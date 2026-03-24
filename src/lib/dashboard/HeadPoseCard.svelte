@@ -5,11 +5,18 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import MetricTooltip from "./MetricTooltip.svelte";
-  import CollapsibleSection from "./CollapsibleSection.svelte";
-  interface Props { pitch: number; roll: number; stillness: number; nodCount: number; shakeCount: number; }
-  let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
+import { t } from "$lib/i18n/index.svelte";
+import CollapsibleSection from "./CollapsibleSection.svelte";
+import MetricTooltip from "./MetricTooltip.svelte";
+
+interface Props {
+  pitch: number;
+  roll: number;
+  stillness: number;
+  nodCount: number;
+  shakeCount: number;
+}
+let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
 </script>
 
 <CollapsibleSection title={t("dashboard.headPose")} dotColor="text-sky-500">

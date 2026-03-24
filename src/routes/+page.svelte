@@ -5,373 +5,451 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount, onDestroy }  from "svelte";
-  import { fade }                from "svelte/transition";
-  import { invoke, Channel }     from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-  import EegChart,  { type SpectrogramColumn, type EventMarker } from "$lib/EegChart.svelte";
-  import BandChart, { type BandSnapshot }      from "$lib/BandChart.svelte";
-  import PpgChart,  { type PpgPacket }         from "$lib/PpgChart.svelte";
-  import ImuChart,  { type ImuPacket }         from "$lib/ImuChart.svelte";
-  import GpuChart                              from "$lib/GpuChart.svelte";
-  import { EEG_CH, EEG_COLOR, GANGLION_CH, GANGLION_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, EMOTIV_CH, EMOTIV_COLOR, IDUN_CH, IDUN_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
-  import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
-  import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
-  import {
-    BrainStateScores, FaaGauge, EegIndices, CompositeScores,
-    ConsciousnessMetrics,
-    ArtifactEvents, HeadPoseCard, PpgMetrics,
-  } from "$lib/dashboard";
-  import { C_NEUTRAL, colorForLevel, QUALITY_COLORS, STATE_COLORS } from "$lib/theme";
-  // Device capabilities are now pushed as part of DeviceStatus from Rust.
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t } from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import { addToast } from "$lib/stores/toast.svelte";
-  import {
-    openSettings, openLabel, openHistory, openBtSettings, openUpdates,
-  } from "$lib/navigation";
-  import { setBtOff } from "$lib/stores/bt-status.svelte";
-  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import type { DeviceStatus, DiscoveredDevice } from "$lib/types";
+import { Channel, invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { onDestroy, onMount } from "svelte";
+import { fade } from "svelte/transition";
+import BandChart, { type BandSnapshot } from "$lib/BandChart.svelte";
+// Device capabilities are now pushed as part of DeviceStatus from Rust.
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
+import { Separator } from "$lib/components/ui/separator";
+import { Spinner } from "$lib/components/ui/spinner";
+import {
+  DEFAULT_FILTER_CONFIG,
+  EEG_CH,
+  EEG_COLOR,
+  EMOTIV_CH,
+  EMOTIV_COLOR,
+  GANGLION_CH,
+  GANGLION_COLOR,
+  HERMES_CH,
+  HERMES_COLOR,
+  IDUN_CH,
+  IDUN_COLOR,
+  MW75_CH,
+  MW75_COLOR,
+} from "$lib/constants";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import {
+  ArtifactEvents,
+  BrainStateScores,
+  CompositeScores,
+  ConsciousnessMetrics,
+  EegIndices,
+  FaaGauge,
+  HeadPoseCard,
+  PpgMetrics,
+} from "$lib/dashboard";
+import EegChart, { type EventMarker, type SpectrogramColumn } from "$lib/EegChart.svelte";
+import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
+import GpuChart from "$lib/GpuChart.svelte";
+import ImuChart, { type ImuPacket } from "$lib/ImuChart.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import { openBtSettings, openHistory, openLabel, openSettings, openUpdates } from "$lib/navigation";
+import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
+import PpgChart, { type PpgPacket } from "$lib/PpgChart.svelte";
+import { setBtOff } from "$lib/stores/bt-status.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { C_NEUTRAL, colorForLevel, QUALITY_COLORS, STATE_COLORS } from "$lib/theme";
+import type { DeviceStatus, DiscoveredDevice } from "$lib/types";
 
-  // ── Model download status (shown as a banner when downloading/retrying) ────
-  interface ModelDownloadStatus {
-    downloading_weights:    boolean;
-    download_status_msg:    string | null;
-    download_retry_attempt: number;
-    download_retry_in_secs: number;
-    encoder_loaded:         boolean;
+// ── Model download status (shown as a banner when downloading/retrying) ────
+interface ModelDownloadStatus {
+  downloading_weights: boolean;
+  download_status_msg: string | null;
+  download_retry_attempt: number;
+  download_retry_in_secs: number;
+  encoder_loaded: boolean;
+}
+let modelDl = $state<ModelDownloadStatus>({
+  downloading_weights: false,
+  download_status_msg: null,
+  download_retry_attempt: 0,
+  download_retry_in_secs: 0,
+  encoder_loaded: false,
+});
+let modelDlTimer: ReturnType<typeof setInterval> | null = null;
+
+async function refreshModelDl() {
+  try {
+    const s = await invoke<ModelDownloadStatus>("get_eeg_model_status");
+    modelDl = s;
+    // Stop polling once encoder is loaded.
+    if (s.encoder_loaded && modelDlTimer) {
+      clearInterval(modelDlTimer);
+      modelDlTimer = null;
+    }
+  } catch {
+    /* non-fatal */
   }
-  let modelDl = $state<ModelDownloadStatus>({
-    downloading_weights: false, download_status_msg: null,
-    download_retry_attempt: 0, download_retry_in_secs: 0,
-    encoder_loaded: false,
-  });
-  let modelDlTimer: ReturnType<typeof setInterval> | null = null;
+}
 
-  async function refreshModelDl() {
-    try {
-      const s = await invoke<ModelDownloadStatus>("get_eeg_model_status");
-      modelDl = s;
-      // Stop polling once encoder is loaded.
-      if (s.encoder_loaded && modelDlTimer) {
-        clearInterval(modelDlTimer); modelDlTimer = null;
-      }
-    } catch { /* non-fatal */ }
+const modelDlVisible = $derived(modelDl.downloading_weights || modelDl.download_retry_in_secs > 0);
+
+// ── Types ──────────────────────────────────────────────────────────────────
+interface EegPacket {
+  electrode: number;
+  samples: number[];
+  timestamp: number;
+}
+
+// EEG_CH and EEG_COLOR imported from constants.ts.
+
+// ── Chart refs ─────────────────────────────────────────────────────────────
+let chartEl = $state<
+  | {
+      pushSamples(ch: number, samples: number[]): void;
+      pushSpecColumn(col: SpectrogramColumn): void;
+      pushMarker(m: EventMarker): void;
+      restartRender(): void;
+    }
+  | undefined
+>();
+let bandChartEl = $state<{ update(snap: BandSnapshot): void; restartRender(): void } | undefined>();
+let ppgChartEl = $state<
+  | {
+      pushSamples(ch: number, samples: number[]): void;
+      pushMarker(m: { timestamp_ms: number; label: string; color: string }): void;
+    }
+  | undefined
+>();
+let imuChartEl = $state<
+  | {
+      pushPacket(pkt: ImuPacket): void;
+    }
+  | undefined
+>();
+
+// ── Relaxation / Engagement score ─────────────────────────────────────────
+//  Relax   = alpha / (beta  + theta)   — high when calm/meditative
+//  Engage  = beta  / (alpha + theta)   — high when alert/task-engaged
+//  Both are averaged across all channels, smoothed with an EMA, then
+//  mapped to 0–100 via a sigmoid so the reading is intuitive.
+let focusScore = $state(0); // kept internally for ws/API compat — not shown in UI
+let relaxScore = $state(0);
+let engagementScore = $state(0);
+/** Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α).
+ *  Positive → greater right-frontal alpha → left-frontal approach bias.
+ *  Range is roughly −1 … +1; smoothed with the same EMA as the other scores. */
+let faaScore = $state(0);
+let tarScore = $state(0); // Theta/Alpha ratio
+let barScore = $state(0); // Beta/Alpha ratio
+let dtrScore = $state(0); // Delta/Theta ratio
+let pseScore = $state(0); // Power Spectral Entropy
+let apfScore = $state(0); // Alpha Peak Frequency
+let bpsScore = $state(0); // Band-Power Slope
+let snrScore = $state(0); // Signal-to-Noise Ratio
+let coherenceScore = $state(0); // Inter-channel coherence
+let muScore = $state(1); // Mu suppression (1 = baseline)
+let moodScore = $state(50); // Mood index (0–100)
+let tbrScore = $state(0); // Theta/Beta ratio (absolute)
+let sef95Score = $state(0); // Spectral Edge Frequency 95%
+let scScore = $state(0); // Spectral Centroid
+let haScore = $state(0); // Hjorth Activity
+let hmScore = $state(0); // Hjorth Mobility
+let hcScore = $state(0); // Hjorth Complexity
+let peScore = $state(0); // Permutation Entropy
+let hfdScore = $state(0); // Higuchi Fractal Dimension
+let dfaScore = $state(0); // DFA Exponent
+let seScore = $state(0); // Sample Entropy
+let pacScore = $state(0); // PAC (θ–γ)
+let latScore = $state(0); // Laterality Index
+let hrScore = $state(0); // Heart Rate (bpm)
+let rmssdScore = $state(0); // RMSSD (ms)
+let sdnnScore = $state(0); // SDNN (ms)
+let pnn50Score = $state(0); // pNN50 (%)
+let lfHfScore = $state(0); // LF/HF ratio
+let respRateScore = $state(0); // Respiratory Rate (bpm)
+let spo2Score = $state(0); // SpO2 estimate (%)
+let perfIdxScore = $state(0); // Perfusion Index (%)
+let stressIdxScore = $state(0); // Stress Index
+// Artifact / event detection
+let blinkCount = $state(0);
+let blinkRate = $state(0); // blinks/min
+// Head pose
+let headPitch = $state(0); // degrees
+let headRoll = $state(0); // degrees
+let stillnessScore = $state(0); // 0–100
+let nodCount = $state(0);
+let shakeCount = $state(0);
+// Composite scores
+let meditationScore = $state(0); // 0–100
+let cogLoadScore = $state(0); // 0–100
+let drowsinessScore = $state(0); // 0–100
+// Headache / Migraine EEG correlate indices (0–100)
+let headacheScore = $state(0);
+let migraineScore = $state(0);
+// Consciousness metrics (0–100)
+let consciousnessLzc = $state(0);
+let consciousnessWakefulness = $state(0);
+let consciousnessIntegration = $state(0);
+const SCORE_TAU = 0.15; // EMA smoothing factor (0 = frozen, 1 = instant)
+
+function sigmoid100(x: number): number {
+  // Maps (0, ∞) → (0, 100) with midpoint at x=1
+  return 100 / (1 + Math.exp(-2.5 * (x - 1)));
+}
+
+function updateScores(snap: BandSnapshot) {
+  if (!snap.channels || snap.channels.length === 0) return;
+  let sumFocus = 0,
+    sumRelax = 0,
+    sumEngage = 0,
+    n = 0;
+  for (const ch of snap.channels) {
+    const a = ch.rel_alpha || 0;
+    const b = ch.rel_beta || 0;
+    const t = ch.rel_theta || 0;
+    const denom1 = a + t;
+    const denom2 = b + t;
+    const denom3 = a + t; // engagement: beta / (alpha + theta) — same ratio
+    if (denom1 > 0.001) sumFocus += b / denom1;
+    if (denom2 > 0.001) sumRelax += a / denom2;
+    // Engagement index (Pope 1995): β / (α + θ)
+    // https://ntrs.nasa.gov/api/citations/19970003078/downloads/19970003078.pdf
+    // We use the same ratio as focus but scale differently via a wider sigmoid
+    // to separate the two visually — engagement emphasises sustained attention
+    // over a longer baseline while focus is the instantaneous reading.
+    if (denom3 > 0.001) sumEngage += b / denom3;
+    n++;
   }
+  if (n === 0) return;
+  const rawFocus = sigmoid100(sumFocus / n);
+  const rawRelax = sigmoid100(sumRelax / n);
+  // Engagement uses a gentler sigmoid (k=2) with midpoint shifted to 0.8
+  // so it's less "twitchy" and represents sustained cognitive engagement.
+  const rawEngage = 100 / (1 + Math.exp(-2 * (sumEngage / n - 0.8)));
+  focusScore = focusScore + SCORE_TAU * (rawFocus - focusScore);
+  relaxScore = relaxScore + SCORE_TAU * (rawRelax - relaxScore);
+  engagementScore = engagementScore + SCORE_TAU * 0.6 * (rawEngage - engagementScore);
 
-  const modelDlVisible = $derived(
-    modelDl.downloading_weights || modelDl.download_retry_in_secs > 0
-  );
-
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface EegPacket { electrode: number; samples: number[]; timestamp: number; }
-
-  // EEG_CH and EEG_COLOR imported from constants.ts.
-
-  // ── Chart refs ─────────────────────────────────────────────────────────────
-  let chartEl = $state<{
-    pushSamples(ch: number, samples: number[]): void;
-    pushSpecColumn(col: SpectrogramColumn): void;
-    pushMarker(m: EventMarker): void;
-    restartRender(): void;
-  } | undefined>();
-  let bandChartEl = $state<{ update(snap: BandSnapshot): void; restartRender(): void } | undefined>();
-  let ppgChartEl = $state<{
-    pushSamples(ch: number, samples: number[]): void;
-    pushMarker(m: { timestamp_ms: number; label: string; color: string }): void;
-  } | undefined>();
-  let imuChartEl = $state<{
-    pushPacket(pkt: ImuPacket): void;
-  } | undefined>();
-
-  // ── Relaxation / Engagement score ─────────────────────────────────────────
-  //  Relax   = alpha / (beta  + theta)   — high when calm/meditative
-  //  Engage  = beta  / (alpha + theta)   — high when alert/task-engaged
-  //  Both are averaged across all channels, smoothed with an EMA, then
-  //  mapped to 0–100 via a sigmoid so the reading is intuitive.
-  let focusScore      = $state(0); // kept internally for ws/API compat — not shown in UI
-  let relaxScore      = $state(0);
-  let engagementScore = $state(0);
-  /** Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α).
-   *  Positive → greater right-frontal alpha → left-frontal approach bias.
-   *  Range is roughly −1 … +1; smoothed with the same EMA as the other scores. */
-  let faaScore        = $state(0);
-  let tarScore        = $state(0);   // Theta/Alpha ratio
-  let barScore        = $state(0);   // Beta/Alpha ratio
-  let dtrScore        = $state(0);   // Delta/Theta ratio
-  let pseScore        = $state(0);   // Power Spectral Entropy
-  let apfScore        = $state(0);   // Alpha Peak Frequency
-  let bpsScore        = $state(0);   // Band-Power Slope
-  let snrScore        = $state(0);   // Signal-to-Noise Ratio
-  let coherenceScore  = $state(0);   // Inter-channel coherence
-  let muScore         = $state(1);   // Mu suppression (1 = baseline)
-  let moodScore       = $state(50);  // Mood index (0–100)
-  let tbrScore        = $state(0);   // Theta/Beta ratio (absolute)
-  let sef95Score      = $state(0);   // Spectral Edge Frequency 95%
-  let scScore         = $state(0);   // Spectral Centroid
-  let haScore         = $state(0);   // Hjorth Activity
-  let hmScore         = $state(0);   // Hjorth Mobility
-  let hcScore         = $state(0);   // Hjorth Complexity
-  let peScore         = $state(0);   // Permutation Entropy
-  let hfdScore        = $state(0);   // Higuchi Fractal Dimension
-  let dfaScore        = $state(0);   // DFA Exponent
-  let seScore         = $state(0);   // Sample Entropy
-  let pacScore        = $state(0);   // PAC (θ–γ)
-  let latScore        = $state(0);   // Laterality Index
-  let hrScore         = $state(0);   // Heart Rate (bpm)
-  let rmssdScore      = $state(0);   // RMSSD (ms)
-  let sdnnScore       = $state(0);   // SDNN (ms)
-  let pnn50Score      = $state(0);   // pNN50 (%)
-  let lfHfScore       = $state(0);   // LF/HF ratio
-  let respRateScore   = $state(0);   // Respiratory Rate (bpm)
-  let spo2Score       = $state(0);   // SpO2 estimate (%)
-  let perfIdxScore    = $state(0);   // Perfusion Index (%)
-  let stressIdxScore  = $state(0);   // Stress Index
-  // Artifact / event detection
-  let blinkCount      = $state(0);
-  let blinkRate       = $state(0);   // blinks/min
+  // ── Frontal Alpha Asymmetry (FAA) ──────────────────────────────────
+  // Precomputed on the backend: ln(AF8 α) − ln(AF7 α).
+  // Smoothed with the same EMA as the other scores.
+  if (snap.faa !== undefined) {
+    faaScore = faaScore + SCORE_TAU * (snap.faa - faaScore);
+  }
+  // ── New indices (all precomputed on backend) ─────────────────────
+  if (snap.tar !== undefined) tarScore = tarScore + SCORE_TAU * (snap.tar - tarScore);
+  if (snap.bar !== undefined) barScore = barScore + SCORE_TAU * (snap.bar - barScore);
+  if (snap.dtr !== undefined) dtrScore = dtrScore + SCORE_TAU * (snap.dtr - dtrScore);
+  if (snap.pse !== undefined) pseScore = pseScore + SCORE_TAU * (snap.pse - pseScore);
+  if (snap.apf !== undefined && snap.apf > 0) apfScore = apfScore + SCORE_TAU * (snap.apf - apfScore);
+  if (snap.bps !== undefined) bpsScore = bpsScore + SCORE_TAU * (snap.bps - bpsScore);
+  if (snap.snr !== undefined) snrScore = snrScore + SCORE_TAU * (snap.snr - snrScore);
+  if (snap.coherence !== undefined) coherenceScore = coherenceScore + SCORE_TAU * (snap.coherence - coherenceScore);
+  if (snap.mu_suppression !== undefined) muScore = muScore + SCORE_TAU * (snap.mu_suppression - muScore);
+  if (snap.mood !== undefined) moodScore = moodScore + SCORE_TAU * (snap.mood - moodScore);
+  if (snap.tbr !== undefined) tbrScore = tbrScore + SCORE_TAU * (snap.tbr - tbrScore);
+  if (snap.sef95 !== undefined) sef95Score = sef95Score + SCORE_TAU * (snap.sef95 - sef95Score);
+  if (snap.spectral_centroid !== undefined) scScore = scScore + SCORE_TAU * (snap.spectral_centroid - scScore);
+  if (snap.hjorth_activity !== undefined) haScore = haScore + SCORE_TAU * (snap.hjorth_activity - haScore);
+  if (snap.hjorth_mobility !== undefined) hmScore = hmScore + SCORE_TAU * (snap.hjorth_mobility - hmScore);
+  if (snap.hjorth_complexity !== undefined) hcScore = hcScore + SCORE_TAU * (snap.hjorth_complexity - hcScore);
+  if (snap.permutation_entropy !== undefined) peScore = peScore + SCORE_TAU * (snap.permutation_entropy - peScore);
+  if (snap.higuchi_fd !== undefined) hfdScore = hfdScore + SCORE_TAU * (snap.higuchi_fd - hfdScore);
+  if (snap.dfa_exponent !== undefined) dfaScore = dfaScore + SCORE_TAU * (snap.dfa_exponent - dfaScore);
+  if (snap.sample_entropy !== undefined) seScore = seScore + SCORE_TAU * (snap.sample_entropy - seScore);
+  if (snap.pac_theta_gamma !== undefined) pacScore = pacScore + SCORE_TAU * (snap.pac_theta_gamma - pacScore);
+  if (snap.laterality_index !== undefined) latScore = latScore + SCORE_TAU * (snap.laterality_index - latScore);
+  // PPG-derived
+  if (snap.hr !== undefined && snap.hr > 0) hrScore = hrScore + SCORE_TAU * (snap.hr - hrScore);
+  if (snap.rmssd !== undefined && snap.rmssd > 0) rmssdScore = rmssdScore + SCORE_TAU * (snap.rmssd - rmssdScore);
+  if (snap.sdnn !== undefined && snap.sdnn > 0) sdnnScore = sdnnScore + SCORE_TAU * (snap.sdnn - sdnnScore);
+  if (snap.pnn50 !== undefined) pnn50Score = pnn50Score + SCORE_TAU * (snap.pnn50 - pnn50Score);
+  if (snap.lf_hf_ratio !== undefined && snap.lf_hf_ratio > 0)
+    lfHfScore = lfHfScore + SCORE_TAU * (snap.lf_hf_ratio - lfHfScore);
+  if (snap.respiratory_rate !== undefined && snap.respiratory_rate > 0)
+    respRateScore = respRateScore + SCORE_TAU * (snap.respiratory_rate - respRateScore);
+  if (snap.spo2_estimate !== undefined && snap.spo2_estimate > 0)
+    spo2Score = spo2Score + SCORE_TAU * (snap.spo2_estimate - spo2Score);
+  if (snap.perfusion_index !== undefined && snap.perfusion_index > 0)
+    perfIdxScore = perfIdxScore + SCORE_TAU * (snap.perfusion_index - perfIdxScore);
+  if (snap.stress_index !== undefined && snap.stress_index > 0)
+    stressIdxScore = stressIdxScore + SCORE_TAU * (snap.stress_index - stressIdxScore);
+  // Artifact / event detection (counts are absolute, not smoothed)
+  if (snap.blink_count !== undefined) blinkCount = snap.blink_count;
+  if (snap.blink_rate !== undefined) blinkRate = blinkRate + SCORE_TAU * (snap.blink_rate - blinkRate);
   // Head pose
-  let headPitch       = $state(0);   // degrees
-  let headRoll        = $state(0);   // degrees
-  let stillnessScore  = $state(0);   // 0–100
-  let nodCount        = $state(0);
-  let shakeCount      = $state(0);
+  if (snap.head_pitch !== undefined) headPitch = headPitch + SCORE_TAU * (snap.head_pitch - headPitch);
+  if (snap.head_roll !== undefined) headRoll = headRoll + SCORE_TAU * (snap.head_roll - headRoll);
+  if (snap.stillness !== undefined) stillnessScore = stillnessScore + SCORE_TAU * (snap.stillness - stillnessScore);
+  if (snap.nod_count !== undefined) nodCount = snap.nod_count;
+  if (snap.shake_count !== undefined) shakeCount = snap.shake_count;
   // Composite scores
-  let meditationScore = $state(0);   // 0–100
-  let cogLoadScore    = $state(0);   // 0–100
-  let drowsinessScore = $state(0);   // 0–100
-  // Headache / Migraine EEG correlate indices (0–100)
-  let headacheScore      = $state(0);
-  let migraineScore      = $state(0);
-  // Consciousness metrics (0–100)
-  let consciousnessLzc         = $state(0);
-  let consciousnessWakefulness = $state(0);
-  let consciousnessIntegration = $state(0);
-  const SCORE_TAU = 0.15;  // EMA smoothing factor (0 = frozen, 1 = instant)
+  if (snap.meditation !== undefined)
+    meditationScore = meditationScore + SCORE_TAU * (snap.meditation - meditationScore);
+  if (snap.cognitive_load !== undefined) cogLoadScore = cogLoadScore + SCORE_TAU * (snap.cognitive_load - cogLoadScore);
+  if (snap.drowsiness !== undefined)
+    drowsinessScore = drowsinessScore + SCORE_TAU * (snap.drowsiness - drowsinessScore);
+  // Headache / Migraine EEG correlate indices
+  if (snap.headache_index !== undefined)
+    headacheScore = headacheScore + SCORE_TAU * (snap.headache_index - headacheScore);
+  if (snap.migraine_index !== undefined)
+    migraineScore = migraineScore + SCORE_TAU * (snap.migraine_index - migraineScore);
+  // Consciousness metrics
+  if (snap.consciousness_lzc !== undefined)
+    consciousnessLzc = consciousnessLzc + SCORE_TAU * (snap.consciousness_lzc - consciousnessLzc);
+  if (snap.consciousness_wakefulness !== undefined)
+    consciousnessWakefulness =
+      consciousnessWakefulness + SCORE_TAU * (snap.consciousness_wakefulness - consciousnessWakefulness);
+  if (snap.consciousness_integration !== undefined)
+    consciousnessIntegration =
+      consciousnessIntegration + SCORE_TAU * (snap.consciousness_integration - consciousnessIntegration);
+}
 
-  function sigmoid100(x: number): number {
-    // Maps (0, ∞) → (0, 100) with midpoint at x=1
-    return 100 / (1 + Math.exp(-2.5 * (x - 1)));
+// ── Status ─────────────────────────────────────────────────────────────────
+/** Redact all dash-separated segments except the last suffix.
+ *  "AAAA-BBBB-CCCC"    → "****-****-CCCC"
+ *  "AA-BB-CC-DD-EE-FF" → "**-**-**-**-**-FF" */
+function redact(v: string) {
+  const parts = v.split("-");
+  return [...parts.slice(0, -1).map((p) => "*".repeat(p.length)), parts.at(-1)].join("-");
+}
+let revealSN = $state(false);
+let revealMAC = $state(false);
+let showElectrodes = $state(false);
+let showDeviceSwitcher = $state(false);
+
+let status = $state<DeviceStatus>({
+  state: "disconnected",
+  device_name: null,
+  device_id: null,
+  serial_number: null,
+  mac_address: null,
+  csv_path: null,
+  sample_count: 0,
+  battery: 0,
+  eeg: [0, 0, 0, 0],
+  paired_devices: [],
+  device_error: null,
+  target_name: null,
+  filter_config: { ...DEFAULT_FILTER_CONFIG },
+  channel_quality: ["no_signal", "no_signal", "no_signal", "no_signal"],
+  retry_attempt: 0,
+  retry_countdown_secs: 0,
+  ppg: [0, 0, 0],
+  ppg_sample_count: 0,
+  accel: [0, 0, 0],
+  gyro: [0, 0, 0],
+  fuel_gauge_mv: 0,
+  temperature_raw: 0,
+  device_kind: "unknown",
+  hardware_version: null,
+  channel_names: [],
+  eeg_channel_count: 0,
+  eeg_sample_rate_hz: 0,
+  has_ppg: false,
+  has_imu: false,
+  has_central_electrodes: false,
+  has_full_montage: false,
+});
+
+/** Capabilities of the currently connected (or last connected) device. */
+// Capability flags are derived directly from status (pushed from Rust).
+
+let uptimeSec = $state(0);
+let uptimeTimer: ReturnType<typeof setInterval> | null = null;
+function startUptime() {
+  uptimeSec = 0;
+  uptimeTimer = setInterval(() => uptimeSec++, 1000);
+}
+function stopUptime() {
+  if (uptimeTimer) {
+    clearInterval(uptimeTimer);
+    uptimeTimer = null;
   }
+  uptimeSec = 0;
+}
 
-  function updateScores(snap: BandSnapshot) {
-    if (!snap.channels || snap.channels.length === 0) return;
-    let sumFocus = 0, sumRelax = 0, sumEngage = 0, n = 0;
-    for (const ch of snap.channels) {
-      const a = ch.rel_alpha || 0;
-      const b = ch.rel_beta  || 0;
-      const t = ch.rel_theta || 0;
-      const denom1 = a + t;
-      const denom2 = b + t;
-      const denom3 = a + t;  // engagement: beta / (alpha + theta) — same ratio
-      if (denom1 > 0.001) sumFocus += b / denom1;
-      if (denom2 > 0.001) sumRelax += a / denom2;
-      // Engagement index (Pope 1995): β / (α + θ)
-      // https://ntrs.nasa.gov/api/citations/19970003078/downloads/19970003078.pdf
-      // We use the same ratio as focus but scale differently via a wider sigmoid
-      // to separate the two visually — engagement emphasises sustained attention
-      // over a longer baseline while focus is the instantaneous reading.
-      if (denom3 > 0.001) sumEngage += b / denom3;
-      n++;
+// Today's total recording time (fetched once, updates with current session uptime)
+let todayRecordedSecs = $state(0); // from past sessions today
+async function fetchTodayRecording() {
+  try {
+    const sessions =
+      await invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions");
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const cutoff = Math.floor(todayStart.getTime() / 1000);
+    let secs = 0;
+    for (const s of sessions) {
+      if (!s.session_start_utc || !s.session_end_utc) continue;
+      if (s.session_end_utc < cutoff) continue;
+      const start = Math.max(s.session_start_utc, cutoff);
+      secs += s.session_end_utc - start;
     }
-    if (n === 0) return;
-    const rawFocus  = sigmoid100(sumFocus / n);
-    const rawRelax  = sigmoid100(sumRelax / n);
-    // Engagement uses a gentler sigmoid (k=2) with midpoint shifted to 0.8
-    // so it's less "twitchy" and represents sustained cognitive engagement.
-    const rawEngage = 100 / (1 + Math.exp(-2 * (sumEngage / n - 0.8)));
-    focusScore      = focusScore      + SCORE_TAU * (rawFocus  - focusScore);
-    relaxScore      = relaxScore      + SCORE_TAU * (rawRelax  - relaxScore);
-    engagementScore = engagementScore + (SCORE_TAU * 0.6) * (rawEngage - engagementScore);
-
-    // ── Frontal Alpha Asymmetry (FAA) ──────────────────────────────────
-    // Precomputed on the backend: ln(AF8 α) − ln(AF7 α).
-    // Smoothed with the same EMA as the other scores.
-    if (snap.faa !== undefined) {
-      faaScore = faaScore + SCORE_TAU * (snap.faa - faaScore);
-    }
-    // ── New indices (all precomputed on backend) ─────────────────────
-    if (snap.tar !== undefined)            tarScore       = tarScore       + SCORE_TAU * (snap.tar       - tarScore);
-    if (snap.bar !== undefined)            barScore       = barScore       + SCORE_TAU * (snap.bar       - barScore);
-    if (snap.dtr !== undefined)            dtrScore       = dtrScore       + SCORE_TAU * (snap.dtr       - dtrScore);
-    if (snap.pse !== undefined)            pseScore       = pseScore       + SCORE_TAU * (snap.pse       - pseScore);
-    if (snap.apf !== undefined && snap.apf > 0) apfScore  = apfScore       + SCORE_TAU * (snap.apf       - apfScore);
-    if (snap.bps !== undefined)            bpsScore       = bpsScore       + SCORE_TAU * (snap.bps       - bpsScore);
-    if (snap.snr !== undefined)            snrScore       = snrScore       + SCORE_TAU * (snap.snr       - snrScore);
-    if (snap.coherence !== undefined)      coherenceScore = coherenceScore + SCORE_TAU * (snap.coherence - coherenceScore);
-    if (snap.mu_suppression !== undefined) muScore        = muScore        + SCORE_TAU * (snap.mu_suppression - muScore);
-    if (snap.mood !== undefined)           moodScore      = moodScore      + SCORE_TAU * (snap.mood      - moodScore);
-    if (snap.tbr !== undefined)            tbrScore       = tbrScore       + SCORE_TAU * (snap.tbr       - tbrScore);
-    if (snap.sef95 !== undefined)          sef95Score     = sef95Score     + SCORE_TAU * (snap.sef95     - sef95Score);
-    if (snap.spectral_centroid !== undefined) scScore     = scScore        + SCORE_TAU * (snap.spectral_centroid - scScore);
-    if (snap.hjorth_activity !== undefined) haScore       = haScore        + SCORE_TAU * (snap.hjorth_activity  - haScore);
-    if (snap.hjorth_mobility !== undefined) hmScore       = hmScore        + SCORE_TAU * (snap.hjorth_mobility  - hmScore);
-    if (snap.hjorth_complexity !== undefined) hcScore     = hcScore        + SCORE_TAU * (snap.hjorth_complexity - hcScore);
-    if (snap.permutation_entropy !== undefined) peScore   = peScore        + SCORE_TAU * (snap.permutation_entropy - peScore);
-    if (snap.higuchi_fd !== undefined)     hfdScore       = hfdScore       + SCORE_TAU * (snap.higuchi_fd - hfdScore);
-    if (snap.dfa_exponent !== undefined)   dfaScore       = dfaScore       + SCORE_TAU * (snap.dfa_exponent - dfaScore);
-    if (snap.sample_entropy !== undefined) seScore        = seScore        + SCORE_TAU * (snap.sample_entropy - seScore);
-    if (snap.pac_theta_gamma !== undefined) pacScore      = pacScore       + SCORE_TAU * (snap.pac_theta_gamma - pacScore);
-    if (snap.laterality_index !== undefined) latScore     = latScore       + SCORE_TAU * (snap.laterality_index - latScore);
-    // PPG-derived
-    if (snap.hr !== undefined && snap.hr > 0)              hrScore        = hrScore        + SCORE_TAU * (snap.hr        - hrScore);
-    if (snap.rmssd !== undefined && snap.rmssd > 0)        rmssdScore     = rmssdScore     + SCORE_TAU * (snap.rmssd     - rmssdScore);
-    if (snap.sdnn !== undefined && snap.sdnn > 0)          sdnnScore      = sdnnScore      + SCORE_TAU * (snap.sdnn      - sdnnScore);
-    if (snap.pnn50 !== undefined)                          pnn50Score     = pnn50Score     + SCORE_TAU * (snap.pnn50     - pnn50Score);
-    if (snap.lf_hf_ratio !== undefined && snap.lf_hf_ratio > 0) lfHfScore = lfHfScore     + SCORE_TAU * (snap.lf_hf_ratio - lfHfScore);
-    if (snap.respiratory_rate !== undefined && snap.respiratory_rate > 0) respRateScore = respRateScore + SCORE_TAU * (snap.respiratory_rate - respRateScore);
-    if (snap.spo2_estimate !== undefined && snap.spo2_estimate > 0) spo2Score = spo2Score + SCORE_TAU * (snap.spo2_estimate - spo2Score);
-    if (snap.perfusion_index !== undefined && snap.perfusion_index > 0) perfIdxScore = perfIdxScore + SCORE_TAU * (snap.perfusion_index - perfIdxScore);
-    if (snap.stress_index !== undefined && snap.stress_index > 0) stressIdxScore = stressIdxScore + SCORE_TAU * (snap.stress_index - stressIdxScore);
-    // Artifact / event detection (counts are absolute, not smoothed)
-    if (snap.blink_count !== undefined) blinkCount = snap.blink_count;
-    if (snap.blink_rate !== undefined)  blinkRate  = blinkRate + SCORE_TAU * (snap.blink_rate - blinkRate);
-    // Head pose
-    if (snap.head_pitch !== undefined) headPitch      = headPitch      + SCORE_TAU * (snap.head_pitch - headPitch);
-    if (snap.head_roll !== undefined)  headRoll       = headRoll       + SCORE_TAU * (snap.head_roll  - headRoll);
-    if (snap.stillness !== undefined)  stillnessScore = stillnessScore + SCORE_TAU * (snap.stillness  - stillnessScore);
-    if (snap.nod_count !== undefined)  nodCount       = snap.nod_count;
-    if (snap.shake_count !== undefined) shakeCount    = snap.shake_count;
-    // Composite scores
-    if (snap.meditation !== undefined)    meditationScore = meditationScore + SCORE_TAU * (snap.meditation    - meditationScore);
-    if (snap.cognitive_load !== undefined) cogLoadScore   = cogLoadScore    + SCORE_TAU * (snap.cognitive_load - cogLoadScore);
-    if (snap.drowsiness !== undefined)    drowsinessScore = drowsinessScore + SCORE_TAU * (snap.drowsiness    - drowsinessScore);
-    // Headache / Migraine EEG correlate indices
-    if (snap.headache_index      !== undefined) headacheScore      = headacheScore      + SCORE_TAU * (snap.headache_index      - headacheScore);
-    if (snap.migraine_index      !== undefined) migraineScore      = migraineScore      + SCORE_TAU * (snap.migraine_index      - migraineScore);
-    // Consciousness metrics
-    if (snap.consciousness_lzc          !== undefined) consciousnessLzc         = consciousnessLzc         + SCORE_TAU * (snap.consciousness_lzc          - consciousnessLzc);
-    if (snap.consciousness_wakefulness  !== undefined) consciousnessWakefulness = consciousnessWakefulness + SCORE_TAU * (snap.consciousness_wakefulness  - consciousnessWakefulness);
-    if (snap.consciousness_integration  !== undefined) consciousnessIntegration = consciousnessIntegration + SCORE_TAU * (snap.consciousness_integration  - consciousnessIntegration);
+    todayRecordedSecs = secs;
+  } catch {
+    /* ignore */
   }
+}
+const todayTotalSecs = $derived(todayRecordedSecs + uptimeSec);
 
-  // ── Status ─────────────────────────────────────────────────────────────────
-  /** Redact all dash-separated segments except the last suffix.
-   *  "AAAA-BBBB-CCCC"    → "****-****-CCCC"
-   *  "AA-BB-CC-DD-EE-FF" → "**-**-**-**-**-FF" */
-  function redact(v: string) {
-    const parts = v.split('-');
-    return [...parts.slice(0, -1).map(p => '*'.repeat(p.length)), parts.at(-1)].join('-');
-  }
-  let revealSN  = $state(false);
-  let revealMAC = $state(false);
-  let showElectrodes = $state(false);
-  let showDeviceSwitcher = $state(false);
+// Daily goal (minutes) — persisted in ~/.skill/settings.json via Rust
+let dailyGoalMin = $state(60);
+let goalNotified = false; // true once notification fired this session
 
-  let status = $state<DeviceStatus>({
-    state: "disconnected", device_name: null, device_id: null,
-    serial_number: null, mac_address: null,
-    csv_path: null, sample_count: 0, battery: 0,
-    eeg: [0, 0, 0, 0], paired_devices: [],
-    device_error: null, target_name: null,
-    filter_config:   { ...DEFAULT_FILTER_CONFIG },
-    channel_quality: ['no_signal', 'no_signal', 'no_signal', 'no_signal'],
-    retry_attempt: 0,
-    retry_countdown_secs: 0,
-    ppg: [0, 0, 0],
-    ppg_sample_count: 0,
-    accel: [0, 0, 0],
-    gyro: [0, 0, 0],
-    fuel_gauge_mv: 0,
-    temperature_raw: 0,
-    device_kind: "unknown",
-    hardware_version: null,
-    channel_names: [],
-    eeg_channel_count: 0,
-    eeg_sample_rate_hz: 0,
-    has_ppg: false,
-    has_imu: false,
-    has_central_electrodes: false,
-    has_full_montage: false,
-  });
-
-  /** Capabilities of the currently connected (or last connected) device. */
-  // Capability flags are derived directly from status (pushed from Rust).
-
-  let uptimeSec   = $state(0);
-  let uptimeTimer: ReturnType<typeof setInterval> | null = null;
-  function startUptime() { uptimeSec = 0; uptimeTimer = setInterval(() => uptimeSec++, 1000); }
-  function stopUptime()  { if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = null; } uptimeSec = 0; }
-
-  // Today's total recording time (fetched once, updates with current session uptime)
-  let todayRecordedSecs = $state(0);   // from past sessions today
-  async function fetchTodayRecording() {
-    try {
-      const sessions = await invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions");
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const cutoff = Math.floor(todayStart.getTime() / 1000);
-      let secs = 0;
-      for (const s of sessions) {
-        if (!s.session_start_utc || !s.session_end_utc) continue;
-        if (s.session_end_utc < cutoff) continue;
-        const start = Math.max(s.session_start_utc, cutoff);
-        secs += s.session_end_utc - start;
-      }
-      todayRecordedSecs = secs;
-    } catch { /* ignore */ }
-  }
-  const todayTotalSecs = $derived(todayRecordedSecs + uptimeSec);
-
-  // Daily goal (minutes) — persisted in ~/.skill/settings.json via Rust
-  let dailyGoalMin = $state(60);
-  let goalNotified = false;   // true once notification fired this session
-
-  // Load persisted goal + today's notification state from Rust on mount
-  invoke<number>("get_daily_goal").then(v => { if (v > 0) dailyGoalMin = v; }).catch(e => console.warn("[home] get_daily_goal failed:", e));
-  invoke<string>("get_goal_notified_date").then(stored => {
+// Load persisted goal + today's notification state from Rust on mount
+invoke<number>("get_daily_goal")
+  .then((v) => {
+    if (v > 0) dailyGoalMin = v;
+  })
+  .catch((_e) => {});
+invoke<string>("get_goal_notified_date")
+  .then((stored) => {
     const today = new Date().toISOString().slice(0, 10);
     if (stored === today) goalNotified = true;
-  }).catch(e => console.warn("[home] get_goal_notified_date failed:", e));
+  })
+  .catch((_e) => {});
 
-  const goalPct     = $derived(Math.min(100, (todayTotalSecs / 60 / dailyGoalMin) * 100));
-  const goalReached = $derived(goalPct >= 100);
+const goalPct = $derived(Math.min(100, (todayTotalSecs / 60 / dailyGoalMin) * 100));
+const goalReached = $derived(goalPct >= 100);
 
-  $effect(() => {
-    if (goalReached && !goalNotified && status.state === "connected") {
-      goalNotified = true;
-      const today = new Date().toISOString().slice(0, 10);
-      invoke("set_goal_notified_date", { date: today }).catch(e => console.warn("[home] set_goal_notified_date failed:", e));
-      try {
-        sendNotification({
-          title: "🎯 Daily Goal Reached!",
-          body: `You've recorded ${Math.floor(todayTotalSecs / 60)} minutes today. Great job!`,
-        });
-      } catch { /* notification not available */ }
+$effect(() => {
+  if (goalReached && !goalNotified && status.state === "connected") {
+    goalNotified = true;
+    const today = new Date().toISOString().slice(0, 10);
+    invoke("set_goal_notified_date", { date: today }).catch((_e) => {});
+    try {
+      sendNotification({
+        title: "🎯 Daily Goal Reached!",
+        body: `You've recorded ${Math.floor(todayTotalSecs / 60)} minutes today. Great job!`,
+      });
+    } catch {
+      /* notification not available */
     }
-  });
-  function fmtUptime(s: number) {
-    return [Math.floor(s/3600), Math.floor((s%3600)/60), s%60]
-      .map(n => String(n).padStart(2,"0")).join(":");
   }
+});
+function fmtUptime(s: number) {
+  return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map((n) => String(n).padStart(2, "0")).join(":");
+}
 
-  const fmtEeg = (v: number | null | undefined) =>
-    v != null && isFinite(v) ? (v >= 0 ? "+" : "") + v.toFixed(1) + " µV" : "—";
+const fmtEeg = (v: number | null | undefined) =>
+  v != null && Number.isFinite(v) ? `${(v >= 0 ? "+" : "") + v.toFixed(1)} µV` : "—";
 
-  const battColor = (p: number) => colorForLevel(p);
+const battColor = (p: number) => colorForLevel(p);
 
-  // Capability flags derived from device_kind — hide irrelevant UI for non-Muse devices
-  const isMuse      = $derived(status.device_kind === "muse" || status.device_kind === "unknown");
-  const isGanglion  = $derived(status.device_kind === "ganglion");
-  const isMw75      = $derived(status.device_kind === "mw75");
-  const isHermes    = $derived(status.device_kind === "hermes");
-  const isEmotiv    = $derived(status.device_kind === "emotiv");
-  const isIdun      = $derived(status.device_kind === "idun");
-  const hasPpg      = $derived(status.has_ppg);
-  const hasImuCap   = $derived(status.has_imu);
-  const hasBattery  = $derived(isMuse || isMw75 || isEmotiv || isIdun);
+// Capability flags derived from device_kind — hide irrelevant UI for non-Muse devices
+const isMuse = $derived(status.device_kind === "muse" || status.device_kind === "unknown");
+const isGanglion = $derived(status.device_kind === "ganglion");
+const isMw75 = $derived(status.device_kind === "mw75");
+const isHermes = $derived(status.device_kind === "hermes");
+const isEmotiv = $derived(status.device_kind === "emotiv");
+const isIdun = $derived(status.device_kind === "idun");
+const hasPpg = $derived(status.has_ppg);
+const hasImuCap = $derived(status.has_imu);
+const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun);
 
-  // Channel labels and colours — dynamic based on connected device.
-  // Use dynamic channel names from the device when available (handles
-  // Emotiv Insight 5ch, EPOC 14ch, Flex 32ch, etc.), fall back to static
-  // constants for known device kinds.
-  const chLabels = $derived((() => {
+// Channel labels and colours — dynamic based on connected device.
+// Use dynamic channel names from the device when available (handles
+// Emotiv Insight 5ch, EPOC 14ch, Flex 32ch, etc.), fall back to static
+// constants for known device kinds.
+const chLabels = $derived(
+  (() => {
     const dynamic = status.channel_names;
     if (dynamic && dynamic.length > 0) return dynamic;
     if (isMw75) return [...MW75_CH];
@@ -380,407 +458,478 @@ the Free Software Foundation, version 3 only. -->
     if (isIdun) return [...IDUN_CH];
     if (isGanglion) return [...GANGLION_CH];
     return [...EEG_CH];
-  })());
-  const chColors = $derived((() => {
+  })(),
+);
+const chColors = $derived(
+  (() => {
     const n = chLabels.length;
     // Pick the static palette closest to the channel count, then slice/extend.
-    const palette =
-      isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR
-      : isIdun ? IDUN_COLOR : isGanglion ? GANGLION_COLOR : EEG_COLOR;
+    const palette = isMw75
+      ? MW75_COLOR
+      : isHermes
+        ? HERMES_COLOR
+        : isEmotiv
+          ? EMOTIV_COLOR
+          : isIdun
+            ? IDUN_COLOR
+            : isGanglion
+              ? GANGLION_COLOR
+              : EEG_COLOR;
     if (n <= palette.length) return [...palette].slice(0, n);
     // Extend by cycling for devices with more channels than the palette.
     const out = [...palette];
     while (out.length < n) out.push(palette[out.length % palette.length]);
     return out;
-  })());
-  /**
-   * Athena = Muse S gen 2.
-   * Detected by hardware_version "p50" (arrives a few seconds after connect)
-   * OR by device name "MuseS-XXXX" — Athena advertises without a space/hyphen
-   * between "Muse" and "S", e.g. "MuseS-F921".
-   */
-  const isAthena    = $derived(
-    isMuse && (
-      status.hardware_version === "p50" ||
+  })(),
+);
+/**
+ * Athena = Muse S gen 2.
+ * Detected by hardware_version "p50" (arrives a few seconds after connect)
+ * OR by device name "MuseS-XXXX" — Athena advertises without a space/hyphen
+ * between "Muse" and "S", e.g. "MuseS-F921".
+ */
+const isAthena = $derived(
+  isMuse &&
+    (status.hardware_version === "p50" ||
       // "MuseS-F921" → toLowerCase → "muses-f921" → includes "muses" ✓
-      (status.device_name?.toLowerCase().includes("muses") ?? false)
-    )
-  );
-  /**
-   * Classic Muse S (gen 1) — advertises as "Muse S-XXXX" (space-separated).
-   * Only shown when it's definitely NOT an Athena.
-   */
-  const isMuseS     = $derived(
-    isMuse && !isAthena && (
-      (status.device_name?.toLowerCase().includes("muse-s") ?? false) ||
-      (status.device_name?.toLowerCase().includes("muse s") ?? false)
-    )
-  );
-  /** Muse 2 — advertises as "Muse-2-XXXX" or has hardware_version "p21". */
-  const isMuse2     = $derived(
-    isMuse && !isAthena && !isMuseS && (
-      (status.device_name?.toLowerCase().includes("muse-2") ?? false) ||
+      (status.device_name?.toLowerCase().includes("muses") ?? false)),
+);
+/**
+ * Classic Muse S (gen 1) — advertises as "Muse S-XXXX" (space-separated).
+ * Only shown when it's definitely NOT an Athena.
+ */
+const isMuseS = $derived(
+  isMuse &&
+    !isAthena &&
+    ((status.device_name?.toLowerCase().includes("muse-s") ?? false) ||
+      (status.device_name?.toLowerCase().includes("muse s") ?? false)),
+);
+/** Muse 2 — advertises as "Muse-2-XXXX" or has hardware_version "p21". */
+const isMuse2 = $derived(
+  isMuse &&
+    !isAthena &&
+    !isMuseS &&
+    ((status.device_name?.toLowerCase().includes("muse-2") ?? false) ||
       (status.device_name?.toLowerCase().includes("muse 2") ?? false) ||
-      status.hardware_version === "p21"
-    )
-  );
-  /**
-   * Image path for the currently connected device, or null if no matching image
-   * is available.  Checked in specificity order so the most precise match wins.
-   */
-  const deviceImage = $derived((() => {
+      status.hardware_version === "p21"),
+);
+/**
+ * Image path for the currently connected device, or null if no matching image
+ * is available.  Checked in specificity order so the most precise match wins.
+ */
+const deviceImage = $derived(
+  (() => {
     if (status.state !== "connected") return null;
-    if (isAthena)   return "/devices/muse-s-athena.jpg";
-    if (isMuseS)    return "/devices/muse-s-gen1.jpg";
-    if (isMuse2)    return "/devices/muse-gen2.jpg";
-    if (isMuse)     return "/devices/muse-gen1.jpg";       // Muse 1 / generic Muse
+    if (isAthena) return "/devices/muse-s-athena.jpg";
+    if (isMuseS) return "/devices/muse-s-gen1.jpg";
+    if (isMuse2) return "/devices/muse-gen2.jpg";
+    if (isMuse) return "/devices/muse-gen1.jpg"; // Muse 1 / generic Muse
     if (isGanglion) return "/devices/openbci-ganglion.jpg";
-    if (isMw75)    return "/devices/muse-mw75.jpg";
-    if (isHermes)  return "/devices/re-ak-nucleus-hermes.png";
-    if (isEmotiv)  return "/devices/emotiv-epoc-x.webp";
-    if (isIdun)    return "/devices/idun-guardian.png";
+    if (isMw75) return "/devices/muse-mw75.jpg";
+    if (isHermes) return "/devices/re-ak-nucleus-hermes.png";
+    if (isEmotiv) return "/devices/emotiv-epoc-x.webp";
+    if (isIdun) return "/devices/idun-guardian.png";
     return null;
-  })());
-  const deviceImageAlt = $derived((() => {
-    if (isAthena)   return "Muse S Athena";
-    if (isMuseS)    return "Muse S";
-    if (isMuse2)    return "Muse 2";
-    if (isMuse)     return "Muse";
+  })(),
+);
+const deviceImageAlt = $derived(
+  (() => {
+    if (isAthena) return "Muse S Athena";
+    if (isMuseS) return "Muse S";
+    if (isMuse2) return "Muse 2";
+    if (isMuse) return "Muse";
     if (isGanglion) return "OpenBCI Ganglion";
-    if (isMw75)    return "MW75 Neuro";
-    if (isHermes)  return "Nucleus Hermes";
-    if (isEmotiv)  return "Emotiv";
-    if (isIdun)    return "IDUN Guardian";
+    if (isMw75) return "MW75 Neuro";
+    if (isHermes) return "Nucleus Hermes";
+    if (isEmotiv) return "Emotiv";
+    if (isIdun) return "IDUN Guardian";
     return status.device_name ?? "";
-  })());
-  const csvName   = (p: string | null) => p ? (p.split(/[\\/]/).pop() ?? p) : "";
+  })(),
+);
+const csvName = (p: string | null) => (p ? (p.split(/[\\/]/).pop() ?? p) : "");
 
-  const QUALITY_LABEL_KEY: Record<string, string> = {
-    good:      "dashboard.qualityGood",
-    fair:      "dashboard.qualityFair",
-    poor:      "dashboard.qualityPoor",
-    no_signal: "dashboard.qualityNoSignal",
-  };
-  const qualityColor = (q: string) => QUALITY_COLORS[q] ?? C_NEUTRAL;
-  const qualityLabel = (q: string) => t(QUALITY_LABEL_KEY[q] ?? q);
+const QUALITY_LABEL_KEY: Record<string, string> = {
+  good: "dashboard.qualityGood",
+  fair: "dashboard.qualityFair",
+  poor: "dashboard.qualityPoor",
+  no_signal: "dashboard.qualityNoSignal",
+};
+const qualityColor = (q: string) => QUALITY_COLORS[q] ?? C_NEUTRAL;
+const qualityLabel = (q: string) => t(QUALITY_LABEL_KEY[q] ?? q);
 
-  let appVersion   = $state("…");
+let appVersion = $state("…");
 
-  // ── Recent label (shown inline under REC row) ──────────────────────────────
-  let recentLabel  = $state<string | null>(null);
-  let recentLabelAt = $state(0);   // unix seconds
+// ── Recent label (shown inline under REC row) ──────────────────────────────
+let recentLabel = $state<string | null>(null);
+let recentLabelAt = $state(0); // unix seconds
 
-  // ── Card collapse state ────────────────────────────────────────────────────
-  let ppgOpticalExpanded = $state(true);
-  let imuExpanded        = $state(true);
-  let eegChExpanded      = $state(true);
+// ── Card collapse state ────────────────────────────────────────────────────
+let ppgOpticalExpanded = $state(true);
+let imuExpanded = $state(true);
+let eegChExpanded = $state(true);
 
-  // ── Onboarding checklist ───────────────────────────────────────────────────
-  // Persisted in localStorage so it survives reloads.
-  let onboardDone = $state({
-    devicePaired:    false,
-    calibrated:      false,
-    firstSession:    false,   // ≥5-min session completed
-    goalSet:         false,
-    llmDownloaded:   false,   // at least one LLM model downloaded
-    searchRun:       false,   // similarity search executed at least once
-    dndConfigured:   false,   // DND auto-focus threshold enabled
-    apiVisited:      false,   // API status page opened at least once
-  });
+// ── Onboarding checklist ───────────────────────────────────────────────────
+// Persisted in localStorage so it survives reloads.
+let onboardDone = $state({
+  devicePaired: false,
+  calibrated: false,
+  firstSession: false, // ≥5-min session completed
+  goalSet: false,
+  llmDownloaded: false, // at least one LLM model downloaded
+  searchRun: false, // similarity search executed at least once
+  dndConfigured: false, // DND auto-focus threshold enabled
+  apiVisited: false, // API status page opened at least once
+});
 
-  function loadOnboarding() {
+function loadOnboarding() {
+  try {
+    const raw = localStorage.getItem("onboardDone");
+    if (raw) onboardDone = { ...onboardDone, ...JSON.parse(raw) };
+  } catch (e) {}
+}
+function saveOnboarding() {
+  localStorage.setItem("onboardDone", JSON.stringify(onboardDone));
+}
+function checkOnboarding() {
+  // device paired
+  if (status.state === "connected" || status.paired_devices.length > 0) {
+    if (!onboardDone.devicePaired) {
+      onboardDone.devicePaired = true;
+      saveOnboarding();
+    }
+  }
+  // first session ≥5 min
+  if (todayTotalSecs >= 300 && !onboardDone.firstSession) {
+    onboardDone.firstSession = true;
+    saveOnboarding();
+  }
+  // goal set
+  if (dailyGoalMin > 0 && !onboardDone.goalSet) {
+    onboardDone.goalSet = true;
+    saveOnboarding();
+  }
+  // pick up flags written by other pages (search, api)
+  try {
+    const stored = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+    let dirty = false;
+    if (stored.searchRun && !onboardDone.searchRun) {
+      onboardDone.searchRun = true;
+      dirty = true;
+    }
+    if (stored.apiVisited && !onboardDone.apiVisited) {
+      onboardDone.apiVisited = true;
+      dirty = true;
+    }
+    if (stored.llmDownloaded && !onboardDone.llmDownloaded) {
+      onboardDone.llmDownloaded = true;
+      dirty = true;
+    }
+    if (stored.dndConfigured && !onboardDone.dndConfigured) {
+      onboardDone.dndConfigured = true;
+      dirty = true;
+    }
+    if (dirty) saveOnboarding();
+  } catch (e) {}
+}
+
+/** One-shot async checks run at startup for steps that don't have live events. */
+async function checkOnboardingAsync() {
+  // LLM: any model already downloaded?
+  if (!onboardDone.llmDownloaded) {
     try {
-      const raw = localStorage.getItem("onboardDone");
-      if (raw) onboardDone = { ...onboardDone, ...JSON.parse(raw) };
-    } catch (e) { console.warn("[home] loadOnboarding parse failed:", e); }
-  }
-  function saveOnboarding() {
-    localStorage.setItem("onboardDone", JSON.stringify(onboardDone));
-  }
-  function checkOnboarding() {
-    // device paired
-    if (status.state === "connected" || status.paired_devices.length > 0) {
-      if (!onboardDone.devicePaired) { onboardDone.devicePaired = true; saveOnboarding(); }
-    }
-    // first session ≥5 min
-    if (todayTotalSecs >= 300 && !onboardDone.firstSession) {
-      onboardDone.firstSession = true; saveOnboarding();
-    }
-    // goal set
-    if (dailyGoalMin > 0 && !onboardDone.goalSet) {
-      onboardDone.goalSet = true; saveOnboarding();
-    }
-    // pick up flags written by other pages (search, api)
-    try {
-      const stored = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
-      let dirty = false;
-      if (stored.searchRun   && !onboardDone.searchRun)   { onboardDone.searchRun   = true; dirty = true; }
-      if (stored.apiVisited  && !onboardDone.apiVisited)  { onboardDone.apiVisited  = true; dirty = true; }
-      if (stored.llmDownloaded && !onboardDone.llmDownloaded) { onboardDone.llmDownloaded = true; dirty = true; }
-      if (stored.dndConfigured && !onboardDone.dndConfigured) { onboardDone.dndConfigured = true; dirty = true; }
-      if (dirty) saveOnboarding();
-    } catch (e) { console.warn("[home] checkOnboarding localStorage read failed:", e); }
-  }
-
-  /** One-shot async checks run at startup for steps that don't have live events. */
-  async function checkOnboardingAsync() {
-    // LLM: any model already downloaded?
-    if (!onboardDone.llmDownloaded) {
-      try {
-        const catalog = await invoke<{ entries: { state: string }[] }>("get_llm_catalog");
-        if (catalog.entries.some(e => e.state === "downloaded")) {
-          onboardDone.llmDownloaded = true; saveOnboarding();
-        }
-      } catch (e) { console.warn("[home] get_llm_catalog onboarding check failed:", e); }
-    }
-    // DND: focus-threshold automation enabled by the user?
-    if (!onboardDone.dndConfigured) {
-      try {
-        const cfg = await invoke<{ enabled: boolean }>("get_dnd_config");
-        if (cfg.enabled) { onboardDone.dndConfigured = true; saveOnboarding(); }
-      } catch (e) { console.warn("[home] get_dnd_config onboarding check failed:", e); }
-    }
-  }
-
-  let onboardComplete = $derived(Object.values(onboardDone).every(Boolean));
-  let onboardSteps = $derived([
-    { key: "devicePaired",  label: t("dashboard.setupDevice"),    done: onboardDone.devicePaired },
-    { key: "calibrated",    label: t("dashboard.setupCalibrate"),  done: onboardDone.calibrated },
-    { key: "firstSession",  label: t("dashboard.setupSession"),   done: onboardDone.firstSession },
-    { key: "goalSet",       label: t("dashboard.setupGoal"),      done: onboardDone.goalSet },
-    { key: "llmDownloaded", label: t("dashboard.setupLlm"),       done: onboardDone.llmDownloaded },
-    { key: "searchRun",     label: t("dashboard.setupSearch"),    done: onboardDone.searchRun },
-    { key: "dndConfigured", label: t("dashboard.setupDnd"),       done: onboardDone.dndConfigured },
-    { key: "apiVisited",    label: t("dashboard.setupApi"),       done: onboardDone.apiVisited },
-  ]);
-
-  // Track unpaired device IDs we've already toasted about so we don't spam.
-  const knownUnpairedIds = new Set<string>();
-
-  async function retryConnect()   { await invoke("retry_connect"); }
-  async function cancelRetry()    { await invoke("cancel_retry"); }
-  async function forgetDevice(id: string) { status = await invoke<DeviceStatus>("forget_device", { id }); }
-  async function connectDevice(id: string) {
-    // If currently connected or scanning, cancel first before switching
-    if (status.state === "connected" || status.state === "scanning") {
-      await invoke("cancel_retry");
-      // Small delay so the backend finishes teardown before starting a new session
-      await new Promise(r => setTimeout(r, 200));
-    }
-    await invoke("set_preferred_device", { id });
-    await invoke("retry_connect");
-  }
-
-  // ── Event markers (labels, calibration, search) ────────────────────────────
-  /** Push a vertical marker to both EEG and PPG charts simultaneously. */
-  function pushMarkerToBoth(label: string, color: string) {
-    const m = { timestamp_ms: Date.now(), label, color };
-    chartEl?.pushMarker(m);
-    ppgChartEl?.pushMarker(m);
-  }
-
-  // ── Scroll-driven hero collapse ───────────────────────────────────────────
-  let compact = $state(false);
-  function handleScroll(e: Event) {
-    if (!compact) compact = (e.currentTarget as HTMLElement).scrollTop > 56;
-  }
-
-  const unlisteners: UnlistenFn[] = [];
-  async function refreshStatus() {
-    const prev = status.state;
-    status = await invoke<DeviceStatus>("get_status");
-    if (prev !== "connected" && status.state === "connected") startUptime();
-    if (prev === "connected"  && status.state !== "connected") stopUptime();
-  }
-
-  onMount(async () => {
-    loadOnboarding();
-    // Async checks for onboarding steps that need backend queries
-    checkOnboardingAsync();
-    // Fetch today's prior recording time
-    fetchTodayRecording();
-
-    // Auto-check for updates (daily, if enabled)
-    try {
-      const autoCheck = localStorage.getItem("autoCheckUpdates") !== "false";
-      const lastCheck = Number(localStorage.getItem("lastUpdateCheckUtc") || "0");
-      const nowSecs = Math.floor(Date.now() / 1000);
-      if (autoCheck && nowSecs - lastCheck >= 86400) {
-        const { check } = await import("@tauri-apps/plugin-updater");
-        const update = await check();
-        localStorage.setItem("lastUpdateCheckUtc", String(nowSecs));
-        if (update) {
-          // Update available — open the updates tab so user sees it
-          await openUpdates();
-        }
+      const catalog = await invoke<{ entries: { state: string }[] }>("get_llm_catalog");
+      if (catalog.entries.some((e) => e.state === "downloaded")) {
+        onboardDone.llmDownloaded = true;
+        saveOnboarding();
       }
-    } catch { /* updater not available in dev / offline */ }
-
-    // Request notification permission on first launch (macOS shows a one-time dialog).
+    } catch (e) {}
+  }
+  // DND: focus-threshold automation enabled by the user?
+  if (!onboardDone.dndConfigured) {
     try {
-      if (!(await isPermissionGranted())) { await requestPermission(); }
-    } catch (_) { /* notification plugin unavailable or denied — non-fatal */ }
+      const cfg = await invoke<{ enabled: boolean }>("get_dnd_config");
+      if (cfg.enabled) {
+        onboardDone.dndConfigured = true;
+        saveOnboarding();
+      }
+    } catch (e) {}
+  }
+}
 
-    const eegChannel = new Channel<EegPacket>();
-    eegChannel.onmessage = (pkt) => chartEl?.pushSamples(pkt.electrode, pkt.samples);
-    await invoke("subscribe_eeg", { onEvent: eegChannel });
+let onboardComplete = $derived(Object.values(onboardDone).every(Boolean));
+let onboardSteps = $derived([
+  { key: "devicePaired", label: t("dashboard.setupDevice"), done: onboardDone.devicePaired },
+  { key: "calibrated", label: t("dashboard.setupCalibrate"), done: onboardDone.calibrated },
+  { key: "firstSession", label: t("dashboard.setupSession"), done: onboardDone.firstSession },
+  { key: "goalSet", label: t("dashboard.setupGoal"), done: onboardDone.goalSet },
+  { key: "llmDownloaded", label: t("dashboard.setupLlm"), done: onboardDone.llmDownloaded },
+  { key: "searchRun", label: t("dashboard.setupSearch"), done: onboardDone.searchRun },
+  { key: "dndConfigured", label: t("dashboard.setupDnd"), done: onboardDone.dndConfigured },
+  { key: "apiVisited", label: t("dashboard.setupApi"), done: onboardDone.apiVisited },
+]);
 
-    const ppgChannel = new Channel<PpgPacket>();
-    ppgChannel.onmessage = (pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples);
-    await invoke("subscribe_ppg", { onEvent: ppgChannel });
+// Track unpaired device IDs we've already toasted about so we don't spam.
+const knownUnpairedIds = new Set<string>();
 
-    const imuChannel = new Channel<ImuPacket>();
-    imuChannel.onmessage = (pkt) => imuChartEl?.pushPacket(pkt);
-    await invoke("subscribe_imu", { onEvent: imuChannel });
+async function retryConnect() {
+  await invoke("retry_connect");
+}
+async function cancelRetry() {
+  await invoke("cancel_retry");
+}
+async function forgetDevice(id: string) {
+  status = await invoke<DeviceStatus>("forget_device", { id });
+}
+async function connectDevice(id: string) {
+  // If currently connected or scanning, cancel first before switching
+  if (status.state === "connected" || status.state === "scanning") {
+    await invoke("cancel_retry");
+    // Small delay so the backend finishes teardown before starting a new session
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  await invoke("set_preferred_device", { id });
+  await invoke("retry_connect");
+}
 
-    await refreshStatus();
-    appVersion = await invoke<string>("get_app_version");
+// ── Event markers (labels, calibration, search) ────────────────────────────
+/** Push a vertical marker to both EEG and PPG charts simultaneously. */
+function pushMarkerToBoth(label: string, color: string) {
+  const m = { timestamp_ms: Date.now(), label, color };
+  chartEl?.pushMarker(m);
+  ppgChartEl?.pushMarker(m);
+}
 
-    // Poll model download status every 2 s until the encoder is loaded.
-    await refreshModelDl();
-    if (!modelDl.encoder_loaded) {
-      modelDlTimer = setInterval(refreshModelDl, 2000);
+// ── Scroll-driven hero collapse ───────────────────────────────────────────
+let compact = $state(false);
+function handleScroll(e: Event) {
+  if (!compact) compact = (e.currentTarget as HTMLElement).scrollTop > 56;
+}
+
+const unlisteners: UnlistenFn[] = [];
+async function refreshStatus() {
+  const prev = status.state;
+  status = await invoke<DeviceStatus>("get_status");
+  if (prev !== "connected" && status.state === "connected") startUptime();
+  if (prev === "connected" && status.state !== "connected") stopUptime();
+}
+
+onMount(async () => {
+  loadOnboarding();
+  // Async checks for onboarding steps that need backend queries
+  checkOnboardingAsync();
+  // Fetch today's prior recording time
+  fetchTodayRecording();
+
+  // Auto-check for updates (daily, if enabled)
+  try {
+    const autoCheck = localStorage.getItem("autoCheckUpdates") !== "false";
+    const lastCheck = Number(localStorage.getItem("lastUpdateCheckUtc") || "0");
+    const nowSecs = Math.floor(Date.now() / 1000);
+    if (autoCheck && nowSecs - lastCheck >= 86400) {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      localStorage.setItem("lastUpdateCheckUtc", String(nowSecs));
+      if (update) {
+        // Update available — open the updates tab so user sees it
+        await openUpdates();
+      }
     }
+  } catch {
+    /* updater not available in dev / offline */
+  }
 
-    // Seed the band chart with whatever the backend already has (may be null
-    // on a fresh start or before the 2-second warmup period completes).
-    const latestBands = await invoke<BandSnapshot | null>("get_latest_bands");
-    if (latestBands) { bandChartEl?.update(latestBands); updateScores(latestBands); }
+  // Request notification permission on first launch (macOS shows a one-time dialog).
+  try {
+    if (!(await isPermissionGranted())) {
+      await requestPermission();
+    }
+  } catch (_) {
+    /* notification plugin unavailable or denied — non-fatal */
+  }
 
-    unlisteners.push(await listen<number>("daily-goal-changed", ev => {
+  const eegChannel = new Channel<EegPacket>();
+  eegChannel.onmessage = (pkt) => chartEl?.pushSamples(pkt.electrode, pkt.samples);
+  await invoke("subscribe_eeg", { onEvent: eegChannel });
+
+  const ppgChannel = new Channel<PpgPacket>();
+  ppgChannel.onmessage = (pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples);
+  await invoke("subscribe_ppg", { onEvent: ppgChannel });
+
+  const imuChannel = new Channel<ImuPacket>();
+  imuChannel.onmessage = (pkt) => imuChartEl?.pushPacket(pkt);
+  await invoke("subscribe_imu", { onEvent: imuChannel });
+
+  await refreshStatus();
+  appVersion = await invoke<string>("get_app_version");
+
+  // Poll model download status every 2 s until the encoder is loaded.
+  await refreshModelDl();
+  if (!modelDl.encoder_loaded) {
+    modelDlTimer = setInterval(refreshModelDl, 2000);
+  }
+
+  // Seed the band chart with whatever the backend already has (may be null
+  // on a fresh start or before the 2-second warmup period completes).
+  const latestBands = await invoke<BandSnapshot | null>("get_latest_bands");
+  if (latestBands) {
+    bandChartEl?.update(latestBands);
+    updateScores(latestBands);
+  }
+
+  unlisteners.push(
+    await listen<number>("daily-goal-changed", (ev) => {
       dailyGoalMin = ev.payload;
-    }));
+    }),
+  );
 
-    unlisteners.push(await listen<DeviceStatus>("status", ev => {
+  unlisteners.push(
+    await listen<DeviceStatus>("status", (ev) => {
       const prev = status.state;
       status = ev.payload;
       if (prev !== "connected" && status.state === "connected") startUptime();
-      if (prev === "connected"  && status.state !== "connected") { stopUptime(); showDeviceSwitcher = false; }
-    }));
+      if (prev === "connected" && status.state !== "connected") {
+        stopUptime();
+        showDeviceSwitcher = false;
+      }
+    }),
+  );
 
-    // When the background scanner discovers a new unpaired device, let the user
-    // know so they can go to Settings → Devices and pair it.
-    unlisteners.push(await listen<DiscoveredDevice[]>("devices-updated", ev => {
-      const unpaired = ev.payload.filter(d => !d.is_paired && d.last_rssi !== 0);
+  // When the background scanner discovers a new unpaired device, let the user
+  // know so they can go to Settings → Devices and pair it.
+  unlisteners.push(
+    await listen<DiscoveredDevice[]>("devices-updated", (ev) => {
+      const unpaired = ev.payload.filter((d) => !d.is_paired && d.last_rssi !== 0);
       for (const dev of unpaired) {
         if (!knownUnpairedIds.has(dev.id)) {
           knownUnpairedIds.add(dev.id);
-          addToast(
-            "info",
-            t("settings.newDeviceNotice"),
-            `${dev.name} — ${t("settings.newDeviceNoticeHint")}`,
-            8_000,
-          );
+          addToast("info", t("settings.newDeviceNotice"), `${dev.name} — ${t("settings.newDeviceNoticeHint")}`, 8_000);
         }
       }
-    }));
+    }),
+  );
 
-    // Spectrogram columns: 8 Hz, one column per filter hop (HOP=32 @ 256 Hz).
-    // Forwarded directly to EegChart which writes them into the tape canvases.
-    unlisteners.push(await listen<SpectrogramColumn>("eeg-spectrogram", ev => {
+  // Spectrogram columns: 8 Hz, one column per filter hop (HOP=32 @ 256 Hz).
+  // Forwarded directly to EegChart which writes them into the tape canvases.
+  unlisteners.push(
+    await listen<SpectrogramColumn>("eeg-spectrogram", (ev) => {
       chartEl?.pushSpecColumn(ev.payload);
-    }));
+    }),
+  );
 
-    // Live band power updates (4 Hz, broadcast event).
-    unlisteners.push(await listen<BandSnapshot>("eeg-bands", ev => {
+  // Live band power updates (4 Hz, broadcast event).
+  unlisteners.push(
+    await listen<BandSnapshot>("eeg-bands", (ev) => {
       bandChartEl?.update(ev.payload);
       updateScores(ev.payload);
-    }));
+    }),
+  );
 
-    // BLE device disconnect — fired from the btleplug adapter event stream
-    // for immediate visibility even before the muse_rs notification stream
-    // closes.  Triggers an immediate status refresh so the UI reacts fast.
-    unlisteners.push(await listen<{ device_name: string; device_id: string; reason: string }>(
-      "device-disconnected", (ev) => {
-        console.debug(`[ble] device-disconnected: ${ev.payload.device_name} reason=${ev.payload.reason}`);
-        refreshStatus();
+  // BLE device disconnect — fired from the btleplug adapter event stream
+  // for immediate visibility even before the muse_rs notification stream
+  // closes.  Triggers an immediate status refresh so the UI reacts fast.
+  unlisteners.push(
+    await listen<{ device_name: string; device_id: string; reason: string }>("device-disconnected", (_ev) => {
+      refreshStatus();
+    }),
+  );
+
+  // BLE device connected.
+  unlisteners.push(
+    await listen<{ device_name: string; device_id: string }>("device-connected", (_ev) => {
+      refreshStatus();
+    }),
+  );
+
+  // ── Event markers on EEG/PPG charts ──────────────────────────────────────
+
+  // Calibration phase boundaries
+  unlisteners.push(
+    await listen<{ action: string; iteration: number }>("calibration-action", (ev) => {
+      pushMarkerToBoth(ev.payload.action, "#f59e0b"); // amber
+    }),
+  );
+  unlisteners.push(
+    await listen<{ iteration: number }>("calibration-break", () => {
+      pushMarkerToBoth("Break", "#94a3b8"); // slate
+    }),
+  );
+  unlisteners.push(
+    await listen("calibration-completed", () => {
+      pushMarkerToBoth("✓ Done", "#22c55e"); // green
+      if (!onboardDone.calibrated) {
+        onboardDone.calibrated = true;
+        saveOnboarding();
       }
-    ));
+    }),
+  );
+  unlisteners.push(
+    await listen("calibration-cancelled", () => {
+      pushMarkerToBoth("✗ Cancel", "#ef4444"); // red
+    }),
+  );
 
-    // BLE device connected.
-    unlisteners.push(await listen<{ device_name: string; device_id: string }>(
-      "device-connected", (ev) => {
-        console.debug(`[ble] device-connected: ${ev.payload.device_name}`);
-        refreshStatus();
+  // Label submissions — the label window calls submit_label; we listen
+  // for a custom event emitted when a label is saved.
+  unlisteners.push(
+    await listen<{ text: string }>("label-created", (ev) => {
+      pushMarkerToBoth(`🏷 ${ev.payload.text}`, "#a78bfa"); // violet
+      recentLabel = ev.payload.text;
+      recentLabelAt = Math.floor(Date.now() / 1000);
+    }),
+  );
+
+  // Search result hits — emitted when the search window highlights results.
+  unlisteners.push(
+    await listen<{ query: string }>("search-hit", (ev) => {
+      pushMarkerToBoth(`🔍 ${ev.payload.query ?? "search"}`, "#38bdf8"); // sky
+    }),
+  );
+
+  // LLM model becomes available (server running = model downloaded & loaded).
+  unlisteners.push(
+    await listen<{ status: string }>("llm:status", (ev) => {
+      if (ev.payload.status === "running" && !onboardDone.llmDownloaded) {
+        onboardDone.llmDownloaded = true;
+        saveOnboarding();
       }
-    ));
+    }),
+  );
 
-    // ── Event markers on EEG/PPG charts ──────────────────────────────────────
+  const onVisible = () => {
+    if (!document.hidden) {
+      refreshStatus();
+      // Restart canvas render loops in case they died while the window was hidden
+      // (e.g. after wake-from-sleep or an unhandled exception during a frame).
+      chartEl?.restartRender();
+      bandChartEl?.restartRender();
+    }
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  unlisteners.push(() => document.removeEventListener("visibilitychange", onVisible));
+});
 
-    // Calibration phase boundaries
-    unlisteners.push(await listen<{ action: string; iteration: number }>(
-      "calibration-action", (ev) => {
-        pushMarkerToBoth(ev.payload.action, "#f59e0b");   // amber
-      }
-    ));
-    unlisteners.push(await listen<{ iteration: number }>(
-      "calibration-break", () => {
-        pushMarkerToBoth("Break", "#94a3b8");             // slate
-      }
-    ));
-    unlisteners.push(await listen("calibration-completed", () => {
-      pushMarkerToBoth("✓ Done", "#22c55e");              // green
-      if (!onboardDone.calibrated) { onboardDone.calibrated = true; saveOnboarding(); }
-    }));
-    unlisteners.push(await listen("calibration-cancelled", () => {
-      pushMarkerToBoth("✗ Cancel", "#ef4444");            // red
-    }));
+onDestroy(() => {
+  unlisteners.forEach((u) => u());
+  stopUptime();
+  if (modelDlTimer) {
+    clearInterval(modelDlTimer);
+    modelDlTimer = null;
+  }
+});
 
-    // Label submissions — the label window calls submit_label; we listen
-    // for a custom event emitted when a label is saved.
-    unlisteners.push(await listen<{ text: string }>(
-      "label-created", (ev) => {
-        pushMarkerToBoth(`🏷 ${ev.payload.text}`, "#a78bfa"); // violet
-        recentLabel   = ev.payload.text;
-        recentLabelAt = Math.floor(Date.now() / 1000);
-      }
-    ));
+// Keep onboarding state up-to-date as status/times change.
+$effect(() => {
+  checkOnboarding();
+});
 
-    // Search result hits — emitted when the search window highlights results.
-    unlisteners.push(await listen<{ query: string }>(
-      "search-hit", (ev) => {
-        pushMarkerToBoth(`🔍 ${ev.payload.query ?? "search"}`, "#38bdf8"); // sky
-      }
-    ));
+const sc = $derived(STATE_COLORS[status.state]);
 
-    // LLM model becomes available (server running = model downloaded & loaded).
-    unlisteners.push(await listen<{ status: string }>(
-      "llm:status", (ev) => {
-        if (ev.payload.status === "running" && !onboardDone.llmDownloaded) {
-          onboardDone.llmDownloaded = true; saveOnboarding();
-        }
-      }
-    ));
+// Keep the shared BT-off store in sync so the titlebar can react.
+$effect(() => {
+  setBtOff(status.state === "bt_off");
+});
 
-    const onVisible = () => {
-      if (!document.hidden) {
-        refreshStatus();
-        // Restart canvas render loops in case they died while the window was hidden
-        // (e.g. after wake-from-sleep or an unhandled exception during a frame).
-        chartEl?.restartRender();
-        bandChartEl?.restartRender();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    unlisteners.push(() => document.removeEventListener("visibilitychange", onVisible));
-
-  });
-
-  onDestroy(() => {
-    unlisteners.forEach(u => u());
-    stopUptime();
-    if (modelDlTimer) { clearInterval(modelDlTimer); modelDlTimer = null; }
-  });
-
-  // Keep onboarding state up-to-date as status/times change.
-  $effect(() => { checkOnboarding(); });
-
-  const sc = $derived(STATE_COLORS[status.state]);
-
-  // Keep the shared BT-off store in sync so the titlebar can react.
-  $effect(() => { setBtOff(status.state === "bt_off"); });
-
-  useWindowTitle("window.title.main");
+useWindowTitle("window.title.main");
 </script>
 
 <main class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}

@@ -6,290 +6,295 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Onboarding / first-run wizard -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { fly, fade }          from "svelte/transition";
-  import { Button }             from "$lib/components/ui/button";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { Progress }           from "$lib/components/ui/progress";
-  import { t }                  from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
-  import { openSettings }       from "$lib/navigation";
-  import type { DeviceStatus }    from "$lib/types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { fade, fly } from "svelte/transition";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { Progress } from "$lib/components/ui/progress";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import { openSettings } from "$lib/navigation";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { DeviceStatus } from "$lib/types";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface CalibrationAction { label: string; duration_secs: number; }
-  interface CalibrationProfile {
-    id: string; name: string;
-    actions: CalibrationAction[];
-    break_duration_secs: number;
-    loop_count: number;
-    auto_start: boolean;
-    last_calibration_utc: number | null;
-  }
-  type DownloadState = "not_downloaded"|"downloading"|"downloaded"|"failed"|"cancelled";
-  interface LlmModelEntry {
-    filename: string;
-    quant: string;
-    size_gb: number;
-    family_id: string;
-    family_name: string;
-    is_mmproj: boolean;
-    recommended: boolean;
-    state: DownloadState;
-    progress: number;
-  }
-  interface LlmCatalogLite {
-    entries: LlmModelEntry[];
-    active_model: string;
-    active_mmproj: string;
-  }
-  interface EegModelStatusLite {
-    weights_found: boolean;
-    downloading_weights: boolean;
-    download_progress: number;
-    download_status_msg: string | null;
-  }
-  interface NeuttsConfig {
-    enabled: boolean;
-    backbone_repo: string;
-    gguf_file: string;
-    voice_preset: string;
-    ref_wav_path: string;
-    ref_text: string;
-  }
-  type OnboardingModelKey = "zuna" | "kitten" | "neutts" | "llm" | "ocr";
-  type CalPhase = "idle" | "action" | "break" | "done";
-  interface Phase { kind: CalPhase; actionIndex: number; loop: number; }
+// ── Types ──────────────────────────────────────────────────────────────────
+interface CalibrationAction {
+  label: string;
+  duration_secs: number;
+}
+interface CalibrationProfile {
+  id: string;
+  name: string;
+  actions: CalibrationAction[];
+  break_duration_secs: number;
+  loop_count: number;
+  auto_start: boolean;
+  last_calibration_utc: number | null;
+}
+type DownloadState = "not_downloaded" | "downloading" | "downloaded" | "failed" | "cancelled";
+interface LlmModelEntry {
+  filename: string;
+  quant: string;
+  size_gb: number;
+  family_id: string;
+  family_name: string;
+  is_mmproj: boolean;
+  recommended: boolean;
+  state: DownloadState;
+  progress: number;
+}
+interface LlmCatalogLite {
+  entries: LlmModelEntry[];
+  active_model: string;
+  active_mmproj: string;
+}
+interface EegModelStatusLite {
+  weights_found: boolean;
+  downloading_weights: boolean;
+  download_progress: number;
+  download_status_msg: string | null;
+}
+interface NeuttsConfig {
+  enabled: boolean;
+  backbone_repo: string;
+  gguf_file: string;
+  voice_preset: string;
+  ref_wav_path: string;
+  ref_text: string;
+}
+type OnboardingModelKey = "zuna" | "kitten" | "neutts" | "llm" | "ocr";
+type CalPhase = "idle" | "action" | "break" | "done";
+interface Phase {
+  kind: CalPhase;
+  actionIndex: number;
+  loop: number;
+}
 
-  // ── Steps ──────────────────────────────────────────────────────────────────
-  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
-  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "models", "tray", "done"];
+// ── Steps ──────────────────────────────────────────────────────────────────
+type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
+const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "models", "tray", "done"];
 
-  let step    = $state<Step>("welcome");
-  let stepIdx = $derived(STEPS.indexOf(step));
+let step = $state<Step>("welcome");
+let stepIdx = $derived(STEPS.indexOf(step));
 
-  // ── Reactive status ────────────────────────────────────────────────────────
-  let status = $state<DeviceStatus>({
-    state: "disconnected", device_name: null, battery: 0,
-    channel_quality: ["no_signal","no_signal","no_signal","no_signal"],
-  } as DeviceStatus);
+// ── Reactive status ────────────────────────────────────────────────────────
+let status = $state<DeviceStatus>({
+  state: "disconnected",
+  device_name: null,
+  battery: 0,
+  channel_quality: ["no_signal", "no_signal", "no_signal", "no_signal"],
+} as DeviceStatus);
 
-  const EEG_CH = ["TP9", "AF7", "AF8", "TP10"];
-  const QC: Record<string, string> = {
-    good: "#22c55e", fair: "#eab308", poor: "#f97316", no_signal: "#94a3b8",
+const EEG_CH = ["TP9", "AF7", "AF8", "TP10"];
+const QC: Record<string, string> = {
+  good: "#22c55e",
+  fair: "#eab308",
+  poor: "#f97316",
+  no_signal: "#94a3b8",
+};
+
+let isConnected = $derived(status.state === "connected");
+let isScanning = $derived(status.state === "scanning");
+let allGoodOrFair = $derived(status.channel_quality.every((q: string) => q === "good" || q === "fair"));
+
+// ── Inline calibration state ───────────────────────────────────────────────
+let calProfile = $state<CalibrationProfile | null>(null);
+let calPhase = $state<Phase>({ kind: "idle", actionIndex: 0, loop: 1 });
+let calCountdown = $state(0);
+let calTotal = $state(0);
+let calRunning = $state(false);
+let ttsReady = $state(false);
+let ttsDlLabel = $state("");
+let unlistenTts: UnlistenFn | null = null;
+let modelsTimer: ReturnType<typeof setInterval> | null = null;
+
+// ── Model download step state ─────────────────────────────────────────────
+let llmTarget = $state<LlmModelEntry | null>(null);
+let zunaStatus = $state<EegModelStatusLite | null>(null);
+let modelLoadError = $state("");
+let ttsActionBusy = $state(false);
+let neuttsDlState = $state<"idle" | "downloading" | "ready" | "error">("idle");
+let kittenDlState = $state<"idle" | "downloading" | "ready" | "error">("idle");
+let neuttsDlError = $state("");
+let kittenDlError = $state("");
+let bundleBusy = $state(false);
+let ocrDlState = $state<"idle" | "downloading" | "ready" | "error">("idle");
+let ocrDlError = $state("");
+let screenRecPerm = $state<boolean | null>(null);
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm", "ocr"]);
+type AutoModelStage = OnboardingModelKey | "done";
+let autoModelStage = $state<AutoModelStage>("zuna");
+let autoModelInFlight = $state(false);
+let autoModelsStarted = $state(false);
+
+const llmIsDownloading = $derived(llmTarget?.state === "downloading");
+const llmIsDownloaded = $derived(llmTarget?.state === "downloaded");
+const llmProgressPct = $derived((llmTarget?.progress ?? 0) * 100);
+const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
+const zunaIsDownloaded = $derived(zunaStatus?.weights_found ?? false);
+const zunaProgressPct = $derived((zunaStatus?.download_progress ?? 0) * 100);
+const allRecommendedReady = $derived(
+  llmIsDownloaded &&
+    zunaIsDownloaded &&
+    neuttsDlState === "ready" &&
+    kittenDlState === "ready" &&
+    ocrDlState === "ready",
+);
+
+const footerModelStatus = $derived.by(() => {
+  const fmt = (name: string, ready: boolean, downloading: boolean, pct: number, hasError: boolean) => {
+    if (ready) return `${name} ✓`;
+    if (hasError) return `${name} ⚠`;
+    if (downloading) return `${name} ${Math.round(Math.max(0, Math.min(100, pct)))}%`;
+    return `${name} ○`;
   };
 
-  let isConnected   = $derived(status.state === "connected");
-  let isScanning    = $derived(status.state === "scanning");
-  let allGoodOrFair = $derived(
-    status.channel_quality.every((q: string) => q === "good" || q === "fair")
+  const stagePart = (stage: OnboardingModelKey) => {
+    if (stage === "zuna") return fmt("ZUNA", zunaIsDownloaded, zunaIsDownloading, zunaProgressPct, false);
+    if (stage === "kitten")
+      return fmt("Kitten", kittenDlState === "ready", kittenDlState === "downloading", 0, kittenDlState === "error");
+    if (stage === "neutts")
+      return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
+    if (stage === "ocr")
+      return fmt("OCR", ocrDlState === "ready", ocrDlState === "downloading", 0, ocrDlState === "error");
+    return fmt("LLM", llmIsDownloaded, llmIsDownloading, llmProgressPct, false);
+  };
+  const parts = onboardingDownloadOrder.map(stagePart);
+
+  if (allRecommendedReady) {
+    return `Model setup complete • ${parts.join(" • ")}`;
+  }
+  return `Model setup • ${parts.join(" • ")}`;
+});
+
+const calProgressPct = $derived(calTotal > 0 ? ((calTotal - calCountdown) / calTotal) * 100 : 0);
+
+const CAL_COLORS = [
+  "text-blue-600 dark:text-blue-400",
+  "text-violet-600 dark:text-violet-400",
+  "text-emerald-600 dark:text-emerald-400",
+  "text-amber-600 dark:text-amber-400",
+  "text-rose-600 dark:text-rose-400",
+  "text-cyan-600 dark:text-cyan-400",
+];
+const CAL_BG = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500"];
+
+const calPhaseLabel = $derived.by(() => {
+  if (calPhase.kind === "action" && calProfile) return calProfile.actions[calPhase.actionIndex]?.label ?? "";
+  if (calPhase.kind === "break") return t("calibration.break");
+  if (calPhase.kind === "done") return t("calibration.complete");
+  return t("calibration.ready");
+});
+const calPhaseColor = $derived.by(() => {
+  if (calPhase.kind === "action") return CAL_COLORS[calPhase.actionIndex % CAL_COLORS.length];
+  if (calPhase.kind === "break") return "text-amber-600 dark:text-amber-400";
+  if (calPhase.kind === "done") return "text-emerald-600 dark:text-emerald-400";
+  return "text-muted-foreground";
+});
+const calPhaseBg = $derived.by(() => {
+  if (calPhase.kind === "action") return CAL_BG[calPhase.actionIndex % CAL_BG.length];
+  if (calPhase.kind === "break") return "bg-amber-500";
+  return "bg-emerald-500";
+});
+
+// ── TTS helpers ────────────────────────────────────────────────────────────
+async function ttsSpeakWait(text: string): Promise<void> {
+  try {
+    await invoke("tts_speak", { text });
+  } catch (e) {}
+}
+function ttsSpeak(text: string): void {
+  invoke("tts_speak", { text }).catch((_e) => {});
+}
+
+// ── Model download helpers ────────────────────────────────────────────────
+
+/** Pick the best family match by id or name regex, preferring Q4_K_M. */
+function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, familyRe: RegExp): LlmModelEntry | null {
+  const family = entries.filter((e) => !e.is_mmproj && (e.family_id === familyId || familyRe.test(e.family_name)));
+  if (!family.length) return null;
+  const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
+  return (
+    byQuant("Q4_K_M") ??
+    byQuant("Q8_0") ??
+    byQuant("Q4_0") ??
+    family.find((e) => e.quant.toUpperCase().startsWith("Q4")) ??
+    family.find((e) => e.recommended) ??
+    family.find((e) => e.state === "downloaded") ??
+    family[0]
   );
+}
 
-  // ── Inline calibration state ───────────────────────────────────────────────
-  let calProfile   = $state<CalibrationProfile | null>(null);
-  let calPhase     = $state<Phase>({ kind: "idle", actionIndex: 0, loop: 1 });
-  let calCountdown = $state(0);
-  let calTotal     = $state(0);
-  let calRunning   = $state(false);
-  let ttsReady     = $state(false);
-  let ttsDlLabel   = $state("");
-  let unlistenTts: UnlistenFn | null = null;
-  let modelsTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * Pick the default LLM to download during onboarding.
+ *
+ * Priority chain:
+ *  1. Already-downloaded model (any family) — skip download.
+ *  2. Qwen3.5 4B Q4_K_M — best quality for the size.
+ *  3. LFM2.5-VL 1.6B Q8_0 — ultra-compact fallback (~1 GB).
+ *  4. Any recommended model, smallest first.
+ */
+function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
+  // If any model is already downloaded, prefer it (skip download).
+  const downloaded = entries.find((e) => !e.is_mmproj && e.state === "downloaded");
+  if (downloaded) return downloaded;
 
-  // ── Model download step state ─────────────────────────────────────────────
-  let llmTarget      = $state<LlmModelEntry | null>(null);
-  let zunaStatus      = $state<EegModelStatusLite | null>(null);
-  let modelLoadError  = $state("");
-  let ttsActionBusy   = $state(false);
-  let neuttsDlState   = $state<"idle"|"downloading"|"ready"|"error">("idle");
-  let kittenDlState   = $state<"idle"|"downloading"|"ready"|"error">("idle");
-  let neuttsDlError   = $state("");
-  let kittenDlError   = $state("");
-  let bundleBusy      = $state(false);
-  let ocrDlState      = $state<"idle"|"downloading"|"ready"|"error">("idle");
-  let ocrDlError      = $state("");
-  let screenRecPerm   = $state<boolean | null>(null);
-  const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-  let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm", "ocr"]);
-  type AutoModelStage = OnboardingModelKey | "done";
-  let autoModelStage      = $state<AutoModelStage>("zuna");
-  let autoModelInFlight   = $state(false);
-  let autoModelsStarted   = $state(false);
-
-  const llmIsDownloading = $derived(llmTarget?.state === "downloading");
-  const llmIsDownloaded  = $derived(llmTarget?.state === "downloaded");
-  const llmProgressPct   = $derived(((llmTarget?.progress ?? 0) * 100));
-  const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
-  const zunaIsDownloaded  = $derived(zunaStatus?.weights_found ?? false);
-  const zunaProgressPct   = $derived(((zunaStatus?.download_progress ?? 0) * 100));
-  const allRecommendedReady = $derived(
-    llmIsDownloaded && zunaIsDownloaded &&
-    neuttsDlState === "ready" && kittenDlState === "ready" &&
-    ocrDlState === "ready"
+  return (
+    pickFamilyTarget(entries, "qwen35-4b", /qwen3\.5\s*4b/i) ??
+    pickFamilyTarget(entries, "lfm25-vl-1.6b", /lfm2\.5.*1\.6b/i) ??
+    entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
+    null
   );
+}
 
-  const footerModelStatus = $derived.by(() => {
-    const fmt = (name: string, ready: boolean, downloading: boolean, pct: number, hasError: boolean) => {
-      if (ready) return `${name} ✓`;
-      if (hasError) return `${name} ⚠`;
-      if (downloading) return `${name} ${Math.round(Math.max(0, Math.min(100, pct)))}%`;
-      return `${name} ○`;
-    };
-
-    const stagePart = (stage: OnboardingModelKey) => {
-      if (stage === "zuna") return fmt("ZUNA", zunaIsDownloaded, zunaIsDownloading, zunaProgressPct, false);
-      if (stage === "kitten") return fmt("Kitten", kittenDlState === "ready", kittenDlState === "downloading", 0, kittenDlState === "error");
-      if (stage === "neutts") return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
-      if (stage === "ocr") return fmt("OCR", ocrDlState === "ready", ocrDlState === "downloading", 0, ocrDlState === "error");
-      return fmt("LLM", llmIsDownloaded, llmIsDownloading, llmProgressPct, false);
-    };
-    const parts = onboardingDownloadOrder.map(stagePart);
-
-    if (allRecommendedReady) {
-      return `Model setup complete • ${parts.join(" • ")}`;
-    }
-    return `Model setup • ${parts.join(" • ")}`;
-  });
-
-  const calProgressPct = $derived(
-    calTotal > 0 ? ((calTotal - calCountdown) / calTotal) * 100 : 0
-  );
-
-  const CAL_COLORS = [
-    "text-blue-600 dark:text-blue-400",
-    "text-violet-600 dark:text-violet-400",
-    "text-emerald-600 dark:text-emerald-400",
-    "text-amber-600 dark:text-amber-400",
-    "text-rose-600 dark:text-rose-400",
-    "text-cyan-600 dark:text-cyan-400",
-  ];
-  const CAL_BG = [
-    "bg-blue-500","bg-violet-500","bg-emerald-500",
-    "bg-amber-500","bg-rose-500","bg-cyan-500",
-  ];
-
-  const calPhaseLabel = $derived.by(() => {
-    if (calPhase.kind === "action" && calProfile)
-      return calProfile.actions[calPhase.actionIndex]?.label ?? "";
-    if (calPhase.kind === "break")  return t("calibration.break");
-    if (calPhase.kind === "done")   return t("calibration.complete");
-    return t("calibration.ready");
-  });
-  const calPhaseColor = $derived.by(() => {
-    if (calPhase.kind === "action") return CAL_COLORS[calPhase.actionIndex % CAL_COLORS.length];
-    if (calPhase.kind === "break")  return "text-amber-600 dark:text-amber-400";
-    if (calPhase.kind === "done")   return "text-emerald-600 dark:text-emerald-400";
-    return "text-muted-foreground";
-  });
-  const calPhaseBg = $derived.by(() => {
-    if (calPhase.kind === "action") return CAL_BG[calPhase.actionIndex % CAL_BG.length];
-    if (calPhase.kind === "break")  return "bg-amber-500";
-    return "bg-emerald-500";
-  });
-
-  // ── TTS helpers ────────────────────────────────────────────────────────────
-  async function ttsSpeakWait(text: string): Promise<void> {
-    try { await invoke("tts_speak", { text }); } catch (e) { console.warn("[onboarding] tts_speak failed:", e); }
+async function refreshModelDownloads() {
+  try {
+    const [catalog, eeg, ocrReady] = await Promise.all([
+      invoke<LlmCatalogLite>("get_llm_catalog"),
+      invoke<EegModelStatusLite>("get_eeg_model_status"),
+      invoke<boolean>("check_ocr_models_ready"),
+    ]);
+    llmTarget = pickLlmTarget(catalog.entries);
+    zunaStatus = eeg;
+    if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
+    modelLoadError = "";
+  } catch (e) {
+    modelLoadError = String(e);
   }
-  function ttsSpeak(text: string): void {
-    invoke("tts_speak", { text }).catch(e => console.warn("[onboarding] tts_speak failed:", e));
+}
+
+async function downloadLlm() {
+  if (!llmTarget || llmTarget.state === "downloading" || llmTarget.state === "downloaded") return;
+  await invoke("download_llm_model", { filename: llmTarget.filename });
+  await refreshModelDownloads();
+}
+
+async function downloadZuna() {
+  if (zunaStatus?.downloading_weights || zunaStatus?.weights_found) return;
+  await invoke("trigger_weights_download");
+  await refreshModelDownloads();
+}
+
+async function downloadTtsBackend(target: "neutts" | "kitten") {
+  if (ttsActionBusy) return;
+  ttsActionBusy = true;
+  if (target === "neutts") {
+    neuttsDlState = "downloading";
+    neuttsDlError = "";
+  } else {
+    kittenDlState = "downloading";
+    kittenDlError = "";
   }
 
-  // ── Model download helpers ────────────────────────────────────────────────
-
-  /** Pick the best family match by id or name regex, preferring Q4_K_M. */
-  function pickFamilyTarget(
-    entries: LlmModelEntry[],
-    familyId: string,
-    familyRe: RegExp,
-  ): LlmModelEntry | null {
-    const family = entries.filter((e) =>
-      !e.is_mmproj && (e.family_id === familyId || familyRe.test(e.family_name))
-    );
-    if (!family.length) return null;
-    const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
-    return (
-      byQuant("Q4_K_M") ??
-      byQuant("Q8_0") ??
-      byQuant("Q4_0") ??
-      family.find((e) => e.quant.toUpperCase().startsWith("Q4")) ??
-      family.find((e) => e.recommended) ??
-      family.find((e) => e.state === "downloaded") ??
-      family[0]
-    );
-  }
-
-  /**
-   * Pick the default LLM to download during onboarding.
-   *
-   * Priority chain:
-   *  1. Already-downloaded model (any family) — skip download.
-   *  2. Qwen3.5 4B Q4_K_M — best quality for the size.
-   *  3. LFM2.5-VL 1.6B Q8_0 — ultra-compact fallback (~1 GB).
-   *  4. Any recommended model, smallest first.
-   */
-  function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
-    // If any model is already downloaded, prefer it (skip download).
-    const downloaded = entries.find((e) => !e.is_mmproj && e.state === "downloaded");
-    if (downloaded) return downloaded;
-
-    return (
-      pickFamilyTarget(entries, "qwen35-4b", /qwen3\.5\s*4b/i) ??
-      pickFamilyTarget(entries, "lfm25-vl-1.6b", /lfm2\.5.*1\.6b/i) ??
-      entries
-        .filter((e) => !e.is_mmproj && e.recommended)
-        .sort((a, b) => a.size_gb - b.size_gb)[0] ??
-      null
-    );
-  }
-
-  async function refreshModelDownloads() {
-    try {
-      const [catalog, eeg, ocrReady] = await Promise.all([
-        invoke<LlmCatalogLite>("get_llm_catalog"),
-        invoke<EegModelStatusLite>("get_eeg_model_status"),
-        invoke<boolean>("check_ocr_models_ready"),
-      ]);
-      llmTarget = pickLlmTarget(catalog.entries);
-      zunaStatus = eeg;
-      if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
-      modelLoadError = "";
-    } catch (e) {
-      modelLoadError = String(e);
-    }
-  }
-
-  async function downloadLlm() {
-    if (!llmTarget || llmTarget.state === "downloading" || llmTarget.state === "downloaded") return;
-    await invoke("download_llm_model", { filename: llmTarget.filename });
-    await refreshModelDownloads();
-  }
-
-  async function downloadZuna() {
-    if (zunaStatus?.downloading_weights || zunaStatus?.weights_found) return;
-    await invoke("trigger_weights_download");
-    await refreshModelDownloads();
-  }
-
-  async function downloadTtsBackend(target: "neutts" | "kitten") {
-    if (ttsActionBusy) return;
-    ttsActionBusy = true;
-    if (target === "neutts") {
-      neuttsDlState = "downloading";
-      neuttsDlError = "";
-    } else {
-      kittenDlState = "downloading";
-      kittenDlError = "";
-    }
-
-    let previous: NeuttsConfig | null = null;
-    try {
-      previous = await invoke<NeuttsConfig>("get_neutts_config");
-      const nextCfg: NeuttsConfig = target === "neutts"
+  let previous: NeuttsConfig | null = null;
+  try {
+    previous = await invoke<NeuttsConfig>("get_neutts_config");
+    const nextCfg: NeuttsConfig =
+      target === "neutts"
         ? {
             ...previous,
             enabled: true,
@@ -299,279 +304,313 @@ the Free Software Foundation, version 3 only. -->
           }
         : { ...previous, enabled: false };
 
-      await invoke("set_neutts_config", { config: nextCfg });
-      await invoke("tts_init");
+    await invoke("set_neutts_config", { config: nextCfg });
+    await invoke("tts_init");
 
-      if (target === "neutts") neuttsDlState = "ready";
-      else kittenDlState = "ready";
-    } catch (e) {
-      if (target === "neutts") {
-        neuttsDlState = "error";
-        neuttsDlError = String(e);
-      } else {
-        kittenDlState = "error";
-        kittenDlError = String(e);
-      }
-    } finally {
-      if (previous) {
-        invoke("set_neutts_config", { config: previous }).catch(e => console.warn("[onboarding] set_neutts_config rollback failed:", e));
-      }
-      ttsActionBusy = false;
-    }
-  }
-
-  async function downloadOcrModels() {
-    if (ocrDlState === "ready" || ocrDlState === "downloading") return;
-    ocrDlState = "downloading";
-    ocrDlError = "";
-    try {
-      const ok = await invoke<boolean>("download_ocr_models");
-      ocrDlState = ok ? "ready" : "error";
-      if (!ok) ocrDlError = "OCR model download failed";
-    } catch (e) {
-      ocrDlState = "error";
-      ocrDlError = String(e);
-    }
-  }
-
-  async function downloadRecommendedBundle() {
-    if (bundleBusy) return;
-    bundleBusy = true;
-    modelLoadError = "";
-    try {
-      await refreshModelDownloads();
-      for (const stage of onboardingDownloadOrder) {
-        if (stage === "zuna") {
-          if (!zunaIsDownloaded && !zunaIsDownloading) await downloadZuna();
-        } else if (stage === "kitten") {
-          if (kittenDlState !== "ready") await downloadTtsBackend("kitten");
-        } else if (stage === "neutts") {
-          if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
-        } else if (stage === "ocr") {
-          if (ocrDlState !== "ready") await downloadOcrModels();
-        } else if (!llmIsDownloaded && !llmIsDownloading) {
-          await downloadLlm();
-        }
-      }
-      await refreshModelDownloads();
-    } catch (e) {
-      modelLoadError = String(e);
-    } finally {
-      bundleBusy = false;
-    }
-  }
-
-  function isStageReady(stage: OnboardingModelKey): boolean {
-    if (stage === "zuna") return zunaIsDownloaded;
-    if (stage === "kitten") return kittenDlState === "ready";
-    if (stage === "neutts") return neuttsDlState === "ready";
-    if (stage === "ocr") return ocrDlState === "ready";
-    return llmIsDownloaded;
-  }
-
-  function isStageDownloading(stage: OnboardingModelKey): boolean {
-    if (stage === "zuna") return zunaIsDownloading;
-    if (stage === "kitten") return kittenDlState === "downloading" || (ttsActionBusy && autoModelStage === "kitten");
-    if (stage === "neutts") return neuttsDlState === "downloading" || (ttsActionBusy && autoModelStage === "neutts");
-    if (stage === "ocr") return ocrDlState === "downloading";
-    return llmIsDownloading;
-  }
-
-  function advanceAutoModelStage() {
-    const nextStage = onboardingDownloadOrder.find((stage) => !isStageReady(stage));
-    if (nextStage) {
-      autoModelStage = nextStage;
+    if (target === "neutts") neuttsDlState = "ready";
+    else kittenDlState = "ready";
+  } catch (e) {
+    if (target === "neutts") {
+      neuttsDlState = "error";
+      neuttsDlError = String(e);
     } else {
-      autoModelStage = "done";
+      kittenDlState = "error";
+      kittenDlError = String(e);
     }
+  } finally {
+    if (previous) {
+      invoke("set_neutts_config", { config: previous }).catch((_e) => {});
+    }
+    ttsActionBusy = false;
   }
+}
 
-  async function driveAutoModelQueue() {
-    if (!autoModelsStarted || autoModelInFlight || autoModelStage === "done") return;
+async function downloadOcrModels() {
+  if (ocrDlState === "ready" || ocrDlState === "downloading") return;
+  ocrDlState = "downloading";
+  ocrDlError = "";
+  try {
+    const ok = await invoke<boolean>("download_ocr_models");
+    ocrDlState = ok ? "ready" : "error";
+    if (!ok) ocrDlError = "OCR model download failed";
+  } catch (e) {
+    ocrDlState = "error";
+    ocrDlError = String(e);
+  }
+}
 
-    advanceAutoModelStage();
-
-    // Wait while current stage is already actively downloading.
-    if (isStageDownloading(autoModelStage)) return;
-
-    autoModelInFlight = true;
-    try {
-      if (autoModelStage === "zuna" && !zunaIsDownloaded) {
-        await downloadZuna();
-      } else if (autoModelStage === "kitten" && kittenDlState !== "ready") {
-        await downloadTtsBackend("kitten");
-      } else if (autoModelStage === "neutts" && neuttsDlState !== "ready") {
-        await downloadTtsBackend("neutts");
-      } else if (autoModelStage === "ocr" && ocrDlState !== "ready") {
-        await downloadOcrModels();
-      } else if (autoModelStage === "llm" && !llmIsDownloaded && !llmIsDownloading) {
+async function downloadRecommendedBundle() {
+  if (bundleBusy) return;
+  bundleBusy = true;
+  modelLoadError = "";
+  try {
+    await refreshModelDownloads();
+    for (const stage of onboardingDownloadOrder) {
+      if (stage === "zuna") {
+        if (!zunaIsDownloaded && !zunaIsDownloading) await downloadZuna();
+      } else if (stage === "kitten") {
+        if (kittenDlState !== "ready") await downloadTtsBackend("kitten");
+      } else if (stage === "neutts") {
+        if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
+      } else if (stage === "ocr") {
+        if (ocrDlState !== "ready") await downloadOcrModels();
+      } else if (!llmIsDownloaded && !llmIsDownloading) {
         await downloadLlm();
       }
-    } catch (e) {
-      modelLoadError = String(e);
-    } finally {
-      autoModelInFlight = false;
-      advanceAutoModelStage();
     }
+    await refreshModelDownloads();
+  } catch (e) {
+    modelLoadError = String(e);
+  } finally {
+    bundleBusy = false;
   }
+}
 
-  // ── Calibration helpers ────────────────────────────────────────────────────
-  function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
+function isStageReady(stage: OnboardingModelKey): boolean {
+  if (stage === "zuna") return zunaIsDownloaded;
+  if (stage === "kitten") return kittenDlState === "ready";
+  if (stage === "neutts") return neuttsDlState === "ready";
+  if (stage === "ocr") return ocrDlState === "ready";
+  return llmIsDownloaded;
+}
 
-  async function emitCalEvent(event: string, payload: Record<string, unknown> = {}) {
-    await invoke("emit_calibration_event", { event, payload });
+function isStageDownloading(stage: OnboardingModelKey): boolean {
+  if (stage === "zuna") return zunaIsDownloading;
+  if (stage === "kitten") return kittenDlState === "downloading" || (ttsActionBusy && autoModelStage === "kitten");
+  if (stage === "neutts") return neuttsDlState === "downloading" || (ttsActionBusy && autoModelStage === "neutts");
+  if (stage === "ocr") return ocrDlState === "downloading";
+  return llmIsDownloading;
+}
+
+function advanceAutoModelStage() {
+  const nextStage = onboardingDownloadOrder.find((stage) => !isStageReady(stage));
+  if (nextStage) {
+    autoModelStage = nextStage;
+  } else {
+    autoModelStage = "done";
   }
+}
 
-  async function runCountdown(secs: number): Promise<boolean> {
-    calTotal = secs; calCountdown = secs;
-    while (calCountdown > 0) {
-      await sleep(1000);
-      if (!calRunning) return false;
-      calCountdown--;
+async function driveAutoModelQueue() {
+  if (!autoModelsStarted || autoModelInFlight || autoModelStage === "done") return;
+
+  advanceAutoModelStage();
+
+  // Wait while current stage is already actively downloading.
+  if (isStageDownloading(autoModelStage)) return;
+
+  autoModelInFlight = true;
+  try {
+    if (autoModelStage === "zuna" && !zunaIsDownloaded) {
+      await downloadZuna();
+    } else if (autoModelStage === "kitten" && kittenDlState !== "ready") {
+      await downloadTtsBackend("kitten");
+    } else if (autoModelStage === "neutts" && neuttsDlState !== "ready") {
+      await downloadTtsBackend("neutts");
+    } else if (autoModelStage === "ocr" && ocrDlState !== "ready") {
+      await downloadOcrModels();
+    } else if (autoModelStage === "llm" && !llmIsDownloaded && !llmIsDownloading) {
+      await downloadLlm();
     }
-    return true;
+  } catch (e) {
+    modelLoadError = String(e);
+  } finally {
+    autoModelInFlight = false;
+    advanceAutoModelStage();
   }
+}
 
-  async function startCalibration() {
-    if (!calProfile || !isConnected) return;
-    calRunning = true;
-    const p = calProfile;
+// ── Calibration helpers ────────────────────────────────────────────────────
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
 
-    await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
-    if (!calRunning) return;
+async function emitCalEvent(event: string, payload: Record<string, unknown> = {}) {
+  await invoke("emit_calibration_event", { event, payload });
+}
 
-    await emitCalEvent("calibration-started", {
-      profile_id: p.id, profile_name: p.name,
-      actions: p.actions.map(a => a.label), loop_count: p.loop_count,
-    });
+async function runCountdown(secs: number): Promise<boolean> {
+  calTotal = secs;
+  calCountdown = secs;
+  while (calCountdown > 0) {
+    await sleep(1000);
+    if (!calRunning) return false;
+    calCountdown--;
+  }
+  return true;
+}
 
-    for (let loop = 1; loop <= p.loop_count; loop++) {
+async function startCalibration() {
+  if (!calProfile || !isConnected) return;
+  calRunning = true;
+  const p = calProfile;
+
+  await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
+  if (!calRunning) return;
+
+  await emitCalEvent("calibration-started", {
+    profile_id: p.id,
+    profile_name: p.name,
+    actions: p.actions.map((a) => a.label),
+    loop_count: p.loop_count,
+  });
+
+  for (let loop = 1; loop <= p.loop_count; loop++) {
+    if (!calRunning) break;
+    for (let ai = 0; ai < p.actions.length; ai++) {
       if (!calRunning) break;
-      for (let ai = 0; ai < p.actions.length; ai++) {
+      const action = p.actions[ai];
+
+      calPhase = { kind: "action", actionIndex: ai, loop };
+      await ttsSpeakWait(action.label);
+      if (!calRunning) break;
+
+      await emitCalEvent("calibration-action", {
+        action: action.label,
+        action_index: ai,
+        loop,
+        phase: `action_${ai}`,
+      });
+      const actionStart = Math.floor(Date.now() / 1000);
+      if (!(await runCountdown(action.duration_secs))) break;
+      try {
+        await invoke("submit_label", { labelStartUtc: actionStart, text: action.label });
+      } catch (e) {}
+
+      const isLast = loop === p.loop_count && ai === p.actions.length - 1;
+      if (!isLast && calRunning) {
+        const nextAction = p.actions[(ai + 1) % p.actions.length];
+        calPhase = { kind: "break", actionIndex: ai, loop };
+
+        await ttsSpeakWait("Break.");
         if (!calRunning) break;
-        const action = p.actions[ai];
+        await sleep(300);
+        ttsSpeak(`Next: ${nextAction.label}.`);
 
-        calPhase = { kind: "action", actionIndex: ai, loop };
-        await ttsSpeakWait(action.label);
-        if (!calRunning) break;
-
-        await emitCalEvent("calibration-action", {
-          action: action.label, action_index: ai, loop, phase: `action_${ai}`,
-        });
-        const actionStart = Math.floor(Date.now() / 1000);
-        if (!(await runCountdown(action.duration_secs))) break;
-        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch (e) { console.warn("[onboarding] submit_label failed:", e); }
-
-        const isLast = loop === p.loop_count && ai === p.actions.length - 1;
-        if (!isLast && calRunning) {
-          const nextAction = p.actions[(ai + 1) % p.actions.length];
-          calPhase = { kind: "break", actionIndex: ai, loop };
-
-          await ttsSpeakWait("Break.");
-          if (!calRunning) break;
-          await sleep(300);
-          ttsSpeak(`Next: ${nextAction.label}.`);
-
-          await emitCalEvent("calibration-break", { after_action: action.label, loop });
-          if (!(await runCountdown(p.break_duration_secs))) break;
-        }
+        await emitCalEvent("calibration-break", { after_action: action.label, loop });
+        if (!(await runCountdown(p.break_duration_secs))) break;
       }
     }
-
-    if (calRunning) {
-      calPhase   = { kind: "done", actionIndex: 0, loop: calProfile.loop_count };
-      calRunning = false;
-      ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
-      await emitCalEvent("calibration-completed", { loop_count: p.loop_count });
-      await invoke("record_calibration_completed", { profileId: p.id });
-    } else if (calPhase.kind !== "idle") {
-      calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
-    }
   }
 
-  async function cancelCalibration() {
-    if (!calRunning) return;
+  if (calRunning) {
+    calPhase = { kind: "done", actionIndex: 0, loop: calProfile.loop_count };
     calRunning = false;
-    ttsSpeak("Calibration cancelled.");
-    await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+    ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
+    await emitCalEvent("calibration-completed", { loop_count: p.loop_count });
+    await invoke("record_calibration_completed", { profileId: p.id });
+  } else if (calPhase.kind !== "idle") {
     calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
   }
+}
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  const unsubs: UnlistenFn[] = [];
-  onMount(async () => {
-    status = await invoke<DeviceStatus>("get_status");
-    unsubs.push(await listen<DeviceStatus>("status", (ev) => { status = ev.payload; }));
+async function cancelCalibration() {
+  if (!calRunning) return;
+  calRunning = false;
+  ttsSpeak("Calibration cancelled.");
+  await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+  calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+}
 
-    // Load default calibration profile for inline calibration
-    try {
-      const order = await invoke<string[]>("get_onboarding_model_download_order");
-      const valid = order.filter((stage): stage is OnboardingModelKey =>
-        stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm" || stage === "ocr"
-      );
-      if (valid.length) onboardingDownloadOrder = valid;
-    } catch (e) { console.warn("[onboarding] get_onboarding_download_order failed:", e); }
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+const unsubs: UnlistenFn[] = [];
+onMount(async () => {
+  status = await invoke<DeviceStatus>("get_status");
+  unsubs.push(
+    await listen<DeviceStatus>("status", (ev) => {
+      status = ev.payload;
+    }),
+  );
 
-    try {
-      calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
-      if (!calProfile) {
-        const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
-        calProfile = profiles[0] ?? null;
-      }
-    } catch (e) { console.warn("[onboarding] load calibration profile failed:", e); }
-
-    // Pre-warm TTS engine
-    unlistenTts = await listen<{ phase: string; label: string }>(
-      "tts-progress", (ev) => {
-        if (ev.payload.phase === "ready") { ttsReady = true; ttsDlLabel = ""; }
-        else { ttsReady = false; ttsDlLabel = ev.payload.label ?? ""; }
-      }
+  // Load default calibration profile for inline calibration
+  try {
+    const order = await invoke<string[]>("get_onboarding_model_download_order");
+    const valid = order.filter(
+      (stage): stage is OnboardingModelKey =>
+        stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm" || stage === "ocr",
     );
-    invoke("tts_init").catch(e => console.warn("[onboarding] tts_init failed:", e));
+    if (valid.length) onboardingDownloadOrder = valid;
+  } catch (e) {}
 
-    await refreshModelDownloads();
-    if (isMac) {
-      try { screenRecPerm = await invoke<boolean>("check_screen_recording_permission"); } catch (e) { console.warn("[onboarding] check_screen_recording_permission failed:", e); }
+  try {
+    calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
+    if (!calProfile) {
+      const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
+      calProfile = profiles[0] ?? null;
     }
-    autoModelsStarted = true;
-    void driveAutoModelQueue();
-    modelsTimer = setInterval(() => {
-      refreshModelDownloads();
-      if (isMac) invoke<boolean>("check_screen_recording_permission").then(v => { screenRecPerm = v; }).catch(e => console.warn("[onboarding] check_screen_recording_permission failed:", e));
-    }, 2000);
-  });
-  onDestroy(async () => {
-    unsubs.forEach((u) => u());
-    unlistenTts?.();
-    if (calRunning) {
-      calRunning = false;
-      await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+  } catch (e) {}
+
+  // Pre-warm TTS engine
+  unlistenTts = await listen<{ phase: string; label: string }>("tts-progress", (ev) => {
+    if (ev.payload.phase === "ready") {
+      ttsReady = true;
+      ttsDlLabel = "";
+    } else {
+      ttsReady = false;
+      ttsDlLabel = ev.payload.label ?? "";
     }
-    if (modelsTimer) clearInterval(modelsTimer);
   });
+  invoke("tts_init").catch((_e) => {});
 
-  $effect(() => {
-    zunaStatus;
-    llmTarget;
-    kittenDlState;
-    neuttsDlState;
-    ocrDlState;
-    ttsActionBusy;
-    autoModelsStarted;
-    autoModelStage;
+  await refreshModelDownloads();
+  if (isMac) {
+    try {
+      screenRecPerm = await invoke<boolean>("check_screen_recording_permission");
+    } catch (e) {}
+  }
+  autoModelsStarted = true;
+  void driveAutoModelQueue();
+  modelsTimer = setInterval(() => {
+    refreshModelDownloads();
+    if (isMac)
+      invoke<boolean>("check_screen_recording_permission")
+        .then((v) => {
+          screenRecPerm = v;
+        })
+        .catch((_e) => {});
+  }, 2000);
+});
+onDestroy(async () => {
+  unsubs.forEach((u) => u());
+  unlistenTts?.();
+  if (calRunning) {
+    calRunning = false;
+    await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+  }
+  if (modelsTimer) clearInterval(modelsTimer);
+});
 
-    if (!autoModelsStarted) return;
-    void driveAutoModelQueue();
-  });
+$effect(() => {
+  zunaStatus;
+  llmTarget;
+  kittenDlState;
+  neuttsDlState;
+  ocrDlState;
+  ttsActionBusy;
+  autoModelsStarted;
+  autoModelStage;
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
-  function next() { const i = stepIdx; if (i < STEPS.length - 1) step = STEPS[i + 1]; }
-  function prev() { const i = stepIdx; if (i > 0) step = STEPS[i - 1]; }
-  async function startScan() { await invoke("retry_connect"); }
-  async function finish()    { await invoke("complete_onboarding"); }
+  if (!autoModelsStarted) return;
+  void driveAutoModelQueue();
+});
 
+// ── Navigation ─────────────────────────────────────────────────────────────
+function next() {
+  const i = stepIdx;
+  if (i < STEPS.length - 1) step = STEPS[i + 1];
+}
+function prev() {
+  const i = stepIdx;
+  if (i > 0) step = STEPS[i - 1];
+}
+async function startScan() {
+  await invoke("retry_connect");
+}
+async function finish() {
+  await invoke("complete_onboarding");
+}
 
-  useWindowTitle("window.title.onboarding");
+useWindowTitle("window.title.onboarding");
 </script>
 
 <main class="h-full min-h-0 flex flex-col overflow-hidden select-none bg-background text-foreground"

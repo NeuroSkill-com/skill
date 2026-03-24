@@ -47,34 +47,34 @@
  *   └── tray-scanning.png    (22px)
  */
 
-import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const ICONS_DIR  = path.join(__dirname, "src-tauri", "icons");
+const ICONS_DIR = path.join(__dirname, "src-tauri", "icons");
 const STATIC_DIR = path.join(__dirname, "static");
 
 const PNG_TARGETS = [
-  { file: "32x32.png",             size: 32  },
-  { file: "128x128.png",           size: 128 },
-  { file: "128x128@2x.png",        size: 256 },
-  { file: "icon.png",              size: 512 },
-  { file: "Square30x30Logo.png",   size: 30  },
-  { file: "Square44x44Logo.png",   size: 44  },
-  { file: "Square71x71Logo.png",   size: 71  },
-  { file: "Square89x89Logo.png",   size: 89  },
+  { file: "32x32.png", size: 32 },
+  { file: "128x128.png", size: 128 },
+  { file: "128x128@2x.png", size: 256 },
+  { file: "icon.png", size: 512 },
+  { file: "Square30x30Logo.png", size: 30 },
+  { file: "Square44x44Logo.png", size: 44 },
+  { file: "Square71x71Logo.png", size: 71 },
+  { file: "Square89x89Logo.png", size: 89 },
   { file: "Square107x107Logo.png", size: 107 },
   { file: "Square142x142Logo.png", size: 142 },
   { file: "Square150x150Logo.png", size: 150 },
   { file: "Square284x284Logo.png", size: 284 },
   { file: "Square310x310Logo.png", size: 310 },
-  { file: "StoreLogo.png",         size: 50  },
+  { file: "StoreLogo.png", size: 50 },
 ];
 
 // Tray icons are NOT generated here — they are status-specific (different colors
@@ -87,19 +87,18 @@ const TRAY_SIZE = 32;
 const ICO_SIZES = [16, 32, 48, 256];
 
 const ICNS_TYPES = [
-  { code: "icp4", size: 16   },
-  { code: "icp5", size: 32   },
-  { code: "icp6", size: 64   },
-  { code: "ic07", size: 128  },
-  { code: "ic08", size: 256  },
-  { code: "ic09", size: 512  },
+  { code: "icp4", size: 16 },
+  { code: "icp5", size: 32 },
+  { code: "icp6", size: 64 },
+  { code: "ic07", size: 128 },
+  { code: "ic08", size: 256 },
+  { code: "ic09", size: 512 },
   { code: "ic10", size: 1024 },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function die(msg) {
-  console.error(`\x1b[31mError:\x1b[0m ${msg}`);
+function die(_msg) {
   process.exit(1);
 }
 
@@ -141,7 +140,7 @@ function rasterize(src, outPath, size, { imCmd, type }) {
     execSync(
       `${imCmd} "${src}" -resize ${size}x${size} -background none` +
         ` -gravity center -extent ${size}x${size} "${outPath}"`,
-      { stdio: ["pipe", "pipe", "pipe"] }
+      { stdio: ["pipe", "pipe", "pipe"] },
     );
   }
 }
@@ -163,14 +162,14 @@ function buildIco(pngPaths, outPath) {
   for (let i = 0; i < count; i++) {
     const e = Buffer.alloc(dirEntrySize);
     const s = ICO_SIZES[i] >= 256 ? 0 : ICO_SIZES[i];
-    e.writeUInt8(s, 0);                       // width  (0 = 256+)
-    e.writeUInt8(s, 1);                       // height (0 = 256+)
-    e.writeUInt8(0, 2);                       // color palette
-    e.writeUInt8(0, 3);                       // reserved
-    e.writeUInt16LE(1, 4);                    // color planes
-    e.writeUInt16LE(32, 6);                   // bits per pixel
-    e.writeUInt32LE(pngs[i].length, 8);       // image data size
-    e.writeUInt32LE(offset, 12);              // offset to image data
+    e.writeUInt8(s, 0); // width  (0 = 256+)
+    e.writeUInt8(s, 1); // height (0 = 256+)
+    e.writeUInt8(0, 2); // color palette
+    e.writeUInt8(0, 3); // reserved
+    e.writeUInt16LE(1, 4); // color planes
+    e.writeUInt16LE(32, 6); // bits per pixel
+    e.writeUInt32LE(pngs[i].length, 8); // image data size
+    e.writeUInt32LE(offset, 12); // offset to image data
     offset += pngs[i].length;
     entries.push(e);
   }
@@ -205,8 +204,6 @@ function buildIcns(pngPaths, outPath) {
 function main() {
   const src = process.argv[2];
   if (!src) {
-    console.log("Usage: node generate-icons.js <source-image>");
-    console.log("       Accepts SVG, PNG, or JPEG.");
     process.exit(1);
   }
 
@@ -223,9 +220,9 @@ function main() {
     } catch {
       die(
         "rsvg-convert not found — required for SVG sources.\n" +
-        "  macOS : brew install librsvg\n" +
-        "  Alpine: apk add librsvg\n" +
-        "  Debian: apt install librsvg2-bin"
+          "  macOS : brew install librsvg\n" +
+          "  Alpine: apk add librsvg\n" +
+          "  Debian: apt install librsvg2-bin",
       );
     }
   } else {
@@ -233,9 +230,9 @@ function main() {
     if (!imCmd) {
       die(
         "ImageMagick not found — required for PNG/JPEG sources.\n" +
-        "  macOS : brew install imagemagick\n" +
-        "  Alpine: apk add imagemagick\n" +
-        "  Debian: apt install imagemagick"
+          "  macOS : brew install imagemagick\n" +
+          "  Alpine: apk add imagemagick\n" +
+          "  Debian: apt install imagemagick",
       );
     }
   }
@@ -253,21 +250,15 @@ function main() {
   };
 
   try {
-    // 1. Generate all PNG targets
-    console.log(`\x1b[1mSource:\x1b[0m ${srcPath} \x1b[2m(${type})\x1b[0m`);
-    console.log(`\x1b[1mOutput:\x1b[0m ${ICONS_DIR}/\n`);
-
     for (const t of PNG_TARGETS) {
       const out = path.join(ICONS_DIR, t.file);
       rasterize(srcPath, out, t.size, ctx);
-      console.log(`  \x1b[32m✓\x1b[0m ${t.file} (${t.size}×${t.size})`);
     }
 
     // 2. Tray icons
     for (const name of TRAY_ICONS) {
       const out = path.join(ICONS_DIR, name);
       rasterize(srcPath, out, TRAY_SIZE, ctx);
-      console.log(`  \x1b[32m✓\x1b[0m ${name} (${TRAY_SIZE}×${TRAY_SIZE})`);
     }
 
     // 3. ICO (multi-layer)
@@ -277,7 +268,6 @@ function main() {
       return p;
     });
     buildIco(icoPngs, path.join(ICONS_DIR, "icon.ico"));
-    console.log(`  \x1b[32m✓\x1b[0m icon.ico (${ICO_SIZES.join("/")}px layers)`);
 
     // 4. ICNS (multi-layer)
     const icnsPngs = ICNS_TYPES.map((t) => {
@@ -286,19 +276,17 @@ function main() {
       return p;
     });
     buildIcns(icnsPngs, path.join(ICONS_DIR, "icon.icns"));
-    console.log(`  \x1b[32m✓\x1b[0m icon.icns (${ICNS_TYPES.map((t) => t.size).join("/")}px layers)`);
 
     // 5. Sync static/icon.png used by the web frontend (e.g. the About window)
-    const tauriIcon  = path.join(ICONS_DIR,  "icon.png");
+    const tauriIcon = path.join(ICONS_DIR, "icon.png");
     const staticIcon = path.join(STATIC_DIR, "icon.png");
     fs.copyFileSync(tauriIcon, staticIcon);
-    console.log(`  \x1b[32m✓\x1b[0m static/icon.png (synced from icon.png)`);
-
-    console.log(`\n\x1b[32mDone.\x1b[0m ${PNG_TARGETS.length + TRAY_ICONS.length + 2} files generated.`);
   } finally {
     // Clean up temp files
     for (const f of tmpFiles) {
-      try { fs.unlinkSync(f); } catch {}
+      try {
+        fs.unlinkSync(f);
+      } catch {}
     }
   }
 }

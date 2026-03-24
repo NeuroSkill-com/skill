@@ -10,21 +10,29 @@
 ///   2. Tokenised and decoded into the KV cache (so the model continues from
 ///      a logically consistent state after the closing tag).
 pub(super) struct ThinkTracker {
-    budget:    Option<u32>,
-    inside:    bool,
-    closed:    bool,
-    tag_buf:   String,   // accumulate chars to detect multi-token tags
+    budget: Option<u32>,
+    inside: bool,
+    closed: bool,
+    tag_buf: String, // accumulate chars to detect multi-token tags
     tok_count: u32,
 }
 
 impl ThinkTracker {
     pub fn new(budget: Option<u32>) -> Self {
-        Self { budget, inside: false, closed: false, tag_buf: String::new(), tok_count: 0 }
+        Self {
+            budget,
+            inside: false,
+            closed: false,
+            tag_buf: String::new(),
+            tok_count: 0,
+        }
     }
 
     /// Returns `Some(inject)` if the think block must be force-closed now.
     pub fn feed(&mut self, piece: &str) -> Option<String> {
-        if self.closed { return None; }
+        if self.closed {
+            return None;
+        }
 
         self.tag_buf.push_str(piece);
         // Keep tag_buf bounded — only need enough to detect the longest tag
@@ -33,7 +41,8 @@ impl ThinkTracker {
             let drain = self.tag_buf.len() - cap;
             // Snap to a char boundary — raw byte arithmetic can land inside a
             // multi-byte codepoint (e.g. CJK) and cause a panic.
-            let drain = (0..=drain).rev()
+            let drain = (0..=drain)
+                .rev()
                 .find(|&i| self.tag_buf.is_char_boundary(i))
                 .unwrap_or(0);
             self.tag_buf.drain(..drain);
@@ -102,7 +111,7 @@ mod tests {
         assert!(t.feed("<think>").is_none());
         assert!(t.feed("tok1").is_none()); // count=1
         assert!(t.feed("tok2").is_none()); // count=2
-        let inject = t.feed("tok3");       // count=3 = budget
+        let inject = t.feed("tok3"); // count=3 = budget
         assert_eq!(inject, Some("\n</think>\n".to_string()));
         // After forced close, no more injections
         assert!(t.feed("tok4").is_none());
@@ -123,9 +132,9 @@ mod tests {
         assert!(t.feed("<thi").is_none());
         assert!(t.feed("nk>").is_none()); // now inside
         assert!(t.feed("reasoning").is_none()); // count=1
-        assert!(t.feed("</thi").is_none());     // count=2, partial close
-        assert!(t.feed("nk>").is_none());        // natural close detected
-        // Should be closed now
+        assert!(t.feed("</thi").is_none()); // count=2, partial close
+        assert!(t.feed("nk>").is_none()); // natural close detected
+                                          // Should be closed now
         assert!(t.feed("after").is_none());
     }
 

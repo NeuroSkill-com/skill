@@ -6,93 +6,100 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- API Status window — connected WebSocket clients + request log -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { Badge }              from "$lib/components/ui/badge";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { t }                  from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import { fmtTime } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Card, CardContent } from "$lib/components/ui/card";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { fmtTime } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface WsClient {
-    peer:         string;
-    connected_at: number;
+// ── Types ──────────────────────────────────────────────────────────────────
+interface WsClient {
+  peer: string;
+  connected_at: number;
+}
+interface WsRequestLog {
+  timestamp: number;
+  peer: string;
+  command: string;
+  ok: boolean;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let port = $state(0);
+let clients = $state<WsClient[]>([]);
+let requests = $state<WsRequestLog[]>([]);
+let now = $state(Math.floor(Date.now() / 1000));
+let copied = $state("");
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmtAgo(utc: number): string {
+  const d = now - utc;
+  if (d < 5) return t("common.justNow");
+  if (d < 60) return t("common.secondsAgo", { n: d });
+  if (d < 3600) return t("common.minutesAgo", { n: Math.floor(d / 60) });
+  return t("common.hoursAgo", { n: Math.floor(d / 3600) });
+}
+
+function shortPeer(peer: string): string {
+  const idx = peer.lastIndexOf(":");
+  return idx > 0 ? peer.slice(0, idx) : peer;
+}
+
+async function copyText(text: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = label;
+    setTimeout(() => {
+      if (copied === label) copied = "";
+    }, 1500);
+  } catch {
+    /* clipboard not available */
   }
-  interface WsRequestLog {
-    timestamp: number;
-    peer:      string;
-    command:   string;
-    ok:        boolean;
-  }
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let port     = $state(0);
-  let clients  = $state<WsClient[]>([]);
-  let requests = $state<WsRequestLog[]>([]);
-  let now      = $state(Math.floor(Date.now() / 1000));
-  let copied   = $state("");
+// ── Data fetching ──────────────────────────────────────────────────────────
+async function refresh() {
+  [port, clients, requests] = await Promise.all([
+    invoke<number>("get_ws_port"),
+    invoke<WsClient[]>("get_ws_clients"),
+    invoke<WsRequestLog[]>("get_ws_request_log"),
+  ]);
+  requests = [...requests].reverse();
+}
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function fmtAgo(utc: number): string {
-    const d = now - utc;
-    if (d < 5)    return t("common.justNow");
-    if (d < 60)   return t("common.secondsAgo", { n: d });
-    if (d < 3600) return t("common.minutesAgo", { n: Math.floor(d / 60) });
-    return t("common.hoursAgo", { n: Math.floor(d / 3600) });
-  }
+let pollTimer: ReturnType<typeof setInterval>;
+let nowTimer: ReturnType<typeof setInterval>;
 
-  function shortPeer(peer: string): string {
-    const idx = peer.lastIndexOf(":");
-    return idx > 0 ? peer.slice(0, idx) : peer;
-  }
+onMount(async () => {
+  await refresh();
+  // Mark "try the API" onboarding step as done.
+  try {
+    const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+    if (!ob.apiVisited) {
+      ob.apiVisited = true;
+      localStorage.setItem("onboardDone", JSON.stringify(ob));
+    }
+  } catch (e) {}
+  pollTimer = setInterval(refresh, 2000);
+  nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
+  window.addEventListener("skill:api-refresh", refresh);
+});
+onDestroy(() => {
+  clearInterval(pollTimer);
+  clearInterval(nowTimer);
+  window.removeEventListener("skill:api-refresh", refresh);
+});
 
-  async function copyText(text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      copied = label;
-      setTimeout(() => { if (copied === label) copied = ""; }, 1500);
-    } catch { /* clipboard not available */ }
-  }
+let wsUrl = $derived(`ws://localhost:${port}`);
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-  async function refresh() {
-    [port, clients, requests] = await Promise.all([
-      invoke<number>("get_ws_port"),
-      invoke<WsClient[]>("get_ws_clients"),
-      invoke<WsRequestLog[]>("get_ws_request_log"),
-    ]);
-    requests = [...requests].reverse();
-  }
+// ── CLI docs ───────────────────────────────────────────────────────────────
+let activeTab = $state<"overview" | "cli_tool" | "websocket" | "python" | "node">("overview");
 
-  let pollTimer: ReturnType<typeof setInterval>;
-  let nowTimer:  ReturnType<typeof setInterval>;
-
-  onMount(async () => {
-    await refresh();
-    // Mark "try the API" onboarding step as done.
-    try {
-      const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
-      if (!ob.apiVisited) { ob.apiVisited = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-    } catch (e) { console.warn("[api] onboarding localStorage update failed:", e); }
-    pollTimer = setInterval(refresh, 2000);
-    nowTimer  = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
-    window.addEventListener("skill:api-refresh", refresh);
-  });
-  onDestroy(() => {
-    clearInterval(pollTimer);
-    clearInterval(nowTimer);
-    window.removeEventListener("skill:api-refresh", refresh);
-  });
-
-  let wsUrl = $derived(`ws://localhost:${port}`);
-
-  // ── CLI docs ───────────────────────────────────────────────────────────────
-  let activeTab = $state<"overview" | "cli_tool" | "websocket" | "python" | "node">("overview");
-
-  const CLI_EXAMPLES = {
-    overview: `# NeuroSkill™ EEG — two ways to interact
+const CLI_EXAMPLES = {
+  overview: `# NeuroSkill™ EEG — two ways to interact
 #
 # 1. neuroskill — high-level typed CLI (included in the repo)
 #    npx neuroskill <command> [options]
@@ -116,7 +123,7 @@ the Free Software Foundation, version 3 only. -->
 #   --json       raw JSON output (pipe to jq)
 #   --help       full help with all examples`,
 
-    cli_tool: `# ── Install prerequisites (one-time) ─────────────────────────
+  cli_tool: `# ── Install prerequisites (one-time) ─────────────────────────
 # Requires: Node ≥ 18, bonjour-service + ws (already in package.json)
 npm install neuroskill -g          # from the skill project root
 
@@ -153,7 +160,7 @@ npx neuroskill raw '{"command":"search","start_utc":1740412800,"end_utc":1740415
 # ── Explicit port (skip mDNS) ─────────────────────────────────
 npx neuroskill --port {port} status`,
 
-    websocket: `# ── wscat (Node.js) ──────────────────────────────────────────
+  websocket: `# ── wscat (Node.js) ──────────────────────────────────────────
 npm install -g wscat
 wscat -c ws://localhost:{port}
 > {"command":"status"}
@@ -172,7 +179,7 @@ dns-sd -B _skill._tcp
 # Linux:
 avahi-browse -r _skill._tcp`,
 
-    python: `# ── Python (websockets library) ──────────────────────────────
+  python: `# ── Python (websockets library) ──────────────────────────────
 # pip install websockets
 import asyncio, json, websockets
 
@@ -196,7 +203,7 @@ async def main():
 
 asyncio.run(main())`,
 
-    node: `// ── Node.js (ws library) ─────────────────────────────────────
+  node: `// ── Node.js (ws library) ─────────────────────────────────────
 // npm install ws
 const WebSocket = require("ws");
 const ws = new WebSocket("ws://localhost:{port}");
@@ -224,17 +231,17 @@ ws.on("message", (data) => {
     ws.close();
   }
 });`,
-  } as const;
+} as const;
 
-  function cliCode(key: keyof typeof CLI_EXAMPLES): string {
-    return CLI_EXAMPLES[key].replace(/\{port\}/g, String(port || "…"));
-  }
+function cliCode(key: keyof typeof CLI_EXAMPLES): string {
+  return CLI_EXAMPLES[key].replace(/\{port\}/g, String(port || "…"));
+}
 
-  async function copyCode(key: keyof typeof CLI_EXAMPLES) {
-    await copyText(cliCode(key), `cli-${key}`);
-  }
+async function copyCode(key: keyof typeof CLI_EXAMPLES) {
+  await copyText(cliCode(key), `cli-${key}`);
+}
 
-  useWindowTitle("window.title.api");
+useWindowTitle("window.title.api");
 </script>
 
 <main class="h-full min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-3"

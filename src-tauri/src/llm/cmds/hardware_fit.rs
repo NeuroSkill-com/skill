@@ -2,11 +2,11 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Per-model hardware fit prediction.
 
-use std::sync::{Mutex, OnceLock};
 use serde::Serialize;
+use std::sync::{Mutex, OnceLock};
 
-use crate::MutexExt;
 use crate::AppState;
+use crate::MutexExt;
 
 /// Cached `SystemSpecs` detection — detect once, reuse forever.
 ///
@@ -55,7 +55,9 @@ fn parse_param_count(family_name: &str) -> (String, Option<u64>) {
                 i += 1;
             }
             let num_str = &family_name[start..i];
-            if i < len && (bytes[i] == b'B' || bytes[i] == b'b' || bytes[i] == b'M' || bytes[i] == b'm') {
+            if i < len
+                && (bytes[i] == b'B' || bytes[i] == b'b' || bytes[i] == b'M' || bytes[i] == b'm')
+            {
                 let unit = (bytes[i] as char).to_uppercase().next().unwrap_or('B');
                 if let Ok(num) = num_str.parse::<f64>() {
                     let raw = match unit {
@@ -79,7 +81,9 @@ fn parse_param_count(family_name: &str) -> (String, Option<u64>) {
 
 /// Convert a catalog `LlmModelEntry` into an `llmfit_core::models::LlmModel`
 /// for hardware-fit analysis.
-fn catalog_entry_to_llm_model(entry: &crate::llm::catalog::LlmModelEntry) -> llmfit_core::models::LlmModel {
+fn catalog_entry_to_llm_model(
+    entry: &crate::llm::catalog::LlmModelEntry,
+) -> llmfit_core::models::LlmModel {
     let (param_count_str, parameters_raw) = parse_param_count(&entry.family_name);
 
     // Estimate min RAM from file size (GGUF size ≈ model weights; add ~0.5 GB overhead)
@@ -88,21 +92,28 @@ fn catalog_entry_to_llm_model(entry: &crate::llm::catalog::LlmModelEntry) -> llm
 
     // Detect MoE from tags or from family name (e.g. "35B-A3B")
     let name_lower = entry.family_name.to_lowercase();
-    let is_moe = entry.tags.iter().any(|t| t == "moe") || (name_lower.contains("-a") && {
-        let parts: Vec<&str> = entry.family_name.split('-').collect();
-        parts.iter().any(|p| {
-            let lower = p.to_lowercase();
-            lower.starts_with('a') && lower.len() > 1 && lower[1..].ends_with('b')
-                && lower[1..lower.len()-1].parse::<f64>().is_ok()
-        })
-    });
+    let is_moe = entry.tags.iter().any(|t| t == "moe")
+        || (name_lower.contains("-a") && {
+            let parts: Vec<&str> = entry.family_name.split('-').collect();
+            parts.iter().any(|p| {
+                let lower = p.to_lowercase();
+                lower.starts_with('a')
+                    && lower.len() > 1
+                    && lower[1..].ends_with('b')
+                    && lower[1..lower.len() - 1].parse::<f64>().is_ok()
+            })
+        });
 
     // Infer use_case from tags
     let use_case = if entry.tags.iter().any(|t| t == "coding") {
         "Coding"
     } else if entry.tags.iter().any(|t| t == "reasoning") {
         "Reasoning"
-    } else if entry.tags.iter().any(|t| t == "vision" || t == "multimodal") {
+    } else if entry
+        .tags
+        .iter()
+        .any(|t| t == "vision" || t == "multimodal")
+    {
         "Multimodal"
     } else {
         "Chat"
@@ -111,7 +122,12 @@ fn catalog_entry_to_llm_model(entry: &crate::llm::catalog::LlmModelEntry) -> llm
     llmfit_core::models::LlmModel {
         format: llmfit_core::models::ModelFormat::Gguf,
         name: entry.family_name.clone(),
-        provider: entry.repo.split('/').next().unwrap_or("unknown").to_string(),
+        provider: entry
+            .repo
+            .split('/')
+            .next()
+            .unwrap_or("unknown")
+            .to_string(),
         parameter_count: param_count_str,
         parameters_raw,
         min_ram_gb: min_ram,
@@ -141,25 +157,28 @@ pub fn get_model_hardware_fit(
 ) -> Vec<ModelHardwareFit> {
     let specs = cached_system_specs();
     let s = state.lock_or_recover();
-    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let llm = __llm_arc.lock_or_recover();
 
-    llm.catalog.entries.iter()
+    llm.catalog
+        .entries
+        .iter()
         .filter(|e| !e.is_mmproj)
         .map(|entry| {
             let model = catalog_entry_to_llm_model(entry);
             let fit = llmfit_core::fit::ModelFit::analyze(&model, specs);
 
             let fit_level = match fit.fit_level {
-                llmfit_core::fit::FitLevel::Perfect  => "perfect",
-                llmfit_core::fit::FitLevel::Good     => "good",
+                llmfit_core::fit::FitLevel::Perfect => "perfect",
+                llmfit_core::fit::FitLevel::Good => "good",
                 llmfit_core::fit::FitLevel::Marginal => "marginal",
                 llmfit_core::fit::FitLevel::TooTight => "too_tight",
             };
             let run_mode = match fit.run_mode {
-                llmfit_core::fit::RunMode::Gpu        => "gpu",
+                llmfit_core::fit::RunMode::Gpu => "gpu",
                 llmfit_core::fit::RunMode::MoeOffload => "moe",
                 llmfit_core::fit::RunMode::CpuOffload => "cpu_gpu",
-                llmfit_core::fit::RunMode::CpuOnly    => "cpu",
+                llmfit_core::fit::RunMode::CpuOnly => "cpu",
             };
 
             ModelHardwareFit {

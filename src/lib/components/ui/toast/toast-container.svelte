@@ -5,30 +5,30 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { fly } from "svelte/transition";
-  import { flip } from "svelte/animate";
-  import { toasts, dismissToast, type Toast, type ToastLevel } from "$lib/stores/toast.svelte";
+import { flip } from "svelte/animate";
+import { fly } from "svelte/transition";
+import { dismissToast, type Toast, type ToastLevel, toasts } from "$lib/stores/toast.svelte";
 
-  const ICONS: Record<ToastLevel, string> = {
-    info:    "ℹ",
-    success: "✓",
-    warning: "⚠",
-    error:   "✕",
-  };
+const ICONS: Record<ToastLevel, string> = {
+  info: "ℹ",
+  success: "✓",
+  warning: "⚠",
+  error: "✕",
+};
 
-  const LEVEL_CLASSES: Record<ToastLevel, string> = {
-    info:    "border-blue-400/40   bg-blue-50   dark:bg-blue-950/30   text-blue-800   dark:text-blue-300",
-    success: "border-green-400/40  bg-green-50  dark:bg-green-950/30  text-green-800  dark:text-green-300",
-    warning: "border-amber-400/40  bg-amber-50  dark:bg-amber-950/30  text-amber-800  dark:text-amber-300",
-    error:   "border-red-400/40    bg-red-50    dark:bg-red-950/30    text-red-800    dark:text-red-300",
-  };
+const LEVEL_CLASSES: Record<ToastLevel, string> = {
+  info: "border-blue-400/40   bg-blue-50   dark:bg-blue-950/30   text-blue-800   dark:text-blue-300",
+  success: "border-green-400/40  bg-green-50  dark:bg-green-950/30  text-green-800  dark:text-green-300",
+  warning: "border-amber-400/40  bg-amber-50  dark:bg-amber-950/30  text-amber-800  dark:text-amber-300",
+  error: "border-red-400/40    bg-red-50    dark:bg-red-950/30    text-red-800    dark:text-red-300",
+};
 
-  const ICON_CLASSES: Record<ToastLevel, string> = {
-    info:    "bg-blue-100  dark:bg-blue-900/40  text-blue-600  dark:text-blue-400",
-    success: "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400",
-    warning: "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400",
-    error:   "bg-red-100   dark:bg-red-900/40   text-red-600   dark:text-red-400",
-  };
+const ICON_CLASSES: Record<ToastLevel, string> = {
+  info: "bg-blue-100  dark:bg-blue-900/40  text-blue-600  dark:text-blue-400",
+  success: "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400",
+  warning: "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400",
+  error: "bg-red-100   dark:bg-red-900/40   text-red-600   dark:text-red-400",
+};
 </script>
 
 {#if toasts.length > 0}

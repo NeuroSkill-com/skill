@@ -38,20 +38,20 @@ use serde::Serialize;
 use std::collections::VecDeque;
 
 use skill_constants::{
-    QUALITY_WINDOW, QUALITY_NO_SIGNAL_RMS, QUALITY_POOR_RMS,
-    QUALITY_CLIP_UV, QUALITY_POOR_CLIPS, QUALITY_FAIR_RMS,
+    QUALITY_CLIP_UV, QUALITY_FAIR_RMS, QUALITY_NO_SIGNAL_RMS, QUALITY_POOR_CLIPS, QUALITY_POOR_RMS,
+    QUALITY_WINDOW,
 };
 
 // ── Thresholds (from skill-constants) ─────────────────────────────────────────
 
-const WINDOW: usize            = QUALITY_WINDOW;
+const WINDOW: usize = QUALITY_WINDOW;
 #[cfg(test)]
-const MIN_SAMPLES: usize       = WINDOW / 4;
+const MIN_SAMPLES: usize = WINDOW / 4;
 const THRESH_NO_SIGNAL_RMS: f64 = QUALITY_NO_SIGNAL_RMS;
-const THRESH_POOR_RMS: f64     = QUALITY_POOR_RMS;
-const THRESH_CLIP_UV: f64      = QUALITY_CLIP_UV;
+const THRESH_POOR_RMS: f64 = QUALITY_POOR_RMS;
+const THRESH_CLIP_UV: f64 = QUALITY_CLIP_UV;
 const THRESH_POOR_CLIPS: usize = QUALITY_POOR_CLIPS;
-const THRESH_FAIR_RMS: f64     = QUALITY_FAIR_RMS;
+const THRESH_FAIR_RMS: f64 = QUALITY_FAIR_RMS;
 
 // ── SignalQuality ─────────────────────────────────────────────────────────────
 
@@ -84,7 +84,10 @@ impl QualityMonitor {
     /// **Deprecated:** defaults to 256-sample window (Muse 256 Hz).
     /// Use [`with_window(channels, sample_rate as usize)`] for a 1-second
     /// window at any device sample rate.
-    #[deprecated(since = "0.1.0", note = "use QualityMonitor::with_window(channels, sample_rate as usize) instead")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "use QualityMonitor::with_window(channels, sample_rate as usize) instead"
+    )]
     pub fn new(channels: usize) -> Self {
         Self::with_window(channels, WINDOW)
     }
@@ -150,7 +153,15 @@ impl QualityMonitor {
         // offset and every channel reads as "Poor".  For Muse (AC-coupled,
         // mean ≈ 0) this is a no-op.
         let mean = buf.iter().sum::<f64>() / n;
-        let rms = (buf.iter().map(|&x| { let ac = x - mean; ac * ac }).sum::<f64>() / n).sqrt();
+        let rms = (buf
+            .iter()
+            .map(|&x| {
+                let ac = x - mean;
+                ac * ac
+            })
+            .sum::<f64>()
+            / n)
+            .sqrt();
 
         if rms < THRESH_NO_SIGNAL_RMS {
             return SignalQuality::NoSignal;
@@ -158,7 +169,10 @@ impl QualityMonitor {
 
         // ── Clip count (AC-coupled — subtract mean so DC-coupled devices
         //    like Emotiv don't trigger false clips from their baseline) ──
-        let clips = buf.iter().filter(|&&x| (x - mean).abs() > THRESH_CLIP_UV).count();
+        let clips = buf
+            .iter()
+            .filter(|&&x| (x - mean).abs() > THRESH_CLIP_UV)
+            .count();
 
         if clips >= THRESH_POOR_CLIPS || rms > THRESH_POOR_RMS {
             return SignalQuality::Poor;
@@ -179,9 +193,15 @@ impl QualityMonitor {
 mod tests {
     use super::*;
 
-    fn monitor() -> QualityMonitor { QualityMonitor::new(1) }
-    fn fill(m: &mut QualityMonitor, s: &[f64]) { m.push(0, s); }
-    fn q(m: &QualityMonitor) -> SignalQuality { m.classify(0) }
+    fn monitor() -> QualityMonitor {
+        QualityMonitor::new(1)
+    }
+    fn fill(m: &mut QualityMonitor, s: &[f64]) {
+        m.push(0, s);
+    }
+    fn q(m: &QualityMonitor) -> SignalQuality {
+        m.classify(0)
+    }
 
     #[test]
     fn warm_up_returns_no_signal() {
@@ -237,7 +257,7 @@ mod tests {
                     + 80.0 * (2.0 * std::f64::consts::PI * 60.0 * t).sin()
             })
             .collect();
-        let actual_rms = (samples.iter().map(|x| x*x).sum::<f64>() / WINDOW as f64).sqrt();
+        let actual_rms = (samples.iter().map(|x| x * x).sum::<f64>() / WINDOW as f64).sqrt();
         assert!(actual_rms < THRESH_FAIR_RMS, "rms={actual_rms:.1}");
         fill(&mut m, &samples);
         assert_eq!(q(&m), SignalQuality::Good);
@@ -302,7 +322,7 @@ mod tests {
         let poor: Vec<f64> = (0..WINDOW)
             .map(|i| 640.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
             .collect();
-        fill(&mut m, &poor);    // evicts the good data
+        fill(&mut m, &poor); // evicts the good data
         assert_eq!(q(&m), SignalQuality::Poor);
     }
 }

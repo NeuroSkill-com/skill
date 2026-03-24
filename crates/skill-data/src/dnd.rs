@@ -68,10 +68,16 @@ pub fn query_os_active() -> Option<bool> {
         use macos_focus::FocusManager;
         match FocusManager::new() {
             Ok(mgr) => match mgr.is_active() {
-                Ok(v)  => Some(v),
-                Err(e) => { eprintln!("[dnd] query_os_active failed: {e}"); None }
+                Ok(v) => Some(v),
+                Err(e) => {
+                    eprintln!("[dnd] query_os_active failed: {e}");
+                    None
+                }
             },
-            Err(e) => { eprintln!("[dnd] query_os_active init failed: {e}"); None }
+            Err(e) => {
+                eprintln!("[dnd] query_os_active init failed: {e}");
+                None
+            }
         }
     }
     #[cfg(target_os = "linux")]
@@ -82,7 +88,11 @@ pub fn query_os_active() -> Option<bool> {
     {
         query_windows_dnd_active()
     }
-    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(target_os = "linux"),
+        not(target_os = "windows")
+    ))]
     None
 }
 
@@ -98,8 +108,11 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
         use macos_focus::{FocusManager, FocusMode};
 
         let mgr = match FocusManager::new() {
-            Ok(m)  => m.with_client_id(CLIENT_ID),
-            Err(e) => { eprintln!("[dnd] init failed: {e}"); return false; }
+            Ok(m) => m.with_client_id(CLIENT_ID),
+            Err(e) => {
+                eprintln!("[dnd] init failed: {e}");
+                return false;
+            }
         };
 
         let result = if enabled {
@@ -111,8 +124,17 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
         };
 
         match result {
-            Ok(())  => { eprintln!("[dnd] {} OK", if enabled { "enable" } else { "disable" }); true }
-            Err(e)  => { eprintln!("[dnd] {} failed: {e}", if enabled { "enable" } else { "disable" }); false }
+            Ok(()) => {
+                eprintln!("[dnd] {} OK", if enabled { "enable" } else { "disable" });
+                true
+            }
+            Err(e) => {
+                eprintln!(
+                    "[dnd] {} failed: {e}",
+                    if enabled { "enable" } else { "disable" }
+                );
+                false
+            }
         }
     }
     #[cfg(target_os = "linux")]
@@ -125,8 +147,15 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
         let _ = mode_identifier;
         set_windows_dnd(enabled)
     }
-    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
-    { let _ = (enabled, mode_identifier); true }
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(target_os = "linux"),
+        not(target_os = "windows")
+    ))]
+    {
+        let _ = (enabled, mode_identifier);
+        true
+    }
 }
 
 /// Return all Focus modes configured on this Mac, ordered as the OS stores
@@ -146,12 +175,17 @@ pub fn list_focus_modes() -> Vec<FocusModeOption> {
     {
         use macos_focus::FocusManager;
 
-        let Ok(mgr) = FocusManager::new() else { return builtin_modes() };
+        let Ok(mgr) = FocusManager::new() else {
+            return builtin_modes();
+        };
         match mgr.available_modes() {
-            Ok(modes) => modes.iter().map(|m| FocusModeOption {
-                identifier: m.identifier().to_owned(),
-                name:       m.display_name().to_owned(),
-            }).collect(),
+            Ok(modes) => modes
+                .iter()
+                .map(|m| FocusModeOption {
+                    identifier: m.identifier().to_owned(),
+                    name: m.display_name().to_owned(),
+                })
+                .collect(),
             Err(_) => builtin_modes(),
         }
     }
@@ -169,7 +203,11 @@ pub fn list_focus_modes() -> Vec<FocusModeOption> {
             name: "Do Not Disturb".to_owned(),
         }]
     }
-    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(target_os = "linux"),
+        not(target_os = "windows")
+    ))]
     Vec::new()
 }
 
@@ -207,14 +245,24 @@ fn query_linux_dnd_active() -> Option<bool> {
 
 #[cfg(target_os = "linux")]
 fn set_linux_dnd(enabled: bool) -> bool {
-    let portal_cleared = if enabled { false } else { set_portal_dnd(false) };
+    let portal_cleared = if enabled {
+        false
+    } else {
+        set_portal_dnd(false)
+    };
 
     if set_gnome_dnd(enabled) {
-        eprintln!("[dnd] linux gnome {} OK", if enabled { "enable" } else { "disable" });
+        eprintln!(
+            "[dnd] linux gnome {} OK",
+            if enabled { "enable" } else { "disable" }
+        );
         return true;
     }
     if set_kde_dnd(enabled) {
-        eprintln!("[dnd] linux kde {} OK", if enabled { "enable" } else { "disable" });
+        eprintln!(
+            "[dnd] linux kde {} OK",
+            if enabled { "enable" } else { "disable" }
+        );
         return true;
     }
 
@@ -227,7 +275,10 @@ fn set_linux_dnd(enabled: bool) -> bool {
         return true;
     }
 
-    eprintln!("[dnd] linux {} failed: no supported desktop backend found", if enabled { "enable" } else { "disable" });
+    eprintln!(
+        "[dnd] linux {} failed: no supported desktop backend found",
+        if enabled { "enable" } else { "disable" }
+    );
     false
 }
 
@@ -251,7 +302,12 @@ fn set_gnome_dnd(enabled: bool) -> bool {
     let show_banners = if enabled { "false" } else { "true" };
     run_cmd_ok(
         "gsettings",
-        &["set", "org.gnome.desktop.notifications", "show-banners", show_banners],
+        &[
+            "set",
+            "org.gnome.desktop.notifications",
+            "show-banners",
+            show_banners,
+        ],
     )
 }
 
@@ -323,7 +379,8 @@ fn set_portal_dnd(enabled: bool) -> bool {
         }
 
         let token = format!("neuroskill_dnd_{}", std::process::id());
-        let options = format!("{{'reason': <'NeuroSkill focus automation'>, 'handle_token': <'{token}'>}}");
+        let options =
+            format!("{{'reason': <'NeuroSkill focus automation'>, 'handle_token': <'{token}'>}}");
         let out = run_cmd(
             "gdbus",
             &[
@@ -476,9 +533,15 @@ fn set_windows_dnd(enabled: bool) -> bool {
         ],
     );
     if ok {
-        eprintln!("[dnd] windows {} OK (ToastEnabled={value})", if enabled { "enable" } else { "disable" });
+        eprintln!(
+            "[dnd] windows {} OK (ToastEnabled={value})",
+            if enabled { "enable" } else { "disable" }
+        );
     } else {
-        eprintln!("[dnd] windows {} failed", if enabled { "enable" } else { "disable" });
+        eprintln!(
+            "[dnd] windows {} failed",
+            if enabled { "enable" } else { "disable" }
+        );
     }
     ok
 }
@@ -504,7 +567,7 @@ fn builtin_modes() -> Vec<FocusModeOption> {
     .iter()
     .map(|m| FocusModeOption {
         identifier: m.identifier().to_owned(),
-        name:       m.display_name().to_owned(),
+        name: m.display_name().to_owned(),
     })
     .collect()
 }

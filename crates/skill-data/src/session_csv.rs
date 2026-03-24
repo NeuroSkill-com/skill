@@ -7,7 +7,10 @@
 // `src-tauri/src/session_csv.rs`; this module holds the pure, framework-free
 // CSV writer and path utilities.
 
-use std::{collections::VecDeque, path::{Path, PathBuf}};
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+};
 
 use crate::ppg_analysis::PpgMetrics;
 use skill_eeg::eeg_bands::BandSnapshot;
@@ -23,21 +26,30 @@ pub const PPG_SAMPLE_RATE: f64 = skill_constants::PPG_SAMPLE_RATE as f64;
 /// Derive the PPG CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_ppg.csv`
 pub fn ppg_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    let stem = eeg_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_ppg.csv"))
 }
 
 /// Derive the metrics CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_metrics.csv`
 pub fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    let stem = eeg_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_metrics.csv"))
 }
 
 /// Derive the IMU CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_imu.csv`
 pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    let stem = eeg_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_imu.csv"))
 }
 
@@ -59,30 +71,74 @@ pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
 /// Cross-channel metric column names (after the per-channel band powers).
 pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 46] = [
     // ── Cross-channel EEG indices ──
-    "faa", "tar", "bar", "dtr", "pse", "apf", "bps", "snr",
-    "coherence", "mu_suppression", "mood", "tbr", "sef95", "spectral_centroid",
-    "hjorth_activity", "hjorth_mobility", "hjorth_complexity",
-    "permutation_entropy", "higuchi_fd", "dfa_exponent",
-    "sample_entropy", "pac_theta_gamma", "laterality_index",
+    "faa",
+    "tar",
+    "bar",
+    "dtr",
+    "pse",
+    "apf",
+    "bps",
+    "snr",
+    "coherence",
+    "mu_suppression",
+    "mood",
+    "tbr",
+    "sef95",
+    "spectral_centroid",
+    "hjorth_activity",
+    "hjorth_mobility",
+    "hjorth_complexity",
+    "permutation_entropy",
+    "higuchi_fd",
+    "dfa_exponent",
+    "sample_entropy",
+    "pac_theta_gamma",
+    "laterality_index",
     // ── PPG vitals ──
-    "hr_bpm", "rmssd_ms", "sdnn_ms", "pnn50_pct", "lf_hf_ratio",
-    "respiratory_rate_bpm", "spo2_pct", "perfusion_index_pct", "stress_index",
+    "hr_bpm",
+    "rmssd_ms",
+    "sdnn_ms",
+    "pnn50_pct",
+    "lf_hf_ratio",
+    "respiratory_rate_bpm",
+    "spo2_pct",
+    "perfusion_index_pct",
+    "stress_index",
     // ── Artifact events ──
-    "blink_count", "blink_rate_per_min",
+    "blink_count",
+    "blink_rate_per_min",
     // ── Head pose ──
-    "head_pitch_deg", "head_roll_deg", "stillness", "nod_count", "shake_count",
+    "head_pitch_deg",
+    "head_roll_deg",
+    "stillness",
+    "nod_count",
+    "shake_count",
     // ── Composite scores ──
-    "meditation", "cognitive_load", "drowsiness",
+    "meditation",
+    "cognitive_load",
+    "drowsiness",
     // ── Telemetry ──
     "temperature_raw",
     // ── GPU utilisation ──
-    "gpu_overall_pct", "gpu_render_pct", "gpu_tiler_pct",
+    "gpu_overall_pct",
+    "gpu_render_pct",
+    "gpu_tiler_pct",
 ];
 
 /// Band-power suffixes for each channel (6 absolute + 6 relative = 12 per channel).
 const BAND_SUFFIXES: [&str; 12] = [
-    "_delta", "_theta", "_alpha", "_beta", "_gamma", "_high_gamma",
-    "_rel_delta", "_rel_theta", "_rel_alpha", "_rel_beta", "_rel_gamma", "_rel_high_gamma",
+    "_delta",
+    "_theta",
+    "_alpha",
+    "_beta",
+    "_gamma",
+    "_high_gamma",
+    "_rel_delta",
+    "_rel_theta",
+    "_rel_alpha",
+    "_rel_beta",
+    "_rel_gamma",
+    "_rel_high_gamma",
 ];
 
 /// Build the full metrics CSV header dynamically from channel names.
@@ -90,7 +146,8 @@ const BAND_SUFFIXES: [&str; 12] = [
 /// Layout: `timestamp_s`, then `<ch>_<band>` × N channels × 12 bands,
 /// then the 46 cross-channel columns.
 pub fn build_metrics_header(channel_names: &[&str]) -> Vec<String> {
-    let mut header = Vec::with_capacity(1 + channel_names.len() * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
+    let mut header =
+        Vec::with_capacity(1 + channel_names.len() * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
     header.push("timestamp_s".to_string());
     for ch in channel_names {
         for suffix in &BAND_SUFFIXES {
@@ -106,26 +163,100 @@ pub fn build_metrics_header(channel_names: &[&str]) -> Vec<String> {
 /// Legacy fixed header for 4-channel Muse (kept for backward-compat reading).
 pub const METRICS_CSV_HEADER: [&str; 95] = [
     "timestamp_s",
-    "TP9_delta",  "TP9_theta",  "TP9_alpha",  "TP9_beta",  "TP9_gamma",  "TP9_high_gamma",
-    "TP9_rel_delta",  "TP9_rel_theta",  "TP9_rel_alpha",  "TP9_rel_beta",  "TP9_rel_gamma",  "TP9_rel_high_gamma",
-    "AF7_delta",  "AF7_theta",  "AF7_alpha",  "AF7_beta",  "AF7_gamma",  "AF7_high_gamma",
-    "AF7_rel_delta",  "AF7_rel_theta",  "AF7_rel_alpha",  "AF7_rel_beta",  "AF7_rel_gamma",  "AF7_rel_high_gamma",
-    "AF8_delta",  "AF8_theta",  "AF8_alpha",  "AF8_beta",  "AF8_gamma",  "AF8_high_gamma",
-    "AF8_rel_delta",  "AF8_rel_theta",  "AF8_rel_alpha",  "AF8_rel_beta",  "AF8_rel_gamma",  "AF8_rel_high_gamma",
-    "TP10_delta", "TP10_theta", "TP10_alpha", "TP10_beta", "TP10_gamma", "TP10_high_gamma",
-    "TP10_rel_delta", "TP10_rel_theta", "TP10_rel_alpha", "TP10_rel_beta", "TP10_rel_gamma", "TP10_rel_high_gamma",
-    "faa", "tar", "bar", "dtr", "pse", "apf", "bps", "snr",
-    "coherence", "mu_suppression", "mood", "tbr", "sef95", "spectral_centroid",
-    "hjorth_activity", "hjorth_mobility", "hjorth_complexity",
-    "permutation_entropy", "higuchi_fd", "dfa_exponent",
-    "sample_entropy", "pac_theta_gamma", "laterality_index",
-    "hr_bpm", "rmssd_ms", "sdnn_ms", "pnn50_pct", "lf_hf_ratio",
-    "respiratory_rate_bpm", "spo2_pct", "perfusion_index_pct", "stress_index",
-    "blink_count", "blink_rate_per_min",
-    "head_pitch_deg", "head_roll_deg", "stillness", "nod_count", "shake_count",
-    "meditation", "cognitive_load", "drowsiness",
+    "TP9_delta",
+    "TP9_theta",
+    "TP9_alpha",
+    "TP9_beta",
+    "TP9_gamma",
+    "TP9_high_gamma",
+    "TP9_rel_delta",
+    "TP9_rel_theta",
+    "TP9_rel_alpha",
+    "TP9_rel_beta",
+    "TP9_rel_gamma",
+    "TP9_rel_high_gamma",
+    "AF7_delta",
+    "AF7_theta",
+    "AF7_alpha",
+    "AF7_beta",
+    "AF7_gamma",
+    "AF7_high_gamma",
+    "AF7_rel_delta",
+    "AF7_rel_theta",
+    "AF7_rel_alpha",
+    "AF7_rel_beta",
+    "AF7_rel_gamma",
+    "AF7_rel_high_gamma",
+    "AF8_delta",
+    "AF8_theta",
+    "AF8_alpha",
+    "AF8_beta",
+    "AF8_gamma",
+    "AF8_high_gamma",
+    "AF8_rel_delta",
+    "AF8_rel_theta",
+    "AF8_rel_alpha",
+    "AF8_rel_beta",
+    "AF8_rel_gamma",
+    "AF8_rel_high_gamma",
+    "TP10_delta",
+    "TP10_theta",
+    "TP10_alpha",
+    "TP10_beta",
+    "TP10_gamma",
+    "TP10_high_gamma",
+    "TP10_rel_delta",
+    "TP10_rel_theta",
+    "TP10_rel_alpha",
+    "TP10_rel_beta",
+    "TP10_rel_gamma",
+    "TP10_rel_high_gamma",
+    "faa",
+    "tar",
+    "bar",
+    "dtr",
+    "pse",
+    "apf",
+    "bps",
+    "snr",
+    "coherence",
+    "mu_suppression",
+    "mood",
+    "tbr",
+    "sef95",
+    "spectral_centroid",
+    "hjorth_activity",
+    "hjorth_mobility",
+    "hjorth_complexity",
+    "permutation_entropy",
+    "higuchi_fd",
+    "dfa_exponent",
+    "sample_entropy",
+    "pac_theta_gamma",
+    "laterality_index",
+    "hr_bpm",
+    "rmssd_ms",
+    "sdnn_ms",
+    "pnn50_pct",
+    "lf_hf_ratio",
+    "respiratory_rate_bpm",
+    "spo2_pct",
+    "perfusion_index_pct",
+    "stress_index",
+    "blink_count",
+    "blink_rate_per_min",
+    "head_pitch_deg",
+    "head_roll_deg",
+    "stillness",
+    "nod_count",
+    "shake_count",
+    "meditation",
+    "cognitive_load",
+    "drowsiness",
     "temperature_raw",
-    "gpu_overall_pct", "gpu_render_pct", "gpu_tiler_pct",
+    "gpu_overall_pct",
+    "gpu_render_pct",
+    "gpu_tiler_pct",
 ];
 
 // ── CSV writer ────────────────────────────────────────────────────────────────
@@ -137,31 +268,31 @@ pub const METRICS_CSV_HEADER: [&str; 95] = [
 /// - PPG samples (`muse_<ts>_ppg.csv`) — created on first PPG packet
 /// - Derived metrics (`muse_<ts>_metrics.csv`) — created on first band snapshot
 pub struct CsvState {
-    wtr:     csv::Writer<std::fs::File>,
+    wtr: csv::Writer<std::fs::File>,
     /// Number of EEG channels in this CSV (4 for Muse/Ganglion, 8/16/24 for Cyton/Galea).
-    n_eeg:   usize,
+    n_eeg: usize,
     /// Channel labels (used for dynamic metrics header generation).
     channel_labels: Vec<String>,
     /// Queued µV values per EEG channel.
-    bufs:    Vec<VecDeque<f64>>,
+    bufs: Vec<VecDeque<f64>>,
     /// Per-sample Unix timestamps (seconds) matching each value in `bufs`.
     ts_bufs: Vec<VecDeque<f64>>,
     /// Rows written so far — used to drive periodic disk flushes.
     written: u64,
     /// Separate CSV writer for PPG data (created lazily on first PPG sample).
-    ppg_wtr:     Option<csv::Writer<std::fs::File>>,
+    ppg_wtr: Option<csv::Writer<std::fs::File>>,
     /// Queued raw ADC values per PPG channel (0=ambient, 1=infrared, 2=red).
-    ppg_bufs:    [VecDeque<f64>; 3],
+    ppg_bufs: [VecDeque<f64>; 3],
     /// Per-sample Unix timestamps for PPG channels.
     ppg_ts_bufs: [VecDeque<f64>; 3],
     /// PPG rows written.
     ppg_written: u64,
     /// Separate CSV writer for derived metrics (~4 Hz, created lazily).
-    metrics_wtr:     Option<csv::Writer<std::fs::File>>,
+    metrics_wtr: Option<csv::Writer<std::fs::File>>,
     /// Metrics rows written.
     metrics_written: u64,
     /// Separate CSV writer for IMU data (created lazily on first IMU sample).
-    imu_wtr:     Option<csv::Writer<std::fs::File>>,
+    imu_wtr: Option<csv::Writer<std::fs::File>>,
     /// IMU rows written.
     imu_written: u64,
 }
@@ -179,39 +310,61 @@ impl CsvState {
         wtr.write_record(&header)?;
         Ok(Self {
             wtr,
-            n_eeg:   n,
-            channel_labels: labels.iter().map(std::string::ToString::to_string).collect(),
-            bufs:    (0..n).map(|_| VecDeque::new()).collect(),
+            n_eeg: n,
+            channel_labels: labels
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            bufs: (0..n).map(|_| VecDeque::new()).collect(),
             ts_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             written: 0,
-            ppg_wtr:     None,
-            ppg_bufs:    std::array::from_fn(|_| VecDeque::new()),
+            ppg_wtr: None,
+            ppg_bufs: std::array::from_fn(|_| VecDeque::new()),
             ppg_ts_bufs: std::array::from_fn(|_| VecDeque::new()),
             ppg_written: 0,
-            metrics_wtr:     None,
+            metrics_wtr: None,
             metrics_written: 0,
-            imu_wtr:     None,
+            imu_wtr: None,
             imu_written: 0,
         })
     }
 
     /// Buffer `samples` for `electrode` and flush any complete rows to disk.
-    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
-        if electrode >= self.n_eeg { return; }
+    pub fn push_eeg(
+        &mut self,
+        electrode: usize,
+        samples: &[f64],
+        packet_ts: f64,
+        sample_rate: f64,
+    ) {
+        if electrode >= self.n_eeg {
+            return;
+        }
         for (i, &v) in samples.iter().enumerate() {
             self.bufs[electrode].push_back(v);
             self.ts_bufs[electrode].push_back(packet_ts + i as f64 / sample_rate);
         }
 
-        let ready = self.bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
+        let ready = self
+            .bufs
+            .iter()
+            .map(std::collections::VecDeque::len)
+            .min()
+            .unwrap_or(0);
         let n = self.n_eeg;
         for _ in 0..ready {
-            let Some(ts) = self.ts_bufs[0].pop_front() else { break };
-            for k in 1..n { self.ts_bufs[k].pop_front(); }
+            let Some(ts) = self.ts_bufs[0].pop_front() else {
+                break;
+            };
+            for k in 1..n {
+                self.ts_bufs[k].pop_front();
+            }
 
             let mut row = vec![format!("{:.6}", ts)];
             for k in 0..n {
-                let Some(v) = self.bufs[k].pop_front() else { break };
+                let Some(v) = self.bufs[k].pop_front() else {
+                    break;
+                };
                 row.push(format!("{:.4}", v));
             }
             let refs: Vec<&str> = row.iter().map(String::as_str).collect();
@@ -228,27 +381,42 @@ impl CsvState {
     pub fn push_ppg(
         &mut self,
         eeg_csv_path: &Path,
-        channel:      usize,
-        samples:      &[f64],
-        packet_ts:    f64,
-        ppg_vitals:   Option<&PpgMetrics>,
+        channel: usize,
+        samples: &[f64],
+        packet_ts: f64,
+        ppg_vitals: Option<&PpgMetrics>,
     ) {
-        if channel >= 3 { return; }
+        if channel >= 3 {
+            return;
+        }
 
         if self.ppg_wtr.is_none() {
             let ppg_path = ppg_csv_path(eeg_csv_path);
             match csv::Writer::from_path(&ppg_path) {
                 Ok(mut w) => {
                     let _ = w.write_record([
-                        "timestamp_s", "ambient", "infrared", "red",
-                        "hr_bpm", "rmssd_ms", "sdnn_ms", "pnn50_pct", "lf_hf_ratio",
-                        "respiratory_rate_bpm", "spo2_pct", "perfusion_index_pct", "stress_index",
+                        "timestamp_s",
+                        "ambient",
+                        "infrared",
+                        "red",
+                        "hr_bpm",
+                        "rmssd_ms",
+                        "sdnn_ms",
+                        "pnn50_pct",
+                        "lf_hf_ratio",
+                        "respiratory_rate_bpm",
+                        "spo2_pct",
+                        "perfusion_index_pct",
+                        "stress_index",
                     ]);
                     eprintln!("[csv] PPG file opened: {}", ppg_path.display());
                     self.ppg_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!("[csv] failed to create PPG file {}: {e}", ppg_path.display());
+                    eprintln!(
+                        "[csv] failed to create PPG file {}: {e}",
+                        ppg_path.display()
+                    );
                     return;
                 }
             }
@@ -259,15 +427,26 @@ impl CsvState {
             self.ppg_ts_bufs[channel].push_back(packet_ts + i as f64 / PPG_SAMPLE_RATE);
         }
 
-        let ready = self.ppg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
+        let ready = self
+            .ppg_bufs
+            .iter()
+            .map(std::collections::VecDeque::len)
+            .min()
+            .unwrap_or(0);
         if let Some(ref mut wtr) = self.ppg_wtr {
             for _ in 0..ready {
-                let Some(ts) = self.ppg_ts_bufs[0].pop_front() else { break };
-                for k in 1..3 { self.ppg_ts_bufs[k].pop_front(); }
+                let Some(ts) = self.ppg_ts_bufs[0].pop_front() else {
+                    break;
+                };
+                for k in 1..3 {
+                    self.ppg_ts_bufs[k].pop_front();
+                }
 
                 let mut row = vec![format!("{:.6}", ts)];
                 for k in 0..3 {
-                    let Some(v) = self.ppg_bufs[k].pop_front() else { break };
+                    let Some(v) = self.ppg_bufs[k].pop_front() else {
+                        break;
+                    };
                     row.push(format!("{:.1}", v));
                 }
                 if let Some(v) = ppg_vitals {
@@ -281,7 +460,9 @@ impl CsvState {
                     row.push(format!("{:.4}", v.perfusion_index));
                     row.push(format!("{:.1}", v.stress_index));
                 } else {
-                    for _ in 0..9 { row.push(String::new()); }
+                    for _ in 0..9 {
+                        row.push(String::new());
+                    }
                 }
                 let refs: Vec<&str> = row.iter().map(String::as_str).collect();
                 let _ = wtr.write_record(&refs);
@@ -298,10 +479,10 @@ impl CsvState {
     pub fn push_imu(
         &mut self,
         eeg_csv_path: &Path,
-        timestamp_s:  f64,
-        accel:        [f32; 3],
-        gyro:         Option<[f32; 3]>,
-        mag:          Option<[f32; 3]>,
+        timestamp_s: f64,
+        accel: [f32; 3],
+        gyro: Option<[f32; 3]>,
+        mag: Option<[f32; 3]>,
     ) {
         if self.imu_wtr.is_none() {
             let imu_path = imu_csv_path(eeg_csv_path);
@@ -309,15 +490,24 @@ impl CsvState {
                 Ok(mut w) => {
                     let _ = w.write_record([
                         "timestamp_s",
-                        "accel_x", "accel_y", "accel_z",
-                        "gyro_x", "gyro_y", "gyro_z",
-                        "mag_x", "mag_y", "mag_z",
+                        "accel_x",
+                        "accel_y",
+                        "accel_z",
+                        "gyro_x",
+                        "gyro_y",
+                        "gyro_z",
+                        "mag_x",
+                        "mag_y",
+                        "mag_z",
                     ]);
                     eprintln!("[csv] IMU file opened: {}", imu_path.display());
                     self.imu_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!("[csv] failed to create IMU file {}: {e}", imu_path.display());
+                    eprintln!(
+                        "[csv] failed to create IMU file {}: {e}",
+                        imu_path.display()
+                    );
                     return;
                 }
             }
@@ -328,9 +518,15 @@ impl CsvState {
             let m = mag.unwrap_or([0.0; 3]);
             let row = [
                 format!("{:.6}", timestamp_s),
-                format!("{:.6}", accel[0]), format!("{:.6}", accel[1]), format!("{:.6}", accel[2]),
-                format!("{:.6}", g[0]), format!("{:.6}", g[1]), format!("{:.6}", g[2]),
-                format!("{:.6}", m[0]), format!("{:.6}", m[1]), format!("{:.6}", m[2]),
+                format!("{:.6}", accel[0]),
+                format!("{:.6}", accel[1]),
+                format!("{:.6}", accel[2]),
+                format!("{:.6}", g[0]),
+                format!("{:.6}", g[1]),
+                format!("{:.6}", g[2]),
+                format!("{:.6}", m[0]),
+                format!("{:.6}", m[1]),
+                format!("{:.6}", m[2]),
             ];
             let refs: Vec<&str> = row.iter().map(String::as_str).collect();
             let _ = wtr.write_record(&refs);
@@ -348,15 +544,23 @@ impl CsvState {
             let path = metrics_csv_path(eeg_csv_path);
             match csv::Writer::from_path(&path) {
                 Ok(mut w) => {
-                    let label_refs: Vec<&str> = self.channel_labels.iter().map(std::string::String::as_str).collect();
+                    let label_refs: Vec<&str> = self
+                        .channel_labels
+                        .iter()
+                        .map(std::string::String::as_str)
+                        .collect();
                     let header = build_metrics_header(&label_refs);
-                    let header_refs: Vec<&str> = header.iter().map(std::string::String::as_str).collect();
+                    let header_refs: Vec<&str> =
+                        header.iter().map(std::string::String::as_str).collect();
                     let _ = w.write_record(&header_refs);
                     eprintln!("[csv] Metrics file opened: {}", path.display());
                     self.metrics_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!("[csv] failed to create metrics file {}: {e}", path.display());
+                    eprintln!(
+                        "[csv] failed to create metrics file {}: {e}",
+                        path.display()
+                    );
                     return;
                 }
             }
@@ -458,8 +662,14 @@ impl CsvState {
     /// Flush all open CSV writers to disk.
     pub fn flush(&mut self) {
         let _ = self.wtr.flush();
-        if let Some(ref mut w) = self.ppg_wtr     { let _ = w.flush(); }
-        if let Some(ref mut w) = self.metrics_wtr { let _ = w.flush(); }
-        if let Some(ref mut w) = self.imu_wtr     { let _ = w.flush(); }
+        if let Some(ref mut w) = self.ppg_wtr {
+            let _ = w.flush();
+        }
+        if let Some(ref mut w) = self.metrics_wtr {
+            let _ = w.flush();
+        }
+        if let Some(ref mut w) = self.imu_wtr {
+            let _ = w.flush();
+        }
     }
 }

@@ -7,734 +7,826 @@ the Free Software Foundation, version 3 only. -->
 <!-- Session Compare — side-by-side band-power & score comparison of two sessions. -->
 
 <script lang="ts">
-  import { onMount }       from "svelte";
-  import { invoke }        from "@tauri-apps/api/core";
-  import { Button }        from "$lib/components/ui/button";
-  import { Separator }     from "$lib/components/ui/separator";
-  import { t }             from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
-  import Hypnogram         from "$lib/Hypnogram.svelte";
-  import UmapViewer3D      from "$lib/UmapViewer3D.svelte";
-  import { TimeSeriesChart } from "$lib/dashboard";
-  import type { Series }   from "$lib/dashboard/TimeSeriesChart.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import {
+  drawBandDiffHeatmap,
+  drawBandHeatmap,
+  drawDiffChart,
+  drawRadar,
+  drawScoreHeatmap,
+  drawSpectrum,
+  HEATMAP_LABEL_W,
+  HEATMAP_ROW_H,
+} from "$lib/compare-canvas";
+// ── Extracted modules ──────────────────────────────────────────────────────
+import {
+  advancedMetrics,
+  analyzeUmapClusters,
+  bandKeys,
+  bandMeta,
+  bv,
+  type ClusterAnalysis,
+  computeInsightDeltas,
+  dc,
+  diff,
+  type EmbeddingSession,
+  generateUmapPlaceholder,
+  HIGHER_IS_BETTER,
+  type InsightDelta,
+  insightMetrics,
+  LOWER_IS_BETTER,
+  pct,
+  radarMetrics,
+  SESSION_COLORS,
+  scoreDiff,
+  scoreKeys,
+  sdc,
+} from "$lib/compare-types";
+import { Button } from "$lib/components/ui/button";
+import { Separator } from "$lib/components/ui/separator";
+import { Spinner } from "$lib/components/ui/spinner";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { TimeSeriesChart } from "$lib/dashboard";
+import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
+import type { Series } from "$lib/dashboard/TimeSeriesChart.svelte";
+import {
+  dateToLocalKey,
+  fmtDateIso,
+  fmtDateTime,
+  fmtDateTimeLocalInput,
+  fmtDayKey,
+  fmtDuration,
+  fmtSecs,
+  fmtTime,
+  fromUnix,
+  pad,
+  parseDateTimeLocalInput,
+} from "$lib/format";
+import Hypnogram from "$lib/Hypnogram.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import type { JobPollResult, JobTicket } from "$lib/search-types";
+import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+import { getResolved } from "$lib/stores/theme.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { SleepEpoch, SleepStages, SleepSummary, UmapPoint, UmapProgress, UmapResult } from "$lib/types";
+import UmapViewer3D from "$lib/UmapViewer3D.svelte";
 
-  import { Spinner }       from "$lib/components/ui/spinner";
-  import { getResolved }   from "$lib/stores/theme.svelte";
-  import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
-  import type { SleepEpoch, SleepSummary, SleepStages } from "$lib/types";
-  import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
-  import {
-    fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad,
-    fmtDateIso, fmtDayKey, fmtDateTimeLocalInput, parseDateTimeLocalInput,
-    dateToLocalKey, fromUnix,
-  } from "$lib/format";
-  import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
+// ── State ──────────────────────────────────────────────────────────────────
+let sessions = $state<EmbeddingSession[]>([]);
+let loading = $state(true);
 
-  // ── Extracted modules ──────────────────────────────────────────────────────
-  import {
-    type EmbeddingSession, type InsightDelta, type ClusterAnalysis,
-    SESSION_COLORS, bandKeys, bandMeta, scoreKeys, radarMetrics,
-    advancedMetrics, insightMetrics,
-    HIGHER_IS_BETTER, LOWER_IS_BETTER,
-    bv, pct, diff, scoreDiff, dc, sdc,
-    analyzeUmapClusters, generateUmapPlaceholder, computeInsightDeltas,
-  } from "$lib/compare-types";
-  import {
-    HEATMAP_ROW_H, HEATMAP_LABEL_W,
-    drawSpectrum, drawDiffChart, drawRadar,
-    drawBandHeatmap, drawScoreHeatmap, drawBandDiffHeatmap,
-  } from "$lib/compare-canvas";
-  import type { JobTicket, JobPollResult } from "$lib/search-types";
+// Timeline range-picker state — one per side (A / B)
+let aAnchorUtc = $state<number | null>(null); // UTC seconds — local midnight of anchor day (start of 48h window)
+let bAnchorUtc = $state<number | null>(null);
+let aRangeStart = $state<number | null>(null); // UTC seconds — selection start
+let aRangeEnd = $state<number | null>(null); // UTC seconds — selection end
+let bRangeStart = $state<number | null>(null);
+let bRangeEnd = $state<number | null>(null);
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let sessions    = $state<EmbeddingSession[]>([]);
-  let loading     = $state(true);
+// Pointer-drag state
+let dragSide = $state<"A" | "B" | null>(null);
+let dragAnchor = $state(0); // UTC seconds where drag started
 
-  // Timeline range-picker state — one per side (A / B)
-  let aAnchorUtc  = $state<number | null>(null);   // UTC seconds — local midnight of anchor day (start of 48h window)
-  let bAnchorUtc  = $state<number | null>(null);
-  let aRangeStart = $state<number | null>(null);   // UTC seconds — selection start
-  let aRangeEnd   = $state<number | null>(null);   // UTC seconds — selection end
-  let bRangeStart = $state<number | null>(null);
-  let bRangeEnd   = $state<number | null>(null);
+let metricsA = $state<SessionMetrics | null>(null);
+let metricsB = $state<SessionMetrics | null>(null);
+let sleepA = $state<SleepStages | null>(null);
+let sleepB = $state<SleepStages | null>(null);
+let comparing = $state(false);
+let tsA = $state<EpochRow[]>([]);
+let tsB = $state<EpochRow[]>([]);
+let showCharts = $state(false);
+let advExpanded = $state(false);
+let sleepExpanded = $state(false);
 
-  // Pointer-drag state
-  let dragSide   = $state<"A" | "B" | null>(null);
-  let dragAnchor = $state(0);  // UTC seconds where drag started
+// UMAP state
+let umapResult = $state<UmapResult | null>(null);
+let umapLoading = $state(false);
+let umapRequested = $state(false); // true once the user clicks "Calculate UMAP"
+let umapEta = $state<string | null>(null); // short status line
+let umapReadyUtc = $state<number | null>(null); // unix-sec when result expected
+let umapElapsed = $state(0); // seconds elapsed since start
+let umapCountdown = $state<number | null>(null); // live seconds remaining
+let umapComputeMs = $state<number | null>(null); // actual compute time from backend
+let umapProgress = $state<UmapProgress | null>(null); // live epoch progress
+let umapTimerHandle: ReturnType<typeof setInterval> | null = null;
+let umapStartMs = 0; // performance.now() at fire
 
-  let metricsA    = $state<SessionMetrics | null>(null);
-  let metricsB    = $state<SessionMetrics | null>(null);
-  let sleepA      = $state<SleepStages | null>(null);
-  let sleepB      = $state<SleepStages | null>(null);
-  let comparing   = $state(false);
-  let tsA         = $state<EpochRow[]>([]);
-  let tsB         = $state<EpochRow[]>([]);
-  let showCharts      = $state(false);
-  let advExpanded     = $state(false);
-  let sleepExpanded   = $state(false);
+// Queue-aware status — updated from poll responses
+/** Current 0-indexed position in the pending queue (0 = running now, >0 = waiting). */
+let umapQueuePosition = $state<number | null>(null);
+/** Estimated seconds this job spends actively computing (excludes queue wait). */
+let umapOwnEstimateSecs = $state<number>(3);
+/** Estimated seconds remaining until my job STARTS (decreases as jobs ahead finish). */
+let umapWaitSecs = $state<number | null>(null);
 
-  // UMAP state
-  let umapResult    = $state<UmapResult | null>(null);
-  let umapLoading   = $state(false);
-  let umapRequested = $state(false);               // true once the user clicks "Calculate UMAP"
-  let umapEta       = $state<string | null>(null); // short status line
-  let umapReadyUtc  = $state<number | null>(null); // unix-sec when result expected
-  let umapElapsed   = $state(0);                   // seconds elapsed since start
-  let umapCountdown = $state<number | null>(null); // live seconds remaining
-  let umapComputeMs = $state<number | null>(null); // actual compute time from backend
-  let umapProgress  = $state<UmapProgress | null>(null); // live epoch progress
-  let umapTimerHandle: ReturnType<typeof setInterval> | null = null;
-  let umapStartMs   = 0;                           // performance.now() at fire
+// Placeholder UMAP data — shown while real UMAP computes
+let umapPlaceholder = $state<UmapResult | null>(null);
 
-  // Queue-aware status — updated from poll responses
-  /** Current 0-indexed position in the pending queue (0 = running now, >0 = waiting). */
-  let umapQueuePosition = $state<number | null>(null);
-  /** Estimated seconds this job spends actively computing (excludes queue wait). */
-  let umapOwnEstimateSecs = $state<number>(3);
-  /** Estimated seconds remaining until my job STARTS (decreases as jobs ahead finish). */
-  let umapWaitSecs = $state<number | null>(null);
-
-  // Placeholder UMAP data — shown while real UMAP computes
-  let umapPlaceholder = $state<UmapResult | null>(null);
-
-
-
-  // Job queue types — imported from search-types.ts
-  /** Start the wall-clock timer that drives elapsed / countdown display. */
-  function startUmapTimer(estimatedSecs: number | null) {
-    stopUmapTimer();
-    umapStartMs = performance.now();
-    umapElapsed = 0;
-    umapCountdown = estimatedSecs;
-    umapTimerHandle = setInterval(() => {
-      const elapsed = Math.floor((performance.now() - umapStartMs) / 1000);
-      umapElapsed = elapsed;
-      if (umapReadyUtc) {
-        const nowUtc = Math.floor(Date.now() / 1000);
-        umapCountdown = Math.max(0, umapReadyUtc - nowUtc);
-      } else if (estimatedSecs != null) {
-        umapCountdown = Math.max(0, estimatedSecs - elapsed);
-      }
-    }, 250);
-  }
-
-  function stopUmapTimer() {
-    if (umapTimerHandle != null) { clearInterval(umapTimerHandle); umapTimerHandle = null; }
-    umapCountdown = null;
-  }
-
-
-
-  // Canvas refs for spectrum charts
-  let specCanvasA = $state<HTMLCanvasElement | null>(null);
-  let specCanvasB = $state<HTMLCanvasElement | null>(null);
-  let diffCanvas  = $state<HTMLCanvasElement | null>(null);
-
-  // Reactive dark-mode flag — used by canvas draw functions to pick colours.
-  const isDark = $derived(getResolved() === "dark");
-
-  // ── Timeline / range-picker helpers ─────────────────────────────────────────
-
-
-
-  /**
-   * Svelte action: attach a non-passive wheel listener so we can call
-   * preventDefault() and use horizontal (or vertical) scroll to navigate
-   * the 48h timeline between days.
-   * Scroll right / down → older day; scroll left / up → newer day.
-   */
-  function timelineWheel(node: HTMLElement, side: "A" | "B") {
-    let accum = 0;
-    function onWheel(e: WheelEvent) {
-      // Only intercept when there's meaningful horizontal intent, or pure
-      // vertical mouse-wheel with no modifier keys held.
-      const dx = e.deltaX, dy = e.deltaY;
-      const dominant = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
-      if (dominant === 0) return;
-      e.preventDefault();
-      accum += dominant;
-      const THRESHOLD = 80; // ~80px of scroll before jumping one day
-      if (accum >  THRESHOLD) { accum = 0; navigateDay(side, +1); } // older
-      if (accum < -THRESHOLD) { accum = 0; navigateDay(side, -1); } // newer
+// Job queue types — imported from search-types.ts
+/** Start the wall-clock timer that drives elapsed / countdown display. */
+function startUmapTimer(estimatedSecs: number | null) {
+  stopUmapTimer();
+  umapStartMs = performance.now();
+  umapElapsed = 0;
+  umapCountdown = estimatedSecs;
+  umapTimerHandle = setInterval(() => {
+    const elapsed = Math.floor((performance.now() - umapStartMs) / 1000);
+    umapElapsed = elapsed;
+    if (umapReadyUtc) {
+      const nowUtc = Math.floor(Date.now() / 1000);
+      umapCountdown = Math.max(0, umapReadyUtc - nowUtc);
+    } else if (estimatedSecs != null) {
+      umapCountdown = Math.max(0, estimatedSecs - elapsed);
     }
-    node.addEventListener("wheel", onWheel, { passive: false });
-    return { destroy() { node.removeEventListener("wheel", onWheel); } };
+  }, 250);
+}
+
+function stopUmapTimer() {
+  if (umapTimerHandle != null) {
+    clearInterval(umapTimerHandle);
+    umapTimerHandle = null;
   }
+  umapCountdown = null;
+}
 
-  /** Local date string "YYYY-MM-DD" from a UTC unix-second timestamp. */
-  function localDateFromUtc(utc: number): string {
-    return dateToLocalKey(fromUnix(utc));
+// Canvas refs for spectrum charts
+let specCanvasA = $state<HTMLCanvasElement | null>(null);
+let specCanvasB = $state<HTMLCanvasElement | null>(null);
+let diffCanvas = $state<HTMLCanvasElement | null>(null);
+
+// Reactive dark-mode flag — used by canvas draw functions to pick colours.
+const isDark = $derived(getResolved() === "dark");
+
+// ── Timeline / range-picker helpers ─────────────────────────────────────────
+
+/**
+ * Svelte action: attach a non-passive wheel listener so we can call
+ * preventDefault() and use horizontal (or vertical) scroll to navigate
+ * the 48h timeline between days.
+ * Scroll right / down → older day; scroll left / up → newer day.
+ */
+function timelineWheel(node: HTMLElement, side: "A" | "B") {
+  let accum = 0;
+  function onWheel(e: WheelEvent) {
+    // Only intercept when there's meaningful horizontal intent, or pure
+    // vertical mouse-wheel with no modifier keys held.
+    const dx = e.deltaX,
+      dy = e.deltaY;
+    const dominant = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
+    if (dominant === 0) return;
+    e.preventDefault();
+    accum += dominant;
+    const THRESHOLD = 80; // ~80px of scroll before jumping one day
+    if (accum > THRESHOLD) {
+      accum = 0;
+      navigateDay(side, +1);
+    } // older
+    if (accum < -THRESHOLD) {
+      accum = 0;
+      navigateDay(side, -1);
+    } // newer
   }
+  node.addEventListener("wheel", onWheel, { passive: false });
+  return {
+    destroy() {
+      node.removeEventListener("wheel", onWheel);
+    },
+  };
+}
 
-  /** UTC seconds for local midnight of a "YYYY-MM-DD" date string. */
-  function localMidnight(dateStr: string): number {
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    return Math.floor(new Date(y, mo - 1, d, 0, 0, 0).getTime() / 1000);
-  }
+/** Local date string "YYYY-MM-DD" from a UTC unix-second timestamp. */
+function localDateFromUtc(utc: number): string {
+  return dateToLocalKey(fromUnix(utc));
+}
 
-  /** "HH:MM" from a UTC unix-second timestamp (local time). */
-  function utcToTimeStr(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  }
+/** UTC seconds for local midnight of a "YYYY-MM-DD" date string. */
+function localMidnight(dateStr: string): number {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  return Math.floor(new Date(y, mo - 1, d, 0, 0, 0).getTime() / 1000);
+}
 
-  /** UTC seconds from a "YYYY-MM-DD" date and "HH:MM" time (local). */
-  function timeStrToUtc(dateStr: string, timeStr: string): number {
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    const [h,  mi]   = timeStr.split(":").map(Number);
-    return Math.floor(new Date(y, mo - 1, d, h, mi, 0).getTime() / 1000);
-  }
+/** "HH:MM" from a UTC unix-second timestamp (local time). */
+function utcToTimeStr(utc: number): string {
+  const d = new Date(utc * 1000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
-  /** Human-readable date label for a "YYYY-MM-DD" string. */
-  function dayLabel(dateStr: string): string {
-    return fmtDayKey(dateStr);
-  }
+/** UTC seconds from a "YYYY-MM-DD" date and "HH:MM" time (local). */
+function timeStrToUtc(dateStr: string, timeStr: string): number {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const [h, mi] = timeStr.split(":").map(Number);
+  return Math.floor(new Date(y, mo - 1, d, h, mi, 0).getTime() / 1000);
+}
 
-  /** Sessions that overlap the half-open interval [startUtc, endUtc). */
-  function sessionsInRange(startUtc: number, endUtc: number): EmbeddingSession[] {
-    return sessions.filter(s => s.end_utc > startUtc && s.start_utc < endUtc);
-  }
+/** Human-readable date label for a "YYYY-MM-DD" string. */
+function dayLabel(dateStr: string): string {
+  return fmtDayKey(dateStr);
+}
 
-  /** Sorted unique day strings (newest first) that have recorded sessions. */
-  const sortedDays = $derived.by(() => {
-    const s = new Set<string>();
-    for (const sess of sessions) {
-      let d = new Date(fromUnix(sess.start_utc).getFullYear(), fromUnix(sess.start_utc).getMonth(), fromUnix(sess.start_utc).getDate());
-      const endD = fromUnix(sess.end_utc);
-      const endMid = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate());
-      while (d <= endMid) {
-        s.add(dateToLocalKey(d));
-        d.setDate(d.getDate() + 1);
-      }
-    }
-    return [...s].sort().reverse(); // newest first
-  });
+/** Sessions that overlap the half-open interval [startUtc, endUtc). */
+function sessionsInRange(startUtc: number, endUtc: number): EmbeddingSession[] {
+  return sessions.filter((s) => s.end_utc > startUtc && s.start_utc < endUtc);
+}
 
-  /**
-   * Select an anchor day for one side and auto-set the range to cover all
-   * sessions within the 48-hour window starting at that day's midnight.
-   */
-  function selectDay(side: "A" | "B", dateStr: string) {
-    const anchorUtc = localMidnight(dateStr);
-    const windowSess = sessions.filter(s => s.end_utc > anchorUtc && s.start_utc < anchorUtc + 172800);
-    const rangeS = windowSess.length > 0 ? Math.min(...windowSess.map(s => s.start_utc)) : anchorUtc;
-    const rangeE = Math.min(
-      windowSess.length > 0 ? Math.max(...windowSess.map(s => s.end_utc)) : anchorUtc + 86400,
-      rangeS + 86400
+/** Sorted unique day strings (newest first) that have recorded sessions. */
+const sortedDays = $derived.by(() => {
+  const s = new Set<string>();
+  for (const sess of sessions) {
+    let d = new Date(
+      fromUnix(sess.start_utc).getFullYear(),
+      fromUnix(sess.start_utc).getMonth(),
+      fromUnix(sess.start_utc).getDate(),
     );
-    if (side === "A") { aAnchorUtc = anchorUtc; aRangeStart = rangeS; aRangeEnd = rangeE; }
-    else              { bAnchorUtc = anchorUtc; bRangeStart = rangeS; bRangeEnd = rangeE; }
-  }
-
-  /** Navigate a side to the next/previous day (by sortedDays list). */
-  function navigateDay(side: "A" | "B", direction: -1 | 1) {
-    const current = side === "A" ? aDayStr : bDayStr;
-    if (!current) return;
-    const idx  = sortedDays.indexOf(current);
-    const next = sortedDays[idx + direction];
-    if (next) selectDay(side, next);
-  }
-
-  /** Snap a session onto a side's selection (click on a session bar). */
-  function pickSession(side: "A" | "B", sess: EmbeddingSession) {
-    if (side === "A") { aRangeStart = sess.start_utc; aRangeEnd = sess.end_utc; }
-    else              { bRangeStart = sess.start_utc; bRangeEnd = sess.end_utc; }
-  }
-
-  /** "YYYY-MM-DDThh:mm:ss" from a UTC unix-second timestamp (for datetime-local inputs). */
-  function utcToDateTimeLocal(utc: number): string {
-    return fmtDateTimeLocalInput(utc);
-  }
-
-  /** UTC seconds from a "YYYY-MM-DDThh:mm" datetime-local string. */
-  function dateTimeLocalToUtc(dt: string): number {
-    return parseDateTimeLocalInput(dt);
-  }
-
-  /** Update range start from a datetime-local input. */
-  function setRangeStart(side: "A" | "B", val: string) {
-    const u = dateTimeLocalToUtc(val);
-    if (side === "A") aRangeStart = u; else bRangeStart = u;
-  }
-
-  /** Update range end from a datetime-local input. */
-  function setRangeEnd(side: "A" | "B", val: string) {
-    const u = dateTimeLocalToUtc(val);
-    if (side === "A") aRangeEnd = u; else bRangeEnd = u;
-  }
-
-  // ── Pointer drag handlers for the 48h timeline ─────────────────────────────
-
-  function ptrDown(e: PointerEvent, side: "A" | "B") {
-    const el     = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-    const rect   = el.getBoundingClientRect();
-    const pct    = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const anchor = side === "A" ? aAnchorUtc : bAnchorUtc;
-    if (!anchor) return;
-    const utc  = Math.round(anchor + pct * 172800);
-    dragSide   = side;
-    dragAnchor = utc;
-    if (side === "A") { aRangeStart = utc; aRangeEnd = utc; }
-    else              { bRangeStart = utc; bRangeEnd = utc; }
-  }
-
-  function ptrMove(e: PointerEvent, side: "A" | "B") {
-    if (dragSide !== side) return;
-    const el     = e.currentTarget as HTMLElement;
-    const rect   = el.getBoundingClientRect();
-    const pct    = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const anchor = side === "A" ? aAnchorUtc : bAnchorUtc;
-    if (!anchor) return;
-    const utc = Math.round(anchor + pct * 172800);
-    const lo  = Math.min(dragAnchor, utc);
-    const hi  = Math.min(Math.max(dragAnchor, utc), lo + 86400); // cap 24 h
-    if (side === "A") { aRangeStart = lo; aRangeEnd = hi; }
-    else              { bRangeStart = lo; bRangeEnd = hi; }
-  }
-
-  function ptrUp(side: "A" | "B") {
-    if (dragSide !== side) return;
-    dragSide = null;
-    // Snap to nearest minute
-    if (side === "A" && aRangeStart !== null && aRangeEnd !== null) {
-      aRangeStart = Math.round(aRangeStart / 60) * 60;
-      aRangeEnd   = Math.round(aRangeEnd   / 60) * 60;
-      if (aRangeEnd <= aRangeStart) aRangeEnd = aRangeStart + 60;
-    } else if (side === "B" && bRangeStart !== null && bRangeEnd !== null) {
-      bRangeStart = Math.round(bRangeStart / 60) * 60;
-      bRangeEnd   = Math.round(bRangeEnd   / 60) * 60;
-      if (bRangeEnd <= bRangeStart) bRangeEnd = bRangeStart + 60;
+    const endD = fromUnix(sess.end_utc);
+    const endMid = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate());
+    while (d <= endMid) {
+      s.add(dateToLocalKey(d));
+      d.setDate(d.getDate() + 1);
     }
   }
+  return [...s].sort().reverse(); // newest first
+});
 
-  // ── Derived UTC ranges (consumed by compare / UMAP / insights) ─────────────
-  // Day string derived from anchor — used for nav dropdown + navigateDay
-  const aDayStr      = $derived(aAnchorUtc !== null ? localDateFromUtc(aAnchorUtc + 43200) : null);
-  const bDayStr      = $derived(bAnchorUtc !== null ? localDateFromUtc(bAnchorUtc + 43200) : null);
-  // Sessions visible in the 48h window
-  const aDaySessions = $derived(aAnchorUtc !== null ? sessions.filter(s => s.end_utc > aAnchorUtc! && s.start_utc < aAnchorUtc! + 172800) : []);
-  const bDaySessions = $derived(bAnchorUtc !== null ? sessions.filter(s => s.end_utc > bAnchorUtc! && s.start_utc < bAnchorUtc! + 172800) : []);
-
-  const aStartUtc = $derived(aRangeStart ?? 0);
-  const aEndUtc   = $derived(aRangeEnd   ?? 0);
-  const bStartUtc = $derived(bRangeStart ?? 0);
-  const bEndUtc   = $derived(bRangeEnd   ?? 0);
-
-  const aDurSecs  = $derived(aEndUtc - aStartUtc);
-  const bDurSecs  = $derived(bEndUtc - bStartUtc);
-  const aSessions = $derived(aRangeStart !== null && aRangeEnd !== null ? sessionsInRange(aStartUtc, aEndUtc) : []);
-  const bSessions = $derived(bRangeStart !== null && bRangeEnd !== null ? sessionsInRange(bStartUtc, bEndUtc) : []);
-
-  const aValid = $derived(aRangeStart !== null && aRangeEnd !== null && aDurSecs > 0 && aDurSecs <= 86400 && aSessions.length > 0);
-  const bValid = $derived(bRangeStart !== null && bRangeEnd !== null && bDurSecs > 0 && bDurSecs <= 86400 && bSessions.length > 0);
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  function sessionLabel(s: EmbeddingSession): string {
-    const dt  = fmtDateTime(s.start_utc);
-    const dur = fmtDuration(s.end_utc - s.start_utc);
-    return `${dt}  (${dur}, ${s.n_epochs} ep)`;
+/**
+ * Select an anchor day for one side and auto-set the range to cover all
+ * sessions within the 48-hour window starting at that day's midnight.
+ */
+function selectDay(side: "A" | "B", dateStr: string) {
+  const anchorUtc = localMidnight(dateStr);
+  const windowSess = sessions.filter((s) => s.end_utc > anchorUtc && s.start_utc < anchorUtc + 172800);
+  const rangeS = windowSess.length > 0 ? Math.min(...windowSess.map((s) => s.start_utc)) : anchorUtc;
+  const rangeE = Math.min(
+    windowSess.length > 0 ? Math.max(...windowSess.map((s) => s.end_utc)) : anchorUtc + 86400,
+    rangeS + 86400,
+  );
+  if (side === "A") {
+    aAnchorUtc = anchorUtc;
+    aRangeStart = rangeS;
+    aRangeEnd = rangeE;
+  } else {
+    bAnchorUtc = anchorUtc;
+    bRangeStart = rangeS;
+    bRangeEnd = rangeE;
   }
+}
 
-  // ── Load sessions & auto-select ────────────────────────────────────────────
-  let refreshing = $state(false);
+/** Navigate a side to the next/previous day (by sortedDays list). */
+function navigateDay(side: "A" | "B", direction: -1 | 1) {
+  const current = side === "A" ? aDayStr : bDayStr;
+  if (!current) return;
+  const idx = sortedDays.indexOf(current);
+  const next = sortedDays[idx + direction];
+  if (next) selectDay(side, next);
+}
 
-  async function loadSessions(autoSelect = false) {
-    // Primary source: sessions that have embeddings computed.
-    const embSessions = await invoke<EmbeddingSession[]>("list_embedding_sessions");
+/** Snap a session onto a side's selection (click on a session bar). */
+function pickSession(side: "A" | "B", sess: EmbeddingSession) {
+  if (side === "A") {
+    aRangeStart = sess.start_utc;
+    aRangeEnd = sess.end_utc;
+  } else {
+    bRangeStart = sess.start_utc;
+    bRangeEnd = sess.end_utc;
+  }
+}
 
-    // Fallback: also pull from the raw session list so that sessions recorded
-    // today (whose embeddings haven't been computed yet) still appear in the
-    // compare timeline.  We fetch only the most recent days to keep it fast.
-    try {
-      const days = await invoke<string[]>("list_session_days");
-      const recentDays = days.slice(0, Math.min(days.length, 7));
-      const dayResults = await Promise.allSettled(
-        recentDays.map(day =>
-          invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>(
-            "list_sessions_for_day", { day }
-          )
-        )
-      );
+/** "YYYY-MM-DDThh:mm:ss" from a UTC unix-second timestamp (for datetime-local inputs). */
+function utcToDateTimeLocal(utc: number): string {
+  return fmtDateTimeLocalInput(utc);
+}
 
-      // Build a lookup of already-covered ranges (rounded to nearest minute to
-      // avoid floating-point / rounding mismatches between the two sources).
-      const covered = new Set(
-        embSessions.map(s => `${Math.round(s.start_utc / 60)}-${Math.round(s.end_utc / 60)}`)
-      );
+/** UTC seconds from a "YYYY-MM-DDThh:mm" datetime-local string. */
+function dateTimeLocalToUtc(dt: string): number {
+  return parseDateTimeLocalInput(dt);
+}
 
-      for (const result of dayResults) {
-        if (result.status !== "fulfilled") continue;
-        for (const sess of result.value) {
-          if (!sess.session_start_utc || !sess.session_end_utc) continue;
-          const key = `${Math.round(sess.session_start_utc / 60)}-${Math.round(sess.session_end_utc / 60)}`;
-          if (!covered.has(key)) {
-            covered.add(key);
-            const dur = sess.session_end_utc - sess.session_start_utc;
-            embSessions.push({
-              start_utc: sess.session_start_utc,
-              end_utc:   sess.session_end_utc,
-              n_epochs:  Math.floor(dur / 5),   // assume 5-second epochs
-              day:       localDateFromUtc(sess.session_start_utc),
-            });
-          }
+/** Update range start from a datetime-local input. */
+function setRangeStart(side: "A" | "B", val: string) {
+  const u = dateTimeLocalToUtc(val);
+  if (side === "A") aRangeStart = u;
+  else bRangeStart = u;
+}
+
+/** Update range end from a datetime-local input. */
+function setRangeEnd(side: "A" | "B", val: string) {
+  const u = dateTimeLocalToUtc(val);
+  if (side === "A") aRangeEnd = u;
+  else bRangeEnd = u;
+}
+
+// ── Pointer drag handlers for the 48h timeline ─────────────────────────────
+
+function ptrDown(e: PointerEvent, side: "A" | "B") {
+  const el = e.currentTarget as HTMLElement;
+  el.setPointerCapture(e.pointerId);
+  const rect = el.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const anchor = side === "A" ? aAnchorUtc : bAnchorUtc;
+  if (!anchor) return;
+  const utc = Math.round(anchor + pct * 172800);
+  dragSide = side;
+  dragAnchor = utc;
+  if (side === "A") {
+    aRangeStart = utc;
+    aRangeEnd = utc;
+  } else {
+    bRangeStart = utc;
+    bRangeEnd = utc;
+  }
+}
+
+function ptrMove(e: PointerEvent, side: "A" | "B") {
+  if (dragSide !== side) return;
+  const el = e.currentTarget as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const anchor = side === "A" ? aAnchorUtc : bAnchorUtc;
+  if (!anchor) return;
+  const utc = Math.round(anchor + pct * 172800);
+  const lo = Math.min(dragAnchor, utc);
+  const hi = Math.min(Math.max(dragAnchor, utc), lo + 86400); // cap 24 h
+  if (side === "A") {
+    aRangeStart = lo;
+    aRangeEnd = hi;
+  } else {
+    bRangeStart = lo;
+    bRangeEnd = hi;
+  }
+}
+
+function ptrUp(side: "A" | "B") {
+  if (dragSide !== side) return;
+  dragSide = null;
+  // Snap to nearest minute
+  if (side === "A" && aRangeStart !== null && aRangeEnd !== null) {
+    aRangeStart = Math.round(aRangeStart / 60) * 60;
+    aRangeEnd = Math.round(aRangeEnd / 60) * 60;
+    if (aRangeEnd <= aRangeStart) aRangeEnd = aRangeStart + 60;
+  } else if (side === "B" && bRangeStart !== null && bRangeEnd !== null) {
+    bRangeStart = Math.round(bRangeStart / 60) * 60;
+    bRangeEnd = Math.round(bRangeEnd / 60) * 60;
+    if (bRangeEnd <= bRangeStart) bRangeEnd = bRangeStart + 60;
+  }
+}
+
+// ── Derived UTC ranges (consumed by compare / UMAP / insights) ─────────────
+// Day string derived from anchor — used for nav dropdown + navigateDay
+const aDayStr = $derived(aAnchorUtc !== null ? localDateFromUtc(aAnchorUtc + 43200) : null);
+const bDayStr = $derived(bAnchorUtc !== null ? localDateFromUtc(bAnchorUtc + 43200) : null);
+// Sessions visible in the 48h window
+const aDaySessions = $derived(
+  aAnchorUtc !== null ? sessions.filter((s) => s.end_utc > aAnchorUtc! && s.start_utc < aAnchorUtc! + 172800) : [],
+);
+const bDaySessions = $derived(
+  bAnchorUtc !== null ? sessions.filter((s) => s.end_utc > bAnchorUtc! && s.start_utc < bAnchorUtc! + 172800) : [],
+);
+
+const aStartUtc = $derived(aRangeStart ?? 0);
+const aEndUtc = $derived(aRangeEnd ?? 0);
+const bStartUtc = $derived(bRangeStart ?? 0);
+const bEndUtc = $derived(bRangeEnd ?? 0);
+
+const aDurSecs = $derived(aEndUtc - aStartUtc);
+const bDurSecs = $derived(bEndUtc - bStartUtc);
+const aSessions = $derived(aRangeStart !== null && aRangeEnd !== null ? sessionsInRange(aStartUtc, aEndUtc) : []);
+const bSessions = $derived(bRangeStart !== null && bRangeEnd !== null ? sessionsInRange(bStartUtc, bEndUtc) : []);
+
+const aValid = $derived(
+  aRangeStart !== null && aRangeEnd !== null && aDurSecs > 0 && aDurSecs <= 86400 && aSessions.length > 0,
+);
+const bValid = $derived(
+  bRangeStart !== null && bRangeEnd !== null && bDurSecs > 0 && bDurSecs <= 86400 && bSessions.length > 0,
+);
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function sessionLabel(s: EmbeddingSession): string {
+  const dt = fmtDateTime(s.start_utc);
+  const dur = fmtDuration(s.end_utc - s.start_utc);
+  return `${dt}  (${dur}, ${s.n_epochs} ep)`;
+}
+
+// ── Load sessions & auto-select ────────────────────────────────────────────
+let refreshing = $state(false);
+
+async function loadSessions(autoSelect = false) {
+  // Primary source: sessions that have embeddings computed.
+  const embSessions = await invoke<EmbeddingSession[]>("list_embedding_sessions");
+
+  // Fallback: also pull from the raw session list so that sessions recorded
+  // today (whose embeddings haven't been computed yet) still appear in the
+  // compare timeline.  We fetch only the most recent days to keep it fast.
+  try {
+    const days = await invoke<string[]>("list_session_days");
+    const recentDays = days.slice(0, Math.min(days.length, 7));
+    const dayResults = await Promise.allSettled(
+      recentDays.map((day) =>
+        invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions_for_day", {
+          day,
+        }),
+      ),
+    );
+
+    // Build a lookup of already-covered ranges (rounded to nearest minute to
+    // avoid floating-point / rounding mismatches between the two sources).
+    const covered = new Set(embSessions.map((s) => `${Math.round(s.start_utc / 60)}-${Math.round(s.end_utc / 60)}`));
+
+    for (const result of dayResults) {
+      if (result.status !== "fulfilled") continue;
+      for (const sess of result.value) {
+        if (!sess.session_start_utc || !sess.session_end_utc) continue;
+        const key = `${Math.round(sess.session_start_utc / 60)}-${Math.round(sess.session_end_utc / 60)}`;
+        if (!covered.has(key)) {
+          covered.add(key);
+          const dur = sess.session_end_utc - sess.session_start_utc;
+          embSessions.push({
+            start_utc: sess.session_start_utc,
+            end_utc: sess.session_end_utc,
+            n_epochs: Math.floor(dur / 5), // assume 5-second epochs
+            day: localDateFromUtc(sess.session_start_utc),
+          });
         }
       }
-    } catch (e) {
-      // Non-fatal — the primary embedding list is still usable.
-      console.warn("[compare] fallback session load failed:", e);
     }
+  } catch (e) {}
 
-    sessions = embSessions;
-    if (!autoSelect || sessions.length === 0) return;
+  sessions = embSessions;
+  if (!autoSelect || sessions.length === 0) return;
 
-    // Check for quick-compare URL params (from open_compare_window_with_sessions)
-    const params = new URLSearchParams(window.location.search);
-    const qStartA = params.get("startA");
-    const qEndA   = params.get("endA");
-    const qStartB = params.get("startB");
-    const qEndB   = params.get("endB");
-    if (qStartA && qEndA && qStartB && qEndB) {
-      const sA = parseInt(qStartA, 10), eA = parseInt(qEndA, 10);
-      const sB = parseInt(qStartB, 10), eB = parseInt(qEndB, 10);
-      aAnchorUtc = localMidnight(localDateFromUtc(sA)); aRangeStart = sA; aRangeEnd = eA;
-      bAnchorUtc = localMidnight(localDateFromUtc(sB)); bRangeStart = sB; bRangeEnd = eB;
-      await compare();
-      return;
-    }
-
-    // Build sorted unique local-date list (newest first) from all sessions
-    const daySet = new Set<string>();
-    for (const sess of sessions) daySet.add(localDateFromUtc(sess.start_utc));
-    const allDays = [...daySet].sort().reverse();
-
-    if (allDays.length >= 1) selectDay("A", allDays[0]);
-    if (allDays.length >= 2) {
-      selectDay("B", allDays[1]);
-    } else if (allDays.length === 1) {
-      // ── Only one calendar day available ────────────────────────────────
-      // Mirror the same day into both pickers so the user can pick two
-      // different time windows from the same recording day.
-      const onlyDay = allDays[0];
-      bAnchorUtc = localMidnight(onlyDay);
-
-      if (sessions.length >= 2) {
-        // Multiple sessions on same day: A = newest, B = second newest.
-        aRangeStart = sessions[0].start_utc; aRangeEnd = sessions[0].end_utc;
-        bRangeStart = sessions[1].start_utc; bRangeEnd = sessions[1].end_utc;
-      } else if (sessions.length === 1) {
-        // Single session: split into first half (A) vs second half (B)
-        // so the user has a sensible default and can adjust by dragging.
-        const sess   = sessions[0];
-        const midUtc = Math.round((sess.start_utc + sess.end_utc) / 2);
-        aRangeStart  = sess.start_utc; aRangeEnd  = midUtc;
-        bRangeStart  = midUtc;        bRangeEnd  = sess.end_utc;
-      }
-    }
-
-    // Let derived values settle before comparing
-    await new Promise(r => setTimeout(r, 0));
-    if (aValid && bValid && (aStartUtc !== bStartUtc || aEndUtc !== bEndUtc)) await compare();
+  // Check for quick-compare URL params (from open_compare_window_with_sessions)
+  const params = new URLSearchParams(window.location.search);
+  const qStartA = params.get("startA");
+  const qEndA = params.get("endA");
+  const qStartB = params.get("startB");
+  const qEndB = params.get("endB");
+  if (qStartA && qEndA && qStartB && qEndB) {
+    const sA = parseInt(qStartA, 10),
+      eA = parseInt(qEndA, 10);
+    const sB = parseInt(qStartB, 10),
+      eB = parseInt(qEndB, 10);
+    aAnchorUtc = localMidnight(localDateFromUtc(sA));
+    aRangeStart = sA;
+    aRangeEnd = eA;
+    bAnchorUtc = localMidnight(localDateFromUtc(sB));
+    bRangeStart = sB;
+    bRangeEnd = eB;
+    await compare();
+    return;
   }
 
-  async function refreshSessions() {
-    refreshing = true;
-    await loadSessions(false);
-    refreshing = false;
+  // Build sorted unique local-date list (newest first) from all sessions
+  const daySet = new Set<string>();
+  for (const sess of sessions) daySet.add(localDateFromUtc(sess.start_utc));
+  const allDays = [...daySet].sort().reverse();
+
+  if (allDays.length >= 1) selectDay("A", allDays[0]);
+  if (allDays.length >= 2) {
+    selectDay("B", allDays[1]);
+  } else if (allDays.length === 1) {
+    // ── Only one calendar day available ────────────────────────────────
+    // Mirror the same day into both pickers so the user can pick two
+    // different time windows from the same recording day.
+    const onlyDay = allDays[0];
+    bAnchorUtc = localMidnight(onlyDay);
+
+    if (sessions.length >= 2) {
+      // Multiple sessions on same day: A = newest, B = second newest.
+      aRangeStart = sessions[0].start_utc;
+      aRangeEnd = sessions[0].end_utc;
+      bRangeStart = sessions[1].start_utc;
+      bRangeEnd = sessions[1].end_utc;
+    } else if (sessions.length === 1) {
+      // Single session: split into first half (A) vs second half (B)
+      // so the user has a sensible default and can adjust by dragging.
+      const sess = sessions[0];
+      const midUtc = Math.round((sess.start_utc + sess.end_utc) / 2);
+      aRangeStart = sess.start_utc;
+      aRangeEnd = midUtc;
+      bRangeStart = midUtc;
+      bRangeEnd = sess.end_utc;
+    }
   }
 
-  // Scroll-container ref used by the ResizeObserver
-  let scrollContainer = $state<HTMLElement | null>(null);
+  // Let derived values settle before comparing
+  await new Promise((r) => setTimeout(r, 0));
+  if (aValid && bValid && (aStartUtc !== bStartUtc || aEndUtc !== bEndUtc)) await compare();
+}
 
-  onMount(() => {
-    // Async session load — fire and forget (sets `loading = false` on resolve)
-    loadSessions(true).then(() => { loading = false; });
+async function refreshSessions() {
+  refreshing = true;
+  await loadSessions(false);
+  refreshing = false;
+}
 
-    // ResizeObserver: redraws all canvases after the layout settles at the new
-    // size.  A plain window "resize" listener fires before CSS has updated, so
-    // the canvas.clientWidth reads the OLD value — causing the stretched look.
-    const ro = new ResizeObserver(() => redrawAllCanvases());
-    if (scrollContainer) ro.observe(scrollContainer);
-    return () => ro.disconnect();
+// Scroll-container ref used by the ResizeObserver
+let scrollContainer = $state<HTMLElement | null>(null);
+
+onMount(() => {
+  // Async session load — fire and forget (sets `loading = false` on resolve)
+  loadSessions(true).then(() => {
+    loading = false;
   });
 
-  // ── Compare ────────────────────────────────────────────────────────────────
-  async function compare() {
-    if (aRangeStart === null || aRangeEnd === null || bRangeStart === null || bRangeEnd === null) return;
+  // ResizeObserver: redraws all canvases after the layout settles at the new
+  // size.  A plain window "resize" listener fires before CSS has updated, so
+  // the canvas.clientWidth reads the OLD value — causing the stretched look.
+  const ro = new ResizeObserver(() => redrawAllCanvases());
+  if (scrollContainer) ro.observe(scrollContainer);
+  return () => ro.disconnect();
+});
 
-    // Snapshot the derived UTC values at call time
-    const sA = aStartUtc, eA = aEndUtc;
-    const sB = bStartUtc, eB = bEndUtc;
+// ── Compare ────────────────────────────────────────────────────────────────
+async function compare() {
+  if (aRangeStart === null || aRangeEnd === null || bRangeStart === null || bRangeEnd === null) return;
 
-    comparing = true;
-    metricsA = null;
-    metricsB = null;
-    sleepA   = null;
-    sleepB   = null;
+  // Snapshot the derived UTC values at call time
+  const sA = aStartUtc,
+    eA = aEndUtc;
+  const sB = bStartUtc,
+    eB = bEndUtc;
 
-    const [ma, mb, sa, sb] = await Promise.all([
-      invoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
-      invoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
-      invoke<SleepStages>("get_sleep_stages",       { startUtc: sA, endUtc: eA }),
-      invoke<SleepStages>("get_sleep_stages",       { startUtc: sB, endUtc: eB }),
-    ]);
+  comparing = true;
+  metricsA = null;
+  metricsB = null;
+  sleepA = null;
+  sleepB = null;
 
-    metricsA  = ma;
-    metricsB  = mb;
-    sleepA    = sa.epochs.length > 0 ? sa : null;
-    sleepB    = sb.epochs.length > 0 ? sb : null;
-    comparing = false;
+  const [ma, mb, sa, sb] = await Promise.all([
+    invoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
+    invoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
+    invoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
+    invoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
+  ]);
 
-    // Reset any previously computed UMAP — the user must request it again.
-    umapResult      = null;
-    umapPlaceholder = null;
-    umapRequested   = false;
-    umapLoading     = false;
-    umapEta         = null;
-    umapReadyUtc    = null;
-    umapComputeMs   = null;
-    umapProgress    = null;
-    stopUmapTimer();
+  metricsA = ma;
+  metricsB = mb;
+  sleepA = sa.epochs.length > 0 ? sa : null;
+  sleepB = sb.epochs.length > 0 ? sb : null;
+  comparing = false;
 
-    // Load time-series for charts (non-blocking).
-    Promise.all([
-      invoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
-      invoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
-    ]).then(([ta, tb]) => { tsA = ta; tsB = tb; }).catch(e => console.warn("[compare] get_session_timeseries failed:", e));
-  }
+  // Reset any previously computed UMAP — the user must request it again.
+  umapResult = null;
+  umapPlaceholder = null;
+  umapRequested = false;
+  umapLoading = false;
+  umapEta = null;
+  umapReadyUtc = null;
+  umapComputeMs = null;
+  umapProgress = null;
+  stopUmapTimer();
 
-  // ── Calculate UMAP (triggered explicitly by the user) ───────────────────
-  async function calculateUmap() {
-    if (aRangeStart === null || aRangeEnd === null || bRangeStart === null || bRangeEnd === null) return;
+  // Load time-series for charts (non-blocking).
+  Promise.all([
+    invoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
+    invoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
+  ])
+    .then(([ta, tb]) => {
+      tsA = ta;
+      tsB = tb;
+    })
+    .catch((_e) => {});
+}
 
-    umapRequested        = true;
-    umapResult           = null;
-    umapLoading          = true;
-    umapEta              = null;
-    umapReadyUtc         = null;
-    umapComputeMs        = null;
-    umapProgress         = null;
-    umapQueuePosition    = null;
-    umapWaitSecs         = null;
-    umapOwnEstimateSecs  = 3;          // updated from ticket below
-    umapPlaceholder = generateUmapPlaceholder(150, 150);
-    startUmapTimer(null);
+// ── Calculate UMAP (triggered explicitly by the user) ───────────────────
+async function calculateUmap() {
+  if (aRangeStart === null || aRangeEnd === null || bRangeStart === null || bRangeEnd === null) return;
 
-    const umapArgs = {
-      aStartUtc, aEndUtc, bStartUtc, bEndUtc,
-    };
+  umapRequested = true;
+  umapResult = null;
+  umapLoading = true;
+  umapEta = null;
+  umapReadyUtc = null;
+  umapComputeMs = null;
+  umapProgress = null;
+  umapQueuePosition = null;
+  umapWaitSecs = null;
+  umapOwnEstimateSecs = 3; // updated from ticket below
+  umapPlaceholder = generateUmapPlaceholder(150, 150);
+  startUmapTimer(null);
 
-    // Try the job queue first (enqueue_umap_compare); if the backend doesn't
-    // support it yet, fall back to the synchronous compute_umap_compare.
-    invoke<JobTicket>("enqueue_umap_compare", umapArgs)
-      .then(ticket => {
-        umapReadyUtc = ticket.estimated_ready_utc;
-        startUmapTimer(ticket.estimated_secs);
+  const umapArgs = {
+    aStartUtc,
+    aEndUtc,
+    bStartUtc,
+    bEndUtc,
+  };
 
-        // Derive this job's own compute estimate.
-        // ticket.estimated_secs = (all pending jobs + this job) / 1000.
-        // When queue_position == 0 there are no pending jobs, so
-        // estimated_secs ≈ this job's own time.  When queued, the backend
-        // uses 3 s per UMAP job as the fixed estimate, so we can compute:
-        //   wait = estimated_secs − own_estimate
-        //   own  = estimated_secs / (queue_position + 1)  — uniform estimate
-        umapOwnEstimateSecs = ticket.queue_position > 0
+  // Try the job queue first (enqueue_umap_compare); if the backend doesn't
+  // support it yet, fall back to the synchronous compute_umap_compare.
+  invoke<JobTicket>("enqueue_umap_compare", umapArgs)
+    .then((ticket) => {
+      umapReadyUtc = ticket.estimated_ready_utc;
+      startUmapTimer(ticket.estimated_secs);
+
+      // Derive this job's own compute estimate.
+      // ticket.estimated_secs = (all pending jobs + this job) / 1000.
+      // When queue_position == 0 there are no pending jobs, so
+      // estimated_secs ≈ this job's own time.  When queued, the backend
+      // uses 3 s per UMAP job as the fixed estimate, so we can compute:
+      //   wait = estimated_secs − own_estimate
+      //   own  = estimated_secs / (queue_position + 1)  — uniform estimate
+      umapOwnEstimateSecs =
+        ticket.queue_position > 0
           ? Math.round(ticket.estimated_secs / (ticket.queue_position + 1))
           : ticket.estimated_secs;
 
-        umapQueuePosition = ticket.queue_position;
-        umapWaitSecs      = Math.max(0, ticket.estimated_secs - umapOwnEstimateSecs);
+      umapQueuePosition = ticket.queue_position;
+      umapWaitSecs = Math.max(0, ticket.estimated_secs - umapOwnEstimateSecs);
 
-        if (ticket.queue_position > 0) {
-          umapEta = `queued #${ticket.queue_position + 1}`;
+      if (ticket.queue_position > 0) {
+        umapEta = `queued #${ticket.queue_position + 1}`;
+      } else {
+        umapEta = "computing 3D projection…";
+      }
+      pollUmapJob(ticket.job_id);
+    })
+    .catch(() => {
+      // Job queue not available — fall back to direct (blocking) call
+      umapEta = "computing 3D projection…";
+      umapQueuePosition = 0;
+      umapWaitSecs = 0;
+      startUmapTimer(10); // rough estimate for direct call
+      invoke<UmapResult>("compute_umap_compare", umapArgs)
+        .then((r) => {
+          umapResult = r?.points && r.points.length > 0 ? r : null;
+          umapComputeMs = r?.elapsed_ms ?? null;
+          finishUmap();
+        })
+        .catch(() => {
+          finishUmap();
+        });
+    });
+}
+
+function finishUmap() {
+  umapLoading = false;
+  umapEta = null;
+  umapReadyUtc = null;
+  umapProgress = null;
+  umapQueuePosition = null;
+  umapWaitSecs = null;
+  stopUmapTimer();
+}
+
+// ── Job queue polling ────────────────────────────────────────────────────
+async function pollUmapJob(jobId: number) {
+  const poll = async () => {
+    try {
+      const r = await invoke<JobPollResult>("poll_job", { jobId });
+      if (r.status === "complete") {
+        const res = r.result as UmapResult | undefined;
+        umapResult = res?.points && res.points.length > 0 ? res : null;
+        umapComputeMs = res?.elapsed_ms ?? r.elapsed_ms ?? null;
+        finishUmap();
+      } else if (r.status === "error") {
+        finishUmap();
+      } else if (r.status === "pending") {
+        // Update queue-aware state on every poll so the UI stays current.
+        umapQueuePosition = r.queue_position!;
+        // estimated_secs from poll = (jobs ahead + this job) estimate.
+        // Subtract this job's own estimate to get remaining wait time.
+        umapWaitSecs = Math.max(0, (r.estimated_secs ?? 0) - umapOwnEstimateSecs);
+
+        if (r.queue_position! > 0) {
+          umapEta = `queued #${r.queue_position! + 1}`;
+        } else if (r.progress) {
+          const p = r.progress as unknown as UmapProgress;
+          umapProgress = p;
+          const pct = p.total_epochs > 0 ? Math.round((p.epoch / p.total_epochs) * 100) : 0;
+          const remaining = p.epoch_ms > 0 ? (((p.total_epochs - p.epoch) * p.epoch_ms) / 1000).toFixed(0) : "?";
+          umapEta = `epoch ${p.epoch}/${p.total_epochs} (${pct}%) · ${p.epoch_ms.toFixed(0)}ms/ep · ~${remaining}s left`;
         } else {
           umapEta = "computing 3D projection…";
         }
-        pollUmapJob(ticket.job_id);
-      })
-      .catch(() => {
-        // Job queue not available — fall back to direct (blocking) call
-        umapEta             = "computing 3D projection…";
-        umapQueuePosition   = 0;
-        umapWaitSecs        = 0;
-        startUmapTimer(10); // rough estimate for direct call
-        invoke<UmapResult>("compute_umap_compare", umapArgs)
-          .then(r => {
-            umapResult = r && r.points && r.points.length > 0 ? r : null;
-            umapComputeMs = r?.elapsed_ms ?? null;
-            finishUmap();
-          })
-          .catch(() => { finishUmap(); });
-      });
-  }
-
-  function finishUmap() {
-    umapLoading       = false;
-    umapEta           = null;
-    umapReadyUtc      = null;
-    umapProgress      = null;
-    umapQueuePosition = null;
-    umapWaitSecs      = null;
-    stopUmapTimer();
-  }
-
-  // ── Job queue polling ────────────────────────────────────────────────────
-  async function pollUmapJob(jobId: number) {
-    const poll = async () => {
-      try {
-        const r = await invoke<JobPollResult>("poll_job", { jobId });
-        if (r.status === "complete") {
-          const res = r.result as UmapResult | undefined;
-          console.log("[umap] poll complete, raw r:", JSON.stringify(r).slice(0, 500));
-          console.log("[umap] res type:", typeof res, "keys:", res ? Object.keys(res) : "null");
-          console.log("[umap] res?.points?.length:", res?.points?.length, "n_a:", res?.n_a, "n_b:", res?.n_b);
-          umapResult = res && res.points && res.points.length > 0 ? res : null;
-          umapComputeMs = res?.elapsed_ms ?? (r.elapsed_ms ?? null);
-          console.log("[umap] umapResult set:", umapResult != null, "points:", umapResult?.points?.length);
-          finishUmap();
-        } else if (r.status === "error") {
-          console.error("[umap] job failed:", r.error);
-          finishUmap();
-        } else if (r.status === "pending") {
-          // Update queue-aware state on every poll so the UI stays current.
-          umapQueuePosition = r.queue_position!;
-          // estimated_secs from poll = (jobs ahead + this job) estimate.
-          // Subtract this job's own estimate to get remaining wait time.
-          umapWaitSecs = Math.max(0, (r.estimated_secs ?? 0) - umapOwnEstimateSecs);
-
-          if (r.queue_position! > 0) {
-            umapEta = `queued #${r.queue_position! + 1}`;
-          } else if (r.progress) {
-            const p = r.progress as unknown as UmapProgress;
-            umapProgress = p;
-            const pct = p.total_epochs > 0 ? Math.round(p.epoch / p.total_epochs * 100) : 0;
-            const remaining = p.epoch_ms > 0 ? ((p.total_epochs - p.epoch) * p.epoch_ms / 1000).toFixed(0) : "?";
-            umapEta = `epoch ${p.epoch}/${p.total_epochs} (${pct}%) · ${p.epoch_ms.toFixed(0)}ms/ep · ~${remaining}s left`;
-          } else {
-            umapEta = "computing 3D projection…";
-          }
-          setTimeout(poll, 500);
-        } else {
-          finishUmap();
-        }
-      } catch {
+        setTimeout(poll, 500);
+      } else {
         finishUmap();
       }
-    };
-    poll();
-  }
+    } catch {
+      finishUmap();
+    }
+  };
+  poll();
+}
 
-  const canCompare = $derived(
-    aValid && bValid &&
-    (aStartUtc !== bStartUtc || aEndUtc !== bEndUtc)
-  );
+const canCompare = $derived(aValid && bValid && (aStartUtc !== bStartUtc || aEndUtc !== bEndUtc));
 
-  // ── Copy summary to clipboard ─────────────────────────────────────────────
-  let copied = $state(false);
-  async function copySummary() {
-    if (!metricsA || !metricsB) return;
-    const lines: string[] = [
-      `Compare`,
-      `A: ${aDayStr ?? "?"} ${aRangeStart ? utcToTimeStr(aRangeStart) : "?"}–${aRangeEnd ? utcToTimeStr(aRangeEnd) : "?"} (${metricsA.n_epochs} epochs)`,
-      `B: ${bDayStr ?? "?"} ${bRangeStart ? utcToTimeStr(bRangeStart) : "?"}–${bRangeEnd ? utcToTimeStr(bRangeEnd) : "?"} (${metricsB.n_epochs} epochs)`,
+// ── Copy summary to clipboard ─────────────────────────────────────────────
+let copied = $state(false);
+async function copySummary() {
+  if (!metricsA || !metricsB) return;
+  const lines: string[] = [
+    `Compare`,
+    `A: ${aDayStr ?? "?"} ${aRangeStart ? utcToTimeStr(aRangeStart) : "?"}–${aRangeEnd ? utcToTimeStr(aRangeEnd) : "?"} (${metricsA.n_epochs} epochs)`,
+    `B: ${bDayStr ?? "?"} ${bRangeStart ? utcToTimeStr(bRangeStart) : "?"}–${bRangeEnd ? utcToTimeStr(bRangeEnd) : "?"} (${metricsB.n_epochs} epochs)`,
+    ``,
+    `Band Powers (A → B):`,
+    ...bandKeys.map(
+      (k, i) =>
+        `  ${bandMeta[i].name}: ${pct(bv(metricsA!, k))}% → ${pct(bv(metricsB!, k))}% (${diff(bv(metricsA!, k), bv(metricsB!, k))})`,
+    ),
+    ``,
+    `Scores (A → B):`,
+    ...scoreKeys.map(
+      (sk) =>
+        `  ${sk.key}: ${metricsA?.[sk.key].toFixed(1)} → ${metricsB?.[sk.key].toFixed(1)} (${scoreDiff(metricsA?.[sk.key], metricsB?.[sk.key])})`,
+    ),
+    `  FAA: ${metricsA?.faa.toFixed(3)} → ${metricsB?.faa.toFixed(3)}`,
+  ];
+  if (improved.length > 0) {
+    lines.push(
       ``,
-      `Band Powers (A → B):`,
-      ...bandKeys.map((k, i) => `  ${bandMeta[i].name}: ${pct(bv(metricsA!, k))}% → ${pct(bv(metricsB!, k))}% (${diff(bv(metricsA!, k), bv(metricsB!, k))})`),
+      `Improved: ${improved.map((d) => `${d.label} (${d.pctChange > 0 ? "+" : ""}${d.pctChange.toFixed(0)}%)`).join(", ")}`,
+    );
+  }
+  if (declined.length > 0) {
+    lines.push(
+      `Declined: ${declined.map((d) => `${d.label} (${d.pctChange > 0 ? "+" : ""}${d.pctChange.toFixed(0)}%)`).join(", ")}`,
+    );
+  }
+  if (sleepAnalysisA) {
+    lines.push(
       ``,
-      `Scores (A → B):`,
-      ...scoreKeys.map(sk => `  ${sk.key}: ${metricsA![sk.key].toFixed(1)} → ${metricsB![sk.key].toFixed(1)} (${scoreDiff(metricsA![sk.key], metricsB![sk.key])})`),
-      `  FAA: ${metricsA!.faa.toFixed(3)} → ${metricsB!.faa.toFixed(3)}`,
-    ];
-    if (improved.length > 0) {
-      lines.push(``, `Improved: ${improved.map(d => `${d.label} (${d.pctChange > 0 ? "+" : ""}${d.pctChange.toFixed(0)}%)`).join(", ")}`);
-    }
-    if (declined.length > 0) {
-      lines.push(`Declined: ${declined.map(d => `${d.label} (${d.pctChange > 0 ? "+" : ""}${d.pctChange.toFixed(0)}%)`).join(", ")}`);
-    }
-    if (sleepAnalysisA) {
-      lines.push(``, `Sleep A: ${sleepAnalysisA.efficiency.toFixed(0)}% eff, onset ${sleepAnalysisA.onsetLatencyMin.toFixed(0)}m, ${sleepAnalysisA.awakenings} awakenings`);
-    }
-    if (sleepAnalysisB) {
-      lines.push(`Sleep B: ${sleepAnalysisB.efficiency.toFixed(0)}% eff, onset ${sleepAnalysisB.onsetLatencyMin.toFixed(0)}m, ${sleepAnalysisB.awakenings} awakenings`);
-    }
-    if (umapAnalysis) {
-      lines.push(``, `UMAP separation: ${umapAnalysis.separationScore.toFixed(2)}`);
-    }
-    await navigator.clipboard.writeText(lines.join("\n"));
-    copied = true;
-    setTimeout(() => copied = false, 2000);
+      `Sleep A: ${sleepAnalysisA.efficiency.toFixed(0)}% eff, onset ${sleepAnalysisA.onsetLatencyMin.toFixed(0)}m, ${sleepAnalysisA.awakenings} awakenings`,
+    );
   }
-
-  // ── Client-side insights (types + logic in compare-types.ts) ──────────────
-  const insightDeltas = $derived.by(() => {
-    if (!metricsA || !metricsB) return [];
-    return computeInsightDeltas(metricsA, metricsB);
-  });
-  const improved = $derived(insightDeltas.filter(d => d.direction === "improved"));
-  const declined = $derived(insightDeltas.filter(d => d.direction === "declined"));
-  const sleepAnalysisA = $derived(sleepA ? analyzeSleep(sleepA) : null);
-  const sleepAnalysisB = $derived(sleepB ? analyzeSleep(sleepB) : null);
-
-  const umapAnalysis = $derived(umapResult ? analyzeUmapClusters(umapResult) : null);
-
-
-
-  // Re-render radar when metrics change
-  $effect(() => {
-    if (metricsA && metricsB && radarCanvas) drawRadar(radarCanvas, metricsA, metricsB);
-  });
-
-  // ── Heatmap state ─────────────────────────────────────────────────────────
-  let radarCanvas = $state<HTMLCanvasElement | null>(null);
-  let hmBandCanvasA    = $state<HTMLCanvasElement | null>(null);
-  let hmBandCanvasB    = $state<HTMLCanvasElement | null>(null);
-  let hmBandDiffCanvas = $state<HTMLCanvasElement | null>(null);
-  let hmScoreCanvasA   = $state<HTMLCanvasElement | null>(null);
-  let hmScoreCanvasB   = $state<HTMLCanvasElement | null>(null);
-  let showHeatmaps     = $state(false);
-  // Re-render heatmaps when time-series data, visibility, or theme changes
-  $effect(() => {
-    if (!showHeatmaps) return;
-    const dark = isDark; // track theme as a reactive dependency
-    if (hmBandCanvasA   && tsA.length > 2) drawBandHeatmap(hmBandCanvasA, tsA, dark);
-    if (hmBandCanvasB   && tsB.length > 2) drawBandHeatmap(hmBandCanvasB, tsB, dark);
-    if (hmBandDiffCanvas && tsA.length > 2 && tsB.length > 2)
-      drawBandDiffHeatmap(hmBandDiffCanvas, tsA, tsB, dark);
-    if (hmScoreCanvasA  && tsA.length > 2) drawScoreHeatmap(hmScoreCanvasA, tsA, dark);
-    if (hmScoreCanvasB  && tsB.length > 2) drawScoreHeatmap(hmScoreCanvasB, tsB, dark);
-  });
-
-
-  // Re-render canvases when metrics or theme changes
-  $effect(() => {
-    void isDark; // track theme changes
-    if (metricsA && specCanvasA) drawSpectrum(specCanvasA, metricsA, "A");
-    if (metricsB && specCanvasB) drawSpectrum(specCanvasB, metricsB, "B");
-    if (metricsA && metricsB && diffCanvas)  drawDiffChart(diffCanvas, metricsA, metricsB);
-  });
-
-  // ── Resize observer — redraws all canvases when the window is resized ─────
-  // Without this the browser stretches the old pixel buffer to fit the new
-  // CSS size, making numbers and chart lines look distorted.
-  function redrawAllCanvases() {
-    const dark = isDark;
-    if (metricsA && specCanvasA) drawSpectrum(specCanvasA, metricsA, "A");
-    if (metricsB && specCanvasB) drawSpectrum(specCanvasB, metricsB, "B");
-    if (metricsA && metricsB && diffCanvas)  drawDiffChart(diffCanvas, metricsA, metricsB);
-    if (metricsA && metricsB && radarCanvas) drawRadar(radarCanvas, metricsA, metricsB);
-    if (showHeatmaps) {
-      if (hmBandCanvasA   && tsA.length > 2) drawBandHeatmap(hmBandCanvasA,   tsA, dark);
-      if (hmBandCanvasB   && tsB.length > 2) drawBandHeatmap(hmBandCanvasB,   tsB, dark);
-      if (hmBandDiffCanvas && tsA.length > 2 && tsB.length > 2)
-        drawBandDiffHeatmap(hmBandDiffCanvas, tsA, tsB, dark);
-      if (hmScoreCanvasA  && tsA.length > 2) drawScoreHeatmap(hmScoreCanvasA, tsA, dark);
-      if (hmScoreCanvasB  && tsB.length > 2) drawScoreHeatmap(hmScoreCanvasB, tsB, dark);
-    }
+  if (sleepAnalysisB) {
+    lines.push(
+      `Sleep B: ${sleepAnalysisB.efficiency.toFixed(0)}% eff, onset ${sleepAnalysisB.onsetLatencyMin.toFixed(0)}m, ${sleepAnalysisB.awakenings} awakenings`,
+    );
   }
+  if (umapAnalysis) {
+    lines.push(``, `UMAP separation: ${umapAnalysis.separationScore.toFixed(2)}`);
+  }
+  await navigator.clipboard.writeText(lines.join("\n"));
+  copied = true;
+  setTimeout(() => (copied = false), 2000);
+}
 
-  useWindowTitle("window.title.compare");
+// ── Client-side insights (types + logic in compare-types.ts) ──────────────
+const insightDeltas = $derived.by(() => {
+  if (!metricsA || !metricsB) return [];
+  return computeInsightDeltas(metricsA, metricsB);
+});
+const improved = $derived(insightDeltas.filter((d) => d.direction === "improved"));
+const declined = $derived(insightDeltas.filter((d) => d.direction === "declined"));
+const sleepAnalysisA = $derived(sleepA ? analyzeSleep(sleepA) : null);
+const sleepAnalysisB = $derived(sleepB ? analyzeSleep(sleepB) : null);
+
+const umapAnalysis = $derived(umapResult ? analyzeUmapClusters(umapResult) : null);
+
+// Re-render radar when metrics change
+$effect(() => {
+  if (metricsA && metricsB && radarCanvas) drawRadar(radarCanvas, metricsA, metricsB);
+});
+
+// ── Heatmap state ─────────────────────────────────────────────────────────
+let radarCanvas = $state<HTMLCanvasElement | null>(null);
+let hmBandCanvasA = $state<HTMLCanvasElement | null>(null);
+let hmBandCanvasB = $state<HTMLCanvasElement | null>(null);
+let hmBandDiffCanvas = $state<HTMLCanvasElement | null>(null);
+let hmScoreCanvasA = $state<HTMLCanvasElement | null>(null);
+let hmScoreCanvasB = $state<HTMLCanvasElement | null>(null);
+let showHeatmaps = $state(false);
+// Re-render heatmaps when time-series data, visibility, or theme changes
+$effect(() => {
+  if (!showHeatmaps) return;
+  const dark = isDark; // track theme as a reactive dependency
+  if (hmBandCanvasA && tsA.length > 2) drawBandHeatmap(hmBandCanvasA, tsA, dark);
+  if (hmBandCanvasB && tsB.length > 2) drawBandHeatmap(hmBandCanvasB, tsB, dark);
+  if (hmBandDiffCanvas && tsA.length > 2 && tsB.length > 2) drawBandDiffHeatmap(hmBandDiffCanvas, tsA, tsB, dark);
+  if (hmScoreCanvasA && tsA.length > 2) drawScoreHeatmap(hmScoreCanvasA, tsA, dark);
+  if (hmScoreCanvasB && tsB.length > 2) drawScoreHeatmap(hmScoreCanvasB, tsB, dark);
+});
+
+// Re-render canvases when metrics or theme changes
+$effect(() => {
+  void isDark; // track theme changes
+  if (metricsA && specCanvasA) drawSpectrum(specCanvasA, metricsA, "A");
+  if (metricsB && specCanvasB) drawSpectrum(specCanvasB, metricsB, "B");
+  if (metricsA && metricsB && diffCanvas) drawDiffChart(diffCanvas, metricsA, metricsB);
+});
+
+// ── Resize observer — redraws all canvases when the window is resized ─────
+// Without this the browser stretches the old pixel buffer to fit the new
+// CSS size, making numbers and chart lines look distorted.
+function redrawAllCanvases() {
+  const dark = isDark;
+  if (metricsA && specCanvasA) drawSpectrum(specCanvasA, metricsA, "A");
+  if (metricsB && specCanvasB) drawSpectrum(specCanvasB, metricsB, "B");
+  if (metricsA && metricsB && diffCanvas) drawDiffChart(diffCanvas, metricsA, metricsB);
+  if (metricsA && metricsB && radarCanvas) drawRadar(radarCanvas, metricsA, metricsB);
+  if (showHeatmaps) {
+    if (hmBandCanvasA && tsA.length > 2) drawBandHeatmap(hmBandCanvasA, tsA, dark);
+    if (hmBandCanvasB && tsB.length > 2) drawBandHeatmap(hmBandCanvasB, tsB, dark);
+    if (hmBandDiffCanvas && tsA.length > 2 && tsB.length > 2) drawBandDiffHeatmap(hmBandDiffCanvas, tsA, tsB, dark);
+    if (hmScoreCanvasA && tsA.length > 2) drawScoreHeatmap(hmScoreCanvasA, tsA, dark);
+    if (hmScoreCanvasB && tsB.length > 2) drawScoreHeatmap(hmScoreCanvasB, tsB, dark);
+  }
+}
+
+useWindowTitle("window.title.compare");
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">

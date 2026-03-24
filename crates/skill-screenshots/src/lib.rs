@@ -7,13 +7,13 @@
 //! - **context** — `ScreenshotContext` trait (abstracts tauri/AppState)
 //! - **capture** — capture worker, embed thread, HNSW search, OCR
 
+pub mod capture;
 pub mod config;
 pub mod context;
-pub(crate) mod platform;
 #[allow(dead_code)]
 pub(crate) mod gif_encode;
-pub mod capture;
+pub(crate) mod platform;
 
 // Re-export so existing `skill_screenshots::ScreenshotConfig` paths keep working.
+pub use context::{ActiveWindowInfo, ScreenshotContext};
 pub use skill_settings::ScreenshotConfig;
-pub use context::{ScreenshotContext, ActiveWindowInfo};

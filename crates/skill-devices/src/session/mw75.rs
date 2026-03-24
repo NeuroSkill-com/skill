@@ -23,17 +23,17 @@ use mw75::prelude::*;
 use skill_constants::{EEG_CHANNELS, MW75_CHANNEL_NAMES, MW75_EEG_CHANNELS, MW75_SAMPLE_RATE};
 
 use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, now_secs,
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
+    EegFrame,
 };
 
 // ── Mw75Adapter ───────────────────────────────────────────────────────────────
 
 pub struct Mw75Adapter {
-    rx:      mpsc::Receiver<Mw75Event>,
+    rx: mpsc::Receiver<Mw75Event>,
     /// `None` only in tests (no BLE hardware available).
-    handle:  Option<Arc<Mw75Handle>>,
-    desc:    DeviceDescriptor,
+    handle: Option<Arc<Mw75Handle>>,
+    desc: DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
 
     /// RFCOMM guard — kept alive so the RFCOMM stream is not dropped.

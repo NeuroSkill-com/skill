@@ -13,23 +13,35 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use skill_commands::{unix_to_ts, ts_to_unix};
-use skill_constants::{SQLITE_FILE, LABELS_FILE};
+use skill_commands::{ts_to_unix, unix_to_ts};
+use skill_constants::{LABELS_FILE, SQLITE_FILE};
 
 // ── Rounding helpers ──────────────────────────────────────────────────────────
 
 /// Round `f32` to 1 decimal place.
-pub fn r1(v: f32) -> f32 { (v * 10.0).round() / 10.0 }
+pub fn r1(v: f32) -> f32 {
+    (v * 10.0).round() / 10.0
+}
 /// Round `f32` to 2 decimal places.
-pub fn r2(v: f32) -> f32 { (v * 100.0).round() / 100.0 }
+pub fn r2(v: f32) -> f32 {
+    (v * 100.0).round() / 100.0
+}
 /// Round `f32` to 3 decimal places.
-pub fn r3(v: f32) -> f32 { (v * 1000.0).round() / 1000.0 }
+pub fn r3(v: f32) -> f32 {
+    (v * 1000.0).round() / 1000.0
+}
 /// Round `f64` to 1 decimal place.
-pub fn r1d(v: f64) -> f64 { (v * 10.0).round() / 10.0 }
+pub fn r1d(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
+}
 /// Round `f64` to 2 decimal places.
-pub fn r2d(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
+pub fn r2d(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
 /// Round `f64` to 2 decimal places (alias of [`r2d`]).
-pub fn r2f(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
+pub fn r2f(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
 
 // ── Rounded metric types ─────────────────────────────────────────────────────
 
@@ -38,7 +50,7 @@ pub struct RoundedBands {
     pub rel_delta: f32,
     pub rel_theta: f32,
     pub rel_alpha: f32,
-    pub rel_beta:  f32,
+    pub rel_beta: f32,
     pub rel_gamma: f32,
 }
 
@@ -101,24 +113,34 @@ pub struct RoundedScores {
 pub fn load_embeddings_range(
     skill_dir: &Path,
     start_utc: u64,
-    end_utc:   u64,
+    end_utc: u64,
 ) -> Vec<(u64, Vec<f32>)> {
     let ts_start = unix_to_ts(start_utc);
-    let ts_end   = unix_to_ts(end_utc);
+    let ts_end = unix_to_ts(end_utc);
 
     let mut out: Vec<(u64, Vec<f32>)> = Vec::new();
-    let Ok(entries) = std::fs::read_dir(skill_dir) else { return out };
+    let Ok(entries) = std::fs::read_dir(skill_dir) else {
+        return out;
+    };
     for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
-        if !path.is_dir() { continue; }
+        if !path.is_dir() {
+            continue;
+        }
         let db_path = path.join(SQLITE_FILE);
-        if !db_path.exists() { continue; }
-        let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
+        if !db_path.exists() {
+            continue;
+        }
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
+            continue;
+        };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, eeg_embedding FROM embeddings
-             WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY timestamp"
-        ) else { continue };
+             WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY timestamp",
+        ) else {
+            continue;
+        };
 
         let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts: i64 = row.get(0)?;
@@ -127,7 +149,9 @@ pub fn load_embeddings_range(
             Ok((ts_to_unix(ts), emb))
         });
         if let Ok(rows) = rows {
-            for r in rows.flatten() { out.push(r); }
+            for r in rows.flatten() {
+                out.push(r);
+            }
         }
     }
     out.sort_by_key(|e| e.0);
@@ -139,26 +163,38 @@ pub fn load_embeddings_range(
 pub fn load_labels_range(
     skill_dir: &Path,
     start_utc: u64,
-    end_utc:   u64,
+    end_utc: u64,
 ) -> Vec<(u64, u64, String)> {
     let labels_db = skill_dir.join(LABELS_FILE);
-    if !labels_db.exists() { return vec![]; }
-    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else { return vec![] };
+    if !labels_db.exists() {
+        return vec![];
+    }
+    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
+        return vec![];
+    };
     let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
     let Ok(mut stmt) = conn.prepare(
         "SELECT eeg_start, eeg_end, text FROM labels
          WHERE eeg_end >= ?1 AND eeg_start <= ?2
-         ORDER BY eeg_start"
-    ) else { return vec![] };
-    stmt.query_map(
-        rusqlite::params![start_utc as i64, end_utc as i64],
-        |row| Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64, row.get::<_, String>(2)?))
-    ).map(|rows| rows.flatten().collect()).unwrap_or_default()
+         ORDER BY eeg_start",
+    ) else {
+        return vec![];
+    };
+    stmt.query_map(rusqlite::params![start_utc as i64, end_utc as i64], |row| {
+        Ok((
+            row.get::<_, i64>(0)? as u64,
+            row.get::<_, i64>(1)? as u64,
+            row.get::<_, String>(2)?,
+        ))
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
 }
 
 /// Find the first label whose EEG window contains `epoch_utc`.
 pub fn find_label_for_epoch(labels: &[(u64, u64, String)], epoch_utc: u64) -> Option<String> {
-    labels.iter()
+    labels
+        .iter()
         .find(|(start, end, _)| epoch_utc >= *start && epoch_utc <= *end)
         .map(|(_, _, text)| text.clone())
 }
@@ -168,55 +204,95 @@ pub fn find_label_for_epoch(labels: &[(u64, u64, String)], epoch_utc: u64) -> Op
 /// Cluster analysis of UMAP 3-D projection: centroids, separation score, outliers.
 pub fn analyze_umap_points(
     embedding: &[Vec<f64>],
-    session_ids: &[u8],    // 0 = A, 1 = B
+    session_ids: &[u8], // 0 = A, 1 = B
     timestamps: &[u64],
     _n_a: usize,
 ) -> serde_json::Value {
     let n = embedding.len().min(session_ids.len());
-    if n == 0 { return serde_json::json!(null); }
+    if n == 0 {
+        return serde_json::json!(null);
+    }
 
     // Centroids
     let (mut ca, mut cb) = ([0.0f64; 3], [0.0f64; 3]);
     let (mut na, mut nb) = (0usize, 0usize);
     for i in 0..n {
-        let c = if session_ids[i] == 0 { &mut ca } else { &mut cb };
-        let cnt = if session_ids[i] == 0 { &mut na } else { &mut nb };
-        for d in 0..3 { c[d] += embedding[i][d]; }
+        let c = if session_ids[i] == 0 {
+            &mut ca
+        } else {
+            &mut cb
+        };
+        let cnt = if session_ids[i] == 0 {
+            &mut na
+        } else {
+            &mut nb
+        };
+        for d in 0..3 {
+            c[d] += embedding[i][d];
+        }
         *cnt += 1;
     }
-    if na > 0 { for c in ca.iter_mut() { *c /= na as f64; } }
-    if nb > 0 { for c in cb.iter_mut() { *c /= nb as f64; } }
+    if na > 0 {
+        for c in ca.iter_mut() {
+            *c /= na as f64;
+        }
+    }
+    if nb > 0 {
+        for c in cb.iter_mut() {
+            *c /= nb as f64;
+        }
+    }
 
-    let inter_dist = ((ca[0]-cb[0]).powi(2) + (ca[1]-cb[1]).powi(2) + (ca[2]-cb[2]).powi(2)).sqrt();
+    let inter_dist =
+        ((ca[0] - cb[0]).powi(2) + (ca[1] - cb[1]).powi(2) + (ca[2] - cb[2]).powi(2)).sqrt();
 
     let dist_to = |pt: &[f64], c: &[f64; 3]| -> f64 {
-        ((pt[0]-c[0]).powi(2) + (pt[1]-c[1]).powi(2) + (pt[2]-c[2]).powi(2)).sqrt()
+        ((pt[0] - c[0]).powi(2) + (pt[1] - c[1]).powi(2) + (pt[2] - c[2]).powi(2)).sqrt()
     };
     let (mut spread_a, mut spread_b) = (0.0f64, 0.0f64);
     for i in 0..n {
-        if session_ids[i] == 0 { spread_a += dist_to(&embedding[i], &ca); }
-        else                   { spread_b += dist_to(&embedding[i], &cb); }
+        if session_ids[i] == 0 {
+            spread_a += dist_to(&embedding[i], &ca);
+        } else {
+            spread_b += dist_to(&embedding[i], &cb);
+        }
     }
-    if na > 0 { spread_a /= na as f64; }
-    if nb > 0 { spread_b /= nb as f64; }
+    if na > 0 {
+        spread_a /= na as f64;
+    }
+    if nb > 0 {
+        spread_b /= nb as f64;
+    }
 
     let avg_intra = (spread_a + spread_b) / 2.0;
-    let separation = if avg_intra > 1e-9 { inter_dist / avg_intra } else { 0.0 };
+    let separation = if avg_intra > 1e-9 {
+        inter_dist / avg_intra
+    } else {
+        0.0
+    };
 
     let mut all_dists_a: Vec<f64> = Vec::new();
     let mut all_dists_b: Vec<f64> = Vec::new();
     for i in 0..n {
         let d = dist_to(&embedding[i], if session_ids[i] == 0 { &ca } else { &cb });
-        if session_ids[i] == 0 { all_dists_a.push(d); } else { all_dists_b.push(d); }
+        if session_ids[i] == 0 {
+            all_dists_a.push(d);
+        } else {
+            all_dists_b.push(d);
+        }
     }
     let std_a = if all_dists_a.len() > 1 {
         let m = all_dists_a.iter().sum::<f64>() / all_dists_a.len() as f64;
         (all_dists_a.iter().map(|x| (x - m).powi(2)).sum::<f64>() / all_dists_a.len() as f64).sqrt()
-    } else { 1.0 };
+    } else {
+        1.0
+    };
     let std_b = if all_dists_b.len() > 1 {
         let m = all_dists_b.iter().sum::<f64>() / all_dists_b.len() as f64;
         (all_dists_b.iter().map(|x| (x - m).powi(2)).sum::<f64>() / all_dists_b.len() as f64).sqrt()
-    } else { 1.0 };
+    } else {
+        1.0
+    };
 
     let mut outliers: Vec<serde_json::Value> = Vec::new();
     let mut oi_a = 0usize;
@@ -224,7 +300,11 @@ pub fn analyze_umap_points(
     for i in 0..n {
         let c = if session_ids[i] == 0 { &ca } else { &cb };
         let d = dist_to(&embedding[i], c);
-        let threshold = if session_ids[i] == 0 { spread_a + 2.0 * std_a } else { spread_b + 2.0 * std_b };
+        let threshold = if session_ids[i] == 0 {
+            spread_a + 2.0 * std_a
+        } else {
+            spread_b + 2.0 * std_b
+        };
         if d > threshold {
             if outliers.len() < 20 {
                 outliers.push(serde_json::json!({
@@ -234,7 +314,11 @@ pub fn analyze_umap_points(
                     "distance_to_centroid": r2f(d),
                 }));
             }
-            if session_ids[i] == 0 { oi_a += 1; } else { oi_b += 1; }
+            if session_ids[i] == 0 {
+                oi_a += 1;
+            } else {
+                oi_b += 1;
+            }
         }
     }
 
@@ -266,8 +350,7 @@ pub fn umap_cache_path(
     b_start: u64,
     b_end: u64,
 ) -> PathBuf {
-    umap_cache_dir(skill_dir)
-        .join(format!("umap_{a_start}_{a_end}_{b_start}_{b_end}.json"))
+    umap_cache_dir(skill_dir).join(format!("umap_{a_start}_{a_end}_{b_start}_{b_end}.json"))
 }
 
 /// Try to load a cached UMAP result from disk.
@@ -299,9 +382,8 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 // ── UMAP compute ──────────────────────────────────────────────────────────────
 
 /// Backend type alias used by fast-umap (GPU-accelerated via wgpu / CubeCL).
-type FastUmapBackend = burn::backend::Autodiff<
-    burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>,
->;
+type FastUmapBackend =
+    burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>>;
 
 /// Inner UMAP compute — shared by both WS and Tauri IPC paths.
 ///
@@ -327,25 +409,27 @@ pub fn umap_compute_inner(
 
     let embs_a = load_embeddings_range(skill_dir, a_start, a_end);
     let embs_b = load_embeddings_range(skill_dir, b_start, b_end);
-    let all_labels = load_labels_range(
-        skill_dir,
-        a_start.min(b_start),
-        a_end.max(b_end),
-    );
+    let all_labels = load_labels_range(skill_dir, a_start.min(b_start), a_end.max(b_end));
 
     let n_a = embs_a.len();
     let n_b = embs_b.len();
-    let n   = n_a + n_b;
+    let n = n_a + n_b;
 
     let umap_start = std::time::Instant::now();
-    eprintln!("[umap] computing 3D projection for {} embeddings (A={}, B={})", n, n_a, n_b);
+    eprintln!(
+        "[umap] computing 3D projection for {} embeddings (A={}, B={})",
+        n, n_a, n_b
+    );
 
     if n < 5 {
         return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
     }
 
-    let dim = embs_a.first().or(embs_b.first())
-        .map(|e| e.1.len()).unwrap_or(0);
+    let dim = embs_a
+        .first()
+        .or(embs_b.first())
+        .map(|e| e.1.len())
+        .unwrap_or(0);
     if dim == 0 {
         return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
     }
@@ -365,7 +449,12 @@ pub fn umap_compute_inner(
         labels.push(if timestamps.len() <= n_a { 0 } else { 1 });
     }
 
-    let k = ucfg.n_neighbors.clamp(2, 50).min(n_use - 1).min(n_use / 2).max(2);
+    let k = ucfg
+        .n_neighbors
+        .clamp(2, 50)
+        .min(n_use - 1)
+        .min(n_use / 2)
+        .max(2);
     let n_epochs = ucfg.n_epochs.clamp(50, 2000);
 
     let config = fast_umap::UmapConfig {
@@ -387,14 +476,16 @@ pub fn umap_compute_inner(
         ..Default::default()
     };
 
-    let fit_labels: Vec<String> = (0..n_use).map(|i| {
-        let session_tag = if labels[i] == 0 { "A" } else { "B" };
-        if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
-            format!("{session_tag}:{lbl}")
-        } else {
-            session_tag.to_string()
-        }
-    }).collect();
+    let fit_labels: Vec<String> = (0..n_use)
+        .map(|i| {
+            let session_tag = if labels[i] == 0 { "A" } else { "B" };
+            if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
+                format!("{session_tag}:{lbl}")
+            } else {
+                session_tag.to_string()
+            }
+        })
+        .collect();
 
     let fit_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let umap = fast_umap::Umap::<FastUmapBackend>::new(config);
@@ -422,19 +513,23 @@ pub fn umap_compute_inner(
         }
     };
 
-    let points: Vec<serde_json::Value> = (0..n_use).map(|i| {
-        let mut pt = serde_json::json!({
-            "x": embedding[i][0],
-            "y": embedding[i][1],
-            "z": embedding[i][2],
-            "session": labels[i],
-            "utc": timestamps[i],
-        });
-        if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
-            if let Some(obj) = pt.as_object_mut() { obj.insert("label".into(), serde_json::Value::String(lbl)); }
-        }
-        pt
-    }).collect();
+    let points: Vec<serde_json::Value> = (0..n_use)
+        .map(|i| {
+            let mut pt = serde_json::json!({
+                "x": embedding[i][0],
+                "y": embedding[i][1],
+                "z": embedding[i][2],
+                "session": labels[i],
+                "utc": timestamps[i],
+            });
+            if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
+                if let Some(obj) = pt.as_object_mut() {
+                    obj.insert("label".into(), serde_json::Value::String(lbl));
+                }
+            }
+            pt
+        })
+        .collect();
 
     let elapsed_ms = umap_start.elapsed().as_millis() as u64;
     eprintln!("[umap] projection done in {elapsed_ms} ms ({n_use} embeddings)");
@@ -526,7 +621,7 @@ mod tests {
     #[test]
     fn r1_rounds_to_one_decimal() {
         assert_eq!(r1(1.234), 1.2);
-        assert_eq!(r1(1.25), 1.3);  // 0.5 rounds up
+        assert_eq!(r1(1.25), 1.3); // 0.5 rounds up
         assert_eq!(r1(0.0), 0.0);
         assert_eq!(r1(-3.78), -3.8);
     }
@@ -534,7 +629,7 @@ mod tests {
     #[test]
     fn r2_rounds_to_two_decimals() {
         assert_eq!(r2(1.2345), 1.23);
-        assert_eq!(r2(1.235), 1.24);  // 0.5 rounds up (banker's rounding in some cases)
+        assert_eq!(r2(1.235), 1.24); // 0.5 rounds up (banker's rounding in some cases)
         assert_eq!(r2(0.001), 0.0);
     }
 

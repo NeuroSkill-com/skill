@@ -602,7 +602,6 @@ export type TranslationKey =
   | "dashboard.scanningFooter"
   | "dashboard.streamingCsv"
   | "dashboard.switchDevice"
-
   | "dashboard.switchTo"
   | "dashboard.stressIndex"
   | "dashboard.tar"

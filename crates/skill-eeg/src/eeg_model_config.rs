@@ -17,9 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, MODEL_CONFIG_FILE,
+    HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT, LUNA_HF_REPO, MODEL_CONFIG_FILE,
     ZUNA_DATA_NORM, ZUNA_HF_REPO,
-    LUNA_HF_REPO, LUNA_DEFAULT_VARIANT,
 };
 
 // ── EXG embedding model backend ──────────────────────────────────────────────
@@ -121,23 +120,35 @@ pub struct EegModelConfig {
     pub luna_hf_repo: String,
 }
 
-fn default_hf_repo()       -> String { ZUNA_HF_REPO.to_string() }
-fn default_hnsw_m()        -> usize  { HNSW_M }
-fn default_hnsw_ef()       -> usize  { HNSW_EF_CONSTRUCTION }
-fn default_data_norm()     -> f32    { ZUNA_DATA_NORM }
-fn default_luna_variant()  -> String { LUNA_DEFAULT_VARIANT.to_string() }
-fn default_luna_hf_repo()  -> String { LUNA_HF_REPO.to_string() }
+fn default_hf_repo() -> String {
+    ZUNA_HF_REPO.to_string()
+}
+fn default_hnsw_m() -> usize {
+    HNSW_M
+}
+fn default_hnsw_ef() -> usize {
+    HNSW_EF_CONSTRUCTION
+}
+fn default_data_norm() -> f32 {
+    ZUNA_DATA_NORM
+}
+fn default_luna_variant() -> String {
+    LUNA_DEFAULT_VARIANT.to_string()
+}
+fn default_luna_hf_repo() -> String {
+    LUNA_HF_REPO.to_string()
+}
 
 impl Default for EegModelConfig {
     fn default() -> Self {
         Self {
-            hf_repo:             default_hf_repo(),
-            hnsw_m:              default_hnsw_m(),
+            hf_repo: default_hf_repo(),
+            hnsw_m: default_hnsw_m(),
             hnsw_ef_construction: default_hnsw_ef(),
-            data_norm:           default_data_norm(),
-            model_backend:       ExgModelBackend::default(),
-            luna_variant:        default_luna_variant(),
-            luna_hf_repo:        default_luna_hf_repo(),
+            data_norm: default_data_norm(),
+            model_backend: ExgModelBackend::default(),
+            luna_variant: default_luna_variant(),
+            luna_hf_repo: default_luna_hf_repo(),
         }
     }
 }
@@ -147,7 +158,8 @@ impl EegModelConfig {
     ///
     /// Falls back to `LUNA_base.safetensors` if the variant is unrecognised.
     pub fn luna_weights_file(&self) -> &'static str {
-        crate::constants::LUNA_VARIANTS.iter()
+        crate::constants::LUNA_VARIANTS
+            .iter()
             .find(|(v, _)| *v == self.luna_variant.as_str())
             .map(|(_, f)| *f)
             .unwrap_or(crate::constants::LUNA_VARIANTS[0].1)
@@ -245,81 +257,81 @@ pub struct EegModelStatus {
 /// Exposed in the WebSocket `status` response and available to the frontend.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LatestEpochMetrics {
-    pub rel_delta:        f32,
-    pub rel_theta:        f32,
-    pub rel_alpha:        f32,
-    pub rel_beta:         f32,
-    pub rel_gamma:        f32,
-    pub rel_high_gamma:   f32,
+    pub rel_delta: f32,
+    pub rel_theta: f32,
+    pub rel_alpha: f32,
+    pub rel_beta: f32,
+    pub rel_gamma: f32,
+    pub rel_high_gamma: f32,
     pub relaxation_score: f32,
     pub engagement_score: f32,
     /// Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α).
-    pub faa:              f32,
+    pub faa: f32,
     /// Theta / Alpha ratio (drowsiness indicator).
-    pub tar:              f32,
+    pub tar: f32,
     /// Beta / Alpha ratio (attention/stress marker).
-    pub bar:              f32,
+    pub bar: f32,
     /// Delta / Theta ratio (deep-relaxation indicator).
-    pub dtr:              f32,
+    pub dtr: f32,
     /// Power Spectral Entropy [0–1] (spectral complexity).
-    pub pse:              f32,
+    pub pse: f32,
     /// Alpha Peak Frequency in Hz.
-    pub apf:              f32,
+    pub apf: f32,
     /// Band-Power Slope (1/f exponent, log–log regression).
-    pub bps:              f32,
+    pub bps: f32,
     /// Signal-to-Noise Ratio in dB.
-    pub snr:              f32,
+    pub snr: f32,
     /// Mean inter-channel alpha coherence [−1, 1].
-    pub coherence:        f32,
+    pub coherence: f32,
     /// Mu suppression index (current alpha / baseline alpha).
-    pub mu_suppression:   f32,
-    pub tbr:              f32,
-    pub sef95:            f32,
+    pub mu_suppression: f32,
+    pub tbr: f32,
+    pub sef95: f32,
     pub spectral_centroid: f32,
-    pub hjorth_activity:  f32,
-    pub hjorth_mobility:  f32,
+    pub hjorth_activity: f32,
+    pub hjorth_mobility: f32,
     pub hjorth_complexity: f32,
     pub permutation_entropy: f32,
-    pub higuchi_fd:       f32,
-    pub dfa_exponent:     f32,
-    pub sample_entropy:   f32,
-    pub pac_theta_gamma:  f32,
+    pub higuchi_fd: f32,
+    pub dfa_exponent: f32,
+    pub sample_entropy: f32,
+    pub pac_theta_gamma: f32,
     pub laterality_index: f32,
     // PPG-derived
-    pub hr:               f64,
-    pub rmssd:            f64,
-    pub sdnn:             f64,
-    pub pnn50:            f64,
-    pub lf_hf_ratio:      f64,
+    pub hr: f64,
+    pub rmssd: f64,
+    pub sdnn: f64,
+    pub pnn50: f64,
+    pub lf_hf_ratio: f64,
     pub respiratory_rate: f64,
-    pub spo2_estimate:    f64,
-    pub perfusion_index:  f64,
-    pub stress_index:     f64,
+    pub spo2_estimate: f64,
+    pub perfusion_index: f64,
+    pub stress_index: f64,
     /// Mood index (composite, 0–100).
-    pub mood:             f32,
+    pub mood: f32,
     // ── Artifact / event metrics ─────────────────────────────────────
-    pub blink_count:      u64,
-    pub blink_rate:       f64,
+    pub blink_count: u64,
+    pub blink_rate: f64,
 
     // ── Head pose ────────────────────────────────────────────────────
-    pub head_pitch:       f64,
-    pub head_roll:        f64,
-    pub stillness:        f64,
-    pub nod_count:        u64,
-    pub shake_count:      u64,
+    pub head_pitch: f64,
+    pub head_roll: f64,
+    pub stillness: f64,
+    pub nod_count: u64,
+    pub shake_count: u64,
     // ── Composite scores ─────────────────────────────────────────────
-    pub meditation:       f64,
-    pub cognitive_load:   f64,
-    pub drowsiness:       f64,
+    pub meditation: f64,
+    pub cognitive_load: f64,
+    pub drowsiness: f64,
     // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
-    pub headache_index:         f32,
-    pub migraine_index:         f32,
+    pub headache_index: f32,
+    pub migraine_index: f32,
     // ── Consciousness metrics (0–100) ─────────────────────────────────
-    pub consciousness_lzc:          f32,
-    pub consciousness_wakefulness:  f32,
-    pub consciousness_integration:  f32,
+    pub consciousness_lzc: f32,
+    pub consciousness_wakefulness: f32,
+    pub consciousness_integration: f32,
     /// `YYYYMMDDHHmmss` UTC timestamp of the epoch.
-    pub epoch_timestamp:  i64,
+    pub epoch_timestamp: i64,
 }
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
@@ -445,7 +457,10 @@ mod tests {
         let parsed: EegModelStatus = serde_json::from_str(&json).unwrap();
         assert!(parsed.encoder_loaded);
         assert_eq!(parsed.embeddings_today, 42);
-        assert_eq!(parsed.weights_path.as_deref(), Some("/path/to/weights.safetensors"));
+        assert_eq!(
+            parsed.weights_path.as_deref(),
+            Some("/path/to/weights.safetensors")
+        );
     }
 
     // ── LatestEpochMetrics ────────────────────────────────────────────────

@@ -43,14 +43,18 @@ export const GANGLION_COLOR = ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"] as co
 export const HERMES_EEG_CHANNELS = 8;
 
 /** Hermes V1 channel labels (10-20 positions — must match Rust HERMES_CHANNEL_NAMES). */
-export const HERMES_CH = [
-  "Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2",
-] as const;
+export const HERMES_CH = ["Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2"] as const;
 
 /** Hermes V1 per-channel colours. */
 export const HERMES_COLOR = [
-  "#22c55e", "#60a5fa", "#c084fc", "#fb923c",
-  "#16a34a", "#3b82f6", "#a855f7", "#f97316",
+  "#22c55e",
+  "#60a5fa",
+  "#c084fc",
+  "#fb923c",
+  "#16a34a",
+  "#3b82f6",
+  "#a855f7",
+  "#f97316",
 ] as const;
 
 // ── MW75 Neuro (12-channel) ──────────────────────────────────────────────────
@@ -61,15 +65,22 @@ export const MW75_EEG_CHANNELS = 12;
 /** MW75 channel labels — approximate 10-20 extended positions.
  *  Left ear (Ch1-6): FT7, T7, TP7, CP5, P7, C5
  *  Right ear (Ch7-12): FT8, T8, TP8, CP6, P8, C6 */
-export const MW75_CH = [
-  "FT7", "T7", "TP7", "CP5", "P7", "C5",
-  "FT8", "T8", "TP8", "CP6", "P8", "C6",
-] as const;
+export const MW75_CH = ["FT7", "T7", "TP7", "CP5", "P7", "C5", "FT8", "T8", "TP8", "CP6", "P8", "C6"] as const;
 
 /** MW75 per-channel colours — 6 greens (left) + 6 blues (right). */
 export const MW75_COLOR = [
-  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d",
-  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed",
+  "#22c55e",
+  "#16a34a",
+  "#15803d",
+  "#a3e635",
+  "#84cc16",
+  "#65a30d",
+  "#60a5fa",
+  "#3b82f6",
+  "#2563eb",
+  "#c084fc",
+  "#a855f7",
+  "#7c3aed",
 ] as const;
 
 // ── Emotiv EPOC (14-channel) ──────────────────────────────────────────────────
@@ -85,14 +96,38 @@ export const EMOTIV_EEG_CHANNELS = 14;
  * 12 channels are processed; the remaining 2 are shown for reference.
  */
 export const EMOTIV_CH = [
-  "AF3", "F7", "F3", "FC5", "T7", "P7", "O1",
-  "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
+  "AF3",
+  "F7",
+  "F3",
+  "FC5",
+  "T7",
+  "P7",
+  "O1",
+  "O2",
+  "P8",
+  "T8",
+  "FC6",
+  "F4",
+  "F8",
+  "AF4",
 ] as const;
 
 /** Emotiv per-channel colours — 7 warm (left) + 7 cool (right). */
 export const EMOTIV_COLOR = [
-  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d", "#4ade80",
-  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed", "#818cf8",
+  "#22c55e",
+  "#16a34a",
+  "#15803d",
+  "#a3e635",
+  "#84cc16",
+  "#65a30d",
+  "#4ade80",
+  "#60a5fa",
+  "#3b82f6",
+  "#2563eb",
+  "#c084fc",
+  "#a855f7",
+  "#7c3aed",
+  "#818cf8",
 ] as const;
 
 // ── IDUN Guardian (1-channel) ─────────────────────────────────────────────────
@@ -191,12 +226,12 @@ export const SPEC_LOG_FLOOR = -12;
 // Linearly interpolated into a 256-entry RGBA LUT at startup.
 
 export const SPEC_CMAP_STOPS_DARK: readonly [number, number, number, number, number][] = [
-  [0.00,  10,  10,  25,   0], // near-black, transparent
-  [0.12,  68,   1,  84, 140], // dark purple
-  [0.35,  59,  82, 139, 200], // blue
-  [0.55,  33, 145, 140, 220], // teal
-  [0.75,  94, 201,  98, 235], // green
-  [1.00, 253, 231,  37, 255], // bright yellow, fully opaque
+  [0.0, 10, 10, 25, 0], // near-black, transparent
+  [0.12, 68, 1, 84, 140], // dark purple
+  [0.35, 59, 82, 139, 200], // blue
+  [0.55, 33, 145, 140, 220], // teal
+  [0.75, 94, 201, 98, 235], // green
+  [1.0, 253, 231, 37, 255], // bright yellow, fully opaque
 ] as const;
 
 /** @deprecated alias kept for backward compat */
@@ -204,14 +239,14 @@ export const SPEC_CMAP_STOPS = SPEC_CMAP_STOPS_DARK;
 
 // Jet-inspired — high contrast, vibrant, clearly readable on white backgrounds.
 export const SPEC_CMAP_STOPS_LIGHT: readonly [number, number, number, number, number][] = [
-  [0.00, 240, 240, 250, 255], // pale blue-white (silence)
-  [0.12,   0,  40, 210, 255], // strong blue
-  [0.30,   0, 160, 235, 255], // cyan
-  [0.45,   0, 200,  60, 255], // vivid green
-  [0.60, 240, 220,   0, 255], // bright yellow
-  [0.75, 240, 120,   0, 255], // hot orange
-  [0.90, 210,  20,  20, 255], // red
-  [1.00, 130,   0,  30, 255], // dark crimson (max power)
+  [0.0, 240, 240, 250, 255], // pale blue-white (silence)
+  [0.12, 0, 40, 210, 255], // strong blue
+  [0.3, 0, 160, 235, 255], // cyan
+  [0.45, 0, 200, 60, 255], // vivid green
+  [0.6, 240, 220, 0, 255], // bright yellow
+  [0.75, 240, 120, 0, 255], // hot orange
+  [0.9, 210, 20, 20, 255], // red
+  [1.0, 130, 0, 30, 255], // dark crimson (max power)
 ] as const;
 
 // ── Waveform rendering ────────────────────────────────────────────────────────
@@ -264,12 +299,12 @@ export const NUM_BANDS = 6;
  * `color` — hex accent colour; must match `BAND_COLORS[i]` in constants.rs.
  */
 export const BANDS = [
-  { key: "rel_delta",      name: "DELTA", sym: "δ",  lo: 0.5,  hi:   4, color: "#6366f1" },
-  { key: "rel_theta",      name: "THETA", sym: "θ",  lo: 4,    hi:   8, color: "#8b5cf6" },
-  { key: "rel_alpha",      name: "ALPHA", sym: "α",  lo: 8,    hi:  13, color: "#22c55e" },
-  { key: "rel_beta",       name: "BETA",  sym: "β",  lo: 13,   hi:  30, color: "#3b82f6" },
-  { key: "rel_gamma",      name: "GAMMA", sym: "γ",  lo: 30,   hi:  50, color: "#f59e0b" },
-  { key: "rel_high_gamma", name: "Hγ",    sym: "γ+", lo: 50,   hi: 100, color: "#ef4444" },
+  { key: "rel_delta", name: "DELTA", sym: "δ", lo: 0.5, hi: 4, color: "#6366f1" },
+  { key: "rel_theta", name: "THETA", sym: "θ", lo: 4, hi: 8, color: "#8b5cf6" },
+  { key: "rel_alpha", name: "ALPHA", sym: "α", lo: 8, hi: 13, color: "#22c55e" },
+  { key: "rel_beta", name: "BETA", sym: "β", lo: 13, hi: 30, color: "#3b82f6" },
+  { key: "rel_gamma", name: "GAMMA", sym: "γ", lo: 30, hi: 50, color: "#f59e0b" },
+  { key: "rel_high_gamma", name: "Hγ", sym: "γ+", lo: 50, hi: 100, color: "#ef4444" },
 ] as const;
 
 // ── EEG Embedding (must match constants.rs EMBEDDING_* values) ───────────────
@@ -329,14 +364,12 @@ export const CALIBRATION_AUTO_START = true;
 /** Ed25519 public key for verifying update signatures.
  *  Mirrors `UPDATER_PUBKEY` in constants.rs and `plugins.updater.pubkey`
  *  in tauri.conf.json.  All three MUST be identical. */
-export const UPDATER_PUBKEY =
-  "RWSusqj1BfOCzJrG0Zc2GVJfId2PbbkH0X8+z+VcJrea4Qu2qGittCpk";
+export const UPDATER_PUBKEY = "RWSusqj1BfOCzJrG0Zc2GVJfId2PbbkH0X8+z+VcJrea4Qu2qGittCpk";
 
 /** URL template for the update manifest endpoint.
  *  Mirrors `UPDATER_ENDPOINT` in constants.rs and
  *  `plugins.updater.endpoints[0]` in tauri.conf.json. */
-export const UPDATER_ENDPOINT =
-  "https://releases.example.com/skill/{{target}}/{{arch}}/{{current_version}}";
+export const UPDATER_ENDPOINT = "https://releases.example.com/skill/{{target}}/{{arch}}/{{current_version}}";
 
 /** Seconds between automatic background update checks (0 = disabled).
  *  Mirrors `UPDATER_CHECK_INTERVAL_SECS`. */
@@ -349,11 +382,11 @@ export const UPDATER_CHECK_ON_STARTUP = true;
 // ── Default filter config (must match FilterConfig::default() in eeg_filter.rs) ─
 
 export const DEFAULT_FILTER_CONFIG = {
-  sample_rate:        SAMPLE_RATE,
-  low_pass_hz:        50,     // DEFAULT_LP_HZ
-  high_pass_hz:       0.5,    // DEFAULT_HP_HZ
-  notch:              "Hz60" as const,
-  notch_bandwidth_hz: 1.0,    // DEFAULT_NOTCH_BW_HZ
+  sample_rate: SAMPLE_RATE,
+  low_pass_hz: 50, // DEFAULT_LP_HZ
+  high_pass_hz: 0.5, // DEFAULT_HP_HZ
+  notch: "Hz60" as const,
+  notch_bandwidth_hz: 1.0, // DEFAULT_NOTCH_BW_HZ
 } as const;
 
 // ── UMAP 3D viewer ───────────────────────────────────────────────────────────
@@ -372,12 +405,11 @@ export const UMAP_ANIM_MS = 1800;
 
 /** Link-line palette for labeled-point connections. */
 export const UMAP_LINK_PALETTE = [
-  0x22d3ee, 0xf472b6, 0xa3e635, 0xfbbf24,
-  0xc084fc, 0xfb7185, 0x34d399, 0x60a5fa,
+  0x22d3ee, 0xf472b6, 0xa3e635, 0xfbbf24, 0xc084fc, 0xfb7185, 0x34d399, 0x60a5fa,
 ] as const;
 
 /** UMAP scene background color (dark / light). */
-export const UMAP_BG       = 0x1a1a2e;
+export const UMAP_BG = 0x1a1a2e;
 export const UMAP_BG_LIGHT = 0xf1f5f9; // slate-100
 
 /** Base point size for UMAP scatter cloud. */
@@ -405,27 +437,27 @@ export const UMAP_DATE_LIT = 0.55;
 
 // ── Session detail chart colours ─────────────────────────────────────────────
 
-export const C_DELTA   = "#6366f1";
-export const C_THETA   = "#22c55e";
-export const C_ALPHA   = "#3b82f6";
-export const C_BETA    = "#f59e0b";
-export const C_GAMMA   = "#ef4444";
-export const C_FOCUS   = "#3b82f6";
-export const C_RELAX   = "#10b981";
-export const C_ENGAGE  = "#f59e0b";
-export const C_MED     = "#8b5cf6";
-export const C_COG     = "#0ea5e9";
-export const C_DROW    = "#ef4444";
-export const C_MOOD    = "#f59e0b";
-export const C_HR      = "#ef4444";
-export const C_HRV_G   = "#10b981"; // RMSSD
-export const C_HRV_B   = "#3b82f6"; // SDNN
-export const C_HRV_A   = "#f59e0b"; // pNN50
-export const C_BLINK   = "#ec4899";
-export const C_PITCH   = "#0ea5e9";
-export const C_ROLL    = "#6366f1";
-export const C_STILL   = "#22c55e";
-export const C_STRESS  = "#f43f5e";
+export const C_DELTA = "#6366f1";
+export const C_THETA = "#22c55e";
+export const C_ALPHA = "#3b82f6";
+export const C_BETA = "#f59e0b";
+export const C_GAMMA = "#ef4444";
+export const C_FOCUS = "#3b82f6";
+export const C_RELAX = "#10b981";
+export const C_ENGAGE = "#f59e0b";
+export const C_MED = "#8b5cf6";
+export const C_COG = "#0ea5e9";
+export const C_DROW = "#ef4444";
+export const C_MOOD = "#f59e0b";
+export const C_HR = "#ef4444";
+export const C_HRV_G = "#10b981"; // RMSSD
+export const C_HRV_B = "#3b82f6"; // SDNN
+export const C_HRV_A = "#f59e0b"; // pNN50
+export const C_BLINK = "#ec4899";
+export const C_PITCH = "#0ea5e9";
+export const C_ROLL = "#6366f1";
+export const C_STILL = "#22c55e";
+export const C_STRESS = "#f43f5e";
 
 // ── Search page ──────────────────────────────────────────────────────────────
 
@@ -441,7 +473,9 @@ export const UMAP_POLL_INTERVAL_MS = 500;
 // ── Session colors ───────────────────────────────────────────────────────────
 
 /** Shared palette for session segments across history, compare, and timeline views. */
-export const SESSION_COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#06b6d4','#f43f5e','#22d3ee','#84cc16'];
+export const SESSION_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#06b6d4", "#f43f5e", "#22d3ee", "#84cc16"];
 
 /** Look up a session color by index (wraps around). */
-export function sessionColor(idx: number): string { return SESSION_COLORS[idx % SESSION_COLORS.length]; }
+export function sessionColor(idx: number): string {
+  return SESSION_COLORS[idx % SESSION_COLORS.length];
+}

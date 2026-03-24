@@ -19,22 +19,20 @@
 //!   IEEE Trans. Automatic Control, 53(5), 1203–1218.
 
 use skill_constants::{
-    IMU_SAMPLE_RATE,
-    HEAD_POSE_ALPHA, HEAD_POSE_STILL_TAU_S,
-    HEAD_POSE_STILL_QUIET_DPS, HEAD_POSE_STILL_ACTIVE_DPS,
-    HEAD_POSE_NOD_THRESHOLD_DEG, HEAD_POSE_SHAKE_THRESHOLD_DEG,
-    HEAD_POSE_GESTURE_WINDOW_S, HEAD_POSE_GESTURE_REFRACTORY_S,
+    HEAD_POSE_ALPHA, HEAD_POSE_GESTURE_REFRACTORY_S, HEAD_POSE_GESTURE_WINDOW_S,
+    HEAD_POSE_NOD_THRESHOLD_DEG, HEAD_POSE_SHAKE_THRESHOLD_DEG, HEAD_POSE_STILL_ACTIVE_DPS,
+    HEAD_POSE_STILL_QUIET_DPS, HEAD_POSE_STILL_TAU_S, IMU_SAMPLE_RATE,
 };
 
 // Local aliases for readability.
-const IMU_SR: f64            = IMU_SAMPLE_RATE;
-const ALPHA: f64             = HEAD_POSE_ALPHA;
-const STILL_TAU_S: f64       = HEAD_POSE_STILL_TAU_S;
-const STILL_QUIET_DPS: f64   = HEAD_POSE_STILL_QUIET_DPS;
-const STILL_ACTIVE_DPS: f64  = HEAD_POSE_STILL_ACTIVE_DPS;
+const IMU_SR: f64 = IMU_SAMPLE_RATE;
+const ALPHA: f64 = HEAD_POSE_ALPHA;
+const STILL_TAU_S: f64 = HEAD_POSE_STILL_TAU_S;
+const STILL_QUIET_DPS: f64 = HEAD_POSE_STILL_QUIET_DPS;
+const STILL_ACTIVE_DPS: f64 = HEAD_POSE_STILL_ACTIVE_DPS;
 const NOD_THRESHOLD_DEG: f64 = HEAD_POSE_NOD_THRESHOLD_DEG;
 const SHAKE_THRESHOLD_DEG: f64 = HEAD_POSE_SHAKE_THRESHOLD_DEG;
-const GESTURE_WINDOW_S: f64  = HEAD_POSE_GESTURE_WINDOW_S;
+const GESTURE_WINDOW_S: f64 = HEAD_POSE_GESTURE_WINDOW_S;
 const GESTURE_REFRACTORY_S: f64 = HEAD_POSE_GESTURE_REFRACTORY_S;
 
 /// Head orientation and movement metrics.
@@ -123,23 +121,23 @@ impl HeadPoseTracker {
 
         // Pitch and roll from accelerometer (gravity reference).
         let accel_pitch = ax.atan2((ay * ay + az * az).sqrt()).to_degrees();
-        let accel_roll  = ay.atan2((ax * ax + az * az).sqrt()).to_degrees();
+        let accel_roll = ay.atan2((ax * ax + az * az).sqrt()).to_degrees();
 
         if !self.initialised {
             self.pitch = accel_pitch;
-            self.roll  = accel_roll;
+            self.roll = accel_roll;
             self.initialised = true;
             return;
         }
 
         // Gyro integration.
         let gyro_pitch = self.pitch + gx * dt;
-        let gyro_roll  = self.roll  + gy * dt;
-        self.yaw      += gz * dt;
+        let gyro_roll = self.roll + gy * dt;
+        self.yaw += gz * dt;
 
         // Complementary filter: fuse gyro (short-term) with accel (long-term).
         self.pitch = ALPHA * gyro_pitch + (1.0 - ALPHA) * accel_pitch;
-        self.roll  = ALPHA * gyro_roll  + (1.0 - ALPHA) * accel_roll;
+        self.roll = ALPHA * gyro_roll + (1.0 - ALPHA) * accel_roll;
 
         // Angular velocity magnitude for stillness.
         let ang_vel = (gx * gx + gy * gy + gz * gz).sqrt();
@@ -150,21 +148,37 @@ impl HeadPoseTracker {
         let hist_max = (GESTURE_WINDOW_S * self.imu_sr) as usize;
 
         self.pitch_history.push_back(self.pitch);
-        if self.pitch_history.len() > hist_max { self.pitch_history.pop_front(); }
+        if self.pitch_history.len() > hist_max {
+            self.pitch_history.pop_front();
+        }
 
         self.yaw_history.push_back(self.yaw);
-        if self.yaw_history.len() > hist_max { self.yaw_history.pop_front(); }
+        if self.yaw_history.len() > hist_max {
+            self.yaw_history.pop_front();
+        }
 
         // Decrement refractories.
-        if self.nod_refractory > 0 { self.nod_refractory -= 1; }
-        if self.shake_refractory > 0 { self.shake_refractory -= 1; }
+        if self.nod_refractory > 0 {
+            self.nod_refractory -= 1;
+        }
+        if self.shake_refractory > 0 {
+            self.shake_refractory -= 1;
+        }
 
         let refractory_samples = (GESTURE_REFRACTORY_S * self.imu_sr) as usize;
 
         // Nod: pitch oscillation (look down then up, or up then down).
         if self.nod_refractory == 0 && self.pitch_history.len() >= 3 {
-            let mn = self.pitch_history.iter().cloned().fold(f64::INFINITY, f64::min);
-            let mx = self.pitch_history.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let mn = self
+                .pitch_history
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min);
+            let mx = self
+                .pitch_history
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
             if mx - mn > NOD_THRESHOLD_DEG {
                 self.nod_count += 1;
                 self.nod_refractory = refractory_samples;
@@ -174,8 +188,16 @@ impl HeadPoseTracker {
 
         // Shake: yaw oscillation (look left then right, or right then left).
         if self.shake_refractory == 0 && self.yaw_history.len() >= 3 {
-            let mn = self.yaw_history.iter().cloned().fold(f64::INFINITY, f64::min);
-            let mx = self.yaw_history.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let mn = self
+                .yaw_history
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min);
+            let mx = self
+                .yaw_history
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
             if mx - mn > SHAKE_THRESHOLD_DEG {
                 self.shake_count += 1;
                 self.shake_refractory = refractory_samples;
@@ -192,13 +214,14 @@ impl HeadPoseTracker {
         } else if self.ang_vel_ema >= STILL_ACTIVE_DPS {
             0.0
         } else {
-            100.0 * (1.0 - (self.ang_vel_ema - STILL_QUIET_DPS)
-                / (STILL_ACTIVE_DPS - STILL_QUIET_DPS))
+            100.0
+                * (1.0
+                    - (self.ang_vel_ema - STILL_QUIET_DPS) / (STILL_ACTIVE_DPS - STILL_QUIET_DPS))
         };
 
         HeadPoseMetrics {
             pitch: (self.pitch * 10.0).round() / 10.0,
-            roll:  (self.roll * 10.0).round() / 10.0,
+            roll: (self.roll * 10.0).round() / 10.0,
             stillness: stillness.round(),
             nod_count: self.nod_count,
             shake_count: self.shake_count,
@@ -218,9 +241,21 @@ mod tests {
             t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(m.pitch.abs() < 5.0, "pitch should be near 0 at rest, got {}", m.pitch);
-        assert!(m.roll.abs() < 5.0, "roll should be near 0 at rest, got {}", m.roll);
-        assert!(m.stillness > 90.0, "should be very still, got {}", m.stillness);
+        assert!(
+            m.pitch.abs() < 5.0,
+            "pitch should be near 0 at rest, got {}",
+            m.pitch
+        );
+        assert!(
+            m.roll.abs() < 5.0,
+            "roll should be near 0 at rest, got {}",
+            m.roll
+        );
+        assert!(
+            m.stillness > 90.0,
+            "should be very still, got {}",
+            m.stillness
+        );
     }
 
     #[test]
@@ -234,7 +269,11 @@ mod tests {
             t.update([0.2, 0.1, 0.9], [100.0, 80.0, 60.0]);
         }
         let m = t.metrics();
-        assert!(m.stillness < 50.0, "should not be still during motion, got {}", m.stillness);
+        assert!(
+            m.stillness < 50.0,
+            "should not be still during motion, got {}",
+            m.stillness
+        );
     }
 
     #[test]
@@ -246,7 +285,11 @@ mod tests {
             t.update([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(m.pitch > 50.0, "tilted forward: expected pitch > 50°, got {}", m.pitch);
+        assert!(
+            m.pitch > 50.0,
+            "tilted forward: expected pitch > 50°, got {}",
+            m.pitch
+        );
     }
 
     #[test]
@@ -257,7 +300,11 @@ mod tests {
             t.update([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(m.roll > 50.0, "tilted right: expected roll > 50°, got {}", m.roll);
+        assert!(
+            m.roll > 50.0,
+            "tilted right: expected roll > 50°, got {}",
+            m.roll
+        );
     }
 
     #[test]
@@ -274,11 +321,17 @@ mod tests {
     fn nod_detected_after_large_pitch_oscillation() {
         let mut t = HeadPoseTracker::new();
         // Settle upright.
-        for _ in 0..30 { t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]); }
+        for _ in 0..30 {
+            t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
+        }
         // Simulate a nod: large pitch gyro oscillation.
         // NOD_THRESHOLD_DEG = 12° — drive ±15°/sample accumulation via gyro.
-        for _ in 0..20 { t.update([0.0, 0.0, 1.0], [100.0, 0.0, 0.0]); }  // look up
-        for _ in 0..20 { t.update([0.0, 0.0, 1.0], [-100.0, 0.0, 0.0]); } // look down
+        for _ in 0..20 {
+            t.update([0.0, 0.0, 1.0], [100.0, 0.0, 0.0]);
+        } // look up
+        for _ in 0..20 {
+            t.update([0.0, 0.0, 1.0], [-100.0, 0.0, 0.0]);
+        } // look down
         assert!(t.metrics().nod_count >= 1, "nod should be detected");
     }
 
@@ -286,11 +339,17 @@ mod tests {
     fn shake_detected_after_large_yaw_oscillation() {
         let mut t = HeadPoseTracker::new();
         // Settle upright.
-        for _ in 0..30 { t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]); }
+        for _ in 0..30 {
+            t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
+        }
         // Simulate a head-shake: large yaw gyro oscillation.
         // SHAKE_THRESHOLD_DEG = 15°.
-        for _ in 0..20 { t.update([0.0, 0.0, 1.0], [0.0, 0.0, 100.0]); }  // yaw right
-        for _ in 0..20 { t.update([0.0, 0.0, 1.0], [0.0, 0.0, -100.0]); } // yaw left
+        for _ in 0..20 {
+            t.update([0.0, 0.0, 1.0], [0.0, 0.0, 100.0]);
+        } // yaw right
+        for _ in 0..20 {
+            t.update([0.0, 0.0, 1.0], [0.0, 0.0, -100.0]);
+        } // yaw left
         assert!(t.metrics().shake_count >= 1, "shake should be detected");
     }
 
@@ -307,12 +366,14 @@ mod tests {
     #[test]
     fn metrics_pitch_and_roll_are_rounded_to_one_decimal() {
         let mut t = HeadPoseTracker::new();
-        for _ in 0..100 { t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]); }
+        for _ in 0..100 {
+            t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
+        }
         let m = t.metrics();
         // Values are rounded to 1 decimal place: (v * 10).round() / 10.
         let pitch_rounded = (m.pitch * 10.0).round() / 10.0;
-        let roll_rounded  = (m.roll  * 10.0).round() / 10.0;
+        let roll_rounded = (m.roll * 10.0).round() / 10.0;
         assert!((m.pitch - pitch_rounded).abs() < 1e-9);
-        assert!((m.roll  - roll_rounded).abs() < 1e-9);
+        assert!((m.roll - roll_rounded).abs() < 1e-9);
     }
 }

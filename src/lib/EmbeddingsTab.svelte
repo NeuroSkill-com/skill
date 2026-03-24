@@ -5,87 +5,91 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { Button } from "$lib/components/ui/button";
-  import { t }      from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface ModelInfo { code: string; dim: number; description: string; }
+// ── Types ──────────────────────────────────────────────────────────────────
+interface ModelInfo {
+  code: string;
+  dim: number;
+  description: string;
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let models       = $state<ModelInfo[]>([]);
-  let currentCode  = $state("");
-  let staleCount   = $state(0);
-  let saving       = $state(false);
-  let reembedding  = $state(false);
-  let progress     = $state<{ done: number; total: number } | null>(null);
-  let unlisten: UnlistenFn | null = null;
+// ── State ──────────────────────────────────────────────────────────────────
+let models = $state<ModelInfo[]>([]);
+let currentCode = $state("");
+let staleCount = $state(0);
+let saving = $state(false);
+let reembedding = $state(false);
+let progress = $state<{ done: number; total: number } | null>(null);
+let unlisten: UnlistenFn | null = null;
 
-  const activeModel = $derived(models.find(m => m.code === currentCode) ?? null);
+const activeModel = $derived(models.find((m) => m.code === currentCode) ?? null);
 
-  // Group models by family for the dropdown
-  const grouped = $derived.by(() => {
-    const families: Record<string, ModelInfo[]> = {};
-    for (const m of models) {
-      const family = m.code.split("/")[0];
-      (families[family] ??= []).push(m);
-    }
-    return families;
+// Group models by family for the dropdown
+const grouped = $derived.by(() => {
+  const families: Record<string, ModelInfo[]> = {};
+  for (const m of models) {
+    const family = m.code.split("/")[0];
+    (families[family] ??= []).push(m);
+  }
+  return families;
+});
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function load() {
+  [models, currentCode, staleCount] = await Promise.all([
+    invoke<ModelInfo[]>("list_embedding_models"),
+    invoke<string>("get_embedding_model"),
+    invoke<number>("get_stale_label_count"),
+  ]);
+  // Sort: put default (bge-small-en) first, then alphabetically
+  models.sort((a, b) => {
+    if (a.code === "Xenova/bge-small-en-v1.5") return -1;
+    if (b.code === "Xenova/bge-small-en-v1.5") return 1;
+    return a.code.localeCompare(b.code);
   });
+}
 
-  // ── Load ───────────────────────────────────────────────────────────────────
-  async function load() {
-    [models, currentCode, staleCount] = await Promise.all([
-      invoke<ModelInfo[]>("list_embedding_models"),
-      invoke<string>("get_embedding_model"),
-      invoke<number>("get_stale_label_count"),
-    ]);
-    // Sort: put default (bge-small-en) first, then alphabetically
-    models.sort((a, b) => {
-      if (a.code === "Xenova/bge-small-en-v1.5") return -1;
-      if (b.code === "Xenova/bge-small-en-v1.5") return  1;
-      return a.code.localeCompare(b.code);
-    });
+// ── Apply model change ─────────────────────────────────────────────────────
+async function applyModel() {
+  saving = true;
+  try {
+    await invoke("set_embedding_model", { modelCode: currentCode });
+    staleCount = 0; // backfill runs in background after set_embedding_model
+  } finally {
+    saving = false;
   }
+}
 
-  // ── Apply model change ─────────────────────────────────────────────────────
-  async function applyModel() {
-    saving = true;
-    try {
-      await invoke("set_embedding_model", { modelCode: currentCode });
-      staleCount = 0; // backfill runs in background after set_embedding_model
-    } finally {
-      saving = false;
-    }
-  }
-
-  // ── Re-embed all ──────────────────────────────────────────────────────────
-  async function reembed() {
-    reembedding = true;
+// ── Re-embed all ──────────────────────────────────────────────────────────
+async function reembed() {
+  reembedding = true;
+  progress = null;
+  try {
+    await invoke("reembed_all_labels");
+    staleCount = 0;
+  } finally {
+    reembedding = false;
     progress = null;
-    try {
-      await invoke("reembed_all_labels");
-      staleCount = 0;
-    } finally {
-      reembedding = false;
-      progress = null;
-    }
   }
+}
 
-  onMount(async () => {
-    await load();
-    unlisten = await listen<{ done: number; total: number }>("embed-progress", e => {
-      progress = e.payload;
-    });
+onMount(async () => {
+  await load();
+  unlisten = await listen<{ done: number; total: number }>("embed-progress", (e) => {
+    progress = e.payload;
   });
-  onDestroy(() => unlisten?.());
+});
+onDestroy(() => unlisten?.());
 
-  // Dim badge colour
-  function dimColor(dim: number) {
-    return "bg-primary/10 text-primary border-primary/20";
-  }
+// Dim badge colour
+function dimColor(_dim: number) {
+  return "bg-primary/10 text-primary border-primary/20";
+}
 </script>
 
 <section class="flex flex-col gap-5">

@@ -6,11 +6,11 @@
 // the Free Software Foundation, version 3 only.
 //! Screenshot configuration and search Tauri commands.
 
-use std::sync::Mutex;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
-use crate::{AppState, skill_dir};
+use crate::{skill_dir, AppState};
 
 // ── Screenshot config ─────────────────────────────────────────────────────────
 
@@ -32,9 +32,11 @@ pub fn set_screenshot_config(
 ) -> skill_data::screenshot_store::ConfigChangeResult {
     let (old_backend, old_model, skill_dir) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.embed_backend.clone(),
-         g.screenshot_config.model_id(),
-         g.skill_dir.clone())
+        (
+            g.screenshot_config.embed_backend.clone(),
+            g.screenshot_config.model_id(),
+            g.skill_dir.clone(),
+        )
     };
 
     let new_backend = config.embed_backend.clone();
@@ -55,7 +57,10 @@ pub fn set_screenshot_config(
         0
     };
 
-    skill_data::screenshot_store::ConfigChangeResult { model_changed, stale_count }
+    skill_data::screenshot_store::ConfigChangeResult {
+        model_changed,
+        stale_count,
+    }
 }
 
 /// Count screenshots needing (re-)embedding and estimate wall-clock time.
@@ -66,12 +71,22 @@ pub async fn estimate_screenshot_reembed(
 ) -> Result<Option<skill_data::screenshot_store::ReembedEstimate>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
+        (
+            g.screenshot_config.clone(),
+            g.skill_dir.clone(),
+            g.screenshot_store.clone(),
+        )
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
-        Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
-    }).await.unwrap_or(None))
+        let store = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })?;
+        Some(crate::screenshot::estimate_reembed(
+            &store, &config, &skill_dir,
+        ))
+    })
+    .await
+    .unwrap_or(None))
 }
 
 /// Re-embed all screenshots with the current model.
@@ -84,13 +99,23 @@ pub async fn rebuild_screenshot_embeddings(
 ) -> Result<Option<skill_data::screenshot_store::ReembedResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
+        (
+            g.screenshot_config.clone(),
+            g.skill_dir.clone(),
+            g.screenshot_store.clone(),
+        )
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
+        let store = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })?;
         let ctx = crate::screenshot::TauriScreenshotContext { app };
-        Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &ctx))
-    }).await.unwrap_or(None))
+        Some(crate::screenshot::rebuild_embeddings(
+            &store, &config, &skill_dir, &ctx,
+        ))
+    })
+    .await
+    .unwrap_or(None))
 }
 
 /// Find screenshots by timestamp range (for EEG correlation).
@@ -105,9 +130,15 @@ pub async fn get_screenshots_around(
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
+        let Some(store) = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        }) else {
+            return vec![];
+        };
         crate::screenshot::get_around(&store, timestamp, window_secs)
-    }).await.unwrap_or_default())
+    })
+    .await
+    .unwrap_or_default())
 }
 
 /// Find screenshots visually similar to a query image.
@@ -121,7 +152,11 @@ pub async fn search_screenshots_by_image(
 ) -> Result<Vec<skill_data::screenshot_store::ScreenshotResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
+        (
+            g.screenshot_config.clone(),
+            g.skill_dir.clone(),
+            g.screenshot_store.clone(),
+        )
     };
     Ok(tokio::task::spawn_blocking(move || {
         let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
@@ -130,12 +165,25 @@ pub async fn search_screenshots_by_image(
         } else {
             None
         };
-        let Some(query) = query_emb else { return vec![] };
-        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
+        let Some(query) = query_emb else {
+            return vec![];
+        };
+        let Some(store) = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        }) else {
+            return vec![];
+        };
         let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) else { return vec![] };
+        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
+            &hnsw_path,
+            fast_hnsw::distance::Cosine,
+        ) else {
+            return vec![];
+        };
         crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
-    }).await.unwrap_or_default())
+    })
+    .await
+    .unwrap_or_default())
 }
 
 /// Get screenshot pipeline metrics (capture + embed thread performance).
@@ -150,13 +198,15 @@ pub fn get_screenshot_metrics(
 
 /// Check whether OCR models are downloaded and ready.
 #[tauri::command]
-pub fn check_ocr_models_ready(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> bool {
+pub fn check_ocr_models_ready(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     let skill_dir = skill_dir(&state);
     let ocr_dir = skill_dir.join("ocr_models");
-    ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE).exists()
-        && ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE).exists()
+    ocr_dir
+        .join(crate::constants::OCR_DETECTION_MODEL_FILE)
+        .exists()
+        && ocr_dir
+            .join(crate::constants::OCR_RECOGNITION_MODEL_FILE)
+            .exists()
 }
 
 /// Download OCR models (text-detection.rten + text-recognition.rten).
@@ -173,13 +223,17 @@ pub async fn download_ocr_models(
         let det_path = ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE);
         let rec_path = ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE);
         let det_ok = crate::screenshot::download_ocr_model_pub(
-            crate::constants::OCR_DETECTION_MODEL_URL, &det_path,
+            crate::constants::OCR_DETECTION_MODEL_URL,
+            &det_path,
         );
         let rec_ok = crate::screenshot::download_ocr_model_pub(
-            crate::constants::OCR_RECOGNITION_MODEL_URL, &rec_path,
+            crate::constants::OCR_RECOGNITION_MODEL_URL,
+            &rec_path,
         );
         det_ok && rec_ok
-    }).await.unwrap_or(false))
+    })
+    .await
+    .unwrap_or(false))
 }
 
 /// Search screenshots by OCR text — both semantic (embedding similarity)
@@ -201,7 +255,11 @@ pub async fn search_screenshots_by_text(
     };
     let embedder = std::sync::Arc::clone(&embedder);
     Ok(tokio::task::spawn_blocking(move || {
-        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
+        let Some(store) = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        }) else {
+            return vec![];
+        };
         let k = k.unwrap_or(20);
         let mode = mode.unwrap_or_else(|| "semantic".into());
         match mode.as_str() {
@@ -211,23 +269,30 @@ pub async fn search_screenshots_by_text(
                     let mut guard = embedder.0.lock().ok()?;
                     let te = guard.as_mut()?;
                     let mut vecs = te.embed(vec![text], None).ok()?;
-                    if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
+                    if vecs.is_empty() {
+                        None
+                    } else {
+                        Some(vecs.remove(0))
+                    }
                 };
-                crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &embed_fn)
+                crate::screenshot::search_by_ocr_text_embedding(
+                    &skill_dir, &store, &query, k, &embed_fn,
+                )
             }
         }
-    }).await.unwrap_or_default())
+    })
+    .await
+    .unwrap_or_default())
 }
 
 /// Return the screenshots directory path and the WebSocket server port.
 /// The frontend constructs image URLs as `http://127.0.0.1:{port}/screenshots/{filename}`
 /// which are served by the axum HTTP server — no asset protocol scope needed.
 #[tauri::command]
-pub fn get_screenshots_dir(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> (String, u16) {
+pub fn get_screenshots_dir(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, u16) {
     let g = state.lock_or_recover();
-    let dir = g.skill_dir
+    let dir = g
+        .skill_dir
         .join(crate::constants::SCREENSHOTS_DIR)
         .to_string_lossy()
         .into_owned();
@@ -248,10 +313,20 @@ pub async fn search_screenshots_by_vector(
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
+        let Some(store) = store.or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        }) else {
+            return vec![];
+        };
         let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) else { return vec![] };
+        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
+            &hnsw_path,
+            fast_hnsw::distance::Cosine,
+        ) else {
+            return vec![];
+        };
         crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
-    }).await.unwrap_or_default())
+    })
+    .await
+    .unwrap_or_default())
 }
-

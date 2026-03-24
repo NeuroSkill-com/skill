@@ -17,761 +17,813 @@ the Free Software Foundation, version 3 only. -->
   space to deselect.  Unconnected nodes and edges are dimmed to 10 % opacity.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import type * as THREE_NS from "three";
-  import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-  import { t } from "$lib/i18n/index.svelte";
-  import { getResolved } from "$lib/stores/theme.svelte";
-  import { fmtDateTimeLocale } from "$lib/format";
+import { onDestroy, onMount } from "svelte";
+import type * as THREE_NS from "three";
+import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
+import { fmtDateTimeLocale } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { getResolved } from "$lib/stores/theme.svelte";
 
-  // ── Types ─────────────────────────────────────────────────────────────────
-  interface GraphNode {
-    id:              string;
-    kind:            "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
-    text?:           string;
-    timestamp_unix?: number;
-    distance:        number;
-    eeg_metrics?:    Record<string, number | null> | null;
-    parent_id?:      string;
-    /** 2-D PCA projection – both axes in [-1, 1].  Present on found_label nodes
-     *  when the backend successfully embedded the label text.  Similar labels
-     *  share nearby (proj_x, proj_y) values. */
-    proj_x?:         number;
-    proj_y?:         number;
-    /** Screenshot image URL — only present on kind === "screenshot" nodes. */
-    screenshot_url?: string;
+// ── Types ─────────────────────────────────────────────────────────────────
+interface GraphNode {
+  id: string;
+  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
+  text?: string;
+  timestamp_unix?: number;
+  distance: number;
+  eeg_metrics?: Record<string, number | null> | null;
+  parent_id?: string;
+  /** 2-D PCA projection – both axes in [-1, 1].  Present on found_label nodes
+   *  when the backend successfully embedded the label text.  Similar labels
+   *  share nearby (proj_x, proj_y) values. */
+  proj_x?: number;
+  proj_y?: number;
+  /** Screenshot image URL — only present on kind === "screenshot" nodes. */
+  screenshot_url?: string;
+}
+interface GraphEdge {
+  from_id: string;
+  to_id: string;
+  distance: number;
+  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
+}
+
+type ThreeModule = typeof import("three");
+type NodeMesh = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshPhongMaterial>;
+type NodeSprite = THREE_NS.Sprite;
+type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
+
+// Internal scene-object records ──────────────────────────────────────────
+interface NodeEntry {
+  mesh: NodeMesh;
+  sprite: NodeSprite | null;
+  node: GraphNode;
+  baseColor: number; // original hex color
+  baseEmissive: number; // original emissiveIntensity
+}
+interface EdgeEntry {
+  line: EdgeLine;
+  fromId: string;
+  toId: string;
+  baseOpacity: number; // opacity at rest
+}
+
+let { nodes, edges, usePca = true }: { nodes: GraphNode[]; edges: GraphEdge[]; usePca?: boolean } = $props();
+
+// ── Visual constants ─────────────────────────────────────────────────────
+const KIND_COLOR: Record<GraphNode["kind"], number> = {
+  query: 0x8b5cf6,
+  text_label: 0x3b82f6,
+  eeg_point: 0xf59e0b,
+  found_label: 0x10b981,
+  screenshot: 0x06b6d4,
+};
+const KIND_RADIUS: Record<GraphNode["kind"], number> = {
+  query: 1.2,
+  text_label: 0.8,
+  eeg_point: 0.55,
+  found_label: 0.65,
+  screenshot: 0.45,
+};
+const EDGE_COLOR: Record<GraphEdge["kind"], number> = {
+  text_sim: 0x8b5cf6,
+  eeg_bridge: 0xf59e0b,
+  eeg_sim: 0xf59e0b,
+  label_prox: 0x10b981,
+  screenshot_link: 0x06b6d4,
+};
+const BASE_EMISSIVE: Record<GraphNode["kind"], number> = {
+  query: 0.3,
+  text_label: 0.18,
+  eeg_point: 0.35,
+  found_label: 0.18,
+  screenshot: 0.25,
+};
+
+const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5, screenshot: 2.5 };
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+const BG_DARK = 0x13131f;
+const BG_LIGHT = 0xf1f5f9;
+
+// Highlight visual constants
+const DIM_OPACITY = 0.08;
+const DIM_EMISSIVE = 0.01;
+const SEL_EMISSIVE = 0.85; // selected node glow
+const NEIGHBOR_EMISSIVE_MULT = 1.6;
+const EDGE_BRIGHT_MULT = 2.8;
+const DIM_EDGE_OPACITY = 0.03;
+
+// ── Jet / turbo colormap ──────────────────────────────────────────────────
+function turbo(t: number): [number, number, number] {
+  const c = Math.max(0, Math.min(1, t));
+  const r = Math.max(
+    0,
+    Math.min(
+      1,
+      0.13572138 + c * (4.6153926 + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c * 59.28637943)))),
+    ),
+  );
+  const g = Math.max(
+    0,
+    Math.min(
+      1,
+      0.09140261 + c * (2.19418839 + c * (4.84296658 + c * (-14.18503333 + c * (4.27729857 + c * 2.82956604)))),
+    ),
+  );
+  const b = Math.max(
+    0,
+    Math.min(
+      1,
+      0.1066733 + c * (12.64194608 + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c * 27.34824973)))),
+    ),
+  );
+  return [r, g, b];
+}
+function turboHex(t: number): number {
+  const [r, g, b] = turbo(t);
+  return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
+}
+function turboCss(t: number): string {
+  const [r, g, b] = turbo(t);
+  const h = (v: number) =>
+    Math.round(v * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let container = $state<HTMLDivElement | undefined>();
+let tooltip = $state<{ x: number; y: number; lines: string[] } | null>(null);
+let loaded = $state(false);
+let isDark = $derived(getResolved() === "dark");
+let selectedNodeId = $state<string | null>(null);
+let hoveredNodeId = $state<string | null>(null); // for cursor style only
+
+let eegTimeMin = $state(0);
+let eegTimeMax = $state(0);
+let eegGradientCss = $derived.by(() => {
+  const stops = Array.from({ length: 10 }, (_, i) => turboCss(i / 9));
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+});
+
+// ── Three.js refs ─────────────────────────────────────────────────────────
+let THREE!: ThreeModule;
+let scene!: THREE_NS.Scene;
+let camera!: THREE_NS.PerspectiveCamera;
+let renderer!: THREE_NS.WebGLRenderer;
+let controls!: OrbitControlsType;
+let animId = 0;
+let resizeObs: ResizeObserver | null = null;
+let raycaster!: THREE_NS.Raycaster;
+let mouse!: THREE_NS.Vector2;
+let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
+
+// Richer scene-object records
+let nodeEntries: NodeEntry[] = [];
+let edgeEntries: EdgeEntry[] = [];
+
+// ── Layout helpers ────────────────────────────────────────────────────────
+function fibSphere(i: number, n: number): [number, number, number] {
+  const y = 1 - (i / Math.max(n - 1, 1)) * 2;
+  const r = Math.sqrt(Math.max(0, 1 - y * y));
+  const θ = GOLDEN * i;
+  return [Math.cos(θ) * r, y, Math.sin(θ) * r];
+}
+function add3(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+function scale3(v: [number, number, number], s: number): [number, number, number] {
+  return [v[0] * s, v[1] * s, v[2] * s];
+}
+function normalize3(v: [number, number, number]): [number, number, number] {
+  const len = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2) || 1;
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function computePositions(ns: GraphNode[], usePcaLayout: boolean): Map<string, [number, number, number]> {
+  const pos = new Map<string, [number, number, number]>();
+  pos.set("query", [0, 0, 0]);
+
+  const textLabels = ns.filter((n) => n.kind === "text_label");
+  for (let i = 0; i < textLabels.length; i++) {
+    pos.set(textLabels[i].id, scale3(fibSphere(i, textLabels.length), LAYER_RADIUS.text_label));
   }
-  interface GraphEdge {
-    from_id:  string;
-    to_id:    string;
-    distance: number;
-    kind:     "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
+
+  const eegMap = new Map<string, GraphNode[]>();
+  for (const n of ns) {
+    if (n.kind !== "eeg_point") continue;
+    const pid = n.parent_id ?? "query";
+    if (!eegMap.has(pid)) eegMap.set(pid, []);
+    eegMap.get(pid)?.push(n);
   }
-
-  type ThreeModule = typeof import("three");
-  type NodeMesh = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshPhongMaterial>;
-  type NodeSprite = THREE_NS.Sprite;
-  type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
-
-  // Internal scene-object records ──────────────────────────────────────────
-  interface NodeEntry {
-    mesh:         NodeMesh;
-    sprite:       NodeSprite | null;
-    node:         GraphNode;
-    baseColor:    number;    // original hex color
-    baseEmissive: number;    // original emissiveIntensity
-  }
-  interface EdgeEntry {
-    line:        EdgeLine;
-    fromId:      string;
-    toId:        string;
-    baseOpacity: number; // opacity at rest
-  }
-
-  let {
-    nodes,
-    edges,
-    usePca = true,
-  }: { nodes: GraphNode[]; edges: GraphEdge[]; usePca?: boolean } = $props();
-
-  // ── Visual constants ─────────────────────────────────────────────────────
-  const KIND_COLOR: Record<GraphNode["kind"], number> = {
-    query:       0x8b5cf6,
-    text_label:  0x3b82f6,
-    eeg_point:   0xf59e0b,
-    found_label: 0x10b981,
-    screenshot:  0x06b6d4,
-  };
-  const KIND_RADIUS: Record<GraphNode["kind"], number> = {
-    query:       1.2,
-    text_label:  0.8,
-    eeg_point:   0.55,
-    found_label: 0.65,
-    screenshot:  0.45,
-  };
-  const EDGE_COLOR: Record<GraphEdge["kind"], number> = {
-    text_sim:        0x8b5cf6,
-    eeg_bridge:      0xf59e0b,
-    eeg_sim:         0xf59e0b,
-    label_prox:      0x10b981,
-    screenshot_link: 0x06b6d4,
-  };
-  const BASE_EMISSIVE: Record<GraphNode["kind"], number> = {
-    query:       0.30,
-    text_label:  0.18,
-    eeg_point:   0.35,
-    found_label: 0.18,
-    screenshot:  0.25,
-  };
-
-  const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5, screenshot: 2.5 };
-  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-  const BG_DARK  = 0x13131f;
-  const BG_LIGHT = 0xf1f5f9;
-
-  // Highlight visual constants
-  const DIM_OPACITY       = 0.08;
-  const DIM_EMISSIVE      = 0.01;
-  const SEL_EMISSIVE      = 0.85;   // selected node glow
-  const NEIGHBOR_EMISSIVE_MULT = 1.6;
-  const EDGE_BRIGHT_MULT  = 2.8;
-  const DIM_EDGE_OPACITY  = 0.03;
-
-  // ── Jet / turbo colormap ──────────────────────────────────────────────────
-  function turbo(t: number): [number, number, number] {
-    const c = Math.max(0, Math.min(1, t));
-    const r = Math.max(0, Math.min(1, 0.13572138 + c * (4.61539260 + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c *  59.28637943))))));
-    const g = Math.max(0, Math.min(1, 0.09140261 + c * (2.19418839 + c * (  4.84296658 + c * (-14.18503333 + c * (  4.27729857 + c *   2.82956604))))));
-    const b = Math.max(0, Math.min(1, 0.10667330 + c * (12.64194608 + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c *  27.34824973))))));
-    return [r, g, b];
-  }
-  function turboHex(t: number): number {
-    const [r, g, b] = turbo(t);
-    return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
-  }
-  function turboCss(t: number): string {
-    const [r, g, b] = turbo(t);
-    const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
-    return `#${h(r)}${h(g)}${h(b)}`;
-  }
-
-  // ── State ─────────────────────────────────────────────────────────────────
-  let container      = $state<HTMLDivElement | undefined>();
-  let tooltip        = $state<{ x: number; y: number; lines: string[] } | null>(null);
-  let loaded         = $state(false);
-  let isDark         = $derived(getResolved() === "dark");
-  let selectedNodeId = $state<string | null>(null);
-  let hoveredNodeId  = $state<string | null>(null);  // for cursor style only
-
-  let eegTimeMin     = $state(0);
-  let eegTimeMax     = $state(0);
-  let eegGradientCss = $derived.by(() => {
-    const stops = Array.from({ length: 10 }, (_, i) => turboCss(i / 9));
-    return `linear-gradient(to right, ${stops.join(", ")})`;
-  });
-
-  // ── Three.js refs ─────────────────────────────────────────────────────────
-  let THREE!: ThreeModule;
-  let scene!: THREE_NS.Scene;
-  let camera!: THREE_NS.PerspectiveCamera;
-  let renderer!: THREE_NS.WebGLRenderer;
-  let controls!: OrbitControlsType;
-  let animId    = 0;
-  let resizeObs: ResizeObserver | null = null;
-  let raycaster!: THREE_NS.Raycaster;
-  let mouse!: THREE_NS.Vector2;
-  let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
-
-  // Richer scene-object records
-  let nodeEntries: NodeEntry[] = [];
-  let edgeEntries: EdgeEntry[] = [];
-
-  // ── Layout helpers ────────────────────────────────────────────────────────
-  function fibSphere(i: number, n: number): [number, number, number] {
-    const y = 1 - (i / Math.max(n - 1, 1)) * 2;
-    const r = Math.sqrt(Math.max(0, 1 - y * y));
-    const θ = GOLDEN * i;
-    return [Math.cos(θ) * r, y, Math.sin(θ) * r];
-  }
-  function add3(a: [number,number,number], b: [number,number,number]): [number,number,number] {
-    return [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
-  }
-  function scale3(v: [number,number,number], s: number): [number,number,number] {
-    return [v[0]*s, v[1]*s, v[2]*s];
-  }
-  function normalize3(v: [number,number,number]): [number,number,number] {
-    const len = Math.sqrt(v[0]**2+v[1]**2+v[2]**2) || 1;
-    return [v[0]/len, v[1]/len, v[2]/len];
-  }
-
-  function computePositions(ns: GraphNode[], usePcaLayout: boolean): Map<string, [number,number,number]> {
-    const pos = new Map<string, [number,number,number]>();
-    pos.set("query", [0,0,0]);
-
-    const textLabels = ns.filter(n => n.kind === "text_label");
-    for (let i = 0; i < textLabels.length; i++) {
-      pos.set(textLabels[i].id, scale3(fibSphere(i, textLabels.length), LAYER_RADIUS.text_label));
-    }
-
-    const eegMap = new Map<string, GraphNode[]>();
-    for (const n of ns) {
-      if (n.kind !== "eeg_point") continue;
-      const pid = n.parent_id ?? "query";
-      if (!eegMap.has(pid)) eegMap.set(pid, []);
-      eegMap.get(pid)!.push(n);
-    }
-    for (const [pid, children] of eegMap) {
-      const parentPos = pos.get(pid) ?? [0,0,0];
-      const outDir = normalize3(parentPos[0]===0&&parentPos[1]===0&&parentPos[2]===0 ? [1,0,0] : parentPos);
-      for (let j = 0; j < children.length; j++) {
-        const local = fibSphere(j, Math.max(children.length, 3));
-        pos.set(children[j].id, add3(parentPos, scale3(normalize3(add3(scale3(outDir, 1.5), local)), LAYER_RADIUS.eeg_point)));
-      }
-    }
-
-    // ── Found labels ──────────────────────────────────────────────────────
-    // When PCA layout is enabled (usePcaLayout) AND the backend has computed
-    // proj_x / proj_y for the found_labels, place them on an outer sphere shell
-    // keyed by embedding azimuth / elevation.  Semantically similar labels
-    // cluster together.  Toggle off to restore parent-relative layout.
-    const allFoundLabels = ns.filter(n => n.kind === "found_label");
-    const hasProjData    = usePcaLayout && allFoundLabels.some(n => n.proj_x !== undefined);
-
-    if (hasProjData) {
-      // Radius slightly outside the EEG + text layers so found_labels occupy
-      // the outermost shell and don't collide with the inner layers.
-      const FOUND_PCA_R = 9.5;
-      for (const n of allFoundLabels) {
-        const px  = n.proj_x ?? 0;
-        const py  = n.proj_y ?? 0;
-        // proj_x drives azimuth (rotation around Y), proj_y drives elevation.
-        // Clamp elevation to ±80° so nodes never pile up exactly at the poles.
-        const phi   = px * Math.PI;                   // azimuth: -π … π
-        const theta = py * (Math.PI / 2.4);           // elevation: ≈ ±75°
-        const cosT  = Math.cos(theta);
-        pos.set(n.id, [
-          FOUND_PCA_R * cosT * Math.cos(phi),
-          FOUND_PCA_R * Math.sin(theta),
-          FOUND_PCA_R * cosT * Math.sin(phi),
-        ]);
-      }
-    } else {
-      // Fallback: cluster each found_label near its EEG-point parent.
-      const flMap = new Map<string, GraphNode[]>();
-      for (const n of allFoundLabels) {
-        const pid = n.parent_id ?? "query";
-        if (!flMap.has(pid)) flMap.set(pid, []);
-        flMap.get(pid)!.push(n);
-      }
-      for (const [pid, children] of flMap) {
-        const parentPos = pos.get(pid) ?? [0,0,0];
-        const outDir = normalize3(
-          parentPos[0]===0&&parentPos[1]===0&&parentPos[2]===0 ? [0,1,0] : parentPos
-        );
-        for (let j = 0; j < children.length; j++) {
-          const local = fibSphere(j, Math.max(children.length, 3));
-          pos.set(children[j].id,
-            add3(parentPos,
-              scale3(
-                normalize3(add3(scale3(outDir, 1.2), local)),
-                LAYER_RADIUS.found_label
-              )
-            )
-          );
-        }
-      }
-    }
-
-    // ── Screenshot nodes — clustered near their parent EEG-point ────────────
-    const ssMap = new Map<string, GraphNode[]>();
-    for (const n of ns) {
-      if (n.kind !== "screenshot") continue;
-      const pid = n.parent_id ?? "query";
-      if (!ssMap.has(pid)) ssMap.set(pid, []);
-      ssMap.get(pid)!.push(n);
-    }
-    for (const [pid, children] of ssMap) {
-      const parentPos = pos.get(pid) ?? [0, 0, 0];
-      const outDir = normalize3(
-        parentPos[0] === 0 && parentPos[1] === 0 && parentPos[2] === 0 ? [0, -1, 0] : parentPos
+  for (const [pid, children] of eegMap) {
+    const parentPos = pos.get(pid) ?? [0, 0, 0];
+    const outDir = normalize3(parentPos[0] === 0 && parentPos[1] === 0 && parentPos[2] === 0 ? [1, 0, 0] : parentPos);
+    for (let j = 0; j < children.length; j++) {
+      const local = fibSphere(j, Math.max(children.length, 3));
+      pos.set(
+        children[j].id,
+        add3(parentPos, scale3(normalize3(add3(scale3(outDir, 1.5), local)), LAYER_RADIUS.eeg_point)),
       );
+    }
+  }
+
+  // ── Found labels ──────────────────────────────────────────────────────
+  // When PCA layout is enabled (usePcaLayout) AND the backend has computed
+  // proj_x / proj_y for the found_labels, place them on an outer sphere shell
+  // keyed by embedding azimuth / elevation.  Semantically similar labels
+  // cluster together.  Toggle off to restore parent-relative layout.
+  const allFoundLabels = ns.filter((n) => n.kind === "found_label");
+  const hasProjData = usePcaLayout && allFoundLabels.some((n) => n.proj_x !== undefined);
+
+  if (hasProjData) {
+    // Radius slightly outside the EEG + text layers so found_labels occupy
+    // the outermost shell and don't collide with the inner layers.
+    const FOUND_PCA_R = 9.5;
+    for (const n of allFoundLabels) {
+      const px = n.proj_x ?? 0;
+      const py = n.proj_y ?? 0;
+      // proj_x drives azimuth (rotation around Y), proj_y drives elevation.
+      // Clamp elevation to ±80° so nodes never pile up exactly at the poles.
+      const phi = px * Math.PI; // azimuth: -π … π
+      const theta = py * (Math.PI / 2.4); // elevation: ≈ ±75°
+      const cosT = Math.cos(theta);
+      pos.set(n.id, [
+        FOUND_PCA_R * cosT * Math.cos(phi),
+        FOUND_PCA_R * Math.sin(theta),
+        FOUND_PCA_R * cosT * Math.sin(phi),
+      ]);
+    }
+  } else {
+    // Fallback: cluster each found_label near its EEG-point parent.
+    const flMap = new Map<string, GraphNode[]>();
+    for (const n of allFoundLabels) {
+      const pid = n.parent_id ?? "query";
+      if (!flMap.has(pid)) flMap.set(pid, []);
+      flMap.get(pid)?.push(n);
+    }
+    for (const [pid, children] of flMap) {
+      const parentPos = pos.get(pid) ?? [0, 0, 0];
+      const outDir = normalize3(parentPos[0] === 0 && parentPos[1] === 0 && parentPos[2] === 0 ? [0, 1, 0] : parentPos);
       for (let j = 0; j < children.length; j++) {
         const local = fibSphere(j, Math.max(children.length, 3));
-        pos.set(children[j].id,
-          add3(parentPos,
-            scale3(
-              normalize3(add3(scale3(outDir, 0.8), local)),
-              LAYER_RADIUS.screenshot
-            )
-          )
+        pos.set(
+          children[j].id,
+          add3(parentPos, scale3(normalize3(add3(scale3(outDir, 1.2), local)), LAYER_RADIUS.found_label)),
         );
       }
     }
-
-    return pos;
   }
 
-  // ── Scene init ────────────────────────────────────────────────────────────
-  async function initScene() {
-    THREE = await import("three");
-    const controlsMod = await import("three/addons/controls/OrbitControls.js") as {
-      OrbitControls: new (object: THREE_NS.Camera, domElement?: HTMLElement) => OrbitControlsType;
-    };
-    const OrbitControls = controlsMod.OrbitControls;
+  // ── Screenshot nodes — clustered near their parent EEG-point ────────────
+  const ssMap = new Map<string, GraphNode[]>();
+  for (const n of ns) {
+    if (n.kind !== "screenshot") continue;
+    const pid = n.parent_id ?? "query";
+    if (!ssMap.has(pid)) ssMap.set(pid, []);
+    ssMap.get(pid)?.push(n);
+  }
+  for (const [pid, children] of ssMap) {
+    const parentPos = pos.get(pid) ?? [0, 0, 0];
+    const outDir = normalize3(parentPos[0] === 0 && parentPos[1] === 0 && parentPos[2] === 0 ? [0, -1, 0] : parentPos);
+    for (let j = 0; j < children.length; j++) {
+      const local = fibSphere(j, Math.max(children.length, 3));
+      pos.set(
+        children[j].id,
+        add3(parentPos, scale3(normalize3(add3(scale3(outDir, 0.8), local)), LAYER_RADIUS.screenshot)),
+      );
+    }
+  }
+
+  return pos;
+}
+
+// ── Scene init ────────────────────────────────────────────────────────────
+async function initScene() {
+  THREE = await import("three");
+  const controlsMod = (await import("three/addons/controls/OrbitControls.js")) as {
+    OrbitControls: new (object: THREE_NS.Camera, domElement?: HTMLElement) => OrbitControlsType;
+  };
+  const OrbitControls = controlsMod.OrbitControls;
+  if (!container) return;
+
+  const w = container.clientWidth,
+    h = container.clientHeight;
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(w, h);
+  container.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 500);
+  camera.position.set(0, 8, 28);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(10, 20, 10);
+  scene.add(dir);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.5;
+
+  raycaster = new THREE.Raycaster();
+  raycaster.params.Points = { threshold: 0.5 };
+  mouse = new THREE.Vector2();
+
+  scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
+
+  buildGraph();
+  loaded = true;
+  animate();
+
+  // Attach click directly to the canvas so OrbitControls pointer-event
+  // handling doesn't interfere with event bubbling to the container div.
+  // Track pointer-down position; only treat as a click if the pointer
+  // moved less than 5 px (i.e. not a drag/orbit gesture).
+  let downX = 0,
+    downY = 0;
+  renderer.domElement.addEventListener(
+    "pointerdown",
+    (e: PointerEvent) => {
+      downX = e.clientX;
+      downY = e.clientY;
+    },
+    { passive: true },
+  );
+  canvasClickHandler = (e: MouseEvent) => {
+    const dx = e.clientX - downX,
+      dy = e.clientY - downY;
+    if (dx * dx + dy * dy > 25) return; // was a drag, ignore
+    onClick(e);
+  };
+  renderer.domElement.addEventListener("click", canvasClickHandler);
+
+  resizeObs = new ResizeObserver(() => {
     if (!container) return;
+    const w2 = container.clientWidth,
+      h2 = container.clientHeight;
+    camera.aspect = w2 / h2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w2, h2);
+  });
+  resizeObs.observe(container);
+}
 
-    const w = container.clientWidth, h = container.clientHeight;
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(w, h);
-    container.appendChild(renderer.domElement);
+function buildGraph() {
+  if (!THREE || !scene) return;
 
-    scene  = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(55, w/h, 0.1, 500);
-    camera.position.set(0, 8, 28);
+  // Clear previous
+  for (const ne of nodeEntries) {
+    ne.mesh.geometry.dispose();
+    ne.mesh.material.dispose();
+    scene.remove(ne.mesh);
+    if (ne.sprite) {
+      ne.sprite.material.map?.dispose();
+      ne.sprite.material.dispose();
+      scene.remove(ne.sprite);
+    }
+  }
+  for (const ee of edgeEntries) {
+    ee.line.geometry.dispose();
+    ee.line.material.dispose();
+    scene.remove(ee.line);
+  }
+  nodeEntries = [];
+  edgeEntries = [];
+  selectedNodeId = null;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-    dir.position.set(10, 20, 10);
-    scene.add(dir);
+  const positions = computePositions(nodes, usePca);
 
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping    = true;
-    controls.dampingFactor    = 0.07;
-    controls.autoRotate       = true;
-    controls.autoRotateSpeed  = 0.5;
+  // EEG time range
+  const eegTs = nodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null).map((n) => n.timestamp_unix!);
+  const tMin = eegTs.length ? Math.min(...eegTs) : 0;
+  const tMax = eegTs.length ? Math.max(...eegTs) : 1;
+  eegTimeMin = tMin;
+  eegTimeMax = tMax;
+  const tRange = tMax - tMin || 1;
 
-    raycaster = new THREE.Raycaster();
-    raycaster.params.Points = { threshold: 0.5 };
-    mouse = new THREE.Vector2();
+  function eegColor(ts: number | undefined): number {
+    if (ts == null || eegTs.length === 0) return KIND_COLOR.eeg_point;
+    return turboHex((ts - tMin) / tRange);
+  }
 
-    scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
+  // Max distances per edge kind for normalisation
+  const maxDist = new Map<string, number>();
+  for (const e of edges) {
+    const cur = maxDist.get(e.kind) ?? 0;
+    if (e.distance > cur) maxDist.set(e.kind, e.distance);
+  }
 
-    buildGraph();
-    loaded = true;
-    animate();
+  // ── Edges ────────────────────────────────────────────────────────────
+  for (const edge of edges) {
+    const fromPos = positions.get(edge.from_id);
+    const toPos = positions.get(edge.to_id);
+    if (!fromPos || !toPos) continue;
 
-    // Attach click directly to the canvas so OrbitControls pointer-event
-    // handling doesn't interfere with event bubbling to the container div.
-    // Track pointer-down position; only treat as a click if the pointer
-    // moved less than 5 px (i.e. not a drag/orbit gesture).
-    let downX = 0, downY = 0;
-    renderer.domElement.addEventListener("pointerdown", (e: PointerEvent) => {
-      downX = e.clientX; downY = e.clientY;
-    }, { passive: true });
-    canvasClickHandler = (e: MouseEvent) => {
-      const dx = e.clientX - downX, dy = e.clientY - downY;
-      if (dx * dx + dy * dy > 25) return;   // was a drag, ignore
-      onClick(e);
-    };
-    renderer.domElement.addEventListener("click", canvasClickHandler);
+    const mx = maxDist.get(edge.kind) || 1;
+    const norm = edge.distance / mx;
+    const opa = Math.max(0.08, 1 - norm * 0.8);
 
-    resizeObs = new ResizeObserver(() => {
-      if (!container) return;
-      const w2 = container.clientWidth, h2 = container.clientHeight;
-      camera.aspect = w2/h2;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w2, h2);
+    let edgeCol = EDGE_COLOR[edge.kind as keyof typeof EDGE_COLOR] ?? 0x888888;
+    if (edge.kind === "eeg_bridge") {
+      const toNode = nodes.find((n) => n.id === edge.to_id);
+      if (toNode?.kind === "eeg_point") edgeCol = eegColor(toNode.timestamp_unix);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setFromPoints([
+      new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
+      new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
+    ]);
+    const mat = new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: opa, linewidth: 1 });
+    const line = new THREE.Line(geo, mat);
+    scene.add(line);
+    edgeEntries.push({ line, fromId: edge.from_id, toId: edge.to_id, baseOpacity: opa });
+  }
+
+  // ── Nodes ────────────────────────────────────────────────────────────
+  for (const node of nodes) {
+    const pos = positions.get(node.id);
+    if (!pos) continue;
+
+    const radius = KIND_RADIUS[node.kind];
+    const color = node.kind === "eeg_point" ? eegColor(node.timestamp_unix) : KIND_COLOR[node.kind];
+    const emissive = BASE_EMISSIVE[node.kind];
+
+    const geo = new THREE.SphereGeometry(radius, 24, 16);
+    const mat = new THREE.MeshPhongMaterial({
+      color,
+      shininess: 90,
+      emissive: color,
+      emissiveIntensity: emissive,
+      transparent: true, // required so we can dim with opacity
+      opacity: 1.0,
     });
-    resizeObs.observe(container);
-  }
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(pos[0], pos[1], pos[2]);
+    scene.add(mesh);
 
-  function buildGraph() {
-    if (!THREE || !scene) return;
-
-    // Clear previous
-    for (const ne of nodeEntries) {
-      ne.mesh.geometry.dispose();
-      ne.mesh.material.dispose();
-      scene.remove(ne.mesh);
-      if (ne.sprite) { ne.sprite.material.map?.dispose(); ne.sprite.material.dispose(); scene.remove(ne.sprite); }
-    }
-    for (const ee of edgeEntries) {
-      ee.line.geometry.dispose(); ee.line.material.dispose(); scene.remove(ee.line);
-    }
-    nodeEntries = []; edgeEntries = [];
-    selectedNodeId = null;
-
-    const positions = computePositions(nodes, usePca);
-
-    // EEG time range
-    const eegTs = nodes.filter(n => n.kind==="eeg_point" && n.timestamp_unix!=null).map(n => n.timestamp_unix!);
-    const tMin  = eegTs.length ? Math.min(...eegTs) : 0;
-    const tMax  = eegTs.length ? Math.max(...eegTs) : 1;
-    eegTimeMin  = tMin;
-    eegTimeMax  = tMax;
-    const tRange = tMax - tMin || 1;
-
-    function eegColor(ts: number|undefined): number {
-      if (ts==null || eegTs.length===0) return KIND_COLOR.eeg_point;
-      return turboHex((ts - tMin) / tRange);
-    }
-
-    // Max distances per edge kind for normalisation
-    const maxDist = new Map<string, number>();
-    for (const e of edges) {
-      const cur = maxDist.get(e.kind) ?? 0;
-      if (e.distance > cur) maxDist.set(e.kind, e.distance);
-    }
-
-    // ── Edges ────────────────────────────────────────────────────────────
-    for (const edge of edges) {
-      const fromPos = positions.get(edge.from_id);
-      const toPos   = positions.get(edge.to_id);
-      if (!fromPos || !toPos) continue;
-
-      const mx   = maxDist.get(edge.kind) || 1;
-      const norm = edge.distance / mx;
-      const opa  = Math.max(0.08, 1 - norm * 0.8);
-
-      let edgeCol = EDGE_COLOR[edge.kind as keyof typeof EDGE_COLOR] ?? 0x888888;
-      if (edge.kind === "eeg_bridge") {
-        const toNode = nodes.find(n => n.id === edge.to_id);
-        if (toNode?.kind === "eeg_point") edgeCol = eegColor(toNode.timestamp_unix);
+    // Label sprite — text labels for most kinds, thumbnail for screenshots
+    let sprite: NodeSprite | null = null;
+    if (node.kind === "screenshot" && node.screenshot_url) {
+      sprite = makeScreenshotSprite(node.screenshot_url, node.text ?? "");
+      if (sprite) {
+        sprite.position.set(pos[0], pos[1] + radius + 2.0, pos[2]);
+        scene.add(sprite);
       }
-
-      const geo = new THREE.BufferGeometry();
-      geo.setFromPoints([
-        new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
-        new THREE.Vector3(toPos[0],   toPos[1],   toPos[2]),
-      ]);
-      const mat = new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: opa, linewidth: 1 });
-      const line = new THREE.Line(geo, mat);
-      scene.add(line);
-      edgeEntries.push({ line, fromId: edge.from_id, toId: edge.to_id, baseOpacity: opa });
-    }
-
-    // ── Nodes ────────────────────────────────────────────────────────────
-    for (const node of nodes) {
-      const pos = positions.get(node.id);
-      if (!pos) continue;
-
-      const radius   = KIND_RADIUS[node.kind];
-      const color    = node.kind === "eeg_point" ? eegColor(node.timestamp_unix) : KIND_COLOR[node.kind];
-      const emissive = BASE_EMISSIVE[node.kind];
-
-      const geo = new THREE.SphereGeometry(radius, 24, 16);
-      const mat = new THREE.MeshPhongMaterial({
-        color,
-        shininess:        90,
-        emissive:         color,
-        emissiveIntensity: emissive,
-        transparent:      true,   // required so we can dim with opacity
-        opacity:          1.0,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(pos[0], pos[1], pos[2]);
-      scene.add(mesh);
-
-      // Label sprite — text labels for most kinds, thumbnail for screenshots
-      let sprite: NodeSprite | null = null;
-      if (node.kind === "screenshot" && node.screenshot_url) {
-        sprite = makeScreenshotSprite(node.screenshot_url, node.text ?? "");
-        if (sprite) {
-          sprite.position.set(pos[0], pos[1] + radius + 2.0, pos[2]);
-          scene.add(sprite);
-        }
-      } else if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
-        sprite = makeTextSprite(node.text ?? "", color, node.kind);
-        if (sprite) {
-          sprite.position.set(pos[0], pos[1] + radius + 1.2, pos[2]);
-          scene.add(sprite);
-        }
+    } else if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
+      sprite = makeTextSprite(node.text ?? "", color, node.kind);
+      if (sprite) {
+        sprite.position.set(pos[0], pos[1] + radius + 1.2, pos[2]);
+        scene.add(sprite);
       }
-
-      nodeEntries.push({ mesh, sprite, node, baseColor: color, baseEmissive: emissive });
     }
+
+    nodeEntries.push({ mesh, sprite, node, baseColor: color, baseEmissive: emissive });
   }
+}
 
-  // ── Text sprite ───────────────────────────────────────────────────────────
-  function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): NodeSprite | null {
-    if (!text || !THREE) return null;
-    const W = 1024, H = 128;
-    const canvas = document.createElement("canvas");
-    canvas.width  = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d")!;
+// ── Text sprite ───────────────────────────────────────────────────────────
+function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): NodeSprite | null {
+  if (!text || !THREE) return null;
+  const W = 1024,
+    H = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
 
-    const r = (hexColor >> 16) & 0xff;
-    const g = (hexColor >> 8)  & 0xff;
-    const b =  hexColor        & 0xff;
+  const r = (hexColor >> 16) & 0xff;
+  const g = (hexColor >> 8) & 0xff;
+  const b = hexColor & 0xff;
 
-    ctx.fillStyle = `rgba(${r},${g},${b},0.12)`;
-    ctx.beginPath(); ctx.roundRect(8, 8, W-16, H-16, 24); ctx.fill();
-    ctx.strokeStyle = `rgba(${r},${g},${b},0.55)`;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.roundRect(8, 8, W-16, H-16, 24); ctx.stroke();
+  ctx.fillStyle = `rgba(${r},${g},${b},0.12)`;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, W - 16, H - 16, 24);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.55)`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, W - 16, H - 16, 24);
+  ctx.stroke();
 
-    const fontSize = kind === "query" ? 52 : kind === "text_label" ? 44 : 38;
-    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-    ctx.fillStyle = `rgba(${r},${g},${b},1.0)`;
+  const fontSize = kind === "query" ? 52 : kind === "text_label" ? 44 : 38;
+  ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = `rgba(${r},${g},${b},1.0)`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const maxW = W - 40;
+  let label = text;
+  while (ctx.measureText(label).width > maxW && label.length > 4) label = `${label.slice(0, -4)}…`;
+  ctx.fillText(label, W / 2, H / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  const sW = kind === "query" ? 9 : kind === "text_label" ? 7.5 : 6;
+  spr.scale.set(sW, sW * (H / W), 1);
+  return spr;
+}
+
+// ── Screenshot thumbnail sprite ─────────────────────────────────────────
+function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
+  if (!THREE) return null;
+  const W = 512,
+    H = 384;
+  // Start with a placeholder frame; the image loads asynchronously.
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  // Rounded frame background
+  ctx.fillStyle = "rgba(6,182,212,0.08)";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, H, 16);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(6,182,212,0.55)";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.roundRect(2, 2, W - 4, H - 4, 16);
+  ctx.stroke();
+  // Label at bottom
+  if (label) {
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(6,182,212,0.85)";
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const maxW = W - 40;
-    let label = text;
-    while (ctx.measureText(label).width > maxW && label.length > 4) label = label.slice(0,-4)+"…";
-    ctx.fillText(label, W/2, H/2);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
-    const spr = new THREE.Sprite(mat);
-    const sW = kind === "query" ? 9 : kind === "text_label" ? 7.5 : 6;
-    spr.scale.set(sW, sW*(H/W), 1);
-    return spr;
+    ctx.textBaseline = "bottom";
+    let lbl = label;
+    while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = `${lbl.slice(0, -4)}…`;
+    ctx.fillText(lbl, W / 2, H - 12);
   }
 
-  // ── Screenshot thumbnail sprite ─────────────────────────────────────────
-  function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
-    if (!THREE) return null;
-    const W = 512, H = 384;
-    // Start with a placeholder frame; the image loads asynchronously.
-    const canvas = document.createElement("canvas");
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d")!;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  const sW = 5.5;
+  spr.scale.set(sW, sW * (H / W), 1);
 
-    // Rounded frame background
+  // Load actual screenshot image asynchronously and repaint the canvas
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    const PAD = 12;
+    const LABEL_H = label ? 32 : 0;
+    const imgW = W - PAD * 2;
+    const imgH = H - PAD * 2 - LABEL_H;
+
+    // Clear and redraw frame
+    ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "rgba(6,182,212,0.08)";
-    ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(0, 0, W, H, 16);
+    ctx.fill();
     ctx.strokeStyle = "rgba(6,182,212,0.55)";
     ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 16); ctx.stroke();
-    // Label at bottom
+    ctx.beginPath();
+    ctx.roundRect(2, 2, W - 4, H - 4, 16);
+    ctx.stroke();
+
+    // Clip inner area and draw the image
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(PAD, PAD, imgW, imgH, 8);
+    ctx.clip();
+    ctx.drawImage(img, PAD, PAD, imgW, imgH);
+    ctx.restore();
+
+    // Re-draw label
     if (label) {
       ctx.font = "bold 22px system-ui, sans-serif";
       ctx.fillStyle = "rgba(6,182,212,0.85)";
-      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
       let lbl = label;
-      while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = lbl.slice(0, -4) + "…";
+      while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = `${lbl.slice(0, -4)}…`;
       ctx.fillText(lbl, W / 2, H - 12);
     }
 
-    const tex = new THREE.CanvasTexture(canvas);
     tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
-    const spr = new THREE.Sprite(mat);
-    const sW = 5.5;
-    spr.scale.set(sW, sW * (H / W), 1);
+  };
+  img.onerror = () => {
+    // On failure, draw a fallback "no image" indicator
+    ctx.font = "bold 28px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(6,182,212,0.35)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("(no image)", W / 2, H / 2);
+    tex.needsUpdate = true;
+  };
+  img.src = url;
 
-    // Load actual screenshot image asynchronously and repaint the canvas
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const PAD = 12;
-      const LABEL_H = label ? 32 : 0;
-      const imgW = W - PAD * 2;
-      const imgH = H - PAD * 2 - LABEL_H;
+  return spr;
+}
 
-      // Clear and redraw frame
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = "rgba(6,182,212,0.08)";
-      ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
-      ctx.strokeStyle = "rgba(6,182,212,0.55)";
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 16); ctx.stroke();
+// ── Selection / highlight ─────────────────────────────────────────────────
+function applySelection(nodeId: string | null) {
+  selectedNodeId = nodeId;
 
-      // Clip inner area and draw the image
-      ctx.save();
-      ctx.beginPath(); ctx.roundRect(PAD, PAD, imgW, imgH, 8); ctx.clip();
-      ctx.drawImage(img, PAD, PAD, imgW, imgH);
-      ctx.restore();
-
-      // Re-draw label
-      if (label) {
-        ctx.font = "bold 22px system-ui, sans-serif";
-        ctx.fillStyle = "rgba(6,182,212,0.85)";
-        ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-        let lbl = label;
-        while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = lbl.slice(0, -4) + "…";
-        ctx.fillText(lbl, W / 2, H - 12);
-      }
-
-      tex.needsUpdate = true;
-    };
-    img.onerror = () => {
-      // On failure, draw a fallback "no image" indicator
-      ctx.font = "bold 28px system-ui, sans-serif";
-      ctx.fillStyle = "rgba(6,182,212,0.35)";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText("(no image)", W / 2, H / 2);
-      tex.needsUpdate = true;
-    };
-    img.src = url;
-
-    return spr;
-  }
-
-  // ── Selection / highlight ─────────────────────────────────────────────────
-  function applySelection(nodeId: string | null) {
-    selectedNodeId = nodeId;
-
-    if (nodeId === null) {
-      // Reset everything
-      for (const ne of nodeEntries) {
-        ne.mesh.material.opacity          = 1.0;
-        ne.mesh.material.emissiveIntensity = ne.baseEmissive;
-        if (ne.sprite) ne.sprite.material.opacity = 1.0;
-      }
-      for (const ee of edgeEntries) {
-        ee.line.material.opacity = ee.baseOpacity;
-      }
-      if (controls) controls.autoRotate = true;
-      return;
-    }
-
-    // Build sets of connected nodes and edge indices
-    const connectedNodeIds = new Set<string>([nodeId]);
-    const connectedEdgeIdx = new Set<number>();
-    for (let i = 0; i < edgeEntries.length; i++) {
-      const ee = edgeEntries[i];
-      if (ee.fromId === nodeId || ee.toId === nodeId) {
-        connectedEdgeIdx.add(i);
-        connectedNodeIds.add(ee.fromId);
-        connectedNodeIds.add(ee.toId);
-      }
-    }
-
-    // Apply to nodes
+  if (nodeId === null) {
+    // Reset everything
     for (const ne of nodeEntries) {
-      const isSelected  = ne.node.id === nodeId;
-      const isNeighbor  = !isSelected && connectedNodeIds.has(ne.node.id);
-      const isDimmed    = !connectedNodeIds.has(ne.node.id);
-
-      if (isSelected) {
-        ne.mesh.material.opacity           = 1.0;
-        ne.mesh.material.emissiveIntensity = SEL_EMISSIVE;
-      } else if (isNeighbor) {
-        ne.mesh.material.opacity           = 1.0;
-        ne.mesh.material.emissiveIntensity = Math.min(0.9, ne.baseEmissive * NEIGHBOR_EMISSIVE_MULT);
-      } else {
-        ne.mesh.material.opacity           = DIM_OPACITY;
-        ne.mesh.material.emissiveIntensity = DIM_EMISSIVE;
-      }
-
-      if (ne.sprite) ne.sprite.material.opacity = isDimmed ? DIM_OPACITY * 0.8 : 1.0;
+      ne.mesh.material.opacity = 1.0;
+      ne.mesh.material.emissiveIntensity = ne.baseEmissive;
+      if (ne.sprite) ne.sprite.material.opacity = 1.0;
     }
-
-    // Apply to edges
-    for (let i = 0; i < edgeEntries.length; i++) {
-      const ee = edgeEntries[i];
-      if (connectedEdgeIdx.has(i)) {
-        ee.line.material.opacity = Math.min(1.0, ee.baseOpacity * EDGE_BRIGHT_MULT);
-      } else {
-        ee.line.material.opacity = DIM_EDGE_OPACITY;
-      }
+    for (const ee of edgeEntries) {
+      ee.line.material.opacity = ee.baseOpacity;
     }
-
-    if (controls) controls.autoRotate = false;
+    if (controls) controls.autoRotate = true;
+    return;
   }
 
-  // ── Raycasting helper ─────────────────────────────────────────────────────
-  function getHitNode(e: MouseEvent): NodeEntry | null {
-    if (!renderer || !container || !raycaster || !mouse) return null;
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
-    mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(nodeEntries.map(ne => ne.mesh));
-    if (!hits.length) return null;
-    return nodeEntries.find(ne => ne.mesh === hits[0].object) ?? null;
+  // Build sets of connected nodes and edge indices
+  const connectedNodeIds = new Set<string>([nodeId]);
+  const connectedEdgeIdx = new Set<number>();
+  for (let i = 0; i < edgeEntries.length; i++) {
+    const ee = edgeEntries[i];
+    if (ee.fromId === nodeId || ee.toId === nodeId) {
+      connectedEdgeIdx.add(i);
+      connectedNodeIds.add(ee.fromId);
+      connectedNodeIds.add(ee.toId);
+    }
   }
 
-  // ── Mouse move (hover tooltip + cursor) ───────────────────────────────────
-  function onMouseMove(e: MouseEvent) {
-    const hit = getHitNode(e);
-    hoveredNodeId = hit?.node.id ?? null;
+  // Apply to nodes
+  for (const ne of nodeEntries) {
+    const isSelected = ne.node.id === nodeId;
+    const isNeighbor = !isSelected && connectedNodeIds.has(ne.node.id);
+    const isDimmed = !connectedNodeIds.has(ne.node.id);
 
-    if (hit) {
-      const n = hit.node;
-      const kindLabel: Record<string, string> = {
-        query:       "Query",
-        text_label:  "Text label",
-        eeg_point:   "EEG point",
-        found_label: (usePca && n.proj_x !== undefined)
-          ? "Found label  (PCA-clustered)"
-          : "Found label",
-        screenshot:  "Screenshot",
-      };
-      const lines: string[] = [`${kindLabel[n.kind] ?? n.kind}`];
-      if (n.text)           lines.push(n.text.slice(0, 80));
-      if (n.timestamp_unix) lines.push(fmtDateTimeLocale(n.timestamp_unix));
-      if (n.distance > 0)   lines.push(`dist: ${n.distance.toFixed(4)}`);
-      if (selectedNodeId === null)
-        lines.push("click to highlight connections");
-      else if (selectedNodeId === n.id)
-        lines.push("click to deselect");
-      tooltip = { x: e.clientX, y: e.clientY - 10, lines };
+    if (isSelected) {
+      ne.mesh.material.opacity = 1.0;
+      ne.mesh.material.emissiveIntensity = SEL_EMISSIVE;
+    } else if (isNeighbor) {
+      ne.mesh.material.opacity = 1.0;
+      ne.mesh.material.emissiveIntensity = Math.min(0.9, ne.baseEmissive * NEIGHBOR_EMISSIVE_MULT);
     } else {
-      tooltip = null;
+      ne.mesh.material.opacity = DIM_OPACITY;
+      ne.mesh.material.emissiveIntensity = DIM_EMISSIVE;
+    }
+
+    if (ne.sprite) ne.sprite.material.opacity = isDimmed ? DIM_OPACITY * 0.8 : 1.0;
+  }
+
+  // Apply to edges
+  for (let i = 0; i < edgeEntries.length; i++) {
+    const ee = edgeEntries[i];
+    if (connectedEdgeIdx.has(i)) {
+      ee.line.material.opacity = Math.min(1.0, ee.baseOpacity * EDGE_BRIGHT_MULT);
+    } else {
+      ee.line.material.opacity = DIM_EDGE_OPACITY;
     }
   }
 
-  // ── Click (select / deselect) ─────────────────────────────────────────────
-  function onClick(e: MouseEvent) {
-    const hit = getHitNode(e);
-    if (!hit) {
-      // Click on empty space → deselect
-      if (selectedNodeId !== null) applySelection(null);
-      return;
-    }
-    // Click same node → deselect; click different node → select it
-    applySelection(hit.node.id === selectedNodeId ? null : hit.node.id);
+  if (controls) controls.autoRotate = false;
+}
+
+// ── Raycasting helper ─────────────────────────────────────────────────────
+function getHitNode(e: MouseEvent): NodeEntry | null {
+  if (!renderer || !container || !raycaster || !mouse) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(nodeEntries.map((ne) => ne.mesh));
+  if (!hits.length) return null;
+  return nodeEntries.find((ne) => ne.mesh === hits[0].object) ?? null;
+}
+
+// ── Mouse move (hover tooltip + cursor) ───────────────────────────────────
+function onMouseMove(e: MouseEvent) {
+  const hit = getHitNode(e);
+  hoveredNodeId = hit?.node.id ?? null;
+
+  if (hit) {
+    const n = hit.node;
+    const kindLabel: Record<string, string> = {
+      query: "Query",
+      text_label: "Text label",
+      eeg_point: "EEG point",
+      found_label: usePca && n.proj_x !== undefined ? "Found label  (PCA-clustered)" : "Found label",
+      screenshot: "Screenshot",
+    };
+    const lines: string[] = [`${kindLabel[n.kind] ?? n.kind}`];
+    if (n.text) lines.push(n.text.slice(0, 80));
+    if (n.timestamp_unix) lines.push(fmtDateTimeLocale(n.timestamp_unix));
+    if (n.distance > 0) lines.push(`dist: ${n.distance.toFixed(4)}`);
+    if (selectedNodeId === null) lines.push("click to highlight connections");
+    else if (selectedNodeId === n.id) lines.push("click to deselect");
+    tooltip = { x: e.clientX, y: e.clientY - 10, lines };
+  } else {
+    tooltip = null;
   }
+}
 
-  // ── Animation loop ────────────────────────────────────────────────────────
-  function animate() {
-    animId = requestAnimationFrame(animate);
-    controls?.update();
-    renderer?.render(scene, camera);
+// ── Click (select / deselect) ─────────────────────────────────────────────
+function onClick(e: MouseEvent) {
+  const hit = getHitNode(e);
+  if (!hit) {
+    // Click on empty space → deselect
+    if (selectedNodeId !== null) applySelection(null);
+    return;
   }
+  // Click same node → deselect; click different node → select it
+  applySelection(hit.node.id === selectedNodeId ? null : hit.node.id);
+}
 
-  // ── Reactivity on data change or PCA toggle ──────────────────────────────
-  $effect(() => {
-    const _n = nodes.length;
-    const _e = edges.length;
-    const _p = usePca; // also rebuild when the PCA toggle flips
-    if (!loaded || !THREE || (_n === 0 && _e === 0)) return;
-    buildGraph();
+// ── Animation loop ────────────────────────────────────────────────────────
+function animate() {
+  animId = requestAnimationFrame(animate);
+  controls?.update();
+  renderer?.render(scene, camera);
+}
+
+// ── Reactivity on data change or PCA toggle ──────────────────────────────
+$effect(() => {
+  const _n = nodes.length;
+  const _e = edges.length;
+  const _p = usePca; // also rebuild when the PCA toggle flips
+  if (!loaded || !THREE || (_n === 0 && _e === 0)) return;
+  buildGraph();
+});
+
+// ── Theme ─────────────────────────────────────────────────────────────────
+$effect(() => {
+  if (scene) scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
+});
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────
+onMount(() => {
+  initScene();
+});
+onDestroy(() => {
+  cancelAnimationFrame(animId);
+  resizeObs?.disconnect();
+  if (canvasClickHandler) renderer?.domElement?.removeEventListener("click", canvasClickHandler);
+  controls?.dispose();
+  renderer?.dispose();
+  if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);
+});
+
+// ── Legend helpers ────────────────────────────────────────────────────────
+// Recompute legend label for found_labels based on toggle + available data.
+const foundLabelLegend = $derived.by(() => {
+  const hasPCA = usePca && nodes.some((n) => n.kind === "found_label" && n.proj_x !== undefined);
+  return hasPCA ? "Found label (PCA)" : "Found label";
+});
+
+const LEGEND_BASE = [
+  { label: "Query", color: "#8b5cf6" },
+  { label: "Text match", color: "#3b82f6" },
+];
+const EDGE_LEGEND = [
+  { label: "Text sim", color: "#8b5cf6" },
+  { label: "EEG bridge", color: "#f59e0b" },
+  { label: "Time prox", color: "#10b981" },
+];
+
+const eegDots = $derived.by(() => {
+  const pts = nodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null).map((n) => n.timestamp_unix!);
+  if (!pts.length) return [] as { unix: number; t: number; css: string }[];
+  const mn = Math.min(...pts),
+    mx = Math.max(...pts),
+    range = mx - mn || 1;
+  return pts
+    .map((unix) => ({ unix, t: (unix - mn) / range, css: turboCss((unix - mn) / range) }))
+    .sort((a, b) => a.unix - b.unix);
+});
+
+const eegTicks = $derived.by(() => {
+  if (eegTimeMax <= eegTimeMin) return [];
+  return Array.from({ length: 5 }, (_, i) => {
+    const t = i / 4;
+    const unix = eegTimeMin + t * (eegTimeMax - eegTimeMin);
+    const d = new Date(unix * 1000);
+    return {
+      t,
+      label: d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+      css: turboCss(t),
+    };
   });
+});
 
-  // ── Theme ─────────────────────────────────────────────────────────────────
-  $effect(() => {
-    if (scene) scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
-  });
-
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-  onMount(() => { initScene(); });
-  onDestroy(() => {
-    cancelAnimationFrame(animId);
-    resizeObs?.disconnect();
-    if (canvasClickHandler) renderer?.domElement?.removeEventListener("click", canvasClickHandler);
-    controls?.dispose();
-    renderer?.dispose();
-    if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);
-  });
-
-  // ── Legend helpers ────────────────────────────────────────────────────────
-  // Recompute legend label for found_labels based on toggle + available data.
-  const foundLabelLegend = $derived.by(() => {
-    const hasPCA = usePca && nodes.some(n => n.kind === "found_label" && n.proj_x !== undefined);
-    return hasPCA ? "Found label (PCA)" : "Found label";
-  });
-
-  const LEGEND_BASE = [
-    { label: "Query",      color: "#8b5cf6" },
-    { label: "Text match", color: "#3b82f6" },
-  ];
-  const EDGE_LEGEND = [
-    { label: "Text sim",   color: "#8b5cf6" },
-    { label: "EEG bridge", color: "#f59e0b" },
-    { label: "Time prox",  color: "#10b981" },
-  ];
-
-  const eegDots = $derived.by(() => {
-    const pts = nodes.filter(n => n.kind==="eeg_point" && n.timestamp_unix!=null).map(n => n.timestamp_unix!);
-    if (!pts.length) return [] as { unix:number; t:number; css:string }[];
-    const mn = Math.min(...pts), mx = Math.max(...pts), range = mx-mn||1;
-    return pts.map(unix => ({ unix, t:(unix-mn)/range, css:turboCss((unix-mn)/range) })).sort((a,b)=>a.unix-b.unix);
-  });
-
-  const eegTicks = $derived.by(() => {
-    if (eegTimeMax <= eegTimeMin) return [];
-    return Array.from({ length:5 }, (_,i) => {
-      const t    = i/4;
-      const unix = eegTimeMin + t*(eegTimeMax-eegTimeMin);
-      const d    = new Date(unix*1000);
-      return {
-        t,
-        label: d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", hour12:false }),
-        css: turboCss(t),
-      };
-    });
-  });
-
-  function fmtTs(unix: number) {
-    if (!unix) return "—";
-    return fmtDateTimeLocale(unix);
-  }
+function fmtTs(unix: number) {
+  if (!unix) return "—";
+  return fmtDateTimeLocale(unix);
+}
 </script>
 
 <!-- Canvas container — click handled directly on renderer.domElement in initScene() -->

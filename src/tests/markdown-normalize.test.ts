@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { marked } from "marked";
+import { describe, expect, it } from "vitest";
 
 import { normalizeMarkdown } from "$lib/markdown-normalize";
 
@@ -43,18 +43,11 @@ describe("markdown normalization", () => {
       "I'll call the date tool.",
     ].join("\n");
 
-    expect(normalizeMarkdown(raw)).toBe([
-      "**Time Information:**",
-      "I'll call the date tool.",
-    ].join("\n"));
+    expect(normalizeMarkdown(raw)).toBe(["**Time Information:**", "I'll call the date tool."].join("\n"));
   });
 
   it("preserves closed json fences", () => {
-    const raw = [
-      "```json",
-      '{"time":"4:55"}',
-      "```",
-    ].join("\n");
+    const raw = ["```json", '{"time":"4:55"}', "```"].join("\n");
 
     expect(normalizeMarkdown(raw)).toBe(raw);
   });

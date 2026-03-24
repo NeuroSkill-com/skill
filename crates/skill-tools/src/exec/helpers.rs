@@ -8,7 +8,9 @@ pub fn resolve_tool_path(path: &str) -> std::path::PathBuf {
     let expanded = if path == "~" {
         dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"))
     } else if let Some(rest) = path.strip_prefix("~/") {
-        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/")).join(rest)
+        dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/"))
+            .join(rest)
     } else {
         std::path::PathBuf::from(path)
     };
@@ -16,7 +18,9 @@ pub fn resolve_tool_path(path: &str) -> std::path::PathBuf {
     if expanded.is_absolute() {
         expanded
     } else {
-        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/")).join(expanded)
+        dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/"))
+            .join(expanded)
     }
 }
 

@@ -14,11 +14,11 @@ pub use skill_screenshots::context::*;
 #[allow(unused_imports)]
 pub use skill_screenshots::ScreenshotConfig;
 
-use std::sync::Arc;
-use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
-use crate::{MutexExt, EmbedderState};
 use crate::AppStateExt;
+use crate::{EmbedderState, MutexExt};
+use serde_json::Value;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Bridges `tauri::AppHandle` + `AppState` to the `ScreenshotContext` trait.
 pub struct TauriScreenshotContext {
@@ -59,7 +59,11 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
         let mut guard = embedder.0.lock().ok()?;
         let te = guard.as_mut()?;
         let mut vecs = te.embed(vec![text], None).ok()?;
-        if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
+        if vecs.is_empty() {
+            None
+        } else {
+            Some(vecs.remove(0))
+        }
     }
 
     fn embed_image_via_llm(&self, png_bytes: &[u8]) -> Option<Vec<f32>> {
@@ -68,17 +72,27 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             let cell = {
                 let r = self.app.app_state();
                 let g = r.lock_or_recover();
-                { let __a = g.llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r }
+                {
+                    let __a = g.llm.clone();
+                    let __r = __a.lock_or_recover().state_cell.clone();
+                    __r
+                }
             };
             let state = cell.lock().ok()?.as_ref()?.clone();
-            if !state.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {
+            if !state
+                .vision_ready
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
                 return None;
             }
             let (tx, rx) = tokio::sync::oneshot::channel();
-            state.req_tx.send(crate::llm::InferRequest::EmbedImage {
-                bytes: png_bytes.to_vec(),
-                result_tx: tx,
-            }).ok()?;
+            state
+                .req_tx
+                .send(crate::llm::InferRequest::EmbedImage {
+                    bytes: png_bytes.to_vec(),
+                    result_tx: tx,
+                })
+                .ok()?;
             rx.blocking_recv().ok()?
         }
         #[cfg(not(feature = "llm"))]
@@ -94,18 +108,23 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             let cell = {
                 let r = self.app.app_state();
                 let g = r.lock_or_recover();
-                { let __a = g.llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r }
+                {
+                    let __a = g.llm.clone();
+                    let __r = __a.lock_or_recover().state_cell.clone();
+                    __r
+                }
             };
             let state = cell.lock().ok()?.as_ref()?.clone();
-            if !state.is_ready() || !state.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {
+            if !state.is_ready()
+                || !state
+                    .vision_ready
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            {
                 return None;
             }
 
             // Encode the image as a base64 data URL for the chat message.
-            let b64 = base64::Engine::encode(
-                &base64::engine::general_purpose::STANDARD,
-                png_bytes,
-            );
+            let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png_bytes);
             let data_url = format!("data:image/png;base64,{b64}");
 
             let messages = vec![
@@ -137,12 +156,15 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             };
 
             let (tok_tx, mut tok_rx) = tokio::sync::mpsc::unbounded_channel();
-            state.req_tx.send(crate::llm::InferRequest::Generate {
-                messages,
-                images,
-                params,
-                token_tx: tok_tx,
-            }).ok()?;
+            state
+                .req_tx
+                .send(crate::llm::InferRequest::Generate {
+                    messages,
+                    images,
+                    params,
+                    token_tx: tok_tx,
+                })
+                .ok()?;
 
             // Collect tokens synchronously (we're on the embed thread).
             let mut text = String::new();
@@ -155,7 +177,11 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             }
 
             let trimmed = text.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         }
         #[cfg(not(feature = "llm"))]
         {
@@ -163,6 +189,4 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             None
         }
     }
-
-
 }

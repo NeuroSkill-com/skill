@@ -16,61 +16,71 @@ the Free Software Foundation, version 3 only. -->
   All colours via theme.ts — no hex literals here.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { colorForLoad }       from "$lib/theme";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { colorForLoad } from "$lib/theme";
 
-  interface GpuStats { render: number; tiler: number; overall: number; }
+interface GpuStats {
+  render: number;
+  tiler: number;
+  overall: number;
+}
 
-  const MAX_PTS = 60; // 2 min at 2 s polling
-  const SW = 54;      // sparkline SVG width (px)
-  const SH = 14;      // sparkline SVG height (px)
+const MAX_PTS = 60; // 2 min at 2 s polling
+const SW = 54; // sparkline SVG width (px)
+const SH = 14; // sparkline SVG height (px)
 
-  let gpuStats = $state<GpuStats | null>(null);
-  let history  = $state<number[]>([]);
-  let timer:   ReturnType<typeof setInterval> | undefined;
+let gpuStats = $state<GpuStats | null>(null);
+let history = $state<number[]>([]);
+let timer: ReturnType<typeof setInterval> | undefined;
 
-  // ── Derived sparkline geometry ──────────────────────────────────────────────
-  const spark = $derived.by(() => {
-    if (history.length < 2) return null;
-    const n   = history.length;
-    const off = MAX_PTS - n; // align newest point to right edge
+// ── Derived sparkline geometry ──────────────────────────────────────────────
+const spark = $derived.by(() => {
+  if (history.length < 2) return null;
+  const n = history.length;
+  const off = MAX_PTS - n; // align newest point to right edge
 
-    const pts = history.map((v, i): [number, number] => [
-      ((off + i) / (MAX_PTS - 1)) * SW,
-      SH - v * SH * 0.88,          // 0.88 keeps the peak slightly below top edge
-    ]);
+  const pts = history.map((v, i): [number, number] => [
+    ((off + i) / (MAX_PTS - 1)) * SW,
+    SH - v * SH * 0.88, // 0.88 keeps the peak slightly below top edge
+  ]);
 
-    const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
 
-    const [x0, y0] = pts[0];
-    const [xE, ] = pts[n - 1];
-    const area =
-      `M ${x0.toFixed(1)},${SH} L ${x0.toFixed(1)},${y0.toFixed(1)} ` +
-      pts.slice(1).map(([x, y]) => `L ${x.toFixed(1)},${y.toFixed(1)}`).join(" ") +
-      ` L ${xE.toFixed(1)},${SH} Z`;
+  const [x0, y0] = pts[0];
+  const [xE] = pts[n - 1];
+  const area =
+    `M ${x0.toFixed(1)},${SH} L ${x0.toFixed(1)},${y0.toFixed(1)} ` +
+    pts
+      .slice(1)
+      .map(([x, y]) => `L ${x.toFixed(1)},${y.toFixed(1)}`)
+      .join(" ") +
+    ` L ${xE.toFixed(1)},${SH} Z`;
 
-    return { line, area };
-  });
+  return { line, area };
+});
 
-  const col = $derived(gpuStats ? colorForLoad(gpuStats.overall) : "#94a3b8");
+const col = $derived(gpuStats ? colorForLoad(gpuStats.overall) : "#94a3b8");
 
-  // ── Polling ─────────────────────────────────────────────────────────────────
-  async function poll() {
-    try {
-      const s = await invoke<GpuStats | null>("get_gpu_stats");
-      gpuStats = s;
-      if (s !== null) {
-        history = [...history.slice(-(MAX_PTS - 1)), s.overall];
-      }
-    } catch {
-      gpuStats = null;
-      clearInterval(timer); // command absent on this platform — stop silently
+// ── Polling ─────────────────────────────────────────────────────────────────
+async function poll() {
+  try {
+    const s = await invoke<GpuStats | null>("get_gpu_stats");
+    gpuStats = s;
+    if (s !== null) {
+      history = [...history.slice(-(MAX_PTS - 1)), s.overall];
     }
+  } catch {
+    gpuStats = null;
+    clearInterval(timer); // command absent on this platform — stop silently
   }
+}
 
-  onMount(() => { poll(); timer = setInterval(poll, 2000); });
-  onDestroy(() => clearInterval(timer));
+onMount(() => {
+  poll();
+  timer = setInterval(poll, 2000);
+});
+onDestroy(() => clearInterval(timer));
 </script>
 
 {#if gpuStats !== null}

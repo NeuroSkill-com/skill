@@ -7,34 +7,84 @@
  * Extracted from `routes/compare/+page.svelte`.
  */
 
-import { setupHiDpiCanvas } from "$lib/format";
 import { bandKeys, bandMeta, radarMetrics } from "$lib/compare-types";
-import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
+import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
+import { setupHiDpiCanvas } from "$lib/format";
 
 // ── Heatmap definitions ──────────────────────────────────────────────────────
 
 export const HM_BANDS_DEF = [
-  { key: "rd" as const, sym: "δ", lo: [20, 20, 50]  as [number,number,number], hi: [99,  102, 241] as [number,number,number] },
-  { key: "rt" as const, sym: "θ", lo: [25, 15, 55]  as [number,number,number], hi: [139,  92, 246] as [number,number,number] },
-  { key: "ra" as const, sym: "α", lo: [10, 40, 20]  as [number,number,number], hi: [34,  197,  94] as [number,number,number] },
-  { key: "rb" as const, sym: "β", lo: [10, 30, 60]  as [number,number,number], hi: [59,  130, 246] as [number,number,number] },
-  { key: "rg" as const, sym: "γ", lo: [55, 45, 10]  as [number,number,number], hi: [245, 158,  11] as [number,number,number] },
+  {
+    key: "rd" as const,
+    sym: "δ",
+    lo: [20, 20, 50] as [number, number, number],
+    hi: [99, 102, 241] as [number, number, number],
+  },
+  {
+    key: "rt" as const,
+    sym: "θ",
+    lo: [25, 15, 55] as [number, number, number],
+    hi: [139, 92, 246] as [number, number, number],
+  },
+  {
+    key: "ra" as const,
+    sym: "α",
+    lo: [10, 40, 20] as [number, number, number],
+    hi: [34, 197, 94] as [number, number, number],
+  },
+  {
+    key: "rb" as const,
+    sym: "β",
+    lo: [10, 30, 60] as [number, number, number],
+    hi: [59, 130, 246] as [number, number, number],
+  },
+  {
+    key: "rg" as const,
+    sym: "γ",
+    lo: [55, 45, 10] as [number, number, number],
+    hi: [245, 158, 11] as [number, number, number],
+  },
 ] as const;
 
 export const HM_SCORES_DEF = [
-  { key: "relaxation"  as const, sym: "Rlx", lo: [10, 45,  35] as [number,number,number], hi: [16,  185, 129] as [number,number,number] },
-  { key: "engagement"  as const, sym: "Eng", lo: [55, 45,  10] as [number,number,number], hi: [245, 158,  11] as [number,number,number] },
-  { key: "med"         as const, sym: "Med", lo: [35, 15,  70] as [number,number,number], hi: [139,  92, 246] as [number,number,number] },
-  { key: "cog"         as const, sym: "Cog", lo: [10, 35,  55] as [number,number,number], hi: [14,  165, 233] as [number,number,number] },
-  { key: "drow"        as const, sym: "Drw", lo: [55, 10,  10] as [number,number,number], hi: [239,  68,  68] as [number,number,number] },
+  {
+    key: "relaxation" as const,
+    sym: "Rlx",
+    lo: [10, 45, 35] as [number, number, number],
+    hi: [16, 185, 129] as [number, number, number],
+  },
+  {
+    key: "engagement" as const,
+    sym: "Eng",
+    lo: [55, 45, 10] as [number, number, number],
+    hi: [245, 158, 11] as [number, number, number],
+  },
+  {
+    key: "med" as const,
+    sym: "Med",
+    lo: [35, 15, 70] as [number, number, number],
+    hi: [139, 92, 246] as [number, number, number],
+  },
+  {
+    key: "cog" as const,
+    sym: "Cog",
+    lo: [10, 35, 55] as [number, number, number],
+    hi: [14, 165, 233] as [number, number, number],
+  },
+  {
+    key: "drow" as const,
+    sym: "Drw",
+    lo: [55, 10, 10] as [number, number, number],
+    hi: [239, 68, 68] as [number, number, number],
+  },
 ] as const;
 
-export const HEATMAP_ROW_H  = 14;
+export const HEATMAP_ROW_H = 14;
 export const HEATMAP_LABEL_W = 22;
 
 // ── Primitives ───────────────────────────────────────────────────────────────
 
-export function lerpRgba(lo: [number,number,number], hi: [number,number,number], t: number, alpha: number): string {
+export function lerpRgba(lo: [number, number, number], hi: [number, number, number], t: number, alpha: number): string {
   const r = Math.round(lo[0] + (hi[0] - lo[0]) * t);
   const g = Math.round(lo[1] + (hi[1] - lo[1]) * t);
   const b = Math.round(lo[2] + (hi[2] - lo[2]) * t);
@@ -75,11 +125,13 @@ export function drawSpectrum(canvas: HTMLCanvasElement, m: SessionMetrics, _labe
   const h = canvas.clientHeight;
   const ctx = setupHiDpiCanvas(canvas, w, h);
 
-  const vals = bandKeys.map(k => m[k] ?? 0);
+  const vals = bandKeys.map((k) => m[k] ?? 0);
   let sum = vals.reduce((a, b) => a + b, 0);
   if (sum < 1e-6) sum = 1;
 
-  const barY = 0, barH = h, r = 8;
+  const barY = 0,
+    barH = h,
+    r = 8;
   ctx.save();
   ctx.beginPath();
   roundRect(ctx, 0, barY, w, barH, r);
@@ -108,7 +160,7 @@ export function drawSpectrum(canvas: HTMLCanvasElement, m: SessionMetrics, _labe
       ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
       ctx.fillStyle = "#fff";
       ctx.globalAlpha = 0.95;
-      ctx.fillText(`${bandMeta[i].sym} ${Math.round(vals[i] / sum * 100)}%`, x + segW / 2, barH / 2);
+      ctx.fillText(`${bandMeta[i].sym} ${Math.round((vals[i] / sum) * 100)}%`, x + segW / 2, barH / 2);
     }
     x += segW;
   }
@@ -122,18 +174,21 @@ export function drawDiffChart(canvas: HTMLCanvasElement, a: SessionMetrics, b: S
   const h = canvas.clientHeight;
   const ctx = setupHiDpiCanvas(canvas, w, h);
 
-  const ml = 4, mr = 4, mt = 14, mb = 16;
+  const ml = 4,
+    mr = 4,
+    mt = 14,
+    mb = 16;
   const cw = w - ml - mr;
   const ch = h - mt - mb;
 
-  const valsA = bandKeys.map(k => a[k] ?? 0);
-  const valsB = bandKeys.map(k => b[k] ?? 0);
+  const valsA = bandKeys.map((k) => a[k] ?? 0);
+  const valsB = bandKeys.map((k) => b[k] ?? 0);
   const maxVal = Math.max(...valsA, ...valsB, 0.01);
 
   const nBands = 5;
   const groupW = cw / nBands;
-  const barW   = groupW * 0.32;
-  const gap    = groupW * 0.06;
+  const barW = groupW * 0.32;
+  const gap = groupW * 0.06;
 
   for (let i = 0; i < nBands; i++) {
     const gx = ml + i * groupW;
@@ -173,7 +228,8 @@ export function drawRadar(canvas: HTMLCanvasElement, a: SessionMetrics, b: Sessi
   const h = canvas.clientHeight;
   const ctx = setupHiDpiCanvas(canvas, w, h);
 
-  const cx = w / 2, cy = h / 2;
+  const cx = w / 2,
+    cy = h / 2;
   const radius = Math.min(cx, cy) - 28;
   const n = radarMetrics.length;
   const angleStep = (Math.PI * 2) / n;
@@ -186,7 +242,8 @@ export function drawRadar(canvas: HTMLCanvasElement, a: SessionMetrics, b: Sessi
       const angle = i * angleStep - Math.PI / 2;
       const x = cx + Math.cos(angle) * r;
       const y = cy + Math.sin(angle) * r;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
     ctx.strokeStyle = "rgba(128,128,128,0.12)";
     ctx.lineWidth = 0.5;
@@ -224,7 +281,8 @@ export function drawRadar(canvas: HTMLCanvasElement, a: SessionMetrics, b: Sessi
       const r = (Math.min(val, radarMetrics[i].max) / radarMetrics[i].max) * radius;
       const x = cx + Math.cos(angle) * r;
       const y = cy + Math.sin(angle) * r;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
     ctx.closePath();
     ctx.fillStyle = color;
@@ -261,21 +319,21 @@ export function drawBandHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark:
   if (!canvas || ts.length < 2) return;
   const rows = HM_BANDS_DEF;
   const nRows = rows.length;
-  const cssH  = HEATMAP_ROW_H * nRows;
-  const cssW  = canvas.clientWidth;
+  const cssH = HEATMAP_ROW_H * nRows;
+  const cssW = canvas.clientWidth;
   if (cssW <= 0) return;
 
   const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
   ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
   ctx.fillRect(0, 0, cssW, cssH);
 
-  const plotW  = cssW - HEATMAP_LABEL_W;
-  const nCols  = ts.length;
-  const colW   = plotW / nCols;
+  const plotW = cssW - HEATMAP_LABEL_W;
+  const nCols = ts.length;
+  const colW = plotW / nCols;
 
   for (let ri = 0; ri < nRows; ri++) {
     const { key, sym, lo, hi } = rows[ri];
-    const vals = ts.map(r => r[key] as number);
+    const vals = ts.map((r) => r[key] as number);
     const vMin = Math.min(...vals);
     const vMax = Math.max(...vals);
     const vRange = vMax - vMin || 1;
@@ -302,10 +360,10 @@ export function drawBandHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark:
 
 export function drawScoreHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark: boolean) {
   if (!canvas || ts.length < 2) return;
-  const rows  = HM_SCORES_DEF;
+  const rows = HM_SCORES_DEF;
   const nRows = rows.length;
-  const cssH  = HEATMAP_ROW_H * nRows;
-  const cssW  = canvas.clientWidth;
+  const cssH = HEATMAP_ROW_H * nRows;
+  const cssW = canvas.clientWidth;
   if (cssW <= 0) return;
 
   const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
@@ -314,11 +372,11 @@ export function drawScoreHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark
 
   const plotW = cssW - HEATMAP_LABEL_W;
   const nCols = ts.length;
-  const colW  = plotW / nCols;
+  const colW = plotW / nCols;
 
   for (let ri = 0; ri < nRows; ri++) {
     const { key, sym, lo, hi } = rows[ri];
-    const vals = ts.map(r => r[key] as number);
+    const vals = ts.map((r) => r[key] as number);
     const vMin = Math.min(...vals);
     const vMax = Math.max(...vals);
     const vRange = vMax - vMin || 1;
@@ -345,10 +403,10 @@ export function drawScoreHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark
 
 export function drawBandDiffHeatmap(canvas: HTMLCanvasElement, tsA: EpochRow[], tsB: EpochRow[], dark: boolean) {
   if (!canvas || tsA.length < 2 || tsB.length < 2) return;
-  const rows  = HM_BANDS_DEF;
+  const rows = HM_BANDS_DEF;
   const nRows = rows.length;
-  const cssH  = HEATMAP_ROW_H * nRows + 12;
-  const cssW  = canvas.clientWidth;
+  const cssH = HEATMAP_ROW_H * nRows + 12;
+  const cssW = canvas.clientWidth;
   if (cssW <= 0) return;
 
   const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
@@ -356,18 +414,18 @@ export function drawBandDiffHeatmap(canvas: HTMLCanvasElement, tsA: EpochRow[], 
   ctx.fillRect(0, 0, cssW, cssH);
 
   const nDisplay = Math.min(Math.max(tsA.length, tsB.length), 400);
-  const plotW    = cssW - HEATMAP_LABEL_W;
-  const colW     = plotW / nDisplay;
+  const plotW = cssW - HEATMAP_LABEL_W;
+  const colW = plotW / nDisplay;
 
   function sampleIdx(tsLen: number, col: number): number {
-    return Math.min(Math.round(col / (nDisplay - 1) * (tsLen - 1)), tsLen - 1);
+    return Math.min(Math.round((col / (nDisplay - 1)) * (tsLen - 1)), tsLen - 1);
   }
 
-  const BLUE_LO:  [number,number,number] = [10,  50, 200];
-  const BLUE_MID: [number,number,number] = [40,  80, 160];
-  const NEUTRAL:  [number,number,number] = dark ? [18, 18, 28] : [230, 230, 242];
-  const RED_MID:  [number,number,number] = [160, 40,  40];
-  const RED_HI:   [number,number,number] = [220, 30,  30];
+  const BLUE_LO: [number, number, number] = [10, 50, 200];
+  const BLUE_MID: [number, number, number] = [40, 80, 160];
+  const NEUTRAL: [number, number, number] = dark ? [18, 18, 28] : [230, 230, 242];
+  const RED_MID: [number, number, number] = [160, 40, 40];
+  const RED_HI: [number, number, number] = [220, 30, 30];
 
   function diffColor(d: number): string {
     const absD = Math.abs(d);
@@ -414,7 +472,7 @@ export function drawBandDiffHeatmap(canvas: HTMLCanvasElement, tsA: EpochRow[], 
   // Legend bar
   const legendY = nRows * HEATMAP_ROW_H + 2;
   const legendH = 6;
-  const nStops  = 80;
+  const nStops = 80;
   const sw = plotW / nStops;
   for (let i = 0; i < nStops; i++) {
     const d = (i / (nStops - 1)) * 2 - 1;

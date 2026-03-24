@@ -51,7 +51,11 @@
     "bench:screenshot": "cargo run --release -p skill-screenshots --bin image_encode_bench",
     "tag": "node scripts/tag.js",
     "test:smoke": "bash scripts/smoke-test.sh",
-    "clean:rust": "node scripts/clean-rust.js"
+    "clean:rust": "node scripts/clean-rust.js",
+    "lint": "npx biome check src/ scripts/",
+    "lint:fix": "npx biome check --write src/ scripts/",
+    "format": "npx biome format --write src/ scripts/",
+    "format:check": "npx biome format src/ scripts/"
   },
   "license": "GPL-3.0-only",
   "dependencies": {
@@ -75,6 +79,7 @@
     "three": "^0.183.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.9.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

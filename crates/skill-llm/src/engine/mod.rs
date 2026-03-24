@@ -45,37 +45,31 @@ pub mod logging;
 pub mod protocol;
 pub mod state;
 
-mod think_tracker;
-pub mod images;
-pub mod tool_orchestration;
-mod sampling;
-mod generation;
 mod actor;
+mod generation;
+pub mod images;
 mod init;
+mod sampling;
+mod think_tracker;
+pub mod tool_orchestration;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 // Preserve the flat `crate::engine::Foo` API so existing imports keep working.
 
-pub use logging::{
-    LlmLogEntry, LlmLogBuffer, LlmLogFile,
-    new_log_buffer, push_log, unix_ts_ms,
-};
+pub use logging::{new_log_buffer, push_log, unix_ts_ms, LlmLogBuffer, LlmLogEntry, LlmLogFile};
 
 pub use protocol::{
-    InferRequest, InferToken, GenParams,
-    ChatRequest, CompletionRequest, EmbeddingsRequest,
+    ChatRequest, CompletionRequest, EmbeddingsRequest, GenParams, InferRequest, InferToken,
 };
 
 pub use state::{
-    LlmServerState, LlmStateCell, LlmStatus,
-    new_state_cell, shutdown_cell, cell_status,
+    cell_status, new_state_cell, shutdown_cell, LlmServerState, LlmStateCell, LlmStatus,
 };
 
 pub use images::extract_images_from_messages;
 
 pub use tool_orchestration::{
-    BeforeToolCallFn, AfterToolCallFn, ToolEvent,
-    run_chat_with_builtin_tools,
+    run_chat_with_builtin_tools, AfterToolCallFn, BeforeToolCallFn, ToolEvent,
 };
 
 pub use init::init;

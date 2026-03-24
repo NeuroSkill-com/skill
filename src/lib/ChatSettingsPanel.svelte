@@ -2,47 +2,48 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat settings panel — system prompt, EEG context, thinking level, generation params. -->
 <script lang="ts">
-  import { tick } from "svelte";
-  import { t }    from "$lib/i18n/index.svelte";
-  import {
-    SYSTEM_PROMPT_DEFAULT, SYSTEM_PROMPT_PRESETS,
-    THINKING_LEVELS,
-    type ThinkingLevel,
-    type BandSnapshot,
-  } from "$lib/chat-types";
+import { tick } from "svelte";
+import {
+  type BandSnapshot,
+  SYSTEM_PROMPT_DEFAULT,
+  SYSTEM_PROMPT_PRESETS,
+  THINKING_LEVELS,
+  type ThinkingLevel,
+} from "$lib/chat-types";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Props {
-    systemPrompt:  string;
-    eegContext:    boolean;
-    latestBands:   BandSnapshot | null;
-    thinkingLevel: ThinkingLevel;
-    temperature:   number;
-    maxTokens:     number;
-    topK:          number;
-    topP:          number;
-  }
+interface Props {
+  systemPrompt: string;
+  eegContext: boolean;
+  latestBands: BandSnapshot | null;
+  thinkingLevel: ThinkingLevel;
+  temperature: number;
+  maxTokens: number;
+  topK: number;
+  topP: number;
+}
 
-  let {
-    systemPrompt  = $bindable(),
-    eegContext    = $bindable(),
-    latestBands,
-    thinkingLevel = $bindable(),
-    temperature   = $bindable(),
-    maxTokens     = $bindable(),
-    topK          = $bindable(),
-    topP          = $bindable(),
-  }: Props = $props();
+let {
+  systemPrompt = $bindable(),
+  eegContext = $bindable(),
+  latestBands,
+  thinkingLevel = $bindable(),
+  temperature = $bindable(),
+  maxTokens = $bindable(),
+  topK = $bindable(),
+  topP = $bindable(),
+}: Props = $props();
 
-  let systemPromptEl = $state<HTMLTextAreaElement | null>(null);
+let systemPromptEl = $state<HTMLTextAreaElement | null>(null);
 
-  const isDefaultPrompt = $derived(systemPrompt.trim() === SYSTEM_PROMPT_DEFAULT.trim());
+const isDefaultPrompt = $derived(systemPrompt.trim() === SYSTEM_PROMPT_DEFAULT.trim());
 
-  function applyPreset(prompt: string) {
-    systemPrompt = prompt;
-    tick().then(() => systemPromptEl?.focus());
-  }
+function applyPreset(prompt: string) {
+  systemPrompt = prompt;
+  tick().then(() => systemPromptEl?.focus());
+}
 
-  const eegActive = $derived(eegContext && latestBands !== null);
+const eegActive = $derived(eegContext && latestBands !== null);
 </script>
 
 <div class="flex-1 min-h-0 overflow-y-auto

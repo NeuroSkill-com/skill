@@ -81,10 +81,7 @@ pub enum JobPollResult {
     },
     /// Job failed.
     #[serde(rename = "error")]
-    Error {
-        job_id: u64,
-        error: String,
-    },
+    Error { job_id: u64, error: String },
     /// Job ID not found (expired or invalid).
     #[serde(rename = "not_found")]
     NotFound { job_id: u64 },
@@ -95,32 +92,32 @@ pub enum JobPollResult {
 type JobFn = Box<dyn FnOnce() -> Result<serde_json::Value, String> + Send + 'static>;
 
 struct PendingJob {
-    id:            u64,
-    work:          JobFn,
-    estimated_ms:  u64,
+    id: u64,
+    work: JobFn,
+    estimated_ms: u64,
 }
 
 struct CompletedJob {
-    result:     Result<serde_json::Value, String>,
+    result: Result<serde_json::Value, String>,
     elapsed_ms: u64,
-    completed:  Instant,
+    completed: Instant,
 }
 
 struct Inner {
-    queue:       VecDeque<PendingJob>,
-    next_id:     u64,
+    queue: VecDeque<PendingJob>,
+    next_id: u64,
     /// Average job duration (EMA) for time estimation.
-    avg_job_ms:  f64,
+    avg_job_ms: f64,
     /// The job currently being executed (popped from queue, not yet in results).
-    running_id:  Option<u64>,
+    running_id: Option<u64>,
 }
 
 /// Thread-safe job queue.  Create one at app startup and share via Tauri state.
 pub struct JobQueue {
-    inner:    Mutex<Inner>,
-    results:  Arc<Mutex<HashMap<u64, CompletedJob>>>,
+    inner: Mutex<Inner>,
+    results: Arc<Mutex<HashMap<u64, CompletedJob>>>,
     progress: Arc<Mutex<HashMap<u64, JobProgress>>>,
-    condvar:  Condvar,
+    condvar: Condvar,
 }
 
 impl JobQueue {
@@ -128,14 +125,14 @@ impl JobQueue {
     pub fn new() -> Arc<Self> {
         let q = Arc::new(Self {
             inner: Mutex::new(Inner {
-                queue:      VecDeque::new(),
-                next_id:    1,
+                queue: VecDeque::new(),
+                next_id: 1,
                 avg_job_ms: 5_000.0, // initial estimate: 5 s
                 running_id: None,
             }),
-            results:  Arc::new(Mutex::new(HashMap::new())),
+            results: Arc::new(Mutex::new(HashMap::new())),
             progress: Arc::new(Mutex::new(HashMap::new())),
-            condvar:  Condvar::new(),
+            condvar: Condvar::new(),
         });
 
         // Spawn the worker thread.
@@ -290,7 +287,12 @@ impl JobQueue {
         }
 
         if let Some(pos) = inner.queue.iter().position(|j| j.id == job_id) {
-            let ahead_ms: u64 = inner.queue.iter().take(pos + 1).map(|j| j.estimated_ms).sum();
+            let ahead_ms: u64 = inner
+                .queue
+                .iter()
+                .take(pos + 1)
+                .map(|j| j.estimated_ms)
+                .sum();
             return JobPollResult::Pending {
                 job_id,
                 queue_position: pos,
@@ -308,9 +310,14 @@ impl JobQueue {
             let job = {
                 let mut inner = self.inner.lock_or_recover();
                 while inner.queue.is_empty() {
-                    inner = self.condvar.wait(inner).unwrap_or_else(std::sync::PoisonError::into_inner);
+                    inner = self
+                        .condvar
+                        .wait(inner)
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
-                let Some(job) = inner.queue.pop_front() else { continue };
+                let Some(job) = inner.queue.pop_front() else {
+                    continue;
+                };
                 inner.running_id = Some(job.id);
                 job
             };
@@ -333,11 +340,14 @@ impl JobQueue {
             {
                 self.progress.lock_or_recover().remove(&job.id);
                 let mut map = self.results.lock_or_recover();
-                map.insert(job.id, CompletedJob {
-                    result,
-                    elapsed_ms,
-                    completed: Instant::now(),
-                });
+                map.insert(
+                    job.id,
+                    CompletedJob {
+                        result,
+                        elapsed_ms,
+                        completed: Instant::now(),
+                    },
+                );
             }
         }
     }
@@ -352,7 +362,7 @@ mod tests {
     fn stats_empty_queue() {
         let q = JobQueue::new();
         let s = q.stats();
-        assert_eq!(s["queued"].as_u64(),   Some(0));
+        assert_eq!(s["queued"].as_u64(), Some(0));
         assert_eq!(s["running"].as_bool(), Some(false));
         assert_eq!(s["total_active"].as_u64(), Some(0));
         assert_eq!(s["est_secs"].as_u64(), Some(0));
@@ -373,8 +383,8 @@ mod tests {
     #[test]
     fn est_secs_rounds_up() {
         let ceil = |ms: u64| ms.div_ceil(1000);
-        assert_eq!(ceil(0),    0);
-        assert_eq!(ceil(1),    1);
+        assert_eq!(ceil(0), 0);
+        assert_eq!(ceil(1), 1);
         assert_eq!(ceil(1000), 1);
         assert_eq!(ceil(1001), 2);
         assert_eq!(ceil(5000), 5);

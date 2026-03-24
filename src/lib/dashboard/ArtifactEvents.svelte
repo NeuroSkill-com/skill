@@ -5,12 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import MetricTooltip from "./MetricTooltip.svelte";
-  import CollapsibleSection from "./CollapsibleSection.svelte";
-  import MetricBar from "./MetricBar.svelte";
-  interface Props { blinkCount: number; blinkRate: number; }
-  let { blinkCount, blinkRate }: Props = $props();
+import { t } from "$lib/i18n/index.svelte";
+import CollapsibleSection from "./CollapsibleSection.svelte";
+import MetricBar from "./MetricBar.svelte";
+import MetricTooltip from "./MetricTooltip.svelte";
+
+interface Props {
+  blinkCount: number;
+  blinkRate: number;
+}
+let { blinkCount, blinkRate }: Props = $props();
 </script>
 
 <CollapsibleSection title={t("dashboard.artifacts")} dotColor="text-pink-500">

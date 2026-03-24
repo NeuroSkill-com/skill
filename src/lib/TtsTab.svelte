@@ -6,236 +6,398 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Settings tab — Voice (TTS) -->
 <script lang="ts">
-  import { onMount, onDestroy }       from "svelte";
-  import { fade }                     from "svelte/transition";
-  import { invoke }                   from "@tauri-apps/api/core";
-  import { listen, emit, type UnlistenFn } from "@tauri-apps/api/event";
-  import { Card, CardContent }        from "$lib/components/ui/card";
-  import TtsTestWidget                from "$lib/help/TtsTestWidget.svelte";
-  import { t }                        from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { fade } from "svelte/transition";
+import { Card, CardContent } from "$lib/components/ui/card";
+import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
-  interface NeuttsConfig {
-    enabled:       boolean;
-    backbone_repo: string;
-    gguf_file:     string;
-    voice_preset:  string;   // "jo"|"dave"|"greta"|"juliette"|"mateo"|""
-    ref_wav_path:  string;
-    ref_text:      string;
-  }
+interface NeuttsConfig {
+  enabled: boolean;
+  backbone_repo: string;
+  gguf_file: string;
+  voice_preset: string; // "jo"|"dave"|"greta"|"juliette"|"mateo"|""
+  ref_wav_path: string;
+  ref_text: string;
+}
 
-  interface LogConfig {
-    embedder: boolean; bluetooth: boolean; websocket: boolean;
-    csv: boolean; filter: boolean; bands: boolean; tts: boolean;
-    llm: boolean; chat_store: boolean; history: boolean; hooks: boolean;
-  }
+interface LogConfig {
+  embedder: boolean;
+  bluetooth: boolean;
+  websocket: boolean;
+  csv: boolean;
+  filter: boolean;
+  bands: boolean;
+  tts: boolean;
+  llm: boolean;
+  chat_store: boolean;
+  history: boolean;
+  hooks: boolean;
+}
 
-  type TtsProgress = { phase: "step" | "ready" | "unloaded" | "error"; step: number; total: number; label: string };
+type TtsProgress = { phase: "step" | "ready" | "unloaded" | "error"; step: number; total: number; label: string };
 
-  // ── Backbone model registry ────────────────────────────────────────────────
+// ── Backbone model registry ────────────────────────────────────────────────
 
-  interface BackboneModel {
-    repo: string; name: string; language: string;
-    size_mb: number; recommended: boolean; pros: string; cons: string;
-  }
+interface BackboneModel {
+  repo: string;
+  name: string;
+  language: string;
+  size_mb: number;
+  recommended: boolean;
+  pros: string;
+  cons: string;
+}
 
-  const BACKBONE_MODELS: BackboneModel[] = [
-    // English
-    { repo: "neuphonic/neutts-nano-q4-gguf",         name: "Nano Q4",        language: "en-us", size_mb: 135,  recommended: true,  pros: "Fast · small · low RAM",                 cons: "Slightly lower quality than Q8"      },
-    { repo: "neuphonic/neutts-nano-q8-gguf",         name: "Nano Q8",        language: "en-us", size_mb: 230,  recommended: false, pros: "Better quality than Q4",                 cons: "2× larger; ~500 MB RAM"              },
-    { repo: "neuphonic/neutts-nano",                 name: "Nano fp16",      language: "en-us", size_mb: 430,  recommended: false, pros: "Reference Nano quality",                 cons: "Slowest; needs FP16 llama.cpp"        },
-    { repo: "neuphonic/neutts-air-q4-gguf",          name: "Air Q4",         language: "en-us", size_mb: 430,  recommended: false, pros: "Richer prosody · voice cloning",         cons: "3× heavier; ~900 MB RAM"             },
-    { repo: "neuphonic/neutts-air-q8-gguf",          name: "Air Q8",         language: "en-us", size_mb: 820,  recommended: false, pros: "Near-lossless for 0.7B model",           cons: "~820 MB; ~1.5 GB RAM"                },
-    { repo: "neuphonic/neutts-air",                  name: "Air fp16",       language: "en-us", size_mb: 1450, recommended: false, pros: "Highest English quality",                cons: "Very large; slow on CPU"             },
-    // German
-    { repo: "neuphonic/neutts-nano-german-q4-gguf",  name: "Nano German Q4", language: "de",    size_mb: 135,  recommended: true,  pros: "Fast German TTS",                        cons: "Q4 quantisation"                     },
-    { repo: "neuphonic/neutts-nano-german-q8-gguf",  name: "Nano German Q8", language: "de",    size_mb: 230,  recommended: false, pros: "Better German quality",                  cons: "2× larger"                           },
-    { repo: "neuphonic/neutts-nano-german",          name: "Nano German fp16",language: "de",   size_mb: 430,  recommended: false, pros: "Reference German quality",               cons: "Largest; needs FP16"                 },
-    // French
-    { repo: "neuphonic/neutts-nano-french-q4-gguf",  name: "Nano French Q4", language: "fr-fr", size_mb: 135,  recommended: true,  pros: "Fast French TTS",                        cons: "Q4 quantisation"                     },
-    { repo: "neuphonic/neutts-nano-french-q8-gguf",  name: "Nano French Q8", language: "fr-fr", size_mb: 230,  recommended: false, pros: "Better French quality",                  cons: "2× larger"                           },
-    { repo: "neuphonic/neutts-nano-french",          name: "Nano French fp16",language: "fr-fr", size_mb: 430, recommended: false, pros: "Reference French quality",               cons: "Largest; needs FP16"                 },
-    // Spanish
-    { repo: "neuphonic/neutts-nano-spanish-q4-gguf", name: "Nano Spanish Q4",language: "es",    size_mb: 135,  recommended: true,  pros: "Fast Spanish TTS",                       cons: "Q4 quantisation"                     },
-    { repo: "neuphonic/neutts-nano-spanish-q8-gguf", name: "Nano Spanish Q8",language: "es",    size_mb: 230,  recommended: false, pros: "Better Spanish quality",                 cons: "2× larger"                           },
-    { repo: "neuphonic/neutts-nano-spanish",         name: "Nano Spanish fp16",language: "es",  size_mb: 430,  recommended: false, pros: "Reference Spanish quality",              cons: "Largest; needs FP16"                 },
-  ];
+const BACKBONE_MODELS: BackboneModel[] = [
+  // English
+  {
+    repo: "neuphonic/neutts-nano-q4-gguf",
+    name: "Nano Q4",
+    language: "en-us",
+    size_mb: 135,
+    recommended: true,
+    pros: "Fast · small · low RAM",
+    cons: "Slightly lower quality than Q8",
+  },
+  {
+    repo: "neuphonic/neutts-nano-q8-gguf",
+    name: "Nano Q8",
+    language: "en-us",
+    size_mb: 230,
+    recommended: false,
+    pros: "Better quality than Q4",
+    cons: "2× larger; ~500 MB RAM",
+  },
+  {
+    repo: "neuphonic/neutts-nano",
+    name: "Nano fp16",
+    language: "en-us",
+    size_mb: 430,
+    recommended: false,
+    pros: "Reference Nano quality",
+    cons: "Slowest; needs FP16 llama.cpp",
+  },
+  {
+    repo: "neuphonic/neutts-air-q4-gguf",
+    name: "Air Q4",
+    language: "en-us",
+    size_mb: 430,
+    recommended: false,
+    pros: "Richer prosody · voice cloning",
+    cons: "3× heavier; ~900 MB RAM",
+  },
+  {
+    repo: "neuphonic/neutts-air-q8-gguf",
+    name: "Air Q8",
+    language: "en-us",
+    size_mb: 820,
+    recommended: false,
+    pros: "Near-lossless for 0.7B model",
+    cons: "~820 MB; ~1.5 GB RAM",
+  },
+  {
+    repo: "neuphonic/neutts-air",
+    name: "Air fp16",
+    language: "en-us",
+    size_mb: 1450,
+    recommended: false,
+    pros: "Highest English quality",
+    cons: "Very large; slow on CPU",
+  },
+  // German
+  {
+    repo: "neuphonic/neutts-nano-german-q4-gguf",
+    name: "Nano German Q4",
+    language: "de",
+    size_mb: 135,
+    recommended: true,
+    pros: "Fast German TTS",
+    cons: "Q4 quantisation",
+  },
+  {
+    repo: "neuphonic/neutts-nano-german-q8-gguf",
+    name: "Nano German Q8",
+    language: "de",
+    size_mb: 230,
+    recommended: false,
+    pros: "Better German quality",
+    cons: "2× larger",
+  },
+  {
+    repo: "neuphonic/neutts-nano-german",
+    name: "Nano German fp16",
+    language: "de",
+    size_mb: 430,
+    recommended: false,
+    pros: "Reference German quality",
+    cons: "Largest; needs FP16",
+  },
+  // French
+  {
+    repo: "neuphonic/neutts-nano-french-q4-gguf",
+    name: "Nano French Q4",
+    language: "fr-fr",
+    size_mb: 135,
+    recommended: true,
+    pros: "Fast French TTS",
+    cons: "Q4 quantisation",
+  },
+  {
+    repo: "neuphonic/neutts-nano-french-q8-gguf",
+    name: "Nano French Q8",
+    language: "fr-fr",
+    size_mb: 230,
+    recommended: false,
+    pros: "Better French quality",
+    cons: "2× larger",
+  },
+  {
+    repo: "neuphonic/neutts-nano-french",
+    name: "Nano French fp16",
+    language: "fr-fr",
+    size_mb: 430,
+    recommended: false,
+    pros: "Reference French quality",
+    cons: "Largest; needs FP16",
+  },
+  // Spanish
+  {
+    repo: "neuphonic/neutts-nano-spanish-q4-gguf",
+    name: "Nano Spanish Q4",
+    language: "es",
+    size_mb: 135,
+    recommended: true,
+    pros: "Fast Spanish TTS",
+    cons: "Q4 quantisation",
+  },
+  {
+    repo: "neuphonic/neutts-nano-spanish-q8-gguf",
+    name: "Nano Spanish Q8",
+    language: "es",
+    size_mb: 230,
+    recommended: false,
+    pros: "Better Spanish quality",
+    cons: "2× larger",
+  },
+  {
+    repo: "neuphonic/neutts-nano-spanish",
+    name: "Nano Spanish fp16",
+    language: "es",
+    size_mb: 430,
+    recommended: false,
+    pros: "Reference Spanish quality",
+    cons: "Largest; needs FP16",
+  },
+];
 
-  // ── Preset voices (bundled in neutts-rs/samples/) ─────────────────────────
+// ── Preset voices (bundled in neutts-rs/samples/) ─────────────────────────
 
-  interface PresetVoice {
-    id: string; labelKey: string; lang: string; flag: string; gender: "♀" | "♂";
-  }
+interface PresetVoice {
+  id: string;
+  labelKey: string;
+  lang: string;
+  flag: string;
+  gender: "♀" | "♂";
+}
 
-  const PRESET_VOICES: PresetVoice[] = [
-    { id: "jo",       labelKey: "ttsTab.voiceJo",       lang: "en-us", flag: "🇺🇸", gender: "♀" },
-    { id: "dave",     labelKey: "ttsTab.voiceDave",     lang: "en-us", flag: "🇺🇸", gender: "♂" },
-    { id: "greta",    labelKey: "ttsTab.voiceGreta",    lang: "de",    flag: "🇩🇪", gender: "♀" },
-    { id: "juliette", labelKey: "ttsTab.voiceJuliette", lang: "fr-fr", flag: "🇫🇷", gender: "♀" },
-    { id: "mateo",    labelKey: "ttsTab.voiceMateo",    lang: "es",    flag: "🇪🇸", gender: "♂" },
-  ];
+const PRESET_VOICES: PresetVoice[] = [
+  { id: "jo", labelKey: "ttsTab.voiceJo", lang: "en-us", flag: "🇺🇸", gender: "♀" },
+  { id: "dave", labelKey: "ttsTab.voiceDave", lang: "en-us", flag: "🇺🇸", gender: "♂" },
+  { id: "greta", labelKey: "ttsTab.voiceGreta", lang: "de", flag: "🇩🇪", gender: "♀" },
+  { id: "juliette", labelKey: "ttsTab.voiceJuliette", lang: "fr-fr", flag: "🇫🇷", gender: "♀" },
+  { id: "mateo", labelKey: "ttsTab.voiceMateo", lang: "es", flag: "🇪🇸", gender: "♂" },
+];
 
-  // ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────────────────
 
-  // Engine status
-  type EnginePhase = "idle" | "loading" | "ready" | "unloaded" | "error";
-  let enginePhase = $state<EnginePhase>("idle");
-  let loadLabel   = $state("");
-  let loadStep    = $state(0);
-  let loadTotal   = $state(3);
-  let errorMsg    = $state("");
+// Engine status
+type EnginePhase = "idle" | "loading" | "ready" | "unloaded" | "error";
+let enginePhase = $state<EnginePhase>("idle");
+let loadLabel = $state("");
+let loadStep = $state(0);
+let loadTotal = $state(3);
+let errorMsg = $state("");
 
-  const loadPct = $derived(
-    enginePhase === "ready"   ? 100 :
-    enginePhase === "loading" ? Math.max(4, Math.round((loadStep / Math.max(loadTotal, 1)) * 100)) :
-    0
-  );
+const loadPct = $derived(
+  enginePhase === "ready"
+    ? 100
+    : enginePhase === "loading"
+      ? Math.max(4, Math.round((loadStep / Math.max(loadTotal, 1)) * 100))
+      : 0,
+);
 
-  // Configs
-  let neuttsConfig = $state<NeuttsConfig>({
-    enabled:      false,
-    backbone_repo:"neuphonic/neutts-nano-q4-gguf",
-    gguf_file:    "",
-    voice_preset: "jo",
-    ref_wav_path: "",
-    ref_text:     "",
-  });
-  let kittenVoices  = $state<string[]>(["Jasper"]);
-  let kittenVoice   = $state("Jasper");
-  let ttsPreload    = $state(true);
-  let logConfig     = $state<LogConfig>({
-    embedder: true, bluetooth: true, websocket: false,
-    csv: false, filter: false, bands: false, tts: false,
-    llm: false, chat_store: false, history: false, hooks: true,
-  });
+// Configs
+let neuttsConfig = $state<NeuttsConfig>({
+  enabled: false,
+  backbone_repo: "neuphonic/neutts-nano-q4-gguf",
+  gguf_file: "",
+  voice_preset: "jo",
+  ref_wav_path: "",
+  ref_text: "",
+});
+let kittenVoices = $state<string[]>(["Jasper"]);
+let kittenVoice = $state("Jasper");
+let ttsPreload = $state(true);
+let logConfig = $state<LogConfig>({
+  embedder: true,
+  bluetooth: true,
+  websocket: false,
+  csv: false,
+  filter: false,
+  bands: false,
+  tts: false,
+  llm: false,
+  chat_store: false,
+  history: false,
+  hooks: true,
+});
 
-  // NeuTTS config dirty / save state
-  let neuttsDirty = $state(false);
-  let neuttsSaved = $state(false);
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+// NeuTTS config dirty / save state
+let neuttsDirty = $state(false);
+let neuttsSaved = $state(false);
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // ── Derived helpers ────────────────────────────────────────────────────────
+// ── Derived helpers ────────────────────────────────────────────────────────
 
-  const activeBackend = $derived(neuttsConfig.enabled ? "neutts" : "kitten");
+const activeBackend = $derived(neuttsConfig.enabled ? "neutts" : "kitten");
 
-  function selectedModel(): BackboneModel | undefined {
-    return BACKBONE_MODELS.find(m => m.repo === neuttsConfig.backbone_repo);
-  }
+function selectedModel(): BackboneModel | undefined {
+  return BACKBONE_MODELS.find((m) => m.repo === neuttsConfig.backbone_repo);
+}
 
-  // ── Event listener ─────────────────────────────────────────────────────────
+// ── Event listener ─────────────────────────────────────────────────────────
 
-  let unlistenTts: UnlistenFn | null = null;
+let unlistenTts: UnlistenFn | null = null;
 
-  onMount(async () => {
-    try { logConfig    = await invoke<LogConfig>("get_log_config"); }    catch (e) { console.warn("[tts] get_log_config failed:", e); }
-    try { neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config"); } catch (e) { console.warn("[tts] get_neutts_config failed:", e); }
-    try { ttsPreload   = await invoke<boolean>("get_tts_preload"); } catch (e) { console.warn("[tts] get_tts_preload failed:", e); }
-    try {
-      const voices = await invoke<string[]>("tts_list_voices");
-      if (voices.length) kittenVoices = voices;
-    } catch (e) { console.warn("[tts] tts_list_voices failed:", e); }
-    try { kittenVoice = await invoke<string>("tts_get_voice"); } catch (e) { console.warn("[tts] tts_get_voice failed:", e); }
+onMount(async () => {
+  try {
+    logConfig = await invoke<LogConfig>("get_log_config");
+  } catch (e) {}
+  try {
+    neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config");
+  } catch (e) {}
+  try {
+    ttsPreload = await invoke<boolean>("get_tts_preload");
+  } catch (e) {}
+  try {
+    const voices = await invoke<string[]>("tts_list_voices");
+    if (voices.length) kittenVoices = voices;
+  } catch (e) {}
+  try {
+    kittenVoice = await invoke<string>("tts_get_voice");
+  } catch (e) {}
 
-    unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
-      const p = ev.payload;
-      if (p.phase === "ready") {
-        enginePhase = "ready";
-        loadStep    = loadTotal;
-        loadLabel   = "";
-        errorMsg    = "";
-      } else if (p.phase === "unloaded") {
-        enginePhase = "unloaded";
-        loadStep    = 0;
-        loadLabel   = "";
-        errorMsg    = "";
-      } else if (p.phase === "error") {
-        enginePhase = "error";
-        loadStep    = 0;
-        loadLabel   = "";
-        errorMsg    = p.label;
-      } else {
-        enginePhase = "loading";
-        loadStep    = p.step;
-        loadTotal   = p.total;
-        loadLabel   = p.label;
-        errorMsg    = "";
-      }
-    });
-
-    // Pre-warm immediately
-    invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
-  });
-
-  onDestroy(() => {
-    unlistenTts?.();
-    if (saveTimer !== null) clearTimeout(saveTimer);
-  });
-
-  // ── Engine lifecycle ───────────────────────────────────────────────────────
-
-  function preload() {
-    enginePhase = "loading";
-    loadStep    = 0;
-    invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
-  }
-
-  async function unload() {
-    await invoke("tts_unload").catch(e => console.warn("[tts] tts_unload failed:", e));
-  }
-
-  // ── Backend switch ─────────────────────────────────────────────────────────
-
-  async function switchBackend(toNeutts: boolean) {
-    if (neuttsConfig.enabled === toNeutts) return;
-    neuttsConfig = { ...neuttsConfig, enabled: toNeutts };
-    neuttsDirty  = true;
-    enginePhase  = "idle";
-    loadStep     = 0;
-    await saveNeutts();
-  }
-
-  // ── KittenTTS voice ────────────────────────────────────────────────────────
-
-  async function setKittenVoice(v: string) {
-    kittenVoice = v;
-    try { await invoke("tts_set_voice", { voice: v }); } catch (e) { console.warn("[tts] tts_set_voice failed:", e); }
-  }
-
-  // ── NeuTTS save ────────────────────────────────────────────────────────────
-
-  async function saveNeutts() {
-    try {
-      await invoke("set_neutts_config", { config: neuttsConfig });
-      neuttsDirty = false;
-      neuttsSaved = true;
-      if (saveTimer !== null) clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => { neuttsSaved = false; }, 2000);
-      // Notify other components that the active engine may have changed.
-      await emit("tts-engine-changed", { enabled: neuttsConfig.enabled });
-      // Always re-warm so the new active engine loads immediately.
+  unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
+    const p = ev.payload;
+    if (p.phase === "ready") {
+      enginePhase = "ready";
+      loadStep = loadTotal;
+      loadLabel = "";
+      errorMsg = "";
+    } else if (p.phase === "unloaded") {
+      enginePhase = "unloaded";
+      loadStep = 0;
+      loadLabel = "";
+      errorMsg = "";
+    } else if (p.phase === "error") {
+      enginePhase = "error";
+      loadStep = 0;
+      loadLabel = "";
+      errorMsg = p.label;
+    } else {
       enginePhase = "loading";
-      loadStep    = 0;
-      loadLabel   = "";
-      invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
-    } catch (e) {
-      console.error("[NeuTTS] set_neutts_config failed", e);
+      loadStep = p.step;
+      loadTotal = p.total;
+      loadLabel = p.label;
+      errorMsg = "";
     }
-  }
+  });
 
-  async function pickRefWav() {
-    try {
-      const path = await invoke<string | null>("pick_ref_wav_file");
-      if (path) { neuttsConfig = { ...neuttsConfig, ref_wav_path: path }; neuttsDirty = true; }
-    } catch (e) { console.warn("[tts] pick_ref_wav_file failed:", e); }
-  }
+  // Pre-warm immediately
+  invoke("tts_init").catch((_e) => {});
+});
 
-  // ── Log toggle ─────────────────────────────────────────────────────────────
+onDestroy(() => {
+  unlistenTts?.();
+  if (saveTimer !== null) clearTimeout(saveTimer);
+});
 
-  async function toggleTtsLog() {
-    logConfig = { ...logConfig, tts: !logConfig.tts };
-    try { await invoke("set_log_config", { config: logConfig }); } catch (e) { console.warn("[tts] set_log_config failed:", e); }
-  }
+// ── Engine lifecycle ───────────────────────────────────────────────────────
+
+function preload() {
+  enginePhase = "loading";
+  loadStep = 0;
+  invoke("tts_init").catch((_e) => {});
+}
+
+async function unload() {
+  await invoke("tts_unload").catch((_e) => {});
+}
+
+// ── Backend switch ─────────────────────────────────────────────────────────
+
+async function switchBackend(toNeutts: boolean) {
+  if (neuttsConfig.enabled === toNeutts) return;
+  neuttsConfig = { ...neuttsConfig, enabled: toNeutts };
+  neuttsDirty = true;
+  enginePhase = "idle";
+  loadStep = 0;
+  await saveNeutts();
+}
+
+// ── KittenTTS voice ────────────────────────────────────────────────────────
+
+async function setKittenVoice(v: string) {
+  kittenVoice = v;
+  try {
+    await invoke("tts_set_voice", { voice: v });
+  } catch (e) {}
+}
+
+// ── NeuTTS save ────────────────────────────────────────────────────────────
+
+async function saveNeutts() {
+  try {
+    await invoke("set_neutts_config", { config: neuttsConfig });
+    neuttsDirty = false;
+    neuttsSaved = true;
+    if (saveTimer !== null) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      neuttsSaved = false;
+    }, 2000);
+    // Notify other components that the active engine may have changed.
+    await emit("tts-engine-changed", { enabled: neuttsConfig.enabled });
+    // Always re-warm so the new active engine loads immediately.
+    enginePhase = "loading";
+    loadStep = 0;
+    loadLabel = "";
+    invoke("tts_init").catch((_e) => {});
+  } catch (e) {}
+}
+
+async function pickRefWav() {
+  try {
+    const path = await invoke<string | null>("pick_ref_wav_file");
+    if (path) {
+      neuttsConfig = { ...neuttsConfig, ref_wav_path: path };
+      neuttsDirty = true;
+    }
+  } catch (e) {}
+}
+
+// ── Log toggle ─────────────────────────────────────────────────────────────
+
+async function toggleTtsLog() {
+  logConfig = { ...logConfig, tts: !logConfig.tts };
+  try {
+    await invoke("set_log_config", { config: logConfig });
+  } catch (e) {}
+}
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->

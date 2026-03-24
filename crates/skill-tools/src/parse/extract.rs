@@ -11,14 +11,22 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-use skill_constants::{TOOL_CALL_START, TOOL_CALL_END};
+use super::json_scan::{find_balanced_json_arrays, find_balanced_json_objects};
 use super::types::{ToolCall, ToolCallFunction};
-use super::json_scan::{find_balanced_json_objects, find_balanced_json_arrays};
+use skill_constants::{TOOL_CALL_END, TOOL_CALL_START};
 
 /// Built-in tool names used for dict-style multi-tool recognition.
 pub(crate) const KNOWN_TOOL_NAMES: &[&str] = &[
-    "date", "location", "web_search", "web_fetch", "bash",
-    "read_file", "write_file", "edit_file", "search_output", "skill",
+    "date",
+    "location",
+    "web_search",
+    "web_fetch",
+    "bash",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "search_output",
+    "skill",
 ];
 
 /// Extract tool calls from a raw assistant message body.
@@ -45,7 +53,8 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
             if tc.function.name == "bash" {
                 let args: Value = serde_json::from_str(&tc.function.arguments)
                     .unwrap_or(Value::Object(Default::default()));
-                let command_empty = args.get("command")
+                let command_empty = args
+                    .get("command")
                     .and_then(|c| c.as_str())
                     .unwrap_or("")
                     .is_empty();
@@ -63,7 +72,9 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
     if calls.is_empty() {
         if let Some(cmd) = extract_bash_fence_command(content) {
             push_tool_call(
-                &mut calls, &mut dedup, "bash".into(),
+                &mut calls,
+                &mut dedup,
+                "bash".into(),
                 format!(
                     r#"{{"command":{}}}"#,
                     serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{cmd}\""))
@@ -158,13 +169,17 @@ fn extract_delimited_blocks(
     let mut remaining = content;
     while let Some(s) = remaining.find(TOOL_CALL_START) {
         let after_start = &remaining[s + TOOL_CALL_START.len()..];
-        let Some(e) = after_start.find(TOOL_CALL_END) else { break };
+        let Some(e) = after_start.find(TOOL_CALL_END) else {
+            break;
+        };
         let block = after_start[..e].trim();
         if let Ok(v) = serde_json::from_str::<Value>(block) {
-            let name = v.get("name")
+            let name = v
+                .get("name")
                 .or_else(|| v.get("tool"))
                 .and_then(|n| n.as_str())
-                .unwrap_or("").to_string();
+                .unwrap_or("")
+                .to_string();
             let args = args_to_json_string(v.get("arguments").or_else(|| v.get("parameters")));
             push_tool_call(calls, dedup, name, args);
         }
@@ -186,10 +201,14 @@ fn extract_llama_xml_tool_calls(
 
     while let Some(fn_start) = remaining.find("<function=") {
         let after_eq = &remaining[fn_start + "<function=".len()..];
-        let Some(gt_pos) = after_eq.find('>') else { break };
+        let Some(gt_pos) = after_eq.find('>') else {
+            break;
+        };
         let name = after_eq[..gt_pos].trim().to_string();
         let inner_start = &after_eq[gt_pos + 1..];
-        let Some(fn_end) = inner_start.find("</function>") else { break };
+        let Some(fn_end) = inner_start.find("</function>") else {
+            break;
+        };
         let body = &inner_start[..fn_end];
 
         let mut params = serde_json::Map::new();
@@ -199,10 +218,14 @@ fn extract_llama_xml_tool_calls(
         while let Some(p_start) = param_remaining.find("<parameter=") {
             found_params = true;
             let after_p_eq = &param_remaining[p_start + "<parameter=".len()..];
-            let Some(p_gt) = after_p_eq.find('>') else { break };
+            let Some(p_gt) = after_p_eq.find('>') else {
+                break;
+            };
             let param_name = after_p_eq[..p_gt].trim().to_string();
             let val_start = &after_p_eq[p_gt + 1..];
-            let Some(p_end) = val_start.find("</parameter>") else { break };
+            let Some(p_end) = val_start.find("</parameter>") else {
+                break;
+            };
             let raw_value = val_start[..p_end].trim();
 
             let value: Value = serde_json::from_str(raw_value)
@@ -216,7 +239,11 @@ fn extract_llama_xml_tool_calls(
             let trimmed = body.trim();
             if !trimmed.is_empty() {
                 if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
-                    let args = if v.is_object() { v.to_string() } else { "{}".to_string() };
+                    let args = if v.is_object() {
+                        v.to_string()
+                    } else {
+                        "{}".to_string()
+                    };
                     push_tool_call(calls, dedup, name.clone(), args);
                     remaining = &inner_start[fn_end + "</function>".len()..];
                     continue;
@@ -243,11 +270,15 @@ fn extract_tool_calls_from_json_text(
     let mut cursor = 0usize;
     while let Some(rel) = content[cursor..].find("```") {
         let after_open = cursor + rel + 3;
-        let Some(nl_rel) = content[after_open..].find('\n') else { break };
+        let Some(nl_rel) = content[after_open..].find('\n') else {
+            break;
+        };
         let header_end = after_open + nl_rel;
         let header = content[after_open..header_end].trim().to_ascii_lowercase();
         let body_start = header_end + 1;
-        let Some(close_rel) = content[body_start..].find("```") else { break };
+        let Some(close_rel) = content[body_start..].find("```") else {
+            break;
+        };
         let body_end = body_start + close_rel;
         let body = content[body_start..body_end].trim();
 
@@ -279,11 +310,15 @@ pub(crate) fn extract_bash_fence_command(content: &str) -> Option<String> {
     let mut cursor = 0usize;
     while let Some(rel) = content[cursor..].find("```") {
         let after_open = cursor + rel + 3;
-        let Some(nl_rel) = content[after_open..].find('\n') else { break };
+        let Some(nl_rel) = content[after_open..].find('\n') else {
+            break;
+        };
         let header_end = after_open + nl_rel;
         let header = content[after_open..header_end].trim().to_ascii_lowercase();
         let body_start = header_end + 1;
-        let Some(close_rel) = content[body_start..].find("```") else { break };
+        let Some(close_rel) = content[body_start..].find("```") else {
+            break;
+        };
         let body_end = body_start + close_rel;
         let body = content[body_start..body_end].trim();
 
@@ -321,8 +356,12 @@ fn redirect_skill_aliases(calls: &mut [ToolCall]) {
 /// Returns true if `v` is a dict-style multi-tool object whose keys are
 /// (at least partially) known tool names and whose values are parameter objects.
 pub(crate) fn is_dict_style_multi_tool(v: &Value) -> bool {
-    let Some(obj) = v.as_object() else { return false };
-    if obj.is_empty() { return false }
+    let Some(obj) = v.as_object() else {
+        return false;
+    };
+    if obj.is_empty() {
+        return false;
+    }
     let has_known_key = obj.keys().any(|k| KNOWN_TOOL_NAMES.contains(&k.as_str()));
     let all_obj_vals = obj.values().all(|v| v.is_object() || v.is_null());
     has_known_key && all_obj_vals
@@ -336,9 +375,13 @@ pub(crate) fn push_tool_call(
     arguments: String,
 ) {
     let name = name.trim().to_string();
-    if name.is_empty() { return }
+    if name.is_empty() {
+        return;
+    }
     let key = (name.clone(), arguments.clone());
-    if !dedup.insert(key) { return }
+    if !dedup.insert(key) {
+        return;
+    }
 
     calls.push(ToolCall {
         id: format!("call_{}", calls.len()),
@@ -379,8 +422,11 @@ fn extract_calls_from_value(
         for item in arr {
             let func = item.get("function").unwrap_or(item);
             let mut name = tool_name_from_value(func);
-            if name.is_empty() { name = tool_name_from_value(item); }
-            let args = args_to_json_string(func.get("arguments").or_else(|| func.get("parameters")));
+            if name.is_empty() {
+                name = tool_name_from_value(item);
+            }
+            let args =
+                args_to_json_string(func.get("arguments").or_else(|| func.get("parameters")));
             push_tool_call(calls, dedup, name, args);
         }
         return;
@@ -389,11 +435,12 @@ fn extract_calls_from_value(
     if is_dict_style_multi_tool(v) {
         if let Some(obj) = v.as_object() {
             for (name, params) in obj {
-                let args = if params.is_object() && params.as_object().is_some_and(|o| !o.is_empty()) {
-                    params.to_string()
-                } else {
-                    "{}".to_string()
-                };
+                let args =
+                    if params.is_object() && params.as_object().is_some_and(|o| !o.is_empty()) {
+                        params.to_string()
+                    } else {
+                        "{}".to_string()
+                    };
                 push_tool_call(calls, dedup, name.clone(), args);
             }
         }
@@ -405,10 +452,15 @@ fn extract_calls_from_value(
         return;
     }
 
-    let single = if let Some(f) = v.get("function") { f } else { v };
+    let single = if let Some(f) = v.get("function") {
+        f
+    } else {
+        v
+    };
     let name = tool_name_from_value(single);
     if !name.is_empty() {
-        let args = args_to_json_string(single.get("arguments").or_else(|| single.get("parameters")));
+        let args =
+            args_to_json_string(single.get("arguments").or_else(|| single.get("parameters")));
         push_tool_call(calls, dedup, name, args);
     }
 }
@@ -426,7 +478,11 @@ pub(crate) fn is_tool_call_value(v: &Value) -> bool {
     if is_dict_style_multi_tool(v) {
         return true;
     }
-    let single = if let Some(f) = v.get("function") { f } else { v };
+    let single = if let Some(f) = v.get("function") {
+        f
+    } else {
+        v
+    };
     !tool_name_from_value(single).is_empty()
 }
 
@@ -437,11 +493,15 @@ pub(crate) fn looks_like_tool_call_json_prefix(s: &str) -> bool {
         return false;
     }
 
-    let probe: String = trimmed.chars().take(320).collect::<String>().to_ascii_lowercase();
+    let probe: String = trimmed
+        .chars()
+        .take(320)
+        .collect::<String>()
+        .to_ascii_lowercase();
 
-    let is_dict_style = KNOWN_TOOL_NAMES.iter().any(|n| {
-        probe.contains(&format!("\"{}\":", n)) || probe.contains(&format!("\"{}\": ", n))
-    });
+    let is_dict_style = KNOWN_TOOL_NAMES
+        .iter()
+        .any(|n| probe.contains(&format!("\"{}\":", n)) || probe.contains(&format!("\"{}\": ", n)));
     if is_dict_style {
         return true;
     }
@@ -450,9 +510,8 @@ pub(crate) fn looks_like_tool_call_json_prefix(s: &str) -> bool {
         || probe.contains("\"tool\"")
         || probe.contains("\"tool_calls\"")
         || probe.contains("\"function\"");
-    let mentions_args = probe.contains("\"parameter")
-        || probe.contains("\"argument")
-        || probe.contains("<think>");
+    let mentions_args =
+        probe.contains("\"parameter") || probe.contains("\"argument") || probe.contains("<think>");
 
     mentions_tool_name && mentions_args
 }

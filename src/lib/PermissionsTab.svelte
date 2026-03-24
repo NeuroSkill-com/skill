@@ -6,108 +6,106 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Settings tab — System Permissions -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { Button }             from "$lib/components/ui/button";
-  import { t }                  from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Platform detection ──────────────────────────────────────────────────────
-  const isMac   = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-  const isLinux = typeof navigator !== "undefined" && /Linux/i.test(navigator.platform);
-  // Windows = everything else
+// ── Platform detection ──────────────────────────────────────────────────────
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+const isLinux = typeof navigator !== "undefined" && /Linux/i.test(navigator.platform);
+// Windows = everything else
 
-  // ── Permission status ───────────────────────────────────────────────────────
-  let accessibilityGranted = $state<boolean | null>(null);
-  let screenRecordingGranted = $state<boolean | null>(null);
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+// ── Permission status ───────────────────────────────────────────────────────
+let accessibilityGranted = $state<boolean | null>(null);
+let screenRecordingGranted = $state<boolean | null>(null);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-  async function refreshAccessibility() {
-    try {
-      accessibilityGranted = await invoke<boolean>("check_accessibility_permission");
-    } catch {
-      accessibilityGranted = null;
-    }
+async function refreshAccessibility() {
+  try {
+    accessibilityGranted = await invoke<boolean>("check_accessibility_permission");
+  } catch {
+    accessibilityGranted = null;
   }
+}
 
-  async function refreshScreenRecording() {
-    try {
-      screenRecordingGranted = await invoke<boolean>("check_screen_recording_permission");
-    } catch {
-      screenRecordingGranted = null;
-    }
+async function refreshScreenRecording() {
+  try {
+    screenRecordingGranted = await invoke<boolean>("check_screen_recording_permission");
+  } catch {
+    screenRecordingGranted = null;
   }
+}
 
-  onMount(() => {
+onMount(() => {
+  refreshAccessibility();
+  refreshScreenRecording();
+  // Poll every 3 s so the status updates after the user grants it in System Settings
+  pollTimer = setInterval(() => {
     refreshAccessibility();
     refreshScreenRecording();
-    // Poll every 3 s so the status updates after the user grants it in System Settings
-    pollTimer = setInterval(() => {
-      refreshAccessibility();
-      refreshScreenRecording();
-    }, 3000);
-  });
-  onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
+  }, 3000);
+});
+onDestroy(() => {
+  if (pollTimer) clearInterval(pollTimer);
+});
 
-  async function openAccessibilitySettings() {
-    await invoke("open_accessibility_settings");
-  }
-  async function openBluetoothSettings() {
-    await invoke("open_bt_settings");
-  }
-  async function openNotificationsSettings() {
-    await invoke("open_notifications_settings");
-  }
-  async function openScreenRecordingSettings() {
-    await invoke("open_screen_recording_settings");
-  }
+async function openAccessibilitySettings() {
+  await invoke("open_accessibility_settings");
+}
+async function openBluetoothSettings() {
+  await invoke("open_bt_settings");
+}
+async function openNotificationsSettings() {
+  await invoke("open_notifications_settings");
+}
+async function openScreenRecordingSettings() {
+  await invoke("open_screen_recording_settings");
+}
 
-  // ── Status badge helper ─────────────────────────────────────────────────────
-  type Status = "granted" | "denied" | "unknown" | "not_required";
-  function statusClass(s: Status): string {
-    return {
-      granted:      "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
-      denied:       "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-      unknown:      "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-      not_required: "bg-muted/60 text-muted-foreground border-border",
-    }[s];
-  }
-  function statusLabel(s: Status): string {
-    return {
-      granted:      t("perm.granted"),
-      denied:       t("perm.denied"),
-      unknown:      t("perm.unknown"),
-      not_required: t("perm.notRequired"),
-    }[s];
-  }
-  function statusDot(s: Status): string {
-    return {
-      granted:      "bg-green-500",
-      denied:       "bg-red-500",
-      unknown:      "bg-amber-400",
-      not_required: "bg-muted-foreground/40",
-    }[s];
-  }
+// ── Status badge helper ─────────────────────────────────────────────────────
+type Status = "granted" | "denied" | "unknown" | "not_required";
+function statusClass(s: Status): string {
+  return {
+    granted: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
+    denied: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+    unknown: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+    not_required: "bg-muted/60 text-muted-foreground border-border",
+  }[s];
+}
+function statusLabel(s: Status): string {
+  return {
+    granted: t("perm.granted"),
+    denied: t("perm.denied"),
+    unknown: t("perm.unknown"),
+    not_required: t("perm.notRequired"),
+  }[s];
+}
+function statusDot(s: Status): string {
+  return {
+    granted: "bg-green-500",
+    denied: "bg-red-500",
+    unknown: "bg-amber-400",
+    not_required: "bg-muted-foreground/40",
+  }[s];
+}
 
-  // Derive accessibility status from the polled boolean
-  const accessStatus = $derived<Status>(
-    accessibilityGranted === null ? "unknown"
-      : accessibilityGranted       ? "granted"
-      : "denied"
-  );
+// Derive accessibility status from the polled boolean
+const accessStatus = $derived<Status>(
+  accessibilityGranted === null ? "unknown" : accessibilityGranted ? "granted" : "denied",
+);
 
-  const screenRecordingStatus = $derived<Status>(
-    screenRecordingGranted === null ? "unknown"
-      : screenRecordingGranted       ? "granted"
-      : "denied"
-  );
+const screenRecordingStatus = $derived<Status>(
+  screenRecordingGranted === null ? "unknown" : screenRecordingGranted ? "granted" : "denied",
+);
 
-  // Bluetooth: we don't have a live API to check it — always show "system-managed"
-  // (the device connection status on the dashboard already shows BT state)
-  const bluetoothStatus: Status = "unknown";
+// Bluetooth: we don't have a live API to check it — always show "system-managed"
+// (the device connection status on the dashboard already shows BT state)
+const bluetoothStatus: Status = "unknown";
 
-  // Notifications: not queried yet — direct user to OS settings
-  const notifStatus: Status = "unknown";
+// Notifications: not queried yet — direct user to OS settings
+const notifStatus: Status = "unknown";
 </script>
 
 <div class="flex flex-col gap-5">

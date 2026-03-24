@@ -6,10 +6,10 @@
 //! inline JSON tool payloads, and trailing partial tag prefixes (for streaming).
 
 use serde_json::Value;
-use skill_constants::{TOOL_CALL_START, TOOL_CALL_END};
+use skill_constants::{TOOL_CALL_END, TOOL_CALL_START};
 
 use super::extract::{is_tool_call_value, looks_like_tool_call_json_prefix};
-use super::json_scan::{find_balanced_json_objects, find_balanced_json_arrays};
+use super::json_scan::{find_balanced_json_arrays, find_balanced_json_objects};
 
 /// Remove `[TOOL_CALL]…[/TOOL_CALL]` markers from assistant message content.
 ///
@@ -92,11 +92,15 @@ fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
     while let Some(rel) = content[cursor..].find("```") {
         let fence_start = cursor + rel;
         let after_open = fence_start + 3;
-        let Some(nl_rel) = content[after_open..].find('\n') else { break };
+        let Some(nl_rel) = content[after_open..].find('\n') else {
+            break;
+        };
         let header_end = after_open + nl_rel;
         let header = content[after_open..header_end].trim().to_ascii_lowercase();
         let body_start = header_end + 1;
-        let Some(close_rel) = content[body_start..].find("```") else { break };
+        let Some(close_rel) = content[body_start..].find("```") else {
+            break;
+        };
         let body_end = body_start + close_rel;
         let body = content[body_start..body_end].trim();
 
@@ -142,7 +146,9 @@ fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
     for (s, e) in ranges {
         if let Some((_, last_e)) = merged.last_mut() {
             if s <= *last_e {
-                if e > *last_e { *last_e = e; }
+                if e > *last_e {
+                    *last_e = e;
+                }
                 continue;
             }
         }
@@ -152,7 +158,9 @@ fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
     let mut out = String::new();
     let mut keep_from = 0usize;
     for (s, e) in merged {
-        if s > keep_from { out.push_str(&content[keep_from..s]); }
+        if s > keep_from {
+            out.push_str(&content[keep_from..s]);
+        }
         keep_from = e;
     }
     if keep_from < content.len() {
@@ -162,20 +170,25 @@ fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
 }
 
 fn find_incomplete_trailing_tool_call_range(content: &str) -> Option<(usize, usize)> {
-    find_incomplete_trailing_fenced(content)
-        .or_else(|| find_incomplete_trailing_inline(content))
+    find_incomplete_trailing_fenced(content).or_else(|| find_incomplete_trailing_inline(content))
 }
 
 fn find_incomplete_trailing_fenced(content: &str) -> Option<(usize, usize)> {
     let fence_start = content.rfind("```")?;
     let after_open = fence_start + 3;
-    if after_open >= content.len() { return None }
-    if content[after_open..].contains("```") { return None }
+    if after_open >= content.len() {
+        return None;
+    }
+    if content[after_open..].contains("```") {
+        return None;
+    }
 
     let nl_rel = content[after_open..].find('\n')?;
     let header_end = after_open + nl_rel;
     let header = content[after_open..header_end].trim().to_ascii_lowercase();
-    if !header.is_empty() && header != "json" { return None }
+    if !header.is_empty() && header != "json" {
+        return None;
+    }
 
     let body = content[header_end + 1..].trim_start();
     if looks_like_tool_call_json_prefix(body) {
@@ -205,7 +218,10 @@ fn find_unclosed_brace(content: &str, open: u8, close: u8) -> Option<(usize, usi
 
     for (i, b) in content.bytes().enumerate() {
         if in_string {
-            if escaped { escaped = false; continue; }
+            if escaped {
+                escaped = false;
+                continue;
+            }
             match b {
                 b'\\' => escaped = true,
                 b'"' => in_string = false,
@@ -215,8 +231,20 @@ fn find_unclosed_brace(content: &str, open: u8, close: u8) -> Option<(usize, usi
         }
         match b {
             b'"' => in_string = true,
-            b if b == open => { if depth == 0 { start = Some(i); } depth += 1; }
-            b if b == close => { if depth > 0 { depth -= 1; if depth == 0 { start = None; } } }
+            b if b == open => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            b if b == close => {
+                if depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        start = None;
+                    }
+                }
+            }
             _ => {}
         }
     }

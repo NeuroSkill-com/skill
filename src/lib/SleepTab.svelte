@@ -6,102 +6,135 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Sleep tab — configure sleeping hours with presets. -->
 <script lang="ts">
-  import { onMount }             from "svelte";
-  import { invoke }              from "@tauri-apps/api/core";
-  import { Card, CardContent }   from "$lib/components/ui/card";
-  import { t }                   from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface SleepConfig {
-    bedtime:   string; // "HH:MM"
-    wake_time: string; // "HH:MM"
-    preset:    string; // snake_case preset id
-  }
+interface SleepConfig {
+  bedtime: string; // "HH:MM"
+  wake_time: string; // "HH:MM"
+  preset: string; // snake_case preset id
+}
 
-  interface Preset {
-    id:       string;
-    label:    () => string;
-    desc:     () => string;
-    bedtime:  string;
-    wake:     string;
-  }
+interface Preset {
+  id: string;
+  label: () => string;
+  desc: () => string;
+  bedtime: string;
+  wake: string;
+}
 
-  const PRESETS: Preset[] = [
-    { id: "default",       label: () => t("sleepSettings.presetDefault"),       desc: () => t("sleepSettings.presetDefaultDesc"),       bedtime: "23:00", wake: "07:00" },
-    { id: "early_bird",    label: () => t("sleepSettings.presetEarlyBird"),     desc: () => t("sleepSettings.presetEarlyBirdDesc"),     bedtime: "21:30", wake: "05:30" },
-    { id: "night_owl",     label: () => t("sleepSettings.presetNightOwl"),      desc: () => t("sleepSettings.presetNightOwlDesc"),      bedtime: "01:00", wake: "09:00" },
-    { id: "short_sleeper", label: () => t("sleepSettings.presetShortSleeper"),  desc: () => t("sleepSettings.presetShortSleeperDesc"),  bedtime: "00:00", wake: "06:00" },
-    { id: "long_sleeper",  label: () => t("sleepSettings.presetLongSleeper"),   desc: () => t("sleepSettings.presetLongSleeperDesc"),   bedtime: "22:00", wake: "08:00" },
-  ];
+const PRESETS: Preset[] = [
+  {
+    id: "default",
+    label: () => t("sleepSettings.presetDefault"),
+    desc: () => t("sleepSettings.presetDefaultDesc"),
+    bedtime: "23:00",
+    wake: "07:00",
+  },
+  {
+    id: "early_bird",
+    label: () => t("sleepSettings.presetEarlyBird"),
+    desc: () => t("sleepSettings.presetEarlyBirdDesc"),
+    bedtime: "21:30",
+    wake: "05:30",
+  },
+  {
+    id: "night_owl",
+    label: () => t("sleepSettings.presetNightOwl"),
+    desc: () => t("sleepSettings.presetNightOwlDesc"),
+    bedtime: "01:00",
+    wake: "09:00",
+  },
+  {
+    id: "short_sleeper",
+    label: () => t("sleepSettings.presetShortSleeper"),
+    desc: () => t("sleepSettings.presetShortSleeperDesc"),
+    bedtime: "00:00",
+    wake: "06:00",
+  },
+  {
+    id: "long_sleeper",
+    label: () => t("sleepSettings.presetLongSleeper"),
+    desc: () => t("sleepSettings.presetLongSleeperDesc"),
+    bedtime: "22:00",
+    wake: "08:00",
+  },
+];
 
-  let config  = $state<SleepConfig>({ bedtime: "23:00", wake_time: "07:00", preset: "default" });
-  let saving  = $state(false);
+let config = $state<SleepConfig>({ bedtime: "23:00", wake_time: "07:00", preset: "default" });
+let saving = $state(false);
 
-  // Derived sleep duration in hours + minutes
-  const duration = $derived.by(() => {
-    const [bh, bm] = config.bedtime.split(":").map(Number);
-    const [wh, wm] = config.wake_time.split(":").map(Number);
-    const bed  = bh * 60 + bm;
-    const wake = wh * 60 + wm;
-    const mins = wake >= bed ? wake - bed : (24 * 60 - bed) + wake;
-    return { hours: Math.floor(mins / 60), minutes: mins % 60, total: mins };
-  });
+// Derived sleep duration in hours + minutes
+const duration = $derived.by(() => {
+  const [bh, bm] = config.bedtime.split(":").map(Number);
+  const [wh, wm] = config.wake_time.split(":").map(Number);
+  const bed = bh * 60 + bm;
+  const wake = wh * 60 + wm;
+  const mins = wake >= bed ? wake - bed : 24 * 60 - bed + wake;
+  return { hours: Math.floor(mins / 60), minutes: mins % 60, total: mins };
+});
 
-  function durationLabel(mins: number): string {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}m`;
-  }
+function durationLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
 
-  // The 24-hour clock visualization
-  const bedAngle  = $derived(timeToAngle(config.bedtime));
-  const wakeAngle = $derived(timeToAngle(config.wake_time));
+// The 24-hour clock visualization
+const bedAngle = $derived(timeToAngle(config.bedtime));
+const wakeAngle = $derived(timeToAngle(config.wake_time));
 
-  function timeToAngle(hhmm: string): number {
-    const [h, m] = hhmm.split(":").map(Number);
-    return ((h + m / 60) / 24) * 360 - 90; // -90 to start at top
-  }
+function timeToAngle(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return ((h + m / 60) / 24) * 360 - 90; // -90 to start at top
+}
 
-  async function save() {
-    saving = true;
-    try { await invoke("set_sleep_config", { config }); } catch (e) { console.warn("[sleep] set_sleep_config failed:", e); }
-    saving = false;
-  }
+async function save() {
+  saving = true;
+  try {
+    await invoke("set_sleep_config", { config });
+  } catch (e) {}
+  saving = false;
+}
 
-  function applyPreset(p: Preset) {
-    config = { bedtime: p.bedtime, wake_time: p.wake, preset: p.id };
-    save();
-  }
+function applyPreset(p: Preset) {
+  config = { bedtime: p.bedtime, wake_time: p.wake, preset: p.id };
+  save();
+}
 
-  function setBedtime(val: string) {
-    config = { ...config, bedtime: val, preset: "custom" };
-    save();
-  }
+function setBedtime(val: string) {
+  config = { ...config, bedtime: val, preset: "custom" };
+  save();
+}
 
-  function setWakeTime(val: string) {
-    config = { ...config, wake_time: val, preset: "custom" };
-    save();
-  }
+function setWakeTime(val: string) {
+  config = { ...config, wake_time: val, preset: "custom" };
+  save();
+}
 
-  onMount(async () => {
-    try {
-      config = await invoke<SleepConfig>("get_sleep_config");
-    } catch (e) { console.warn("[sleep] get_sleep_config failed:", e); }
-  });
+onMount(async () => {
+  try {
+    config = await invoke<SleepConfig>("get_sleep_config");
+  } catch (e) {}
+});
 
-  // Arc path for the sleep span on the clock
-  function arcPath(startAngle: number, endAngle: number, r: number): string {
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const cx = 60, cy = 60;
-    let sweep = endAngle - startAngle;
-    if (sweep < 0) sweep += 360;
-    const largeArc = sweep > 180 ? 1 : 0;
-    const sx = cx + r * Math.cos(toRad(startAngle));
-    const sy = cy + r * Math.sin(toRad(startAngle));
-    const ex = cx + r * Math.cos(toRad(endAngle));
-    const ey = cy + r * Math.sin(toRad(endAngle));
-    return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
-  }
+// Arc path for the sleep span on the clock
+function arcPath(startAngle: number, endAngle: number, r: number): string {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const cx = 60,
+    cy = 60;
+  let sweep = endAngle - startAngle;
+  if (sweep < 0) sweep += 360;
+  const largeArc = sweep > 180 ? 1 : 0;
+  const sx = cx + r * Math.cos(toRad(startAngle));
+  const sy = cy + r * Math.sin(toRad(startAngle));
+  const ex = cx + r * Math.cos(toRad(endAngle));
+  const ey = cy + r * Math.sin(toRad(endAngle));
+  return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
+}
 </script>
 
 <section class="flex flex-col gap-4">

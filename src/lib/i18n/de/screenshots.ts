@@ -8,11 +8,13 @@
 const screenshots: Record<string, string> = {
   "screenshots.title": "Screenshot-Erfassung",
   "screenshots.enableToggle": "Screenshot-Erfassung aktivieren",
-  "screenshots.enableDesc": "Aktives Fenster periodisch erfassen und mit einem Vision-Modell für visuelle Ähnlichkeitssuche einbetten.",
+  "screenshots.enableDesc":
+    "Aktives Fenster periodisch erfassen und mit einem Vision-Modell für visuelle Ähnlichkeitssuche einbetten.",
   "screenshots.sessionOnlyToggle": "Nur bei Sitzung",
   "screenshots.sessionOnlyDesc": "Nur während aktiver EEG-Aufnahmen erfassen.",
   "screenshots.interval": "Erfassungsintervall",
-  "screenshots.intervalDesc": "Ausgerichtet an EEG-Embedding-Epochen (je 5 s). 1× = jede Epoche, 2× = jede zweite, bis 12× (60 s).",
+  "screenshots.intervalDesc":
+    "Ausgerichtet an EEG-Embedding-Epochen (je 5 s). 1× = jede Epoche, 2× = jede zweite, bis 12× (60 s).",
   "screenshots.intervalUnit": "s",
   "screenshots.intervalEpoch": "Epoche",
   "screenshots.imageSize": "Bildgröße",
@@ -25,7 +27,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Vision-Modell für Bild-Einbettungen zur Ähnlichkeitssuche.",
   "screenshots.backendFastembed": "fastembed (lokales ONNX)",
   "screenshots.backendMmproj": "mmproj (LLM-Vision-Projektor)",
-  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
+  "screenshots.backendLlmVlm": "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 — 512d (schnell, Standard)",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 — 768d",
   "screenshots.reembed": "Screenshots neu einbetten",
@@ -37,17 +39,22 @@ const screenshots: Record<string, string> = {
   "screenshots.unembedded": "nicht eingebettet",
   "screenshots.estimate": "Geschätzte Zeit:",
   "screenshots.modelChanged": "Einbettungsmodell geändert",
-  "screenshots.modelChangedDesc": "Screenshots wurden mit einem anderen Modell eingebettet. Für konsistente Suchergebnisse neu einbetten.",
-  "screenshots.privacyNote": "Alle Screenshots werden nur lokal gespeichert und nie übertragen. Opt-in, standardmäßig sitzungsgebunden.",
+  "screenshots.modelChangedDesc":
+    "Screenshots wurden mit einem anderen Modell eingebettet. Für konsistente Suchergebnisse neu einbetten.",
+  "screenshots.privacyNote":
+    "Alle Screenshots werden nur lokal gespeichert und nie übertragen. Opt-in, standardmäßig sitzungsgebunden.",
   "screenshots.storagePath": "Speicherort: ~/.skill/screenshots/",
   "screenshots.permissionRequired": "Bildschirmaufnahme-Berechtigung erforderlich",
-  "screenshots.permissionDesc": "macOS benötigt die Berechtigung für Bildschirm- und Systemaudio-Aufnahme, um andere Anwendungsfenster zu erfassen.",
+  "screenshots.permissionDesc":
+    "macOS benötigt die Berechtigung für Bildschirm- und Systemaudio-Aufnahme, um andere Anwendungsfenster zu erfassen.",
   "screenshots.permissionGranted": "Bildschirmaufnahme-Berechtigung erteilt.",
   "screenshots.openPermissionSettings": "Bildschirmaufnahme-Einstellungen öffnen",
   "screenshots.ocrToggle": "OCR-Texterkennung",
-  "screenshots.ocrToggleDesc": "Text aus Screenshots extrahieren für textbasierte Suche. Läuft auf dem Vollauflösungsbild vor der Verkleinerung.",
+  "screenshots.ocrToggleDesc":
+    "Text aus Screenshots extrahieren für textbasierte Suche. Läuft auf dem Vollauflösungsbild vor der Verkleinerung.",
   "screenshots.gpuToggle": "GPU-Beschleunigung",
-  "screenshots.gpuToggleDesc": "GPU für Bild-Einbettungen und OCR verwenden. Deaktivieren für CPU-Inferenz (gibt GPU für LLM/EEG frei).",
+  "screenshots.gpuToggleDesc":
+    "GPU für Bild-Einbettungen und OCR verwenden. Deaktivieren für CPU-Inferenz (gibt GPU für LLM/EEG frei).",
   "screenshots.ocrEngineSelect": "OCR-Engine",
   "screenshots.ocrEngineAppleVision": "Apple Vision — GPU / Neural Engine (empfohlen auf macOS)",
   "screenshots.ocrEngineOcrs": "ocrs — lokale rten-basierte CPU (plattformübergreifend)",
@@ -56,7 +63,8 @@ const screenshots: Record<string, string> = {
   "screenshots.ocrInference": "Inferenz",
   "screenshots.ocrTitle": "OCR-Texterkennung",
   "screenshots.ocrEngine": "Lokale OCR",
-  "screenshots.ocrDesc": "Text wird aus jedem Screenshot in voller Auflösung vor der Verkleinerung extrahiert. Der Text wird mit BGE-Small-EN-v1.5 eingebettet und in einem separaten HNSW-Index für semantische Textsuche indiziert.",
+  "screenshots.ocrDesc":
+    "Text wird aus jedem Screenshot in voller Auflösung vor der Verkleinerung extrahiert. Der Text wird mit BGE-Small-EN-v1.5 eingebettet und in einem separaten HNSW-Index für semantische Textsuche indiziert.",
   "screenshots.ocrDetModel": "Erkennungsmodell",
   "screenshots.ocrRecModel": "Texterkennungsmodell",
   "screenshots.ocrTextEmbed": "Texteinbettung",
@@ -82,7 +90,8 @@ const screenshots: Record<string, string> = {
   "screenshots.perfQueue": "Warteschlangentiefe",
   "screenshots.perfDrops": "Verworfen",
   "screenshots.perfBackoff": "Drosselung",
-  "screenshots.perfDropsHint": "Einbettungs-Thread zu langsam — Intervall automatisch erhöht, erholt sich bei leerer Warteschlange",
+  "screenshots.perfDropsHint":
+    "Einbettungs-Thread zu langsam — Intervall automatisch erhöht, erholt sich bei leerer Warteschlange",
   "screenshots.perfErrors": "Fehler",
   "screenshots.stats": "Statistiken",
   "screenshots.totalCount": "Screenshots gesamt",

@@ -8,27 +8,59 @@
 
 use serde::{Deserialize, Serialize};
 
-use skill_constants::{EMBEDDING_EPOCH_SECS, SCREENSHOT_INTERVAL_MIN_MULT, SCREENSHOT_INTERVAL_MAX_MULT};
+use skill_constants::{
+    EMBEDDING_EPOCH_SECS, SCREENSHOT_INTERVAL_MAX_MULT, SCREENSHOT_INTERVAL_MIN_MULT,
+};
 
-pub fn default_screenshot_interval()        -> u32    { 5 }
-pub fn default_screenshot_image_size()      -> u32    { 768 }
-pub fn default_screenshot_quality()         -> u8     { 60 }
-pub fn default_screenshot_session_only()    -> bool   { true }
-pub fn default_screenshot_embed_backend()   -> String { "fastembed".into() }
-pub fn default_screenshot_fastembed_model() -> String { "clip-vit-b-32".into() }
-pub fn default_screenshot_ocr_enabled()     -> bool   { true }
-pub fn default_screenshot_ocr_engine()      -> String {
-    #[cfg(target_os = "macos")]
-    { "apple-vision".into() }
-    #[cfg(not(target_os = "macos"))]
-    { "ocrs".into() }
+pub fn default_screenshot_interval() -> u32 {
+    5
 }
-pub fn default_screenshot_use_gpu()         -> bool   { true }
-pub fn default_screenshot_gif_enabled()     -> bool   { false }
-pub fn default_screenshot_gif_frame_count() -> u32    { 15 }
-pub fn default_screenshot_gif_frame_delay() -> u32    { 100 }
-pub fn default_screenshot_gif_motion_thr()  -> f32    { 0.05 }
-pub fn default_screenshot_gif_max_size_kb() -> u64    { 2048 }
+pub fn default_screenshot_image_size() -> u32 {
+    768
+}
+pub fn default_screenshot_quality() -> u8 {
+    60
+}
+pub fn default_screenshot_session_only() -> bool {
+    true
+}
+pub fn default_screenshot_embed_backend() -> String {
+    "fastembed".into()
+}
+pub fn default_screenshot_fastembed_model() -> String {
+    "clip-vit-b-32".into()
+}
+pub fn default_screenshot_ocr_enabled() -> bool {
+    true
+}
+pub fn default_screenshot_ocr_engine() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "apple-vision".into()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "ocrs".into()
+    }
+}
+pub fn default_screenshot_use_gpu() -> bool {
+    true
+}
+pub fn default_screenshot_gif_enabled() -> bool {
+    false
+}
+pub fn default_screenshot_gif_frame_count() -> u32 {
+    15
+}
+pub fn default_screenshot_gif_frame_delay() -> u32 {
+    100
+}
+pub fn default_screenshot_gif_motion_thr() -> f32 {
+    0.05
+}
+pub fn default_screenshot_gif_max_size_kb() -> u64 {
+    2048
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -86,21 +118,21 @@ pub struct ScreenshotConfig {
 impl Default for ScreenshotConfig {
     fn default() -> Self {
         Self {
-            enabled:         false,
-            interval_secs:   default_screenshot_interval(),
-            image_size:      default_screenshot_image_size(),
-            quality:         default_screenshot_quality(),
-            session_only:    default_screenshot_session_only(),
-            embed_backend:   default_screenshot_embed_backend(),
+            enabled: false,
+            interval_secs: default_screenshot_interval(),
+            image_size: default_screenshot_image_size(),
+            quality: default_screenshot_quality(),
+            session_only: default_screenshot_session_only(),
+            embed_backend: default_screenshot_embed_backend(),
             fastembed_model: default_screenshot_fastembed_model(),
-            ocr_enabled:     default_screenshot_ocr_enabled(),
-            ocr_engine:      default_screenshot_ocr_engine(),
-            use_gpu:         default_screenshot_use_gpu(),
-            gif_enabled:          default_screenshot_gif_enabled(),
-            gif_frame_count:      default_screenshot_gif_frame_count(),
-            gif_frame_delay_ms:   default_screenshot_gif_frame_delay(),
+            ocr_enabled: default_screenshot_ocr_enabled(),
+            ocr_engine: default_screenshot_ocr_engine(),
+            use_gpu: default_screenshot_use_gpu(),
+            gif_enabled: default_screenshot_gif_enabled(),
+            gif_frame_count: default_screenshot_gif_frame_count(),
+            gif_frame_delay_ms: default_screenshot_gif_frame_delay(),
             gif_motion_threshold: default_screenshot_gif_motion_thr(),
-            gif_max_size_kb:      default_screenshot_gif_max_size_kb(),
+            gif_max_size_kb: default_screenshot_gif_max_size_kb(),
         }
     }
 }
@@ -131,13 +163,13 @@ impl ScreenshotConfig {
     pub fn model_id(&self) -> String {
         match self.embed_backend.as_str() {
             "fastembed" => match self.fastembed_model.as_str() {
-                "clip-vit-b-32"           => "Qdrant/clip-ViT-B-32-vision".into(),
+                "clip-vit-b-32" => "Qdrant/clip-ViT-B-32-vision".into(),
                 "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-vision-v1.5".into(),
-                other                     => other.into(),
+                other => other.into(),
             },
-            "mmproj"  => "mmproj".into(),
+            "mmproj" => "mmproj".into(),
             "llm-vlm" => "llm-vlm".into(),
-            other      => other.into(),
+            other => other.into(),
         }
     }
 
@@ -145,10 +177,10 @@ impl ScreenshotConfig {
         match self.embed_backend.as_str() {
             "fastembed" => match self.fastembed_model.as_str() {
                 "nomic-embed-vision-v1.5" => 768,
-                _                         => 768,
+                _ => 768,
             },
             "mmproj" | "llm-vlm" => 768,
-            _                    => 768,
+            _ => 768,
         }
     }
 }

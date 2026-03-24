@@ -7,7 +7,7 @@
 import Root from "./skeleton.svelte";
 
 export {
-	Root,
-	//
-	Root as Skeleton,
+  Root,
+  //
+  Root as Skeleton,
 };

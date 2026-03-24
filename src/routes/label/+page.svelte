@@ -5,147 +5,155 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { Button }   from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { t }        from "$lib/i18n/index.svelte";
-  import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import { fmtElapsed } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { Textarea } from "$lib/components/ui/textarea";
+import { fmtElapsed } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let text          = $state("");
-  let context       = $state("");
-  let saving        = $state(false);
-  let error         = $state("");
-  let elapsed       = $state(0);
-  let labelStartUtc = 0;                         // set once in onMount
-  let recentLabels  = $state<string[]>([]);
-  let historyIndex  = $state(-1);
-  let draftText     = $state("");
+// ── State ──────────────────────────────────────────────────────────────────
+let text = $state("");
+let context = $state("");
+let saving = $state(false);
+let error = $state("");
+let elapsed = $state(0);
+let labelStartUtc = 0; // set once in onMount
+let recentLabels = $state<string[]>([]);
+let historyIndex = $state(-1);
+let draftText = $state("");
 
-  // bind:ref requires $state in Svelte 5
-  let textareaEl  = $state<HTMLTextAreaElement | null>(null);
-  let contextEl   = $state<HTMLTextAreaElement | null>(null);
-  let timer: ReturnType<typeof setInterval> | null = null;
+// bind:ref requires $state in Svelte 5
+let textareaEl = $state<HTMLTextAreaElement | null>(null);
+let contextEl = $state<HTMLTextAreaElement | null>(null);
+let timer: ReturnType<typeof setInterval> | null = null;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
+// ── Helpers ────────────────────────────────────────────────────────────────
+const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
 
-  /** Close via Rust command — avoids importing webviewWindow (causes Vite reload). */
-  async function closeWindow() {
-    await invoke("close_label_window");
+/** Close via Rust command — avoids importing webviewWindow (causes Vite reload). */
+async function closeWindow() {
+  await invoke("close_label_window");
+}
+
+async function submit() {
+  if (!text.trim() || saving) return;
+  saving = true;
+  error = "";
+  try {
+    await invoke("submit_label", { labelStartUtc, text: text.trim(), context: context.trim() });
+    await closeWindow();
+  } catch (e) {
+    error = String(e);
+    saving = false;
+  }
+}
+
+async function loadRecentLabels() {
+  try {
+    recentLabels = await invoke<string[]>("get_recent_labels", { limit: 12 });
+  } catch {
+    recentLabels = [];
+  }
+}
+
+function applyRecentLabel(index: number) {
+  if (index < 0 || index >= recentLabels.length) return;
+  historyIndex = index;
+  text = recentLabels[index];
+  requestAnimationFrame(() => {
+    if (!textareaEl) return;
+    const pos = textareaEl.value.length;
+    textareaEl.focus();
+    textareaEl.setSelectionRange(pos, pos);
+  });
+}
+
+function cycleRecentLabels(direction: 1 | -1) {
+  const total = recentLabels.length;
+  if (total === 0) return;
+
+  if (historyIndex === -1) {
+    draftText = text;
+    applyRecentLabel(direction === 1 ? 0 : total - 1);
+    return;
   }
 
-  async function submit() {
-    if (!text.trim() || saving) return;
-    saving = true;
-    error  = "";
-    try {
-      await invoke("submit_label", { labelStartUtc, text: text.trim(), context: context.trim() });
-      await closeWindow();
-    } catch (e) {
-      error  = String(e);
-      saving = false;
-    }
-  }
-
-  async function loadRecentLabels() {
-    try {
-      recentLabels = await invoke<string[]>("get_recent_labels", { limit: 12 });
-    } catch {
-      recentLabels = [];
-    }
-  }
-
-  function applyRecentLabel(index: number) {
-    if (index < 0 || index >= recentLabels.length) return;
-    historyIndex = index;
-    text = recentLabels[index];
+  if (direction === 1 && historyIndex === total - 1) {
+    historyIndex = -1;
+    text = draftText;
     requestAnimationFrame(() => {
       if (!textareaEl) return;
       const pos = textareaEl.value.length;
       textareaEl.focus();
       textareaEl.setSelectionRange(pos, pos);
     });
+    return;
   }
 
-  function cycleRecentLabels(direction: 1 | -1) {
-    const total = recentLabels.length;
-    if (total === 0) return;
+  applyRecentLabel((historyIndex + direction + total) % total);
+}
 
-    if (historyIndex === -1) {
-      draftText = text;
-      applyRecentLabel(direction === 1 ? 0 : total - 1);
-      return;
-    }
+function onLabelInput() {
+  draftText = text;
+  historyIndex = -1;
+}
 
-    if (direction === 1 && historyIndex === total - 1) {
-      historyIndex = -1;
-      text = draftText;
-      requestAnimationFrame(() => {
-        if (!textareaEl) return;
-        const pos = textareaEl.value.length;
-        textareaEl.focus();
-        textareaEl.setSelectionRange(pos, pos);
-      });
-      return;
-    }
+function clearLabelText() {
+  text = "";
+  draftText = "";
+  historyIndex = -1;
+  requestAnimationFrame(() => textareaEl?.focus());
+}
 
-    applyRecentLabel((historyIndex + direction + total) % total);
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeWindow();
   }
-
-  function onLabelInput() {
-    draftText = text;
-    historyIndex = -1;
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    submit();
   }
-
-  function clearLabelText() {
-    text = "";
-    draftText = "";
-    historyIndex = -1;
-    requestAnimationFrame(() => textareaEl?.focus());
+  if (
+    (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+    document.activeElement === textareaEl &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey
+  ) {
+    e.preventDefault();
+    cycleRecentLabels(e.key === "ArrowDown" ? 1 : -1);
   }
+}
 
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape")                             { e.preventDefault(); closeWindow(); }
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit();      }
-    if (
-      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-      document.activeElement === textareaEl &&
-      !e.ctrlKey && !e.metaKey && !e.altKey
-    ) {
-      e.preventDefault();
-      cycleRecentLabels(e.key === "ArrowDown" ? 1 : -1);
-    }
-  }
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(() => {
+  labelStartUtc = Math.floor(Date.now() / 1000);
+  labelTitlebarState.active = true;
+  timer = setInterval(() => elapsed++, 1000);
+  setTimeout(() => textareaEl?.focus(), 60);
+  loadRecentLabels();
+});
+onDestroy(() => {
+  if (timer) clearInterval(timer);
+  labelTitlebarState.active = false;
+  labelTitlebarState.elapsed = "0s";
+});
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(() => {
-    labelStartUtc = Math.floor(Date.now() / 1000);
-    labelTitlebarState.active = true;
-    timer = setInterval(() => elapsed++, 1000);
-    setTimeout(() => textareaEl?.focus(), 60);
-    loadRecentLabels();
-  });
-  onDestroy(() => {
-    if (timer) clearInterval(timer);
-    labelTitlebarState.active = false;
-    labelTitlebarState.elapsed = "0s";
-  });
+$effect(() => {
+  labelTitlebarState.elapsed = fmtElapsed(elapsed);
+});
 
-  $effect(() => {
-    labelTitlebarState.elapsed = fmtElapsed(elapsed);
-  });
+const MAX_CHARS = 1000;
+const MAX_CONTEXT_CHARS = 20_000;
+const nearLimit = $derived(text.length > MAX_CHARS * 0.85);
+const overLimit = $derived(text.length > MAX_CHARS);
+const canSubmit = $derived(text.trim().length > 0 && !overLimit && !saving);
 
-  const MAX_CHARS        = 1000;
-  const MAX_CONTEXT_CHARS = 20_000;
-  const nearLimit        = $derived(text.length > MAX_CHARS * 0.85);
-  const overLimit        = $derived(text.length > MAX_CHARS);
-  const canSubmit        = $derived(text.trim().length > 0 && !overLimit && !saving);
-
-  useWindowTitle("window.title.label");
+useWindowTitle("window.title.label");
 </script>
 
 <svelte:window onkeydown={onKeydown} />

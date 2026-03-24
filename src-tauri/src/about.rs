@@ -16,10 +16,9 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::AppHandle;
 
 use crate::constants::{
-    APP_DISPLAY_NAME, APP_TAGLINE,
-    APP_WEBSITE, APP_WEBSITE_LABEL, APP_REPO_URL, APP_DISCORD_URL,
-    APP_LICENSE, APP_LICENSE_NAME, APP_LICENSE_URL,
-    APP_COPYRIGHT, APP_AUTHORS, APP_ACKNOWLEDGEMENTS,
+    APP_ACKNOWLEDGEMENTS, APP_AUTHORS, APP_COPYRIGHT, APP_DISCORD_URL, APP_DISPLAY_NAME,
+    APP_LICENSE, APP_LICENSE_NAME, APP_LICENSE_URL, APP_REPO_URL, APP_TAGLINE, APP_WEBSITE,
+    APP_WEBSITE_LABEL,
 };
 
 // ── Serialisable about payload ────────────────────────────────────────────────
@@ -29,23 +28,23 @@ use crate::constants::{
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AboutInfo {
-    pub name:             String,
-    pub version:          String,
-    pub tagline:          String,
-    pub website:          String,
-    pub website_label:    String,
-    pub repo_url:         String,
-    pub discord_url:      String,
-    pub license:          String,
-    pub license_name:     String,
-    pub license_url:      String,
-    pub copyright:        String,
+    pub name: String,
+    pub version: String,
+    pub tagline: String,
+    pub website: String,
+    pub website_label: String,
+    pub repo_url: String,
+    pub discord_url: String,
+    pub license: String,
+    pub license_name: String,
+    pub license_url: String,
+    pub copyright: String,
     /// `(name, role)` pairs
-    pub authors:          Vec<[String; 2]>,
+    pub authors: Vec<[String; 2]>,
     pub acknowledgements: String,
     /// PNG data URL (`data:image/png;base64,…`) of the Tauri app icon, or
     /// `None` if the icon could not be read (should never happen in practice).
-    pub icon_data_url:    Option<String>,
+    pub icon_data_url: Option<String>,
 }
 
 // ── Icon encoding ─────────────────────────────────────────────────────────────
@@ -60,10 +59,10 @@ pub struct AboutInfo {
 /// Tauri's `Image` stores raw RGBA pixels; we re-encode them to PNG in memory
 /// so the frontend can use the result directly in an `<img src>`.
 fn icon_data_url() -> Option<String> {
-    let icon   = tauri::include_image!("icons/icon.png");
-    let width  = icon.width();
+    let icon = tauri::include_image!("icons/icon.png");
+    let width = icon.width();
     let height = icon.height();
-    let rgba   = icon.rgba();
+    let rgba = icon.rgba();
 
     let mut png_bytes: Vec<u8> = Vec::new();
     let mut encoder = png::Encoder::new(&mut png_bytes, width, height);
@@ -71,7 +70,10 @@ fn icon_data_url() -> Option<String> {
     encoder.set_depth(png::BitDepth::Eight);
     encoder.write_header().ok()?.write_image_data(rgba).ok()?;
 
-    Some(format!("data:image/png;base64,{}", STANDARD.encode(&png_bytes)))
+    Some(format!(
+        "data:image/png;base64,{}",
+        STANDARD.encode(&png_bytes)
+    ))
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -81,23 +83,23 @@ fn icon_data_url() -> Option<String> {
 pub fn get_about_info(app: AppHandle) -> AboutInfo {
     let version = app.package_info().version.to_string();
     AboutInfo {
-        name:             APP_DISPLAY_NAME.into(),
+        name: APP_DISPLAY_NAME.into(),
         version,
-        tagline:          APP_TAGLINE.into(),
-        website:          APP_WEBSITE.into(),
-        website_label:    APP_WEBSITE_LABEL.into(),
-        repo_url:         APP_REPO_URL.into(),
-        discord_url:      APP_DISCORD_URL.into(),
-        license:          APP_LICENSE.into(),
-        license_name:     APP_LICENSE_NAME.into(),
-        license_url:      APP_LICENSE_URL.into(),
-        copyright:        APP_COPYRIGHT.into(),
-        authors:          APP_AUTHORS
-                              .iter()
-                              .map(|(n, r)| [n.to_string(), r.to_string()])
-                              .collect(),
+        tagline: APP_TAGLINE.into(),
+        website: APP_WEBSITE.into(),
+        website_label: APP_WEBSITE_LABEL.into(),
+        repo_url: APP_REPO_URL.into(),
+        discord_url: APP_DISCORD_URL.into(),
+        license: APP_LICENSE.into(),
+        license_name: APP_LICENSE_NAME.into(),
+        license_url: APP_LICENSE_URL.into(),
+        copyright: APP_COPYRIGHT.into(),
+        authors: APP_AUTHORS
+            .iter()
+            .map(|(n, r)| [n.to_string(), r.to_string()])
+            .collect(),
         acknowledgements: APP_ACKNOWLEDGEMENTS.into(),
-        icon_data_url:    icon_data_url(),
+        icon_data_url: icon_data_url(),
     }
 }
 
@@ -105,11 +107,15 @@ pub fn get_about_info(app: AppHandle) -> AboutInfo {
 #[tauri::command]
 pub async fn open_about_window(app: AppHandle) -> Result<(), String> {
     let title = format!("About {APP_DISPLAY_NAME}");
-    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
-        label: "about", route: "about", title: &title,
-        inner_size: (520.0, 740.0), resizable: false,
-        ..Default::default()
-    })
+    crate::window_cmds::focus_or_create(
+        &app,
+        crate::window_cmds::WindowSpec {
+            label: "about",
+            route: "about",
+            title: &title,
+            inner_size: (520.0, 740.0),
+            resizable: false,
+            ..Default::default()
+        },
+    )
 }
-
-

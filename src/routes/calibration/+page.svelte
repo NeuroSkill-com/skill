@@ -5,359 +5,385 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount, onDestroy }  from "svelte";
-  import { invoke }              from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-  import { Button }              from "$lib/components/ui/button";
-  import { Badge }               from "$lib/components/ui/badge";
-  import { Progress }            from "$lib/components/ui/progress";
-  import { t }                   from "$lib/i18n/index.svelte";
-  import { useWindowTitle }      from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter        from "$lib/DisclaimerFooter.svelte";
-  import type { DeviceStatus }    from "$lib/types";
-  import { MUSE_CHANNELS, MUSE_POSITIONS } from "$lib/types";
-  import { fmtDateTimeLocale }  from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Progress } from "$lib/components/ui/progress";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { fmtDateTimeLocale } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { DeviceStatus } from "$lib/types";
+import { MUSE_CHANNELS, MUSE_POSITIONS } from "$lib/types";
 
-  // ── Electrode quality ──────────────────────────────────────────────────────
-  type ElecTab = "muse" | "10-20" | "10-10";
-  const ELEC_TABS: { id: ElecTab; label: string; count: string }[] = [
-    { id: "muse",  label: "Muse",  count: "4"  },
-    { id: "10-20", label: "10-20", count: "21" },
-    { id: "10-10", label: "10-10", count: "64" },
-  ];
+// ── Electrode quality ──────────────────────────────────────────────────────
+type ElecTab = "muse" | "10-20" | "10-10";
+const ELEC_TABS: { id: ElecTab; label: string; count: string }[] = [
+  { id: "muse", label: "Muse", count: "4" },
+  { id: "10-20", label: "10-20", count: "21" },
+  { id: "10-10", label: "10-10", count: "64" },
+];
 
-  let elecQuality   = $state<string[]>(["no_signal","no_signal","no_signal","no_signal"]);
-  let museConnected = $state(false);
-  let elecTab       = $state<ElecTab>("muse");
+let elecQuality = $state<string[]>(["no_signal", "no_signal", "no_signal", "no_signal"]);
+let museConnected = $state(false);
+let elecTab = $state<ElecTab>("muse");
 
-  // ── TTS readiness ──────────────────────────────────────────────────────────
-  let ttsReady        = $state(false);
-  let ttsDlLabel      = $state("");
-  let unlistenTtsFn:  UnlistenFn | null = null;
+// ── TTS readiness ──────────────────────────────────────────────────────────
+let ttsReady = $state(false);
+let ttsDlLabel = $state("");
+let unlistenTtsFn: UnlistenFn | null = null;
 
-  function elecQualityColor(label: string): string {
-    switch (label) {
-      case "good": return "#22c55e";
-      case "fair": return "#f59e0b";
-      case "poor": return "#ef4444";
-      default:     return "#94a3b8";
+function elecQualityColor(label: string): string {
+  switch (label) {
+    case "good":
+      return "#22c55e";
+    case "fair":
+      return "#f59e0b";
+    case "poor":
+      return "#ef4444";
+    default:
+      return "#94a3b8";
+  }
+}
+function elecQualityBg(label: string): string {
+  switch (label) {
+    case "good":
+      return "bg-green-500/10 border-green-500/20";
+    case "fair":
+      return "bg-amber-500/10 border-amber-500/20";
+    case "poor":
+      return "bg-red-500/10 border-red-500/20";
+    default:
+      return "bg-muted/30 border-border dark:border-white/[0.06]";
+  }
+}
+function elecQualityText(label: string): string {
+  switch (label) {
+    case "good":
+      return "Good";
+    case "fair":
+      return "Fair";
+    case "poor":
+      return "Poor";
+    default:
+      return "No Signal";
+  }
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────
+interface CalibrationAction {
+  label: string;
+  duration_secs: number;
+}
+interface CalibrationProfile {
+  id: string;
+  name: string;
+  actions: CalibrationAction[];
+  break_duration_secs: number;
+  loop_count: number;
+  auto_start: boolean;
+  last_calibration_utc: number | null;
+}
+
+type PhaseKind = "idle" | "action" | "break" | "done";
+interface Phase {
+  kind: PhaseKind;
+  actionIndex: number; // index into profile.actions (for "action" kind)
+  loop: number; // 1-based
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let profiles = $state<CalibrationProfile[]>([]);
+let profile = $state<CalibrationProfile | null>(null);
+let phase = $state<Phase>({ kind: "idle", actionIndex: 0, loop: 1 });
+let countdown = $state(0);
+let totalSecs = $state(0);
+let running = $state(false);
+let unlisten: UnlistenFn | null = null;
+let unlistenQualityFn: UnlistenFn | null = null;
+let notifGranted = false;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+async function closeWindow() {
+  if (running) {
+    running = false; // prevent double-emit in onDestroy
+    await emitEvent("calibration-cancelled", { loop: phase.loop });
+  }
+  await invoke("close_calibration_window");
+}
+
+async function emitEvent(event: string, payload: Record<string, unknown> = {}) {
+  await invoke("emit_calibration_event", { event, payload });
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+function timeAgo(utc: number): string {
+  const diff = Math.floor(Date.now() / 1000) - utc;
+  if (diff < 60) return t("common.justNow");
+  if (diff < 3600) return t("common.minutesAgo", { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t("common.hoursAgo", { n: Math.floor(diff / 3600) });
+  return t("common.daysAgo", { n: Math.floor(diff / 86400) });
+}
+
+async function notify(title: string, body: string) {
+  if (!notifGranted) return;
+  try {
+    sendNotification({ title, body });
+  } catch (e) {}
+}
+
+async function runCountdown(secs: number): Promise<boolean> {
+  totalSecs = secs;
+  countdown = secs;
+  const endTime = Date.now() + secs * 1000;
+  while (countdown > 0) {
+    // Sleep until the next whole-second boundary to avoid cumulative drift.
+    const remaining = endTime - Date.now();
+    if (remaining <= 0) {
+      countdown = 0;
+      break;
     }
+    const nextTick = remaining % 1000 || 1000;
+    await sleep(nextTick);
+    if (!running) return false;
+    countdown = Math.max(0, Math.round((endTime - Date.now()) / 1000));
   }
-  function elecQualityBg(label: string): string {
-    switch (label) {
-      case "good": return "bg-green-500/10 border-green-500/20";
-      case "fair": return "bg-amber-500/10 border-amber-500/20";
-      case "poor": return "bg-red-500/10 border-red-500/20";
-      default:     return "bg-muted/30 border-border dark:border-white/[0.06]";
-    }
+  return true;
+}
+
+// ── Load profiles ──────────────────────────────────────────────────────────
+async function loadProfiles() {
+  profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
+}
+
+async function selectProfile(p: CalibrationProfile) {
+  profile = p;
+  await invoke("set_active_calibration", { id: p.id });
+}
+
+// ── TTS helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Await TTS playback to completion before returning.
+ * Use before starting a countdown so the timer only ticks after the user
+ * has heard the full announcement.  Swallows all errors so TTS failures
+ * never block calibration.
+ */
+async function ttsSpeakWait(text: string): Promise<void> {
+  try {
+    await invoke("tts_speak", { text });
+  } catch {
+    /* non-fatal */
   }
-  function elecQualityText(label: string): string {
-    switch (label) {
-      case "good": return "Good";
-      case "fair": return "Fair";
-      case "poor": return "Poor";
-      default:     return "No Signal";
-    }
-  }
+}
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface CalibrationAction { label: string; duration_secs: number; }
-  interface CalibrationProfile {
-    id: string; name: string;
-    actions: CalibrationAction[];
-    break_duration_secs: number;
-    loop_count: number;
-    auto_start: boolean;
-    last_calibration_utc: number | null;
-  }
+/** Fire-and-forget TTS — never throws; failures are silently ignored. */
+function ttsSpeak(text: string): void {
+  invoke("tts_speak", { text }).catch((_e) => {});
+}
 
-  type PhaseKind = "idle" | "action" | "break" | "done";
-  interface Phase {
-    kind:        PhaseKind;
-    actionIndex: number;   // index into profile.actions (for "action" kind)
-    loop:        number;   // 1-based
-  }
+// ── Calibration loop ───────────────────────────────────────────────────────
+async function startCalibration() {
+  if (!profile) return;
+  running = true;
+  const p = profile;
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let profiles     = $state<CalibrationProfile[]>([]);
-  let profile      = $state<CalibrationProfile | null>(null);
-  let phase        = $state<Phase>({ kind: "idle", actionIndex: 0, loop: 1 });
-  let countdown    = $state(0);
-  let totalSecs    = $state(0);
-  let running      = $state(false);
-  let unlisten: UnlistenFn | null = null;
-  let unlistenQualityFn: UnlistenFn | null = null;
-  let notifGranted = false;
+  // Announce calibration start and wait for it to finish so the first action
+  // announcement doesn't overlap.
+  await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
+  if (!running) return; // user cancelled during the announcement
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  async function closeWindow() {
-    if (running) {
-      running = false;                           // prevent double-emit in onDestroy
-      await emitEvent("calibration-cancelled", { loop: phase.loop });
-    }
-    await invoke("close_calibration_window");
-  }
+  await emitEvent("calibration-started", {
+    profile_id: p.id,
+    profile_name: p.name,
+    actions: p.actions.map((a) => a.label),
+    loop_count: p.loop_count,
+  });
 
-  async function emitEvent(event: string, payload: Record<string, unknown> = {}) {
-    await invoke("emit_calibration_event", { event, payload });
-  }
+  for (let loop = 1; loop <= p.loop_count; loop++) {
+    if (!running) break;
 
-  function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
-
-
-
-  function timeAgo(utc: number): string {
-    const diff = Math.floor(Date.now() / 1000) - utc;
-    if (diff < 60)    return t("common.justNow");
-    if (diff < 3600)  return t("common.minutesAgo", { n: Math.floor(diff / 60) });
-    if (diff < 86400) return t("common.hoursAgo",   { n: Math.floor(diff / 3600) });
-    return t("common.daysAgo", { n: Math.floor(diff / 86400) });
-  }
-
-  async function notify(title: string, body: string) {
-    if (!notifGranted) return;
-    try { sendNotification({ title, body }); } catch (e) { console.warn("[calibration] sendNotification failed:", e); }
-  }
-
-  async function runCountdown(secs: number): Promise<boolean> {
-    totalSecs = secs;
-    countdown = secs;
-    const endTime = Date.now() + secs * 1000;
-    while (countdown > 0) {
-      // Sleep until the next whole-second boundary to avoid cumulative drift.
-      const remaining = endTime - Date.now();
-      if (remaining <= 0) { countdown = 0; break; }
-      const nextTick = remaining % 1000 || 1000;
-      await sleep(nextTick);
-      if (!running) return false;
-      countdown = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-    }
-    return true;
-  }
-
-  // ── Load profiles ──────────────────────────────────────────────────────────
-  async function loadProfiles() {
-    profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
-  }
-
-  async function selectProfile(p: CalibrationProfile) {
-    profile = p;
-    await invoke("set_active_calibration", { id: p.id });
-  }
-
-  // ── TTS helpers ────────────────────────────────────────────────────────────
-
-  /**
-   * Await TTS playback to completion before returning.
-   * Use before starting a countdown so the timer only ticks after the user
-   * has heard the full announcement.  Swallows all errors so TTS failures
-   * never block calibration.
-   */
-  async function ttsSpeakWait(text: string): Promise<void> {
-    try { await invoke("tts_speak", { text }); } catch { /* non-fatal */ }
-  }
-
-  /** Fire-and-forget TTS — never throws; failures are silently ignored. */
-  function ttsSpeak(text: string): void {
-    invoke("tts_speak", { text }).catch(e => console.warn("[calibration] tts_speak failed:", e));
-  }
-
-  // ── Calibration loop ───────────────────────────────────────────────────────
-  async function startCalibration() {
-    if (!profile) return;
-    running = true;
-    const p = profile;
-
-    // Announce calibration start and wait for it to finish so the first action
-    // announcement doesn't overlap.
-    await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
-    if (!running) return;   // user cancelled during the announcement
-
-    await emitEvent("calibration-started", {
-      profile_id: p.id, profile_name: p.name,
-      actions: p.actions.map(a => a.label), loop_count: p.loop_count,
-    });
-
-    for (let loop = 1; loop <= p.loop_count; loop++) {
+    for (let ai = 0; ai < p.actions.length; ai++) {
       if (!running) break;
+      const action = p.actions[ai];
 
-      for (let ai = 0; ai < p.actions.length; ai++) {
+      // ACTION phase — speak the action label and wait for it to finish
+      // before the countdown begins, so the user hears the full cue first.
+      phase = { kind: "action", actionIndex: ai, loop };
+      await ttsSpeakWait(action.label);
+      if (!running) break; // cancelled during speech
+      await notify(action.label, t("calibration.notifActionBody", { loop: String(loop), total: String(p.loop_count) }));
+      await emitEvent("calibration-action", {
+        action: action.label,
+        action_index: ai,
+        loop,
+        phase: `action_${ai}`,
+      });
+      const actionStart = Math.floor(Date.now() / 1000);
+      if (!(await runCountdown(action.duration_secs))) break;
+      try {
+        await invoke("submit_label", { labelStartUtc: actionStart, text: action.label });
+      } catch (e) {}
+
+      // BREAK phase — skip only after the very last action of the very last loop
+      const isLast = loop === p.loop_count && ai === p.actions.length - 1;
+      if (!isLast && running) {
+        const nextAction = p.actions[(ai + 1) % p.actions.length];
+        phase = { kind: "break", actionIndex: ai, loop };
+
+        // Announce both parts sequentially so TTS is fully done before the
+        // countdown starts.  This prevents "Next: …" from bleeding into the
+        // next action phase and delaying its countdown.
+        await ttsSpeakWait("Break.");
         if (!running) break;
-        const action = p.actions[ai];
+        await sleep(300);
+        await ttsSpeakWait(`Next: ${nextAction.label}.`);
+        if (!running) break;
 
-        // ACTION phase — speak the action label and wait for it to finish
-        // before the countdown begins, so the user hears the full cue first.
-        phase = { kind: "action", actionIndex: ai, loop };
-        await ttsSpeakWait(action.label);
-        if (!running) break;   // cancelled during speech
-        await notify(action.label,
-          t("calibration.notifActionBody", { loop: String(loop), total: String(p.loop_count) }));
-        await emitEvent("calibration-action", {
-          action: action.label, action_index: ai, loop, phase: `action_${ai}`,
-        });
-        const actionStart = Math.floor(Date.now() / 1000);
-        if (!(await runCountdown(action.duration_secs))) break;
-        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch (e) { console.warn("[calibration] submit_label failed:", e); }
-
-        // BREAK phase — skip only after the very last action of the very last loop
-        const isLast = loop === p.loop_count && ai === p.actions.length - 1;
-        if (!isLast && running) {
-          const nextAction = p.actions[(ai + 1) % p.actions.length];
-          phase = { kind: "break", actionIndex: ai, loop };
-
-          // Announce both parts sequentially so TTS is fully done before the
-          // countdown starts.  This prevents "Next: …" from bleeding into the
-          // next action phase and delaying its countdown.
-          await ttsSpeakWait("Break.");
-          if (!running) break;
-          await sleep(300);
-          await ttsSpeakWait(`Next: ${nextAction.label}.`);
-          if (!running) break;
-
-          await notify(t("calibration.break"),
-            t("calibration.notifBreakBody", { next: nextAction.label }));
-          await emitEvent("calibration-break", { after_action: action.label, loop });
-          if (!(await runCountdown(p.break_duration_secs))) break;
-        }
+        await notify(t("calibration.break"), t("calibration.notifBreakBody", { next: nextAction.label }));
+        await emitEvent("calibration-break", { after_action: action.label, loop });
+        if (!(await runCountdown(p.break_duration_secs))) break;
       }
     }
-
-    if (running) {
-      // Completed all loops normally.
-      phase = { kind: "done", actionIndex: 0, loop: p.loop_count };
-      running = false;
-      ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
-      await notify(t("calibration.complete"),
-        t("calibration.notifDoneBody", { n: String(p.loop_count) }));
-      await emitEvent("calibration-completed", { loop_count: p.loop_count });
-      await invoke("record_calibration_completed", { profileId: p.id });
-      await loadProfiles();
-      profile = profiles.find(x => x.id === p.id) ?? profile;
-    } else if (phase.kind !== "idle") {
-      // cancelCalibration() set running=false but the loop was mid-sleep when
-      // it returned — ensure we end up in idle in case phase wasn't reset yet.
-      phase = { kind: "idle", actionIndex: 0, loop: 1 };
-    }
   }
 
-  async function cancelCalibration() {
-    if (!running) return;
+  if (running) {
+    // Completed all loops normally.
+    phase = { kind: "done", actionIndex: 0, loop: p.loop_count };
     running = false;
-    ttsSpeak("Calibration cancelled.");
-    await emitEvent("calibration-cancelled", { loop: phase.loop });
-    // Reset immediately so the UI returns to the start screen without waiting
-    // for the background countdown loop to finish its current sleep(1000).
+    ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
+    await notify(t("calibration.complete"), t("calibration.notifDoneBody", { n: String(p.loop_count) }));
+    await emitEvent("calibration-completed", { loop_count: p.loop_count });
+    await invoke("record_calibration_completed", { profileId: p.id });
+    await loadProfiles();
+    profile = profiles.find((x) => x.id === p.id) ?? profile;
+  } else if (phase.kind !== "idle") {
+    // cancelCalibration() set running=false but the loop was mid-sleep when
+    // it returned — ensure we end up in idle in case phase wasn't reset yet.
     phase = { kind: "idle", actionIndex: 0, loop: 1 };
   }
+}
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const progressPct = $derived(totalSecs > 0 ? ((totalSecs - countdown) / totalSecs) * 100 : 0);
+async function cancelCalibration() {
+  if (!running) return;
+  running = false;
+  ttsSpeak("Calibration cancelled.");
+  await emitEvent("calibration-cancelled", { loop: phase.loop });
+  // Reset immediately so the UI returns to the start screen without waiting
+  // for the background countdown loop to finish its current sleep(1000).
+  phase = { kind: "idle", actionIndex: 0, loop: 1 };
+}
 
-  const phaseLabel = $derived.by(() => {
-    if (phase.kind === "action" && profile) {
-      return profile.actions[phase.actionIndex]?.label ?? "";
+// ── Derived ────────────────────────────────────────────────────────────────
+const progressPct = $derived(totalSecs > 0 ? ((totalSecs - countdown) / totalSecs) * 100 : 0);
+
+const phaseLabel = $derived.by(() => {
+  if (phase.kind === "action" && profile) {
+    return profile.actions[phase.actionIndex]?.label ?? "";
+  }
+  if (phase.kind === "break") return t("calibration.break");
+  if (phase.kind === "done") return t("calibration.complete");
+  return t("calibration.ready");
+});
+
+const phaseColor = $derived.by(() => {
+  const COLORS = [
+    "text-blue-600 dark:text-blue-400",
+    "text-violet-600 dark:text-violet-400",
+    "text-emerald-600 dark:text-emerald-400",
+    "text-amber-600 dark:text-amber-400",
+    "text-rose-600 dark:text-rose-400",
+    "text-cyan-600 dark:text-cyan-400",
+  ];
+  if (phase.kind === "action") return COLORS[phase.actionIndex % COLORS.length];
+  if (phase.kind === "break") return "text-amber-600 dark:text-amber-400";
+  if (phase.kind === "done") return "text-emerald-600 dark:text-emerald-400";
+  return "text-muted-foreground";
+});
+
+const phaseBg = $derived.by(() => {
+  const BG = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500"];
+  if (phase.kind === "action") return BG[phase.actionIndex % BG.length];
+  if (phase.kind === "break") return "bg-amber-500";
+  return "bg-emerald-500";
+});
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(async () => {
+  // Notification permission
+  try {
+    notifGranted = await isPermissionGranted();
+    if (!notifGranted) {
+      const perm = await requestPermission();
+      notifGranted = perm === "granted";
     }
-    if (phase.kind === "break") return t("calibration.break");
-    if (phase.kind === "done")  return t("calibration.complete");
-    return t("calibration.ready");
+  } catch (e) {}
+
+  await loadProfiles();
+
+  // Parse URL params for profile pre-selection and autostart
+  const params = new URLSearchParams(window.location.search);
+  const paramId = params.get("profile");
+  const autostart = params.get("autostart") === "1";
+
+  if (paramId) {
+    profile = profiles.find((p) => p.id === paramId) ?? profiles[0] ?? null;
+  } else {
+    profile = (await invoke<CalibrationProfile | null>("get_active_calibration")) ?? profiles[0] ?? null;
+  }
+
+  if (autostart && profile) startCalibration();
+
+  // Listen for run events emitted when window is already open
+  unlisten = await listen<{ profile_id?: string; autostart?: boolean }>("calibration-run", async (ev) => {
+    if (running) return;
+    const pid = ev.payload.profile_id;
+    if (pid) profile = profiles.find((p) => p.id === pid) ?? profile;
+    if (ev.payload.autostart) startCalibration();
   });
 
-  const phaseColor = $derived.by(() => {
-    const COLORS = [
-      "text-blue-600 dark:text-blue-400",
-      "text-violet-600 dark:text-violet-400",
-      "text-emerald-600 dark:text-emerald-400",
-      "text-amber-600 dark:text-amber-400",
-      "text-rose-600 dark:text-rose-400",
-      "text-cyan-600 dark:text-cyan-400",
-    ];
-    if (phase.kind === "action") return COLORS[phase.actionIndex % COLORS.length];
-    if (phase.kind === "break")  return "text-amber-600 dark:text-amber-400";
-    if (phase.kind === "done")   return "text-emerald-600 dark:text-emerald-400";
-    return "text-muted-foreground";
-  });
-
-  const phaseBg = $derived.by(() => {
-    const BG = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500"];
-    if (phase.kind === "action") return BG[phase.actionIndex % BG.length];
-    if (phase.kind === "break")  return "bg-amber-500";
-    return "bg-emerald-500";
-  });
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    // Notification permission
-    try {
-      notifGranted = await isPermissionGranted();
-      if (!notifGranted) {
-        const perm = await requestPermission();
-        notifGranted = perm === "granted";
-      }
-    } catch (e) { console.warn("[calibration] requestPermission failed:", e); }
-
-    await loadProfiles();
-
-    // Parse URL params for profile pre-selection and autostart
-    const params = new URLSearchParams(window.location.search);
-    const paramId = params.get("profile");
-    const autostart = params.get("autostart") === "1";
-
-    if (paramId) {
-      profile = profiles.find(p => p.id === paramId) ?? profiles[0] ?? null;
+  // Pre-warm TTS engine — listen for progress events BEFORE calling init
+  // so we never miss the first "step" event.
+  unlistenTtsFn = await listen<{ phase: string; label: string }>("tts-progress", (ev) => {
+    if (ev.payload.phase === "ready") {
+      ttsReady = true;
+      ttsDlLabel = "";
     } else {
-      profile = (await invoke<CalibrationProfile | null>("get_active_calibration")) ?? profiles[0] ?? null;
-    }
-
-    if (autostart && profile) startCalibration();
-
-    // Listen for run events emitted when window is already open
-    unlisten = await listen<{ profile_id?: string; autostart?: boolean }>("calibration-run", async ev => {
-      if (running) return;
-      const pid = ev.payload.profile_id;
-      if (pid) profile = profiles.find(p => p.id === pid) ?? profile;
-      if (ev.payload.autostart) startCalibration();
-    });
-
-    // Pre-warm TTS engine — listen for progress events BEFORE calling init
-    // so we never miss the first "step" event.
-    unlistenTtsFn = await listen<{ phase: string; label: string }>(
-      "tts-progress",
-      (ev) => {
-        if (ev.payload.phase === "ready") {
-          ttsReady   = true;
-          ttsDlLabel = "";
-        } else {
-          ttsReady   = false;
-          ttsDlLabel = ev.payload.label ?? "";
-        }
-      }
-    );
-    invoke("tts_init").catch(e => console.warn("[calibration] tts_init failed:", e));
-
-    // Electrode signal quality
-    try {
-      const s = await invoke<DeviceStatus>("get_status");
-      elecQuality   = s.channel_quality;
-      museConnected = s.state === "connected";
-    } catch (e) { console.warn("[calibration] get_status failed:", e); }
-    unlistenQualityFn = await listen<DeviceStatus>("status", (ev) => {
-      elecQuality   = ev.payload.channel_quality;
-      museConnected = ev.payload.state === "connected";
-    });
-  });
-
-  onDestroy(async () => {
-    unlisten?.();
-    unlistenQualityFn?.();
-    unlistenTtsFn?.();
-    if (running) {
-      running = false;
-      await emitEvent("calibration-cancelled", { loop: phase.loop });
+      ttsReady = false;
+      ttsDlLabel = ev.payload.label ?? "";
     }
   });
+  invoke("tts_init").catch((_e) => {});
 
-  useWindowTitle("window.title.calibration");
+  // Electrode signal quality
+  try {
+    const s = await invoke<DeviceStatus>("get_status");
+    elecQuality = s.channel_quality;
+    museConnected = s.state === "connected";
+  } catch (e) {}
+  unlistenQualityFn = await listen<DeviceStatus>("status", (ev) => {
+    elecQuality = ev.payload.channel_quality;
+    museConnected = ev.payload.state === "connected";
+  });
+});
+
+onDestroy(async () => {
+  unlisten?.();
+  unlistenQualityFn?.();
+  unlistenTtsFn?.();
+  if (running) {
+    running = false;
+    await emitEvent("calibration-cancelled", { loop: phase.loop });
+  }
+});
+
+useWindowTitle("window.title.calibration");
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape") closeWindow(); }} />

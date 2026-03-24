@@ -2,51 +2,70 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Calendar heatmap views (year / month / week) for session history. -->
 <script lang="ts">
-  import { fade } from "svelte/transition";
-  import { t } from "$lib/i18n/index.svelte";
+import { fade } from "svelte/transition";
+import { t } from "$lib/i18n/index.svelte";
 
-  export interface CalendarCell {
-    dayKey: string;
-    date: Date;
-    count: number;
-    inRange: boolean;
-    isToday: boolean;
-  }
+export interface CalendarCell {
+  dayKey: string;
+  date: Date;
+  count: number;
+  inRange: boolean;
+  isToday: boolean;
+}
 
-  interface WeekGridDay {
-    dayKey: string;
+interface WeekGridDay {
+  dayKey: string;
+  label: string;
+  sessions: Array<{ csv_path: string; start_utc: number; end_utc: number }>;
+}
+
+interface Props {
+  viewMode: "year" | "month" | "week";
+  calendarCells: CalendarCell[];
+  yearWeeks: CalendarCell[][];
+  maxCount: number;
+  heatColor: (count: number, max: number) => string;
+  navigateToDay: (dayKey: string) => void;
+  recordingStreak: number;
+  calendarMonth: string;
+  weekGridDays: WeekGridDay[];
+  drawDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
+  renderDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
+  handleDayDotsHover: (canvas: HTMLCanvasElement, e: MouseEvent, sessions: any[], dayKey: string) => void;
+  drawDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
+  renderDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
+  handleGridHover: (canvas: HTMLCanvasElement, e: MouseEvent, data: any) => void;
+  gridDataForDay: (dayKey: string) => any;
+  daySessionsMap: Map<string, any[]>;
+  gridTooltip: {
+    visible: boolean;
+    x: number;
+    y: number;
     label: string;
-    sessions: Array<{ csv_path: string; start_utc: number; end_utc: number }>;
-  }
+    values: Array<{ label: string; value: string }>;
+  } | null;
+}
 
-  interface Props {
-    viewMode: "year" | "month" | "week";
-    calendarCells: CalendarCell[];
-    yearWeeks: CalendarCell[][];
-    maxCount: number;
-    heatColor: (count: number, max: number) => string;
-    navigateToDay: (dayKey: string) => void;
-    recordingStreak: number;
-    calendarMonth: string;
-    weekGridDays: WeekGridDay[];
-    drawDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
-    renderDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
-    handleDayDotsHover: (canvas: HTMLCanvasElement, e: MouseEvent, sessions: any[], dayKey: string) => void;
-    drawDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
-    renderDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
-    handleGridHover: (canvas: HTMLCanvasElement, e: MouseEvent, data: any) => void;
-    gridDataForDay: (dayKey: string) => any;
-    daySessionsMap: Map<string, any[]>;
-    gridTooltip: { visible: boolean; x: number; y: number; label: string; values: Array<{ label: string; value: string }> } | null;
-  }
-
-  let {
-    viewMode, calendarCells, yearWeeks, maxCount,
-    heatColor, navigateToDay, recordingStreak, calendarMonth,
-    weekGridDays, drawDayDots, renderDayDots, handleDayDotsHover,
-    drawDayGrid, renderDayGrid, handleGridHover, gridDataForDay,
-    daySessionsMap, gridTooltip,
-  }: Props = $props();
+let {
+  viewMode,
+  calendarCells,
+  yearWeeks,
+  maxCount,
+  heatColor,
+  navigateToDay,
+  recordingStreak,
+  calendarMonth,
+  weekGridDays,
+  drawDayDots,
+  renderDayDots,
+  handleDayDotsHover,
+  drawDayGrid,
+  renderDayGrid,
+  handleGridHover,
+  gridDataForDay,
+  daySessionsMap,
+  gridTooltip,
+}: Props = $props();
 </script>
 
 <div class="flex flex-col gap-2" transition:fade={{ duration: 120 }}>

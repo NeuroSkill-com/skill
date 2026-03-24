@@ -18,16 +18,16 @@ use idun::prelude::*;
 use skill_constants::{EEG_CHANNELS, IDUN_CHANNEL_NAMES, IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE};
 
 use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame, now_secs,
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
+    EegFrame, ImuFrame,
 };
 
 // ── IdunAdapter ───────────────────────────────────────────────────────────────
 
 pub struct IdunAdapter {
-    rx:      mpsc::Receiver<GuardianEvent>,
-    handle:  Option<GuardianHandle>,
-    desc:    DeviceDescriptor,
+    rx: mpsc::Receiver<GuardianEvent>,
+    handle: Option<GuardianHandle>,
+    desc: DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
 
     /// Last known accelerometer values so gyro events can pair with them.

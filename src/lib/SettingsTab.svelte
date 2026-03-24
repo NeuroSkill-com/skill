@@ -6,146 +6,158 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Settings tab — Storage format, GPU/memory, activity tracking, logging, data dir, WS server -->
 <script lang="ts">
-  import { onMount, onDestroy }       from "svelte";
-  import { invoke }                   from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { relaunch }                 from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { onDestroy, onMount } from "svelte";
 
-  import { Button }                   from "$lib/components/ui/button";
-  import { Card, CardContent }        from "$lib/components/ui/card";
-  import { Separator }                from "$lib/components/ui/separator";
-  import { t } from "$lib/i18n/index.svelte";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
 
+// ── Types ──────────────────────────────────────────────────────────────────
+interface LogConfig {
+  embedder: boolean;
+  bluetooth: boolean;
+  websocket: boolean;
+  csv: boolean;
+  filter: boolean;
+  bands: boolean;
+  tts: boolean;
+  llm: boolean;
+  chat_store: boolean;
+  history: boolean;
+  hooks: boolean;
+  tools: boolean;
+}
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface LogConfig {
-    embedder:   boolean;
-    bluetooth:  boolean;
-    websocket:  boolean;
-    csv:        boolean;
-    filter:     boolean;
-    bands:      boolean;
-    tts:        boolean;
-    llm:        boolean;
-    chat_store: boolean;
-    history:    boolean;
-    hooks:      boolean;
-    tools:      boolean;
+interface GpuStats {
+  render: number;
+  tiler: number;
+  overall: number;
+  isUnifiedMemory: boolean;
+  totalMemoryBytes: number | null;
+  freeMemoryBytes: number | null;
+}
+let gpuStats = $state<GpuStats | null>(null);
+
+let storageFormat = $state<"csv" | "parquet" | "both">("csv");
+let logConfig = $state<LogConfig>({
+  embedder: true,
+  bluetooth: true,
+  websocket: false,
+  csv: false,
+  filter: false,
+  bands: false,
+  tts: false,
+  llm: false,
+  chat_store: false,
+  history: false,
+  hooks: true,
+  tools: false,
+});
+let dataDirCurrent = $state("");
+let dataDirDefault = $state("");
+let dataDirInput = $state("");
+let dataDirSaving = $state(false);
+let dataDirChanged = $state(false);
+let now = $state(Math.floor(Date.now() / 1000));
+
+// ── Activity tracking ────────────────────────────────────────────────────────
+interface ActiveWindowInfo {
+  app_name: string;
+  app_path: string;
+  window_title: string;
+  activated_at: number;
+}
+let trackActiveWindow = $state(true);
+let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
+let trackInputActivity = $state(true);
+// [kbd_ts, mouse_ts] in unix seconds; 0 = never
+let lastInputActivity = $state<[number, number]>([0, 0]);
+
+// ── WS server config ────────────────────────────────────────────────────────
+let wsHost = $state("127.0.0.1");
+let wsPort = $state(8375);
+let wsPortInput = $state("8375");
+let wsHostChanged = $state(false);
+let wsPortChanged = $state(false);
+let wsPortError = $state("");
+let wsSaving = $state(false);
+let wsChanged = $derived(wsHostChanged || wsPortChanged);
+
+// ── API token ───────────────────────────────────────────────────────────────
+let apiToken = $state("");
+let apiTokenInput = $state("");
+let apiTokenDirty = $derived(apiTokenInput !== apiToken);
+
+const OVERLAP_PRESETS: [string, number][] = [
+  ["0 s — none", 0],
+  ["1.25 s — 25%", 1.25],
+  ["2.5 s — 50%", 2.5],
+  ["3.75 s — 75%", 3.75],
+  ["4.5 s — 90%", 4.5],
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmtLastSeen(ts: number) {
+  if (ts === 0) return "never";
+  const d = now - ts;
+  if (d < 5) return "just now";
+  if (d < 60) return `${d}s ago`;
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+  return `${Math.floor(d / 3600)}h ago`;
+}
+
+// ── Log config ────────────────────────────────────────────────────────────
+async function toggleLog(key: keyof LogConfig) {
+  const next = { ...logConfig, [key]: !logConfig[key] };
+  logConfig = next;
+  await invoke("set_log_config", { config: next });
+}
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+let unlisteners: UnlistenFn[] = [];
+let nowTimer: ReturnType<typeof setInterval>;
+
+onMount(async () => {
+  gpuStats = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
+  storageFormat = (await invoke<string>("get_storage_format").catch(() => "csv")) as "csv" | "parquet" | "both";
+  logConfig = await invoke<LogConfig>("get_log_config");
+  {
+    const [cur, def] = await invoke<[string, string]>("get_data_dir");
+    dataDirCurrent = cur;
+    dataDirDefault = def;
+    dataDirInput = cur;
   }
-
-  interface GpuStats {
-    render:            number;
-    tiler:             number;
-    overall:           number;
-    isUnifiedMemory:   boolean;
-    totalMemoryBytes:  number | null;
-    freeMemoryBytes:   number | null;
+  {
+    const [h, p] = await invoke<[string, number]>("get_ws_config");
+    wsHost = h;
+    wsPort = p;
+    wsPortInput = String(p);
   }
-  let gpuStats = $state<GpuStats | null>(null);
+  apiToken = await invoke<string>("get_api_token");
+  apiTokenInput = apiToken;
+  trackActiveWindow = await invoke<boolean>("get_active_window_tracking");
+  currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
+  trackInputActivity = await invoke<boolean>("get_input_activity_tracking");
+  lastInputActivity = await invoke<[number, number]>("get_last_input_activity");
+  nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
 
-  let storageFormat  = $state<"csv" | "parquet" | "both">("csv");
-  let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, tts: false, llm: false, chat_store: false, history: false, hooks: true, tools: false });
-  let dataDirCurrent = $state("");
-  let dataDirDefault = $state("");
-  let dataDirInput   = $state("");
-  let dataDirSaving  = $state(false);
-  let dataDirChanged = $state(false);
-  let now          = $state(Math.floor(Date.now() / 1000));
-
-  // ── Activity tracking ────────────────────────────────────────────────────────
-  interface ActiveWindowInfo {
-    app_name:     string;
-    app_path:     string;
-    window_title: string;
-    activated_at: number;
-  }
-  let trackActiveWindow   = $state(true);
-  let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
-  let trackInputActivity  = $state(true);
-  // [kbd_ts, mouse_ts] in unix seconds; 0 = never
-  let lastInputActivity   = $state<[number, number]>([0, 0]);
-
-  // ── WS server config ────────────────────────────────────────────────────────
-  let wsHost        = $state("127.0.0.1");
-  let wsPort        = $state(8375);
-  let wsPortInput   = $state("8375");
-  let wsHostChanged = $state(false);
-  let wsPortChanged = $state(false);
-  let wsPortError   = $state("");
-  let wsSaving      = $state(false);
-  let wsChanged     = $derived(wsHostChanged || wsPortChanged);
-
-  // ── API token ───────────────────────────────────────────────────────────────
-  let apiToken      = $state("");
-  let apiTokenInput = $state("");
-  let apiTokenDirty = $derived(apiTokenInput !== apiToken);
-
-  const OVERLAP_PRESETS: [string, number][] = [
-    ["0 s — none",    0],
-    ["1.25 s — 25%",  1.25],
-    ["2.5 s — 50%",   2.5],
-    ["3.75 s — 75%",  3.75],
-    ["4.5 s — 90%",   4.5],
-  ];
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function fmtLastSeen(ts: number) {
-    if (ts === 0) return "never";
-    const d = now - ts;
-    if (d < 5)    return "just now";
-    if (d < 60)   return `${d}s ago`;
-    if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-    return `${Math.floor(d / 3600)}h ago`;
-  }
-
-  // ── Log config ────────────────────────────────────────────────────────────
-  async function toggleLog(key: keyof LogConfig) {
-    const next = { ...logConfig, [key]: !logConfig[key] };
-    logConfig = next;
-    await invoke("set_log_config", { config: next });
-  }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  let unlisteners: UnlistenFn[] = [];
-  let nowTimer: ReturnType<typeof setInterval>;
-
-  onMount(async () => {
-    gpuStats    = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
-    storageFormat = (await invoke<string>("get_storage_format").catch(() => "csv")) as "csv" | "parquet" | "both";
-    logConfig   = await invoke<LogConfig>("get_log_config");
-    {
-      const [cur, def] = await invoke<[string, string]>("get_data_dir");
-      dataDirCurrent = cur;
-      dataDirDefault = def;
-      dataDirInput = cur;
-    }
-    {
-      const [h, p] = await invoke<[string, number]>("get_ws_config");
-      wsHost = h;
-      wsPort = p;
-      wsPortInput = String(p);
-    }
-    apiToken = await invoke<string>("get_api_token");
-    apiTokenInput = apiToken;
-    trackActiveWindow   = await invoke<boolean>("get_active_window_tracking");
-    currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
-    trackInputActivity  = await invoke<boolean>("get_input_activity_tracking");
-    lastInputActivity   = await invoke<[number, number]>("get_last_input_activity");
-    nowTimer    = setInterval(() => now = Math.floor(Date.now() / 1000), 1000);
-
-    unlisteners.push(
-      await listen<ActiveWindowInfo | null>("active-window-changed", ev => {
-        currentActiveWindow = ev.payload;
-      }),
-      await listen<[number, number]>("input-activity", ev => {
-        lastInputActivity = ev.payload;
-      }),
-    );
-  });
-  onDestroy(() => {
-    unlisteners.forEach(u => u());
-    clearInterval(nowTimer);
-  });
+  unlisteners.push(
+    await listen<ActiveWindowInfo | null>("active-window-changed", (ev) => {
+      currentActiveWindow = ev.payload;
+    }),
+    await listen<[number, number]>("input-activity", (ev) => {
+      lastInputActivity = ev.payload;
+    }),
+  );
+});
+onDestroy(() => {
+  unlisteners.forEach((u) => u());
+  clearInterval(nowTimer);
+});
 </script>
 
 <!-- ── Storage Format ───────────────────────────────────────────────────────── -->

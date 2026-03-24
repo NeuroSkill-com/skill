@@ -70,19 +70,19 @@ pub struct Secrets {
 /// Load all secrets from the system keychain.
 pub fn load_secrets() -> Secrets {
     Secrets {
-        api_token:            get_secret(KEY_API_TOKEN),
-        emotiv_client_id:     get_secret(KEY_EMOTIV_CLIENT_ID),
+        api_token: get_secret(KEY_API_TOKEN),
+        emotiv_client_id: get_secret(KEY_EMOTIV_CLIENT_ID),
         emotiv_client_secret: get_secret(KEY_EMOTIV_CLIENT_SECRET),
-        idun_api_token:       get_secret(KEY_IDUN_API_TOKEN),
+        idun_api_token: get_secret(KEY_IDUN_API_TOKEN),
     }
 }
 
 /// Save all secrets to the system keychain.
 pub fn save_secrets(secrets: &Secrets) {
-    set_secret(KEY_API_TOKEN,            &secrets.api_token);
-    set_secret(KEY_EMOTIV_CLIENT_ID,     &secrets.emotiv_client_id);
+    set_secret(KEY_API_TOKEN, &secrets.api_token);
+    set_secret(KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id);
     set_secret(KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret);
-    set_secret(KEY_IDUN_API_TOKEN,       &secrets.idun_api_token);
+    set_secret(KEY_IDUN_API_TOKEN, &secrets.idun_api_token);
 }
 
 /// Migrate plaintext secrets from settings JSON into the keychain.
@@ -100,10 +100,10 @@ pub fn migrate_plaintext_secrets(
     let mut migrated = false;
 
     let pairs: &[(&str, &str)] = &[
-        (KEY_API_TOKEN,            api_token),
-        (KEY_EMOTIV_CLIENT_ID,     emotiv_client_id),
+        (KEY_API_TOKEN, api_token),
+        (KEY_EMOTIV_CLIENT_ID, emotiv_client_id),
         (KEY_EMOTIV_CLIENT_SECRET, emotiv_client_secret),
-        (KEY_IDUN_API_TOKEN,       idun_api_token),
+        (KEY_IDUN_API_TOKEN, idun_api_token),
     ];
 
     for &(key, plaintext) in pairs {

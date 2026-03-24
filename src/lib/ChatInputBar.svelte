@@ -2,89 +2,95 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat input bar — message textarea, image attachments, prompt library button. -->
 <script lang="ts">
-  import { tick }          from "svelte";
-  import { t }             from "$lib/i18n/index.svelte";
-  import PromptLibrary     from "$lib/PromptLibrary.svelte";
-  import type { Attachment, ServerStatus } from "$lib/chat-types";
+import { tick } from "svelte";
+import type { Attachment, ServerStatus } from "$lib/chat-types";
+import { t } from "$lib/i18n/index.svelte";
+import type PromptLibrary from "$lib/PromptLibrary.svelte";
 
-  interface Props {
-    input: string;
-    attachments: Attachment[];
-    status: ServerStatus;
-    generating: boolean;
-    aborting: boolean;
-    canSend: boolean;
-    supportsVision: boolean;
-    nCtx: number;
-    liveUsedTokens: number;
-    onSend: () => void;
-    onAbort: () => void;
-    onInputKeydown: (e: KeyboardEvent) => void;
-    onBeforeInput: (e: InputEvent) => void;
+interface Props {
+  input: string;
+  attachments: Attachment[];
+  status: ServerStatus;
+  generating: boolean;
+  aborting: boolean;
+  canSend: boolean;
+  supportsVision: boolean;
+  nCtx: number;
+  liveUsedTokens: number;
+  onSend: () => void;
+  onAbort: () => void;
+  onInputKeydown: (e: KeyboardEvent) => void;
+  onBeforeInput: (e: InputEvent) => void;
+}
+
+let {
+  input = $bindable(),
+  attachments = $bindable(),
+  status,
+  generating,
+  aborting,
+  canSend,
+  supportsVision,
+  nCtx,
+  liveUsedTokens,
+  onSend,
+  onAbort,
+  onInputKeydown,
+  onBeforeInput,
+}: Props = $props();
+
+let inputEl = $state<HTMLTextAreaElement | null>(null);
+let fileInputEl = $state<HTMLInputElement | null>(null);
+let promptLibRef = $state<PromptLibrary | null>(null);
+
+export function focus() {
+  inputEl?.focus();
+}
+export function getInputEl() {
+  return inputEl;
+}
+
+export function autoResize() {
+  if (!inputEl) return;
+  inputEl.style.height = "auto";
+  inputEl.style.height = `${Math.min(inputEl.scrollHeight, 200)}px`;
+}
+
+function openFilePicker() {
+  fileInputEl?.click();
+}
+
+async function onFilesSelected(e: Event) {
+  const files = (e.target as HTMLInputElement).files;
+  if (!files) return;
+  for (const file of Array.from(files)) {
+    if (!file.type.startsWith("image/")) continue;
+    const dataUrl = await readFileAsDataUrl(file);
+    attachments = [...attachments, { dataUrl, mimeType: file.type, name: file.name }];
   }
+  if (fileInputEl) fileInputEl.value = "";
+}
 
-  let {
-    input           = $bindable(),
-    attachments     = $bindable(),
-    status,
-    generating,
-    aborting,
-    canSend,
-    supportsVision,
-    nCtx,
-    liveUsedTokens,
-    onSend,
-    onAbort,
-    onInputKeydown,
-    onBeforeInput,
-  }: Props = $props();
+function removeAttachment(i: number) {
+  attachments = attachments.filter((_, idx) => idx !== i);
+}
 
-  let inputEl      = $state<HTMLTextAreaElement | null>(null);
-  let fileInputEl  = $state<HTMLInputElement | null>(null);
-  let promptLibRef = $state<PromptLibrary | null>(null);
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result as string);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+}
 
-  export function focus() { inputEl?.focus(); }
-  export function getInputEl() { return inputEl; }
-
-  export function autoResize() {
-    if (!inputEl) return;
-    inputEl.style.height = "auto";
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + "px";
-  }
-
-  function openFilePicker() { fileInputEl?.click(); }
-
-  async function onFilesSelected(e: Event) {
-    const files = (e.target as HTMLInputElement).files;
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) continue;
-      const dataUrl = await readFileAsDataUrl(file);
-      attachments = [...attachments, { dataUrl, mimeType: file.type, name: file.name }];
-    }
-    if (fileInputEl) fileInputEl.value = "";
-  }
-
-  function removeAttachment(i: number) {
-    attachments = attachments.filter((_, idx) => idx !== i);
-  }
-
-  function readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload  = () => res(reader.result as string);
-      reader.onerror = rej;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function selectPrompt(text: string) {
-    input = text;
-    await tick();
-    autoResize();
-    inputEl?.focus();
-    inputEl?.setSelectionRange(input.length, input.length);
-  }
+async function selectPrompt(text: string) {
+  input = text;
+  await tick();
+  autoResize();
+  inputEl?.focus();
+  inputEl?.setSelectionRange(input.length, input.length);
+}
 </script>
 
 <footer class="relative shrink-0 border-t border-border dark:border-white/[0.06]

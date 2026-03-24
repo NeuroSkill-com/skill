@@ -11,7 +11,9 @@ import type { UmapPoint } from "$lib/types";
 
 // ── Easing ───────────────────────────────────────────────────────────────────
 
-export function easeOut(t: number): number { return 1 - (1 - t) ** 3; }
+export function easeOut(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
 
 export function gauss(): number {
   return Math.sqrt(-2 * Math.log(Math.random() || 1e-10)) * Math.cos(Math.PI * 2 * Math.random());
@@ -21,21 +23,48 @@ export function gauss(): number {
 
 export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
   return [f(0), f(8), f(4)];
 }
 
 export function labelHex(hue: number): string {
   const [r, g, b] = hslToRgb(hue, 0.85, 0.55);
-  return `#${[r, g, b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[r, g, b]
+    .map((v) =>
+      Math.round(v * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 /** Turbo colormap — returns raw [R, G, B] in 0–1 range. */
 export function turboRaw(t: number): [number, number, number] {
   const c = Math.max(0, Math.min(1, t));
-  const r = Math.max(0, Math.min(1, 0.13572138 + c*(4.61539260 + c*(-42.66032258 + c*(132.13108234 + c*(-152.54893924 + c* 59.28637943))))));
-  const g = Math.max(0, Math.min(1, 0.09140261 + c*(2.19418839 + c*(  4.84296658 + c*(-14.18503333 + c*(   4.27729857 + c*  2.82956604))))));
-  const b = Math.max(0, Math.min(1, 0.10667330 + c*(12.64194608 + c*(-60.58204836 + c*(110.36276771 + c*( -89.90310912 + c* 27.34824973))))));
+  const r = Math.max(
+    0,
+    Math.min(
+      1,
+      0.13572138 + c * (4.6153926 + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c * 59.28637943)))),
+    ),
+  );
+  const g = Math.max(
+    0,
+    Math.min(
+      1,
+      0.09140261 + c * (2.19418839 + c * (4.84296658 + c * (-14.18503333 + c * (4.27729857 + c * 2.82956604)))),
+    ),
+  );
+  const b = Math.max(
+    0,
+    Math.min(
+      1,
+      0.1066733 + c * (12.64194608 + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c * 27.34824973)))),
+    ),
+  );
   return [r, g, b];
 }
 
@@ -52,7 +81,13 @@ export function jet(t: number): [number, number, number] {
 /** Jet colormap → CSS hex string. */
 export function jetHex(t: number): string {
   const [r, g, b] = jet(t);
-  return `#${[r, g, b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[r, g, b]
+    .map((v) =>
+      Math.round(v * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 // ── Timestamp formatting ─────────────────────────────────────────────────────
@@ -62,7 +97,7 @@ export function fmtGradientTs(utc: number, span: number): string {
   if (utc <= 0) return "";
   const d = new Date(utc * 1000);
   if (span >= 172800) return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  if (span >= 3600)   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (span >= 3600) return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
@@ -75,7 +110,7 @@ export function fmtUtcTime(utc: number): string {
 /** Convert UTC seconds → local "YYYY-MM-DD" string. */
 export function utcToLocalDate(utc: number): string {
   const d = new Date(utc * 1000);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // ── Geometry ─────────────────────────────────────────────────────────────────
@@ -85,19 +120,29 @@ export function normalise(pts: UmapPoint[]): Float32Array {
   const n = pts.length;
   const pos = new Float32Array(n * 3);
   if (n === 0) return pos;
-  let mx = 0, my = 0, mz = 0;
-  for (const p of pts) { mx += p.x; my += p.y; mz += p.z; }
-  mx /= n; my /= n; mz /= n;
+  let mx = 0,
+    my = 0,
+    mz = 0;
+  for (const p of pts) {
+    mx += p.x;
+    my += p.y;
+    mz += p.z;
+  }
+  mx /= n;
+  my /= n;
+  mz /= n;
   let maxR = 0;
   for (const p of pts) {
-    const dx = p.x - mx, dy = p.y - my, dz = p.z - mz;
-    maxR = Math.max(maxR, Math.sqrt(dx*dx + dy*dy + dz*dz));
+    const dx = p.x - mx,
+      dy = p.y - my,
+      dz = p.z - mz;
+    maxR = Math.max(maxR, Math.sqrt(dx * dx + dy * dy + dz * dz));
   }
   if (maxR < 1e-8) maxR = 1;
   for (let i = 0; i < n; i++) {
-    pos[i*3]   = (pts[i].x - mx) / maxR;
-    pos[i*3+1] = (pts[i].y - my) / maxR;
-    pos[i*3+2] = (pts[i].z - mz) / maxR;
+    pos[i * 3] = (pts[i].x - mx) / maxR;
+    pos[i * 3 + 1] = (pts[i].y - my) / maxR;
+    pos[i * 3 + 2] = (pts[i].z - mz) / maxR;
   }
   return pos;
 }
@@ -107,9 +152,9 @@ export function randomPositions(pts: UmapPoint[]): Float32Array {
   const n = pts.length;
   const pos = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    pos[i*3]   = gauss() * 0.15;
-    pos[i*3+1] = gauss() * 0.15;
-    pos[i*3+2] = gauss() * 0.15;
+    pos[i * 3] = gauss() * 0.15;
+    pos[i * 3 + 1] = gauss() * 0.15;
+    pos[i * 3 + 2] = gauss() * 0.15;
   }
   return pos;
 }
@@ -129,7 +174,7 @@ export function buildTraceTimeTicks(sorted: number[]): { t: number; label: strin
   const TARGET_TICKS = 5;
   const raw = span / TARGET_TICKS;
   const niceIntervals = [60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 43200, 86400];
-  let interval = niceIntervals.find(i => i >= raw) ?? 86400;
+  const interval = niceIntervals.find((i) => i >= raw) ?? 86400;
 
   // Generate ticks at whole multiples of interval
   const firstTick = Math.ceil(tMin / interval) * interval;
@@ -156,7 +201,9 @@ export function buildTraceTimeTicks(sorted: number[]): { t: number; label: strin
  */
 export function buildDatePaletteRaw(pts: UmapPoint[]): Map<string, [number, number, number]> {
   const daySet = new Set<string>();
-  for (const p of pts) { if (p.utc > 0) daySet.add(utcToLocalDate(p.utc)); }
+  for (const p of pts) {
+    if (p.utc > 0) daySet.add(utcToLocalDate(p.utc));
+  }
   const days = [...daySet].sort();
   const palette = new Map<string, [number, number, number]>();
   for (let i = 0; i < days.length; i++) {

@@ -8,23 +8,21 @@ use std::{
     sync::{mpsc, Arc, Mutex},
 };
 
-use crate::skill_log::SkillLogger;
-use crate::settings::{HookLastTrigger, HookRule};
-use crate::MutexExt;
 use crate::constants::{
-    CHANNEL_NAMES, EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES,
-    GLOBAL_HNSW_SAVE_EVERY, MUSE_SAMPLE_RATE,
+    CHANNEL_NAMES, EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, GLOBAL_HNSW_SAVE_EVERY, MUSE_SAMPLE_RATE,
 };
 use crate::global_eeg_index;
+use crate::settings::{HookLastTrigger, HookRule};
+use crate::skill_log::SkillLogger;
+use crate::MutexExt;
 use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, ExgModelBackend};
 use skill_exg::{
-    EpochMetrics, configure_cubecl_cache, GPU_DEVICE_POISONED,
-    panic_msg, yyyymmdd_utc, yyyymmddhhmmss_utc,
+    configure_cubecl_cache, panic_msg, yyyymmdd_utc, yyyymmddhhmmss_utc, EpochMetrics,
+    GPU_DEVICE_POISONED,
 };
 
-use super::EpochMsg;
 use super::day_store::DayStore;
-
+use super::EpochMsg;
 
 #[derive(serde::Serialize)]
 struct HookBroadcastPayload {
@@ -63,7 +61,8 @@ struct HookMatcher {
     last_refresh_unix: u64,
     last_fired_unix: HashMap<String, u64>,
     logger: Arc<SkillLogger>,
-    hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+    hook_runtime:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
     app: tauri::AppHandle,
     hooks_log: Option<skill_data::hooks_log::HooksLog>,
 }
@@ -77,7 +76,9 @@ impl HookMatcher {
         label_idx: Arc<crate::label_index::LabelIndexState>,
         ws_broadcaster: crate::ws_server::WsBroadcaster,
         logger: Arc<SkillLogger>,
-        hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+        hook_runtime: std::sync::Arc<
+            std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>,
+        >,
         app: tauri::AppHandle,
     ) -> Self {
         let hooks_log = skill_data::hooks_log::HooksLog::open(&skill_dir);
@@ -110,7 +111,7 @@ impl HookMatcher {
         // ── Phase 1: batch-embed all hook keywords while holding the lock ─────
         // Collect (hook_index, queries, embeddings) tuples.
         struct HookQueries {
-            hook_idx:   usize,
+            hook_idx: usize,
             embeddings: Vec<Vec<f32>>,
         }
         let mut hook_queries: Vec<HookQueries> = Vec::new();
@@ -126,23 +127,33 @@ impl HookMatcher {
             };
 
             for (idx, hook) in self.hooks.iter().enumerate().filter(|(_, h)| h.enabled) {
-                let mut queries: Vec<String> = hook.keywords
+                let mut queries: Vec<String> = hook
+                    .keywords
                     .iter()
                     .map(|k| k.trim().to_owned())
                     .filter(|k| !k.is_empty())
                     .collect();
 
-                if queries.is_empty() { continue; }
+                if queries.is_empty() {
+                    continue;
+                }
 
                 for label in &recent_labels {
-                    if queries.iter().any(|k| fuzzy_match(k, label)) && !queries.iter().any(|q| q == label) {
+                    if queries.iter().any(|k| fuzzy_match(k, label))
+                        && !queries.iter().any(|q| q == label)
+                    {
                         queries.push(label.clone());
                     }
                 }
 
                 let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-                let Ok(embeddings) = te.embed(query_refs, None) else { continue };
-                hook_queries.push(HookQueries { hook_idx: idx, embeddings });
+                let Ok(embeddings) = te.embed(query_refs, None) else {
+                    continue;
+                };
+                hook_queries.push(HookQueries {
+                    hook_idx: idx,
+                    embeddings,
+                });
             }
         } // ── lock released here ──────────────────────────────────────────────
 
@@ -163,7 +174,11 @@ impl HookMatcher {
                 ));
             }
 
-            neighbors.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+            neighbors.sort_by(|a, b| {
+                a.distance
+                    .partial_cmp(&b.distance)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
             let mut refs: Vec<HookReference> = Vec::new();
 
@@ -171,7 +186,9 @@ impl HookMatcher {
                 if !seen.insert(n.label_id) {
                     continue;
                 }
-                if let Some(eeg_ref) = crate::label_index::mean_eeg_for_window(&self.skill_dir, n.eeg_start, n.eeg_end) {
+                if let Some(eeg_ref) =
+                    crate::label_index::mean_eeg_for_window(&self.skill_dir, n.eeg_start, n.eeg_end)
+                {
                     refs.push(HookReference {
                         emb: eeg_ref,
                         label_id: n.label_id,
@@ -193,7 +210,12 @@ impl HookMatcher {
         }
 
         if !next_cache.is_empty() {
-            skill_log!(self.logger, "hooks", "cache refreshed: {} active hooks", next_cache.len());
+            skill_log!(
+                self.logger,
+                "hooks",
+                "cache refreshed: {} active hooks",
+                next_cache.len()
+            );
         }
         self.cache = next_cache;
     }
@@ -235,7 +257,9 @@ impl HookMatcher {
                 continue;
             }
             let threshold = entry.hook.distance_threshold.clamp(0.01, 1.0);
-            let best = entry.refs.iter()
+            let best = entry
+                .refs
+                .iter()
                 .map(|r| (r, cosine_distance(embedding, &r.emb)))
                 .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -247,7 +271,11 @@ impl HookMatcher {
                 continue;
             }
 
-            let last = self.last_fired_unix.get(&entry.hook.name).copied().unwrap_or(0);
+            let last = self
+                .last_fired_unix
+                .get(&entry.hook.name)
+                .copied()
+                .unwrap_or(0);
             if now.saturating_sub(last) < 10 {
                 continue;
             }
@@ -292,24 +320,26 @@ impl HookMatcher {
             // ── Audit log ─────────────────────────────────────────────────────
             if let Some(ref log) = self.hooks_log {
                 use serde_json::{json, to_string};
-                let hook_json   = to_string(&entry.hook).unwrap_or_default();
+                let hook_json = to_string(&entry.hook).unwrap_or_default();
                 let trigger_json = to_string(&json!({
                     "triggered_at_utc": ts_utc,
                     "distance":          min_dist,
                     "label_id":          best_ref.label_id,
                     "label_text":        &best_ref.label_text,
                     "label_eeg_start_utc": best_ref.eeg_start_utc,
-                })).unwrap_or_default();
+                }))
+                .unwrap_or_default();
                 let payload_json = to_string(&json!({
                     "context": "labels",
                     "command": &entry.hook.command,
                     "text":    &entry.hook.text,
-                })).unwrap_or_default();
+                }))
+                .unwrap_or_default();
                 log.record(&skill_data::hooks_log::HookFireEntry {
                     triggered_at_utc: ts_utc as i64,
-                    hook_json:        &hook_json,
-                    trigger_json:     &trigger_json,
-                    payload_json:     &payload_json,
+                    hook_json: &hook_json,
+                    trigger_json: &trigger_json,
+                    payload_json: &payload_json,
                 });
             }
 
@@ -369,28 +399,38 @@ pub(crate) use skill_exg::fuzzy_match;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn embed_worker(
-    rx:               mpsc::Receiver<EpochMsg>,
-    skill_dir:        PathBuf,
-    config:           EegModelConfig,
-    status:           Arc<Mutex<EegModelStatus>>,
-    cancel:           Arc<std::sync::atomic::AtomicBool>,
+    rx: mpsc::Receiver<EpochMsg>,
+    skill_dir: PathBuf,
+    config: EegModelConfig,
+    status: Arc<Mutex<EegModelStatus>>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
     reload_requested: Arc<std::sync::atomic::AtomicBool>,
-    logger:           Arc<SkillLogger>,
-    global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
-    hooks:            Vec<HookRule>,
-    shared_embedder:  Arc<crate::label_cmds::EmbedderState>,
-    label_idx:        Arc<crate::label_index::LabelIndexState>,
-    ws_broadcaster:   crate::ws_server::WsBroadcaster,
-    hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+    logger: Arc<SkillLogger>,
+    global_index: Arc<
+        Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>,
+    >,
+    hooks: Vec<HookRule>,
+    shared_embedder: Arc<crate::label_cmds::EmbedderState>,
+    label_idx: Arc<crate::label_index::LabelIndexState>,
+    ws_broadcaster: crate::ws_server::WsBroadcaster,
+    hook_runtime: std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>,
+    >,
     app: tauri::AppHandle,
 ) {
     use burn::backend::Wgpu;
     use ndarray::Array2;
     use std::collections::HashMap;
     use std::time::Instant;
-    use zuna_rs::{ZunaEncoder, config::DataConfig, load_from_named_tensor};
+    use zuna_rs::{config::DataConfig, load_from_named_tensor, ZunaEncoder};
 
-    skill_log!(logger, "embedder", "worker started — skill_dir={} backend={}", skill_dir.display(), config.model_backend);
+    skill_log!(
+        logger,
+        "embedder",
+        "worker started — skill_dir={} backend={}",
+        skill_dir.display(),
+        config.model_backend
+    );
     // Mark worker as active so the UI can distinguish "loading on GPU" from
     // "weights found but no session yet".
     status.lock_or_recover().embed_worker_active = true;
@@ -399,12 +439,19 @@ pub(super) fn embed_worker(
 
     // ── 1. Open today's DayStore immediately (files created before encoder) ───
     let mut current_date = yyyymmdd_utc();
-    let mut store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, active_backend.as_str(), logger.clone());
+    let mut store = DayStore::open(
+        &skill_dir,
+        &current_date,
+        config.hnsw_m,
+        config.hnsw_ef_construction,
+        active_backend.as_str(),
+        logger.clone(),
+    );
 
     if let Some(ref s) = store {
         let mut st = status.lock_or_recover();
         st.daily_hnsw_path = s.index_path.display().to_string();
-        st.daily_db_path   = s.db_path.display().to_string();
+        st.daily_db_path = s.db_path.display().to_string();
         st.embeddings_today = s.hnsw_len();
     }
 
@@ -443,7 +490,11 @@ pub(super) fn embed_worker(
         let mut attempt = 0u32;
         loop {
             if cancel.load(Ordering::Relaxed) {
-                skill_log!(logger, "embedder", "auto-download cancelled by user — stopping retry loop");
+                skill_log!(
+                    logger,
+                    "embedder",
+                    "auto-download cancelled by user — stopping retry loop"
+                );
                 return None;
             }
 
@@ -453,7 +504,15 @@ pub(super) fn embed_worker(
                 st.download_retry_in_secs = 0;
             }
 
-            if let Some(w) = download_hf_weights(&download_repo, &download_weights_file, &download_config_file, &status, &cancel, false, &logger) {
+            if let Some(w) = download_hf_weights(
+                &download_repo,
+                &download_weights_file,
+                &download_config_file,
+                &status,
+                &cancel,
+                false,
+                &logger,
+            ) {
                 let mut st = status.lock_or_recover();
                 st.download_retry_attempt = 0;
                 st.download_retry_in_secs = 0;
@@ -461,7 +520,11 @@ pub(super) fn embed_worker(
             }
 
             if cancel.load(Ordering::Relaxed) {
-                skill_log!(logger, "embedder", "download cancelled mid-attempt — stopping auto-retry");
+                skill_log!(
+                    logger,
+                    "embedder",
+                    "download cancelled mid-attempt — stopping auto-retry"
+                );
                 let mut st = status.lock_or_recover();
                 st.download_retry_in_secs = 0;
                 return None;
@@ -469,7 +532,11 @@ pub(super) fn embed_worker(
 
             let delay = BACKOFF_SECS.get(attempt as usize).copied().unwrap_or(1800);
             attempt += 1;
-            skill_log!(logger, "embedder", "download failed — retrying in {delay}s (attempt {attempt})");
+            skill_log!(
+                logger,
+                "embedder",
+                "download failed — retrying in {delay}s (attempt {attempt})"
+            );
 
             for remaining in (1..=delay).rev() {
                 {
@@ -485,7 +552,11 @@ pub(super) fn embed_worker(
                     return None;
                 }
                 if reload_requested.load(Ordering::Relaxed) {
-                    skill_log!(logger, "embedder", "reload requested during backoff wait — exiting for respawn");
+                    skill_log!(
+                        logger,
+                        "embedder",
+                        "reload requested during backoff wait — exiting for respawn"
+                    );
                     let mut st = status.lock_or_recover();
                     st.download_retry_in_secs = 0;
                     return None;
@@ -501,11 +572,16 @@ pub(super) fn embed_worker(
     {
         let mut st = status.lock_or_recover();
         st.weights_found = weights.is_some();
-        st.weights_path  = weights.as_ref().map(|(w, _)| w.display().to_string());
+        st.weights_path = weights.as_ref().map(|(w, _)| w.display().to_string());
         st.active_model_backend = Some(active_backend.as_str().to_string());
     }
     if weights.is_none() {
-        skill_log!(logger, "embedder", "{} weights unavailable — embeddings skipped.", active_backend);
+        skill_log!(
+            logger,
+            "embedder",
+            "{} weights unavailable — embeddings skipped.",
+            active_backend
+        );
     }
 
     // ── 3. Load ZUNA encoder on wgpu ─────────────────────────────────────────
@@ -521,9 +597,12 @@ pub(super) fn embed_worker(
     // If a previous worker already poisoned the wgpu device's internal mutexes,
     // skip GPU entirely — there is no recovery short of restarting the process.
     if GPU_DEVICE_POISONED.load(std::sync::atomic::Ordering::Relaxed) {
-        skill_log!(logger, "embedder",
+        skill_log!(
+            logger,
+            "embedder",
             "wgpu device poisoned from a previous panic — \
-             GPU embeddings disabled for this process; metrics-only mode");
+             GPU embeddings disabled for this process; metrics-only mode"
+        );
         for msg in rx {
             // Still honour reload requests even in metrics-only mode so the
             // accumulator can respawn a worker after a process restart clears
@@ -553,11 +632,10 @@ pub(super) fn embed_worker(
     // `ZunaEncoder::<Wgpu>::load(&c, &w, device)` finds the already-
     // registered client and skips re-initialisation.
     let device = {
-        use burn::backend::wgpu::{
-            RuntimeOptions, WgpuSetup, init_device,
-            graphics::AutoGraphicsApi,
-        };
         use burn::backend::wgpu::graphics::GraphicsApi;
+        use burn::backend::wgpu::{
+            graphics::AutoGraphicsApi, init_device, RuntimeOptions, WgpuSetup,
+        };
 
         let backend = AutoGraphicsApi::backend();
 
@@ -587,12 +665,21 @@ pub(super) fn embed_worker(
                 .await
                 .expect("[embedder] failed to create wgpu device");
 
-            WgpuSetup { instance, adapter, device, queue, backend }
+            WgpuSetup {
+                instance,
+                adapter,
+                device,
+                queue,
+                backend,
+            }
         });
 
-        skill_log!(logger, "embedder",
+        skill_log!(
+            logger,
+            "embedder",
             "wgpu device ready (backend={}, validation=env-controlled)",
-            setup.backend);
+            setup.backend
+        );
 
         init_device(setup, RuntimeOptions::default())
     };
@@ -617,32 +704,38 @@ pub(super) fn embed_worker(
     // fall back to metrics-only mode.
     //
     let mut encoder: Option<LoadedEncoder> = weights.and_then(|(w, c)| {
-        skill_log!(logger, "embedder", "loading {} encoder from {}", active_backend, w.display());
+        skill_log!(
+            logger,
+            "embedder",
+            "loading {} encoder from {}",
+            active_backend,
+            w.display()
+        );
         let backend = active_backend.clone();
-        let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(LoadedEncoder, f64), String> {
-            match backend {
-                ExgModelBackend::Zuna => {
-                    ZunaEncoder::<Wgpu>::load(&c, &w, device.clone())
+        let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || -> Result<(LoadedEncoder, f64), String> {
+                match backend {
+                    ExgModelBackend::Zuna => ZunaEncoder::<Wgpu>::load(&c, &w, device.clone())
                         .map(|(enc, ms)| (LoadedEncoder::Zuna(Box::new(enc)), ms))
-                        .map_err(|e| format!("{e:#}"))
+                        .map_err(|e| format!("{e:#}")),
+                    ExgModelBackend::Luna => {
+                        // The HF config.json is minimal and lacks per-variant
+                        // hyperparameters.  Write a temp config with the correct
+                        // model dimensions for the selected variant.
+                        let cfg_path = luna_variant_config_path(&c, &config.luna_variant);
+                        luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w, device.clone())
+                            .map(|(enc, ms)| (LoadedEncoder::Luna(Box::new(enc)), ms))
+                            .map_err(|e| format!("{e:#}"))
+                    }
                 }
-                ExgModelBackend::Luna => {
-                    // The HF config.json is minimal and lacks per-variant
-                    // hyperparameters.  Write a temp config with the correct
-                    // model dimensions for the selected variant.
-                    let cfg_path = luna_variant_config_path(&c, &config.luna_variant);
-                    luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w, device.clone())
-                        .map(|(enc, ms)| (LoadedEncoder::Luna(Box::new(enc)), ms))
-                        .map_err(|e| format!("{e:#}"))
-                }
-            }
-        }));
+            },
+        ));
         match load_result {
             Ok(Ok((enc, ms))) => {
                 let desc = enc.describe();
                 skill_log!(logger, "embedder", "encoder ready ({ms:.0} ms) — {desc}");
                 let mut st = status.lock_or_recover();
-                st.encoder_loaded   = true;
+                st.encoder_loaded = true;
                 st.encoder_describe = Some(desc);
                 Some(enc)
             }
@@ -651,10 +744,13 @@ pub(super) fn embed_worker(
                 None
             }
             Err(panic_payload) => {
-                skill_log!(logger, "embedder",
+                skill_log!(
+                    logger,
+                    "embedder",
                     "encoder load panicked (cubecl cache issue?): {} — \
                      marking wgpu device poisoned; GPU embeddings disabled",
-                    panic_msg(&panic_payload));
+                    panic_msg(&panic_payload)
+                );
                 GPU_DEVICE_POISONED.store(true, std::sync::atomic::Ordering::Relaxed);
                 None
             }
@@ -662,9 +758,12 @@ pub(super) fn embed_worker(
     });
 
     // Default channel names — overridden per-epoch from the message.
-    let mut ch_names: Vec<String>               = CHANNEL_NAMES.iter().map(std::string::ToString::to_string).collect();
-    let mut epoch_sample_rate: f32              = MUSE_SAMPLE_RATE;
-    let data_cfg                                 = DataConfig::default();
+    let mut ch_names: Vec<String> = CHANNEL_NAMES
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
+    let mut epoch_sample_rate: f32 = MUSE_SAMPLE_RATE;
+    let data_cfg = DataConfig::default();
     let pos_overrides: HashMap<String, [f32; 3]> = HashMap::new();
 
     // Embedding speed EMA (exponential moving average, alpha = 0.1).
@@ -674,8 +773,14 @@ pub(super) fn embed_worker(
     // Counter for periodic global index saves.
     let mut global_save_counter: usize = 0;
     let mut hook_matcher = HookMatcher::new(
-        skill_dir.clone(), hooks, shared_embedder, label_idx, ws_broadcaster, logger.clone(),
-        hook_runtime, app,
+        skill_dir.clone(),
+        hooks,
+        shared_embedder,
+        label_idx,
+        ws_broadcaster,
+        logger.clone(),
+        hook_runtime,
+        app,
     );
 
     // ── 4. Process epoch messages ─────────────────────────────────────────────
@@ -686,12 +791,16 @@ pub(super) fn embed_worker(
         // call resolve_hf_weights (finding the newly downloaded files) and load
         // the encoder — no full app restart needed.
         if reload_requested.load(std::sync::atomic::Ordering::Relaxed) {
-            skill_log!(logger, "embedder", "reload requested — exiting for in-place encoder reload");
+            skill_log!(
+                logger,
+                "embedder",
+                "reload requested — exiting for in-place encoder reload"
+            );
             // Reset status so the UI shows the loading state while the new
             // worker initialises.
             {
                 let mut st = status.lock_or_recover();
-                st.encoder_loaded   = false;
+                st.encoder_loaded = false;
                 st.encoder_describe = None;
                 st.download_needs_restart = false;
             }
@@ -703,18 +812,29 @@ pub(super) fn embed_worker(
         // Midnight UTC rollover — rotate both HNSW and SQLite.
         let today = yyyymmdd_utc();
         if today != current_date {
-            skill_log!(logger, "embedder", "date rolled over {current_date} → {today}");
+            skill_log!(
+                logger,
+                "embedder",
+                "date rolled over {current_date} → {today}"
+            );
             current_date = today;
-            store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, active_backend.as_str(), logger.clone());
+            store = DayStore::open(
+                &skill_dir,
+                &current_date,
+                config.hnsw_m,
+                config.hnsw_ef_construction,
+                active_backend.as_str(),
+                logger.clone(),
+            );
             if let Some(ref s) = store {
                 let mut st = status.lock_or_recover();
-                st.daily_hnsw_path  = s.index_path.display().to_string();
-                st.daily_db_path    = s.db_path.display().to_string();
+                st.daily_hnsw_path = s.index_path.display().to_string();
+                st.daily_db_path = s.db_path.display().to_string();
                 st.embeddings_today = 0;
             }
         }
 
-        let Some(ref mut s) = store   else {
+        let Some(ref mut s) = store else {
             skill_log!(logger, "embedder", "no day store — skipping epoch");
             continue;
         };
@@ -730,8 +850,11 @@ pub(super) fn embed_worker(
         // ── Preprocess + encode on wgpu ───────────────────────────────────────
         let flat: Vec<f32> = msg.samples.iter().flatten().copied().collect();
         let array = match Array2::from_shape_vec((EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES), flat) {
-            Ok(a)  => a,
-            Err(e) => { skill_log!(logger, "embedder", "array shape error: {e}"); continue; }
+            Ok(a) => a,
+            Err(e) => {
+                skill_log!(logger, "embedder", "array shape error: {e}");
+                continue;
+            }
         };
 
         // If encoder is None (GPU never loaded or was poisoned), fall through
@@ -765,28 +888,46 @@ pub(super) fn embed_worker(
                         while padded_names.len() < EEG_CHANNELS {
                             padded_names.push(format!("_pad{}", padded_names.len()));
                         }
-                        let ch_refs: Vec<&str> = padded_names.iter().map(std::string::String::as_str).collect();
+                        let ch_refs: Vec<&str> = padded_names
+                            .iter()
+                            .map(std::string::String::as_str)
+                            .collect();
                         let mut batches = load_from_named_tensor::<Wgpu>(
-                            array, &ch_refs, epoch_sample_rate, config.data_norm,
-                            &pos_overrides, &data_cfg, &device,
-                        ).map_err(|e| format!("preprocess: {e:#}"))?;
+                            array,
+                            &ch_refs,
+                            epoch_sample_rate,
+                            config.data_norm,
+                            &pos_overrides,
+                            &data_cfg,
+                            &device,
+                        )
+                        .map_err(|e| format!("preprocess: {e:#}"))?;
 
-                        if batches.is_empty() { return Err::<Vec<f32>, String>("empty batch".into()); }
+                        if batches.is_empty() {
+                            return Err::<Vec<f32>, String>("empty batch".into());
+                        }
 
-                        let mut epochs = zuna_enc.encode_batches(batches.drain(..1).collect())
+                        let mut epochs = zuna_enc
+                            .encode_batches(batches.drain(..1).collect())
                             .map_err(|e| format!("encode: {e:#}"))?;
 
                         let epoch = epochs.pop().ok_or("no epoch output")?;
-                        let dim   = epoch.output_dim();
+                        let dim = epoch.output_dim();
                         let n_tok = epoch.n_tokens();
-                        if dim == 0 || n_tok == 0 { return Err("zero dim/tokens".into()); }
+                        if dim == 0 || n_tok == 0 {
+                            return Err("zero dim/tokens".into());
+                        }
 
                         let mut mean_emb = vec![0f32; dim];
                         for tok in epoch.embeddings.chunks(dim) {
-                            for (i, &v) in tok.iter().enumerate() { mean_emb[i] += v; }
+                            for (i, &v) in tok.iter().enumerate() {
+                                mean_emb[i] += v;
+                            }
                         }
                         let scale = 1.0 / n_tok as f32;
-                        for v in &mut mean_emb { *v *= scale; }
+                        for v in &mut mean_emb {
+                            *v *= scale;
+                        }
                         Ok(mean_emb)
                     }
                     LoadedEncoder::Luna(luna_enc) => {
@@ -813,31 +954,34 @@ pub(super) fn embed_worker(
                             return Err("no device channels match LUNA vocabulary".into());
                         }
 
-                        let n_samples = if !luna_ch_indices.is_empty() && !msg.samples[luna_ch_indices[0]].is_empty() {
+                        let n_samples = if !luna_ch_indices.is_empty()
+                            && !msg.samples[luna_ch_indices[0]].is_empty()
+                        {
                             msg.samples[luna_ch_indices[0]].len()
                         } else {
                             EMBEDDING_EPOCH_SAMPLES
                         };
-                        let flat: Vec<f32> = luna_ch_indices.iter()
-                            .flat_map(|&ch| {
-                                msg.samples[ch].iter().copied()
-                            })
+                        let flat: Vec<f32> = luna_ch_indices
+                            .iter()
+                            .flat_map(|&ch| msg.samples[ch].iter().copied())
                             .collect();
 
-                        let ch_refs: Vec<&str> = luna_ch_names.iter().map(std::string::String::as_str).collect();
-                        let batch = luna_rs::build_batch_named::<Wgpu>(
-                            flat,
-                            &ch_refs,
-                            n_samples,
-                            &device,
-                        );
+                        let ch_refs: Vec<&str> = luna_ch_names
+                            .iter()
+                            .map(std::string::String::as_str)
+                            .collect();
+                        let batch =
+                            luna_rs::build_batch_named::<Wgpu>(flat, &ch_refs, n_samples, &device);
 
-                        let result = luna_enc.run_batch(&batch)
+                        let result = luna_enc
+                            .run_batch(&batch)
                             .map_err(|e| format!("luna encode: {e:#}"))?;
 
                         let out = &result.output;
                         let shape = &result.shape;
-                        if out.is_empty() { return Err("empty luna output".into()); }
+                        if out.is_empty() {
+                            return Err("empty luna output".into());
+                        }
 
                         // LUNA output shape depends on mode:
                         //   Reconstruction: [C, T] — large, variable-size
@@ -866,54 +1010,65 @@ pub(super) fn embed_worker(
                             // Mean-pool across channels → [T], then pool over
                             // patch windows → [n_patches] to get a compact
                             // fixed-size embedding.
-                            let patch_means: Vec<f32> = (0..n_patches).map(|p| {
-                                let mut sum = 0f64;
-                                let count = (c * ps) as f64;
-                                for ch in 0..c {
-                                    for s in 0..ps {
-                                        let idx = ch * t + p * ps + s;
-                                        if idx < out.len() {
-                                            sum += out[idx] as f64;
+                            let patch_means: Vec<f32> = (0..n_patches)
+                                .map(|p| {
+                                    let mut sum = 0f64;
+                                    let count = (c * ps) as f64;
+                                    for ch in 0..c {
+                                        for s in 0..ps {
+                                            let idx = ch * t + p * ps + s;
+                                            if idx < out.len() {
+                                                sum += out[idx] as f64;
+                                            }
                                         }
                                     }
-                                }
-                                (sum / count) as f32
-                            }).collect();
+                                    (sum / count) as f32
+                                })
+                                .collect();
                             patch_means
                         } else {
                             // Classification or 1-D output: use as-is.
                             out.clone()
                         };
 
-                        if emb.is_empty() { return Err("empty luna embedding after pooling".into()); }
+                        if emb.is_empty() {
+                            return Err("empty luna embedding after pooling".into());
+                        }
                         Ok(emb)
                     }
                 }
             }));
 
             match gpu_result {
-                Ok(Ok(emb))  => Some(emb),
+                Ok(Ok(emb)) => Some(emb),
                 Ok(Err(msg)) => {
                     skill_log!(logger, "embedder", "GPU pipeline error: {msg}");
                     None
                 }
                 Err(payload) => {
-                    skill_log!(logger, "embedder",
+                    skill_log!(
+                        logger,
+                        "embedder",
                         "GPU pipeline panicked (cubecl — wgpu device now poisoned): {} — \
                          disabling GPU embeddings for this process",
-                        panic_msg(&payload));
+                        panic_msg(&payload)
+                    );
                     GPU_DEVICE_POISONED.store(true, std::sync::atomic::Ordering::Relaxed);
                     encoder = None;
                     None
                 }
             }
         } else {
-            None  // encoder unavailable — metrics-only mode
+            None // encoder unavailable — metrics-only mode
         };
 
         // ── Track embedding speed ─────────────────────────────────────────────
         let embed_elapsed_ms = embed_start.elapsed().as_secs_f64() * 1000.0;
-        let current_speed_ms = if mean_emb.is_some() { Some(embed_elapsed_ms) } else { None };
+        let current_speed_ms = if mean_emb.is_some() {
+            Some(embed_elapsed_ms)
+        } else {
+            None
+        };
         if let Some(ms) = current_speed_ms {
             embed_speed_count += 1;
             if embed_speed_count == 1 {
@@ -928,46 +1083,53 @@ pub(super) fn embed_worker(
             let mut m = EpochMetrics::from_snapshot(snap);
             // Merge PPG-derived metrics if available
             if let Some(ref ppg) = msg.ppg_metrics {
-                m.hr               = ppg.hr;
-                m.rmssd            = ppg.rmssd;
-                m.sdnn             = ppg.sdnn;
-                m.pnn50            = ppg.pnn50;
-                m.lf_hf_ratio      = ppg.lf_hf_ratio;
+                m.hr = ppg.hr;
+                m.rmssd = ppg.rmssd;
+                m.sdnn = ppg.sdnn;
+                m.pnn50 = ppg.pnn50;
+                m.lf_hf_ratio = ppg.lf_hf_ratio;
                 m.respiratory_rate = ppg.respiratory_rate;
-                m.spo2_estimate    = ppg.spo2_estimate;
-                m.perfusion_index  = ppg.perfusion_index;
-                m.stress_index     = ppg.stress_index;
+                m.spo2_estimate = ppg.spo2_estimate;
+                m.perfusion_index = ppg.perfusion_index;
+                m.stress_index = ppg.stress_index;
             }
             m
         });
 
         // Serialise per-channel band powers as JSON for full-fidelity storage.
         let channels_json = msg.band_snapshot.as_ref().map(|snap| {
-            let channels: Vec<serde_json::Value> = snap.channels.iter().map(|ch| {
-                serde_json::json!({
-                    "channel":        ch.channel,
-                    "delta":          ch.delta,
-                    "theta":          ch.theta,
-                    "alpha":          ch.alpha,
-                    "beta":           ch.beta,
-                    "gamma":          ch.gamma,
-                    "high_gamma":     ch.high_gamma,
-                    "rel_delta":      ch.rel_delta,
-                    "rel_theta":      ch.rel_theta,
-                    "rel_alpha":      ch.rel_alpha,
-                    "rel_beta":       ch.rel_beta,
-                    "rel_gamma":      ch.rel_gamma,
-                    "rel_high_gamma": ch.rel_high_gamma,
-                    "dominant":       ch.dominant,
+            let channels: Vec<serde_json::Value> = snap
+                .channels
+                .iter()
+                .map(|ch| {
+                    serde_json::json!({
+                        "channel":        ch.channel,
+                        "delta":          ch.delta,
+                        "theta":          ch.theta,
+                        "alpha":          ch.alpha,
+                        "beta":           ch.beta,
+                        "gamma":          ch.gamma,
+                        "high_gamma":     ch.high_gamma,
+                        "rel_delta":      ch.rel_delta,
+                        "rel_theta":      ch.rel_theta,
+                        "rel_alpha":      ch.rel_alpha,
+                        "rel_beta":       ch.rel_beta,
+                        "rel_gamma":      ch.rel_gamma,
+                        "rel_high_gamma": ch.rel_high_gamma,
+                        "dominant":       ch.dominant,
+                    })
                 })
-            }).collect();
+                .collect();
             serde_json::to_string(&channels).unwrap_or_default()
         });
 
         // ── Store ─────────────────────────────────────────────────────────────
-        let has_metrics  = metrics.is_some();
+        let has_metrics = metrics.is_some();
         let has_channels = channels_json.is_some();
-        let channels_len = channels_json.as_ref().map(std::string::String::len).unwrap_or(0);
+        let channels_len = channels_json
+            .as_ref()
+            .map(std::string::String::len)
+            .unwrap_or(0);
 
         // When the GPU pipeline produced an embedding, store it in both HNSW
         // and SQLite.  When it didn't (encoder unavailable / device poisoned),
@@ -1008,12 +1170,20 @@ pub(super) fn embed_worker(
                         global_save_counter += 1;
                         if global_save_counter >= GLOBAL_HNSW_SAVE_EVERY {
                             global_save_counter = 0;
-                            global_eeg_index::save_index_for(gidx, &skill_dir, active_backend.as_str());
+                            global_eeg_index::save_index_for(
+                                gidx,
+                                &skill_dir,
+                                active_backend.as_str(),
+                            );
                         }
                     } else {
-                        skill_log!(logger, "embedder",
+                        skill_log!(
+                            logger,
+                            "embedder",
                             "skipping global HNSW insert: dim mismatch (got {} vs existing {})",
-                            emb.len(), gidx.get_embedding(0).len());
+                            emb.len(),
+                            gidx.get_embedding(0).len()
+                        );
                     }
                 }
             }
@@ -1085,73 +1255,76 @@ pub(super) fn embed_worker(
             st.embeddings_today = total;
             if let Some(ms) = current_speed_ms {
                 st.last_embed_ms = ms;
-                st.avg_embed_ms  = embed_speed_ema;
+                st.avg_embed_ms = embed_speed_ema;
             }
             // Publish latest epoch metrics so the WS status command can return them.
-            st.latest_metrics = metrics.as_ref().map(|m| {
-                skill_eeg::eeg_model_config::LatestEpochMetrics {
-                    rel_delta:        m.rel_delta,
-                    rel_theta:        m.rel_theta,
-                    rel_alpha:        m.rel_alpha,
-                    rel_beta:         m.rel_beta,
-                    rel_gamma:        m.rel_gamma,
-                    rel_high_gamma:   m.rel_high_gamma,
-                    relaxation_score: m.relaxation,
-                    engagement_score: m.engagement,
-                    faa:              m.faa,
-                    tar:              m.tar,
-                    bar:              m.bar,
-                    dtr:              m.dtr,
-                    pse:              m.pse,
-                    apf:              m.apf,
-                    bps:              m.bps,
-                    snr:              m.snr,
-                    coherence:        m.coherence,
-                    mu_suppression:   m.mu_suppression,
-                    mood:             m.mood,
-                    tbr:              m.tbr,
-                    sef95:            m.sef95,
-                    spectral_centroid: m.spectral_centroid,
-                    hjorth_activity:  m.hjorth_activity,
-                    hjorth_mobility:  m.hjorth_mobility,
-                    hjorth_complexity: m.hjorth_complexity,
-                    permutation_entropy: m.permutation_entropy,
-                    higuchi_fd:       m.higuchi_fd,
-                    dfa_exponent:     m.dfa_exponent,
-                    sample_entropy:   m.sample_entropy,
-                    pac_theta_gamma:  m.pac_theta_gamma,
-                    laterality_index: m.laterality_index,
-                    hr:               m.hr,
-                    rmssd:            m.rmssd,
-                    sdnn:             m.sdnn,
-                    pnn50:            m.pnn50,
-                    lf_hf_ratio:      m.lf_hf_ratio,
-                    respiratory_rate: m.respiratory_rate,
-                    spo2_estimate:    m.spo2_estimate,
-                    perfusion_index:  m.perfusion_index,
-                    stress_index:     m.stress_index,
-                    blink_count:      m.blink_count,
-                    blink_rate:       m.blink_rate,
-                    head_pitch:       m.head_pitch,
-                    head_roll:        m.head_roll,
-                    stillness:        m.stillness,
-                    nod_count:        m.nod_count,
-                    shake_count:      m.shake_count,
-                    meditation:       m.meditation,
-                    cognitive_load:   m.cognitive_load,
-                    drowsiness:       m.drowsiness,
-                    headache_index:         m.headache_index,
-                    migraine_index:         m.migraine_index,
-                    consciousness_lzc:          m.consciousness_lzc,
-                    consciousness_wakefulness:  m.consciousness_wakefulness,
-                    consciousness_integration:  m.consciousness_integration,
-                    epoch_timestamp:  msg.timestamp,
-                }
-            });
+            st.latest_metrics =
+                metrics
+                    .as_ref()
+                    .map(|m| skill_eeg::eeg_model_config::LatestEpochMetrics {
+                        rel_delta: m.rel_delta,
+                        rel_theta: m.rel_theta,
+                        rel_alpha: m.rel_alpha,
+                        rel_beta: m.rel_beta,
+                        rel_gamma: m.rel_gamma,
+                        rel_high_gamma: m.rel_high_gamma,
+                        relaxation_score: m.relaxation,
+                        engagement_score: m.engagement,
+                        faa: m.faa,
+                        tar: m.tar,
+                        bar: m.bar,
+                        dtr: m.dtr,
+                        pse: m.pse,
+                        apf: m.apf,
+                        bps: m.bps,
+                        snr: m.snr,
+                        coherence: m.coherence,
+                        mu_suppression: m.mu_suppression,
+                        mood: m.mood,
+                        tbr: m.tbr,
+                        sef95: m.sef95,
+                        spectral_centroid: m.spectral_centroid,
+                        hjorth_activity: m.hjorth_activity,
+                        hjorth_mobility: m.hjorth_mobility,
+                        hjorth_complexity: m.hjorth_complexity,
+                        permutation_entropy: m.permutation_entropy,
+                        higuchi_fd: m.higuchi_fd,
+                        dfa_exponent: m.dfa_exponent,
+                        sample_entropy: m.sample_entropy,
+                        pac_theta_gamma: m.pac_theta_gamma,
+                        laterality_index: m.laterality_index,
+                        hr: m.hr,
+                        rmssd: m.rmssd,
+                        sdnn: m.sdnn,
+                        pnn50: m.pnn50,
+                        lf_hf_ratio: m.lf_hf_ratio,
+                        respiratory_rate: m.respiratory_rate,
+                        spo2_estimate: m.spo2_estimate,
+                        perfusion_index: m.perfusion_index,
+                        stress_index: m.stress_index,
+                        blink_count: m.blink_count,
+                        blink_rate: m.blink_rate,
+                        head_pitch: m.head_pitch,
+                        head_roll: m.head_roll,
+                        stillness: m.stillness,
+                        nod_count: m.nod_count,
+                        shake_count: m.shake_count,
+                        meditation: m.meditation,
+                        cognitive_load: m.cognitive_load,
+                        drowsiness: m.drowsiness,
+                        headache_index: m.headache_index,
+                        migraine_index: m.migraine_index,
+                        consciousness_lzc: m.consciousness_lzc,
+                        consciousness_wakefulness: m.consciousness_wakefulness,
+                        consciousness_integration: m.consciousness_integration,
+                        epoch_timestamp: msg.timestamp,
+                    });
         }
 
         let dim = mean_emb.as_ref().map(std::vec::Vec::len).unwrap_or(0);
-        let speed_str = current_speed_ms.map(|ms| format!(" {ms:.1}ms (avg {embed_speed_ema:.1}ms)")).unwrap_or_default();
+        let speed_str = current_speed_ms
+            .map(|ms| format!(" {ms:.1}ms (avg {embed_speed_ema:.1}ms)"))
+            .unwrap_or_default();
         if let Some(ref m) = metrics {
             eprintln!(
                 "[embed] #{hnsw_id} ts={} dev={} dim={dim} model={}{speed_str} relax={:.0} engage={:.0} faa={:.3} tar={:.2} bar={:.2} dtr={:.2} pse={:.2} apf={:.1} bps={:.2} snr={:.1} coh={:.3} mu={:.3} mood={:.0}",
@@ -1177,7 +1350,12 @@ pub(super) fn embed_worker(
         let g = global_index.lock_or_recover();
         if let Some(ref gidx) = *g {
             global_eeg_index::save_index_for(gidx, &skill_dir, active_backend.as_str());
-            skill_log!(logger, "embedder", "global HNSW flushed on exit ({} entries)", gidx.len());
+            skill_log!(
+                logger,
+                "embedder",
+                "global HNSW flushed on exit ({} entries)",
+                gidx.len()
+            );
         }
     }
 
@@ -1190,50 +1368,64 @@ pub(super) fn embed_worker(
 /// Metrics-only drain used by the early-exit path when the wgpu device is
 /// permanently poisoned from a previous panic in this process.
 fn store_metrics_only(
-    msg:       &EpochMsg,
-    store:     &mut Option<DayStore>,
-    status:    &Arc<Mutex<EegModelStatus>>,
-    logger:    &Arc<SkillLogger>,
+    msg: &EpochMsg,
+    store: &mut Option<DayStore>,
+    status: &Arc<Mutex<EegModelStatus>>,
+    logger: &Arc<SkillLogger>,
     skill_dir: &Path,
-    config:    &EegModelConfig,
+    config: &EegModelConfig,
 ) {
     // Rotate DayStore on midnight UTC rollover.
     let today = yyyymmdd_utc();
-    let needs_rotate = store.as_ref()
+    let needs_rotate = store
+        .as_ref()
         .map(|s| !s.db_path.to_string_lossy().contains(&today))
         .unwrap_or(true);
     if needs_rotate {
-        *store = DayStore::open(skill_dir, &today, config.hnsw_m, config.hnsw_ef_construction, config.model_backend.as_str(), logger.clone());
+        *store = DayStore::open(
+            skill_dir,
+            &today,
+            config.hnsw_m,
+            config.hnsw_ef_construction,
+            config.model_backend.as_str(),
+            logger.clone(),
+        );
     }
-    let Some(ref mut s) = store else { return; };
+    let Some(ref mut s) = store else {
+        return;
+    };
 
     let metrics = msg.band_snapshot.as_ref().map(|snap| {
         let mut m = EpochMetrics::from_snapshot(snap);
         if let Some(ref ppg) = msg.ppg_metrics {
-            m.hr               = ppg.hr;
-            m.rmssd            = ppg.rmssd;
-            m.sdnn             = ppg.sdnn;
-            m.pnn50            = ppg.pnn50;
-            m.lf_hf_ratio      = ppg.lf_hf_ratio;
+            m.hr = ppg.hr;
+            m.rmssd = ppg.rmssd;
+            m.sdnn = ppg.sdnn;
+            m.pnn50 = ppg.pnn50;
+            m.lf_hf_ratio = ppg.lf_hf_ratio;
             m.respiratory_rate = ppg.respiratory_rate;
-            m.spo2_estimate    = ppg.spo2_estimate;
-            m.perfusion_index  = ppg.perfusion_index;
-            m.stress_index     = ppg.stress_index;
+            m.spo2_estimate = ppg.spo2_estimate;
+            m.perfusion_index = ppg.perfusion_index;
+            m.stress_index = ppg.stress_index;
         }
         m
     });
 
     let channels_json = msg.band_snapshot.as_ref().map(|snap| {
-        let channels: Vec<serde_json::Value> = snap.channels.iter().map(|ch| {
-            serde_json::json!({
-                "channel": ch.channel, "delta": ch.delta, "theta": ch.theta,
-                "alpha": ch.alpha, "beta": ch.beta, "gamma": ch.gamma,
-                "high_gamma": ch.high_gamma, "rel_delta": ch.rel_delta,
-                "rel_theta": ch.rel_theta, "rel_alpha": ch.rel_alpha,
-                "rel_beta": ch.rel_beta, "rel_gamma": ch.rel_gamma,
-                "rel_high_gamma": ch.rel_high_gamma, "dominant": ch.dominant,
+        let channels: Vec<serde_json::Value> = snap
+            .channels
+            .iter()
+            .map(|ch| {
+                serde_json::json!({
+                    "channel": ch.channel, "delta": ch.delta, "theta": ch.theta,
+                    "alpha": ch.alpha, "beta": ch.beta, "gamma": ch.gamma,
+                    "high_gamma": ch.high_gamma, "rel_delta": ch.rel_delta,
+                    "rel_theta": ch.rel_theta, "rel_alpha": ch.rel_alpha,
+                    "rel_beta": ch.rel_beta, "rel_gamma": ch.rel_gamma,
+                    "rel_high_gamma": ch.rel_high_gamma, "dominant": ch.dominant,
+                })
             })
-        }).collect();
+            .collect();
         serde_json::to_string(&channels).unwrap_or_default()
     });
 
@@ -1250,28 +1442,57 @@ fn store_metrics_only(
     if let Some(ref m) = metrics {
         let mut st = status.lock_or_recover();
         st.latest_metrics = Some(skill_eeg::eeg_model_config::LatestEpochMetrics {
-            rel_delta: m.rel_delta, rel_theta: m.rel_theta, rel_alpha: m.rel_alpha,
-            rel_beta: m.rel_beta, rel_gamma: m.rel_gamma, rel_high_gamma: m.rel_high_gamma,
-            relaxation_score: m.relaxation, engagement_score: m.engagement,
-            faa: m.faa, tar: m.tar, bar: m.bar, dtr: m.dtr, pse: m.pse,
-            apf: m.apf, bps: m.bps, snr: m.snr, coherence: m.coherence,
-            mu_suppression: m.mu_suppression, mood: m.mood, tbr: m.tbr,
-            sef95: m.sef95, spectral_centroid: m.spectral_centroid,
-            hjorth_activity: m.hjorth_activity, hjorth_mobility: m.hjorth_mobility,
+            rel_delta: m.rel_delta,
+            rel_theta: m.rel_theta,
+            rel_alpha: m.rel_alpha,
+            rel_beta: m.rel_beta,
+            rel_gamma: m.rel_gamma,
+            rel_high_gamma: m.rel_high_gamma,
+            relaxation_score: m.relaxation,
+            engagement_score: m.engagement,
+            faa: m.faa,
+            tar: m.tar,
+            bar: m.bar,
+            dtr: m.dtr,
+            pse: m.pse,
+            apf: m.apf,
+            bps: m.bps,
+            snr: m.snr,
+            coherence: m.coherence,
+            mu_suppression: m.mu_suppression,
+            mood: m.mood,
+            tbr: m.tbr,
+            sef95: m.sef95,
+            spectral_centroid: m.spectral_centroid,
+            hjorth_activity: m.hjorth_activity,
+            hjorth_mobility: m.hjorth_mobility,
             hjorth_complexity: m.hjorth_complexity,
             permutation_entropy: m.permutation_entropy,
-            higuchi_fd: m.higuchi_fd, dfa_exponent: m.dfa_exponent,
-            sample_entropy: m.sample_entropy, pac_theta_gamma: m.pac_theta_gamma,
+            higuchi_fd: m.higuchi_fd,
+            dfa_exponent: m.dfa_exponent,
+            sample_entropy: m.sample_entropy,
+            pac_theta_gamma: m.pac_theta_gamma,
             laterality_index: m.laterality_index,
-            hr: m.hr, rmssd: m.rmssd, sdnn: m.sdnn, pnn50: m.pnn50,
-            lf_hf_ratio: m.lf_hf_ratio, respiratory_rate: m.respiratory_rate,
-            spo2_estimate: m.spo2_estimate, perfusion_index: m.perfusion_index,
+            hr: m.hr,
+            rmssd: m.rmssd,
+            sdnn: m.sdnn,
+            pnn50: m.pnn50,
+            lf_hf_ratio: m.lf_hf_ratio,
+            respiratory_rate: m.respiratory_rate,
+            spo2_estimate: m.spo2_estimate,
+            perfusion_index: m.perfusion_index,
             stress_index: m.stress_index,
-            blink_count: m.blink_count, blink_rate: m.blink_rate,
-            head_pitch: m.head_pitch, head_roll: m.head_roll,
-            stillness: m.stillness, nod_count: m.nod_count, shake_count: m.shake_count,
-            meditation: m.meditation, cognitive_load: m.cognitive_load,
-            drowsiness: m.drowsiness, headache_index: m.headache_index,
+            blink_count: m.blink_count,
+            blink_rate: m.blink_rate,
+            head_pitch: m.head_pitch,
+            head_roll: m.head_roll,
+            stillness: m.stillness,
+            nod_count: m.nod_count,
+            shake_count: m.shake_count,
+            meditation: m.meditation,
+            cognitive_load: m.cognitive_load,
+            drowsiness: m.drowsiness,
+            headache_index: m.headache_index,
             migraine_index: m.migraine_index,
             consciousness_lzc: m.consciousness_lzc,
             consciousness_wakefulness: m.consciousness_wakefulness,
@@ -1309,16 +1530,23 @@ fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, P
 ///   Pass `false` from [`embed_worker`] because the startup path loads the
 ///   encoder immediately after the download returns.
 pub(crate) fn download_hf_weights(
-    hf_repo:            &str,
-    weights_file:       &str,
-    config_file:        &str,
-    status:             &Arc<Mutex<EegModelStatus>>,
-    cancel:             &Arc<std::sync::atomic::AtomicBool>,
+    hf_repo: &str,
+    weights_file: &str,
+    config_file: &str,
+    status: &Arc<Mutex<EegModelStatus>>,
+    cancel: &Arc<std::sync::atomic::AtomicBool>,
     mark_needs_restart: bool,
-    _logger:            &Arc<SkillLogger>,
+    _logger: &Arc<SkillLogger>,
 ) -> Option<(PathBuf, PathBuf)> {
     // Delegate to skill_exg.
-    skill_exg::download_hf_weights_files(hf_repo, weights_file, config_file, status, cancel, mark_needs_restart)
+    skill_exg::download_hf_weights_files(
+        hf_repo,
+        weights_file,
+        config_file,
+        status,
+        cancel,
+        mark_needs_restart,
+    )
 }
 
 /// Generate a config file with variant-specific LUNA hyperparameters.
@@ -1333,11 +1561,14 @@ pub(crate) fn download_hf_weights(
 pub(crate) fn luna_variant_config_path(base_config: &Path, variant: &str) -> PathBuf {
     use skill_constants::luna_variant_config;
 
-    let Some((embed_dim, num_queries, depth, num_heads)) = luna_variant_config(variant) else { return base_config.to_path_buf() };
+    let Some((embed_dim, num_queries, depth, num_heads)) = luna_variant_config(variant) else {
+        return base_config.to_path_buf();
+    };
 
     // Read the base config, inject model params.
     let base_json = std::fs::read_to_string(base_config).unwrap_or_else(|_| "{}".to_string());
-    let mut val: serde_json::Value = serde_json::from_str(&base_json).unwrap_or(serde_json::json!({}));
+    let mut val: serde_json::Value =
+        serde_json::from_str(&base_json).unwrap_or(serde_json::json!({}));
 
     let model_obj = serde_json::json!({
         "embed_dim":   embed_dim,
@@ -1361,4 +1592,3 @@ pub(crate) fn luna_variant_config_path(base_config: &Path, variant: &str) -> Pat
 
     base_config.to_path_buf()
 }
-

@@ -6,65 +6,68 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- EXG tab — signal processing filters, EEG embedding config, model backend. -->
 <script lang="ts">
-  import { onMount }                   from "svelte";
-  import { invoke }                   from "@tauri-apps/api/core";
-  import { DEFAULT_FILTER_CONFIG,
-           EMBEDDING_EPOCH_SECS,
-           EMBEDDING_OVERLAP_SECS }   from "$lib/constants";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { DEFAULT_FILTER_CONFIG, EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS } from "$lib/constants";
+import EegModelTab from "$lib/EegModelTab.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  import { Badge }                    from "$lib/components/ui/badge";
-  import { Card, CardContent }        from "$lib/components/ui/card";
-  import { t }                        from "$lib/i18n/index.svelte";
-  import EegModelTab                  from "$lib/EegModelTab.svelte";
+// ── Types ──────────────────────────────────────────────────────────────────
+type PowerlineFreq = "Hz60" | "Hz50";
+interface FilterConfig {
+  sample_rate: number;
+  low_pass_hz: number | null;
+  high_pass_hz: number | null;
+  notch: PowerlineFreq | null;
+  notch_bandwidth_hz: number;
+}
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  type PowerlineFreq = "Hz60" | "Hz50";
-  interface FilterConfig {
-    sample_rate:        number;
-    low_pass_hz:        number | null;
-    high_pass_hz:       number | null;
-    notch:              PowerlineFreq | null;
-    notch_bandwidth_hz: number;
+// ── State ──────────────────────────────────────────────────────────────────
+let filter = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
+let filterSaving = $state(false);
+let overlapSecs = $state(EMBEDDING_OVERLAP_SECS);
+let overlapSaving = $state(false);
+
+// ── Filter ─────────────────────────────────────────────────────────────────
+async function applyFilter(patch: Partial<FilterConfig>) {
+  filter = { ...filter, ...patch };
+  filterSaving = true;
+  try {
+    await invoke("set_filter_config", { config: filter });
+  } finally {
+    filterSaving = false;
   }
+}
+const setNotch = (v: PowerlineFreq | null) => applyFilter({ notch: v });
+const setHighPass = (hz: number | null) => applyFilter({ high_pass_hz: hz });
+const setLowPass = (hz: number | null) => applyFilter({ low_pass_hz: hz });
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let filter       = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
-  let filterSaving = $state(false);
-  let overlapSecs  = $state(EMBEDDING_OVERLAP_SECS);
-  let overlapSaving = $state(false);
+// ── Overlap ────────────────────────────────────────────────────────────────
+const OVERLAP_PRESETS: [string, number][] = [
+  ["0 s — none", 0],
+  ["1.25 s — 25%", 1.25],
+  ["2.5 s — 50%", 2.5],
+  ["3.75 s — 75%", 3.75],
+  ["4.5 s — 90%", 4.5],
+];
 
-  // ── Filter ─────────────────────────────────────────────────────────────────
-  async function applyFilter(patch: Partial<FilterConfig>) {
-    filter = { ...filter, ...patch };
-    filterSaving = true;
-    try { await invoke("set_filter_config", { config: filter }); }
-    finally { filterSaving = false; }
+async function setOverlap(secs: number) {
+  overlapSecs = secs;
+  overlapSaving = true;
+  try {
+    await invoke("set_embedding_overlap", { overlapSecs: secs });
+  } finally {
+    overlapSaving = false;
   }
-  const setNotch    = (v: PowerlineFreq | null) => applyFilter({ notch: v });
-  const setHighPass = (hz: number | null)        => applyFilter({ high_pass_hz: hz });
-  const setLowPass  = (hz: number | null)        => applyFilter({ low_pass_hz: hz });
+}
 
-  // ── Overlap ────────────────────────────────────────────────────────────────
-  const OVERLAP_PRESETS: [string, number][] = [
-    ["0 s — none",    0],
-    ["1.25 s — 25%",  1.25],
-    ["2.5 s — 50%",   2.5],
-    ["3.75 s — 75%",  3.75],
-    ["4.5 s — 90%",   4.5],
-  ];
-
-  async function setOverlap(secs: number) {
-    overlapSecs   = secs;
-    overlapSaving = true;
-    try { await invoke("set_embedding_overlap", { overlapSecs: secs }); }
-    finally { overlapSaving = false; }
-  }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    filter      = await invoke<FilterConfig>("get_filter_config");
-    overlapSecs = await invoke<number>("get_embedding_overlap");
-  });
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(async () => {
+  filter = await invoke<FilterConfig>("get_filter_config");
+  overlapSecs = await invoke<number>("get_embedding_overlap");
+});
 </script>
 
 <section class="flex flex-col gap-4">

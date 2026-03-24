@@ -5,385 +5,389 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { Button } from "$lib/components/ui/button";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { t } from "$lib/i18n/index.svelte";
-  import { fmtDateTimeLocale } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { fmtDateTimeLocale } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface HookRule {
-    name: string;
-    enabled: boolean;
-    keywords: string[];
-    scenario: string;
-    command: string;
-    text: string;
-    distance_threshold: number;
-    recent_limit: number;
-  }
+interface HookRule {
+  name: string;
+  enabled: boolean;
+  keywords: string[];
+  scenario: string;
+  command: string;
+  text: string;
+  distance_threshold: number;
+  recent_limit: number;
+}
 
-  interface HookLastTrigger {
-    triggered_at_utc: number;
-    distance: number;
-    label_id: number | null;
-    label_text: string | null;
-    label_eeg_start_utc: number | null;
-  }
+interface HookLastTrigger {
+  triggered_at_utc: number;
+  distance: number;
+  label_id: number | null;
+  label_text: string | null;
+  label_eeg_start_utc: number | null;
+}
 
-  interface HookStatus {
-    hook: HookRule;
-    last_trigger: HookLastTrigger | null;
-  }
+interface HookStatus {
+  hook: HookRule;
+  last_trigger: HookLastTrigger | null;
+}
 
-  interface HookDistanceSuggestion {
-    label_n: number;
-    ref_n: number;
-    sample_n: number;
-    eeg_min: number;
-    eeg_p25: number;
-    eeg_p50: number;
-    eeg_p75: number;
-    eeg_max: number;
-    suggested: number;
-    note: string;
-  }
+interface HookDistanceSuggestion {
+  label_n: number;
+  ref_n: number;
+  sample_n: number;
+  eeg_min: number;
+  eeg_p25: number;
+  eeg_p50: number;
+  eeg_p75: number;
+  eeg_max: number;
+  suggested: number;
+  note: string;
+}
 
-  interface HookLogRow {
-    id: number;
-    triggered_at_utc: number;
-    hook_json: string;
-    trigger_json: string;
-    payload_json: string;
-  }
+interface HookLogRow {
+  id: number;
+  triggered_at_utc: number;
+  hook_json: string;
+  trigger_json: string;
+  payload_json: string;
+}
 
-  interface HookKeywordSuggestion {
-    keyword: string;
-    source: string;
-    score: number;
-  }
+interface HookKeywordSuggestion {
+  keyword: string;
+  source: string;
+  score: number;
+}
 
-  const NEW_HOOK: HookRule = {
-    name: "",
-    enabled: true,
-    keywords: [],
-    scenario: "any",
-    command: "",
-    text: "",
-    distance_threshold: 0.1,
+const NEW_HOOK: HookRule = {
+  name: "",
+  enabled: true,
+  keywords: [],
+  scenario: "any",
+  command: "",
+  text: "",
+  distance_threshold: 0.1,
+  recent_limit: 12,
+};
+
+interface HookExample {
+  id: string;
+  name: string;
+  scenario: string;
+  keywords: string[];
+  command: string;
+  text: string;
+  distance_threshold: number;
+  recent_limit: number;
+}
+
+const HOOK_EXAMPLES: HookExample[] = [
+  {
+    id: "cognitive-focus-reset",
+    name: "Deep Work Guard",
+    scenario: "cognitive",
+    keywords: ["focus", "deep work", "flow"],
+    command: "focus_reset",
+    text: "Cognitive load is high. Take a 2-minute reset and resume.",
+    distance_threshold: 0.14,
     recent_limit: 12,
-  };
+  },
+  {
+    id: "emotional-calm",
+    name: "Calm Recovery",
+    scenario: "emotional",
+    keywords: ["stress", "anxious", "overwhelmed"],
+    command: "calm_breath",
+    text: "Emotional strain detected. Slow breathing: inhale 4, exhale 6 for 1 minute.",
+    distance_threshold: 0.16,
+    recent_limit: 12,
+  },
+  {
+    id: "physical-break",
+    name: "Body Break",
+    scenario: "physical",
+    keywords: ["fatigue", "slump", "tired"],
+    command: "micro_break",
+    text: "Physical fatigue detected. Stand up, stretch, and hydrate for 90 seconds.",
+    distance_threshold: 0.18,
+    recent_limit: 12,
+  },
+];
 
-  interface HookExample {
-    id: string;
-    name: string;
-    scenario: string;
-    keywords: string[];
-    command: string;
-    text: string;
-    distance_threshold: number;
-    recent_limit: number;
+let hooks = $state<HookRule[]>([]);
+let statuses = $state<Record<string, HookLastTrigger | null>>({});
+let keywordDrafts = $state<string[]>([]);
+let loading = $state(true);
+let saving = $state(false);
+let saved = $state(false);
+let openingSession = $state<string | null>(null);
+
+// ── Relative timer ─────────────────────────────────────────────────────────
+let nowSecs = $state(Math.floor(Date.now() / 1000));
+
+// ── Distance suggestion ────────────────────────────────────────────────────
+let suggestions = $state<Record<number, HookDistanceSuggestion | null>>({});
+let suggestingIdx = $state<number | null>(null);
+
+// ── Keyword suggestions ───────────────────────────────────────────────────
+let keywordSuggestions = $state<Record<number, HookKeywordSuggestion[]>>({});
+let keywordSuggesting = $state<Record<number, boolean>>({});
+let keywordSuggestionFocus = $state<Record<number, number>>({});
+const keywordSuggestDebounce = new Map<number, ReturnType<typeof setTimeout>>();
+
+// ── History log ───────────────────────────────────────────────────────────
+let logRows = $state<HookLogRow[]>([]);
+let logTotal = $state(0);
+let logOffset = $state(0);
+let logLoading = $state(false);
+let showLog = $state(false);
+const LOG_PAGE = 20;
+
+async function loadHooks() {
+  loading = true;
+  try {
+    hooks = await invoke<HookRule[]>("get_hooks");
+    keywordDrafts = hooks.map(() => "");
+    suggestions = {};
+    keywordSuggestions = {};
+    keywordSuggesting = {};
+    keywordSuggestionFocus = {};
+    await loadStatuses();
+  } catch {
+    hooks = [];
+    keywordDrafts = [];
+    statuses = {};
+  } finally {
+    loading = false;
   }
+}
 
-  const HOOK_EXAMPLES: HookExample[] = [
-    {
-      id: "cognitive-focus-reset",
-      name: "Deep Work Guard",
-      scenario: "cognitive",
-      keywords: ["focus", "deep work", "flow"],
-      command: "focus_reset",
-      text: "Cognitive load is high. Take a 2-minute reset and resume.",
-      distance_threshold: 0.14,
-      recent_limit: 12,
-    },
-    {
-      id: "emotional-calm",
-      name: "Calm Recovery",
-      scenario: "emotional",
-      keywords: ["stress", "anxious", "overwhelmed"],
-      command: "calm_breath",
-      text: "Emotional strain detected. Slow breathing: inhale 4, exhale 6 for 1 minute.",
-      distance_threshold: 0.16,
-      recent_limit: 12,
-    },
-    {
-      id: "physical-break",
-      name: "Body Break",
-      scenario: "physical",
-      keywords: ["fatigue", "slump", "tired"],
-      command: "micro_break",
-      text: "Physical fatigue detected. Stand up, stretch, and hydrate for 90 seconds.",
-      distance_threshold: 0.18,
-      recent_limit: 12,
-    },
-  ];
-
-  let hooks = $state<HookRule[]>([]);
-  let statuses = $state<Record<string, HookLastTrigger | null>>({});
-  let keywordDrafts = $state<string[]>([]);
-  let loading = $state(true);
-  let saving = $state(false);
-  let saved = $state(false);
-  let openingSession = $state<string | null>(null);
-
-  // ── Relative timer ─────────────────────────────────────────────────────────
-  let nowSecs = $state(Math.floor(Date.now() / 1000));
-
-  // ── Distance suggestion ────────────────────────────────────────────────────
-  let suggestions = $state<Record<number, HookDistanceSuggestion | null>>({});
-  let suggestingIdx = $state<number | null>(null);
-
-  // ── Keyword suggestions ───────────────────────────────────────────────────
-  let keywordSuggestions = $state<Record<number, HookKeywordSuggestion[]>>({});
-  let keywordSuggesting = $state<Record<number, boolean>>({});
-  let keywordSuggestionFocus = $state<Record<number, number>>({});
-  const keywordSuggestDebounce = new Map<number, ReturnType<typeof setTimeout>>();
-
-  // ── History log ───────────────────────────────────────────────────────────
-  let logRows = $state<HookLogRow[]>([]);
-  let logTotal = $state(0);
-  let logOffset = $state(0);
-  let logLoading = $state(false);
-  let showLog = $state(false);
-  const LOG_PAGE = 20;
-
-  async function loadHooks() {
-    loading = true;
-    try {
-      hooks = await invoke<HookRule[]>("get_hooks");
-      keywordDrafts = hooks.map(() => "");
-      suggestions = {};
-      keywordSuggestions = {};
-      keywordSuggesting = {};
-      keywordSuggestionFocus = {};
-      await loadStatuses();
-    } catch {
-      hooks = [];
-      keywordDrafts = [];
-      statuses = {};
-    } finally {
-      loading = false;
-    }
+async function loadStatuses() {
+  try {
+    const rows = await invoke<HookStatus[]>("get_hook_statuses");
+    const next: Record<string, HookLastTrigger | null> = {};
+    for (const row of rows) next[row.hook.name] = row.last_trigger;
+    statuses = next;
+  } catch {
+    statuses = {};
   }
+}
 
-  async function loadStatuses() {
-    try {
-      const rows = await invoke<HookStatus[]>("get_hook_statuses");
-      const next: Record<string, HookLastTrigger | null> = {};
-      for (const row of rows) next[row.hook.name] = row.last_trigger;
-      statuses = next;
-    } catch {
-      statuses = {};
-    }
+async function loadLog() {
+  logLoading = true;
+  try {
+    logTotal = await invoke<number>("get_hook_log_count");
+    logRows = await invoke<HookLogRow[]>("get_hook_log", { limit: LOG_PAGE, offset: logOffset });
+  } catch {
+    logRows = [];
+  } finally {
+    logLoading = false;
   }
+}
 
-  async function loadLog() {
-    logLoading = true;
-    try {
-      logTotal = await invoke<number>("get_hook_log_count");
-      logRows = await invoke<HookLogRow[]>("get_hook_log", { limit: LOG_PAGE, offset: logOffset });
-    } catch {
-      logRows = [];
-    } finally {
-      logLoading = false;
-    }
-  }
-
-  async function suggestDistances(i: number) {
-    const kws = hooks[i]?.keywords ?? [];
-    if (kws.length === 0) return;
-    suggestingIdx = i;
-    try {
-      const result = await invoke<HookDistanceSuggestion>("suggest_hook_distances", { keywords: kws });
-      suggestions = { ...suggestions, [i]: result };
-    } catch {
-      suggestions = { ...suggestions, [i]: null };
-    } finally {
-      suggestingIdx = null;
-    }
-  }
-
-  function applySuggestion(i: number) {
-    const s = suggestions[i];
-    if (!s) return;
-    updateHook(i, { distance_threshold: s.suggested });
+async function suggestDistances(i: number) {
+  const kws = hooks[i]?.keywords ?? [];
+  if (kws.length === 0) return;
+  suggestingIdx = i;
+  try {
+    const result = await invoke<HookDistanceSuggestion>("suggest_hook_distances", { keywords: kws });
+    suggestions = { ...suggestions, [i]: result };
+  } catch {
     suggestions = { ...suggestions, [i]: null };
+  } finally {
+    suggestingIdx = null;
   }
+}
 
-  function tsToUnix(tsUtc: number): number {
-    const s = String(tsUtc).padStart(14, "0");
-    const y = Number(s.slice(0, 4));
-    const m = Number(s.slice(4, 6)) - 1;
-    const d = Number(s.slice(6, 8));
-    const hh = Number(s.slice(8, 10));
-    const mm = Number(s.slice(10, 12));
-    const ss = Number(s.slice(12, 14));
-    return Math.floor(Date.UTC(y, m, d, hh, mm, ss) / 1000);
+function applySuggestion(i: number) {
+  const s = suggestions[i];
+  if (!s) return;
+  updateHook(i, { distance_threshold: s.suggested });
+  suggestions = { ...suggestions, [i]: null };
+}
+
+function tsToUnix(tsUtc: number): number {
+  const s = String(tsUtc).padStart(14, "0");
+  const y = Number(s.slice(0, 4));
+  const m = Number(s.slice(4, 6)) - 1;
+  const d = Number(s.slice(6, 8));
+  const hh = Number(s.slice(8, 10));
+  const mm = Number(s.slice(10, 12));
+  const ss = Number(s.slice(12, 14));
+  return Math.floor(Date.UTC(y, m, d, hh, mm, ss) / 1000);
+}
+
+function fmtUtc(tsUtc: number): string {
+  const unix = tsToUnix(tsUtc);
+  if (!unix || Number.isNaN(unix)) return "—";
+  return fmtDateTimeLocale(unix);
+}
+
+function relativeAge(tsUtc: number): string {
+  const unix = tsToUnix(tsUtc);
+  if (!unix || Number.isNaN(unix)) return "";
+  const diff = nowSecs - unix;
+  if (diff < 0) return "";
+  if (diff < 60) return `${diff}s ${t("hooks.ago")}`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ${t("hooks.ago")}`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ${t("hooks.ago")}`;
+  return `${Math.floor(diff / 86400)}d ${t("hooks.ago")}`;
+}
+
+async function openTriggeredSession(hookName: string, trigger: HookLastTrigger | null) {
+  const ts = trigger?.label_eeg_start_utc;
+  if (!ts) return;
+  openingSession = hookName;
+  try {
+    await invoke("open_session_for_timestamp", { timestampUtc: ts });
+  } finally {
+    openingSession = null;
   }
+}
 
-  function fmtUtc(tsUtc: number): string {
-    const unix = tsToUnix(tsUtc);
-    if (!unix || Number.isNaN(unix)) return "—";
-    return fmtDateTimeLocale(unix);
+onMount(() => {
+  loadHooks();
+  const statusTimer = setInterval(loadStatuses, 5000);
+  const clockTimer = setInterval(() => {
+    nowSecs = Math.floor(Date.now() / 1000);
+  }, 1000);
+  return () => {
+    clearInterval(statusTimer);
+    clearInterval(clockTimer);
+    for (const timer of keywordSuggestDebounce.values()) clearTimeout(timer);
+    keywordSuggestDebounce.clear();
+  };
+});
+
+function addHook() {
+  hooks = [...hooks, { ...NEW_HOOK }];
+  keywordDrafts = [...keywordDrafts, ""];
+}
+
+function removeHook(i: number) {
+  hooks = hooks.filter((_, idx) => idx !== i);
+  keywordDrafts = keywordDrafts.filter((_, idx) => idx !== i);
+  const next = { ...suggestions };
+  delete next[i];
+  suggestions = next;
+  const nextK = { ...keywordSuggestions };
+  delete nextK[i];
+  keywordSuggestions = nextK;
+  const nextS = { ...keywordSuggesting };
+  delete nextS[i];
+  keywordSuggesting = nextS;
+  const nextF = { ...keywordSuggestionFocus };
+  delete nextF[i];
+  keywordSuggestionFocus = nextF;
+  const t = keywordSuggestDebounce.get(i);
+  if (t) {
+    clearTimeout(t);
+    keywordSuggestDebounce.delete(i);
   }
+}
 
-  function relativeAge(tsUtc: number): string {
-    const unix = tsToUnix(tsUtc);
-    if (!unix || Number.isNaN(unix)) return "";
-    const diff = nowSecs - unix;
-    if (diff < 0) return "";
-    if (diff < 60) return `${diff}s ${t("hooks.ago")}`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ${t("hooks.ago")}`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ${t("hooks.ago")}`;
-    return `${Math.floor(diff / 86400)}d ${t("hooks.ago")}`;
-  }
+function updateHook(i: number, patch: Partial<HookRule>) {
+  hooks = hooks.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
+}
 
-  async function openTriggeredSession(hookName: string, trigger: HookLastTrigger | null) {
-    const ts = trigger?.label_eeg_start_utc;
-    if (!ts) return;
-    openingSession = hookName;
-    try {
-      await invoke("open_session_for_timestamp", { timestampUtc: ts });
-    } finally {
-      openingSession = null;
-    }
-  }
-
-  onMount(() => {
-    loadHooks();
-    const statusTimer = setInterval(loadStatuses, 5000);
-    const clockTimer  = setInterval(() => { nowSecs = Math.floor(Date.now() / 1000); }, 1000);
-    return () => {
-      clearInterval(statusTimer);
-      clearInterval(clockTimer);
-      for (const timer of keywordSuggestDebounce.values()) clearTimeout(timer);
-      keywordSuggestDebounce.clear();
-    };
-  });
-
-  function addHook() {
-    hooks = [...hooks, { ...NEW_HOOK }];
-    keywordDrafts = [...keywordDrafts, ""];
-  }
-
-  function removeHook(i: number) {
-    hooks = hooks.filter((_, idx) => idx !== i);
-    keywordDrafts = keywordDrafts.filter((_, idx) => idx !== i);
-    const next = { ...suggestions };
-    delete next[i];
-    suggestions = next;
-    const nextK = { ...keywordSuggestions };
-    delete nextK[i];
-    keywordSuggestions = nextK;
-    const nextS = { ...keywordSuggesting };
-    delete nextS[i];
-    keywordSuggesting = nextS;
-    const nextF = { ...keywordSuggestionFocus };
-    delete nextF[i];
-    keywordSuggestionFocus = nextF;
-    const t = keywordSuggestDebounce.get(i);
-    if (t) {
-      clearTimeout(t);
-      keywordSuggestDebounce.delete(i);
-    }
-  }
-
-  function updateHook(i: number, patch: Partial<HookRule>) {
-    hooks = hooks.map((h, idx) => idx === i ? { ...h, ...patch } : h);
-  }
-
-  function addKeywordValue(i: number, value: string) {
-    const kw = value.trim();
-    if (!kw) return;
-    const exists = hooks[i].keywords.some((x) => x.toLowerCase() === kw.toLowerCase());
-    if (exists) {
-      keywordDrafts = keywordDrafts.map((v, idx) => idx === i ? "" : v);
-      keywordSuggestions = { ...keywordSuggestions, [i]: [] };
-      return;
-    }
-    const next = [...hooks[i].keywords, kw];
-    updateHook(i, { keywords: next });
-    keywordDrafts = keywordDrafts.map((v, idx) => idx === i ? "" : v);
+function addKeywordValue(i: number, value: string) {
+  const kw = value.trim();
+  if (!kw) return;
+  const exists = hooks[i].keywords.some((x) => x.toLowerCase() === kw.toLowerCase());
+  if (exists) {
+    keywordDrafts = keywordDrafts.map((v, idx) => (idx === i ? "" : v));
     keywordSuggestions = { ...keywordSuggestions, [i]: [] };
+    return;
   }
+  const next = [...hooks[i].keywords, kw];
+  updateHook(i, { keywords: next });
+  keywordDrafts = keywordDrafts.map((v, idx) => (idx === i ? "" : v));
+  keywordSuggestions = { ...keywordSuggestions, [i]: [] };
+}
 
-  function addKeyword(i: number) {
-    addKeywordValue(i, keywordDrafts[i] ?? "");
+function addKeyword(i: number) {
+  addKeywordValue(i, keywordDrafts[i] ?? "");
+}
+
+function removeKeyword(hookIndex: number, keywordIndex: number) {
+  updateHook(hookIndex, {
+    keywords: hooks[hookIndex].keywords.filter((_, idx) => idx !== keywordIndex),
+  });
+}
+
+function sourceText(source: string): string {
+  if (source === "both") return t("hooks.suggestionSourceBoth");
+  if (source === "embedding") return t("hooks.suggestionSourceEmbedding");
+  return t("hooks.suggestionSourceFuzzy");
+}
+
+async function fetchKeywordSuggestions(i: number) {
+  const draft = (keywordDrafts[i] ?? "").trim();
+  if (draft.length < 2) {
+    keywordSuggestions = { ...keywordSuggestions, [i]: [] };
+    keywordSuggesting = { ...keywordSuggesting, [i]: false };
+    return;
   }
-
-  function removeKeyword(hookIndex: number, keywordIndex: number) {
-    updateHook(hookIndex, {
-      keywords: hooks[hookIndex].keywords.filter((_, idx) => idx !== keywordIndex),
-    });
+  keywordSuggesting = { ...keywordSuggesting, [i]: true };
+  try {
+    const rows = await invoke<HookKeywordSuggestion[]>("suggest_hook_keywords", { draft, limit: 8 });
+    const existing = new Set((hooks[i]?.keywords ?? []).map((x) => x.toLowerCase()));
+    keywordSuggestions = {
+      ...keywordSuggestions,
+      [i]: rows.filter((r) => !existing.has(r.keyword.toLowerCase())),
+    };
+    keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: 0 };
+  } catch {
+    keywordSuggestions = { ...keywordSuggestions, [i]: [] };
+    keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: -1 };
+  } finally {
+    keywordSuggesting = { ...keywordSuggesting, [i]: false };
   }
+}
 
-  function sourceText(source: string): string {
-    if (source === "both") return t("hooks.suggestionSourceBoth");
-    if (source === "embedding") return t("hooks.suggestionSourceEmbedding");
-    return t("hooks.suggestionSourceFuzzy");
+function onKeywordInputKeyDown(i: number, e: KeyboardEvent) {
+  const suggestionsForRow = keywordSuggestions[i] ?? [];
+  if (e.key === "ArrowDown") {
+    if (suggestionsForRow.length === 0) return;
+    e.preventDefault();
+    const current = keywordSuggestionFocus[i] ?? -1;
+    const next = current < 0 ? 0 : (current + 1) % suggestionsForRow.length;
+    keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: next };
+    return;
   }
-
-  async function fetchKeywordSuggestions(i: number) {
-    const draft = (keywordDrafts[i] ?? "").trim();
-    if (draft.length < 2) {
-      keywordSuggestions = { ...keywordSuggestions, [i]: [] };
-      keywordSuggesting = { ...keywordSuggesting, [i]: false };
-      return;
-    }
-    keywordSuggesting = { ...keywordSuggesting, [i]: true };
-    try {
-      const rows = await invoke<HookKeywordSuggestion[]>("suggest_hook_keywords", { draft, limit: 8 });
-      const existing = new Set((hooks[i]?.keywords ?? []).map((x) => x.toLowerCase()));
-      keywordSuggestions = {
-        ...keywordSuggestions,
-        [i]: rows.filter((r) => !existing.has(r.keyword.toLowerCase())),
-      };
-      keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: 0 };
-    } catch {
-      keywordSuggestions = { ...keywordSuggestions, [i]: [] };
-      keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: -1 };
-    } finally {
-      keywordSuggesting = { ...keywordSuggesting, [i]: false };
-    }
+  if (e.key === "ArrowUp") {
+    if (suggestionsForRow.length === 0) return;
+    e.preventDefault();
+    const current = keywordSuggestionFocus[i] ?? 0;
+    const next = current <= 0 ? suggestionsForRow.length - 1 : current - 1;
+    keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: next };
+    return;
   }
-
-  function onKeywordInputKeyDown(i: number, e: KeyboardEvent) {
-    const suggestionsForRow = keywordSuggestions[i] ?? [];
-    if (e.key === "ArrowDown") {
-      if (suggestionsForRow.length === 0) return;
-      e.preventDefault();
-      const current = keywordSuggestionFocus[i] ?? -1;
-      const next = current < 0 ? 0 : (current + 1) % suggestionsForRow.length;
-      keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: next };
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      if (suggestionsForRow.length === 0) return;
-      e.preventDefault();
-      const current = keywordSuggestionFocus[i] ?? 0;
-      const next = current <= 0 ? suggestionsForRow.length - 1 : current - 1;
-      keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: next };
-      return;
-    }
-    if (e.key === "Escape") {
-      keywordSuggestions = { ...keywordSuggestions, [i]: [] };
-      keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: -1 };
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const idx = keywordSuggestionFocus[i] ?? -1;
-      const active = idx >= 0 ? suggestionsForRow[idx] : null;
-      if (active) {
-        applyKeywordSuggestion(i, active.keyword);
-      } else {
-        addKeyword(i);
-      }
+  if (e.key === "Escape") {
+    keywordSuggestions = { ...keywordSuggestions, [i]: [] };
+    keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: -1 };
+    return;
+  }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const idx = keywordSuggestionFocus[i] ?? -1;
+    const active = idx >= 0 ? suggestionsForRow[idx] : null;
+    if (active) {
+      applyKeywordSuggestion(i, active.keyword);
+    } else {
+      addKeyword(i);
     }
   }
+}
 
-  function addScenarioExample(example: HookExample) {
-    hooks = [...hooks, {
+function addScenarioExample(example: HookExample) {
+  hooks = [
+    ...hooks,
+    {
       name: example.name,
       enabled: true,
       keywords: [...example.keywords],
@@ -392,55 +396,64 @@ the Free Software Foundation, version 3 only. -->
       text: example.text,
       distance_threshold: example.distance_threshold,
       recent_limit: example.recent_limit,
-    }];
-    keywordDrafts = [...keywordDrafts, ""];
-  }
+    },
+  ];
+  keywordDrafts = [...keywordDrafts, ""];
+}
 
-  function onKeywordDraftInput(i: number, value: string) {
-    keywordDrafts = keywordDrafts.map((v, idx) => idx === i ? value : v);
-    const prev = keywordSuggestDebounce.get(i);
-    if (prev) clearTimeout(prev);
-    const timer = setTimeout(() => { fetchKeywordSuggestions(i); }, 180);
-    keywordSuggestDebounce.set(i, timer);
-  }
+function onKeywordDraftInput(i: number, value: string) {
+  keywordDrafts = keywordDrafts.map((v, idx) => (idx === i ? value : v));
+  const prev = keywordSuggestDebounce.get(i);
+  if (prev) clearTimeout(prev);
+  const timer = setTimeout(() => {
+    fetchKeywordSuggestions(i);
+  }, 180);
+  keywordSuggestDebounce.set(i, timer);
+}
 
-  function applyKeywordSuggestion(i: number, kw: string) {
-    addKeywordValue(i, kw);
-  }
+function applyKeywordSuggestion(i: number, kw: string) {
+  addKeywordValue(i, kw);
+}
 
-  async function saveHooks() {
-    saving = true;
-    saved = false;
-    try {
-      await invoke("set_hooks", { hooks });
-      saved = true;
-      setTimeout(() => { saved = false; }, 1500);
-      await loadHooks();
-    } finally {
-      saving = false;
-    }
+async function saveHooks() {
+  saving = true;
+  saved = false;
+  try {
+    await invoke("set_hooks", { hooks });
+    saved = true;
+    setTimeout(() => {
+      saved = false;
+    }, 1500);
+    await loadHooks();
+  } finally {
+    saving = false;
   }
+}
 
-  // ── Log parsing helpers ───────────────────────────────────────────────────
-  function parseJson(s: string): Record<string, unknown> {
-    try { return JSON.parse(s); } catch { return {}; }
+// ── Log parsing helpers ───────────────────────────────────────────────────
+function parseJson(s: string): Record<string, unknown> {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
   }
+}
 
-  function logHookName(row: HookLogRow): string {
-    const h = parseJson(row.hook_json);
-    return String(h.name ?? "?");
-  }
+function logHookName(row: HookLogRow): string {
+  const h = parseJson(row.hook_json);
+  return String(h.name ?? "?");
+}
 
-  function logLabel(row: HookLogRow): string {
-    const t = parseJson(row.trigger_json);
-    return String(t.label_text ?? "");
-  }
+function logLabel(row: HookLogRow): string {
+  const t = parseJson(row.trigger_json);
+  return String(t.label_text ?? "");
+}
 
-  function logDistance(row: HookLogRow): string {
-    const t = parseJson(row.trigger_json);
-    const d = Number(t.distance);
-    return Number.isFinite(d) ? d.toFixed(3) : "—";
-  }
+function logDistance(row: HookLogRow): string {
+  const t = parseJson(row.trigger_json);
+  const d = Number(t.distance);
+  return Number.isFinite(d) ? d.toFixed(3) : "—";
+}
 </script>
 
 <Card class="border border-border/50 bg-background/95">

@@ -8,331 +8,365 @@ the Free Software Foundation, version 3 only. -->
      Configurable work/break timer with automatic EEG labelling.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen }             from "@tauri-apps/api/event";
-  import { t }           from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import { Button }             from "$lib/components/ui/button";
-  import { fmtDuration, fmtTimeShort as fmtTime, dateToCompactKey, fmtCountdown } from "$lib/format";
-  import { openLabel } from "$lib/navigation";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { dateToCompactKey, fmtCountdown, fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { openLabel } from "$lib/navigation";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
-  // ── Presets ────────────────────────────────────────────────────────────────
-  type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
+// ── Presets ────────────────────────────────────────────────────────────────
+type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
 
-  interface PresetConfig {
-    workMins:      number;
-    breakMins:     number;
-    longBreakMins: number;
-    longBreakEvery:number;
+interface PresetConfig {
+  workMins: number;
+  breakMins: number;
+  longBreakMins: number;
+  longBreakEvery: number;
+}
+
+const PRESETS: Record<Exclude<Preset, "custom">, PresetConfig> = {
+  pomodoro: { workMins: 25, breakMins: 5, longBreakMins: 15, longBreakEvery: 4 },
+  deepWork: { workMins: 50, breakMins: 10, longBreakMins: 30, longBreakEvery: 2 },
+  shortFocus: { workMins: 15, breakMins: 5, longBreakMins: 15, longBreakEvery: 4 },
+};
+
+// ── Config state ────────────────────────────────────────────────────────────
+const LS_KEY = "skill.focusTimer.config";
+
+interface TimerConfig {
+  preset: Preset;
+  workMins: number;
+  breakMins: number;
+  longBreakMins: number;
+  longBreakEvery: number;
+  autoLabel: boolean;
+  ttsEnabled: boolean;
+}
+
+function loadConfig(): TimerConfig {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return { ...defaultConfig(), ...JSON.parse(raw) };
+  } catch {
+    /* ignore */
   }
+  return defaultConfig();
+}
 
-  const PRESETS: Record<Exclude<Preset, "custom">, PresetConfig> = {
-    pomodoro:   { workMins: 25, breakMins: 5,  longBreakMins: 15, longBreakEvery: 4 },
-    deepWork:   { workMins: 50, breakMins: 10, longBreakMins: 30, longBreakEvery: 2 },
-    shortFocus: { workMins: 15, breakMins: 5,  longBreakMins: 15, longBreakEvery: 4 },
+function defaultConfig(): TimerConfig {
+  return {
+    preset: "pomodoro",
+    workMins: 25,
+    breakMins: 5,
+    longBreakMins: 15,
+    longBreakEvery: 4,
+    autoLabel: true,
+    ttsEnabled: false,
   };
+}
 
-  // ── Config state ────────────────────────────────────────────────────────────
-  const LS_KEY = "skill.focusTimer.config";
+const _init = loadConfig();
+let selectedPreset = $state<Preset>(_init.preset);
+let workMins = $state(_init.workMins);
+let breakMins = $state(_init.breakMins);
+let longBreakMins = $state(_init.longBreakMins);
+let longBreakEvery = $state(_init.longBreakEvery);
+let autoLabel = $state(_init.autoLabel);
+let ttsEnabled = $state(_init.ttsEnabled);
 
-  interface TimerConfig {
-    preset:        Preset;
-    workMins:      number;
-    breakMins:     number;
-    longBreakMins: number;
-    longBreakEvery: number;
-    autoLabel:     boolean;
-    ttsEnabled:    boolean;
+// Persist config whenever it changes (idle state only — don't interrupt a running timer)
+$effect(() => {
+  const cfg: TimerConfig = {
+    preset: selectedPreset,
+    workMins,
+    breakMins,
+    longBreakMins,
+    longBreakEvery,
+    autoLabel,
+    ttsEnabled,
+  };
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+  } catch {
+    /* private/full */
   }
+});
 
-  function loadConfig(): TimerConfig {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) return { ...defaultConfig(), ...JSON.parse(raw) };
-    } catch { /* ignore */ }
-    return defaultConfig();
+// ── TTS helpers ─────────────────────────────────────────────────────────────
+// Fire-and-forget: queued on the Rust TTS worker, never blocks the JS timer.
+function speakAsync(text: string) {
+  if (!ttsEnabled) return;
+  invoke("tts_speak", { text, voice: null }).catch((_e) => {});
+}
+
+// Announcement spoken at the start of each phase.
+function phaseAnnouncement(p: Phase): string {
+  const mins = p === "work" ? workMins : p === "break" ? breakMins : p === "longBreak" ? longBreakMins : 0;
+  const label = p === "work" ? "Focus time" : p === "break" ? "Break time" : p === "longBreak" ? "Long break" : "";
+  return `${label}. ${mins} minute${mins !== 1 ? "s" : ""}.`;
+}
+
+function applyPreset(p: Exclude<Preset, "custom">) {
+  selectedPreset = p;
+  const c = PRESETS[p];
+  workMins = c.workMins;
+  breakMins = c.breakMins;
+  longBreakMins = c.longBreakMins;
+  longBreakEvery = c.longBreakEvery;
+}
+
+// ── Session log ──────────────────────────────────────────────────────────────
+
+interface LogEntry {
+  type: "work" | "break" | "longBreak";
+  startUtc: number; // unix seconds
+  durationSecs: number; // planned duration (what was configured)
+  completedAt: number; // unix seconds
+}
+
+const LS_LOG_PREFIX = "skill.focusTimer.log.";
+
+/** YYYYMMDD string for today (local time). */
+function todayKey(): string {
+  return dateToCompactKey(new Date());
+}
+
+function loadLog(): LogEntry[] {
+  try {
+    const raw = localStorage.getItem(LS_LOG_PREFIX + todayKey());
+    if (raw) return JSON.parse(raw) as LogEntry[];
+  } catch {
+    /* ignore */
   }
+  return [];
+}
 
-  function defaultConfig(): TimerConfig {
-    return { preset: "pomodoro", workMins: 25, breakMins: 5, longBreakMins: 15, longBreakEvery: 4, autoLabel: true, ttsEnabled: false };
+function saveLog(entries: LogEntry[]) {
+  try {
+    localStorage.setItem(LS_LOG_PREFIX + todayKey(), JSON.stringify(entries));
+  } catch {
+    /* full/private */
   }
+}
 
-  const _init = loadConfig();
-  let selectedPreset  = $state<Preset>(_init.preset);
-  let workMins        = $state(_init.workMins);
-  let breakMins       = $state(_init.breakMins);
-  let longBreakMins   = $state(_init.longBreakMins);
-  let longBreakEvery  = $state(_init.longBreakEvery);
-  let autoLabel       = $state(_init.autoLabel);
-  let ttsEnabled      = $state(_init.ttsEnabled);
+let sessionLog = $state<LogEntry[]>(loadLog());
 
-  // Persist config whenever it changes (idle state only — don't interrupt a running timer)
-  $effect(() => {
-    const cfg: TimerConfig = { preset: selectedPreset, workMins, breakMins, longBreakMins, longBreakEvery, autoLabel, ttsEnabled };
-    try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch { /* private/full */ }
-  });
+function pushLog(entry: LogEntry) {
+  sessionLog = [...sessionLog, entry];
+  saveLog(sessionLog);
+}
 
-  // ── TTS helpers ─────────────────────────────────────────────────────────────
-  // Fire-and-forget: queued on the Rust TTS worker, never blocks the JS timer.
-  function speakAsync(text: string) {
-    if (!ttsEnabled) return;
-    invoke("tts_speak", { text, voice: null }).catch(e => console.warn("[focus-timer] tts_speak failed:", e));
+function clearLog() {
+  sessionLog = [];
+  try {
+    localStorage.removeItem(LS_LOG_PREFIX + todayKey());
+  } catch {
+    /* ignore */
   }
+}
 
-  // Announcement spoken at the start of each phase.
-  function phaseAnnouncement(p: Phase): string {
-    const mins = p === "work"      ? workMins      :
-                 p === "break"     ? breakMins     :
-                 p === "longBreak" ? longBreakMins : 0;
-    const label = p === "work"      ? "Focus time"   :
-                  p === "break"     ? "Break time"   :
-                  p === "longBreak" ? "Long break"   : "";
-    return `${label}. ${mins} minute${mins !== 1 ? "s" : ""}.`;
-  }
+// Derived totals
+const focusSecs = $derived(sessionLog.filter((e) => e.type === "work").reduce((s, e) => s + e.durationSecs, 0));
+const breakSecs = $derived(sessionLog.filter((e) => e.type !== "work").reduce((s, e) => s + e.durationSecs, 0));
+const logTotalSecs = $derived(focusSecs + breakSecs);
+const cyclesDone = $derived(sessionLog.filter((e) => e.type === "work").length);
 
-  function applyPreset(p: Exclude<Preset, "custom">) {
-    selectedPreset = p;
-    const c = PRESETS[p];
-    workMins       = c.workMins;
-    breakMins      = c.breakMins;
-    longBreakMins  = c.longBreakMins;
-    longBreakEvery = c.longBreakEvery;
-  }
+// Whether the log panel is expanded
+let logOpen = $state(true);
 
-  // ── Session log ──────────────────────────────────────────────────────────────
+// ── Timer state ─────────────────────────────────────────────────────────────
+type Phase = "idle" | "work" | "break" | "longBreak";
 
-  interface LogEntry {
-    type:        "work" | "break" | "longBreak";
-    startUtc:    number;   // unix seconds
-    durationSecs: number;  // planned duration (what was configured)
-    completedAt: number;   // unix seconds
-  }
+let phase = $state<Phase>("idle");
+let paused = $state(false);
+let secondsLeft = $state(0);
+let sessionsDone = $state(0);
+let phaseStartUtc = $state(0);
 
-  const LS_LOG_PREFIX = "skill.focusTimer.log.";
+let intervalId: ReturnType<typeof setInterval> | null = null;
 
-  /** YYYYMMDD string for today (local time). */
-  function todayKey(): string {
-    return dateToCompactKey(new Date());
-  }
+// Total seconds for current phase (for progress ring)
+let totalSecs = $derived(
+  phase === "work"
+    ? workMins * 60
+    : phase === "break"
+      ? breakMins * 60
+      : phase === "longBreak"
+        ? longBreakMins * 60
+        : 0,
+);
 
-  function loadLog(): LogEntry[] {
-    try {
-      const raw = localStorage.getItem(LS_LOG_PREFIX + todayKey());
-      if (raw) return JSON.parse(raw) as LogEntry[];
-    } catch { /* ignore */ }
-    return [];
-  }
+// SVG progress ring
+const RING_R = 80;
+const RING_CX = 96;
+const RING_CY = 96;
+const CIRCUM = 2 * Math.PI * RING_R;
+let ringOffset = $derived(totalSecs > 0 ? CIRCUM * (1 - secondsLeft / totalSecs) : 0);
 
-  function saveLog(entries: LogEntry[]) {
-    try { localStorage.setItem(LS_LOG_PREFIX + todayKey(), JSON.stringify(entries)); } catch { /* full/private */ }
-  }
+// Formatted time MM:SS
+let timeDisplay = $derived(() => fmtCountdown(secondsLeft));
 
-  let sessionLog = $state<LogEntry[]>(loadLog());
+// Phase label
+let phaseLabel = $derived(
+  phase === "work"
+    ? t("focusTimer.workPhase")
+    : phase === "break"
+      ? t("focusTimer.breakPhase")
+      : phase === "longBreak"
+        ? t("focusTimer.longBreak")
+        : t("focusTimer.title"),
+);
 
-  function pushLog(entry: LogEntry) {
-    sessionLog = [...sessionLog, entry];
-    saveLog(sessionLog);
-  }
+// Ring color per phase
+let ringColor = $derived(
+  phase === "work"
+    ? "#3b82f6"
+    : // blue
+      phase === "break"
+      ? "#22c55e"
+      : // green
+        phase === "longBreak"
+        ? "var(--color-violet-500)"
+        : "#64748b", // slate
+);
 
-  function clearLog() {
-    sessionLog = [];
-    try { localStorage.removeItem(LS_LOG_PREFIX + todayKey()); } catch { /* ignore */ }
-  }
-
-  // Derived totals
-  const focusSecs  = $derived(sessionLog.filter(e => e.type === "work").reduce((s, e) => s + e.durationSecs, 0));
-  const breakSecs  = $derived(sessionLog.filter(e => e.type !== "work").reduce((s, e) => s + e.durationSecs, 0));
-  const logTotalSecs = $derived(focusSecs + breakSecs);
-  const cyclesDone = $derived(sessionLog.filter(e => e.type === "work").length);
-
-  // Whether the log panel is expanded
-  let logOpen = $state(true);
-
-  // ── Timer state ─────────────────────────────────────────────────────────────
-  type Phase = "idle" | "work" | "break" | "longBreak";
-
-  let phase         = $state<Phase>("idle");
-  let paused        = $state(false);
-  let secondsLeft   = $state(0);
-  let sessionsDone  = $state(0);
-  let phaseStartUtc = $state(0);
-
-  let intervalId: ReturnType<typeof setInterval> | null = null;
-
-  // Total seconds for current phase (for progress ring)
-  let totalSecs = $derived(
-    phase === "work"      ? workMins * 60       :
-    phase === "break"     ? breakMins * 60      :
-    phase === "longBreak" ? longBreakMins * 60  : 0
-  );
-
-  // SVG progress ring
-  const RING_R   = 80;
-  const RING_CX  = 96;
-  const RING_CY  = 96;
-  const CIRCUM   = 2 * Math.PI * RING_R;
-  let ringOffset = $derived(
-    totalSecs > 0
-      ? CIRCUM * (1 - secondsLeft / totalSecs)
-      : 0
-  );
-
-  // Formatted time MM:SS
-  let timeDisplay = $derived(() => fmtCountdown(secondsLeft));
-
-  // Phase label
-  let phaseLabel = $derived(
-    phase === "work"      ? t("focusTimer.workPhase")  :
-    phase === "break"     ? t("focusTimer.breakPhase") :
-    phase === "longBreak" ? t("focusTimer.longBreak")  :
-    t("focusTimer.title")
-  );
-
-  // Ring color per phase
-  let ringColor = $derived(
-    phase === "work"      ? "#3b82f6" :   // blue
-    phase === "break"     ? "#22c55e" :   // green
-    phase === "longBreak" ? "var(--color-violet-500)" :
-    "#64748b"                             // slate
-  );
-
-  // ── Tick ───────────────────────────────────────────────────────────────────
-  function tick() {
-    if (paused) return;
-    if (secondsLeft <= 0) {
-      onPhaseComplete();
-      return;
-    }
-    secondsLeft--;
-    // Speak countdown digits for the final 5 seconds of any phase.
-    if (secondsLeft > 0 && secondsLeft <= 5) {
-      speakAsync(String(secondsLeft));
-    }
-  }
-
-  async function onPhaseComplete() {
-    clearInterval(intervalId!);
-    intervalId = null;
-
-    const completedAt = Math.floor(Date.now() / 1000);
-
-    if (phase === "work") {
-      speakAsync("Time's up. Great work!");
-      sessionsDone++;
-
-      // Log the completed focus session
-      pushLog({
-        type:         "work",
-        startUtc:     phaseStartUtc,
-        durationSecs: workMins * 60,
-        completedAt,
-      });
-
-      // Auto-label the completed focus session
-      if (autoLabel) {
-        try {
-          const label = `${t("focusTimer.workPhase")} — ${workMins}min`;
-          await invoke("submit_label", {
-            labelStartUtc: phaseStartUtc,
-            text: label,
-          });
-        } catch (e) { console.warn("[focus-timer] submit_label failed:", e); }
-      }
-
-      // Decide next phase
-      const nextPhase = sessionsDone % longBreakEvery === 0 ? "longBreak" : "break";
-      startPhase(nextPhase);
-    } else {
-      // Log the completed break
-      pushLog({
-        type:         phase as "break" | "longBreak",
-        startUtc:     phaseStartUtc,
-        durationSecs: phase === "longBreak" ? longBreakMins * 60 : breakMins * 60,
-        completedAt,
-      });
-
-      speakAsync("Break over. Ready to focus?");
-      // After break → go back to idle (don't auto-start, notify instead)
-      phase       = "idle";
-      secondsLeft = 0;
-      // Show a toast (best-effort)
-      try {
-        await invoke("show_toast_from_frontend", {
-          level: "info",
-          title: t("focusTimer.breakComplete"),
-          message: "",
-        });
-      } catch (e) { console.warn("[focus-timer] show_toast_from_frontend failed:", e); }
-    }
-  }
-
-  function startPhase(p: Phase) {
-    phase = p;
-    paused = false;
-    phaseStartUtc = Math.floor(Date.now() / 1000);
-    secondsLeft =
-      p === "work"      ? workMins * 60       :
-      p === "break"     ? breakMins * 60      :
-      p === "longBreak" ? longBreakMins * 60  : 0;
-    clearInterval(intervalId!);
-    intervalId = setInterval(tick, 1000);
-    speakAsync(phaseAnnouncement(p));
-  }
-
-  function handleStart() {
-    if (phase === "idle") {
-      startPhase("work");
-    } else if (paused) {
-      paused = false;
-    }
-  }
-
-  function handlePause() {
-    paused = !paused;
-  }
-
-  function handleStop() {
-    clearInterval(intervalId!);
-    intervalId = null;
-    phase       = "idle";
-    paused      = false;
-    secondsLeft = 0;
-  }
-
-  function handleReset() {
-    handleStop();
-    sessionsDone = 0;
-  }
-
-
-
-  function skipPhase() {
-    clearInterval(intervalId!);
-    intervalId = null;
+// ── Tick ───────────────────────────────────────────────────────────────────
+function tick() {
+  if (paused) return;
+  if (secondsLeft <= 0) {
     onPhaseComplete();
+    return;
   }
+  secondsLeft--;
+  // Speak countdown digits for the final 5 seconds of any phase.
+  if (secondsLeft > 0 && secondsLeft <= 5) {
+    speakAsync(String(secondsLeft));
+  }
+}
 
-  onMount(() => {
-    // Auto-start when the window is opened via `timer` WS command
-    // (URL param for fresh windows; event for already-open windows)
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("autostart") === "1" && phase === "idle") {
-      handleStart();
-    }
+async function onPhaseComplete() {
+  clearInterval(intervalId!);
+  intervalId = null;
 
-    const unlisten = listen("focus-timer-start", () => {
-      if (phase === "idle") handleStart();
+  const completedAt = Math.floor(Date.now() / 1000);
+
+  if (phase === "work") {
+    speakAsync("Time's up. Great work!");
+    sessionsDone++;
+
+    // Log the completed focus session
+    pushLog({
+      type: "work",
+      startUtc: phaseStartUtc,
+      durationSecs: workMins * 60,
+      completedAt,
     });
 
-    return () => { unlisten.then(fn => fn()); };
+    // Auto-label the completed focus session
+    if (autoLabel) {
+      try {
+        const label = `${t("focusTimer.workPhase")} — ${workMins}min`;
+        await invoke("submit_label", {
+          labelStartUtc: phaseStartUtc,
+          text: label,
+        });
+      } catch (e) {}
+    }
+
+    // Decide next phase
+    const nextPhase = sessionsDone % longBreakEvery === 0 ? "longBreak" : "break";
+    startPhase(nextPhase);
+  } else {
+    // Log the completed break
+    pushLog({
+      type: phase as "break" | "longBreak",
+      startUtc: phaseStartUtc,
+      durationSecs: phase === "longBreak" ? longBreakMins * 60 : breakMins * 60,
+      completedAt,
+    });
+
+    speakAsync("Break over. Ready to focus?");
+    // After break → go back to idle (don't auto-start, notify instead)
+    phase = "idle";
+    secondsLeft = 0;
+    // Show a toast (best-effort)
+    try {
+      await invoke("show_toast_from_frontend", {
+        level: "info",
+        title: t("focusTimer.breakComplete"),
+        message: "",
+      });
+    } catch (e) {}
+  }
+}
+
+function startPhase(p: Phase) {
+  phase = p;
+  paused = false;
+  phaseStartUtc = Math.floor(Date.now() / 1000);
+  secondsLeft =
+    p === "work" ? workMins * 60 : p === "break" ? breakMins * 60 : p === "longBreak" ? longBreakMins * 60 : 0;
+  clearInterval(intervalId!);
+  intervalId = setInterval(tick, 1000);
+  speakAsync(phaseAnnouncement(p));
+}
+
+function handleStart() {
+  if (phase === "idle") {
+    startPhase("work");
+  } else if (paused) {
+    paused = false;
+  }
+}
+
+function handlePause() {
+  paused = !paused;
+}
+
+function handleStop() {
+  clearInterval(intervalId!);
+  intervalId = null;
+  phase = "idle";
+  paused = false;
+  secondsLeft = 0;
+}
+
+function handleReset() {
+  handleStop();
+  sessionsDone = 0;
+}
+
+function skipPhase() {
+  clearInterval(intervalId!);
+  intervalId = null;
+  onPhaseComplete();
+}
+
+onMount(() => {
+  // Auto-start when the window is opened via `timer` WS command
+  // (URL param for fresh windows; event for already-open windows)
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("autostart") === "1" && phase === "idle") {
+    handleStart();
+  }
+
+  const unlisten = listen("focus-timer-start", () => {
+    if (phase === "idle") handleStart();
   });
 
-  onDestroy(() => {
-    if (intervalId) clearInterval(intervalId);
-  });
+  return () => {
+    unlisten.then((fn) => fn());
+  };
+});
 
-  useWindowTitle("window.title.focusTimer");
+onDestroy(() => {
+  if (intervalId) clearInterval(intervalId);
+});
+
+useWindowTitle("window.title.focusTimer");
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">

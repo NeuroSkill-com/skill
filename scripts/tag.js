@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from "fs";
-import { execSync } from "child_process";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const tag = `v${pkg.version}`;
@@ -10,7 +10,3 @@ try {
 } catch {
   process.exit(1);
 }
-
-console.log(`\nTag ${tag} created locally.`);
-console.log(`\nTo push it to the remote, run:\n`);
-console.log(`  git push origin ${tag}\n`);

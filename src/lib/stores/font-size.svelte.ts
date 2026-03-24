@@ -15,11 +15,11 @@ const STORAGE_KEY = "skill-font-size";
 
 /** Available presets (percentage of base 16px). */
 export const FONT_SIZE_PRESETS = [
-  { label: "XS",  value: 75  },
-  { label: "S",   value: 87  },
-  { label: "M",   value: 100 },
-  { label: "L",   value: 112 },
-  { label: "XL",  value: 125 },
+  { label: "XS", value: 75 },
+  { label: "S", value: 87 },
+  { label: "M", value: 100 },
+  { label: "L", value: 112 },
+  { label: "XL", value: 125 },
   { label: "XXL", value: 150 },
 ] as const;
 
@@ -32,7 +32,7 @@ function load(): number {
   const v = localStorage.getItem(STORAGE_KEY);
   if (v) {
     const n = parseInt(v, 10);
-    if (FONT_SIZE_PRESETS.some(p => p.value === n)) return n;
+    if (FONT_SIZE_PRESETS.some((p) => p.value === n)) return n;
   }
   return 100;
 }
@@ -46,7 +46,9 @@ function apply() {
   document.documentElement.style.setProperty("--font-scale", String(pct / 100));
 }
 
-export function getFontSize(): number { return current; }
+export function getFontSize(): number {
+  return current;
+}
 
 export function setFontSize(pct: number) {
   current = pct;

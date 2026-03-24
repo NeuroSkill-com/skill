@@ -2,10 +2,10 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! JSON Schema validation of LLM tool-call arguments.
 
-use serde_json::Value;
-use super::types::Tool;
 use super::coerce::coerce_value;
+use super::types::Tool;
 use anyhow::Context;
+use serde_json::Value;
 
 /// Validate tool-call arguments against the tool's JSON Schema `parameters`.
 ///

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Unit tests for ScreenshotMetrics and MetricsSnapshot.
 
-use skill_screenshots::capture::{ScreenshotMetrics, MetricsSnapshot};
+use skill_screenshots::capture::{MetricsSnapshot, ScreenshotMetrics};
 use std::sync::atomic::Ordering;
 
 #[test]
@@ -37,7 +37,10 @@ fn metrics_default_equals_new() {
     let d = ScreenshotMetrics::default();
     let n = ScreenshotMetrics::new();
     assert_eq!(d.snapshot().captures, n.snapshot().captures);
-    assert_eq!(d.snapshot().backoff_multiplier, n.snapshot().backoff_multiplier);
+    assert_eq!(
+        d.snapshot().backoff_multiplier,
+        n.snapshot().backoff_multiplier
+    );
 }
 
 #[test]

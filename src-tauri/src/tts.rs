@@ -10,9 +10,9 @@
 
 #[allow(unused_imports)]
 pub use skill_tts::{
-    NeuttsConfig, NeuttsVoiceInfo, TtsProgressEvent, TTS_PROGRESS_EVENT,
-    init_tts_dirs, init_neutts_samples_dir, init_espeak_bundled_data_path,
-    set_logging, tts_shutdown, neutts_apply_config, use_neutts,
+    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_dirs, neutts_apply_config,
+    set_logging, tts_shutdown, use_neutts, NeuttsConfig, NeuttsVoiceInfo, TtsProgressEvent,
+    TTS_PROGRESS_EVENT,
 };
 
 /// Wire TTS log output through the app's [`SkillLogger`](crate::skill_log::SkillLogger).
@@ -20,7 +20,10 @@ pub use skill_tts::{
 /// Call once during setup, after the logger is registered as managed state.
 pub fn init_tts_logger(app: &tauri::AppHandle) {
     use tauri::Manager;
-    let logger = app.state::<std::sync::Arc<crate::skill_log::SkillLogger>>().inner().clone();
+    let logger = app
+        .state::<std::sync::Arc<crate::skill_log::SkillLogger>>()
+        .inner()
+        .clone();
     skill_tts::log::set_log_callback(move |tag, msg| {
         if logger.enabled(tag) {
             logger.write(tag, msg);
@@ -39,7 +42,9 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
     let emit = move |ev: TtsProgressEvent| {
         app.emit(TTS_PROGRESS_EVENT, ev).ok();
     };
-    skill_tts::tts_init_with_callback(emit).await.map_err(|e| e.to_string())
+    skill_tts::tts_init_with_callback(emit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Unload the active TTS backend, freeing memory.
@@ -48,7 +53,9 @@ pub async fn tts_unload(app_handle: AppHandle) -> Result<(), String> {
     let result = skill_tts::tts_unload().await.map_err(|e| e.to_string());
     #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
     if result.is_ok() {
-        app_handle.emit(TTS_PROGRESS_EVENT, TtsProgressEvent::unloaded()).ok();
+        app_handle
+            .emit(TTS_PROGRESS_EVENT, TtsProgressEvent::unloaded())
+            .ok();
     }
     #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
     let _ = &app_handle;

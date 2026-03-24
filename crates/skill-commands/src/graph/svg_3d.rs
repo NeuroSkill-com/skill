@@ -2,8 +2,8 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! 3-D perspective SVG graph generation for interactive search results.
 
-use crate::{InteractiveGraphNode, InteractiveGraphEdge, fmt_unix_utc};
-use super::svg::{SvgLabels, svg_esc, trunc};
+use super::svg::{svg_esc, trunc, SvgLabels};
+use crate::{fmt_unix_utc, InteractiveGraphEdge, InteractiveGraphNode};
 
 // ── 3-D perspective SVG ────────────────────────────────────────────────────
 
@@ -16,8 +16,8 @@ fn project_3d(x: f32, y: f32, z: f32, w: f64, h: f64) -> (f64, f64, f64) {
     let cx = w / 2.0;
     let cy = h / 2.0;
     // Isometric-like projection with mild depth foreshortening
-    let depth = 1.0 + (z as f64) * 0.35;  // z ∈ [-1,1] → [0.65, 1.35]
-    let scale = 0.55 + depth * 0.35;      // depth → [0.78, 1.02]
+    let depth = 1.0 + (z as f64) * 0.35; // z ∈ [-1,1] → [0.65, 1.35]
+    let scale = 0.55 + depth * 0.35; // depth → [0.78, 1.02]
     let sx = cx + (x as f64) * (w * 0.38) / depth + (z as f64) * (w * 0.08);
     let sy = cy + (y as f64) * (h * 0.35) / depth - (z as f64) * (h * 0.10);
     (sx, sy, scale)
@@ -29,8 +29,8 @@ fn project_3d(x: f32, y: f32, z: f32, w: f64, h: f64) -> (f64, f64, f64) {
 /// space via PCA and perspective-projected.  Nodes without projections are
 /// arranged in a header row.
 pub fn generate_svg_3d(
-    nodes:  &[InteractiveGraphNode],
-    edges:  &[InteractiveGraphEdge],
+    nodes: &[InteractiveGraphNode],
+    edges: &[InteractiveGraphEdge],
     labels: &SvgLabels,
 ) -> String {
     const W: f64 = 900.0;
@@ -55,39 +55,51 @@ pub fn generate_svg_3d(
 "##));
 
     // Markers
-    for (id, col) in [("m3v","#8b5cf6"),("m3a","#f59e0b"),("m3e","#10b981"),("m3s","#ec4899"),("m3g","#666")] {
+    for (id, col) in [
+        ("m3v", "#8b5cf6"),
+        ("m3a", "#f59e0b"),
+        ("m3e", "#10b981"),
+        ("m3s", "#ec4899"),
+        ("m3g", "#666"),
+    ] {
         o.push_str(&format!(
             "    <marker id=\"{id}\" markerWidth=\"6\" markerHeight=\"4\" refX=\"5\" refY=\"2\" orient=\"auto\" markerUnits=\"strokeWidth\">\
              <path d=\"M0,0 L6,2 L0,4 Z\" fill=\"{col}\"/></marker>\n"));
     }
     o.push_str("  </defs>\n");
-    o.push_str(&format!("  <rect width=\"{wi}\" height=\"{hi}\" fill=\"url(#bg3d)\"/>\n"));
+    o.push_str(&format!(
+        "  <rect width=\"{wi}\" height=\"{hi}\" fill=\"url(#bg3d)\"/>\n"
+    ));
 
     // Grid floor lines (3D-projected)
     for i in -4..=4 {
         let t = i as f32 / 4.0;
         let (x1, y1, _) = project_3d(-1.0, 1.0, t, W, H);
-        let (x2, y2, _) = project_3d(1.0,  1.0, t, W, H);
+        let (x2, y2, _) = project_3d(1.0, 1.0, t, W, H);
         o.push_str(&format!(
             "  <line x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\" \
-             stroke=\"#ffffff\" stroke-opacity=\"0.04\" stroke-width=\"0.5\"/>\n"));
+             stroke=\"#ffffff\" stroke-opacity=\"0.04\" stroke-width=\"0.5\"/>\n"
+        ));
         let (x1, y1, _) = project_3d(t, 1.0, -1.0, W, H);
-        let (x2, y2, _) = project_3d(t, 1.0, 1.0,  W, H);
+        let (x2, y2, _) = project_3d(t, 1.0, 1.0, W, H);
         o.push_str(&format!(
             "  <line x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\" \
-             stroke=\"#ffffff\" stroke-opacity=\"0.04\" stroke-width=\"0.5\"/>\n"));
+             stroke=\"#ffffff\" stroke-opacity=\"0.04\" stroke-width=\"0.5\"/>\n"
+        ));
     }
 
     // Position map — 3D projected
     let mut pos: std::collections::HashMap<String, (f64, f64, f64)> = Default::default();
 
     // Nodes WITH 3D projections
-    let has_proj: Vec<&InteractiveGraphNode> = nodes.iter()
+    let has_proj: Vec<&InteractiveGraphNode> = nodes
+        .iter()
         .filter(|n| n.proj_x.is_some() && n.proj_y.is_some() && n.proj_z.is_some())
         .collect();
 
     // Nodes WITHOUT projections — place in a header row
-    let no_proj: Vec<&InteractiveGraphNode> = nodes.iter()
+    let no_proj: Vec<&InteractiveGraphNode> = nodes
+        .iter()
         .filter(|n| n.proj_x.is_none() || n.proj_y.is_none() || n.proj_z.is_none())
         .collect();
 
@@ -121,52 +133,60 @@ pub fn generate_svg_3d(
     // Edges first (behind nodes)
     let edge_marker = |kind: &str| -> (&str, &str, &str) {
         match kind {
-            "text_sim"        => ("#8b5cf6", "",    "m3v"),
-            "eeg_bridge"      => ("#f59e0b", "5,3", "m3a"),
-            "eeg_sim"         => ("#f59e0b", "2,3", "m3a"),
-            "label_prox"      => ("#10b981", "",    "m3e"),
+            "text_sim" => ("#8b5cf6", "", "m3v"),
+            "eeg_bridge" => ("#f59e0b", "5,3", "m3a"),
+            "eeg_sim" => ("#f59e0b", "2,3", "m3a"),
+            "label_prox" => ("#10b981", "", "m3e"),
             "screenshot_prox" => ("#ec4899", "5,3", "m3s"),
-            "ocr_sim"         => ("#ec4899", "2,3", "m3s"),
-            _                 => ("#666666", "",    "m3g"),
+            "ocr_sim" => ("#ec4899", "2,3", "m3s"),
+            _ => ("#666666", "", "m3g"),
         }
     };
 
     for e in edges {
         let (Some(&(x1, y1, s1)), Some(&(x2, y2, s2))) = (pos.get(&e.from_id), pos.get(&e.to_id))
-            else { continue };
+        else {
+            continue;
+        };
         let avg_scale = (s1 + s2) / 2.0;
         let opacity = (0.25 * avg_scale).clamp(0.1, 0.6);
         let pw = 1.2 * avg_scale;
         let (col, dash, mid) = edge_marker(&e.kind);
-        let da = if dash.is_empty() { String::new() }
-                 else { format!(" stroke-dasharray=\"{dash}\"") };
+        let da = if dash.is_empty() {
+            String::new()
+        } else {
+            format!(" stroke-dasharray=\"{dash}\"")
+        };
         o.push_str(&format!(
             "  <line x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\" \
              stroke=\"{col}\" stroke-width=\"{pw:.2}\" opacity=\"{opacity:.2}\"{da} \
-             marker-end=\"url(#{mid})\"/>\n"));
+             marker-end=\"url(#{mid})\"/>\n"
+        ));
     }
 
     // Nodes
     let node_color = |kind: &str| -> &str {
         match kind {
-            "query"       => "#8b5cf6",
-            "text_label"  => "#3b82f6",
-            "eeg_point"   => "#f59e0b",
+            "query" => "#8b5cf6",
+            "text_label" => "#3b82f6",
+            "eeg_point" => "#f59e0b",
             "found_label" => "#10b981",
-            "screenshot"  => "#ec4899",
-            _             => "#888888",
+            "screenshot" => "#ec4899",
+            _ => "#888888",
         }
     };
 
     for nd in &render_order {
-        let Some(&(cx, cy, scale)) = pos.get(&nd.id) else { continue };
+        let Some(&(cx, cy, scale)) = pos.get(&nd.id) else {
+            continue;
+        };
         let fill = node_color(&nd.kind);
         let opacity = (0.55 + scale * 0.45).clamp(0.3, 1.0);
         let fs = (9.0 * scale).clamp(6.0, 11.0);
 
         // Drop shadow (depth cue)
         let shadow_blur = (3.0 * scale).clamp(1.0, 5.0);
-        let shadow_opa  = (0.3 * scale).clamp(0.05, 0.4);
+        let shadow_opa = (0.3 * scale).clamp(0.05, 0.4);
 
         match nd.kind.as_str() {
             "query" => {
@@ -177,13 +197,15 @@ pub fn generate_svg_3d(
                     r + 6.0 * scale, 2.0 * scale));
                 o.push_str(&format!(
                     "  <circle cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"{r:.1}\" fill=\"{fill}\" \
-                     fill-opacity=\"{opacity:.2}\"/>\n"));
+                     fill-opacity=\"{opacity:.2}\"/>\n"
+                ));
                 let label = trunc(nd.text.as_deref().unwrap_or("query"), 16);
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{cy:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"{fs:.1}\" font-weight=\"700\" \
                      fill=\"white\" opacity=\"{opacity:.2}\">{}</text>\n",
-                    svg_esc(&label)));
+                    svg_esc(&label)
+                ));
             }
             "eeg_point" => {
                 let s = 11.0 * scale;
@@ -191,16 +213,21 @@ pub fn generate_svg_3d(
                     "  <polygon points=\"{cx:.1},{:.1} {:.1},{cy:.1} {cx:.1},{:.1} {:.1},{cy:.1}\" \
                      fill=\"{fill}\" fill-opacity=\"{opacity:.2}\"/>\n",
                     cy - s, cx + s * 1.35, cy + s, cx - s * 1.35));
-                let time_str = nd.timestamp_unix.map(|ts| {
-                    let h = (ts % 86400) / 3600;
-                    let m = (ts % 3600)  / 60;
-                    format!("{h:02}:{m:02}")
-                }).unwrap_or_default();
+                let time_str = nd
+                    .timestamp_unix
+                    .map(|ts| {
+                        let h = (ts % 86400) / 3600;
+                        let m = (ts % 3600) / 60;
+                        format!("{h:02}:{m:02}")
+                    })
+                    .unwrap_or_default();
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{cy:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"{:.1}\" font-weight=\"600\" \
                      fill=\"white\" opacity=\"{opacity:.2}\">{}</text>\n",
-                    fs * 0.8, svg_esc(&time_str)));
+                    fs * 0.8,
+                    svg_esc(&time_str)
+                ));
             }
             "screenshot" => {
                 let rw = (NW + 8.0) * scale;
@@ -216,7 +243,9 @@ pub fn generate_svg_3d(
                      fill=\"{fill}\" fill-opacity=\"{opacity:.2}\" stroke=\"{fill}\" \
                      stroke-width=\"{:.1}\" stroke-opacity=\"0.3\"/>\n",
                     cx - rw / 2.0, cy - rh / 2.0, 6.0 * scale, 1.2 * scale));
-                let title = nd.window_title.as_deref()
+                let title = nd
+                    .window_title
+                    .as_deref()
                     .or(nd.app_name.as_deref())
                     .unwrap_or("screenshot");
                 let primary = trunc(title, 16);
@@ -224,21 +253,34 @@ pub fn generate_svg_3d(
                     "  <text x=\"{cx:.1}\" y=\"{:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"{fs:.1}\" font-weight=\"600\" \
                      fill=\"white\" opacity=\"{opacity:.2}\">{}</text>\n",
-                    if nd.timestamp_unix.is_some() { cy - 5.0 * scale } else { cy },
-                    svg_esc(&primary)));
+                    if nd.timestamp_unix.is_some() {
+                        cy - 5.0 * scale
+                    } else {
+                        cy
+                    },
+                    svg_esc(&primary)
+                ));
                 if let Some(ts) = nd.timestamp_unix {
                     o.push_str(&format!(
                         "  <text x=\"{cx:.1}\" y=\"{:.1}\" text-anchor=\"middle\" \
                          dominant-baseline=\"middle\" font-size=\"{:.1}\" fill=\"white\" \
                          opacity=\"{:.2}\">{}</text>\n",
-                        cy + 7.0 * scale, fs * 0.75, opacity * 0.7, svg_esc(&fmt_unix_utc(ts))));
+                        cy + 7.0 * scale,
+                        fs * 0.75,
+                        opacity * 0.7,
+                        svg_esc(&fmt_unix_utc(ts))
+                    ));
                 }
             }
             _ => {
                 // text_label / found_label — rounded rect
                 let rw = NW * scale;
                 let rh = NH * scale;
-                let rx = if nd.kind == "found_label" { rh / 2.0 } else { 5.0 * scale };
+                let rx = if nd.kind == "found_label" {
+                    rh / 2.0
+                } else {
+                    5.0 * scale
+                };
                 // Shadow
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{rw:.1}\" height=\"{rh:.1}\" rx=\"{rx:.1}\" \
@@ -256,14 +298,19 @@ pub fn generate_svg_3d(
                     "  <text x=\"{cx:.1}\" y=\"{ty:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"{fs:.1}\" font-weight=\"600\" \
                      fill=\"white\" opacity=\"{opacity:.2}\">{}</text>\n",
-                    svg_esc(&primary)));
+                    svg_esc(&primary)
+                ));
                 if has_sub {
                     if let Some(ts) = nd.timestamp_unix {
                         o.push_str(&format!(
                             "  <text x=\"{cx:.1}\" y=\"{:.1}\" text-anchor=\"middle\" \
                              dominant-baseline=\"middle\" font-size=\"{:.1}\" fill=\"white\" \
                              opacity=\"{:.2}\">{}</text>\n",
-                            cy + 7.0 * scale, fs * 0.75, opacity * 0.7, svg_esc(&fmt_unix_utc(ts))));
+                            cy + 7.0 * scale,
+                            fs * 0.75,
+                            opacity * 0.7,
+                            svg_esc(&fmt_unix_utc(ts))
+                        ));
                     }
                 }
             }
@@ -299,15 +346,18 @@ pub fn generate_svg_3d(
     o.push_str(&format!(
         "  <text x=\"{:.1}\" y=\"22\" text-anchor=\"middle\" font-size=\"11\" \
          fill=\"#666\" font-weight=\"500\">3D Embedding Space</text>\n",
-        W / 2.0));
+        W / 2.0
+    ));
 
     // Footer
     o.push_str(&format!(
         "  <text x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"middle\" font-size=\"7\" \
          fill=\"#555\">{}</text>\n",
-        W / 2.0, H - 10.0, svg_esc(&labels.generated_by)));
+        W / 2.0,
+        H - 10.0,
+        svg_esc(&labels.generated_by)
+    ));
 
     o.push_str("</svg>\n");
     o
 }
-

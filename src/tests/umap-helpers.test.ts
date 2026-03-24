@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
-import {
-  easeOut, gauss, hslToRgb, labelHex, turboRaw, jet, jetHex,
-  fmtGradientTs, fmtUtcTime, utcToLocalDate,
-  normalise, randomPositions,
-  buildTraceTimeTicks, buildDatePaletteRaw,
-} from "$lib/umap-helpers";
+import { describe, expect, it } from "vitest";
 import type { UmapPoint } from "$lib/types";
+import {
+  buildDatePaletteRaw,
+  buildTraceTimeTicks,
+  easeOut,
+  fmtGradientTs,
+  fmtUtcTime,
+  gauss,
+  hslToRgb,
+  jet,
+  jetHex,
+  labelHex,
+  normalise,
+  randomPositions,
+  turboRaw,
+  utcToLocalDate,
+} from "$lib/umap-helpers";
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -98,9 +108,12 @@ describe("turboRaw", () => {
 describe("jet", () => {
   it("returns RGB in [0,1]", () => {
     const [r, g, b] = jet(0.5);
-    expect(r).toBeGreaterThanOrEqual(0); expect(r).toBeLessThanOrEqual(1);
-    expect(g).toBeGreaterThanOrEqual(0); expect(g).toBeLessThanOrEqual(1);
-    expect(b).toBeGreaterThanOrEqual(0); expect(b).toBeLessThanOrEqual(1);
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
   });
 });
 
@@ -218,7 +231,7 @@ describe("buildDatePaletteRaw", () => {
     expect(palette.size).toBe(2);
     for (const [, rgb] of palette) {
       expect(rgb).toHaveLength(3);
-      rgb.forEach(c => {
+      rgb.forEach((c) => {
         expect(c).toBeGreaterThanOrEqual(0);
         expect(c).toBeLessThanOrEqual(1);
       });

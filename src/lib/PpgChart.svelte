@@ -5,19 +5,19 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts" module>
-  /** PPG packet from the Rust backend. */
-  export interface PpgPacket {
-    channel:   number;   // 0=ambient, 1=infrared, 2=red
-    samples:   number[];
-    timestamp: number;
-  }
+/** PPG packet from the Rust backend. */
+export interface PpgPacket {
+  channel: number; // 0=ambient, 1=infrared, 2=red
+  samples: number[];
+  timestamp: number;
+}
 
-  /** Vertical event marker rendered on the PPG chart. */
-  export interface PpgMarker {
-    timestamp_ms: number;
-    label: string;
-    color: string;
-  }
+/** Vertical event marker rendered on the PPG chart. */
+export interface PpgMarker {
+  timestamp_ms: number;
+  label: string;
+  color: string;
+}
 </script>
 
 <script lang="ts">

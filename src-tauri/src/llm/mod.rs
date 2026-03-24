@@ -14,26 +14,30 @@
 // These re-exports exist so the rest of the crate can keep using `crate::llm::…`
 // paths unchanged after the extraction.
 
-#[allow(unused_imports)] pub use skill_llm::tools;
-#[allow(unused_imports)] pub use skill_llm::catalog;
-#[allow(unused_imports)] pub use skill_llm::chat_store;
+#[allow(unused_imports)]
+pub use skill_llm::catalog;
+#[allow(unused_imports)]
+pub use skill_llm::chat_store;
+#[allow(unused_imports)]
+pub use skill_llm::tools;
 
 #[cfg(feature = "llm")]
-#[allow(unused_imports)] pub use skill_llm::engine;
+#[allow(unused_imports)]
+pub use skill_llm::engine;
 
 // Re-export commonly used types at this module level so `crate::llm::Foo` works.
-#[allow(unused_imports)] pub use skill_llm::{LlmConfig, LlmToolConfig, ToolExecutionMode};
-#[allow(unused_imports)] pub use skill_llm::{LlmEventEmitter, NoopEmitter};
+#[allow(unused_imports)]
+pub use skill_llm::{LlmConfig, LlmToolConfig, ToolExecutionMode};
+#[allow(unused_imports)]
+pub use skill_llm::{LlmEventEmitter, NoopEmitter};
 
 #[cfg(feature = "llm")]
 #[allow(unused_imports)]
 pub use skill_llm::{
-    GenParams, InferRequest, InferToken, LlmLogBuffer, LlmLogEntry,
-    LlmLogFile, LlmServerState, LlmStateCell, LlmStatus,
-    BeforeToolCallFn, AfterToolCallFn, ToolEvent,
-    cell_status, extract_images_from_messages, init, new_log_buffer,
-    new_state_cell, push_log, router, shutdown_cell,
-    run_chat_with_builtin_tools,
+    cell_status, extract_images_from_messages, init, new_log_buffer, new_state_cell, push_log,
+    router, run_chat_with_builtin_tools, shutdown_cell, AfterToolCallFn, BeforeToolCallFn,
+    GenParams, InferRequest, InferToken, LlmLogBuffer, LlmLogEntry, LlmLogFile, LlmServerState,
+    LlmStateCell, LlmStatus, ToolEvent,
 };
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -46,7 +50,10 @@ pub mod cmds;
 /// Call once during setup, after the logger is registered as managed state.
 pub fn init_llm_logger(app: &tauri::AppHandle) {
     use tauri::Manager;
-    let logger = app.state::<std::sync::Arc<crate::skill_log::SkillLogger>>().inner().clone();
+    let logger = app
+        .state::<std::sync::Arc<crate::skill_log::SkillLogger>>()
+        .inner()
+        .clone();
     skill_llm::log::set_log_callback(move |tag, msg| {
         if logger.enabled(tag) {
             logger.write(tag, msg);
@@ -64,7 +71,10 @@ pub fn set_llm_logging(enabled: bool) {
 /// Call once during setup, after the logger is registered as managed state.
 pub fn init_tool_logger(app: &tauri::AppHandle) {
     use tauri::Manager;
-    let logger = app.state::<std::sync::Arc<crate::skill_log::SkillLogger>>().inner().clone();
+    let logger = app
+        .state::<std::sync::Arc<crate::skill_log::SkillLogger>>()
+        .inner()
+        .clone();
     skill_tools::log::set_log_callback(move |tag, msg| {
         if logger.enabled(tag) {
             logger.write(tag, msg);
@@ -78,7 +88,11 @@ pub fn init_tool_logger(app: &tauri::AppHandle) {
         // Use char boundary to avoid panic on multi-byte UTF-8.
         let display = if command.chars().count() > 2000 {
             let truncated: String = command.chars().take(2000).collect();
-            format!("{}...\n\n({} chars total)", truncated, command.chars().count())
+            format!(
+                "{}...\n\n({} chars total)",
+                truncated,
+                command.chars().count()
+            )
         } else {
             command.to_string()
         };
@@ -91,9 +105,14 @@ pub fn init_tool_logger(app: &tauri::AppHandle) {
             .set_title("NeuroSkill \u{2014} Review Bash Command")
             .set_description(&message)
             .set_buttons(rfd::MessageButtons::YesNo)
-            .show() == rfd::MessageDialogResult::Yes;
+            .show()
+            == rfd::MessageDialogResult::Yes;
 
-        if approved { Some(command.to_string()) } else { None }
+        if approved {
+            Some(command.to_string())
+        } else {
+            None
+        }
     }));
 }
 

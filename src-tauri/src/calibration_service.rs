@@ -8,14 +8,13 @@
 
 use tauri::AppHandle;
 
-use crate::{
-    AppStateExt, MutexExt,
-    CalibrationProfile, new_profile_id,
-    save_settings,
-};
+use crate::{new_profile_id, save_settings, AppStateExt, CalibrationProfile, MutexExt};
 
 /// Create a new calibration profile, persist settings, and return the profile.
-pub(crate) fn create_profile(app: &AppHandle, mut profile: CalibrationProfile) -> CalibrationProfile {
+pub(crate) fn create_profile(
+    app: &AppHandle,
+    mut profile: CalibrationProfile,
+) -> CalibrationProfile {
     profile.id = new_profile_id();
     profile.last_calibration_utc = None;
     let ret = profile.clone();
@@ -29,10 +28,15 @@ pub(crate) fn create_profile(app: &AppHandle, mut profile: CalibrationProfile) -
 }
 
 /// Update an existing calibration profile by ID.  Returns the updated profile.
-pub(crate) fn update_profile(app: &AppHandle, profile: CalibrationProfile) -> Result<CalibrationProfile, String> {
+pub(crate) fn update_profile(
+    app: &AppHandle,
+    profile: CalibrationProfile,
+) -> Result<CalibrationProfile, String> {
     let st = app.app_state();
     let mut s = st.lock_or_recover();
-    let entry = s.calibration_profiles.iter_mut()
+    let entry = s
+        .calibration_profiles
+        .iter_mut()
         .find(|p| p.id == profile.id)
         .ok_or_else(|| format!("profile not found: {}", profile.id))?;
     *entry = profile;
@@ -51,8 +55,11 @@ pub(crate) fn delete_profile(app: &AppHandle, id: &str) -> Result<(), String> {
     }
     s.calibration_profiles.retain(|p| p.id != id);
     if s.active_calibration_id == id {
-        s.active_calibration_id = s.calibration_profiles.first()
-            .map(|p| p.id.clone()).unwrap_or_default();
+        s.active_calibration_id = s
+            .calibration_profiles
+            .first()
+            .map(|p| p.id.clone())
+            .unwrap_or_default();
     }
     drop(s);
     save_settings(app);
@@ -70,5 +77,9 @@ pub(crate) fn list_profiles(app: &AppHandle) -> Vec<CalibrationProfile> {
 pub(crate) fn get_profile(app: &AppHandle, id: &str) -> Option<CalibrationProfile> {
     let st = app.app_state();
     let guard = st.lock_or_recover();
-    guard.calibration_profiles.iter().find(|p| p.id == id).cloned()
+    guard
+        .calibration_profiles
+        .iter()
+        .find(|p| p.id == id)
+        .cloned()
 }

@@ -52,7 +52,7 @@ fn main() {
     // far too small for the generated Tauri handler stack frame.
     #[cfg(not(target_os = "linux"))]
     {
-        const RED_ZONE: usize  = 32 * 1024 * 1024; // 32 MiB remaining trigger
+        const RED_ZONE: usize = 32 * 1024 * 1024; // 32 MiB remaining trigger
         const NEW_STACK: usize = 64 * 1024 * 1024; // 64 MiB new stack
 
         stacker::maybe_grow(RED_ZONE, NEW_STACK, || {

@@ -59,14 +59,14 @@ export function animatedCanvas(
   function resize() {
     const dpr = getDpr();
     if (widthPx != null) {
-      canvas.width  = Math.round(widthPx * dpr);
+      canvas.width = Math.round(widthPx * dpr);
       canvas.height = Math.round(heightPx * dpr);
     } else {
       const observed = container ?? canvas.parentElement ?? canvas;
       const w = observed.clientWidth || canvas.clientWidth;
-      canvas.width  = Math.round(w * dpr);
+      canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(heightPx * dpr);
-      canvas.style.width  = `${w}px`;
+      canvas.style.width = `${w}px`;
       canvas.style.height = `${heightPx}px`;
     }
   }
@@ -80,9 +80,7 @@ export function animatedCanvas(
     const h = canvas.height / dpr;
     try {
       draw(ctx, w, h);
-    } catch (err) {
-      console.error("[animatedCanvas] draw error:", err);
-    }
+    } catch (_err) {}
   }
 
   function start() {
@@ -113,7 +111,7 @@ export function animatedCanvas(
     update(o: AnimatedCanvasOpts) {
       draw = o.draw;
       heightPx = o.heightPx;
-      widthPx  = o.widthPx;
+      widthPx = o.widthPx;
       if (o.container !== container) {
         container = o.container;
         ro?.disconnect();

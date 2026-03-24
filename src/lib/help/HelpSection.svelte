@@ -7,17 +7,17 @@ the Free Software Foundation, version 3 only. -->
 <!-- Reusable help section: title + optional description + slotted children. -->
 
 <script lang="ts">
-  import type { Snippet } from "svelte";
+import type { Snippet } from "svelte";
 
-  let {
-    title,
-    description = undefined,
-    children = undefined,
-  }: {
-    title:        string;
-    description?: string;
-    children?:    Snippet;
-  } = $props();
+let {
+  title,
+  description = undefined,
+  children = undefined,
+}: {
+  title: string;
+  description?: string;
+  children?: Snippet;
+} = $props();
 </script>
 
 <section class="flex flex-col gap-3">

@@ -6,192 +6,202 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- EEG Model tab — Encoder status · HNSW index · Model source -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen }             from "@tauri-apps/api/event";
-  import { relaunch }           from "@tauri-apps/plugin-process";
-  import { Badge }              from "$lib/components/ui/badge";
-  import { Button }             from "$lib/components/ui/button";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { t }                  from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface EegModelConfig {
-    hf_repo:              string;
-    hnsw_m:               number;
-    hnsw_ef_construction: number;
-    data_norm:            number;
-    model_backend:        string;
-    luna_variant:         string;
-    luna_hf_repo:         string;
+// ── Types ──────────────────────────────────────────────────────────────────
+interface EegModelConfig {
+  hf_repo: string;
+  hnsw_m: number;
+  hnsw_ef_construction: number;
+  data_norm: number;
+  model_backend: string;
+  luna_variant: string;
+  luna_hf_repo: string;
+}
+interface EegModelStatus {
+  encoder_loaded: boolean;
+  encoder_describe: string | null;
+  embed_worker_active: boolean;
+  weights_found: boolean;
+  weights_path: string | null;
+  active_model_backend: string | null;
+  last_embed_ms: number;
+  avg_embed_ms: number;
+  embeddings_today: number;
+  daily_db_path: string;
+  daily_hnsw_path: string;
+  downloading_weights: boolean;
+  download_progress: number;
+  download_status_msg: string | null;
+  download_needs_restart: boolean;
+  download_retry_attempt: number;
+  download_retry_in_secs: number;
+}
+interface ReembedEstimate {
+  date_dirs: number;
+  total_sessions: number;
+}
+interface ReembedProgress {
+  done: number;
+  total: number;
+  date: string;
+  status: string;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let modelConfig = $state<EegModelConfig>({
+  hf_repo: "Zyphra/ZUNA",
+  hnsw_m: 16,
+  hnsw_ef_construction: 200,
+  data_norm: 10,
+  model_backend: "zuna",
+  luna_variant: "base",
+  luna_hf_repo: "PulpBio/LUNA",
+});
+let modelStatus = $state<EegModelStatus>({
+  encoder_loaded: false,
+  encoder_describe: null,
+  embed_worker_active: false,
+  weights_found: false,
+  weights_path: null,
+  active_model_backend: null,
+  last_embed_ms: 0,
+  avg_embed_ms: 0,
+  embeddings_today: 0,
+  daily_db_path: "",
+  daily_hnsw_path: "",
+  downloading_weights: false,
+  download_progress: 0,
+  download_status_msg: null,
+  download_needs_restart: false,
+  download_retry_attempt: 0,
+  download_retry_in_secs: 0,
+});
+let modelConfigSaving = $state(false);
+let reembedEstimate = $state<ReembedEstimate | null>(null);
+let reembedProgress = $state<ReembedProgress | null>(null);
+let reembedRunning = $state(false);
+
+const HNSW_M_PRESETS: number[] = [8, 16, 32, 64];
+const HNSW_EF_PRESETS: number[] = [50, 100, 200, 400];
+
+let restarting = $state(false);
+
+// Dynamic encoder display name based on selected backend + variant.
+const encoderName = $derived(
+  modelConfig.model_backend === "luna" ? `LUNA Encoder (${modelConfig.luna_variant})` : t("model.zunaEncoder"),
+);
+
+// ── Actions ────────────────────────────────────────────────────────────────
+async function refreshStatus() {
+  modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
+}
+
+async function saveModelConfig(patch: Partial<EegModelConfig>) {
+  modelConfig = { ...modelConfig, ...patch };
+  modelConfigSaving = true;
+  try {
+    await invoke("set_eeg_model_config", { config: modelConfig });
+  } finally {
+    modelConfigSaving = false;
   }
-  interface EegModelStatus {
-    encoder_loaded:         boolean;
-    encoder_describe:       string | null;
-    embed_worker_active:    boolean;
-    weights_found:          boolean;
-    weights_path:           string | null;
-    active_model_backend:   string | null;
-    last_embed_ms:          number;
-    avg_embed_ms:           number;
-    embeddings_today:       number;
-    daily_db_path:          string;
-    daily_hnsw_path:        string;
-    downloading_weights:    boolean;
-    download_progress:      number;
-    download_status_msg:    string | null;
-    download_needs_restart: boolean;
-    download_retry_attempt: number;
-    download_retry_in_secs: number;
+}
+
+async function startDownload() {
+  await invoke("trigger_weights_download");
+  // Status updates will arrive via the 2-second poll.
+}
+
+async function cancelDownload() {
+  await invoke("cancel_weights_download");
+}
+
+async function restartApp() {
+  restarting = true;
+  try {
+    await relaunch();
+  } catch {
+    restarting = false;
   }
-  interface ReembedEstimate {
-    date_dirs: number;
-    total_sessions: number;
-  }
-  interface ReembedProgress {
-    done:   number;
-    total:  number;
-    date:   string;
-    status: string;
-  }
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let modelConfig = $state<EegModelConfig>({
-    hf_repo: "Zyphra/ZUNA", hnsw_m: 16, hnsw_ef_construction: 200, data_norm: 10,
-    model_backend: "zuna", luna_variant: "base", luna_hf_repo: "PulpBio/LUNA",
-  });
-  let modelStatus = $state<EegModelStatus>({
-    encoder_loaded: false, encoder_describe: null,
-    embed_worker_active: false,
-    weights_found: false, weights_path: null,
-    active_model_backend: null,
-    last_embed_ms: 0, avg_embed_ms: 0,
-    embeddings_today: 0, daily_db_path: "", daily_hnsw_path: "",
-    downloading_weights: false, download_progress: 0,
-    download_status_msg: null,
-    download_needs_restart: false,
-    download_retry_attempt: 0, download_retry_in_secs: 0,
-  });
-  let modelConfigSaving = $state(false);
-  let reembedEstimate   = $state<ReembedEstimate | null>(null);
-  let reembedProgress   = $state<ReembedProgress | null>(null);
-  let reembedRunning    = $state(false);
+async function loadReembedEstimate() {
+  reembedEstimate = await invoke<ReembedEstimate>("estimate_reembed");
+}
 
-  const HNSW_M_PRESETS:  number[] = [8, 16, 32, 64];
-  const HNSW_EF_PRESETS: number[] = [50, 100, 200, 400];
+async function startReembed() {
+  reembedRunning = true;
+  reembedProgress = null;
+  await invoke("trigger_reembed");
+}
 
-  let restarting = $state(false);
-
-  // Dynamic encoder display name based on selected backend + variant.
-  const encoderName = $derived(
-    modelConfig.model_backend === "luna"
-      ? `LUNA Encoder (${modelConfig.luna_variant})`
-      : t("model.zunaEncoder")
-  );
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-  async function refreshStatus() {
-    modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
-  }
-
-  async function saveModelConfig(patch: Partial<EegModelConfig>) {
-    modelConfig = { ...modelConfig, ...patch };
-    modelConfigSaving = true;
-    try { await invoke("set_eeg_model_config", { config: modelConfig }); }
-    finally { modelConfigSaving = false; }
-  }
-
-  async function startDownload() {
-    await invoke("trigger_weights_download");
-    // Status updates will arrive via the 2-second poll.
-  }
-
-  async function cancelDownload() {
-    await invoke("cancel_weights_download");
-  }
-
-  async function restartApp() {
-    restarting = true;
-    try { await relaunch(); } catch { restarting = false; }
-  }
-
-  async function loadReembedEstimate() {
-    reembedEstimate = await invoke<ReembedEstimate>("estimate_reembed");
-  }
-
-  async function startReembed() {
-    reembedRunning = true;
-    reembedProgress = null;
-    await invoke("trigger_reembed");
-  }
-
-  // Derived state helpers
-  const isDownloading    = $derived(modelStatus.downloading_weights);
-  const isAutoRetrying   = $derived(
-    !modelStatus.downloading_weights &&
-    !modelStatus.weights_found &&
-    modelStatus.download_retry_in_secs > 0
-  );
-  const hasFailed        = $derived(
-    !modelStatus.downloading_weights &&
+// Derived state helpers
+const isDownloading = $derived(modelStatus.downloading_weights);
+const isAutoRetrying = $derived(
+  !modelStatus.downloading_weights && !modelStatus.weights_found && modelStatus.download_retry_in_secs > 0,
+);
+const hasFailed = $derived(
+  !modelStatus.downloading_weights &&
     !modelStatus.weights_found &&
     !isAutoRetrying &&
     modelStatus.download_status_msg !== null &&
-    modelStatus.download_status_msg !== "Download cancelled."
-  );
-  const wasCancelled     = $derived(
-    !modelStatus.downloading_weights &&
-    !isAutoRetrying &&
-    modelStatus.download_status_msg === "Download cancelled."
-  );
-  const needsDownload    = $derived(
-    !modelStatus.weights_found &&
-    !modelStatus.downloading_weights &&
-    !isAutoRetrying &&
-    !hasFailed
-  );
-  // download_needs_restart is kept for backwards compat but the normal flow
-  // now uses in-place reload — this state is only reached in edge cases.
-  const needsRestart     = $derived(modelStatus.download_needs_restart);
-  // Weights present on disk but the embed worker is not yet running (no active
-  // BLE/OpenBCI session).  Show an informational state rather than a spinner.
-  const weightsReadyNoSession = $derived(
-    modelStatus.weights_found &&
+    modelStatus.download_status_msg !== "Download cancelled.",
+);
+const wasCancelled = $derived(
+  !modelStatus.downloading_weights && !isAutoRetrying && modelStatus.download_status_msg === "Download cancelled.",
+);
+const needsDownload = $derived(
+  !modelStatus.weights_found && !modelStatus.downloading_weights && !isAutoRetrying && !hasFailed,
+);
+// download_needs_restart is kept for backwards compat but the normal flow
+// now uses in-place reload — this state is only reached in edge cases.
+const needsRestart = $derived(modelStatus.download_needs_restart);
+// Weights present on disk but the embed worker is not yet running (no active
+// BLE/OpenBCI session).  Show an informational state rather than a spinner.
+const weightsReadyNoSession = $derived(
+  modelStatus.weights_found &&
     !modelStatus.encoder_loaded &&
     !modelStatus.embed_worker_active &&
     !modelStatus.downloading_weights &&
-    !modelStatus.download_needs_restart
-  );
-  // Worker is running and actively loading the encoder on the GPU.
-  const encoderLoading   = $derived(
-    modelStatus.weights_found &&
+    !modelStatus.download_needs_restart,
+);
+// Worker is running and actively loading the encoder on the GPU.
+const encoderLoading = $derived(
+  modelStatus.weights_found &&
     !modelStatus.encoder_loaded &&
     modelStatus.embed_worker_active &&
-    !modelStatus.download_needs_restart
-  );
+    !modelStatus.download_needs_restart,
+);
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  let statusTimer: ReturnType<typeof setInterval> | undefined;
-  let unlistenReembed: (() => void) | undefined;
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+let statusTimer: ReturnType<typeof setInterval> | undefined;
+let unlistenReembed: (() => void) | undefined;
 
-  onMount(async () => {
-    modelConfig = await invoke<EegModelConfig>("get_eeg_model_config");
-    modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
-    statusTimer = setInterval(refreshStatus, 2000);
-    loadReembedEstimate();
+onMount(async () => {
+  modelConfig = await invoke<EegModelConfig>("get_eeg_model_config");
+  modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
+  statusTimer = setInterval(refreshStatus, 2000);
+  loadReembedEstimate();
 
-    unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
-      reembedProgress = ev.payload;
-      if (ev.payload.status === "complete" || ev.payload.status.startsWith("error")) {
-        reembedRunning = false;
-        loadReembedEstimate();
-      }
-    });
+  unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
+    reembedProgress = ev.payload;
+    if (ev.payload.status === "complete" || ev.payload.status.startsWith("error")) {
+      reembedRunning = false;
+      loadReembedEstimate();
+    }
   });
-  onDestroy(() => {
-    clearInterval(statusTimer);
-    unlistenReembed?.();
-  });
+});
+onDestroy(() => {
+  clearInterval(statusTimer);
+  unlistenReembed?.();
+});
 </script>
 
 <!-- ── Model backend ─────────────────────────────────────────────────────────── -->

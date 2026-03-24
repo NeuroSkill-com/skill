@@ -2,36 +2,62 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Pre-commit hook — enforces i18n key synchronisation.
-#
-# Runs `npm run sync:i18n:check` when any i18n source file is staged.
-# This catches missing translation keys before they reach the repository,
-# preventing structural drift between locales.
+# Pre-commit hook — enforces i18n sync, formatting, and lint checks.
 #
 # Setup (run once per clone):
 #   git config core.hooksPath .githooks
-#
-# Or install manually:
-#   ln -sf ../../.githooks/pre-commit .git/hooks/pre-commit
 
 set -euo pipefail
 
-# ── Only check when i18n files are actually staged ─────────────────────────────
-# Avoids slowing down commits that don't touch translations.
+ERRORS=0
+
+# ── i18n key synchronisation ──────────────────────────────────────────────────
 STAGED_I18N=$(git diff --cached --name-only --diff-filter=ACMR -- 'src/lib/i18n/' 2>/dev/null || true)
 
-if [ -z "$STAGED_I18N" ]; then
-    exit 0
+if [ -n "$STAGED_I18N" ]; then
+    echo "🌐 i18n files changed — checking key synchronisation…"
+    if ! npm run sync:i18n:check --silent 2>&1; then
+        echo ""
+        echo "❌ i18n keys are out of sync."
+        echo "   Run:  npm run sync:i18n:fix"
+        ERRORS=1
+    else
+        echo "✅ i18n keys in sync."
+    fi
 fi
 
-echo "🌐 i18n files changed — checking key synchronisation…"
+# ── Frontend formatting (Biome) ──────────────────────────────────────────────
+STAGED_TS_SVELTE=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.svelte' '*.js' 2>/dev/null || true)
 
-if ! npm run sync:i18n:check --silent 2>&1; then
+if [ -n "$STAGED_TS_SVELTE" ]; then
+    echo "🎨 Checking frontend formatting…"
+    if ! npx biome format --no-errors-on-unmatched $STAGED_TS_SVELTE 2>&1; then
+        echo ""
+        echo "❌ Frontend formatting issues found."
+        echo "   Run:  npm run lint:fix"
+        ERRORS=1
+    else
+        echo "✅ Frontend formatting OK."
+    fi
+fi
+
+# ── Rust formatting ──────────────────────────────────────────────────────────
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' 2>/dev/null || true)
+
+if [ -n "$STAGED_RS" ]; then
+    echo "🦀 Checking Rust formatting…"
+    if ! cargo fmt --check 2>&1; then
+        echo ""
+        echo "❌ Rust formatting issues found."
+        echo "   Run:  cargo fmt"
+        ERRORS=1
+    else
+        echo "✅ Rust formatting OK."
+    fi
+fi
+
+if [ "$ERRORS" -ne 0 ]; then
     echo ""
-    echo "❌ i18n keys are out of sync."
-    echo "   Run:  npm run sync:i18n:fix"
-    echo "   Then stage the fixed files and commit again."
+    echo "❌ Pre-commit checks failed. Fix the issues above and try again."
     exit 1
 fi
-
-echo "✅ i18n keys in sync."

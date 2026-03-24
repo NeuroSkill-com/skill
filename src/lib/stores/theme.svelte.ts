@@ -25,18 +25,20 @@ export type ThemeMode = "system" | "light" | "dark";
 // each preset is a perfectly balanced, perceptually-uniform ramp.
 
 export interface AccentPreset {
-  id:      string;
-  label:   string;
+  id: string;
+  label: string;
   /** oklch of the 600-shade — shown as the swatch colour in the picker. */
-  swatch:  string;
+  swatch: string;
   palette: Record<string, string>;
 }
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   {
-    id: "violet", label: "Violet", swatch: "oklch(0.558 0.288 302.3)",
+    id: "violet",
+    label: "Violet",
+    swatch: "oklch(0.558 0.288 302.3)",
     palette: {
-      "--color-violet-50":  "oklch(0.969 0.016 272.3)",
+      "--color-violet-50": "oklch(0.969 0.016 272.3)",
       "--color-violet-100": "oklch(0.943 0.029 294.6)",
       "--color-violet-200": "oklch(0.895 0.058 296.8)",
       "--color-violet-300": "oklch(0.842 0.117 293.1)",
@@ -50,9 +52,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "indigo", label: "Indigo", swatch: "oklch(0.511 0.262 276.9)",
+    id: "indigo",
+    label: "Indigo",
+    swatch: "oklch(0.511 0.262 276.9)",
     palette: {
-      "--color-violet-50":  "oklch(0.962 0.018 272.3)",
+      "--color-violet-50": "oklch(0.962 0.018 272.3)",
       "--color-violet-100": "oklch(0.930 0.034 272.7)",
       "--color-violet-200": "oklch(0.870 0.065 274.0)",
       "--color-violet-300": "oklch(0.785 0.115 274.7)",
@@ -66,9 +70,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "blue", label: "Blue", swatch: "oklch(0.546 0.245 262.9)",
+    id: "blue",
+    label: "Blue",
+    swatch: "oklch(0.546 0.245 262.9)",
     palette: {
-      "--color-violet-50":  "oklch(0.970 0.014 254.6)",
+      "--color-violet-50": "oklch(0.970 0.014 254.6)",
       "--color-violet-100": "oklch(0.932 0.032 255.6)",
       "--color-violet-200": "oklch(0.882 0.059 254.1)",
       "--color-violet-300": "oklch(0.809 0.105 251.8)",
@@ -82,9 +88,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "sky", label: "Sky", swatch: "oklch(0.588 0.158 241.9)",
+    id: "sky",
+    label: "Sky",
+    swatch: "oklch(0.588 0.158 241.9)",
     palette: {
-      "--color-violet-50":  "oklch(0.977 0.013 236.6)",
+      "--color-violet-50": "oklch(0.977 0.013 236.6)",
       "--color-violet-100": "oklch(0.951 0.026 236.6)",
       "--color-violet-200": "oklch(0.901 0.058 230.9)",
       "--color-violet-300": "oklch(0.828 0.111 230.3)",
@@ -98,9 +106,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "teal", label: "Teal", swatch: "oklch(0.600 0.145 184.7)",
+    id: "teal",
+    label: "Teal",
+    swatch: "oklch(0.600 0.145 184.7)",
     palette: {
-      "--color-violet-50":  "oklch(0.984 0.014 180.7)",
+      "--color-violet-50": "oklch(0.984 0.014 180.7)",
       "--color-violet-100": "oklch(0.963 0.023 180.8)",
       "--color-violet-200": "oklch(0.910 0.048 180.4)",
       "--color-violet-300": "oklch(0.855 0.099 180.4)",
@@ -114,9 +124,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "emerald", label: "Emerald", swatch: "oklch(0.596 0.145 163.0)",
+    id: "emerald",
+    label: "Emerald",
+    swatch: "oklch(0.596 0.145 163.0)",
     palette: {
-      "--color-violet-50":  "oklch(0.979 0.021 166.1)",
+      "--color-violet-50": "oklch(0.979 0.021 166.1)",
       "--color-violet-100": "oklch(0.950 0.052 163.1)",
       "--color-violet-200": "oklch(0.905 0.093 164.1)",
       "--color-violet-300": "oklch(0.845 0.143 164.8)",
@@ -130,9 +142,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "rose", label: "Rose", swatch: "oklch(0.586 0.253 17.6)",
+    id: "rose",
+    label: "Rose",
+    swatch: "oklch(0.586 0.253 17.6)",
     palette: {
-      "--color-violet-50":  "oklch(0.969 0.015 12.4)",
+      "--color-violet-50": "oklch(0.969 0.015 12.4)",
       "--color-violet-100": "oklch(0.941 0.030 12.6)",
       "--color-violet-200": "oklch(0.892 0.058 10.0)",
       "--color-violet-300": "oklch(0.811 0.111 8.6)",
@@ -146,9 +160,11 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     },
   },
   {
-    id: "pink", label: "Pink", swatch: "oklch(0.592 0.249 0.6)",
+    id: "pink",
+    label: "Pink",
+    swatch: "oklch(0.592 0.249 0.6)",
     palette: {
-      "--color-violet-50":  "oklch(0.971 0.014 343.2)",
+      "--color-violet-50": "oklch(0.971 0.014 343.2)",
       "--color-violet-100": "oklch(0.948 0.028 342.3)",
       "--color-violet-200": "oklch(0.899 0.061 343.2)",
       "--color-violet-300": "oklch(0.823 0.120 343.4)",
@@ -163,14 +179,14 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   },
 ];
 
-const STORAGE_KEY    = "skill-theme";
-const HC_KEY         = "skill-high-contrast";
-const ACCENT_KEY     = "skill-accent";
+const STORAGE_KEY = "skill-theme";
+const HC_KEY = "skill-high-contrast";
+const ACCENT_KEY = "skill-accent";
 
-let mode         = $state<ThemeMode>(loadMode());
-let resolved     = $state<"light" | "dark">(resolve(loadMode()));
+let mode = $state<ThemeMode>(loadMode());
+let resolved = $state<"light" | "dark">(resolve(loadMode()));
 let highContrast = $state<boolean>(loadHC());
-let accentId     = $state<string>(loadAccentId());
+let accentId = $state<string>(loadAccentId());
 
 function loadMode(): ThemeMode {
   if (typeof localStorage === "undefined") return "system";
@@ -191,11 +207,15 @@ export async function initFromSettings() {
     if (theme === "light" || theme === "dark" || theme === "system") {
       setTheme(theme as ThemeMode);
     }
-  } catch { /* not available (e.g. dev server without Tauri) */ }
+  } catch {
+    /* not available (e.g. dev server without Tauri) */
+  }
   try {
     const id = await invoke<string>("get_accent_color");
     applyAccent(id);
-  } catch { /* degrade gracefully */ }
+  } catch {
+    /* degrade gracefully */
+  }
 }
 
 function loadHC(): boolean {
@@ -218,26 +238,30 @@ function apply() {
 
 /** Listen for OS theme changes (only matters in "system" mode). */
 if (typeof window !== "undefined") {
-  window
-    .matchMedia("(prefers-color-scheme: dark)")
-    .addEventListener("change", () => {
-      if (mode === "system") apply();
-    });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (mode === "system") apply();
+  });
   // Also respond to OS high-contrast / forced-colors preference.
-  window
-    .matchMedia("(prefers-contrast: more)")
-    .addEventListener("change", (e) => {
-      if (!localStorage.getItem(HC_KEY)) {
-        highContrast = e.matches;
-        apply();
-      }
-    });
+  window.matchMedia("(prefers-contrast: more)").addEventListener("change", (e) => {
+    if (!localStorage.getItem(HC_KEY)) {
+      highContrast = e.matches;
+      apply();
+    }
+  });
 }
 
-export function getTheme(): ThemeMode { return mode; }
-export function getResolved(): "light" | "dark" { return resolved; }
-export function getHighContrast(): boolean { return highContrast; }
-export function getAccentId(): string { return accentId; }
+export function getTheme(): ThemeMode {
+  return mode;
+}
+export function getResolved(): "light" | "dark" {
+  return resolved;
+}
+export function getHighContrast(): boolean {
+  return highContrast;
+}
+export function getAccentId(): string {
+  return accentId;
+}
 
 // ── Accent application ────────────────────────────────────────────────────────
 
@@ -247,7 +271,7 @@ export function getAccentId(): string { return accentId; }
  * Falls back to the "violet" preset if `id` is unknown.
  */
 export function applyAccent(id: string) {
-  const preset = ACCENT_PRESETS.find(p => p.id === id) ?? ACCENT_PRESETS[0];
+  const preset = ACCENT_PRESETS.find((p) => p.id === id) ?? ACCENT_PRESETS[0];
   accentId = preset.id;
   if (typeof localStorage !== "undefined") {
     if (preset.id === "violet") localStorage.removeItem(ACCENT_KEY);
@@ -267,7 +291,7 @@ export function applyAccent(id: string) {
 
 export function setAccent(id: string) {
   applyAccent(id);
-  invoke("set_accent_color", { accent: id }).catch(e => console.warn("[theme] set_accent_color failed:", e));
+  invoke("set_accent_color", { accent: id }).catch((_e) => {});
 }
 
 export function setTheme(m: ThemeMode) {
@@ -278,7 +302,7 @@ export function setTheme(m: ThemeMode) {
   }
   apply();
   // Persist to settings.json via Tauri
-  invoke("set_theme", { theme: m }).catch(e => console.warn("[theme] set_theme failed:", e));
+  invoke("set_theme", { theme: m }).catch((_e) => {});
 }
 
 export function setHighContrast(on: boolean) {

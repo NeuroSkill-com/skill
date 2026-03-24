@@ -4,16 +4,18 @@
 //!
 //! Compiled only when the `tts-neutts` Cargo feature is enabled.
 
-
 use std::path::{Path, PathBuf};
-use std::sync::{OnceLock, RwLock, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock, RwLock,
+};
 
-use hf_hub::{Cache, Repo, api::sync::ApiBuilder as HfApiBuilder};
+use hf_hub::{api::sync::ApiBuilder as HfApiBuilder, Cache, Repo};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 
-use crate::{play_f32_audio, skill_dir, init_espeak_data_path};
+use crate::{init_espeak_data_path, play_f32_audio, skill_dir};
 use anyhow::Context;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -25,57 +27,79 @@ pub const SAMPLE_RATE: u32 = neutts::codec::SAMPLE_RATE;
 /// Falls back to `resources/neutts-samples` relative to CWD if unset.
 static SAMPLES_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-pub fn set_samples_dir(path: PathBuf) { let _ = SAMPLES_DIR.set(path); }
+pub fn set_samples_dir(path: PathBuf) {
+    let _ = SAMPLES_DIR.set(path);
+}
 
 fn samples_dir() -> PathBuf {
-    SAMPLES_DIR.get().cloned().unwrap_or_else(|| PathBuf::from("resources/neutts-samples"))
+    SAMPLES_DIR
+        .get()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("resources/neutts-samples"))
 }
 
 /// Valid preset voice ids — must match filenames under `samples_dir()`.
 pub const PRESET_NAMES: &[&str] = &["jo", "dave", "greta", "juliette", "mateo"];
 
-pub fn is_preset(name: &str) -> bool { PRESET_NAMES.contains(&name) }
+pub fn is_preset(name: &str) -> bool {
+    PRESET_NAMES.contains(&name)
+}
 
 // ─── Paths within skill_dir ───────────────────────────────────────────────────
 
 /// `skill_dir/models/neutts/` — stores `neucodec_decoder.safetensors` (converted once).
-pub fn model_dir() -> PathBuf { skill_dir().join("models/neutts") }
+pub fn model_dir() -> PathBuf {
+    skill_dir().join("models/neutts")
+}
 
 /// `skill_dir/cache/neutts-ref-codes/` — encoded voice reference `.npy` files.
-fn ref_code_cache_dir() -> PathBuf { skill_dir().join("cache/neutts-ref-codes") }
+fn ref_code_cache_dir() -> PathBuf {
+    skill_dir().join("cache/neutts-ref-codes")
+}
 
 /// `skill_dir/cache/neutts-wav/` — generated speech WAV files (content-addressed).
-fn wav_cache_dir() -> PathBuf { skill_dir().join("cache/neutts-wav") }
+fn wav_cache_dir() -> PathBuf {
+    skill_dir().join("cache/neutts-wav")
+}
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
 
 pub static LOADING: AtomicBool = AtomicBool::new(false);
-pub static READY:   AtomicBool = AtomicBool::new(false);
+pub static READY: AtomicBool = AtomicBool::new(false);
 
 struct RuntimeConfig {
     backbone_repo: String,
-    gguf_file:     Option<String>,
-    voice_preset:  String,
-    ref_wav_path:  String,
-    ref_text:      String,
+    gguf_file: Option<String>,
+    voice_preset: String,
+    ref_wav_path: String,
+    ref_text: String,
 }
 
 static CFG: OnceLock<RwLock<RuntimeConfig>> = OnceLock::new();
 
 fn cfg_lock() -> &'static RwLock<RuntimeConfig> {
-    CFG.get_or_init(|| RwLock::new(RuntimeConfig {
-        backbone_repo: "neuphonic/neutts-nano-q4-gguf".into(),
-        gguf_file:     None,
-        voice_preset:  "jo".into(),
-        ref_wav_path:  String::new(),
-        ref_text:      String::new(),
-    }))
+    CFG.get_or_init(|| {
+        RwLock::new(RuntimeConfig {
+            backbone_repo: "neuphonic/neutts-nano-q4-gguf".into(),
+            gguf_file: None,
+            voice_preset: "jo".into(),
+            ref_wav_path: String::new(),
+            ref_text: String::new(),
+        })
+    })
 }
 
 pub fn read_cfg() -> (String, Option<String>, String, String, String) {
-    let g = cfg_lock().read().unwrap_or_else(std::sync::PoisonError::into_inner);
-    (g.backbone_repo.clone(), g.gguf_file.clone(),
-     g.voice_preset.clone(), g.ref_wav_path.clone(), g.ref_text.clone())
+    let g = cfg_lock()
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    (
+        g.backbone_repo.clone(),
+        g.gguf_file.clone(),
+        g.voice_preset.clone(),
+        g.ref_wav_path.clone(),
+        g.ref_text.clone(),
+    )
 }
 
 pub fn set_voice_preset(preset: String) {
@@ -92,10 +116,14 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 
     if let Ok(mut g) = cfg_lock().write() {
         g.backbone_repo = cfg.backbone_repo.clone();
-        g.gguf_file     = if cfg.gguf_file.is_empty() { None } else { Some(cfg.gguf_file.clone()) };
-        g.voice_preset  = cfg.voice_preset.clone();
-        g.ref_wav_path  = cfg.ref_wav_path.clone();
-        g.ref_text      = cfg.ref_text.clone();
+        g.gguf_file = if cfg.gguf_file.is_empty() {
+            None
+        } else {
+            Some(cfg.gguf_file.clone())
+        };
+        g.voice_preset = cfg.voice_preset.clone();
+        g.ref_wav_path = cfg.ref_wav_path.clone();
+        g.ref_text = cfg.ref_text.clone();
     }
 
     // When KittenTTS is also compiled, the `enabled` flag is the runtime switch
@@ -105,7 +133,10 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 
     if cfg.enabled && was_ready {
         READY.store(false, Ordering::Relaxed);
-        tts_log!("neutts", "config updated \u{2014} will reinitialise on next tts_init");
+        tts_log!(
+            "neutts",
+            "config updated \u{2014} will reinitialise on next tts_init"
+        );
     }
 }
 
@@ -114,26 +145,30 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 pub enum Cmd {
     Init {
         backbone_repo: String,
-        gguf_file:     Option<String>,
-        voice_preset:  String,
-        ref_wav_path:  String,
-        ref_text:      String,
-        cb:   Box<dyn FnMut(neutts::download::LoadProgress) + Send + 'static>,
+        gguf_file: Option<String>,
+        voice_preset: String,
+        ref_wav_path: String,
+        ref_text: String,
+        cb: Box<dyn FnMut(neutts::download::LoadProgress) + Send + 'static>,
         done: oneshot::Sender<anyhow::Result<()>>,
     },
     /// `voice_override`: an optional preset name that overrides the reference
     /// for this single utterance only (without mutating stored state).
     Speak {
-        text:           String,
+        text: String,
         voice_override: Option<String>,
-        done:           oneshot::Sender<()>,
+        done: oneshot::Sender<()>,
     },
-    Unload { done: oneshot::Sender<()> },
+    Unload {
+        done: oneshot::Sender<()>,
+    },
     /// Blocking shutdown: drops the model synchronously so the Metal/llama.cpp
     /// context is released **before** `exit()` fires C++ static destructors.
     /// Uses a plain `std::sync::mpsc` channel so it can be called from a
     /// non-async context (e.g. Tauri's `RunEvent::Exit` callback).
-    Shutdown { done: std::sync::mpsc::SyncSender<()> },
+    Shutdown {
+        done: std::sync::mpsc::SyncSender<()>,
+    },
 }
 
 static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
@@ -141,7 +176,9 @@ static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
 /// Send a `Shutdown` command to the worker if it has been started.
 /// Returns `true` if the channel send succeeded (worker is running).
 pub fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
-    TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
+    TX.get()
+        .map(|ch| ch.send(Cmd::Shutdown { done }).is_ok())
+        .unwrap_or(false)
 }
 
 pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
@@ -163,18 +200,26 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     // Audio device is NOT pre-opened here — we open fresh on every Speak
     // command so that device changes (e.g. Bluetooth reconnect) are always
     // picked up.  See the Speak arm for the open-per-utterance logic.
-    let mut stream:           Option<MixerDeviceSink> = None;
-    let mut model:            Option<neutts::NeuTTS>  = None;
-    let mut loaded_backbone:  String                  = String::new();
-    let mut ref_codes:        Vec<i32>                = Vec::new();
-    let mut ref_text_cached:  String                  = String::new();
+    let mut stream: Option<MixerDeviceSink> = None;
+    let mut model: Option<neutts::NeuTTS> = None;
+    let mut loaded_backbone: String = String::new();
+    let mut ref_codes: Vec<i32> = Vec::new();
+    let mut ref_text_cached: String = String::new();
     // Stable per-voice identifier for WAV cache key.
-    let mut loaded_voice_key: String                  = "default".to_string();
+    let mut loaded_voice_key: String = "default".to_string();
 
     for cmd in rx {
         match cmd {
             // ── Init ─────────────────────────────────────────────────────────
-            Cmd::Init { backbone_repo, gguf_file, voice_preset, ref_wav_path, ref_text, cb, done } => {
+            Cmd::Init {
+                backbone_repo,
+                gguf_file,
+                voice_preset,
+                ref_wav_path,
+                ref_text,
+                cb,
+                done,
+            } => {
                 LOADING.store(true, Ordering::Relaxed);
 
                 if model.is_none() || loaded_backbone != backbone_repo {
@@ -187,7 +232,8 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                         Err(e) => {
                             LOADING.store(false, Ordering::Relaxed);
-                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}"))).ok();
+                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}")))
+                                .ok();
                             continue;
                         }
                     }
@@ -195,14 +241,14 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
                 let Some(model_ref) = model.as_ref() else {
                     LOADING.store(false, Ordering::Relaxed);
-                    done.send(Err(anyhow::anyhow!("NeuTTS model not loaded"))).ok();
+                    done.send(Err(anyhow::anyhow!("NeuTTS model not loaded")))
+                        .ok();
                     continue;
                 };
-                let (codes, txt, vkey) = load_ref_codes(
-                    model_ref, &voice_preset, &ref_wav_path, &ref_text,
-                );
-                ref_codes        = codes;
-                ref_text_cached  = txt;
+                let (codes, txt, vkey) =
+                    load_ref_codes(model_ref, &voice_preset, &ref_wav_path, &ref_text);
+                ref_codes = codes;
+                ref_text_cached = txt;
                 loaded_voice_key = vkey;
 
                 READY.store(true, Ordering::Relaxed);
@@ -211,7 +257,11 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
             }
 
             // ── Speak ─────────────────────────────────────────────────────────
-            Cmd::Speak { text, voice_override, done } => {
+            Cmd::Speak {
+                text,
+                voice_override,
+                done,
+            } => {
                 // Lazy-init if unloaded.
                 if model.is_none() {
                     let (repo, gguf, preset, wav, txt) = read_cfg();
@@ -219,8 +269,8 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         Ok(m) => {
                             loaded_backbone = repo;
                             let (codes, rtext, vkey) = load_ref_codes(&m, &preset, &wav, &txt);
-                            ref_codes        = codes;
-                            ref_text_cached  = rtext;
+                            ref_codes = codes;
+                            ref_text_cached = rtext;
                             loaded_voice_key = vkey;
                             model = Some(m);
                             READY.store(true, Ordering::Relaxed);
@@ -256,11 +306,15 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 ) = match voice_override.as_deref().filter(|v| !v.is_empty()) {
                     Some(ovr) if is_preset(ovr) => {
                         tts_log!("neutts", "per-utterance preset override: {ovr:?}");
-                        let Some(model_ref) = model.as_ref() else { continue };
+                        let Some(model_ref) = model.as_ref() else {
+                            continue;
+                        };
                         let (c, t, k) = load_ref_codes(model_ref, ovr, "", "");
-                        (std::borrow::Cow::Owned(c),
-                         std::borrow::Cow::Owned(t),
-                         std::borrow::Cow::Owned(k))
+                        (
+                            std::borrow::Cow::Owned(c),
+                            std::borrow::Cow::Owned(t),
+                            std::borrow::Cow::Owned(k),
+                        )
                     }
                     _ => (
                         std::borrow::Cow::Borrowed(&ref_codes),
@@ -270,7 +324,15 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 };
 
                 if let (Some(m), Some(s)) = (&model, &stream) {
-                    speak_cached(m, s, &text, &eff_codes, &eff_text, &loaded_backbone, &eff_vkey);
+                    speak_cached(
+                        m,
+                        s,
+                        &text,
+                        &eff_codes,
+                        &eff_text,
+                        &loaded_backbone,
+                        &eff_vkey,
+                    );
                 } else {
                     tts_log!("neutts", "speak skipped: no audio device");
                 }
@@ -301,7 +363,10 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 loaded_backbone.clear();
                 READY.store(false, Ordering::Relaxed);
                 LOADING.store(false, Ordering::Relaxed);
-                tts_log!("neutts", "shutdown complete \u{2014} Metal context released");
+                tts_log!(
+                    "neutts",
+                    "shutdown complete \u{2014} Metal context released"
+                );
                 done.send(()).ok();
                 // Exit the worker loop so the thread ends cleanly.
                 return;
@@ -318,26 +383,26 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
 fn load<F>(
     backbone_repo: &str,
-    gguf_file:     Option<&str>,
+    gguf_file: Option<&str>,
     mut on_progress: F,
 ) -> anyhow::Result<neutts::NeuTTS>
 where
     F: FnMut(neutts::download::LoadProgress),
 {
     use neutts::download::{
-        LoadProgress, CODEC_DECODER_REPO, CODEC_DECODER_FILE,
-        CODEC_SOURCE_FILE, CODEC_DECODER_SIZE_MB, find_model,
-        convert_neucodec_checkpoint,
+        convert_neucodec_checkpoint, find_model, LoadProgress, CODEC_DECODER_FILE,
+        CODEC_DECODER_REPO, CODEC_DECODER_SIZE_MB, CODEC_SOURCE_FILE,
     };
 
     let hf_cache = Cache::from_env();
-    let api      = HfApiBuilder::new()
+    let api = HfApiBuilder::new()
         .build()
         .context("Failed to init HF client")?;
 
     // ── Step 1/3: backbone GGUF → standard HF cache ───────────────────────────
     on_progress(LoadProgress::Fetching {
-        step: 1, total: 3,
+        step: 1,
+        total: 3,
         file: gguf_file.unwrap_or("*.gguf").to_string(),
         repo: backbone_repo.into(),
         size_mb: find_model(backbone_repo).map(|m| m.size_mb),
@@ -346,28 +411,34 @@ where
     let resolved_gguf: String = match gguf_file {
         Some(f) => f.to_string(),
         None => {
-            let info = api.model(backbone_repo.to_string()).info()
+            let info = api
+                .model(backbone_repo.to_string())
+                .info()
                 .with_context(|| format!("repo info for '{backbone_repo}'"))?;
-            info.siblings.into_iter()
+            info.siblings
+                .into_iter()
                 .map(|s| s.rfilename)
                 .find(|f| f.ends_with(".gguf"))
                 .ok_or_else(|| anyhow::anyhow!("no .gguf file in '{backbone_repo}'"))?
         }
     };
 
-    let backbone_path = hf_dl(
-        &api, &hf_cache, backbone_repo, &resolved_gguf,
-        |dl, tot| on_progress(LoadProgress::Downloading {
-            step: 1, total: 3, downloaded: dl, total_bytes: tot,
-        }),
-    )?;
+    let backbone_path = hf_dl(&api, &hf_cache, backbone_repo, &resolved_gguf, |dl, tot| {
+        on_progress(LoadProgress::Downloading {
+            step: 1,
+            total: 3,
+            downloaded: dl,
+            total_bytes: tot,
+        })
+    })?;
 
     // ── Step 2/3: NeuCodec decoder → skill_dir (converted once) ──────────────
     let decoder_dest = model_dir().join(CODEC_DECODER_FILE);
 
     let decoder_path = if decoder_dest.exists() {
         on_progress(LoadProgress::Fetching {
-            step: 2, total: 3,
+            step: 2,
+            total: 3,
             file: CODEC_DECODER_FILE.into(),
             repo: "(skill_dir)".into(),
             size_mb: None,
@@ -375,19 +446,29 @@ where
         decoder_dest
     } else {
         on_progress(LoadProgress::Fetching {
-            step: 2, total: 3,
+            step: 2,
+            total: 3,
             file: CODEC_SOURCE_FILE.into(),
             repo: CODEC_DECODER_REPO.into(),
             size_mb: Some(CODEC_DECODER_SIZE_MB),
         });
         let bin_path = hf_dl(
-            &api, &hf_cache, CODEC_DECODER_REPO, CODEC_SOURCE_FILE,
-            |dl, tot| on_progress(LoadProgress::Downloading {
-                step: 2, total: 3, downloaded: dl, total_bytes: tot,
-            }),
+            &api,
+            &hf_cache,
+            CODEC_DECODER_REPO,
+            CODEC_SOURCE_FILE,
+            |dl, tot| {
+                on_progress(LoadProgress::Downloading {
+                    step: 2,
+                    total: 3,
+                    downloaded: dl,
+                    total_bytes: tot,
+                })
+            },
         )?;
         on_progress(LoadProgress::Loading {
-            step: 2, total: 3,
+            step: 2,
+            total: 3,
             component: format!("converting {CODEC_SOURCE_FILE} → {CODEC_DECODER_FILE}"),
         });
         convert_neucodec_checkpoint(&bin_path, &decoder_dest, 16, CODEC_DECODER_REPO)
@@ -397,7 +478,8 @@ where
 
     // ── Step 3/3: load from explicit paths ────────────────────────────────────
     on_progress(LoadProgress::Loading {
-        step: 3, total: 3,
+        step: 3,
+        total: 3,
         component: "backbone + NeuCodec decoder".into(),
     });
     let language = neutts::download::find_model(backbone_repo)
@@ -410,9 +492,9 @@ where
 
 /// HuggingFace download with byte-level progress, checking `cache` first.
 fn hf_dl<F: FnMut(u64, u64)>(
-    api:      &hf_hub::api::sync::Api,
-    cache:    &Cache,
-    repo_id:  &str,
+    api: &hf_hub::api::sync::Api,
+    cache: &Cache,
+    repo_id: &str,
     filename: &str,
     mut on_bytes: F,
 ) -> anyhow::Result<PathBuf> {
@@ -423,14 +505,33 @@ fn hf_dl<F: FnMut(u64, u64)>(
         on_bytes(1, 1);
         return Ok(path);
     }
-    struct Prog<F: FnMut(u64, u64)> { cb: F, done: u64, total: u64 }
+    struct Prog<F: FnMut(u64, u64)> {
+        cb: F,
+        done: u64,
+        total: u64,
+    }
     impl<F: FnMut(u64, u64)> Progress for Prog<F> {
-        fn init(&mut self, size: usize, _: &str) { self.total = size as u64; (self.cb)(0, self.total); }
-        fn update(&mut self, n: usize) { self.done += n as u64; (self.cb)(self.done, self.total); }
-        fn finish(&mut self) { (self.cb)(self.total, self.total); }
+        fn init(&mut self, size: usize, _: &str) {
+            self.total = size as u64;
+            (self.cb)(0, self.total);
+        }
+        fn update(&mut self, n: usize) {
+            self.done += n as u64;
+            (self.cb)(self.done, self.total);
+        }
+        fn finish(&mut self) {
+            (self.cb)(self.total, self.total);
+        }
     }
     api.model(repo_id.to_string())
-        .download_with_progress(filename, Prog { cb: on_bytes, done: 0, total: 0 })
+        .download_with_progress(
+            filename,
+            Prog {
+                cb: on_bytes,
+                done: 0,
+                total: 0,
+            },
+        )
         .with_context(|| format!("download '{filename}' from '{repo_id}'"))
 }
 
@@ -444,12 +545,11 @@ fn hf_dl<F: FnMut(u64, u64)>(
 //   default → `"default"`
 
 fn load_ref_codes(
-    model:    &neutts::NeuTTS,
-    preset:   &str,
+    model: &neutts::NeuTTS,
+    preset: &str,
     wav_path: &str,
     ref_text: &str,
 ) -> (Vec<i32>, String, String) {
-
     // ── Preset voice ──────────────────────────────────────────────────────────
     if !preset.is_empty() {
         let base = samples_dir();
@@ -458,26 +558,35 @@ fn load_ref_codes(
         match model.load_ref_codes(&npy) {
             Ok(codes) => {
                 let text = std::fs::read_to_string(&txt)
-                    .map(|s| s.trim().to_string()).unwrap_or_default();
-                tts_log!("neutts", "preset voice '{preset}' loaded ({} tokens)", codes.len());
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
+                tts_log!(
+                    "neutts",
+                    "preset voice '{preset}' loaded ({} tokens)",
+                    codes.len()
+                );
                 return (codes, text, preset.to_string());
             }
-            Err(e) => tts_log!("neutts", "preset '{preset}' not found at {}: {e}", npy.display()),
+            Err(e) => tts_log!(
+                "neutts",
+                "preset '{preset}' not found at {}: {e}",
+                npy.display()
+            ),
         }
     }
 
     // ── Custom WAV ────────────────────────────────────────────────────────────
     if !wav_path.is_empty() {
-        let path      = Path::new(wav_path);
+        let path = Path::new(wav_path);
         let voice_key = neutts::cache::sha256_file(path)
             .map(|h| format!("custom-{h}"))
             .unwrap_or_else(|_| format!("custom-{wav_path}"));
 
         let cache = neutts::RefCodeCache::with_dir(ref_code_cache_dir())
-            .map_err(|e| tts_log!("neutts", "ref-code cache open failed: {e}")).ok();
+            .map_err(|e| tts_log!("neutts", "ref-code cache open failed: {e}"))
+            .ok();
 
-        if let Some((codes, outcome)) = cache.as_ref()
-            .and_then(|c| c.try_load(path).ok().flatten())
+        if let Some((codes, outcome)) = cache.as_ref().and_then(|c| c.try_load(path).ok().flatten())
         {
             tts_log!("neutts", "custom voice ref-code cache hit: {outcome}");
             return (codes, ref_text.to_string(), voice_key);
@@ -500,24 +609,33 @@ fn load_ref_codes(
     }
 
     // ── Backbone built-in voice ───────────────────────────────────────────────
-    tts_log!("neutts", "no voice reference loaded \u{2014} using backbone built-in voice");
+    tts_log!(
+        "neutts",
+        "no voice reference loaded \u{2014} using backbone built-in voice"
+    );
     (Vec::new(), String::new(), "default".to_string())
 }
 
 // ─── Synthesis ────────────────────────────────────────────────────────────────
 
 fn synthesize(
-    model: &neutts::NeuTTS, text: &str, ref_codes: &[i32], ref_text: &str,
+    model: &neutts::NeuTTS,
+    text: &str,
+    ref_codes: &[i32],
+    ref_text: &str,
 ) -> anyhow::Result<Vec<f32>> {
-    let t0    = std::time::Instant::now();
-    let audio = model.infer(text, ref_codes, ref_text)
+    let t0 = std::time::Instant::now();
+    let audio = model
+        .infer(text, ref_codes, ref_text)
         .with_context(|| format!("neutts synthesis failed for {text:?}"))?;
     if audio.is_empty() {
         anyhow::bail!("synthesis returned no samples for {text:?}")
     }
-    tts_log!("neutts",
+    tts_log!(
+        "neutts",
         "synthesised {} samples ({:.2} s) in {} ms \u{2014} text={text:?}",
-        audio.len(), audio.len() as f32 / SAMPLE_RATE as f32,
+        audio.len(),
+        audio.len() as f32 / SAMPLE_RATE as f32,
         t0.elapsed().as_millis(),
     );
     Ok(audio)
@@ -543,18 +661,22 @@ fn wav_cache_path(backbone: &str, voice_key: &str, text: &str) -> PathBuf {
 // ─── Speak: cache check → synthesise → write cache → play ────────────────────
 
 fn speak_cached(
-    model:     &neutts::NeuTTS,
-    stream:    &MixerDeviceSink,
-    text:      &str,
+    model: &neutts::NeuTTS,
+    stream: &MixerDeviceSink,
+    text: &str,
     ref_codes: &[i32],
-    ref_text:  &str,
-    backbone:  &str,
+    ref_text: &str,
+    backbone: &str,
     voice_key: &str,
 ) {
     let cache_path = wav_cache_path(backbone, voice_key, text);
 
     if cache_path.exists() {
-        tts_log!("neutts", "WAV cache hit \u{2014} playing {}", cache_path.display());
+        tts_log!(
+            "neutts",
+            "WAV cache hit \u{2014} playing {}",
+            cache_path.display()
+        );
         play_wav(stream, &cache_path);
         return;
     }
@@ -579,8 +701,11 @@ fn speak_cached(
 /// This avoids rodio/symphonia format probing which can fail on some PCM WAVs.
 fn play_wav(stream: &MixerDeviceSink, path: &Path) {
     let reader = match hound::WavReader::open(path) {
-        Ok(r)  => r,
-        Err(e) => { tts_log!("neutts", "WAV cache open failed ({}): {e}", path.display()); return; }
+        Ok(r) => r,
+        Err(e) => {
+            tts_log!("neutts", "WAV cache open failed ({}): {e}", path.display());
+            return;
+        }
     };
     let sample_rate = reader.spec().sample_rate;
     let samples: Vec<f32> = reader
@@ -593,9 +718,11 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
         tts_log!("neutts", "WAV cache file is empty: {}", path.display());
         return;
     }
-    tts_log!("neutts",
+    tts_log!(
+        "neutts",
         "playing {} samples @ {} Hz from cache",
-        samples.len(), sample_rate
+        samples.len(),
+        sample_rate
     );
     play_f32_audio(stream, samples, sample_rate);
 }
@@ -605,20 +732,37 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
 pub fn progress_to_event(p: neutts::download::LoadProgress) -> crate::TtsProgressEvent {
     use neutts::download::LoadProgress as NP;
     match p {
-        NP::Fetching { step, total, file, repo, size_mb } => {
+        NP::Fetching {
+            step,
+            total,
+            file,
+            repo,
+            size_mb,
+        } => {
             let label = match size_mb {
                 Some(mb) => format!("{file} from {repo} (~{mb} MB)"),
-                None     => format!("{file} from {repo}"),
+                None => format!("{file} from {repo}"),
             };
             crate::TtsProgressEvent::step(step, total, label)
         }
-        NP::Downloading { step, total, downloaded, total_bytes } => {
-            crate::TtsProgressEvent::step(step, total,
-                format!("Downloading… {}/{} MB",
-                    downloaded / 1_048_576, total_bytes / 1_048_576))
-        }
-        NP::Loading { step, total, component } => {
-            crate::TtsProgressEvent::step(step, total, component)
-        }
+        NP::Downloading {
+            step,
+            total,
+            downloaded,
+            total_bytes,
+        } => crate::TtsProgressEvent::step(
+            step,
+            total,
+            format!(
+                "Downloading… {}/{} MB",
+                downloaded / 1_048_576,
+                total_bytes / 1_048_576
+            ),
+        ),
+        NP::Loading {
+            step,
+            total,
+            component,
+        } => crate::TtsProgressEvent::step(step, total, component),
     }
 }

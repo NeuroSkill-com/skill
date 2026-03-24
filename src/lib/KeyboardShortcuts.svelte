@@ -11,130 +11,152 @@ the Free Software Foundation, version 3 only. -->
   in-app keyboard shortcuts hardcoded in the frontend.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { fade }               from "svelte/transition";
-  import { t }                  from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { fade } from "svelte/transition";
+import { t } from "$lib/i18n/index.svelte";
 
-  let open = $state(false);
+let open = $state(false);
 
-  // Global shortcuts fetched from the backend
-  let labelShortcut        = $state("");
-  let searchShortcut       = $state("");
-  let settingsShortcut     = $state("");
-  let calibrationShortcut  = $state("");
-  let focusTimerShortcut   = $state("");
+// Global shortcuts fetched from the backend
+let labelShortcut = $state("");
+let searchShortcut = $state("");
+let settingsShortcut = $state("");
+let calibrationShortcut = $state("");
+let focusTimerShortcut = $state("");
 
-  /** Pretty-print a Tauri accelerator string for display.
-   *  "CmdOrCtrl+Shift+L" → "⌘⇧L" on Mac, "Ctrl+Shift+L" elsewhere. */
-  function pretty(accel: string): string {
-    if (!accel) return "—";
-    const isMac = navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac");
-    let s = accel;
-    if (isMac) {
-      s = s.replace(/CmdOrCtrl/gi, "⌘")
-           .replace(/CommandOrControl/gi, "⌘")
-           .replace(/Ctrl/gi, "⌃")
-           .replace(/Cmd/gi, "⌘")
-           .replace(/Alt/gi, "⌥")
-           .replace(/Shift/gi, "⇧")
-           .replace(/\+/g, "");
-    } else {
-      s = s.replace(/CmdOrCtrl/gi, "Ctrl")
-           .replace(/CommandOrControl/gi, "Ctrl");
-    }
-    return s;
+/** Pretty-print a Tauri accelerator string for display.
+ *  "CmdOrCtrl+Shift+L" → "⌘⇧L" on Mac, "Ctrl+Shift+L" elsewhere. */
+function pretty(accel: string): string {
+  if (!accel) return "—";
+  const isMac = navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac");
+  let s = accel;
+  if (isMac) {
+    s = s
+      .replace(/CmdOrCtrl/gi, "⌘")
+      .replace(/CommandOrControl/gi, "⌘")
+      .replace(/Ctrl/gi, "⌃")
+      .replace(/Cmd/gi, "⌘")
+      .replace(/Alt/gi, "⌥")
+      .replace(/Shift/gi, "⇧")
+      .replace(/\+/g, "");
+  } else {
+    s = s.replace(/CmdOrCtrl/gi, "Ctrl").replace(/CommandOrControl/gi, "Ctrl");
   }
+  return s;
+}
 
-  interface ShortcutEntry {
-    keys: string;
-    label: string;
-    section: string;
+interface ShortcutEntry {
+  keys: string;
+  label: string;
+  section: string;
+}
+
+const mod = navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac") ? "⌘" : "Ctrl+";
+
+const appShortcuts: ShortcutEntry[] = [
+  { keys: "?", label: "shortcuts.showOverlay", section: "shortcuts.sectionApp" },
+  { keys: `${mod}K`, label: "shortcutsTab.cmdKTitle", section: "shortcuts.sectionApp" },
+  { keys: "Esc", label: "shortcuts.closeOverlay", section: "shortcuts.sectionApp" },
+];
+
+let globalShortcuts = $derived<ShortcutEntry[]>([
+  { keys: pretty(labelShortcut), label: "settings.shortcutAddLabel", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(searchShortcut), label: "settings.shortcutSearch", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(settingsShortcut), label: "settings.shortcutSettings", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(calibrationShortcut), label: "shortcuts.openCalibration", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(focusTimerShortcut), label: "focusTimer.title", section: "shortcuts.sectionGlobal" },
+]);
+
+const windowShortcuts: ShortcutEntry[] = [
+  { keys: "⌘/Ctrl + ↵", label: "shortcuts.submitLabel", section: "shortcuts.sectionWindows" },
+  { keys: "Esc", label: "shortcuts.closeWindow", section: "shortcuts.sectionWindows" },
+];
+
+let allShortcuts = $derived([...appShortcuts, ...globalShortcuts, ...windowShortcuts]);
+
+// Group by section for rendering
+let sections = $derived(() => {
+  const map = new Map<string, ShortcutEntry[]>();
+  for (const s of allShortcuts) {
+    if (!map.has(s.section)) map.set(s.section, []);
+    map.get(s.section)?.push(s);
   }
+  return [...map.entries()];
+});
 
-  const mod = navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac") ? "⌘" : "Ctrl+";
-
-  const appShortcuts: ShortcutEntry[] = [
-    { keys: "?",              label: "shortcuts.showOverlay",      section: "shortcuts.sectionApp" },
-    { keys: `${mod}K`,        label: "shortcutsTab.cmdKTitle",     section: "shortcuts.sectionApp" },
-    { keys: "Esc",            label: "shortcuts.closeOverlay",     section: "shortcuts.sectionApp" },
-  ];
-
-  let globalShortcuts = $derived<ShortcutEntry[]>([
-    { keys: pretty(labelShortcut),       label: "settings.shortcutAddLabel",    section: "shortcuts.sectionGlobal" },
-    { keys: pretty(searchShortcut),      label: "settings.shortcutSearch",      section: "shortcuts.sectionGlobal" },
-    { keys: pretty(settingsShortcut),    label: "settings.shortcutSettings",    section: "shortcuts.sectionGlobal" },
-    { keys: pretty(calibrationShortcut), label: "shortcuts.openCalibration",    section: "shortcuts.sectionGlobal" },
-    { keys: pretty(focusTimerShortcut),  label: "focusTimer.title",             section: "shortcuts.sectionGlobal" },
-  ]);
-
-  const windowShortcuts: ShortcutEntry[] = [
-    { keys: "⌘/Ctrl + ↵",  label: "shortcuts.submitLabel",     section: "shortcuts.sectionWindows" },
-    { keys: "Esc",          label: "shortcuts.closeWindow",     section: "shortcuts.sectionWindows" },
-  ];
-
-  let allShortcuts = $derived([...appShortcuts, ...globalShortcuts, ...windowShortcuts]);
-
-  // Group by section for rendering
-  let sections = $derived(() => {
-    const map = new Map<string, ShortcutEntry[]>();
-    for (const s of allShortcuts) {
-      if (!map.has(s.section)) map.set(s.section, []);
-      map.get(s.section)!.push(s);
-    }
-    return [...map.entries()];
-  });
-
-  async function fetchShortcuts() {
-    try {
-      [labelShortcut, searchShortcut, settingsShortcut, calibrationShortcut, focusTimerShortcut] =
-        await Promise.all([
-          invoke<string>("get_label_shortcut"),
-          invoke<string>("get_search_shortcut"),
-          invoke<string>("get_settings_shortcut"),
-          invoke<string>("get_calibration_shortcut"),
-          invoke<string>("get_focus_timer_shortcut"),
-        ]);
-    } catch (_) { /* backend unavailable — keep defaults */ }
+async function fetchShortcuts() {
+  try {
+    [labelShortcut, searchShortcut, settingsShortcut, calibrationShortcut, focusTimerShortcut] = await Promise.all([
+      invoke<string>("get_label_shortcut"),
+      invoke<string>("get_search_shortcut"),
+      invoke<string>("get_settings_shortcut"),
+      invoke<string>("get_calibration_shortcut"),
+      invoke<string>("get_focus_timer_shortcut"),
+    ]);
+  } catch (_) {
+    /* backend unavailable — keep defaults */
   }
+}
 
-  function handleKeydown(e: KeyboardEvent) {
-    // Don't trigger when typing in inputs/textareas
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+function handleKeydown(e: KeyboardEvent) {
+  // Don't trigger when typing in inputs/textareas
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-    if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      if (open) { open = false; } else { fetchShortcuts(); open = true; }
-    }
-    if (e.key === "Escape" && open) {
-      e.preventDefault();
-      e.stopPropagation();
+  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    if (open) {
       open = false;
+    } else {
+      fetchShortcuts();
+      open = true;
     }
   }
-
-  // ── Focus trap ─────────────────────────────────────────────────────────────
-  function focusTrap(node: HTMLElement) {
-    const FOCUSABLE = 'button:not([disabled]),input,[tabindex]:not([tabindex="-1"])';
-    const first = () => node.querySelectorAll<HTMLElement>(FOCUSABLE)[0];
-    const last  = () => { const els = node.querySelectorAll<HTMLElement>(FOCUSABLE); return els[els.length - 1]; };
-    first()?.focus();
-    function trap(e: KeyboardEvent) {
-      if (e.key !== "Tab") return;
-      if (e.shiftKey) { if (document.activeElement === first()) { e.preventDefault(); last()?.focus(); } }
-      else            { if (document.activeElement === last())  { e.preventDefault(); first()?.focus(); } }
-    }
-    node.addEventListener("keydown", trap);
-    return { destroy() { node.removeEventListener("keydown", trap); } };
+  if (e.key === "Escape" && open) {
+    e.preventDefault();
+    e.stopPropagation();
+    open = false;
   }
+}
 
-  onMount(() => {
-    window.addEventListener("keydown", handleKeydown, true);
-  });
-  onDestroy(() => {
-    window.removeEventListener("keydown", handleKeydown, true);
-  });
+// ── Focus trap ─────────────────────────────────────────────────────────────
+function focusTrap(node: HTMLElement) {
+  const FOCUSABLE = 'button:not([disabled]),input,[tabindex]:not([tabindex="-1"])';
+  const first = () => node.querySelectorAll<HTMLElement>(FOCUSABLE)[0];
+  const last = () => {
+    const els = node.querySelectorAll<HTMLElement>(FOCUSABLE);
+    return els[els.length - 1];
+  };
+  first()?.focus();
+  function trap(e: KeyboardEvent) {
+    if (e.key !== "Tab") return;
+    if (e.shiftKey) {
+      if (document.activeElement === first()) {
+        e.preventDefault();
+        last()?.focus();
+      }
+    } else {
+      if (document.activeElement === last()) {
+        e.preventDefault();
+        first()?.focus();
+      }
+    }
+  }
+  node.addEventListener("keydown", trap);
+  return {
+    destroy() {
+      node.removeEventListener("keydown", trap);
+    },
+  };
+}
+
+onMount(() => {
+  window.addEventListener("keydown", handleKeydown, true);
+});
+onDestroy(() => {
+  window.removeEventListener("keydown", handleKeydown, true);
+});
 </script>
 
 {#if open}

@@ -18,7 +18,6 @@
 
 mod constants;
 
-
 #[macro_use]
 mod skill_log;
 use skill_log::SkillLogger;
@@ -40,18 +39,15 @@ macro_rules! app_log {
     }};
 }
 
-
-
 mod eeg_embeddings;
 mod global_eeg_index;
 use global_eeg_index::GlobalEegIndex;
-
 
 mod session_dsp;
 pub(crate) use session_dsp::SessionDsp;
 
 mod lifecycle;
-pub(crate) use lifecycle::{start_session, cancel_session, go_disconnected};
+pub(crate) use lifecycle::{cancel_session, go_disconnected, start_session};
 
 mod quit;
 pub(crate) use quit::confirm_and_quit;
@@ -59,13 +55,12 @@ pub(crate) use quit::confirm_and_quit;
 mod commands;
 mod job_queue;
 
-mod ws_commands;
-mod label_index;
-mod ws_server;
 mod api;
+mod label_index;
+mod ws_commands;
+mod ws_server;
 
 mod screenshot;
-
 
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
 /// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
@@ -92,23 +87,20 @@ mod session_connect;
 /// Session history listing and streaming Tauri commands.
 mod history_cmds;
 use history_cmds::{
-    open_history_window, list_sessions, list_session_days, list_sessions_for_day,
-    stream_sessions, get_history_stats, delete_session, list_embedding_sessions,
+    delete_session, get_history_stats, list_embedding_sessions, list_session_days, list_sessions,
+    list_sessions_for_day, open_history_window, stream_sessions,
 };
 
 /// Session metrics, time-series, sleep staging, UMAP and compare commands.
 mod session_analysis;
 pub(crate) use session_analysis::{
-    get_session_metrics_impl,
-    get_sleep_stages_impl,
-    compute_compare_insights, analyze_sleep_stages, analyze_search_results,
-    compute_status_history,
-    load_embeddings_range
+    analyze_search_results, analyze_sleep_stages, compute_compare_insights, compute_status_history,
+    get_session_metrics_impl, get_sleep_stages_impl, load_embeddings_range,
 };
 use session_analysis::{
-    get_sleep_stages, compute_umap_compare, enqueue_umap_compare, poll_job,
-    get_session_metrics, get_session_timeseries, get_csv_metrics, get_day_metrics_batch,
-    open_compare_window, open_compare_window_with_sessions,
+    compute_umap_compare, enqueue_umap_compare, get_csv_metrics, get_day_metrics_batch,
+    get_session_metrics, get_session_timeseries, get_sleep_stages, open_compare_window,
+    open_compare_window_with_sessions, poll_job,
 };
 
 // ── Existing extracted modules ────────────────────────────────────────────────
@@ -117,23 +109,22 @@ mod autostart;
 
 mod tts;
 
-use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
-pub(crate) use tts::{neutts_apply_config, init_neutts_samples_dir,
-                     init_espeak_bundled_data_path, tts_shutdown};
+pub(crate) use tts::{
+    init_espeak_bundled_data_path, init_neutts_samples_dir, neutts_apply_config, tts_shutdown,
+};
+use tts::{
+    tts_get_voice, tts_init, tts_list_neutts_voices, tts_list_voices, tts_set_voice, tts_speak,
+    tts_unload,
+};
 
 mod settings;
 pub(crate) use settings::{
-    CalibrationAction, CalibrationProfile, CalibrationConfig, new_profile_id,
-    load_umap_config, load_settings,
-    default_skill_dir,
+    default_skill_dir, load_settings, load_umap_config, new_profile_id, CalibrationAction,
+    CalibrationConfig, CalibrationProfile,
 };
 
-
-
-
-
 mod tray;
-pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
+pub(crate) use tray::{build_menu, icon_disconnected, refresh_tray};
 
 // ── Linux decoration workaround (tauri-apps/tauri#11856) ─────────────────────
 // On Linux (Wayland + GNOME/Mutter/KWin), window decorations (close /
@@ -144,7 +135,10 @@ pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
 // and visually imperceptible.  Must be called *after* `win.show()`.
 #[cfg(target_os = "linux")]
 pub(crate) fn linux_fix_decorations(win: &tauri::WebviewWindow) {
-    eprintln!("[linux] applying decoration fix (fullscreen toggle) for {}", win.label());
+    eprintln!(
+        "[linux] applying decoration fix (fullscreen toggle) for {}",
+        win.label()
+    );
     let _ = win.set_fullscreen(true);
     let _ = win.set_fullscreen(false);
 }
@@ -180,23 +174,16 @@ fn linux_has_appindicator_runtime() -> bool {
 mod shortcut_cmds;
 pub(crate) use shortcut_cmds::apply_all_shortcuts;
 use shortcut_cmds::{
-    get_label_shortcut, set_label_shortcut,
-    get_search_shortcut, set_search_shortcut,
-    get_settings_shortcut, set_settings_shortcut,
-    get_calibration_shortcut, set_calibration_shortcut,
-    get_help_shortcut, set_help_shortcut,
-    get_history_shortcut, set_history_shortcut,
-    get_api_shortcut, set_api_shortcut,
-    get_theme_shortcut, set_theme_shortcut,
-    get_focus_timer_shortcut, set_focus_timer_shortcut,
+    get_api_shortcut, get_calibration_shortcut, get_focus_timer_shortcut, get_help_shortcut,
+    get_history_shortcut, get_label_shortcut, get_search_shortcut, get_settings_shortcut,
+    get_theme_shortcut, set_api_shortcut, set_calibration_shortcut, set_focus_timer_shortcut,
+    set_help_shortcut, set_history_shortcut, set_label_shortcut, set_search_shortcut,
+    set_settings_shortcut, set_theme_shortcut,
 };
 #[cfg(feature = "llm")]
 use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
 
-
 mod active_window;
-
-
 
 mod about;
 use about::{get_about_info, open_about_window};
@@ -205,110 +192,81 @@ mod calibration_service;
 mod window_cmds;
 pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{
-    open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
-    open_search_window, open_session_window, open_label_window, open_labels_window,
-    open_focus_timer_window, open_api_window,
-    show_main_window,
-    open_whats_new_window, get_whats_new_seen_version, dismiss_whats_new,
-    open_onboarding_window, get_onboarding_model_download_order,
-    complete_onboarding, get_onboarding_complete, close_label_window,
-    check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
-    check_screen_recording_permission, open_screen_recording_settings,
-    open_calibration_window, open_and_start_calibration, close_calibration_window,
-    list_calibration_profiles, get_calibration_profile, get_active_calibration,
-    set_active_calibration, create_calibration_profile, update_calibration_profile,
-    delete_calibration_profile, record_calibration_completed,
-    get_calibration_config, set_calibration_config,
-    emit_calibration_event, quit_app, get_app_version, get_app_name, is_session_live, set_update_ready,
-    get_data_dir, set_data_dir, open_skill_dir, get_ws_clients, get_ws_request_log, get_ws_port,
+    check_accessibility_permission, check_screen_recording_permission, close_calibration_window,
+    close_label_window, complete_onboarding, create_calibration_profile,
+    delete_calibration_profile, dismiss_whats_new, emit_calibration_event, get_active_calibration,
+    get_app_name, get_app_version, get_calibration_config, get_calibration_profile, get_data_dir,
+    get_onboarding_complete, get_onboarding_model_download_order, get_whats_new_seen_version,
+    get_ws_clients, get_ws_port, get_ws_request_log, is_session_live, list_calibration_profiles,
+    open_accessibility_settings, open_and_start_calibration, open_api_window, open_bt_settings,
+    open_calibration_window, open_focus_timer_window, open_help_window, open_label_window,
+    open_labels_window, open_model_tab, open_notifications_settings, open_onboarding_window,
+    open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
+    open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
+    record_calibration_completed, set_active_calibration, set_calibration_config, set_data_dir,
+    set_update_ready, show_main_window, update_calibration_profile,
 };
 
 mod label_cmds;
-pub(crate) use label_cmds::{EmbedderState, init_embedder};
 use label_cmds::{
-    query_annotations, get_recent_labels, delete_label, update_label, get_queue_stats, submit_label,
-    list_embedding_models, get_embedding_model, set_embedding_model,
-    reembed_all_labels, get_stale_label_count,
-    rebuild_label_index, search_labels_by_text, search_labels_by_eeg,
+    delete_label, get_embedding_model, get_queue_stats, get_recent_labels, get_stale_label_count,
+    list_embedding_models, query_annotations, rebuild_label_index, reembed_all_labels,
+    search_labels_by_eeg, search_labels_by_text, set_embedding_model, submit_label, update_label,
 };
+pub(crate) use label_cmds::{init_embedder, EmbedderState};
 
 mod settings_cmds;
 use settings_cmds::{
-    subscribe_eeg, subscribe_ppg, subscribe_imu,
-    get_status, get_devices, get_supported_companies, get_device_capabilities,
-    set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
-    get_filter_config, set_filter_config, set_notch_preset,
-    get_storage_format, set_storage_format,
-    get_latest_bands, get_embedding_overlap, set_embedding_overlap,
-    get_gpu_stats, get_log_config, set_log_config,
-    get_eeg_model_config, set_eeg_model_config, get_eeg_model_status,
-    trigger_weights_download, cancel_weights_download,
-    estimate_reembed, trigger_reembed,
-    get_umap_config, set_umap_config, get_theme_and_language, set_theme, set_language,
-    get_accent_color, set_accent_color,
-    get_daily_goal, set_daily_goal, get_goal_notified_date, set_goal_notified_date,
-    get_daily_recording_mins,
-    get_hooks, set_hooks, get_hook_statuses, open_session_for_timestamp,
-    suggest_hook_distances, suggest_hook_keywords, get_hook_log, get_hook_log_count,
-    get_ws_config, set_ws_config,
-    get_api_token, set_api_token,
-    get_autostart_enabled, set_autostart_enabled,
-    get_update_check_interval, set_update_check_interval,
-    get_skills_refresh_interval, set_skills_refresh_interval,
-    get_skills_sync_on_launch, set_skills_sync_on_launch,
-    get_skills_last_sync, sync_skills_now,
-    list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
-    get_openbci_config, set_openbci_config, list_serial_ports,
-    get_device_api_config, set_device_api_config,
-    get_scanner_config, set_scanner_config, get_device_log, get_cortex_ws_state,
-    get_neutts_config, set_neutts_config, pick_ref_wav_file,
-    get_tts_preload, set_tts_preload,
-    get_active_window_tracking, set_active_window_tracking, get_active_window,
-    get_input_activity_tracking, set_input_activity_tracking,
-    get_last_input_activity,
-    get_recent_active_windows, get_recent_input_activity,
-    get_input_buckets,
-    get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
-    get_sleep_config, set_sleep_config,
-    get_llm_config, set_llm_config, pick_gguf_file,
-    web_cache_stats, web_cache_list, web_cache_clear, web_cache_remove_domain, web_cache_remove_entry,
-    get_screenshot_config, set_screenshot_config,
-    estimate_screenshot_reembed, rebuild_screenshot_embeddings,
-    get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
-    search_screenshots_by_text,
-    check_ocr_models_ready, download_ocr_models,
-    get_screenshot_metrics, get_screenshots_dir,
+    cancel_retry, cancel_weights_download, check_ocr_models_ready, download_ocr_models,
+    estimate_reembed, estimate_screenshot_reembed, forget_device, get_accent_color,
+    get_active_window, get_active_window_tracking, get_api_token, get_autostart_enabled,
+    get_cortex_ws_state, get_daily_goal, get_daily_recording_mins, get_device_api_config,
+    get_device_capabilities, get_device_log, get_devices, get_disabled_skills, get_dnd_active,
+    get_dnd_config, get_dnd_status, get_eeg_model_config, get_eeg_model_status,
+    get_embedding_overlap, get_filter_config, get_goal_notified_date, get_gpu_stats, get_hook_log,
+    get_hook_log_count, get_hook_statuses, get_hooks, get_input_activity_tracking,
+    get_input_buckets, get_last_input_activity, get_latest_bands, get_llm_config, get_log_config,
+    get_neutts_config, get_openbci_config, get_recent_active_windows, get_recent_input_activity,
+    get_scanner_config, get_screenshot_config, get_screenshot_metrics, get_screenshots_around,
+    get_screenshots_dir, get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
+    get_skills_sync_on_launch, get_sleep_config, get_status, get_storage_format,
+    get_supported_companies, get_theme_and_language, get_tts_preload, get_umap_config,
+    get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports, list_skills,
+    open_session_for_timestamp, pair_device, pick_gguf_file, pick_ref_wav_file,
+    rebuild_screenshot_embeddings, retry_connect, search_screenshots_by_image,
+    search_screenshots_by_text, search_screenshots_by_vector, set_accent_color,
+    set_active_window_tracking, set_api_token, set_autostart_enabled, set_daily_goal,
+    set_device_api_config, set_disabled_skills, set_dnd_config, set_eeg_model_config,
+    set_embedding_overlap, set_filter_config, set_goal_notified_date, set_hooks,
+    set_input_activity_tracking, set_language, set_llm_config, set_log_config, set_neutts_config,
+    set_notch_preset, set_openbci_config, set_preferred_device, set_scanner_config,
+    set_screenshot_config, set_skills_refresh_interval, set_skills_sync_on_launch,
+    set_sleep_config, set_storage_format, set_theme, set_tts_preload, set_umap_config,
+    set_update_check_interval, set_ws_config, subscribe_eeg, subscribe_imu, subscribe_ppg,
+    suggest_hook_distances, suggest_hook_keywords, sync_skills_now, test_dnd, trigger_reembed,
+    trigger_weights_download, web_cache_clear, web_cache_list, web_cache_remove_domain,
+    web_cache_remove_entry, web_cache_stats,
 };
 
 // LLM catalog commands (feature-gated)
 #[cfg(feature = "llm")]
 use llm::cmds::{
-    get_llm_catalog, download_llm_model, cancel_llm_download,
-    pause_llm_download, resume_llm_download, get_llm_downloads,
-    delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
-    set_llm_autoload_mmproj, add_llm_model,
-    get_llm_logs, start_llm_server, stop_llm_server, switch_llm_model, get_llm_server_status, open_chat_window,
-    open_downloads_window,
-    chat_completions_ipc, abort_llm_stream, cancel_tool_call,
-    get_last_chat_session, save_chat_message, save_chat_tool_calls, new_chat_session,
-    load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
-    get_session_params, set_session_params,
-    archive_chat_session, unarchive_chat_session, list_archived_chat_sessions,
-    get_model_hardware_fit,
+    abort_llm_stream, add_llm_model, archive_chat_session, cancel_llm_download, cancel_tool_call,
+    chat_completions_ipc, delete_chat_session, delete_llm_model, download_llm_model,
+    get_last_chat_session, get_llm_catalog, get_llm_downloads, get_llm_logs, get_llm_server_status,
+    get_model_hardware_fit, get_session_params, list_archived_chat_sessions, list_chat_sessions,
+    load_chat_session, new_chat_session, open_chat_window, open_downloads_window,
+    pause_llm_download, refresh_llm_catalog, rename_chat_session, resume_llm_download,
+    save_chat_message, save_chat_tool_calls, set_llm_active_mmproj, set_llm_active_model,
+    set_llm_autoload_mmproj, set_session_params, start_llm_server, stop_llm_server,
+    switch_llm_model, unarchive_chat_session,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-use std::{
-    sync::Mutex,
-    time::Duration,
-};
+use std::{sync::Mutex, time::Duration};
 
-use tauri::{
-    tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
-};
-
+use tauri::{tray::TrayIconBuilder, AppHandle, Emitter, Manager};
 
 // ── Core types (re-exported from state.rs) ────────────────────────────────────
 
@@ -319,13 +277,9 @@ pub(crate) use state::*;
 
 mod helpers;
 pub(crate) use helpers::{
-    unix_secs, yyyymmdd_utc,
-    emit_status, emit_devices, set_cortex_ws_state,
-    send_toast, ToastLevel,
-    skill_dir, read_state, mutate_and_save,
-    save_settings, save_settings_now, save_settings_handle,
-    upsert_paired, upsert_discovered,
-    AppStateExt,
+    emit_devices, emit_status, mutate_and_save, read_state, save_settings, save_settings_handle,
+    save_settings_now, send_toast, set_cortex_ws_state, skill_dir, unix_secs, upsert_discovered,
+    upsert_paired, yyyymmdd_utc, AppStateExt, ToastLevel,
 };
 
 // ── Mutex poison recovery ─────────────────────────────────────────────────────
@@ -335,12 +289,7 @@ pub(crate) use helpers::{
 // crates/skill-data/src/util.rs.
 pub(crate) use skill_data::util::MutexExt;
 
-
-
-
 // ── Quit confirmation dialog ──────────────────────────────────────────────────
-
-
 
 static EXIT_SHUTDOWN_STARTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -396,7 +345,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     {
         use tauri::Manager;
-        let resource_dir = app.path().resource_dir()
+        let resource_dir = app
+            .path()
+            .resource_dir()
             .unwrap_or_else(|_| std::path::PathBuf::from("resources"));
         init_espeak_bundled_data_path(&resource_dir);
         let samples_dir = resource_dir.join("neutts-samples");
@@ -421,7 +372,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_name = app.package_info().name.to_lowercase();
     let ws_cfg = {
         let dir = app.app_state().lock_or_recover().skill_dir.clone();
-        let s   = load_settings(&dir);
+        let s = load_settings(&dir);
         (s.ws_host, s.ws_port)
     };
 
@@ -434,13 +385,20 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let llm_arc = app.app_state().lock_or_recover().llm_arc();
             let llm = llm_arc.lock_or_recover();
             let sd = app.app_state().lock_or_recover().skill_dir.clone();
-            (llm_cfg, llm.catalog.clone(), llm.logs.clone(), llm.state_cell.clone(), sd)
+            (
+                llm_cfg,
+                llm.catalog.clone(),
+                llm.logs.clone(),
+                llm.state_cell.clone(),
+                sd,
+            )
         };
         if llm_cfg.enabled {
             let app_handle = app.handle().clone();
             let cell2 = cell.clone();
             std::thread::spawn(move || {
-                let emitter: std::sync::Arc<dyn llm::LlmEventEmitter> = std::sync::Arc::new(llm::TauriEmitter(app_handle));
+                let emitter: std::sync::Arc<dyn llm::LlmEventEmitter> =
+                    std::sync::Arc::new(llm::TauriEmitter(app_handle));
                 if let Some(state) = llm::init(&llm_cfg, &catalog, emitter, log_buf, &skill_dir) {
                     *cell2.lock_or_recover() = Some(state);
                 }
@@ -455,8 +413,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(feature = "llm")]
     {
-        let cell = app.app_state()
-            .lock_or_recover().llm.lock_or_recover().state_cell.clone();
+        let cell = app
+            .app_state()
+            .lock_or_recover()
+            .llm
+            .lock_or_recover()
+            .state_cell
+            .clone();
         serve_handle.set_llm(cell.clone());
 
         // Propagate the actual WS port to the Skill API tool so the LLM
@@ -475,7 +438,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });
+    tauri::async_runtime::spawn(async move {
+        serve_handle.serve(ws_app).await;
+    });
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {
@@ -497,10 +462,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (llm_autostart, llm_has_model, model_code, model_status, hf_repo) = {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let llm = __llm_arc.lock_or_recover();
         let autostart = llm.config.enabled && llm.config.autostart;
-        let has_model = llm.config.model_path.as_ref()
-            .map(|p| p.exists()).unwrap_or(false);
+        let has_model = llm
+            .config
+            .model_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false);
         drop(llm);
         (
             autostart,
@@ -527,9 +497,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let skill_dir_emb = skill_dir.clone();
-        let embedder_arc  = std::sync::Arc::clone(
-            &*app.state::<std::sync::Arc<EmbedderState>>()
-        );
+        let embedder_arc = std::sync::Arc::clone(&*app.state::<std::sync::Arc<EmbedderState>>());
         let logger_emb = app.state::<std::sync::Arc<SkillLogger>>().inner().clone();
         std::thread::spawn(move || {
             init_embedder(&embedder_arc, &model_code, &skill_dir_emb, &logger_emb);
@@ -537,9 +505,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     {
-        let label_idx = std::sync::Arc::clone(
-            &*app.state::<std::sync::Arc<label_index::LabelIndexState>>()
-        );
+        let label_idx =
+            std::sync::Arc::clone(&*app.state::<std::sync::Arc<label_index::LabelIndexState>>());
         let sd = skill_dir.clone();
         std::thread::spawn(move || label_idx.load(&sd));
     }
@@ -550,8 +517,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .spawn(move || {
             if let Some((w, _c)) = skill_exg::probe_hf_weights(&hf_repo) {
                 let mut st = model_status.lock_or_recover();
-                st.weights_found  = true;
-                st.weights_path   = Some(w.display().to_string());
+                st.weights_found = true;
+                st.weights_path = Some(w.display().to_string());
                 eprintln!("[embedder] startup probe: weights found at {}", w.display());
             } else {
                 eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
@@ -561,9 +528,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Global cross-day EEG HNSW index ──────────────────────────────
     {
-        let global_arc = std::sync::Arc::clone(
-            &*app.state::<std::sync::Arc<GlobalEegIndex>>()
-        );
+        let global_arc = std::sync::Arc::clone(&*app.state::<std::sync::Arc<GlobalEegIndex>>());
         let sd = skill_dir.clone();
         std::thread::Builder::new()
             .name("global-hnsw-build".into())
@@ -581,12 +546,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(target_os = "macos")]
     {
-        use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItem, PredefinedMenuItem};
+        use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
         let app_submenu = SubmenuBuilder::new(app, constants::APP_DISPLAY_NAME)
             .item(&MenuItem::with_id(
-                app, "about",
+                app,
+                "about",
                 format!("About {}", constants::APP_DISPLAY_NAME),
-                true, None::<&str>,
+                true,
+                None::<&str>,
             )?)
             .separator()
             .item(&PredefinedMenuItem::hide(app, None)?)
@@ -594,9 +561,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .item(&PredefinedMenuItem::show_all(app, None)?)
             .separator()
             .item(&MenuItem::with_id(
-                app, "macos_quit",
+                app,
+                "macos_quit",
                 format!("Quit {}", constants::APP_DISPLAY_NAME),
-                true, Some("Cmd+Q"),
+                true,
+                Some("Cmd+Q"),
             )?)
             .build()?;
         let edit_submenu = SubmenuBuilder::new(app, "Edit")
@@ -645,14 +614,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let win = if let Some(win) = app.get_webview_window("main") {
             win
         } else {
-            match tauri::WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::App("".into()),
-            )
-            .title(constants::APP_DISPLAY_NAME)
-            .decorations(false).transparent(true)
-            .build()
+            match tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("".into()))
+                .title(constants::APP_DISPLAY_NAME)
+                .decorations(false)
+                .transparent(true)
+                .build()
             {
                 Ok(win) => win,
                 Err(_) => return,
@@ -710,34 +676,50 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 });
             } else if id == "search" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_search_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_search_window(a).await;
+                });
             } else if id == "label" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_label_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_label_window(a).await;
+                });
             } else if id == "history" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_history_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_history_window(a).await;
+                });
             } else if id == "compare" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_compare_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_compare_window(a).await;
+                });
             } else if id == "settings" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_settings_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_settings_window(a).await;
+                });
             } else if id == "help" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_help_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_help_window(a).await;
+                });
             } else if id == "api" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_api_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_api_window(a).await;
+                });
             } else if id == "chat" {
-                #[cfg(feature = "llm")] {
+                #[cfg(feature = "llm")]
+                {
                     let a = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let _ = open_chat_window(a).await;
                     });
                 }
             } else if id == "downloads" {
-                #[cfg(feature = "llm")] {
+                #[cfg(feature = "llm")]
+                {
                     let a = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let _ = open_downloads_window(a).await;
@@ -750,7 +732,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 });
             } else if id == "check_update" {
                 let a = app.clone();
-                tauri::async_runtime::spawn(async move { let _ = open_updates_window(a).await; });
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_updates_window(a).await;
+                });
             } else if id == "quit" {
                 confirm_and_quit(app.app_handle().clone());
             } else if let Some(dev_id) = id.strip_prefix("connect:") {
@@ -775,9 +759,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let preferred = {
             let r = app_auto.state::<Mutex<Box<AppState>>>();
             let mut s = r.lock_or_recover();
-            let pref = s.preferred_id.clone()
+            let pref = s
+                .preferred_id
+                .clone()
                 .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()));
-            if pref.is_some() { s.pending_reconnect = true; }
+            if pref.is_some() {
+                s.pending_reconnect = true;
+            }
             pref
         };
         // Only auto-connect if there's a paired device.  On first launch
@@ -796,7 +784,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let r = app_cal.state::<Mutex<Box<AppState>>>();
             let s = r.lock_or_recover();
             let active_id = &s.active_calibration_id;
-            s.calibration_profiles.iter()
+            s.calibration_profiles
+                .iter()
                 .find(|p| &p.id == active_id)
                 .filter(|p| p.auto_start)
                 .map(|p| p.id.clone())
@@ -814,7 +803,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let g = r.lock_or_recover();
             g.ui.onboarding_complete
         };
-        if !done { let _ = open_onboarding_window(app_onboard).await; }
+        if !done {
+            let _ = open_onboarding_window(app_onboard).await;
+        }
     });
 
     {
@@ -843,8 +834,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 .name("input-monitor".into())
                 .spawn(move || {
                     active_window::run_input_monitor(
-                        app_inp, input_flag, kbd_ts, mouse_ts,
-                        kbd_cnt, mouse_cnt, store,
+                        app_inp, input_flag, kbd_ts, mouse_ts, kbd_cnt, mouse_cnt, store,
                     );
                 })
                 .expect("[input-monitor] failed to spawn thread");
@@ -861,8 +851,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         let app_ss = app.handle().clone();
         let sd = skill_dir.clone();
-        let ss_metrics = app.app_state()
-            .lock_or_recover().screenshot_metrics.clone();
+        let ss_metrics = app.app_state().lock_or_recover().screenshot_metrics.clone();
         std::thread::Builder::new()
             .name("screenshot-worker".into())
             .spawn(move || {
@@ -888,64 +877,76 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        s.status.paired_devices         = data.paired.clone();
-        s.preferred_id                  = data.preferred_id.clone();
-        s.status.filter_config          = data.filter_config;
+        s.status.paired_devices = data.paired.clone();
+        s.preferred_id = data.preferred_id.clone();
+        s.status.filter_config = data.filter_config;
         s.status.embedding_overlap_secs = data.embedding_overlap_secs;
-        s.shortcuts.label_shortcut                = data.label_shortcut;
-        s.shortcuts.search_shortcut               = data.search_shortcut;
-        s.shortcuts.settings_shortcut             = data.settings_shortcut;
-        s.shortcuts.calibration_shortcut          = data.calibration_shortcut;
-        s.shortcuts.help_shortcut                 = data.help_shortcut;
-        s.shortcuts.history_shortcut              = data.history_shortcut;
-        s.shortcuts.api_shortcut                  = data.api_shortcut;
-        s.shortcuts.theme_shortcut                = data.theme_shortcut;
-        s.shortcuts.focus_timer_shortcut          = data.focus_timer_shortcut;
+        s.shortcuts.label_shortcut = data.label_shortcut;
+        s.shortcuts.search_shortcut = data.search_shortcut;
+        s.shortcuts.settings_shortcut = data.settings_shortcut;
+        s.shortcuts.calibration_shortcut = data.calibration_shortcut;
+        s.shortcuts.help_shortcut = data.help_shortcut;
+        s.shortcuts.history_shortcut = data.history_shortcut;
+        s.shortcuts.api_shortcut = data.api_shortcut;
+        s.shortcuts.theme_shortcut = data.theme_shortcut;
+        s.shortcuts.focus_timer_shortcut = data.focus_timer_shortcut;
         let mut profiles = data.calibration_profiles;
         if profiles.is_empty() {
             profiles.push(CalibrationProfile::from_legacy(&data.calibration));
         }
         s.calibration_profiles = profiles;
         s.active_calibration_id = if data.active_calibration_id.is_empty() {
-            s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default()
+            s.calibration_profiles
+                .first()
+                .map(|p| p.id.clone())
+                .unwrap_or_default()
         } else {
             data.active_calibration_id
         };
-        s.ui.onboarding_complete                = data.onboarding_complete;
-        s.ui.last_seen_whats_new_version        = data.last_seen_whats_new_version;
-        s.ui.theme                        = data.theme;
-        s.ui.language                     = data.language;
-        s.ui.daily_goal_min               = data.daily_goal_min;
-        s.ui.goal_notified_date           = data.goal_notified_date;
-        s.ui.text_embedding_model         = data.text_embedding_model.clone();
-        s.hooks                        = data.hooks;
-        s.ws_host                      = data.ws_host.clone();
-        s.ws_port                      = data.ws_port;
-        s.api_token                    = data.api_token.clone();
-        s.update_check_interval_secs   = data.update_check_interval_secs;
-        s.openbci_config               = data.openbci;
-        s.device_api_config            = data.device_api;
-        s.scanner_config               = data.scanner;
-        s.neutts_config                = data.neutts.clone();
-        s.tts_preload                  = data.tts_preload;
-        s.input.track_active_window          = data.track_active_window;
-        s.input.track_input_activity         = data.track_input_activity;
-        s.input.input_activity_enabled
-            .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
+        s.ui.onboarding_complete = data.onboarding_complete;
+        s.ui.last_seen_whats_new_version = data.last_seen_whats_new_version;
+        s.ui.theme = data.theme;
+        s.ui.language = data.language;
+        s.ui.daily_goal_min = data.daily_goal_min;
+        s.ui.goal_notified_date = data.goal_notified_date;
+        s.ui.text_embedding_model = data.text_embedding_model.clone();
+        s.hooks = data.hooks;
+        s.ws_host = data.ws_host.clone();
+        s.ws_port = data.ws_port;
+        s.api_token = data.api_token.clone();
+        s.update_check_interval_secs = data.update_check_interval_secs;
+        s.openbci_config = data.openbci;
+        s.device_api_config = data.device_api;
+        s.scanner_config = data.scanner;
+        s.neutts_config = data.neutts.clone();
+        s.tts_preload = data.tts_preload;
+        s.input.track_active_window = data.track_active_window;
+        s.input.track_input_activity = data.track_input_activity;
+        s.input.input_activity_enabled.store(
+            data.track_input_activity,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         s.dnd.lock_or_recover().config = data.do_not_disturb;
-        { let __a = s.llm.clone(); __a.lock_or_recover().config = data.llm; }
+        {
+            let __a = s.llm.clone();
+            __a.lock_or_recover().config = data.llm;
+        }
         s.settings_storage_format = data.storage_format;
-        s.sleep_config      = data.sleep;
+        s.sleep_config = data.sleep;
         s.screenshot_config = data.screenshot;
         if let Some(os_active) = skill_data::dnd::query_os_active() {
-            if !os_active { s.dnd.lock_or_recover().active = false; }
+            if !os_active {
+                s.dnd.lock_or_recover().active = false;
+            }
         }
         neutts_apply_config(&data.neutts);
         for pd in &data.paired {
             let transport = crate::helpers::transport_from_id(&pd.id);
             s.discovered.push(DiscoveredDevice {
-                id: pd.id.clone(), name: pd.name.clone(),
-                last_seen: pd.last_seen, last_rssi: 0,
+                id: pd.id.clone(),
+                name: pd.name.clone(),
+                last_seen: pd.last_seen,
+                last_rssi: 0,
                 is_paired: true,
                 is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
                 transport,
@@ -972,14 +973,15 @@ fn setup_background_tasks(app: &mut tauri::App) {
         let mut updater_platform_unsupported = false;
         tokio::time::sleep(Duration::from_secs(30)).await;
         loop {
-            if updater_platform_unsupported { break; }
+            if updater_platform_unsupported {
+                break;
+            }
             eprintln!("[updater] running background update check");
             match app_upd.updater() {
                 Err(e) => eprintln!("[updater] cannot get updater: {e}"),
                 Ok(updater) => {
-                    let result = tokio::time::timeout(
-                        Duration::from_secs(30), updater.check(),
-                    ).await;
+                    let result =
+                        tokio::time::timeout(Duration::from_secs(30), updater.check()).await;
                     match result {
                         Err(_) => eprintln!("[updater] check timed out after 30 s"),
                         Ok(Ok(Some(update))) => {
@@ -1018,7 +1020,11 @@ fn setup_background_tasks(app: &mut tauri::App) {
                 let g = r.lock_or_recover();
                 g.update_check_interval_secs
             };
-            let sleep_secs = if interval_secs == 0 { 60 } else { interval_secs };
+            let sleep_secs = if interval_secs == 0 {
+                60
+            } else {
+                interval_secs
+            };
             tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
         }
     });
@@ -1054,7 +1060,8 @@ fn setup_background_tasks(app: &mut tauri::App) {
                 let iv = effective_interval;
                 let outcome = tokio::task::spawn_blocking(move || {
                     skill_skills::sync::sync_skills(&sd, iv, None)
-                }).await;
+                })
+                .await;
 
                 match outcome {
                     Ok(skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. }) => {
@@ -1073,7 +1080,11 @@ fn setup_background_tasks(app: &mut tauri::App) {
                 }
             }
 
-            let sleep_secs = if interval_secs == 0 { 300 } else { interval_secs.min(3600) };
+            let sleep_secs = if interval_secs == 0 {
+                300
+            } else {
+                interval_secs.min(3600)
+            };
             tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
         }
     });
@@ -1086,8 +1097,10 @@ fn setup_background_tasks(app: &mut tauri::App) {
             let os_now = skill_data::dnd::query_os_active();
 
             // DND state is behind its own lock — no AppState lock needed.
-            let dnd_arc = app_dnd.state::<Mutex<Box<AppState>>>()
-                .lock_or_recover().dnd_arc();
+            let dnd_arc = app_dnd
+                .state::<Mutex<Box<AppState>>>()
+                .lock_or_recover()
+                .dnd_arc();
             let (prev, app_active) = {
                 let d = dnd_arc.lock_or_recover();
                 (d.os_active, d.active)
@@ -1098,7 +1111,9 @@ fn setup_background_tasks(app: &mut tauri::App) {
 
                 let payload = serde_json::json!({ "os_active": os_now });
                 let _ = app_dnd.emit("dnd-os-changed", &payload);
-                app_dnd.state::<WsBroadcaster>().send("dnd-os-changed", &payload);
+                app_dnd
+                    .state::<WsBroadcaster>()
+                    .send("dnd-os-changed", &payload);
 
                 if os_now == Some(false) && app_active {
                     eprintln!(
@@ -1107,12 +1122,13 @@ fn setup_background_tasks(app: &mut tauri::App) {
                     );
                     {
                         let mut d = dnd_arc.lock_or_recover();
-                        d.active      = false;
+                        d.active = false;
                         d.below_ticks = 0;
                         d.focus_samples.clear();
                     }
                     let _ = app_dnd.emit("dnd-state-changed", false);
-                    app_dnd.state::<WsBroadcaster>()
+                    app_dnd
+                        .state::<WsBroadcaster>()
                         .send("dnd-state-changed", &false);
                 }
             }
@@ -1150,18 +1166,25 @@ pub fn run() {
         type VectoredHandler = unsafe extern "system" fn(*mut ExceptionPointers) -> i32;
 
         extern "system" {
-            fn AddVectoredExceptionHandler(first: u32, handler: VectoredHandler) -> *mut core::ffi::c_void;
+            fn AddVectoredExceptionHandler(
+                first: u32,
+                handler: VectoredHandler,
+            ) -> *mut core::ffi::c_void;
         }
 
         const EXCEPTION_ACCESS_VIOLATION: u32 = 0xC000_0005;
         const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
         unsafe extern "system" fn crash_handler(info: *mut ExceptionPointers) -> i32 {
-            if info.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
+            if info.is_null() {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
             // SAFETY: `info` is non-null (checked above) and points to a valid
             // OS-provided `ExceptionPointers` structure for the duration of this call.
             let record = unsafe { (*info).exception_record };
-            if record.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
+            if record.is_null() {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
             // SAFETY: `record` is non-null (checked above) and points to a valid
             // OS-provided `ExceptionRecord` structure.
             let code = unsafe { (*record).exception_code };
@@ -1170,7 +1193,7 @@ pub fn run() {
                 let addr = unsafe { (*record).exception_address as usize };
                 // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
                 let info0 = unsafe { (*record).exception_information[0] }; // 0=read, 1=write, 8=DEP
-                // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
+                                                                           // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
                 let info1 = unsafe { (*record).exception_information[1] }; // target address
                 let op = match info0 {
                     0 => "reading",
@@ -1181,7 +1204,10 @@ pub fn run() {
                 eprintln!("\n=== STATUS_ACCESS_VIOLATION ===");
                 eprintln!("Faulting instruction: 0x{addr:016x}");
                 eprintln!("Operation: {op} address 0x{info1:016x}");
-                eprintln!("Thread: {:?}", std::thread::current().name().unwrap_or("unnamed"));
+                eprintln!(
+                    "Thread: {:?}",
+                    std::thread::current().name().unwrap_or("unnamed")
+                );
                 eprintln!("\nBacktrace:");
                 eprintln!("{}", std::backtrace::Backtrace::force_capture());
                 eprintln!("=== END CRASH INFO ===\n");
@@ -1271,87 +1297,210 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(Mutex::new(AppState::new_boxed()))
         .manage(job_queue::JobQueue::new())
-        .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
+        .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(
+            None,
+        ))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
         .manage(std::sync::Arc::new(GlobalEegIndex::new()))
-        .setup(|app| { setup_app(app) })
+        .setup(|app| setup_app(app))
         .invoke_handler(tauri::generate_handler![
-            subscribe_eeg, subscribe_ppg, subscribe_imu,
-            get_status, get_devices, get_supported_companies, get_device_capabilities,
-            set_preferred_device, pair_device, forget_device, retry_connect, cancel_retry,
-            open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
-            check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
-            check_screen_recording_permission, open_screen_recording_settings,
-            get_filter_config, set_filter_config, set_notch_preset,
-            get_storage_format, set_storage_format,
+            subscribe_eeg,
+            subscribe_ppg,
+            subscribe_imu,
+            get_status,
+            get_devices,
+            get_supported_companies,
+            get_device_capabilities,
+            set_preferred_device,
+            pair_device,
+            forget_device,
+            retry_connect,
+            cancel_retry,
+            open_bt_settings,
+            open_settings_window,
+            open_updates_window,
+            open_model_tab,
+            open_help_window,
+            check_accessibility_permission,
+            open_accessibility_settings,
+            open_notifications_settings,
+            check_screen_recording_permission,
+            open_screen_recording_settings,
+            get_filter_config,
+            set_filter_config,
+            set_notch_preset,
+            get_storage_format,
+            set_storage_format,
             get_latest_bands,
-            get_embedding_overlap, set_embedding_overlap,
+            get_embedding_overlap,
+            set_embedding_overlap,
             get_gpu_stats,
-            get_log_config, set_log_config,
-            get_eeg_model_config, set_eeg_model_config, get_eeg_model_status,
-            trigger_weights_download, cancel_weights_download,
-            estimate_reembed, trigger_reembed,
-            get_umap_config, set_umap_config,
-            get_theme_and_language, set_theme, set_language,
-            get_accent_color, set_accent_color,
-            get_daily_goal, set_daily_goal,
-            get_goal_notified_date, set_goal_notified_date,
+            get_log_config,
+            set_log_config,
+            get_eeg_model_config,
+            set_eeg_model_config,
+            get_eeg_model_status,
+            trigger_weights_download,
+            cancel_weights_download,
+            estimate_reembed,
+            trigger_reembed,
+            get_umap_config,
+            set_umap_config,
+            get_theme_and_language,
+            set_theme,
+            set_language,
+            get_accent_color,
+            set_accent_color,
+            get_daily_goal,
+            set_daily_goal,
+            get_goal_notified_date,
+            set_goal_notified_date,
             get_daily_recording_mins,
-            get_hooks, set_hooks, get_hook_statuses, open_session_for_timestamp,
-            suggest_hook_distances, suggest_hook_keywords, get_hook_log, get_hook_log_count,
-            quit_app, open_label_window, open_labels_window, open_focus_timer_window,
-            submit_label, close_label_window,
-            query_annotations, get_recent_labels, delete_label, update_label, get_queue_stats,
-            list_embedding_models, get_embedding_model, set_embedding_model,
-            reembed_all_labels, get_stale_label_count,
-            rebuild_label_index, search_labels_by_text, search_labels_by_eeg,
+            get_hooks,
+            set_hooks,
+            get_hook_statuses,
+            open_session_for_timestamp,
+            suggest_hook_distances,
+            suggest_hook_keywords,
+            get_hook_log,
+            get_hook_log_count,
+            quit_app,
+            open_label_window,
+            open_labels_window,
+            open_focus_timer_window,
+            submit_label,
+            close_label_window,
+            query_annotations,
+            get_recent_labels,
+            delete_label,
+            update_label,
+            get_queue_stats,
+            list_embedding_models,
+            get_embedding_model,
+            set_embedding_model,
+            reembed_all_labels,
+            get_stale_label_count,
+            rebuild_label_index,
+            search_labels_by_text,
+            search_labels_by_eeg,
             open_search_window,
-            open_history_window, list_sessions, list_session_days, list_sessions_for_day,
-            stream_sessions, get_history_stats, delete_session,
-            open_compare_window, open_compare_window_with_sessions,
-            get_session_metrics, get_session_timeseries, get_csv_metrics, get_day_metrics_batch,
-            list_embedding_sessions, get_sleep_stages,
-            compute_umap_compare, enqueue_umap_compare, poll_job,
-            get_label_shortcut, set_label_shortcut,
-            get_search_shortcut, set_search_shortcut,
-            get_settings_shortcut, set_settings_shortcut,
-            get_calibration_shortcut, set_calibration_shortcut,
-            get_help_shortcut, set_help_shortcut,
-            get_history_shortcut, set_history_shortcut,
-            get_api_shortcut, set_api_shortcut,
-            get_theme_shortcut, set_theme_shortcut,
-            get_focus_timer_shortcut, set_focus_timer_shortcut,
-            open_calibration_window, open_and_start_calibration, close_calibration_window,
-            list_calibration_profiles, get_calibration_profile, get_active_calibration,
-            set_active_calibration, create_calibration_profile, update_calibration_profile,
-            delete_calibration_profile, record_calibration_completed,
-            get_calibration_config, set_calibration_config,
+            open_history_window,
+            list_sessions,
+            list_session_days,
+            list_sessions_for_day,
+            stream_sessions,
+            get_history_stats,
+            delete_session,
+            open_compare_window,
+            open_compare_window_with_sessions,
+            get_session_metrics,
+            get_session_timeseries,
+            get_csv_metrics,
+            get_day_metrics_batch,
+            list_embedding_sessions,
+            get_sleep_stages,
+            compute_umap_compare,
+            enqueue_umap_compare,
+            poll_job,
+            get_label_shortcut,
+            set_label_shortcut,
+            get_search_shortcut,
+            set_search_shortcut,
+            get_settings_shortcut,
+            set_settings_shortcut,
+            get_calibration_shortcut,
+            set_calibration_shortcut,
+            get_help_shortcut,
+            set_help_shortcut,
+            get_history_shortcut,
+            set_history_shortcut,
+            get_api_shortcut,
+            set_api_shortcut,
+            get_theme_shortcut,
+            set_theme_shortcut,
+            get_focus_timer_shortcut,
+            set_focus_timer_shortcut,
+            open_calibration_window,
+            open_and_start_calibration,
+            close_calibration_window,
+            list_calibration_profiles,
+            get_calibration_profile,
+            get_active_calibration,
+            set_active_calibration,
+            create_calibration_profile,
+            update_calibration_profile,
+            delete_calibration_profile,
+            record_calibration_completed,
+            get_calibration_config,
+            set_calibration_config,
             emit_calibration_event,
-            get_app_version, get_app_name, is_session_live, set_update_ready,
-            get_data_dir, set_data_dir, open_skill_dir,
-            get_ws_clients, get_ws_request_log, get_ws_port,
-            get_ws_config, set_ws_config,
-            get_api_token, set_api_token,
-            get_autostart_enabled, set_autostart_enabled,
-            get_update_check_interval, set_update_check_interval,
-            get_skills_refresh_interval, set_skills_refresh_interval,
-            get_skills_sync_on_launch, set_skills_sync_on_launch,
-            get_skills_last_sync, sync_skills_now,
-            list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
-            get_openbci_config, set_openbci_config, list_serial_ports,
-            get_device_api_config, set_device_api_config,
-            get_scanner_config, set_scanner_config, get_device_log, get_cortex_ws_state,
-            get_neutts_config, set_neutts_config, pick_ref_wav_file,
-            get_tts_preload, set_tts_preload,
-            get_active_window_tracking, set_active_window_tracking, get_active_window,
-            get_input_activity_tracking, set_input_activity_tracking,
+            get_app_version,
+            get_app_name,
+            is_session_live,
+            set_update_ready,
+            get_data_dir,
+            set_data_dir,
+            open_skill_dir,
+            get_ws_clients,
+            get_ws_request_log,
+            get_ws_port,
+            get_ws_config,
+            set_ws_config,
+            get_api_token,
+            set_api_token,
+            get_autostart_enabled,
+            set_autostart_enabled,
+            get_update_check_interval,
+            set_update_check_interval,
+            get_skills_refresh_interval,
+            set_skills_refresh_interval,
+            get_skills_sync_on_launch,
+            set_skills_sync_on_launch,
+            get_skills_last_sync,
+            sync_skills_now,
+            list_skills,
+            get_disabled_skills,
+            set_disabled_skills,
+            get_skills_license,
+            get_openbci_config,
+            set_openbci_config,
+            list_serial_ports,
+            get_device_api_config,
+            set_device_api_config,
+            get_scanner_config,
+            set_scanner_config,
+            get_device_log,
+            get_cortex_ws_state,
+            get_neutts_config,
+            set_neutts_config,
+            pick_ref_wav_file,
+            get_tts_preload,
+            set_tts_preload,
+            get_active_window_tracking,
+            set_active_window_tracking,
+            get_active_window,
+            get_input_activity_tracking,
+            set_input_activity_tracking,
             get_last_input_activity,
-            get_recent_active_windows, get_recent_input_activity,
+            get_recent_active_windows,
+            get_recent_input_activity,
             get_input_buckets,
-            get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
-            get_sleep_config, set_sleep_config,
-            get_llm_config, set_llm_config, pick_gguf_file,
-            web_cache_stats, web_cache_list, web_cache_clear, web_cache_remove_domain, web_cache_remove_entry,
+            get_dnd_config,
+            set_dnd_config,
+            get_dnd_active,
+            get_dnd_status,
+            test_dnd,
+            list_focus_modes,
+            get_sleep_config,
+            set_sleep_config,
+            get_llm_config,
+            set_llm_config,
+            pick_gguf_file,
+            web_cache_stats,
+            web_cache_list,
+            web_cache_clear,
+            web_cache_remove_domain,
+            web_cache_remove_entry,
             // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)
             #[cfg(feature = "llm")]
             get_llm_catalog,
@@ -1429,20 +1578,30 @@ pub fn run() {
             cancel_tool_call,
             #[cfg(feature = "llm")]
             get_model_hardware_fit,
-            get_screenshot_config, set_screenshot_config,
-            estimate_screenshot_reembed, rebuild_screenshot_embeddings,
-            get_screenshots_around, search_screenshots_by_vector,
+            get_screenshot_config,
+            set_screenshot_config,
+            estimate_screenshot_reembed,
+            rebuild_screenshot_embeddings,
+            get_screenshots_around,
+            search_screenshots_by_vector,
             search_screenshots_by_image,
             search_screenshots_by_text,
-            check_ocr_models_ready, download_ocr_models,
-            get_screenshot_metrics, get_screenshots_dir,
-            tts_unload, tts_get_voice, tts_list_neutts_voices,
+            check_ocr_models_ready,
+            download_ocr_models,
+            get_screenshot_metrics,
+            get_screenshots_dir,
+            tts_unload,
+            tts_get_voice,
+            tts_list_neutts_voices,
             session_connect::connect_openbci,
             open_api_window,
             open_whats_new_window,
-            get_whats_new_seen_version, dismiss_whats_new,
-            open_onboarding_window, get_onboarding_model_download_order,
-            complete_onboarding, get_onboarding_complete,
+            get_whats_new_seen_version,
+            dismiss_whats_new,
+            open_onboarding_window,
+            get_onboarding_model_download_order,
+            complete_onboarding,
+            get_onboarding_complete,
             commands::search_embeddings,
             global_eeg_index::get_global_index_stats,
             global_eeg_index::rebuild_global_eeg_index,
@@ -1455,8 +1614,12 @@ pub fn run() {
             commands::save_dot_file,
             commands::save_svg_file,
             open_session_window,
-            tts_init, tts_speak, tts_list_voices, tts_set_voice,
-            get_about_info, open_about_window,
+            tts_init,
+            tts_speak,
+            tts_list_voices,
+            tts_set_voice,
+            get_about_info,
+            open_about_window,
             show_main_window,
         ])
         .build(tauri::generate_context!())
@@ -1478,10 +1641,15 @@ pub fn run() {
                             eprintln!("[window-event] label={label} Moved({},{})", pos.x, pos.y);
                         }
                         tauri::WindowEvent::Resized(size) => {
-                            eprintln!("[window-event] label={label} Resized({}x{})", size.width, size.height);
+                            eprintln!(
+                                "[window-event] label={label} Resized({}x{})",
+                                size.width, size.height
+                            );
                         }
                         tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                            eprintln!("[window-event] label={label} ScaleFactorChanged({scale_factor})");
+                            eprintln!(
+                                "[window-event] label={label} ScaleFactorChanged({scale_factor})"
+                            );
                         }
                         _ => {}
                     }
@@ -1507,7 +1675,9 @@ pub fn run() {
                             let _ = win.hide();
                         }
                     } else {
-                        eprintln!("[run-event] explicit exit requested — running blocking shutdown");
+                        eprintln!(
+                            "[run-event] explicit exit requested — running blocking shutdown"
+                        );
                         run_blocking_exit_shutdown(app);
                     }
                 }
@@ -1540,5 +1710,3 @@ pub fn run() {
             }
         });
 }
-
-

@@ -6,7 +6,7 @@
 
 - [x] record SNR too, so we can filter out by it later.
 
-- [ ] send raw messages to the LLM actor and let it apply the model's built-in chat template via `model.apply_chat_template()` (see `skill-llm/src/handlers.rs`).
+- [x] send raw messages to the LLM actor and let it apply the model's built-in chat template via `model.apply_chat_template()` (see `skill-llm/src/handlers.rs`).
 
 - [x] tool-call self-healing: re-prompt the model when it emits a garbled tool call that cannot be parsed, injecting a corrective message with the raw output and asking it to re-emit in the correct format (use the existing multi-round loop).
 
@@ -25,3 +25,21 @@
 - [x] add integration tests for DSP pipeline (skill-eeg), headless browser (skill-headless), and screenshots (skill-screenshots).
 
 - [x] extract search page business logic into `search-logic.ts` with tests.
+
+- [x] add Biome frontend linter/formatter with CI integration.
+
+- [x] scope `incremental = false` workaround to candle-core only (faster dev builds).
+
+- [x] add `cargo-deny` for dependency auditing (licenses, duplicates, advisories).
+
+- [x] add `thiserror` structured error types to core crates (skill-data, skill-llm, skill-tools).
+
+- [x] add property-based tests (proptest) for tool-call parser and EEG DSP.
+
+- [x] add CONTRIBUTING.md with build/test/workflow docs.
+
+- [x] enhance pre-commit hook (Rust fmt, Biome format, i18n sync).
+
+- [x] add unit tests for skill-headless InterceptStore.
+
+- [x] strip console.log/debug in production builds (esbuild pure).

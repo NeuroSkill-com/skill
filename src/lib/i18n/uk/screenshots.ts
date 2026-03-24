@@ -12,7 +12,8 @@ const screenshots: Record<string, string> = {
   "screenshots.sessionOnlyToggle": "Screenshots",
   "screenshots.sessionOnlyDesc": "Screenshots",
   "screenshots.interval": "Інтервал захоплення",
-  "screenshots.intervalDesc": "Вирівняно з епохами вбудовування ЕЕГ (по 5 с). 1× = кожна епоха, 2× = кожна друга, до 12× (60 с).",
+  "screenshots.intervalDesc":
+    "Вирівняно з епохами вбудовування ЕЕГ (по 5 с). 1× = кожна епоха, 2× = кожна друга, до 12× (60 с).",
   "screenshots.intervalUnit": "с",
   "screenshots.intervalEpoch": "епоха",
   "screenshots.imageSize": "Screenshots",
@@ -25,7 +26,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Screenshots",
   "screenshots.backendFastembed": "fastembed (ONNX)",
   "screenshots.backendMmproj": "mmproj",
-  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
+  "screenshots.backendLlmVlm": "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 — 512d",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 — 768d",
   "screenshots.reembed": "Screenshots",
@@ -46,13 +47,16 @@ const screenshots: Record<string, string> = {
   "screenshots.unembeddedCount": "Screenshots",
   "screenshots.staleCount": "Screenshots",
   "screenshots.permissionRequired": "Потрібен дозвіл на запис екрана",
-  "screenshots.permissionDesc": "macOS потребує дозволу на запис екрана та системного аудіо для захоплення вікон інших програм. Без нього знімки можуть бути порожніми або показувати лише вашу програму.",
+  "screenshots.permissionDesc":
+    "macOS потребує дозволу на запис екрана та системного аудіо для захоплення вікон інших програм. Без нього знімки можуть бути порожніми або показувати лише вашу програму.",
   "screenshots.permissionGranted": "Дозвіл на запис екрана надано.",
   "screenshots.openPermissionSettings": "Відкрити налаштування запису екрана",
   "screenshots.ocrToggle": "Вилучення тексту OCR",
-  "screenshots.ocrToggleDesc": "Вилучати текст зі знімків екрана для текстового пошуку. Працює на зображенні повної роздільності перед зменшенням.",
+  "screenshots.ocrToggleDesc":
+    "Вилучати текст зі знімків екрана для текстового пошуку. Працює на зображенні повної роздільності перед зменшенням.",
   "screenshots.gpuToggle": "Прискорення GPU",
-  "screenshots.gpuToggleDesc": "Використовувати GPU для вбудовування зображень та OCR. Вимкніть для примусового використання CPU (звільняє GPU для LLM/EEG).",
+  "screenshots.gpuToggleDesc":
+    "Використовувати GPU для вбудовування зображень та OCR. Вимкніть для примусового використання CPU (звільняє GPU для LLM/EEG).",
   "screenshots.ocrEngineSelect": "Двигун OCR",
   "screenshots.ocrEngineAppleVision": "Apple Vision — GPU / Neural Engine (рекомендовано на macOS)",
   "screenshots.ocrEngineOcrs": "ocrs — локальний CPU на базі rten (кросплатформний)",
@@ -61,7 +65,8 @@ const screenshots: Record<string, string> = {
   "screenshots.ocrInference": "Інференс",
   "screenshots.ocrTitle": "Вилучення тексту OCR",
   "screenshots.ocrEngine": "OCR на пристрої",
-  "screenshots.ocrDesc": "Текст вилучається з кожного знімка екрана у повній роздільності перед зменшенням за допомогою двигуна ocrs. Вилучений текст вбудовується через BGE-Small-EN-v1.5 та індексується в окремому індексі HNSW для семантичного текстового пошуку. Моделі OCR (~10 МБ кожна) завантажуються автоматично при першому використанні.",
+  "screenshots.ocrDesc":
+    "Текст вилучається з кожного знімка екрана у повній роздільності перед зменшенням за допомогою двигуна ocrs. Вилучений текст вбудовується через BGE-Small-EN-v1.5 та індексується в окремому індексі HNSW для семантичного текстового пошуку. Моделі OCR (~10 МБ кожна) завантажуються автоматично при першому використанні.",
   "screenshots.ocrDetModel": "Модель виявлення",
   "screenshots.ocrRecModel": "Модель розпізнавання",
   "screenshots.ocrTextEmbed": "Текстове вбудовування",
@@ -87,7 +92,8 @@ const screenshots: Record<string, string> = {
   "screenshots.perfQueue": "Глибина черги",
   "screenshots.perfDrops": "Пропущено",
   "screenshots.perfBackoff": "Затримка",
-  "screenshots.perfDropsHint": "потік вбудовування надто повільний — інтервал автоматично збільшено, відновиться коли черга спорожніє",
+  "screenshots.perfDropsHint":
+    "потік вбудовування надто повільний — інтервал автоматично збільшено, відновиться коли черга спорожніє",
   "screenshots.perfErrors": "помилки",
 };
 

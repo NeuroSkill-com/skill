@@ -2,9 +2,9 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Built-in tool definitions — JSON Schema specs for each tool the LLM can invoke.
 
-use serde_json::json;
 use crate::parse::{Tool, ToolFunction};
 use crate::types::LlmToolConfig;
+use serde_json::json;
 
 /// Return the full set of built-in tool definitions.
 pub fn builtin_llm_tools() -> Vec<Tool> {
@@ -304,10 +304,18 @@ pub fn skill_api_tool() -> Tool {
 
 /// Check whether a tool name is a known built-in tool (regardless of enabled state).
 pub fn is_known_builtin_tool(name: &str) -> bool {
-    matches!(name,
-        "date" | "location" | "web_search" | "web_fetch" |
-        "bash" | "read_file" | "write_file" | "edit_file" |
-        "search_output" | "skill"
+    matches!(
+        name,
+        "date"
+            | "location"
+            | "web_search"
+            | "web_fetch"
+            | "bash"
+            | "read_file"
+            | "write_file"
+            | "edit_file"
+            | "search_output"
+            | "skill"
     )
 }
 
@@ -317,21 +325,52 @@ pub fn is_known_builtin_tool(name: &str) -> bool {
 /// return a targeted hint instead of the generic "unsupported tool" error,
 /// dramatically reducing wasted round-trips.
 pub fn is_skill_api_command(name: &str) -> bool {
-    matches!(name,
-        "status" | "sessions" | "session_metrics" | "say" | "notify" |
-        "label" | "search_labels" | "interactive_search" | "search" |
-        "compare" | "sleep" | "calibrate" | "timer" |
-        "run_calibration" | "list_calibrations" | "get_calibration" |
-        "create_calibration" | "update_calibration" | "delete_calibration" |
-        "dnd" | "dnd_set" |
-        "hooks_status" | "hooks_get" | "hooks_set" | "hooks_suggest" | "hooks_log" |
-        "umap" | "umap_poll" |
-        "llm_status" | "llm_catalog" | "llm_downloads" | "llm_hardware_fit" |
-        "search_screenshots" | "screenshots_around" |
-        "screenshots_for_eeg" | "eeg_for_screenshots" |
-        "search_screenshots_vision" | "search_screenshots_by_image_b64" |
-        "sleep_schedule" | "sleep_schedule_set" |
-        "health_summary" | "health_query" | "health_metric_types" | "health_sync"
+    matches!(
+        name,
+        "status"
+            | "sessions"
+            | "session_metrics"
+            | "say"
+            | "notify"
+            | "label"
+            | "search_labels"
+            | "interactive_search"
+            | "search"
+            | "compare"
+            | "sleep"
+            | "calibrate"
+            | "timer"
+            | "run_calibration"
+            | "list_calibrations"
+            | "get_calibration"
+            | "create_calibration"
+            | "update_calibration"
+            | "delete_calibration"
+            | "dnd"
+            | "dnd_set"
+            | "hooks_status"
+            | "hooks_get"
+            | "hooks_set"
+            | "hooks_suggest"
+            | "hooks_log"
+            | "umap"
+            | "umap_poll"
+            | "llm_status"
+            | "llm_catalog"
+            | "llm_downloads"
+            | "llm_hardware_fit"
+            | "search_screenshots"
+            | "screenshots_around"
+            | "screenshots_for_eeg"
+            | "eeg_for_screenshots"
+            | "search_screenshots_vision"
+            | "search_screenshots_by_image_b64"
+            | "sleep_schedule"
+            | "sleep_schedule_set"
+            | "health_summary"
+            | "health_query"
+            | "health_metric_types"
+            | "health_sync"
     )
 }
 
@@ -390,16 +429,16 @@ pub fn resolve_skill_alias(name: &str) -> Option<String> {
         }
         // Skill folder names map to a primary command:
         match cmd {
-            "hooks"        => return Some("hooks_status".to_string()),
-            "labels"       => return Some("search_labels".to_string()),
-            "search"       => return Some("interactive_search".to_string()),
-            "dnd"          => return Some("dnd".to_string()),
-            "llm"          => return Some("llm_status".to_string()),
-            "protocols"    => return Some("list_calibrations".to_string()),
-            "screenshots"  => return Some("search_screenshots".to_string()),
-            "streaming"    => return Some("status".to_string()),
-            "transport"    => return Some("status".to_string()),
-            "recipes"      => return Some("status".to_string()),
+            "hooks" => return Some("hooks_status".to_string()),
+            "labels" => return Some("search_labels".to_string()),
+            "search" => return Some("interactive_search".to_string()),
+            "dnd" => return Some("dnd".to_string()),
+            "llm" => return Some("llm_status".to_string()),
+            "protocols" => return Some("list_calibrations".to_string()),
+            "screenshots" => return Some("search_screenshots".to_string()),
+            "streaming" => return Some("status".to_string()),
+            "transport" => return Some("status".to_string()),
+            "recipes" => return Some("status".to_string()),
             "data-reference" | "data_reference" => return Some("status".to_string()),
             _ => {}
         }
@@ -415,19 +454,19 @@ pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
         return false;
     }
     match name {
-        "date"          => config.date,
-        "location"      => config.location,
-        "web_search"    => config.web_search,
-        "web_fetch"     => config.web_fetch,
-        "bash"          => config.bash,
-        "read_file"     => config.read_file,
-        "write_file"    => config.write_file,
-        "edit_file"     => config.edit_file,
+        "date" => config.date,
+        "location" => config.location,
+        "web_search" => config.web_search,
+        "web_fetch" => config.web_fetch,
+        "bash" => config.bash,
+        "read_file" => config.read_file,
+        "write_file" => config.write_file,
+        "edit_file" => config.edit_file,
         // search_output is automatically enabled when bash is enabled
         "search_output" => config.bash,
         // skill API tool — enabled when toggle is on AND port is known
-        "skill"         => config.skill_api && config.skill_api_port > 0,
-        _               => false,
+        "skill" => config.skill_api && config.skill_api_port > 0,
+        _ => false,
     }
 }
 
@@ -468,7 +507,11 @@ mod tests {
     #[test]
     fn all_builtin_tools_have_function_type() {
         for tool in builtin_llm_tools() {
-            assert_eq!(tool.tool_type, "function", "tool {} has wrong type", tool.function.name);
+            assert_eq!(
+                tool.tool_type, "function",
+                "tool {} has wrong type",
+                tool.function.name
+            );
         }
     }
 
@@ -484,14 +527,16 @@ mod tests {
         for tool in builtin_llm_tools() {
             assert!(
                 tool.function.description.is_some(),
-                "tool {} missing description", tool.function.name
+                "tool {} missing description",
+                tool.function.name
             );
         }
     }
 
     #[test]
     fn builtin_tools_contain_expected_names() {
-        let names: Vec<String> = builtin_llm_tools().iter()
+        let names: Vec<String> = builtin_llm_tools()
+            .iter()
             .map(|t| t.function.name.clone())
             .collect();
         assert!(names.contains(&"date".into()));
@@ -514,7 +559,10 @@ mod tests {
 
     #[test]
     fn master_switch_disables_all_tools() {
-        let cfg = LlmToolConfig { enabled: false, ..Default::default() };
+        let cfg = LlmToolConfig {
+            enabled: false,
+            ..Default::default()
+        };
         assert!(!is_builtin_tool_enabled(&cfg, "date"));
         assert!(!is_builtin_tool_enabled(&cfg, "web_search"));
         assert!(!is_builtin_tool_enabled(&cfg, "bash"));
@@ -534,7 +582,10 @@ mod tests {
         let mut cfg = LlmToolConfig::default();
         cfg.skill_api = true;
         cfg.skill_api_port = 0;
-        assert!(!is_builtin_tool_enabled(&cfg, "skill"), "skill needs port > 0");
+        assert!(
+            !is_builtin_tool_enabled(&cfg, "skill"),
+            "skill needs port > 0"
+        );
 
         cfg.skill_api_port = 8080;
         assert!(is_builtin_tool_enabled(&cfg, "skill"));
@@ -612,17 +663,26 @@ mod tests {
 
     #[test]
     fn hyphenated_prefix_resolves() {
-        assert_eq!(resolve_skill_alias("neuroskill-sessions"), Some("sessions".into()));
+        assert_eq!(
+            resolve_skill_alias("neuroskill-sessions"),
+            Some("sessions".into())
+        );
     }
 
     #[test]
     fn underscore_prefix_resolves() {
-        assert_eq!(resolve_skill_alias("neuroskill_sessions"), Some("sessions".into()));
+        assert_eq!(
+            resolve_skill_alias("neuroskill_sessions"),
+            Some("sessions".into())
+        );
     }
 
     #[test]
     fn hooks_folder_maps_to_hooks_status() {
-        assert_eq!(resolve_skill_alias("neuroskill-hooks"), Some("hooks_status".into()));
+        assert_eq!(
+            resolve_skill_alias("neuroskill-hooks"),
+            Some("hooks_status".into())
+        );
     }
 
     #[test]
@@ -635,31 +695,64 @@ mod tests {
 
     #[test]
     fn search_images_alias_resolves() {
-        assert_eq!(resolve_skill_alias("search-images"), Some("search_screenshots".into()));
+        assert_eq!(
+            resolve_skill_alias("search-images"),
+            Some("search_screenshots".into())
+        );
     }
 
     #[test]
     fn screenshot_cli_aliases_resolve() {
-        assert_eq!(resolve_skill_alias("screenshots-around"), Some("screenshots_around".into()));
-        assert_eq!(resolve_skill_alias("screenshots-for-eeg"), Some("screenshots_for_eeg".into()));
-        assert_eq!(resolve_skill_alias("eeg-for-screenshots"), Some("eeg_for_screenshots".into()));
+        assert_eq!(
+            resolve_skill_alias("screenshots-around"),
+            Some("screenshots_around".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("screenshots-for-eeg"),
+            Some("screenshots_for_eeg".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("eeg-for-screenshots"),
+            Some("eeg_for_screenshots".into())
+        );
     }
 
     #[test]
     fn neuroskill_screenshots_resolves_to_search() {
-        assert_eq!(resolve_skill_alias("neuroskill-screenshots"), Some("search_screenshots".into()));
+        assert_eq!(
+            resolve_skill_alias("neuroskill-screenshots"),
+            Some("search_screenshots".into())
+        );
     }
 
     #[test]
     fn hyphenated_cli_names_resolve() {
         // Generic hyphen-to-underscore fallback for any known command
-        assert_eq!(resolve_skill_alias("search-labels"), Some("search_labels".into()));
-        assert_eq!(resolve_skill_alias("sleep-schedule"), Some("sleep_schedule".into()));
-        assert_eq!(resolve_skill_alias("session-metrics"), Some("session_metrics".into()));
-        assert_eq!(resolve_skill_alias("hooks-status"), Some("hooks_status".into()));
+        assert_eq!(
+            resolve_skill_alias("search-labels"),
+            Some("search_labels".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("sleep-schedule"),
+            Some("sleep_schedule".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("session-metrics"),
+            Some("session_metrics".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("hooks-status"),
+            Some("hooks_status".into())
+        );
         assert_eq!(resolve_skill_alias("dnd-set"), Some("dnd_set".into()));
-        assert_eq!(resolve_skill_alias("interactive-search"), Some("interactive_search".into()));
-        assert_eq!(resolve_skill_alias("health-summary"), Some("health_summary".into()));
+        assert_eq!(
+            resolve_skill_alias("interactive-search"),
+            Some("interactive_search".into())
+        );
+        assert_eq!(
+            resolve_skill_alias("health-summary"),
+            Some("health_summary".into())
+        );
     }
 
     #[test]

@@ -2,112 +2,112 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Full context viewer modal — shows the entire prompt as it would be sent to the LLM. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import { type Message, type BandSnapshot, type ToolConfig,
-           buildUserContent, estimateTokens } from "$lib/chat-types";
-  import { buildEegBlock } from "$lib/chat-eeg";
+import { buildEegBlock } from "$lib/chat-eeg";
+import { type BandSnapshot, buildUserContent, estimateTokens, type Message, type ToolConfig } from "$lib/chat-types";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Props {
-    messages: Message[];
-    systemPrompt: string;
-    eegActive: boolean;
-    latestBands: BandSnapshot | null;
-    toolConfig: ToolConfig;
-    supportsTools: boolean;
-    nCtx: number;
-    onClose: () => void;
+interface Props {
+  messages: Message[];
+  systemPrompt: string;
+  eegActive: boolean;
+  latestBands: BandSnapshot | null;
+  toolConfig: ToolConfig;
+  supportsTools: boolean;
+  nCtx: number;
+  onClose: () => void;
+}
+
+let { messages, systemPrompt, eegActive, latestBands, toolConfig, supportsTools, nCtx, onClose }: Props = $props();
+
+/** Reconstruct the message list as it would be sent to the API. */
+const apiMessages = $derived.by(() => {
+  const result: { role: string; content: string; label?: string }[] = [];
+
+  // System prompt
+  const systemParts: string[] = [];
+  if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
+  if (eegActive && latestBands) systemParts.push(buildEegBlock(latestBands));
+  if (systemParts.length) {
+    result.push({ role: "system", content: systemParts.join("\n\n"), label: t("chat.ctx.system") });
   }
 
-  let {
-    messages, systemPrompt, eegActive, latestBands,
-    toolConfig, supportsTools, nCtx, onClose,
-  }: Props = $props();
+  // Conversation messages
+  for (const m of messages) {
+    if (m.pending) continue;
 
-  /** Reconstruct the message list as it would be sent to the API. */
-  const apiMessages = $derived.by(() => {
-    const result: { role: string; content: string; label?: string }[] = [];
+    if (m.role === "user") {
+      const content = m.attachments?.length
+        ? JSON.stringify(buildUserContent(m.content, m.attachments), null, 2)
+        : m.content;
+      result.push({ role: "user", content, label: t("chat.ctx.user") });
+    } else if (m.role === "assistant") {
+      // Reconstruct full assistant output including thinking
+      let full = "";
+      if (m.leadIn) full += `${m.leadIn}\n`;
+      if (m.thinking) full += `<think>\n${m.thinking}\n</think>\n`;
+      full += m.content;
 
-    // System prompt
-    const systemParts: string[] = [];
-    if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
-    if (eegActive && latestBands) systemParts.push(buildEegBlock(latestBands));
-    if (systemParts.length) {
-      result.push({ role: "system", content: systemParts.join("\n\n"), label: t("chat.ctx.system") });
-    }
+      result.push({ role: "assistant", content: full, label: t("chat.ctx.assistant") });
 
-    // Conversation messages
-    for (const m of messages) {
-      if (m.pending) continue;
-
-      if (m.role === "user") {
-        const content = m.attachments?.length
-          ? JSON.stringify(buildUserContent(m.content, m.attachments), null, 2)
-          : m.content;
-        result.push({ role: "user", content, label: t("chat.ctx.user") });
-      } else if (m.role === "assistant") {
-        // Reconstruct full assistant output including thinking
-        let full = "";
-        if (m.leadIn) full += m.leadIn + "\n";
-        if (m.thinking) full += `<think>\n${m.thinking}\n</think>\n`;
-        full += m.content;
-
-        result.push({ role: "assistant", content: full, label: t("chat.ctx.assistant") });
-
-        // Tool uses injected as separate messages
-        if (m.toolUses) {
-          for (const tu of m.toolUses) {
-            if (tu.args) {
-              result.push({
-                role: "assistant",
-                content: `[Tool Call: ${tu.tool}]\n${JSON.stringify(tu.args, null, 2)}`,
-                label: `${t("chat.ctx.toolDefs")} — ${tu.tool}`,
-              });
-            }
-            if (tu.result) {
-              result.push({
-                role: "tool",
-                content: typeof tu.result === "string" ? tu.result : JSON.stringify(tu.result, null, 2),
-                label: `${t("chat.ctx.toolResults")} — ${tu.tool}`,
-              });
-            }
+      // Tool uses injected as separate messages
+      if (m.toolUses) {
+        for (const tu of m.toolUses) {
+          if (tu.args) {
+            result.push({
+              role: "assistant",
+              content: `[Tool Call: ${tu.tool}]\n${JSON.stringify(tu.args, null, 2)}`,
+              label: `${t("chat.ctx.toolDefs")} — ${tu.tool}`,
+            });
+          }
+          if (tu.result) {
+            result.push({
+              role: "tool",
+              content: typeof tu.result === "string" ? tu.result : JSON.stringify(tu.result, null, 2),
+              label: `${t("chat.ctx.toolResults")} — ${tu.tool}`,
+            });
           }
         }
       }
     }
+  }
 
-    return result;
+  return result;
+});
+
+const totalTokens = $derived(apiMessages.reduce((acc, m) => acc + estimateTokens(m.content) + 10, 0));
+
+let copied = $state(false);
+
+function copyAll() {
+  const text = apiMessages.map((m) => `--- [${m.role.toUpperCase()}] ---\n${m.content}`).join("\n\n");
+  navigator.clipboard.writeText(text).then(() => {
+    copied = true;
+    setTimeout(() => (copied = false), 2000);
   });
+}
 
-  const totalTokens = $derived(
-    apiMessages.reduce((acc, m) => acc + estimateTokens(m.content) + 10, 0)
-  );
-
-  let copied = $state(false);
-
-  function copyAll() {
-    const text = apiMessages
-      .map(m => `--- [${m.role.toUpperCase()}] ---\n${m.content}`)
-      .join("\n\n");
-    navigator.clipboard.writeText(text).then(() => {
-      copied = true;
-      setTimeout(() => copied = false, 2000);
-    });
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    e.stopPropagation();
+    onClose();
   }
+}
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+/** Role → accent color for the left border. */
+function roleColor(role: string): string {
+  switch (role) {
+    case "system":
+      return "#8b5cf6";
+    case "user":
+      return "#3b82f6";
+    case "assistant":
+      return "#10b981";
+    case "tool":
+      return "#ef4444";
+    default:
+      return "#64748b";
   }
-
-  /** Role → accent color for the left border. */
-  function roleColor(role: string): string {
-    switch (role) {
-      case "system":    return "#8b5cf6";
-      case "user":      return "#3b82f6";
-      case "assistant": return "#10b981";
-      case "tool":      return "#ef4444";
-      default:          return "#64748b";
-    }
-  }
+}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

@@ -5,87 +5,87 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script module lang="ts">
-  // ── Types ──────────────────────────────────────────────────────────────────
-  export interface BandPowers {
-    channel:        string;
-    delta:          number;
-    theta:          number;
-    alpha:          number;
-    beta:           number;
-    gamma:          number;
-    high_gamma:     number;
-    rel_delta:      number;
-    rel_theta:      number;
-    rel_alpha:      number;
-    rel_beta:       number;
-    rel_gamma:      number;
-    rel_high_gamma: number;
-    dominant:       string;
-    dominant_symbol:string;
-    dominant_color: string;
-  }
+// ── Types ──────────────────────────────────────────────────────────────────
+export interface BandPowers {
+  channel: string;
+  delta: number;
+  theta: number;
+  alpha: number;
+  beta: number;
+  gamma: number;
+  high_gamma: number;
+  rel_delta: number;
+  rel_theta: number;
+  rel_alpha: number;
+  rel_beta: number;
+  rel_gamma: number;
+  rel_high_gamma: number;
+  dominant: string;
+  dominant_symbol: string;
+  dominant_color: string;
+}
 
-  export interface BandSnapshot {
-    timestamp: number;
-    channels:  BandPowers[];
-    /** Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α). */
-    faa:       number;
-    tar?:      number;
-    bar?:      number;
-    dtr?:      number;
-    pse?:      number;
-    apf?:      number;
-    bps?:      number;
-    snr?:      number;
-    coherence?: number;
-    mu_suppression?: number;
-    mood?:     number;
-    tbr?:      number;
-    sef95?:    number;
-    spectral_centroid?: number;
-    hjorth_activity?:   number;
-    hjorth_mobility?:   number;
-    hjorth_complexity?: number;
-    permutation_entropy?: number;
-    higuchi_fd?:    number;
-    dfa_exponent?:  number;
-    sample_entropy?: number;
-    pac_theta_gamma?: number;
-    laterality_index?: number;
-    // PPG-derived
-    hr?:               number;
-    rmssd?:            number;
-    sdnn?:             number;
-    pnn50?:            number;
-    lf_hf_ratio?:      number;
-    respiratory_rate?: number;
-    spo2_estimate?:    number;
-    perfusion_index?:  number;
-    stress_index?:     number;
-    // Artifact / event detection
-    blink_count?:      number;
-    blink_rate?:       number;
+export interface BandSnapshot {
+  timestamp: number;
+  channels: BandPowers[];
+  /** Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α). */
+  faa: number;
+  tar?: number;
+  bar?: number;
+  dtr?: number;
+  pse?: number;
+  apf?: number;
+  bps?: number;
+  snr?: number;
+  coherence?: number;
+  mu_suppression?: number;
+  mood?: number;
+  tbr?: number;
+  sef95?: number;
+  spectral_centroid?: number;
+  hjorth_activity?: number;
+  hjorth_mobility?: number;
+  hjorth_complexity?: number;
+  permutation_entropy?: number;
+  higuchi_fd?: number;
+  dfa_exponent?: number;
+  sample_entropy?: number;
+  pac_theta_gamma?: number;
+  laterality_index?: number;
+  // PPG-derived
+  hr?: number;
+  rmssd?: number;
+  sdnn?: number;
+  pnn50?: number;
+  lf_hf_ratio?: number;
+  respiratory_rate?: number;
+  spo2_estimate?: number;
+  perfusion_index?: number;
+  stress_index?: number;
+  // Artifact / event detection
+  blink_count?: number;
+  blink_rate?: number;
 
-    // Head pose
-    head_pitch?:       number;
-    head_roll?:        number;
-    stillness?:        number;
-    nod_count?:        number;
-    shake_count?:      number;
-    // Composite scores
-    meditation?:       number;
-    cognitive_load?:   number;
-    drowsiness?:       number;
-    // Device telemetry
-    temperature_raw?:  number;
-    // Headache / migraine EEG correlate indices
-    headache_index?:   number;
-    migraine_index?:   number;
-    // Consciousness metrics
-    consciousness_lzc?:          number;
-    consciousness_wakefulness?:  number;
-    consciousness_integration?:  number;
-  }
+  // Head pose
+  head_pitch?: number;
+  head_roll?: number;
+  stillness?: number;
+  nod_count?: number;
+  shake_count?: number;
+  // Composite scores
+  meditation?: number;
+  cognitive_load?: number;
+  drowsiness?: number;
+  // Device telemetry
+  temperature_raw?: number;
+  // Headache / migraine EEG correlate indices
+  headache_index?: number;
+  migraine_index?: number;
+  // Consciousness metrics
+  consciousness_lzc?: number;
+  consciousness_wakefulness?: number;
+  consciousness_integration?: number;
+}
 </script>
 
 <script lang="ts">

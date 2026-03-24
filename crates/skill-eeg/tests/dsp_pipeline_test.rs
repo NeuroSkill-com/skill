@@ -28,9 +28,15 @@ fn band_analyzer_produces_snapshot_after_enough_samples() {
         analyzer.push(ch, &signal);
     }
 
-    assert!(analyzer.latest.is_some(), "should have produced at least one snapshot");
+    assert!(
+        analyzer.latest.is_some(),
+        "should have produced at least one snapshot"
+    );
     let snap = analyzer.latest.as_ref().unwrap();
-    assert!(!snap.channels.is_empty(), "snapshot should have channel powers");
+    assert!(
+        !snap.channels.is_empty(),
+        "snapshot should have channel powers"
+    );
 
     // 10 Hz is alpha — check that alpha is present
     for ch_pow in &snap.channels {
@@ -48,10 +54,7 @@ fn band_analyzer_different_sample_rates() {
             analyzer.push(ch, &signal);
         }
         let snap = analyzer.latest.as_ref();
-        assert!(
-            snap.is_some(),
-            "should produce snapshot at sr={sr}"
-        );
+        assert!(snap.is_some(), "should produce snapshot at sr={sr}");
     }
 }
 
@@ -69,7 +72,8 @@ fn band_analyzer_beta_dominates_for_20hz() {
         assert!(
             ch_pow.beta > ch_pow.alpha,
             "beta ({}) should exceed alpha ({}) for 20 Hz",
-            ch_pow.beta, ch_pow.alpha
+            ch_pow.beta,
+            ch_pow.alpha
         );
     }
 }
@@ -98,5 +102,8 @@ fn band_analyzer_reset_clears_state() {
     assert!(analyzer.latest.as_ref().is_some());
 
     analyzer.reset();
-    assert!(analyzer.latest.as_ref().is_none(), "reset should clear latest snapshot");
+    assert!(
+        analyzer.latest.as_ref().is_none(),
+        "reset should clear latest snapshot"
+    );
 }

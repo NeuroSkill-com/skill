@@ -7,25 +7,25 @@
 // simulating the end-to-end scenario where a user starts a model download,
 // closes the settings window, and reopens it.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  type DownloadState,
-  type LlmModelEntry,
-  type LlmCatalog,
-  type ModelFamily,
-  vendorLabel,
-  familySizeRank,
-  familyPrimarySize,
-  quantRank,
-  compareModelEntries,
-  runModeLabel,
-  tagLabel,
-  tagColor,
-  buildFamilies,
-  splitEntryGroups,
-  familyOptionLabel,
   autoSelectFamily,
+  buildFamilies,
+  compareModelEntries,
+  type DownloadState,
+  familyOptionLabel,
+  familyPrimarySize,
+  familySizeRank,
   hasActiveDownloads,
+  type LlmCatalog,
+  type LlmModelEntry,
+  type ModelFamily,
+  quantRank,
+  runModeLabel,
+  splitEntryGroups,
+  tagColor,
+  tagLabel,
+  vendorLabel,
 } from "$lib/llm-helpers";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -33,25 +33,25 @@ import {
 /** Minimal model entry with sensible defaults.  Override any field. */
 function entry(overrides: Partial<LlmModelEntry> = {}): LlmModelEntry {
   return {
-    repo:               "bartowski/Qwen3-1.7B-GGUF",
-    filename:           "Qwen3-1.7B-Q4_K_M.gguf",
-    quant:              "Q4_K_M",
-    size_gb:            1.2,
-    description:        "Qwen3 1.7B Q4_K_M",
-    family_id:          "qwen3-1.7b",
-    family_name:        "Qwen3 1.7B",
-    family_desc:        "Compact chat model",
-    tags:               ["chat", "small"],
-    is_mmproj:          false,
-    recommended:        false,
-    advanced:           false,
-    params_b:           1.7,
+    repo: "bartowski/Qwen3-1.7B-GGUF",
+    filename: "Qwen3-1.7B-Q4_K_M.gguf",
+    quant: "Q4_K_M",
+    size_gb: 1.2,
+    description: "Qwen3 1.7B Q4_K_M",
+    family_id: "qwen3-1.7b",
+    family_name: "Qwen3 1.7B",
+    family_desc: "Compact chat model",
+    tags: ["chat", "small"],
+    is_mmproj: false,
+    recommended: false,
+    advanced: false,
+    params_b: 1.7,
     max_context_length: 32768,
-    shard_files:        [],
-    local_path:         null,
-    state:              "not_downloaded",
-    status_msg:         null,
-    progress:           0,
+    shard_files: [],
+    local_path: null,
+    state: "not_downloaded",
+    status_msg: null,
+    progress: 0,
     ...overrides,
   };
 }
@@ -63,25 +63,40 @@ function multiCatalog(): LlmCatalog {
     active_mmproj: "",
     entries: [
       entry({ filename: "Qwen3-1.7B-Q4_K_M.gguf", quant: "Q4_K_M", size_gb: 1.2, recommended: true }),
-      entry({ filename: "Qwen3-1.7B-Q8_0.gguf",   quant: "Q8_0",   size_gb: 2.0, advanced: true }),
-      entry({ filename: "Qwen3-1.7B-Q3_K_M.gguf",  quant: "Q3_K_M", size_gb: 0.9, advanced: true }),
+      entry({ filename: "Qwen3-1.7B-Q8_0.gguf", quant: "Q8_0", size_gb: 2.0, advanced: true }),
+      entry({ filename: "Qwen3-1.7B-Q3_K_M.gguf", quant: "Q3_K_M", size_gb: 0.9, advanced: true }),
       entry({
-        filename: "Phi-4-Q4_K_M.gguf", quant: "Q4_K_M", size_gb: 2.5,
-        family_id: "phi-4", family_name: "Phi-4", family_desc: "Microsoft reasoning model",
-        tags: ["chat", "reasoning", "medium"], repo: "bartowski/Phi-4-GGUF",
+        filename: "Phi-4-Q4_K_M.gguf",
+        quant: "Q4_K_M",
+        size_gb: 2.5,
+        family_id: "phi-4",
+        family_name: "Phi-4",
+        family_desc: "Microsoft reasoning model",
+        tags: ["chat", "reasoning", "medium"],
+        repo: "bartowski/Phi-4-GGUF",
         recommended: true,
       }),
       entry({
-        filename: "Phi-4-Q6_K.gguf", quant: "Q6_K", size_gb: 3.8,
-        family_id: "phi-4", family_name: "Phi-4", family_desc: "Microsoft reasoning model",
-        tags: ["chat", "reasoning", "medium"], repo: "bartowski/Phi-4-GGUF",
+        filename: "Phi-4-Q6_K.gguf",
+        quant: "Q6_K",
+        size_gb: 3.8,
+        family_id: "phi-4",
+        family_name: "Phi-4",
+        family_desc: "Microsoft reasoning model",
+        tags: ["chat", "reasoning", "medium"],
+        repo: "bartowski/Phi-4-GGUF",
         advanced: true,
       }),
       // mmproj entry — should not appear in family.entries
       entry({
-        filename: "mmproj-Phi-4-BF16.gguf", quant: "BF16", size_gb: 0.6,
-        family_id: "phi-4", family_name: "Phi-4", family_desc: "",
-        tags: ["vision"], is_mmproj: true,
+        filename: "mmproj-Phi-4-BF16.gguf",
+        quant: "BF16",
+        size_gb: 0.6,
+        family_id: "phi-4",
+        family_name: "Phi-4",
+        family_desc: "",
+        tags: ["vision"],
+        is_mmproj: true,
       }),
     ],
   };
@@ -123,24 +138,15 @@ describe("familySizeRank", () => {
 
 describe("familyPrimarySize", () => {
   it("prefers recommended entry", () => {
-    const entries = [
-      entry({ size_gb: 2.0 }),
-      entry({ size_gb: 1.0, recommended: true }),
-    ];
+    const entries = [entry({ size_gb: 2.0 }), entry({ size_gb: 1.0, recommended: true })];
     expect(familyPrimarySize(entries)).toBe(1.0);
   });
   it("falls back to non-advanced entry", () => {
-    const entries = [
-      entry({ size_gb: 3.0, advanced: true }),
-      entry({ size_gb: 1.5, advanced: false }),
-    ];
+    const entries = [entry({ size_gb: 3.0, advanced: true }), entry({ size_gb: 1.5, advanced: false })];
     expect(familyPrimarySize(entries)).toBe(1.5);
   });
   it("falls back to smallest entry", () => {
-    const entries = [
-      entry({ size_gb: 3.0, advanced: true }),
-      entry({ size_gb: 2.0, advanced: true }),
-    ];
+    const entries = [entry({ size_gb: 3.0, advanced: true }), entry({ size_gb: 2.0, advanced: true })];
     expect(familyPrimarySize(entries)).toBe(2.0);
   });
   it("returns Infinity for empty list", () => {
@@ -261,14 +267,14 @@ describe("buildFamilies", () => {
   it("groups entries by family_id", () => {
     const families = buildFamilies(multiCatalog().entries);
     expect(families).toHaveLength(2);
-    const ids = families.map(f => f.id);
+    const ids = families.map((f) => f.id);
     expect(ids).toContain("phi-4");
     expect(ids).toContain("qwen3-1.7b");
   });
 
   it("separates mmproj entries from regular entries", () => {
     const families = buildFamilies(multiCatalog().entries);
-    const phi = families.find(f => f.id === "phi-4")!;
+    const phi = families.find((f) => f.id === "phi-4")!;
     expect(phi.entries).toHaveLength(2); // Q4_K_M + Q6_K
     expect(phi.mmproj).toHaveLength(1);
     expect(phi.mmproj[0].filename).toBe("mmproj-Phi-4-BF16.gguf");
@@ -276,9 +282,9 @@ describe("buildFamilies", () => {
 
   it("tracks recommended entry", () => {
     const families = buildFamilies(multiCatalog().entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.recommended).toBeDefined();
-    expect(qwen.recommended!.filename).toBe("Qwen3-1.7B-Q4_K_M.gguf");
+    expect(qwen.recommended?.filename).toBe("Qwen3-1.7B-Q4_K_M.gguf");
   });
 
   it("collects downloaded entries", () => {
@@ -286,14 +292,14 @@ describe("buildFamilies", () => {
     cat.entries[0].state = "downloaded";
     cat.entries[0].local_path = "/some/path";
     const families = buildFamilies(cat.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(1);
     expect(qwen.downloaded[0].filename).toBe("Qwen3-1.7B-Q4_K_M.gguf");
   });
 
   it("collects tags and vendors", () => {
     const families = buildFamilies(multiCatalog().entries);
-    const phi = families.find(f => f.id === "phi-4")!;
+    const phi = families.find((f) => f.id === "phi-4")!;
     expect(phi.tags).toContain("reasoning");
     expect(phi.vendors).toContain("Bartowski");
   });
@@ -305,9 +311,7 @@ describe("buildFamilies", () => {
   });
 
   it("filters out families with only mmproj entries", () => {
-    const families = buildFamilies([
-      entry({ family_id: "orphan", family_name: "Orphan", is_mmproj: true }),
-    ]);
+    const families = buildFamilies([entry({ family_id: "orphan", family_name: "Orphan", is_mmproj: true })]);
     expect(families).toHaveLength(0);
   });
 
@@ -320,44 +324,33 @@ describe("buildFamilies", () => {
 
 describe("splitEntryGroups", () => {
   it("puts non-advanced entries in primary group", () => {
-    const sorted = [
-      entry({ filename: "a.gguf" }),
-      entry({ filename: "b.gguf", advanced: true }),
-    ];
+    const sorted = [entry({ filename: "a.gguf" }), entry({ filename: "b.gguf", advanced: true })];
     const { primary, extra } = splitEntryGroups(sorted, "");
-    expect(primary.map(e => e.filename)).toContain("a.gguf");
-    expect(extra.map(e => e.filename)).toContain("b.gguf");
+    expect(primary.map((e) => e.filename)).toContain("a.gguf");
+    expect(extra.map((e) => e.filename)).toContain("b.gguf");
   });
 
   it("always includes downloading entries in primary", () => {
-    const sorted = [
-      entry({ filename: "dl.gguf", state: "downloading", progress: 0.3, advanced: true }),
-    ];
+    const sorted = [entry({ filename: "dl.gguf", state: "downloading", progress: 0.3, advanced: true })];
     const { primary } = splitEntryGroups(sorted, "");
     expect(primary).toHaveLength(1);
     expect(primary[0].filename).toBe("dl.gguf");
   });
 
   it("always includes active model in primary", () => {
-    const sorted = [
-      entry({ filename: "active.gguf", state: "downloaded", advanced: true }),
-    ];
+    const sorted = [entry({ filename: "active.gguf", state: "downloaded", advanced: true })];
     const { primary } = splitEntryGroups(sorted, "active.gguf");
     expect(primary).toHaveLength(1);
   });
 
   it("always includes recommended in primary", () => {
-    const sorted = [
-      entry({ filename: "rec.gguf", recommended: true, advanced: true }),
-    ];
+    const sorted = [entry({ filename: "rec.gguf", recommended: true, advanced: true })];
     const { primary } = splitEntryGroups(sorted, "");
     expect(primary).toHaveLength(1);
   });
 
   it("always includes downloaded entries in primary", () => {
-    const sorted = [
-      entry({ filename: "dl.gguf", state: "downloaded", advanced: true }),
-    ];
+    const sorted = [entry({ filename: "dl.gguf", state: "downloaded", advanced: true })];
     const { primary } = splitEntryGroups(sorted, "");
     expect(primary).toHaveLength(1);
   });
@@ -368,9 +361,15 @@ describe("splitEntryGroups", () => {
 describe("familyOptionLabel", () => {
   it("shows ✓ prefix when family has the active model", () => {
     const f: ModelFamily = {
-      id: "test", name: "TestModel", desc: "", tags: [], vendors: [],
+      id: "test",
+      name: "TestModel",
+      desc: "",
+      tags: [],
+      vendors: [],
       entries: [entry({ filename: "active.gguf", state: "downloaded" })],
-      mmproj: [], recommended: undefined, downloaded: [entry({ state: "downloaded" })],
+      mmproj: [],
+      recommended: undefined,
+      downloaded: [entry({ state: "downloaded" })],
     };
     const label = familyOptionLabel(f, "active.gguf");
     expect(label).toMatch(/^✓/);
@@ -379,9 +378,15 @@ describe("familyOptionLabel", () => {
 
   it("shows ⬇ prefix when family has a downloading model", () => {
     const f: ModelFamily = {
-      id: "test", name: "TestModel", desc: "", tags: [], vendors: [],
+      id: "test",
+      name: "TestModel",
+      desc: "",
+      tags: [],
+      vendors: [],
       entries: [entry({ filename: "dl.gguf", state: "downloading" })],
-      mmproj: [], recommended: undefined, downloaded: [],
+      mmproj: [],
+      recommended: undefined,
+      downloaded: [],
     };
     const label = familyOptionLabel(f, "");
     expect(label).toMatch(/^⬇/);
@@ -389,9 +394,14 @@ describe("familyOptionLabel", () => {
 
   it("shows download count when not active", () => {
     const f: ModelFamily = {
-      id: "test", name: "TestModel", desc: "", tags: [], vendors: [],
+      id: "test",
+      name: "TestModel",
+      desc: "",
+      tags: [],
+      vendors: [],
       entries: [entry({ filename: "a.gguf", state: "downloaded" })],
-      mmproj: [], recommended: undefined,
+      mmproj: [],
+      recommended: undefined,
       downloaded: [entry({ state: "downloaded" }), entry({ state: "downloaded" })],
     };
     const label = familyOptionLabel(f, "other.gguf");
@@ -400,9 +410,14 @@ describe("familyOptionLabel", () => {
 
   it("omits download count for active families", () => {
     const f: ModelFamily = {
-      id: "test", name: "TestModel", desc: "", tags: [], vendors: [],
+      id: "test",
+      name: "TestModel",
+      desc: "",
+      tags: [],
+      vendors: [],
       entries: [entry({ filename: "active.gguf" })],
-      mmproj: [], recommended: undefined,
+      mmproj: [],
+      recommended: undefined,
       downloaded: [entry({ state: "downloaded" })],
     };
     const label = familyOptionLabel(f, "active.gguf");
@@ -496,23 +511,21 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // 2. buildFamilies correctly includes the downloading entry
     const families = buildFamilies(catalog.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
-    const dlEntry = qwen.entries.find(e => e.state === "downloading");
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
+    const dlEntry = qwen.entries.find((e) => e.state === "downloading");
     expect(dlEntry).toBeDefined();
-    expect(dlEntry!.progress).toBe(0.42);
+    expect(dlEntry?.progress).toBe(0.42);
 
     // 3. hasActiveDownloads detects it (used by poll timer)
     expect(hasActiveDownloads(catalog)).toBe(true);
 
     // 4. The downloading entry sorts to the top (after active)
-    const sorted = [...qwen.entries].sort((a, b) =>
-      compareModelEntries(a, b, catalog.active_model),
-    );
+    const sorted = [...qwen.entries].sort((a, b) => compareModelEntries(a, b, catalog.active_model));
     expect(sorted[0].state).toBe("downloading");
 
     // 5. The downloading entry is in the primary (visible) group
     const { primary } = splitEntryGroups(sorted, catalog.active_model);
-    expect(primary.some(e => e.state === "downloading")).toBe(true);
+    expect(primary.some((e) => e.state === "downloading")).toBe(true);
 
     // 6. The family dropdown shows the ⬇ indicator
     const label = familyOptionLabel(qwen, catalog.active_model);
@@ -535,7 +548,7 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // 4. Family now shows the downloaded count
     const families = buildFamilies(cat.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(1);
   });
 
@@ -550,10 +563,10 @@ describe("E2E: download-progress survives window reopen", () => {
     expect(hasActiveDownloads(cat)).toBe(false);
 
     const families = buildFamilies(cat.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
-    const failed = qwen.entries.find(e => e.state === "failed");
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
+    const failed = qwen.entries.find((e) => e.state === "failed");
     expect(failed).toBeDefined();
-    expect(failed!.status_msg).toContain("Network error");
+    expect(failed?.status_msg).toContain("Network error");
   });
 
   it("scenario: multiple simultaneous downloads across families", () => {
@@ -584,7 +597,7 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // But paused entry is NOT in the downloaded list
     const families = buildFamilies(cat.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(0);
   });
 
@@ -606,7 +619,7 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // 3. Auto-select picks a valid family
     const selected = autoSelectFamily(families, fresh, "");
-    expect(families.some(f => f.id === selected)).toBe(true);
+    expect(families.some((f) => f.id === selected)).toBe(true);
   });
 
   it("scenario: download starts on one family while viewing another", () => {
@@ -625,7 +638,7 @@ describe("E2E: download-progress survives window reopen", () => {
     expect(selected).toBe("phi-4");
 
     // But the Qwen family dropdown label shows ⬇
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(familyOptionLabel(qwen, cat.active_model)).toMatch(/⬇/);
   });
 
@@ -643,8 +656,8 @@ describe("E2E: download-progress survives window reopen", () => {
 
     expect(hasActiveDownloads(cat)).toBe(true);
     const families = buildFamilies(cat.entries);
-    const qwen = families.find(f => f.id === "qwen3-1.7b")!;
-    const dlEntry = qwen.entries.find(e => e.state === "downloading")!;
+    const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
+    const dlEntry = qwen.entries.find((e) => e.state === "downloading")!;
     expect(dlEntry.shard_files).toHaveLength(3);
     expect(dlEntry.progress).toBeCloseTo(0.33);
   });
@@ -655,10 +668,9 @@ describe("E2E: download-progress survives window reopen", () => {
 describe("edge cases", () => {
   it("handles catalog with only mmproj entries gracefully", () => {
     const cat: LlmCatalog = {
-      active_model: "", active_mmproj: "",
-      entries: [
-        entry({ family_id: "orphan", is_mmproj: true }),
-      ],
+      active_model: "",
+      active_mmproj: "",
+      entries: [entry({ family_id: "orphan", is_mmproj: true })],
     };
     expect(buildFamilies(cat.entries)).toHaveLength(0);
     expect(hasActiveDownloads(cat)).toBe(false);
@@ -667,11 +679,13 @@ describe("edge cases", () => {
 
   it("handles duplicate family names from different repos", () => {
     const cat: LlmCatalog = {
-      active_model: "", active_mmproj: "",
+      active_model: "",
+      active_mmproj: "",
       entries: [
         entry({ family_id: "qwen3-1.7b", repo: "bartowski/Qwen3-GGUF" }),
         entry({
-          family_id: "qwen3-1.7b", repo: "unsloth/Qwen3-GGUF",
+          family_id: "qwen3-1.7b",
+          repo: "unsloth/Qwen3-GGUF",
           filename: "Qwen3-1.7B-Q4_K_M-unsloth.gguf",
         }),
       ],
@@ -684,9 +698,7 @@ describe("edge cases", () => {
   });
 
   it("all DownloadState values are handled", () => {
-    const allStates: DownloadState[] = [
-      "not_downloaded", "downloading", "paused", "downloaded", "failed", "cancelled",
-    ];
+    const allStates: DownloadState[] = ["not_downloaded", "downloading", "paused", "downloaded", "failed", "cancelled"];
     for (const state of allStates) {
       const e = entry({ state });
       // Should not throw

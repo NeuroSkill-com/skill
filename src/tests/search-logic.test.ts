@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  buildNeighborLabelMap,
+  computePreset,
+  enrichUmapLabels,
+  fmtDuration,
+  fromInputValue,
   normalizeSearchMode,
   toInputValue,
-  fromInputValue,
-  fmtDuration,
-  buildNeighborLabelMap,
-  enrichUmapLabels,
-  computePreset,
 } from "$lib/search-logic";
 
 describe("normalizeSearchMode", () => {

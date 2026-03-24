@@ -18,26 +18,26 @@ pub enum InferRequest {
     /// from URLs) in the same order as the `image_url` parts across all messages.
     Generate {
         messages: Vec<Value>,
-        images:   Vec<Vec<u8>>,
-        params:   GenParams,
+        images: Vec<Vec<u8>>,
+        params: GenParams,
         token_tx: UnboundedSender<InferToken>,
     },
     /// Raw text completion (prompt already formatted by the caller).
     Complete {
-        prompt:   String,
-        params:   GenParams,
+        prompt: String,
+        params: GenParams,
         token_tx: UnboundedSender<InferToken>,
     },
     /// Compute mean-pooled embeddings for a list of strings.
     Embed {
-        inputs:    Vec<String>,
+        inputs: Vec<String>,
         result_tx: tokio::sync::oneshot::Sender<anyhow::Result<Vec<Vec<f32>>>>,
     },
     /// Embed a single image via the loaded mmproj vision projector.
     /// Used by the screenshot worker for visual-similarity embeddings.
     /// Returns `None` if no mmproj is loaded or encoding fails.
     EmbedImage {
-        bytes:     Vec<u8>,
+        bytes: Vec<u8>,
         result_tx: tokio::sync::oneshot::Sender<Option<Vec<f32>>>,
     },
     /// Simple liveness probe (kept for future use; status now via `AtomicBool`).
@@ -52,10 +52,10 @@ pub enum InferToken {
     Delta(String),
     /// Generation finished normally.
     Done {
-        finish_reason:     String,
-        prompt_tokens:     usize,
+        finish_reason: String,
+        prompt_tokens: usize,
         completion_tokens: usize,
-        n_ctx:             usize,
+        n_ctx: usize,
     },
     /// Generation aborted with an error.
     Error(String),
@@ -66,32 +66,32 @@ pub enum InferToken {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GenParams {
-    pub temperature:      f32,
-    pub top_k:            i32,
-    pub top_p:            f32,
-    pub repeat_penalty:   f32,
-    pub seed:             u32,
-    pub max_tokens:       usize,
-    pub stop:             Vec<String>,
+    pub temperature: f32,
+    pub top_k: i32,
+    pub top_p: f32,
+    pub repeat_penalty: f32,
+    pub seed: u32,
+    pub max_tokens: usize,
+    pub stop: Vec<String>,
     /// Maximum tokens the model may spend inside a `<think>…</think>` block.
     ///
     /// `None`  = unlimited thinking (default off — model decides).
     /// `Some(0)` = skip thinking entirely (pre-fill empty `<think>\n\n</think>`).
     /// `Some(n)` = force-close the think block after `n` tokens.
     #[serde(default)]
-    pub thinking_budget:  Option<u32>,
+    pub thinking_budget: Option<u32>,
 }
 
 impl Default for GenParams {
     fn default() -> Self {
         Self {
-            temperature:    0.8,
-            top_k:          40,
-            top_p:          0.9,
+            temperature: 0.8,
+            top_k: 40,
+            top_p: 0.9,
             repeat_penalty: 1.1,
-            seed:           0xDEAD_BEEF,
-            max_tokens:     2048,
-            stop:           Vec::new(),
+            seed: 0xDEAD_BEEF,
+            max_tokens: 2048,
+            stop: Vec::new(),
             // Default: minimal (512 tokens) so simple queries don't over-think.
             thinking_budget: Some(512),
         }
@@ -103,13 +103,13 @@ impl Default for GenParams {
 pub struct ChatRequest {
     pub messages: Vec<Value>,
     #[serde(default)]
-    pub tools:    Vec<tools::Tool>,
+    pub tools: Vec<tools::Tool>,
     #[serde(default)]
     pub tool_choice: Option<Value>,
     #[serde(default)]
-    pub stream:   bool,
+    pub stream: bool,
     #[serde(flatten)]
-    pub gen:      GenParams,
+    pub gen: GenParams,
 }
 
 // Text completions request
@@ -119,7 +119,7 @@ pub struct CompletionRequest {
     #[serde(default)]
     pub stream: bool,
     #[serde(flatten)]
-    pub gen:    GenParams,
+    pub gen: GenParams,
 }
 
 // Embeddings request

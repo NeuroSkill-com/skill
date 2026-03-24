@@ -18,24 +18,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
+use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
 use image::{DynamicImage, GenericImageView, ImageReader};
 use serde::Serialize;
 
-
-
-use skill_constants::{
-    SCREENSHOTS_DIR, SCREENSHOTS_HNSW, SCREENSHOTS_OCR_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
-    HNSW_M, HNSW_EF_CONSTRUCTION,
-    OCR_DETECTION_MODEL_URL, OCR_RECOGNITION_MODEL_URL,
-    OCR_DETECTION_MODEL_FILE, OCR_RECOGNITION_MODEL_FILE,
-};
-use skill_data::screenshot_store::{
-    ScreenshotStore, ScreenshotRow, ScreenshotResult,
-    ReembedEstimate, ReembedResult,
-};
 use crate::config::ScreenshotConfig;
 use crate::platform::capture_active_window;
+use skill_constants::{
+    HNSW_EF_CONSTRUCTION, HNSW_M, OCR_DETECTION_MODEL_FILE, OCR_DETECTION_MODEL_URL,
+    OCR_RECOGNITION_MODEL_FILE, OCR_RECOGNITION_MODEL_URL, SCREENSHOTS_DIR, SCREENSHOTS_HNSW,
+    SCREENSHOTS_OCR_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
+};
+use skill_data::screenshot_store::{
+    ReembedEstimate, ReembedResult, ScreenshotResult, ScreenshotRow, ScreenshotStore,
+};
 
 // ── Image resize + pad ────────────────────────────────────────────────────────
 
@@ -45,15 +41,20 @@ use crate::platform::capture_active_window;
 /// should use [`encode_png`] separately.
 fn resize_fit_pad_image(raw_bytes: &[u8], target: u32) -> Option<DynamicImage> {
     let img = ImageReader::new(Cursor::new(raw_bytes))
-        .with_guessed_format().ok()?
-        .decode().ok()?;
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
     Some(resize_fit_pad_dyn(&img, target))
 }
 
 /// Resize + pad from a pre-decoded `CapturedImage`.  Uses the decoded image
 /// if available, otherwise decodes from `raw_bytes`.  Avoids the
 /// encode→decode round-trip on Linux/Windows where xcap gives us RGBA directly.
-fn resize_fit_pad_captured(captured: &crate::platform::CapturedImage, target: u32) -> Option<DynamicImage> {
+fn resize_fit_pad_captured(
+    captured: &crate::platform::CapturedImage,
+    target: u32,
+) -> Option<DynamicImage> {
     if let Some(ref img) = captured.decoded {
         Some(resize_fit_pad_dyn(img, target))
     } else {
@@ -91,14 +92,16 @@ fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> 
 /// Encode a `DynamicImage` as PNG bytes (for the vision encoder).
 fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png).ok()?;
+    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+        .ok()?;
     Some(buf)
 }
 
 /// Encode an already-decoded image as WebP with the given quality.
 fn encode_webp(img: &DynamicImage, _quality: u8, out_path: &Path) -> Option<u64> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::WebP).ok()?;
+    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::WebP)
+        .ok()?;
     std::fs::write(out_path, &buf).ok()?;
     Some(buf.len() as u64)
 }
@@ -128,16 +131,19 @@ fn fresh_hnsw() -> LabeledIndex<Cosine, i64> {
 
 /// Generic load-or-rebuild for any HNSW index backed by an embedding-fetch closure.
 fn load_or_rebuild_hnsw_generic(
-    skill_dir:  &Path,
-    hnsw_file:  &str,
-    label:      &str,
+    skill_dir: &Path,
+    hnsw_file: &str,
+    label: &str,
     fetch_rows: impl FnOnce() -> Vec<(i64, Vec<f32>)>,
 ) -> LabeledIndex<Cosine, i64> {
     let hnsw_path = skill_dir.join(hnsw_file);
     if hnsw_path.exists() {
         match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
             Ok(idx) => {
-                eprintln!("[screenshot] loaded {label} HNSW from {}", hnsw_path.display());
+                eprintln!(
+                    "[screenshot] loaded {label} HNSW from {}",
+                    hnsw_path.display()
+                );
                 return idx;
             }
             Err(e) => {
@@ -147,7 +153,10 @@ fn load_or_rebuild_hnsw_generic(
     }
     let mut idx = fresh_hnsw();
     let rows = fetch_rows();
-    eprintln!("[screenshot] rebuilding {label} HNSW from {} embeddings", rows.len());
+    eprintln!(
+        "[screenshot] rebuilding {label} HNSW from {} embeddings",
+        rows.len()
+    );
     for (ts, emb) in rows {
         idx.insert(emb, ts);
     }
@@ -165,11 +174,10 @@ fn save_hnsw_to(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path, hnsw_file: &s
     }
 }
 
-fn load_or_rebuild_hnsw(
-    skill_dir: &Path,
-    store: &ScreenshotStore,
-) -> LabeledIndex<Cosine, i64> {
-    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || store.all_embeddings())
+fn load_or_rebuild_hnsw(skill_dir: &Path, store: &ScreenshotStore) -> LabeledIndex<Cosine, i64> {
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || {
+        store.all_embeddings()
+    })
 }
 
 fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
@@ -187,7 +195,9 @@ fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
 /// Each provider's `build()` returns a registration request; if ORT was not
 /// compiled with that EP's feature flag the registration silently fails and
 /// the next provider in the list is tried, ultimately falling through to CPU.
-fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::ExecutionProviderDispatch> {
+fn build_execution_providers(
+    use_gpu: bool,
+) -> Vec<ort::execution_providers::ExecutionProviderDispatch> {
     if use_gpu {
         #[cfg(target_os = "macos")]
         {
@@ -224,24 +234,34 @@ fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::Exe
 }
 
 /// Try to create a fastembed `ImageEmbedding` instance.  Public alias for Tauri commands.
-pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
+pub fn load_fastembed_image_pub(
+    config: &ScreenshotConfig,
+    skill_dir: &Path,
+) -> Option<fastembed::ImageEmbedding> {
     load_fastembed_image(config, skill_dir)
 }
 
 /// Try to create a fastembed `ImageEmbedding` instance.
-fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
-    if config.embed_backend != "fastembed" { return None; }
+fn load_fastembed_image(
+    config: &ScreenshotConfig,
+    skill_dir: &Path,
+) -> Option<fastembed::ImageEmbedding> {
+    if config.embed_backend != "fastembed" {
+        return None;
+    }
     let model = crate::config::fastembed_model_enum(config)?;
     let cache = skill_dir.join("fastembed_cache");
     let eps = build_execution_providers(config.use_gpu);
     match fastembed::ImageEmbedding::try_new(
         fastembed::ImageInitOptions::new(model)
             .with_cache_dir(cache)
-            .with_execution_providers(eps)
+            .with_execution_providers(eps),
     ) {
         Ok(e) => {
-            eprintln!("[screenshot] fastembed image model loaded: {} (gpu={})",
-                config.fastembed_model, config.use_gpu);
+            eprintln!(
+                "[screenshot] fastembed image model loaded: {} (gpu={})",
+                config.fastembed_model, config.use_gpu
+            );
             Some(e)
         }
         Err(e) => {
@@ -252,7 +272,10 @@ fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<f
 }
 
 /// Embed a single image (PNG bytes) using fastembed.  Public alias for Tauri commands.
-pub fn fastembed_embed_pub(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
+pub fn fastembed_embed_pub(
+    encoder: &mut fastembed::ImageEmbedding,
+    png_bytes: &[u8],
+) -> Option<Vec<f32>> {
     fastembed_embed(encoder, png_bytes)
 }
 
@@ -270,7 +293,10 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
 
 /// Embed a pre-decoded `DynamicImage` directly using fastembed — avoids the
 /// CPU-intensive PNG encode→decode round-trip that `embed_bytes` performs.
-fn fastembed_embed_image(encoder: &mut fastembed::ImageEmbedding, img: DynamicImage) -> Option<Vec<f32>> {
+fn fastembed_embed_image(
+    encoder: &mut fastembed::ImageEmbedding,
+    img: DynamicImage,
+) -> Option<Vec<f32>> {
     match encoder.embed_images(vec![img]) {
         Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
         Ok(_) => None,
@@ -301,7 +327,9 @@ pub fn download_ocr_model_pub(url: &str, dest: &Path) -> bool {
 
 /// Download an OCR model file if it doesn't exist yet.
 fn download_ocr_model(url: &str, dest: &Path) -> bool {
-    if dest.exists() { return true; }
+    if dest.exists() {
+        return true;
+    }
     eprintln!("[screenshot] downloading OCR model: {url}");
     match ureq::get(url).call() {
         Ok(resp) => {
@@ -331,8 +359,12 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
     let det_path = ocr_dir.join(OCR_DETECTION_MODEL_FILE);
     let rec_path = ocr_dir.join(OCR_RECOGNITION_MODEL_FILE);
 
-    if !download_ocr_model(OCR_DETECTION_MODEL_URL, &det_path) { return None; }
-    if !download_ocr_model(OCR_RECOGNITION_MODEL_URL, &rec_path) { return None; }
+    if !download_ocr_model(OCR_DETECTION_MODEL_URL, &det_path) {
+        return None;
+    }
+    if !download_ocr_model(OCR_RECOGNITION_MODEL_URL, &rec_path) {
+        return None;
+    }
 
     let det_model = rten::Model::load_file(&det_path).ok()?;
     let rec_model = rten::Model::load_file(&rec_path).ok()?;
@@ -341,7 +373,8 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
         detection_model: Some(det_model),
         recognition_model: Some(rec_model),
         ..Default::default()
-    }).ok()
+    })
+    .ok()
 }
 
 /// Run OCR on an already-resized PNG image.  Returns the extracted text.
@@ -395,7 +428,11 @@ fn run_ocr_rten_rgb(engine: &ocrs::OcrEngine, img: &image::RgbImage) -> Option<S
     let input = engine.prepare_input(source).ok()?;
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();
-    if text.is_empty() { None } else { Some(text) }
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
 }
 
 /// Embed OCR text using an externally-provided embed function.
@@ -413,7 +450,9 @@ fn load_or_rebuild_ocr_hnsw(
     skill_dir: &Path,
     store: &ScreenshotStore,
 ) -> LabeledIndex<Cosine, i64> {
-    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_OCR_HNSW, "OCR", || store.all_ocr_embeddings())
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_OCR_HNSW, "OCR", || {
+        store.all_ocr_embeddings()
+    })
 }
 
 fn save_ocr_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
@@ -424,41 +463,41 @@ fn save_ocr_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
 
 #[derive(Clone, Serialize)]
 struct ScreenshotCapturedEvent {
-    ts:       String,
+    ts: String,
     filename: String,
 }
 
 // ── Pipeline metrics (lock-free atomics) ──────────────────────────────────────
 
-use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 /// Shared metrics updated by both capture and embed threads.
 /// All times are in microseconds.  All counters are monotonic.
 pub struct ScreenshotMetrics {
     // ── Capture thread ──
-    pub captures:          AtomicU64,
-    pub capture_errors:    AtomicU64,
-    pub drops:             AtomicU64,   // try_send failures
-    pub capture_us:        AtomicU64,   // last window-capture time
-    pub ocr_us:            AtomicU64,   // last OCR time
-    pub resize_us:         AtomicU64,   // last resize+pad time
-    pub save_us:           AtomicU64,   // last WebP save + SQLite insert
-    pub capture_total_us:  AtomicU64,   // last full capture-thread iteration
+    pub captures: AtomicU64,
+    pub capture_errors: AtomicU64,
+    pub drops: AtomicU64,            // try_send failures
+    pub capture_us: AtomicU64,       // last window-capture time
+    pub ocr_us: AtomicU64,           // last OCR time
+    pub resize_us: AtomicU64,        // last resize+pad time
+    pub save_us: AtomicU64,          // last WebP save + SQLite insert
+    pub capture_total_us: AtomicU64, // last full capture-thread iteration
 
     // ── Embed thread ──
-    pub embeds:            AtomicU64,
-    pub embed_errors:      AtomicU64,
-    pub vision_embed_us:   AtomicU64,   // last vision embedding time
-    pub text_embed_us:     AtomicU64,   // last OCR text embedding time
-    pub embed_total_us:    AtomicU64,   // last full embed iteration
-    pub queue_depth:       AtomicI64,   // current channel occupancy (inc on send, dec on recv)
+    pub embeds: AtomicU64,
+    pub embed_errors: AtomicU64,
+    pub vision_embed_us: AtomicU64, // last vision embedding time
+    pub text_embed_us: AtomicU64,   // last OCR text embedding time
+    pub embed_total_us: AtomicU64,  // last full embed iteration
+    pub queue_depth: AtomicI64,     // current channel occupancy (inc on send, dec on recv)
 
     // ── Throughput (rolling) ──
-    pub last_capture_unix: AtomicU64,   // unix-ms of last capture
-    pub last_embed_unix:   AtomicU64,   // unix-ms of last embed completion
+    pub last_capture_unix: AtomicU64, // unix-ms of last capture
+    pub last_embed_unix: AtomicU64,   // unix-ms of last embed completion
 
     // ── Adaptive backoff ──
-    pub backoff_multiplier: AtomicU64,  // current interval multiplier (1 = no backoff)
+    pub backoff_multiplier: AtomicU64, // current interval multiplier (1 = no backoff)
 }
 
 impl Default for ScreenshotMetrics {
@@ -470,22 +509,22 @@ impl Default for ScreenshotMetrics {
 impl ScreenshotMetrics {
     pub fn new() -> Self {
         Self {
-            captures:         AtomicU64::new(0),
-            capture_errors:   AtomicU64::new(0),
-            drops:            AtomicU64::new(0),
-            capture_us:       AtomicU64::new(0),
-            ocr_us:           AtomicU64::new(0),
-            resize_us:        AtomicU64::new(0),
-            save_us:          AtomicU64::new(0),
+            captures: AtomicU64::new(0),
+            capture_errors: AtomicU64::new(0),
+            drops: AtomicU64::new(0),
+            capture_us: AtomicU64::new(0),
+            ocr_us: AtomicU64::new(0),
+            resize_us: AtomicU64::new(0),
+            save_us: AtomicU64::new(0),
             capture_total_us: AtomicU64::new(0),
-            embeds:           AtomicU64::new(0),
-            embed_errors:     AtomicU64::new(0),
-            vision_embed_us:  AtomicU64::new(0),
-            text_embed_us:    AtomicU64::new(0),
-            embed_total_us:   AtomicU64::new(0),
-            queue_depth:      AtomicI64::new(0),
+            embeds: AtomicU64::new(0),
+            embed_errors: AtomicU64::new(0),
+            vision_embed_us: AtomicU64::new(0),
+            text_embed_us: AtomicU64::new(0),
+            embed_total_us: AtomicU64::new(0),
+            queue_depth: AtomicI64::new(0),
             last_capture_unix: AtomicU64::new(0),
-            last_embed_unix:  AtomicU64::new(0),
+            last_embed_unix: AtomicU64::new(0),
             backoff_multiplier: AtomicU64::new(1),
         }
     }
@@ -493,22 +532,22 @@ impl ScreenshotMetrics {
     /// Snapshot all metrics into a serializable struct.
     pub fn snapshot(&self) -> MetricsSnapshot {
         MetricsSnapshot {
-            captures:         self.captures.load(Ordering::Relaxed),
-            capture_errors:   self.capture_errors.load(Ordering::Relaxed),
-            drops:            self.drops.load(Ordering::Relaxed),
-            capture_us:       self.capture_us.load(Ordering::Relaxed),
-            ocr_us:           self.ocr_us.load(Ordering::Relaxed),
-            resize_us:        self.resize_us.load(Ordering::Relaxed),
-            save_us:          self.save_us.load(Ordering::Relaxed),
+            captures: self.captures.load(Ordering::Relaxed),
+            capture_errors: self.capture_errors.load(Ordering::Relaxed),
+            drops: self.drops.load(Ordering::Relaxed),
+            capture_us: self.capture_us.load(Ordering::Relaxed),
+            ocr_us: self.ocr_us.load(Ordering::Relaxed),
+            resize_us: self.resize_us.load(Ordering::Relaxed),
+            save_us: self.save_us.load(Ordering::Relaxed),
             capture_total_us: self.capture_total_us.load(Ordering::Relaxed),
-            embeds:           self.embeds.load(Ordering::Relaxed),
-            embed_errors:     self.embed_errors.load(Ordering::Relaxed),
-            vision_embed_us:  self.vision_embed_us.load(Ordering::Relaxed),
-            text_embed_us:    self.text_embed_us.load(Ordering::Relaxed),
-            embed_total_us:   self.embed_total_us.load(Ordering::Relaxed),
-            queue_depth:      self.queue_depth.load(Ordering::Relaxed),
+            embeds: self.embeds.load(Ordering::Relaxed),
+            embed_errors: self.embed_errors.load(Ordering::Relaxed),
+            vision_embed_us: self.vision_embed_us.load(Ordering::Relaxed),
+            text_embed_us: self.text_embed_us.load(Ordering::Relaxed),
+            embed_total_us: self.embed_total_us.load(Ordering::Relaxed),
+            queue_depth: self.queue_depth.load(Ordering::Relaxed),
             last_capture_unix: self.last_capture_unix.load(Ordering::Relaxed),
-            last_embed_unix:  self.last_embed_unix.load(Ordering::Relaxed),
+            last_embed_unix: self.last_embed_unix.load(Ordering::Relaxed),
             backoff_multiplier: self.backoff_multiplier.load(Ordering::Relaxed),
         }
     }
@@ -516,43 +555,46 @@ impl ScreenshotMetrics {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct MetricsSnapshot {
-    pub captures:         u64,
-    pub capture_errors:   u64,
-    pub drops:            u64,
-    pub capture_us:       u64,
-    pub ocr_us:           u64,
-    pub resize_us:        u64,
-    pub save_us:          u64,
+    pub captures: u64,
+    pub capture_errors: u64,
+    pub drops: u64,
+    pub capture_us: u64,
+    pub ocr_us: u64,
+    pub resize_us: u64,
+    pub save_us: u64,
     pub capture_total_us: u64,
-    pub embeds:           u64,
-    pub embed_errors:     u64,
-    pub vision_embed_us:  u64,
-    pub text_embed_us:    u64,
-    pub embed_total_us:   u64,
-    pub queue_depth:      i64,
+    pub embeds: u64,
+    pub embed_errors: u64,
+    pub vision_embed_us: u64,
+    pub text_embed_us: u64,
+    pub embed_total_us: u64,
+    pub queue_depth: i64,
     pub last_capture_unix: u64,
-    pub last_embed_unix:  u64,
+    pub last_embed_unix: u64,
     pub backoff_multiplier: u64,
 }
 
 /// Convenience: current time in milliseconds since epoch.
 fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 // ── Embed job sent from capture thread → embed thread ─────────────────────────
 
 struct EmbedJob {
-    row_id:      i64,
-    ts_i64:      i64,
+    row_id: i64,
+    ts_i64: i64,
     /// Pre-decoded resized image.  Passed directly to fastembed's
     /// `embed_images()` to avoid the CPU-heavy PNG encode→decode
     /// round-trip.  For LLM/OCR paths that need encoded bytes, JPEG
     /// is produced lazily in the embed thread (~10× faster than PNG).
     resized_img: Option<DynamicImage>,
     /// Whether OCR should run on the resized image in the embed thread.
-    run_ocr:     bool,
-    config:      ScreenshotConfig,
+    run_ocr: bool,
+    config: ScreenshotConfig,
     /// When set, the screenshot is identical to a previous one — copy
     /// embedding + OCR from this row instead of running ML inference.
     copy_from_row: Option<i64>,
@@ -580,7 +622,8 @@ pub fn run_screenshot_worker(
     shared_store: Option<Arc<ScreenshotStore>>,
     metrics: Arc<ScreenshotMetrics>,
 ) {
-    let Some(store) = shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) else {
+    let Some(store) = shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new))
+    else {
         eprintln!("[screenshot] failed to open store — worker exiting");
         return;
     };
@@ -593,16 +636,23 @@ pub fn run_screenshot_worker(
     // thread falls behind, the capture thread blocks on send rather than
     // accumulating unbounded memory.
     let (embed_tx, embed_rx) = crossbeam_channel::bounded::<EmbedJob>(4);
-    let embed_store   = Arc::clone(&store);
-    let embed_dir     = skill_dir.clone();
-    let embed_ctx     = Arc::clone(&ctx);
-    let embed_config  = config.clone();
+    let embed_store = Arc::clone(&store);
+    let embed_dir = skill_dir.clone();
+    let embed_ctx = Arc::clone(&ctx);
+    let embed_config = config.clone();
     let embed_metrics = Arc::clone(&metrics);
 
     std::thread::Builder::new()
         .name("screenshot-embed".into())
         .spawn(move || {
-            run_embed_thread(embed_ctx, embed_dir, embed_store, embed_rx, embed_config, embed_metrics);
+            run_embed_thread(
+                embed_ctx,
+                embed_dir,
+                embed_store,
+                embed_rx,
+                embed_config,
+                embed_metrics,
+            );
         })
         .unwrap_or_else(|e| {
             eprintln!("[screenshot] failed to spawn embed thread: {e}");
@@ -656,13 +706,19 @@ pub fn run_screenshot_worker(
             metrics.capture_errors.fetch_add(1, Ordering::Relaxed);
             continue;
         };
-        metrics.capture_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .capture_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── Resize + pad (no PNG encoding — just pixel ops) ──
         let t0 = Instant::now();
-        let Some(resized_img) = resize_fit_pad_captured(&captured, config.image_size) else { continue };
+        let Some(resized_img) = resize_fit_pad_captured(&captured, config.image_size) else {
+            continue;
+        };
         let (w, h) = (config.image_size, config.image_size);
-        metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .resize_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         drop(captured); // free full-res capture immediately
 
@@ -671,7 +727,9 @@ pub fn run_screenshot_worker(
         resized_img.as_bytes().hash(&mut hasher);
         let current_hash = hasher.finish();
         let copy_from = if current_hash == prev_screenshot_hash && prev_row_id.is_some() {
-            eprintln!("[screenshot] duplicate detected — will copy OCR + embeddings from previous row");
+            eprintln!(
+                "[screenshot] duplicate detected — will copy OCR + embeddings from previous row"
+            );
             prev_row_id
         } else {
             None
@@ -681,8 +739,6 @@ pub fn run_screenshot_worker(
         // loop — only scripts may produce animated GIFs.  The gif_encode module
         // and config fields are preserved for the script-level API.
 
-
-
         // ── Save to disk as WebP + SQLite + context ──
         let t0 = Instant::now();
         let (ts_str, unix_ts) = yyyymmddhhmmss_utc();
@@ -691,7 +747,9 @@ pub fn run_screenshot_worker(
         let _ = std::fs::create_dir_all(&date_dir);
         let webp_name = format!("{date_str}/{ts_str}.webp");
         let webp_path = screenshots_dir.join(&webp_name);
-        let Some(file_size) = encode_webp(&resized_img, config.quality, &webp_path) else { continue };
+        let Some(file_size) = encode_webp(&resized_img, config.quality, &webp_path) else {
+            continue;
+        };
 
         let aw = ctx.active_window();
         let (app_name, window_title) = (aw.app_name, aw.window_title);
@@ -720,12 +778,19 @@ pub fn run_screenshot_worker(
             ocr_hnsw_id: None,
         });
 
-        metrics.save_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .save_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── Notify frontend ──
-        ctx.emit_event("screenshot-captured", serde_json::to_value(&ScreenshotCapturedEvent {
-            ts: ts_str, filename: webp_name,
-        }).unwrap_or_default());
+        ctx.emit_event(
+            "screenshot-captured",
+            serde_json::to_value(&ScreenshotCapturedEvent {
+                ts: ts_str,
+                filename: webp_name,
+            })
+            .unwrap_or_default(),
+        );
 
         // ── Prepare image for the embed thread ──
         // Pass the decoded DynamicImage directly — the embed thread uses
@@ -760,12 +825,20 @@ pub fn run_screenshot_worker(
                     consecutive_ok += 1;
                     if consecutive_ok >= 3 && backoff_multiplier > 1 {
                         // Step down: 4→3→2→1
-                        let cur_idx = BACKOFF_STEPS.iter().position(|&s| s == backoff_multiplier)
+                        let cur_idx = BACKOFF_STEPS
+                            .iter()
+                            .position(|&s| s == backoff_multiplier)
                             .unwrap_or(BACKOFF_STEPS.len() - 1);
-                        backoff_multiplier = if cur_idx > 0 { BACKOFF_STEPS[cur_idx - 1] } else { 1 };
+                        backoff_multiplier = if cur_idx > 0 {
+                            BACKOFF_STEPS[cur_idx - 1]
+                        } else {
+                            1
+                        };
                         consecutive_ok = 0;
-                        eprintln!("[screenshot] backoff recovered → {}× base interval",
-                            backoff_multiplier);
+                        eprintln!(
+                            "[screenshot] backoff recovered → {}× base interval",
+                            backoff_multiplier
+                        );
                     }
                 }
                 Err(_) => {
@@ -774,9 +847,12 @@ pub fn run_screenshot_worker(
                     // to release pressure (1→2→3→4 × base).
                     consecutive_ok = 0;
                     if backoff_multiplier < MAX_BACKOFF {
-                        let cur_idx = BACKOFF_STEPS.iter().position(|&s| s == backoff_multiplier)
+                        let cur_idx = BACKOFF_STEPS
+                            .iter()
+                            .position(|&s| s == backoff_multiplier)
                             .unwrap_or(0);
-                        backoff_multiplier = BACKOFF_STEPS[(cur_idx + 1).min(BACKOFF_STEPS.len() - 1)];
+                        backoff_multiplier =
+                            BACKOFF_STEPS[(cur_idx + 1).min(BACKOFF_STEPS.len() - 1)];
                         eprintln!("[screenshot] embed queue full — backing off to {}× base interval ({}s)",
                             backoff_multiplier, config.effective_interval_secs() * backoff_multiplier);
                     }
@@ -785,9 +861,13 @@ pub fn run_screenshot_worker(
         }
 
         metrics.captures.fetch_add(1, Ordering::Relaxed);
-        metrics.capture_total_us.store(iter_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .capture_total_us
+            .store(iter_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         metrics.last_capture_unix.store(now_ms(), Ordering::Relaxed);
-        metrics.backoff_multiplier.store(backoff_multiplier, Ordering::Relaxed);
+        metrics
+            .backoff_multiplier
+            .store(backoff_multiplier, Ordering::Relaxed);
     }
 }
 
@@ -810,13 +890,16 @@ fn run_embed_thread(
     // Load vision encoder
     let mut fe_encoder = load_fastembed_image(&initial_config, &skill_dir);
     let mut last_backend = initial_config.embed_backend.clone();
-    let mut last_model   = initial_config.fastembed_model.clone();
+    let mut last_model = initial_config.fastembed_model.clone();
 
     // Load OCR engine (downloads models on first use)
     let ocr_engine = if initial_config.ocr_enabled {
         let engine = load_ocr_engine(&skill_dir);
         if engine.is_some() {
-            eprintln!("[screenshot-embed] OCR engine ({}) loaded", initial_config.ocr_engine);
+            eprintln!(
+                "[screenshot-embed] OCR engine ({}) loaded",
+                initial_config.ocr_engine
+            );
         } else {
             eprintln!("[screenshot-embed] OCR engine not available");
         }
@@ -849,12 +932,21 @@ fn run_embed_thread(
         // Backfill vision embeddings
         let unembedded = store.rows_without_embedding();
         if !unembedded.is_empty() {
-            eprintln!("[screenshot-embed] backfill: {} screenshots without vision embedding", unembedded.len());
+            eprintln!(
+                "[screenshot-embed] backfill: {} screenshots without vision embedding",
+                unembedded.len()
+            );
             for row in &unembedded {
                 let webp_path = screenshots_dir.join(&row.filename);
-                if !webp_path.exists() { continue; }
-                let Ok(raw) = std::fs::read(&webp_path) else { continue };
-                let Some((resized, _, _)) = resize_fit_pad(&raw, initial_config.image_size) else { continue };
+                if !webp_path.exists() {
+                    continue;
+                }
+                let Ok(raw) = std::fs::read(&webp_path) else {
+                    continue;
+                };
+                let Some((resized, _, _)) = resize_fit_pad(&raw, initial_config.image_size) else {
+                    continue;
+                };
                 if let Some(ref mut fe) = fe_encoder {
                     if let Some(emb) = fastembed_embed(fe, &resized) {
                         let ts = store.get_timestamp(row.id).unwrap_or(0);
@@ -862,7 +954,9 @@ fn run_embed_thread(
                         hnsw.insert(emb.clone(), ts);
                         inserts_since_save += 1;
                         store.update_embedding(
-                            row.id, &emb, Some(id),
+                            row.id,
+                            &emb,
+                            Some(id),
                             &initial_config.embed_backend,
                             &initial_config.model_id(),
                             initial_config.image_size,
@@ -880,18 +974,27 @@ fn run_embed_thread(
         // Backfill OCR text + OCR embeddings
         let no_ocr = store.rows_without_ocr();
         if !no_ocr.is_empty() && ocr_engine.is_some() {
-            eprintln!("[screenshot-embed] backfill: {} screenshots without OCR text", no_ocr.len());
+            eprintln!(
+                "[screenshot-embed] backfill: {} screenshots without OCR text",
+                no_ocr.len()
+            );
             for row in &no_ocr {
                 let webp_path = screenshots_dir.join(&row.filename);
-                if !webp_path.exists() { continue; }
-                let Ok(raw) = std::fs::read(&webp_path) else { continue };
+                if !webp_path.exists() {
+                    continue;
+                }
+                let Ok(raw) = std::fs::read(&webp_path) else {
+                    continue;
+                };
                 // OCR on the saved WebP image
                 let ocr_text = if let Some(ref engine) = ocr_engine {
                     run_ocr(engine, &raw).unwrap_or_default()
                 } else {
                     String::new()
                 };
-                if ocr_text.is_empty() { continue; }
+                if ocr_text.is_empty() {
+                    continue;
+                }
                 // Embed the OCR text via the shared app-wide embedder
                 if let Some(emb) = ctx.embed_text(&ocr_text) {
                     let ts = store.get_timestamp(row.id).unwrap_or(0);
@@ -943,8 +1046,12 @@ fn run_embed_thread(
                         inserts_since_save = 0;
                     }
                     store.update_embedding(
-                        job.row_id, emb, Some(id),
-                        &prev.model_backend, &prev.model_id, prev.image_size,
+                        job.row_id,
+                        emb,
+                        Some(id),
+                        &prev.model_backend,
+                        &prev.model_id,
+                        prev.image_size,
                     );
                 }
                 // Copy OCR text + OCR embedding
@@ -962,15 +1069,21 @@ fn run_embed_thread(
                         store.update_ocr(job.row_id, &prev.ocr_text, None, None);
                     }
                 }
-                eprintln!("[screenshot-embed] copied OCR + embeddings from row {src_id} → {}",
-                    job.row_id);
+                eprintln!(
+                    "[screenshot-embed] copied OCR + embeddings from row {src_id} → {}",
+                    job.row_id
+                );
                 metrics.embeds.fetch_add(1, Ordering::Relaxed);
-                metrics.embed_total_us.store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+                metrics
+                    .embed_total_us
+                    .store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
                 metrics.last_embed_unix.store(now_ms(), Ordering::Relaxed);
                 continue;
             }
             // Fallback: source row missing/corrupted — proceed with normal embedding
-            eprintln!("[screenshot-embed] copy source row {src_id} not found — running full pipeline");
+            eprintln!(
+                "[screenshot-embed] copy source row {src_id} not found — running full pipeline"
+            );
         }
 
         // Hot-reload vision encoder if model changed
@@ -978,15 +1091,14 @@ fn run_embed_thread(
             eprintln!("[screenshot-embed] model changed — reloading encoder");
             fe_encoder = load_fastembed_image(config, &skill_dir);
             last_backend = config.embed_backend.clone();
-            last_model   = config.fastembed_model.clone();
+            last_model = config.fastembed_model.clone();
         }
 
         // ── Lazily encode JPEG for paths that need encoded bytes ──
         // JPEG encoding is ~10× faster than PNG.  Only produced when the
         // LLM vision or OCR paths actually need it.
-        let encoded_bytes_lazy = |img: &DynamicImage| -> Vec<u8> {
-            encode_jpeg(img, 85).unwrap_or_default()
-        };
+        let encoded_bytes_lazy =
+            |img: &DynamicImage| -> Vec<u8> { encode_jpeg(img, 85).unwrap_or_default() };
 
         // ── Vision embedding ──
         let t0 = Instant::now();
@@ -994,9 +1106,10 @@ fn run_embed_thread(
             "fastembed" => {
                 if let Some(ref mut fe) = fe_encoder {
                     // Pass DynamicImage directly — no encode→decode round-trip.
-                    let emb = job.resized_img.as_ref().and_then(|img| {
-                        fastembed_embed_image(fe, img.clone())
-                    });
+                    let emb = job
+                        .resized_img
+                        .as_ref()
+                        .and_then(|img| fastembed_embed_image(fe, img.clone()));
                     let mid = config.model_id();
                     (emb, "fastembed".to_string(), mid)
                 } else {
@@ -1004,7 +1117,9 @@ fn run_embed_thread(
                 }
             }
             "mmproj" | "llm-vlm" => {
-                let encoded = job.resized_img.as_ref()
+                let encoded = job
+                    .resized_img
+                    .as_ref()
                     .map(encoded_bytes_lazy)
                     .unwrap_or_default();
                 let result = if !encoded.is_empty() {
@@ -1023,7 +1138,9 @@ fn run_embed_thread(
             _ => (None, String::new(), String::new()),
         };
 
-        metrics.vision_embed_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .vision_embed_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── Backfill vision embedding ──
         if let Some(ref emb) = embedding {
@@ -1050,8 +1167,12 @@ fn run_embed_thread(
                 inserts_since_save = 0;
             }
             store.update_embedding(
-                job.row_id, emb, Some(id),
-                &model_backend, &model_id, config.image_size,
+                job.row_id,
+                emb,
+                Some(id),
+                &model_backend,
+                &model_id,
+                config.image_size,
             );
         }
 
@@ -1060,7 +1181,9 @@ fn run_embed_thread(
         let ocr_text = if job.run_ocr {
             if config.embed_backend == "llm-vlm" || config.ocr_engine == "llm-vlm" {
                 // VLM-based OCR — encode to JPEG for the LLM vision endpoint.
-                let encoded = job.resized_img.as_ref()
+                let encoded = job
+                    .resized_img
+                    .as_ref()
                     .map(encoded_bytes_lazy)
                     .unwrap_or_default();
                 if !encoded.is_empty() {
@@ -1082,7 +1205,9 @@ fn run_embed_thread(
         } else {
             String::new()
         };
-        metrics.ocr_us.store(t_ocr.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .ocr_us
+            .store(t_ocr.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── OCR text embedding + backfill ──
         let t0 = Instant::now();
@@ -1114,10 +1239,14 @@ fn run_embed_thread(
                 store.update_ocr(job.row_id, &ocr_text, None, None);
             }
         }
-        metrics.text_embed_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .text_embed_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         metrics.embeds.fetch_add(1, Ordering::Relaxed);
-        metrics.embed_total_us.store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics
+            .embed_total_us
+            .store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         metrics.last_embed_unix.store(now_ms(), Ordering::Relaxed);
     }
 
@@ -1138,12 +1267,15 @@ pub fn search_by_vector(
 ) -> Vec<ScreenshotResult> {
     let ef = k.max(100); // ef >= k for good recall
     let results = hnsw.search(query, k, ef);
-    results.iter().filter_map(|r| {
-        let ts = *r.payload; // YYYYMMDDHHmmss
-        let mut sr = store.find_by_timestamp(ts)?;
-        sr.similarity = 1.0 - r.distance; // cosine distance → similarity
-        Some(sr)
-    }).collect()
+    results
+        .iter()
+        .filter_map(|r| {
+            let ts = *r.payload; // YYYYMMDDHHmmss
+            let mut sr = store.find_by_timestamp(ts)?;
+            sr.similarity = 1.0 - r.distance; // cosine distance → similarity
+            Some(sr)
+        })
+        .collect()
 }
 
 /// Search screenshots by OCR text similarity using the OCR HNSW index.
@@ -1160,11 +1292,15 @@ pub fn search_by_ocr_text_embedding(
 ) -> Vec<ScreenshotResult> {
     // Embed the query text via the shared embedder
     let query_emb = embed_ocr_text(query, embed_fn);
-    let Some(query_emb) = query_emb else { return vec![] };
+    let Some(query_emb) = query_emb else {
+        return vec![];
+    };
 
     // Load OCR HNSW
     let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
-    let Ok(hnsw) = LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) else { return vec![] };
+    let Ok(hnsw) = LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) else {
+        return vec![];
+    };
 
     search_by_vector(&hnsw, store, &query_emb, k)
 }
@@ -1179,7 +1315,11 @@ pub fn search_by_ocr_text_like(
 }
 
 /// Get screenshots around a given unix timestamp.
-pub fn get_around(store: &ScreenshotStore, timestamp: i64, window_secs: i32) -> Vec<ScreenshotResult> {
+pub fn get_around(
+    store: &ScreenshotStore,
+    timestamp: i64,
+    window_secs: i32,
+) -> Vec<ScreenshotResult> {
     store.around_timestamp(timestamp, window_secs)
 }
 
@@ -1202,7 +1342,9 @@ pub fn estimate_reembed(
             // Create a tiny test image
             let test_img = DynamicImage::new_rgb8(config.image_size, config.image_size);
             let mut png = Vec::new();
-            test_img.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png).ok();
+            test_img
+                .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+                .ok();
 
             let start = Instant::now();
             for _ in 0..3 {
@@ -1217,7 +1359,13 @@ pub fn estimate_reembed(
     let total_to_embed = stale + unembedded;
     let eta_secs = (total_to_embed as u64 * per_image_ms) / 1000;
 
-    ReembedEstimate { total, stale, unembedded, per_image_ms, eta_secs }
+    ReembedEstimate {
+        total,
+        stale,
+        unembedded,
+        per_image_ms,
+        eta_secs,
+    }
 }
 
 /// Re-embed all screenshots with the current model.
@@ -1247,8 +1395,14 @@ pub fn rebuild_embeddings(
         }
 
         // Read + resize
-        let Ok(raw) = std::fs::read(&webp_path) else { skipped += 1; continue; };
-        let Some((resized, _, _)) = resize_fit_pad(&raw, config.image_size) else { skipped += 1; continue; };
+        let Ok(raw) = std::fs::read(&webp_path) else {
+            skipped += 1;
+            continue;
+        };
+        let Some((resized, _, _)) = resize_fit_pad(&raw, config.image_size) else {
+            skipped += 1;
+            continue;
+        };
 
         // Embed
         let emb = if let Some(ref mut fe) = encoder {
@@ -1267,20 +1421,29 @@ pub fn rebuild_embeddings(
         // Progress event every 10 rows
         if (i + 1) % 10 == 0 || i + 1 == total {
             let elapsed = start.elapsed().as_secs_f64();
-            let rate = if embedded > 0 { elapsed / embedded as f64 } else { 0.25 };
+            let rate = if embedded > 0 {
+                elapsed / embedded as f64
+            } else {
+                0.25
+            };
             let remaining = total - i - 1;
             let eta = remaining as f64 * rate;
-            ctx.emit_event("screenshot-reembed-progress", serde_json::json!({
-                "done": i + 1,
-                "total": total,
-                "elapsed_secs": elapsed,
-                "eta_secs": eta,
-            }));
+            ctx.emit_event(
+                "screenshot-reembed-progress",
+                serde_json::json!({
+                    "done": i + 1,
+                    "total": total,
+                    "elapsed_secs": elapsed,
+                    "eta_secs": eta,
+                }),
+            );
         }
     }
 
     // Rebuild HNSW
-    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || store.all_embeddings());
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || {
+        store.all_embeddings()
+    });
 
     ReembedResult {
         embedded,

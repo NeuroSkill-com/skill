@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  fmtDurCompact, totalDurationSecs, labelsForDay,
-  assignLabelRainbowColors, labelRelations,
-  dateKey, fmtDuration, fmtSamples, dayPct,
-  secToUtcDir, localDayBounds, buildLocalDays,
-  GRID_COLS, GRID_ROWS, GRID_BIN,
+  assignLabelRainbowColors,
+  buildLocalDays,
+  dateKey,
+  dayPct,
+  fmtDuration,
+  fmtDurCompact,
+  fmtSamples,
+  GRID_BIN,
+  GRID_COLS,
+  GRID_ROWS,
   LABEL_PROXIMITY_SECS,
+  labelRelations,
+  labelsForDay,
+  localDayBounds,
   type SessionEntry,
+  secToUtcDir,
+  totalDurationSecs,
 } from "$lib/history-helpers";
 import type { LabelRow } from "$lib/types";
 
@@ -15,11 +25,16 @@ import type { LabelRow } from "$lib/types";
 
 function session(overrides: Partial<SessionEntry> = {}): SessionEntry {
   return {
-    csv_file: "test.csv", csv_path: "/data/test.csv",
-    session_start_utc: 1700000000, session_end_utc: 1700003600,
-    device_name: "Muse S", serial_number: null,
-    battery_pct: 80, total_samples: 256000,
-    sample_rate_hz: 256, labels: [],
+    csv_file: "test.csv",
+    csv_path: "/data/test.csv",
+    session_start_utc: 1700000000,
+    session_end_utc: 1700003600,
+    device_name: "Muse S",
+    serial_number: null,
+    battery_pct: 80,
+    total_samples: 256000,
+    sample_rate_hz: 256,
+    labels: [],
     file_size_bytes: 1024,
     avg_snr_db: null,
     ...overrides,
@@ -28,9 +43,14 @@ function session(overrides: Partial<SessionEntry> = {}): SessionEntry {
 
 function label(id: number, eeg_start: number, text = "test"): LabelRow {
   return {
-    id, text, eeg_start, eeg_end: eeg_start + 5,
-    label_start: eeg_start, label_end: eeg_start + 5,
-    context: "", created_at: eeg_start,
+    id,
+    text,
+    eeg_start,
+    eeg_end: eeg_start + 5,
+    label_start: eeg_start,
+    label_end: eeg_start + 5,
+    context: "",
+    created_at: eeg_start,
   } as LabelRow;
 }
 
@@ -86,7 +106,7 @@ describe("labelsForDay", () => {
     const s2 = session({ labels: [l2] });
     const result = labelsForDay("2026-01-01", [s1, s2]);
     expect(result).toHaveLength(2);
-    expect(result.map(l => l.id)).toEqual([1, 2]);
+    expect(result.map((l) => l.id)).toEqual([1, 2]);
   });
 });
 
@@ -102,7 +122,7 @@ describe("assignLabelRainbowColors", () => {
     expect(colors.size).toBe(3);
     const vals = [...colors.values()];
     // All should be HSL strings
-    vals.forEach(c => expect(c).toMatch(/^hsl\(/));
+    vals.forEach((c) => expect(c).toMatch(/^hsl\(/));
     // All should be different
     expect(new Set(vals).size).toBe(3);
   });

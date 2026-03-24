@@ -26,8 +26,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
             .as_millis();
         let label = format!("hfetch_{}", ts);
 
-        let parsed_url: tauri::Url = url.parse()
-            .map_err(|e| format!("invalid URL: {e}"))?;
+        let parsed_url: tauri::Url = url.parse().map_err(|e| format!("invalid URL: {e}"))?;
 
         // Channel to detect initial page-load completion (DOM ready).
         let (load_tx, load_rx) = mpsc::sync_channel::<()>(1);
@@ -56,7 +55,9 @@ pub(crate) fn setup(app: &mut tauri::App) {
                 let _ = window.destroy();
                 return Err("cancelled by user".into());
             }
-            if load_rx.try_recv().is_ok() { break; }
+            if load_rx.try_recv().is_ok() {
+                break;
+            }
             if Instant::now() > deadline {
                 let _ = window.destroy();
                 return Err("page load timeout (30s)".into());
@@ -93,7 +94,8 @@ pub(crate) fn setup(app: &mut tauri::App) {
             if let Ok(title) = window.title() {
                 if let Some(len_str) = title.strip_prefix("__SKILL_LEN__") {
                     if let Ok(len) = len_str.parse::<usize>() {
-                        if len > 100 { // Minimum content threshold
+                        if len > 100 {
+                            // Minimum content threshold
                             if last_len == Some(len) {
                                 stable_count += 1;
                                 if stable_count >= 3 {
@@ -171,12 +173,12 @@ pub(crate) fn setup(app: &mut tauri::App) {
                 }
             }
 
-            if Instant::now() > extract_deadline { break; }
+            if Instant::now() > extract_deadline {
+                break;
+            }
         }
 
         let _ = window.destroy();
         Err("content extraction timeout".into())
     });
 }
-
-

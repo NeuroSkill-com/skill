@@ -6,275 +6,280 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Updates tab — check for updates, auto-download, install, restart. -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { check, type Update } from "@tauri-apps/plugin-updater";
-  import { openUrl }            from "@tauri-apps/plugin-opener";
-  import { relaunch }           from "@tauri-apps/plugin-process";
-  import { Button }             from "$lib/components/ui/button";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { t }                  from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Phase ─────────────────────────────────────────────────────────────────
-  // Single state enum — avoids the boolean-soup that caused the previous bugs.
-  type Phase =
-    | "idle"        // nothing happening
-    | "checking"    // calling check() / waiting for result
-    | "downloading" // downloadAndInstall() in progress
-    | "ready"       // installed, counting down to restart
-    | "error";      // something went wrong (error string is always shown)
+// ── Phase ─────────────────────────────────────────────────────────────────
+// Single state enum — avoids the boolean-soup that caused the previous bugs.
+type Phase =
+  | "idle" // nothing happening
+  | "checking" // calling check() / waiting for result
+  | "downloading" // downloadAndInstall() in progress
+  | "ready" // installed, counting down to restart
+  | "error"; // something went wrong (error string is always shown)
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  let appVersion  = $state("…");
-  let phase       = $state<Phase>("idle");
-  let progress    = $state(0);        // 0–100 during download
-  let error       = $state("");       // non-empty only on error phase
-  let available   = $state<{ version: string; date?: string; body?: string } | null>(null);
-  let lastCheckedUtc = $state(0);
-  /** True while an EEG session is being recorded — blocks restart. */
-  let sessionLive = $state(false);
-  /** User attempted restart while session was live — show warning. */
-  let sessionBlockWarning = $state(false);
+// ── State ─────────────────────────────────────────────────────────────────
+let appVersion = $state("…");
+let phase = $state<Phase>("idle");
+let progress = $state(0); // 0–100 during download
+let error = $state(""); // non-empty only on error phase
+let available = $state<{ version: string; date?: string; body?: string } | null>(null);
+let lastCheckedUtc = $state(0);
+/** True while an EEG session is being recorded — blocks restart. */
+let sessionLive = $state(false);
+/** User attempted restart while session was live — show warning. */
+let sessionBlockWarning = $state(false);
 
-  // Autostart
-  let autostartEnabled  = $state(false);
-  let autostartSaving   = $state(false);
-  let autostartError    = $state("");
+// Autostart
+let autostartEnabled = $state(false);
+let autostartSaving = $state(false);
+let autostartError = $state("");
 
-  // Update-check interval (backend-persisted)
-  let checkIntervalSecs = $state(3600);
-  let intervalSaving    = $state(false);
+// Update-check interval (backend-persisted)
+let checkIntervalSecs = $state(3600);
+let intervalSaving = $state(false);
 
-  // ── Interval options ──────────────────────────────────────────────────────
-  const INTERVAL_OPTIONS: [number, string][] = [
-    [900,   "updates.interval15m"],
-    [1800,  "updates.interval30m"],
-    [3600,  "updates.interval1h"],
-    [14400, "updates.interval4h"],
-    [86400, "updates.interval24h"],
-    [0,     "updates.intervalOff"],
-  ];
+// ── Interval options ──────────────────────────────────────────────────────
+const INTERVAL_OPTIONS: [number, string][] = [
+  [900, "updates.interval15m"],
+  [1800, "updates.interval30m"],
+  [3600, "updates.interval1h"],
+  [14400, "updates.interval4h"],
+  [86400, "updates.interval24h"],
+  [0, "updates.intervalOff"],
+];
 
-  const RELEASES_DOWNLOAD_URL = "https://github.com/NeuroSkill-com/skill/releases/latest";
+const RELEASES_DOWNLOAD_URL = "https://github.com/NeuroSkill-com/skill/releases/latest";
 
-  // ── Session-live polling ────────────────────────────────────────────────
-  let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
+// ── Session-live polling ────────────────────────────────────────────────
+let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Poll session state so the restart button reacts when session ends. */
-  function startSessionPoll() {
-    stopSessionPoll();
-    sessionPollTimer = setInterval(async () => {
-      try { sessionLive = await invoke<boolean>("is_session_live"); }
-      catch { /* ignore */ }
-      if (!sessionLive) sessionBlockWarning = false;
-    }, 2000);
-  }
-
-  function stopSessionPoll() {
-    if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null; }
-  }
-
-  /** Attempt restart — blocked when a session is live. */
-  async function tryRestart() {
-    try { sessionLive = await invoke<boolean>("is_session_live"); }
-    catch { /* allow restart if check fails */ sessionLive = false; }
-    if (sessionLive) {
-      sessionBlockWarning = true;
-      return;
+/** Poll session state so the restart button reacts when session ends. */
+function startSessionPoll() {
+  stopSessionPoll();
+  sessionPollTimer = setInterval(async () => {
+    try {
+      sessionLive = await invoke<boolean>("is_session_live");
+    } catch {
+      /* ignore */
     }
-    sessionBlockWarning = false;
-    relaunch();
+    if (!sessionLive) sessionBlockWarning = false;
+  }, 2000);
+}
+
+function stopSessionPoll() {
+  if (sessionPollTimer) {
+    clearInterval(sessionPollTimer);
+    sessionPollTimer = null;
   }
+}
 
-  // ── Last-checked persistence ──────────────────────────────────────────────
-  const LAST_KEY = "lastUpdateCheckUtc";
-
-  function loadLastChecked() {
-    try {
-      const v = localStorage.getItem(LAST_KEY);
-      if (v) lastCheckedUtc = Number(v) || 0;
-    } catch (e) { console.warn("[updates] load last checked failed:", e); }
+/** Attempt restart — blocked when a session is live. */
+async function tryRestart() {
+  try {
+    sessionLive = await invoke<boolean>("is_session_live");
+  } catch {
+    /* allow restart if check fails */ sessionLive = false;
   }
-
-  function saveLastChecked() {
-    lastCheckedUtc = Math.floor(Date.now() / 1000);
-    try { localStorage.setItem(LAST_KEY, String(lastCheckedUtc)); } catch (e) { console.warn("[updates] save last checked failed:", e); }
+  if (sessionLive) {
+    sessionBlockWarning = true;
+    return;
   }
+  sessionBlockWarning = false;
+  relaunch();
+}
 
-  async function openOnlineDownload() {
-    try {
-      await openUrl(RELEASES_DOWNLOAD_URL);
-    } catch (e) {
-      const msg = t("updates.openDownloadPageFailed", { error: String(e) });
-      error = error ? `${error}\n${msg}` : msg;
-    }
+// ── Last-checked persistence ──────────────────────────────────────────────
+const LAST_KEY = "lastUpdateCheckUtc";
+
+function loadLastChecked() {
+  try {
+    const v = localStorage.getItem(LAST_KEY);
+    if (v) lastCheckedUtc = Number(v) || 0;
+  } catch (e) {}
+}
+
+function saveLastChecked() {
+  lastCheckedUtc = Math.floor(Date.now() / 1000);
+  try {
+    localStorage.setItem(LAST_KEY, String(lastCheckedUtc));
+  } catch (e) {}
+}
+
+async function openOnlineDownload() {
+  try {
+    await openUrl(RELEASES_DOWNLOAD_URL);
+  } catch (e) {
+    const msg = t("updates.openDownloadPageFailed", { error: String(e) });
+    error = error ? `${error}\n${msg}` : msg;
   }
+}
 
-  // ── Core update logic ─────────────────────────────────────────────────────
+// ── Core update logic ─────────────────────────────────────────────────────
 
-  /** Download + install a known Update object.
-   *  Sets phase to "downloading" → "ready" on success, "error" on failure.  */
-  async function doInstall(update: Update) {
-    phase    = "downloading";
-    progress = 0;
-    error    = "";
+/** Download + install a known Update object.
+ *  Sets phase to "downloading" → "ready" on success, "error" on failure.  */
+async function doInstall(update: Update) {
+  phase = "downloading";
+  progress = 0;
+  error = "";
 
-    let downloaded   = 0;
-    let totalLength  = 0;
+  let downloaded = 0;
+  let totalLength = 0;
 
-    try {
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case "Started":
-            totalLength = event.data.contentLength ?? 0;
-            break;
-          case "Progress":
-            downloaded += event.data.chunkLength;
-            progress = totalLength > 0
-              ? Math.min(99, Math.round((downloaded / totalLength) * 100))
-              : 0;
-            break;
-          case "Finished":
-            progress = 100;
-            break;
-        }
-      });
-
-      // Install complete — wait for user to confirm restart.
-      phase = "ready";
-      await invoke("set_update_ready", { ready: true });
-      startSessionPoll();
-
-    } catch (e) {
-      phase = "error";
-      error = `${String(e)}\n${t("updates.autoUpdateFailedOnline")}`;
-      await openOnlineDownload();
-    }
-  }
-
-  /** Check the update endpoint, store the result, and immediately download
-   *  if an update is found.  Safe to call when phase is "idle" or "error".
-   *
-   *  @param hint  Metadata pre-fetched by the background Rust task.  When
-   *               present the UI keeps showing the known version while we
-   *               obtain a fresh Update object (which carries download
-   *               capability).  If check() then returns null — e.g. because
-   *               CDN edge nodes haven't propagated latest.json yet — we
-   *               surface an error instead of silently going back to "idle".
-   */
-  async function checkAndDownload(
-    hint?: { version: string; date?: string; body?: string },
-  ) {
-    if (phase === "checking" || phase === "downloading" || phase === "ready") return;
-
-    stopCountdown();
-    phase = "checking";
-    error = "";
-    // Preserve any hint metadata so the UI shows the version during the
-    // network round-trip.  Only wipe available for a manual "Check Now".
-    if (!hint) available = null;
-
-    try {
-      const update = await check();
-      saveLastChecked();
-
-      if (update) {
-        available = {
-          version: update.version,
-          date:    update.date ?? undefined,
-          body:    update.body ?? undefined,
-        };
-        // Immediately start downloading — no "Download Now" click needed.
-        await doInstall(update);
-      } else if (hint) {
-        // The background task detected an update but check() now disagrees —
-        // most likely a CDN propagation race (latest.json not yet on all
-        // edges).  Surface an actionable error rather than silently dropping.
-        phase = "error";
-        error = `Update v${hint.version} was detected but could not be prepared (CDN may still be propagating). Click "Retry" in a moment.`;
-      } else {
-        available = null;
-        phase = "idle";
+  try {
+    await update.downloadAndInstall((event) => {
+      switch (event.event) {
+        case "Started":
+          totalLength = event.data.contentLength ?? 0;
+          break;
+        case "Progress":
+          downloaded += event.data.chunkLength;
+          progress = totalLength > 0 ? Math.min(99, Math.round((downloaded / totalLength) * 100)) : 0;
+          break;
+        case "Finished":
+          progress = 100;
+          break;
       }
-
-    } catch (e) {
-      phase = "error";
-      error = String(e);
-    }
-  }
-
-  function fmtLastChecked(): string {
-    if (!lastCheckedUtc) return t("common.never");
-    const d = new Date(lastCheckedUtc * 1000);
-    return d.toLocaleDateString(undefined, {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
     });
-  }
 
-  // ── Autostart ─────────────────────────────────────────────────────────────
-  async function toggleAutostart() {
-    autostartError  = "";
-    autostartSaving = true;
-    try {
-      await invoke("set_autostart_enabled", { enabled: !autostartEnabled });
-      autostartEnabled = !autostartEnabled;
-    } catch (e) {
-      autostartError = String(e);
-    } finally {
-      autostartSaving = false;
+    // Install complete — wait for user to confirm restart.
+    phase = "ready";
+    await invoke("set_update_ready", { ready: true });
+    startSessionPoll();
+  } catch (e) {
+    phase = "error";
+    error = `${String(e)}\n${t("updates.autoUpdateFailedOnline")}`;
+    await openOnlineDownload();
+  }
+}
+
+/** Check the update endpoint, store the result, and immediately download
+ *  if an update is found.  Safe to call when phase is "idle" or "error".
+ *
+ *  @param hint  Metadata pre-fetched by the background Rust task.  When
+ *               present the UI keeps showing the known version while we
+ *               obtain a fresh Update object (which carries download
+ *               capability).  If check() then returns null — e.g. because
+ *               CDN edge nodes haven't propagated latest.json yet — we
+ *               surface an error instead of silently going back to "idle".
+ */
+async function checkAndDownload(hint?: { version: string; date?: string; body?: string }) {
+  if (phase === "checking" || phase === "downloading" || phase === "ready") return;
+
+  stopCountdown();
+  phase = "checking";
+  error = "";
+  // Preserve any hint metadata so the UI shows the version during the
+  // network round-trip.  Only wipe available for a manual "Check Now".
+  if (!hint) available = null;
+
+  try {
+    const update = await check();
+    saveLastChecked();
+
+    if (update) {
+      available = {
+        version: update.version,
+        date: update.date ?? undefined,
+        body: update.body ?? undefined,
+      };
+      // Immediately start downloading — no "Download Now" click needed.
+      await doInstall(update);
+    } else if (hint) {
+      // The background task detected an update but check() now disagrees —
+      // most likely a CDN propagation race (latest.json not yet on all
+      // edges).  Surface an actionable error rather than silently dropping.
+      phase = "error";
+      error = `Update v${hint.version} was detected but could not be prepared (CDN may still be propagating). Click "Retry" in a moment.`;
+    } else {
+      available = null;
+      phase = "idle";
     }
+  } catch (e) {
+    phase = "error";
+    error = String(e);
   }
+}
 
-  // ── Update-check interval ─────────────────────────────────────────────────
-  async function setCheckInterval(secs: number) {
-    intervalSaving    = true;
-    checkIntervalSecs = secs;
-    try {
-      await invoke("set_update_check_interval", { secs });
-    } finally {
-      intervalSaving = false;
-    }
+function fmtLastChecked(): string {
+  if (!lastCheckedUtc) return t("common.never");
+  const d = new Date(lastCheckedUtc * 1000);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ── Autostart ─────────────────────────────────────────────────────────────
+async function toggleAutostart() {
+  autostartError = "";
+  autostartSaving = true;
+  try {
+    await invoke("set_autostart_enabled", { enabled: !autostartEnabled });
+    autostartEnabled = !autostartEnabled;
+  } catch (e) {
+    autostartError = String(e);
+  } finally {
+    autostartSaving = false;
   }
+}
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-  let unlisteners: UnlistenFn[] = [];
+// ── Update-check interval ─────────────────────────────────────────────────
+async function setCheckInterval(secs: number) {
+  intervalSaving = true;
+  checkIntervalSecs = secs;
+  try {
+    await invoke("set_update_check_interval", { secs });
+  } finally {
+    intervalSaving = false;
+  }
+}
 
-  onMount(async () => {
-    loadLastChecked();
-    appVersion = await invoke<string>("get_app_version");
+// ── Lifecycle ─────────────────────────────────────────────────────────────
+let unlisteners: UnlistenFn[] = [];
 
-    const [autoEnabled, intervalSecs] = await Promise.all([
-      invoke<boolean>("get_autostart_enabled").catch(() => false),
-      invoke<number>("get_update_check_interval").catch(() => 3600),
-    ]);
-    autostartEnabled  = autoEnabled;
-    checkIntervalSecs = intervalSecs;
+onMount(async () => {
+  loadLastChecked();
+  appVersion = await invoke<string>("get_app_version");
 
-    unlisteners.push(
-      // Background Rust task found an update — kick off download automatically.
-      await listen<{ version: string; date?: string; body?: string }>(
-        "update-available",
-        (ev) => {
-          if (phase === "checking" || phase === "downloading" || phase === "ready") return;
-          saveLastChecked();
-          // Pass the event payload as a hint so checkAndDownload() keeps the
-          // version visible in the UI while it fetches a fresh Update object,
-          // and surfaces an error if check() returns null (CDN race) instead
-          // of silently reverting to "idle".
-          checkAndDownload(ev.payload);
-        },
-      ),
-      await listen("update-checked", () => {
-        saveLastChecked();
-      }),
-    );
-  });
+  const [autoEnabled, intervalSecs] = await Promise.all([
+    invoke<boolean>("get_autostart_enabled").catch(() => false),
+    invoke<number>("get_update_check_interval").catch(() => 3600),
+  ]);
+  autostartEnabled = autoEnabled;
+  checkIntervalSecs = intervalSecs;
 
-  onDestroy(() => {
-    unlisteners.forEach(u => u());
-    stopSessionPoll();
-  });
+  unlisteners.push(
+    // Background Rust task found an update — kick off download automatically.
+    await listen<{ version: string; date?: string; body?: string }>("update-available", (ev) => {
+      if (phase === "checking" || phase === "downloading" || phase === "ready") return;
+      saveLastChecked();
+      // Pass the event payload as a hint so checkAndDownload() keeps the
+      // version visible in the UI while it fetches a fresh Update object,
+      // and surfaces an error if check() returns null (CDN race) instead
+      // of silently reverting to "idle".
+      checkAndDownload(ev.payload);
+    }),
+    await listen("update-checked", () => {
+      saveLastChecked();
+    }),
+  );
+});
+
+onDestroy(() => {
+  unlisteners.forEach((u) => u());
+  stopSessionPoll();
+});
 </script>
 
 <section class="flex flex-col gap-4">

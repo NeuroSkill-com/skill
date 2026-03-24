@@ -2,24 +2,24 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- History stats bar — recording streak, session counts, week trend. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import type { HistoryStatsData } from "$lib/history-helpers";
+import type { HistoryStatsData } from "$lib/history-helpers";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface WeekTrend {
-    thisWeek: number;
-    lastWeek: number;
-    pctChange: number;
-  }
+interface WeekTrend {
+  thisWeek: number;
+  lastWeek: number;
+  pctChange: number;
+}
 
-  interface Props {
-    daysCount: number;
-    totalHours: number;
-    recordingStreak: number;
-    historyStats: HistoryStatsData | null;
-    weekTrend: WeekTrend | null;
-  }
+interface Props {
+  daysCount: number;
+  totalHours: number;
+  recordingStreak: number;
+  historyStats: HistoryStatsData | null;
+  weekTrend: WeekTrend | null;
+}
 
-  let { daysCount, totalHours, recordingStreak, historyStats, weekTrend }: Props = $props();
+let { daysCount, totalHours, recordingStreak, historyStats, weekTrend }: Props = $props();
 </script>
 
 {#if recordingStreak > 0}

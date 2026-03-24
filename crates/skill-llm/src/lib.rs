@@ -12,6 +12,7 @@
 //! - **event** — event emitter trait (abstracts tauri::AppHandle)
 
 pub mod config;
+pub mod error;
 pub mod event;
 pub mod log;
 
@@ -50,12 +51,10 @@ pub use event::{LlmEventEmitter, NoopEmitter};
 
 #[cfg(feature = "llm")]
 pub use engine::{
-    GenParams, InferRequest, InferToken, LlmLogBuffer, LlmLogEntry,
-    LlmLogFile, LlmServerState, LlmStateCell, LlmStatus,
-    BeforeToolCallFn, AfterToolCallFn, ToolEvent,
-    cell_status, extract_images_from_messages, init, new_log_buffer,
-    new_state_cell, push_log, shutdown_cell,
-    run_chat_with_builtin_tools,
+    cell_status, extract_images_from_messages, init, new_log_buffer, new_state_cell, push_log,
+    run_chat_with_builtin_tools, shutdown_cell, AfterToolCallFn, BeforeToolCallFn, GenParams,
+    InferRequest, InferToken, LlmLogBuffer, LlmLogEntry, LlmLogFile, LlmServerState, LlmStateCell,
+    LlmStatus, ToolEvent,
 };
 #[cfg(feature = "llm")]
 pub use handlers::router;

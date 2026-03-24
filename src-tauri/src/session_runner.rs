@@ -13,19 +13,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 use skill_devices::session::*;
-use skill_devices::{self, BatteryEma, BatteryAlert};
+use skill_devices::{self, BatteryAlert, BatteryEma};
 
+use crate::session_csv::write_session_meta;
+use crate::ws_server::WsBroadcaster;
+use crate::AppStateExt;
 use crate::{
-    EegPacket, ImuPacket, MutexExt, PpgPacket, SessionDsp, ToastLevel,
-    emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
+    emit_status, refresh_tray, send_toast, unix_secs, upsert_paired, EegPacket, ImuPacket,
+    MutexExt, PpgPacket, SessionDsp, ToastLevel,
 };
+use skill_data::session_writer::{SessionWriter, StorageFormat};
 use skill_eeg::artifact_detection::ArtifactDetector;
 use skill_eeg::eeg_bands::{BandAnalyzer, BandSnapshot};
 use skill_eeg::eeg_quality::QualityMonitor;
-use crate::session_csv::write_session_meta;
-use skill_data::session_writer::{SessionWriter, StorageFormat};
-use crate::ws_server::WsBroadcaster;
-use crate::AppStateExt;
 
 // ── Data watchdog ─────────────────────────────────────────────────────────────
 
@@ -53,12 +53,11 @@ const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
 ///   2. Constructing the adapter and passing it here.
 ///   3. Wiring a `cancel_rx` oneshot for user-initiated disconnect.
 pub(crate) async fn run_device_session(
-    app:        AppHandle,
-    cancel:     tokio_util::sync::CancellationToken,
-    csv_path:   PathBuf,
+    app: AppHandle,
+    cancel: tokio_util::sync::CancellationToken,
+    csv_path: PathBuf,
     mut adapter: Box<dyn DeviceAdapter>,
 ) {
-
     let desc = adapter.descriptor().clone();
     let has_ppg = desc.caps.contains(DeviceCaps::PPG);
     let has_imu = desc.caps.contains(DeviceCaps::IMU);
@@ -87,15 +86,20 @@ pub(crate) async fn run_device_session(
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.filter_config.sample_rate = sample_rate as f32;
-        s.status.channel_names     = desc.channel_names.clone();
+        s.status.channel_names = desc.channel_names.clone();
         s.status.eeg_channel_count = desc.eeg_channels;
         s.status.eeg_sample_rate_hz = sample_rate;
     }
 
     // ── Session-local DSP (lock-free during sample processing) ───────────────
-    let ch_name_refs: Vec<&str> = desc.channel_names.iter().map(std::string::String::as_str).collect();
+    let ch_name_refs: Vec<&str> = desc
+        .channel_names
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let mut dsp = SessionDsp::new(&app, &ch_name_refs);
-    dsp.accumulator.set_device_channels(desc.channel_names.clone(), sample_rate as f32);
+    dsp.accumulator
+        .set_device_channels(desc.channel_names.clone(), sample_rate as f32);
 
     // ── Battery EMA (from skill-devices — replaces inline smoothing) ─────────
     let mut battery_ema = BatteryEma::new(0.1);
@@ -276,12 +280,20 @@ pub(crate) async fn run_device_session(
         // adapter never emitted Eeg events).  Still need to clean up
         // the session state so the UI transitions to disconnected and
         // reconnect logic can fire.
-        app_log!(app, "bluetooth",
-            "[{kind}] session ended before any EEG data was recorded");
-        crate::device_scanner::device_log("session",
-            &format!("[{kind}] Session ended (no data recorded)"));
-        let error_msg = if user_cancelled { None }
-                        else { Some("DEVICE_DISCONNECTED".into()) };
+        app_log!(
+            app,
+            "bluetooth",
+            "[{kind}] session ended before any EEG data was recorded"
+        );
+        crate::device_scanner::device_log(
+            "session",
+            &format!("[{kind}] Session ended (no data recorded)"),
+        );
+        let error_msg = if user_cancelled {
+            None
+        } else {
+            Some("DEVICE_DISCONNECTED".into())
+        };
         crate::go_disconnected(&app, error_msg, false);
     }
 }
@@ -289,44 +301,67 @@ pub(crate) async fn run_device_session(
 // ── Event handlers ────────────────────────────────────────────────────────────
 
 fn on_connected(
-    app:      &AppHandle,
-    dsp:      &mut SessionDsp,
+    app: &AppHandle,
+    dsp: &mut SessionDsp,
     csv_path: &Path,
-    info:     &DeviceInfo,
-    kind:     &str,
+    info: &DeviceInfo,
+    kind: &str,
 ) {
     let dev_id = {
         let sr = app.app_state();
         let g = sr.lock_or_recover();
-        g.status.device_id.clone().unwrap_or_else(|| info.id.clone())
+        g.status
+            .device_id
+            .clone()
+            .unwrap_or_else(|| info.id.clone())
     };
 
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        s.status.state       = "connected".into();
+        s.status.state = "connected".into();
         s.status.device_name = Some(info.name.clone());
         if s.status.device_id.is_none() {
             s.status.device_id = Some(info.id.clone());
         }
         // Populate device identity fields from the adapter's DeviceInfo.
-        if let Some(ref v) = info.serial_number      { s.status.serial_number      = Some(v.clone()); }
-        if let Some(ref v) = info.firmware_version    { s.status.firmware_version   = Some(v.clone()); }
-        if let Some(ref v) = info.hardware_version    { s.status.hardware_version   = Some(v.clone()); }
-        if let Some(ref v) = info.bootloader_version  { s.status.bootloader_version = Some(v.clone()); }
-        if let Some(ref v) = info.mac_address         { s.status.mac_address        = Some(v.clone()); }
-        if let Some(ref v) = info.headset_preset      { s.status.headset_preset     = Some(v.clone()); }
-        s.status.device_error    = None;
+        if let Some(ref v) = info.serial_number {
+            s.status.serial_number = Some(v.clone());
+        }
+        if let Some(ref v) = info.firmware_version {
+            s.status.firmware_version = Some(v.clone());
+        }
+        if let Some(ref v) = info.hardware_version {
+            s.status.hardware_version = Some(v.clone());
+        }
+        if let Some(ref v) = info.bootloader_version {
+            s.status.bootloader_version = Some(v.clone());
+        }
+        if let Some(ref v) = info.mac_address {
+            s.status.mac_address = Some(v.clone());
+        }
+        if let Some(ref v) = info.headset_preset {
+            s.status.headset_preset = Some(v.clone());
+        }
+        s.status.device_error = None;
         s.status.target_name = None;
-        s.retry_attempt               = 0;
-        s.status.retry_attempt        = 0;
+        s.retry_attempt = 0;
+        s.status.retry_attempt = 0;
         s.status.retry_countdown_secs = 0;
     }
 
-    dsp.accumulator.update_device(Some(dev_id.clone()), Some(info.name.clone()));
-    app_log!(app, "bluetooth", "[{kind}] connected: {} (id={dev_id})", info.name);
-    crate::device_scanner::device_log("session",
-        &format!("[{kind}] Connected: {} (id={dev_id})", info.name));
+    dsp.accumulator
+        .update_device(Some(dev_id.clone()), Some(info.name.clone()));
+    app_log!(
+        app,
+        "bluetooth",
+        "[{kind}] connected: {} (id={dev_id})",
+        info.name
+    );
+    crate::device_scanner::device_log(
+        "session",
+        &format!("[{kind}] Connected: {} (id={dev_id})", info.name),
+    );
     // Auto-pair ONLY on first launch (no paired devices at all) so the user
     // can test immediately.  Otherwise, only update existing paired entries
     // (e.g. refresh last_seen timestamp, name).  The user must explicitly
@@ -348,8 +383,7 @@ fn on_connected(
             upsert_paired(app, &dev_id, &info.name);
         } else if first_time {
             // First-time onboarding: auto-pair the first device.
-            app_log!(app, "bluetooth",
-                "[{kind}] first-time auto-pair: {dev_id}");
+            app_log!(app, "bluetooth", "[{kind}] first-time auto-pair: {dev_id}");
             upsert_paired(app, &dev_id, &info.name);
         }
         // else: device not paired and not first-time → don't auto-pair.
@@ -361,8 +395,11 @@ fn on_connected(
     if kind == "emotiv" && dev_id == "cortex:emotiv" && !info.name.is_empty() {
         let real_id = format!("cortex:{}", info.name);
         if real_id != dev_id {
-            app_log!(app, "bluetooth",
-                "[{kind}] migrating paired ID: {dev_id} → {real_id}");
+            app_log!(
+                app,
+                "bluetooth",
+                "[{kind}] migrating paired ID: {dev_id} → {real_id}"
+            );
             upsert_paired(app, &real_id, &info.name);
             {
                 let r = app.app_state();
@@ -389,9 +426,14 @@ fn on_connected(
         "timestamp":   unix_secs(),
     });
     let _ = app.emit("device-connected", &payload);
-    app.state::<WsBroadcaster>().send("device-connected", &payload);
-    send_toast(app, ToastLevel::Success, "Connected",
-        &format!("{} is now streaming EEG data.", info.name));
+    app.state::<WsBroadcaster>()
+        .send("device-connected", &payload);
+    send_toast(
+        app,
+        ToastLevel::Success,
+        "Connected",
+        &format!("{} is now streaming EEG data.", info.name),
+    );
 }
 
 fn on_disconnected(app: &AppHandle, kind: &str) {
@@ -399,13 +441,15 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
         let sr = app.app_state();
         let g = sr.lock_or_recover();
         (
-            g.status.device_name.clone().unwrap_or_else(|| "unknown".into()),
+            g.status
+                .device_name
+                .clone()
+                .unwrap_or_else(|| "unknown".into()),
             g.status.device_id.clone(),
         )
     };
     app_log!(app, "bluetooth", "[{kind}] disconnected: {name}");
-    crate::device_scanner::device_log("session",
-        &format!("[{kind}] Disconnected: {name}"));
+    crate::device_scanner::device_log("session", &format!("[{kind}] Disconnected: {name}"));
     let payload = serde_json::json!({
         "device_name": name,
         "device_id":   device_id,
@@ -413,23 +457,28 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
         "reason":      "device_disconnected",
     });
     let _ = app.emit("device-disconnected", &payload);
-    app.state::<WsBroadcaster>().send("device-disconnected", &payload);
-    send_toast(app, ToastLevel::Warning, "Connection Lost",
-        &format!("{name} disconnected."));
+    app.state::<WsBroadcaster>()
+        .send("device-disconnected", &payload);
+    send_toast(
+        app,
+        ToastLevel::Warning,
+        "Connection Lost",
+        &format!("{name} disconnected."),
+    );
 }
 
 // ── EEG processing ────────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
 fn process_eeg(
-    app:            &AppHandle,
-    dsp:            &mut SessionDsp,
+    app: &AppHandle,
+    dsp: &mut SessionDsp,
     csv: &mut SessionWriter,
-    csv_path:       &Path,
-    frame:          &EegFrame,
-    sample_rate:    f64,
-    pipeline_ch:    usize,
-    has_ppg:        bool,
+    csv_path: &Path,
+    frame: &EegFrame,
+    sample_rate: f64,
+    pipeline_ch: usize,
+    has_ppg: bool,
     temperature_raw: u16,
 ) {
     let ts_s = frame.timestamp_s;
@@ -453,13 +502,17 @@ fn process_eeg(
 
     // ── Per-channel: CSV write + DSP pipeline ────────────────────────────────
     let mut filter_fired = false;
-    let mut band_fired   = false;
+    let mut band_fired = false;
     for (ch, &uv) in frame.channels.iter().enumerate() {
         let one = [uv];
         csv.push_eeg(ch, &one, ts_s, sample_rate);
         if ch < pipeline_ch {
-            if dsp.filter.push(ch, &one)        { filter_fired = true; }
-            if dsp.band_analyzer.push(ch, &one) { band_fired   = true; }
+            if dsp.filter.push(ch, &one) {
+                filter_fired = true;
+            }
+            if dsp.band_analyzer.push(ch, &one) {
+                band_fired = true;
+            }
             dsp.quality.push(ch, &one);
             dsp.artifact_detector.push(ch, &one);
             dsp.accumulator.push(ch, &[uv as f32]);
@@ -498,7 +551,11 @@ fn process_eeg(
     // ── Emit filtered EEG packets via IPC ────────────────────────────────────
     if !drained.is_empty() {
         for (ch, samples) in drained {
-            let pkt = EegPacket { electrode: ch, samples, timestamp: ts_ms };
+            let pkt = EegPacket {
+                electrode: ch,
+                samples,
+                timestamp: ts_ms,
+            };
             if let Some(ref ipc_ch) = ipc_ch {
                 let _ = ipc_ch.send(pkt);
             }
@@ -519,10 +576,10 @@ fn process_eeg(
         };
         let enrich_ctx = skill_devices::SnapshotContext {
             ppg,
-            artifacts:       Some(dsp.artifact_detector.metrics()),
-            head_pose:       Some(dsp.head_pose.metrics()),
+            artifacts: Some(dsp.artifact_detector.metrics()),
+            head_pose: Some(dsp.head_pose.metrics()),
             temperature_raw,
-            gpu:             skill_data::gpu_stats::read(),
+            gpu: skill_data::gpu_stats::read(),
         };
         skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
 
@@ -536,7 +593,7 @@ fn process_eeg(
             let sr = app.app_state();
             let mut s = sr.lock_or_recover();
             if snap.snr.is_finite() {
-                s.snr_sum   += snap.snr as f64;
+                s.snr_sum += snap.snr as f64;
                 s.snr_count += 1;
             }
             s.latest_bands = Some(snap.clone());
@@ -565,27 +622,27 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
     let d = {
         let mut dnd = dnd_arc.lock_or_recover();
         let cfg = skill_devices::DndConfig {
-            enabled:               dnd.config.enabled,
-            focus_threshold:        dnd.config.focus_threshold as f64,
-            duration_secs:          dnd.config.duration_secs,
-            exit_duration_secs:     dnd.config.exit_duration_secs,
-            focus_lookback_secs:    dnd.config.focus_lookback_secs,
-            exit_notification:      dnd.config.exit_notification,
-            focus_mode_identifier:  dnd.config.focus_mode_identifier.clone(),
-            snr_exit_db:            dnd.config.snr_exit_db,
+            enabled: dnd.config.enabled,
+            focus_threshold: dnd.config.focus_threshold as f64,
+            duration_secs: dnd.config.duration_secs,
+            exit_duration_secs: dnd.config.exit_duration_secs,
+            focus_lookback_secs: dnd.config.focus_lookback_secs,
+            exit_notification: dnd.config.exit_notification,
+            focus_mode_identifier: dnd.config.focus_mode_identifier.clone(),
+            snr_exit_db: dnd.config.snr_exit_db,
         };
         let mut dnd_state = skill_devices::DndState {
-            active:        dnd.active,
+            active: dnd.active,
             focus_samples: std::mem::take(&mut dnd.focus_samples),
             score_history: std::mem::take(&mut dnd.score_history),
-            below_ticks:   dnd.below_ticks,
+            below_ticks: dnd.below_ticks,
             snr_low_ticks: dnd.snr_low_ticks,
-            os_active:     dnd.os_active,
+            os_active: dnd.os_active,
         };
         let decision = skill_devices::dnd_tick(&cfg, &mut dnd_state, focus_score, snr_db);
         dnd.focus_samples = dnd_state.focus_samples;
         dnd.score_history = dnd_state.score_history;
-        dnd.below_ticks   = dnd_state.below_ticks;
+        dnd.below_ticks = dnd_state.below_ticks;
         dnd.snr_low_ticks = dnd_state.snr_low_ticks;
         decision
     }; // dnd lock released
@@ -596,12 +653,13 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
         if ok {
             {
                 let mut dnd = dnd_arc.lock_or_recover();
-                dnd.active      = enable;
+                dnd.active = enable;
                 dnd.below_ticks = 0;
                 dnd.snr_low_ticks = 0;
             }
             let _ = app.emit("dnd-state-changed", enable);
-            app.state::<WsBroadcaster>().send("dnd-state-changed", &enable);
+            app.state::<WsBroadcaster>()
+                .send("dnd-state-changed", &enable);
             if !enable && d.send_exit_notification {
                 send_toast(app, ToastLevel::Info, "Focus mode exited", d.exit_body);
             }
@@ -609,13 +667,12 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
     }
 
     let emit_active = d.emit_active;
-    let exit_secs_remaining: f64 =
-        if emit_active && d.avg_score < d.threshold && !d.exit_held {
-            let remaining = d.exit_window.saturating_sub(d.below_ticks as usize);
-            remaining as f64 / 4.0
-        } else {
-            0.0
-        };
+    let exit_secs_remaining: f64 = if emit_active && d.avg_score < d.threshold && !d.exit_held {
+        let remaining = d.exit_window.saturating_sub(d.below_ticks as usize);
+        remaining as f64 / 4.0
+    } else {
+        0.0
+    };
 
     let eligibility = serde_json::json!({
         "enabled":               d.enabled,
@@ -634,17 +691,18 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
         "os_active":             d.os_active,
     });
     let _ = app.emit("dnd-eligibility", &eligibility);
-    app.state::<WsBroadcaster>().send("dnd-eligibility", &eligibility);
+    app.state::<WsBroadcaster>()
+        .send("dnd-eligibility", &eligibility);
 }
 
 // ── PPG processing ────────────────────────────────────────────────────────────
 
 fn process_ppg(
-    app:      &AppHandle,
-    dsp:      &mut SessionDsp,
+    app: &AppHandle,
+    dsp: &mut SessionDsp,
     csv: &mut SessionWriter,
     csv_path: &Path,
-    frame:    &PpgFrame,
+    frame: &PpgFrame,
 ) {
     let samples_f64 = &frame.samples;
 
@@ -664,12 +722,18 @@ fn process_ppg(
     dsp.accumulator.push_ppg(frame.channel, samples_f64);
     let ppg_vitals = dsp.accumulator.latest_ppg().cloned();
 
-    csv.push_ppg(csv_path, frame.channel, samples_f64, frame.timestamp_s, ppg_vitals.as_ref());
+    csv.push_ppg(
+        csv_path,
+        frame.channel,
+        samples_f64,
+        frame.timestamp_s,
+        ppg_vitals.as_ref(),
+    );
 
     if let Some(ch) = ipc {
         let _ = ch.send(PpgPacket {
-            channel:   frame.channel,
-            samples:   samples_f64.clone(),
+            channel: frame.channel,
+            samples: samples_f64.clone(),
             timestamp: frame.timestamp_s * 1000.0,
         });
     }
@@ -678,11 +742,11 @@ fn process_ppg(
 // ── IMU processing ────────────────────────────────────────────────────────────
 
 fn process_imu(
-    app:      &AppHandle,
-    dsp:      &mut SessionDsp,
-    csv:      &mut SessionWriter,
+    app: &AppHandle,
+    dsp: &mut SessionDsp,
+    csv: &mut SessionWriter,
     csv_path: &Path,
-    frame:    &ImuFrame,
+    frame: &ImuFrame,
 ) {
     let accel = frame.accel;
     let gyro = frame.gyro.unwrap_or([0.0; 3]);
@@ -716,14 +780,14 @@ fn process_imu(
     };
     if let Some(ch) = ipc {
         let _ = ch.send(ImuPacket {
-            sensor:    "accel".into(),
-            samples:   [accel, accel, accel],
+            sensor: "accel".into(),
+            samples: [accel, accel, accel],
             timestamp: now_ms,
         });
         if frame.gyro.is_some() {
             let _ = ch.send(ImuPacket {
-                sensor:    "gyro".into(),
-                samples:   [gyro, gyro, gyro],
+                sensor: "gyro".into(),
+                samples: [gyro, gyro, gyro],
                 timestamp: now_ms,
             });
         }
@@ -731,11 +795,7 @@ fn process_imu(
 }
 
 /// Process IMU when CSV writer is not yet available (before first EEG frame).
-fn process_imu_no_csv(
-    app:   &AppHandle,
-    dsp:   &mut SessionDsp,
-    frame: &ImuFrame,
-) {
+fn process_imu_no_csv(app: &AppHandle, dsp: &mut SessionDsp, frame: &ImuFrame) {
     let accel = frame.accel;
     let gyro = frame.gyro.unwrap_or([0.0; 3]);
 
@@ -753,7 +813,8 @@ fn process_imu_no_csv(
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs_f64() * 1000.0;
+        .as_secs_f64()
+        * 1000.0;
 
     let ipc = {
         let sr = app.app_state();
@@ -762,14 +823,14 @@ fn process_imu_no_csv(
     };
     if let Some(ch) = ipc {
         let _ = ch.send(ImuPacket {
-            sensor:    "accel".into(),
-            samples:   [accel, accel, accel],
+            sensor: "accel".into(),
+            samples: [accel, accel, accel],
             timestamp: now_ms,
         });
         if frame.gyro.is_some() {
             let _ = ch.send(ImuPacket {
-                sensor:    "gyro".into(),
-                samples:   [gyro, gyro, gyro],
+                sensor: "gyro".into(),
+                samples: [gyro, gyro, gyro],
                 timestamp: now_ms,
             });
         }
@@ -779,10 +840,10 @@ fn process_imu_no_csv(
 // ── Battery processing ────────────────────────────────────────────────────────
 
 fn process_battery(
-    app:          &AppHandle,
-    battery_ema:  &mut BatteryEma,
-    csv_path:     &Path,
-    frame:        &BatteryFrame,
+    app: &AppHandle,
+    battery_ema: &mut BatteryEma,
+    csv_path: &Path,
+    frame: &BatteryFrame,
 ) {
     let first_reading = battery_ema.is_first_reading();
     let (smoothed, alert) = battery_ema.update(frame.level_pct);
@@ -806,12 +867,20 @@ fn process_battery(
 
     match alert {
         BatteryAlert::Critical(_) => {
-            send_toast(app, ToastLevel::Error, "Battery Critical",
-                &format!("Battery at {smoothed:.0}% \u{2014} charge soon."));
+            send_toast(
+                app,
+                ToastLevel::Error,
+                "Battery Critical",
+                &format!("Battery at {smoothed:.0}% \u{2014} charge soon."),
+            );
         }
         BatteryAlert::Low(_) => {
-            send_toast(app, ToastLevel::Warning, "Low Battery",
-                &format!("Battery at {smoothed:.0}% \u{2014} consider charging."));
+            send_toast(
+                app,
+                ToastLevel::Warning,
+                "Low Battery",
+                &format!("Battery at {smoothed:.0}% \u{2014} consider charging."),
+            );
         }
         BatteryAlert::None => {}
     }
@@ -826,7 +895,9 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
     let Some(obj) = val.as_object() else { return };
 
     let str_key = |short: &str, long: &str| -> Option<String> {
-        obj.get(short).and_then(|v| v.as_str()).map(str::to_owned)
+        obj.get(short)
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
             .or_else(|| obj.get(long).and_then(|v| v.as_str()).map(str::to_owned))
     };
 
@@ -840,12 +911,24 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
     if sn.is_some() || ma.is_some() || fw.is_some() || hw.is_some() {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        if let Some(v) = sn { s.status.serial_number      = Some(v); }
-        if let Some(v) = ma { s.status.mac_address         = Some(v); }
-        if let Some(v) = fw { s.status.firmware_version    = Some(v); }
-        if let Some(v) = hw { s.status.hardware_version    = Some(v); }
-        if let Some(v) = bl { s.status.bootloader_version  = Some(v); }
-        if let Some(v) = tp { s.status.headset_preset      = Some(v); }
+        if let Some(v) = sn {
+            s.status.serial_number = Some(v);
+        }
+        if let Some(v) = ma {
+            s.status.mac_address = Some(v);
+        }
+        if let Some(v) = fw {
+            s.status.firmware_version = Some(v);
+        }
+        if let Some(v) = hw {
+            s.status.hardware_version = Some(v);
+        }
+        if let Some(v) = bl {
+            s.status.bootloader_version = Some(v);
+        }
+        if let Some(v) = tp {
+            s.status.headset_preset = Some(v);
+        }
         drop(s);
         emit_status(app);
         write_session_meta(app, csv_path);
@@ -855,9 +938,9 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
 // ── Session finalisation ──────────────────────────────────────────────────────
 
 fn finalize_session(
-    app:            &AppHandle,
+    app: &AppHandle,
     csv: &mut SessionWriter,
-    csv_path:       &Path,
+    csv_path: &Path,
     user_cancelled: bool,
 ) {
     csv.flush();
@@ -870,6 +953,10 @@ fn finalize_session(
             s.pending_reconnect = true;
         }
     }
-    let error_msg = if user_cancelled { None } else { Some("DEVICE_DISCONNECTED".into()) };
+    let error_msg = if user_cancelled {
+        None
+    } else {
+        Some("DEVICE_DISCONNECTED".into())
+    };
     crate::go_disconnected(app, error_msg, false);
 }

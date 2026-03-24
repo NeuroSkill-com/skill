@@ -7,34 +7,34 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Proactive Hooks — EEG-driven automatic triggers -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t }         from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 
-  const overviewKeys = [
-    ["helpHooks.whatIsTitle",        "helpHooks.whatIsBody"],
-    ["helpHooks.howItWorksTitle",    "helpHooks.howItWorksBody"],
-    ["helpHooks.scenariosTitle",     "helpHooks.scenariosBody"],
-  ] as const;
+const overviewKeys = [
+  ["helpHooks.whatIsTitle", "helpHooks.whatIsBody"],
+  ["helpHooks.howItWorksTitle", "helpHooks.howItWorksBody"],
+  ["helpHooks.scenariosTitle", "helpHooks.scenariosBody"],
+] as const;
 
-  const configKeys = [
-    ["helpHooks.nameTitle",          "helpHooks.nameBody"],
-    ["helpHooks.keywordsTitle",      "helpHooks.keywordsBody"],
-    ["helpHooks.keywordSugTitle",    "helpHooks.keywordSugBody"],
-    ["helpHooks.distanceTitle",      "helpHooks.distanceBody"],
-    ["helpHooks.distanceSugTitle",   "helpHooks.distanceSugBody"],
-    ["helpHooks.recentLimitTitle",   "helpHooks.recentLimitBody"],
-    ["helpHooks.commandTitle",       "helpHooks.commandBody"],
-    ["helpHooks.textTitle",          "helpHooks.textBody"],
-  ] as const;
+const configKeys = [
+  ["helpHooks.nameTitle", "helpHooks.nameBody"],
+  ["helpHooks.keywordsTitle", "helpHooks.keywordsBody"],
+  ["helpHooks.keywordSugTitle", "helpHooks.keywordSugBody"],
+  ["helpHooks.distanceTitle", "helpHooks.distanceBody"],
+  ["helpHooks.distanceSugTitle", "helpHooks.distanceSugBody"],
+  ["helpHooks.recentLimitTitle", "helpHooks.recentLimitBody"],
+  ["helpHooks.commandTitle", "helpHooks.commandBody"],
+  ["helpHooks.textTitle", "helpHooks.textBody"],
+] as const;
 
-  const advancedKeys = [
-    ["helpHooks.examplesTitle",      "helpHooks.examplesBody"],
-    ["helpHooks.historyTitle",       "helpHooks.historyBody"],
-    ["helpHooks.wsEventsTitle",      "helpHooks.wsEventsBody"],
-    ["helpHooks.tipsTitle",          "helpHooks.tipsBody"],
-  ] as const;
+const advancedKeys = [
+  ["helpHooks.examplesTitle", "helpHooks.examplesBody"],
+  ["helpHooks.historyTitle", "helpHooks.historyBody"],
+  ["helpHooks.wsEventsTitle", "helpHooks.wsEventsBody"],
+  ["helpHooks.tipsTitle", "helpHooks.tipsBody"],
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

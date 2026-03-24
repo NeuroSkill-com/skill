@@ -1,12 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  pad, fromUnix, toUnix, fmtDuration, fmtDurationRange, fmtSecs,
-  fmtDateIso, fmtDateTime, fmtDateTimeSecs, fmtCountdown,
-  thresholdColor, fmtMs, fmtElapsed,
-  dateToLocalKey, dateToCompactKey, unixToLocalKey, localKeyToUnix,
-  fmtBytes, fmtGB, fmtDayKey,
-  fmtDateTimeLocalInput, parseDateTimeLocalInput,
+  dateToCompactKey,
+  dateToLocalKey,
+  fmtBytes,
+  fmtCountdown,
+  fmtDateIso,
+  fmtDateTime,
+  fmtDateTimeLocalInput,
+  fmtDateTimeSecs,
+  fmtDayKey,
+  fmtDuration,
+  fmtDurationRange,
+  fmtElapsed,
+  fmtGB,
+  fmtMs,
+  fmtSecs,
+  fromUnix,
+  localKeyToUnix,
+  pad,
+  parseDateTimeLocalInput,
+  thresholdColor,
+  toUnix,
+  unixToLocalKey,
 } from "$lib/format";
 
 describe("pad", () => {
@@ -86,13 +102,40 @@ describe("fmtCountdown", () => {
 
 describe("thresholdColor", () => {
   it("returns fallback for value below all thresholds", () => {
-    expect(thresholdColor(10, [[60, "green"], [30, "yellow"]], "gray")).toBe("gray");
+    expect(
+      thresholdColor(
+        10,
+        [
+          [60, "green"],
+          [30, "yellow"],
+        ],
+        "gray",
+      ),
+    ).toBe("gray");
   });
   it("returns matching threshold color", () => {
-    expect(thresholdColor(50, [[60, "green"], [30, "yellow"]], "gray")).toBe("yellow");
+    expect(
+      thresholdColor(
+        50,
+        [
+          [60, "green"],
+          [30, "yellow"],
+        ],
+        "gray",
+      ),
+    ).toBe("yellow");
   });
   it("returns highest matching threshold", () => {
-    expect(thresholdColor(80, [[60, "green"], [30, "yellow"]], "gray")).toBe("green");
+    expect(
+      thresholdColor(
+        80,
+        [
+          [60, "green"],
+          [30, "yellow"],
+        ],
+        "gray",
+      ),
+    ).toBe("green");
   });
 });
 

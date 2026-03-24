@@ -41,7 +41,9 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     /// Returns `None` if the embedder is not yet initialised or embedding
     /// fails.  The default implementation always returns `None` (standalone /
     /// test contexts that don't have a text embedder).
-    fn embed_text(&self, _text: &str) -> Option<Vec<f32>> { None }
+    fn embed_text(&self, _text: &str) -> Option<Vec<f32>> {
+        None
+    }
 
     /// Run OCR on an image via the LLM vision model (VLM-based OCR).
     ///
@@ -51,5 +53,7 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     ///
     /// This is an alternative to traditional OCR engines (ocrs / Apple Vision)
     /// that can be benchmarked against them.
-    fn ocr_via_llm(&self, _png_bytes: &[u8]) -> Option<String> { None }
+    fn ocr_via_llm(&self, _png_bytes: &[u8]) -> Option<String> {
+        None
+    }
 }

@@ -19,7 +19,7 @@
 //!   (identical to the EEG range above).
 //! * `created_at`              — insertion timestamp (unix seconds).
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::Path;
 
 use skill_constants::LABELS_FILE;
@@ -43,12 +43,12 @@ const DDL: &str = "
 const MIGRATE_CONTEXT: &str = "ALTER TABLE labels ADD COLUMN context TEXT NOT NULL DEFAULT ''";
 
 /// Migration: add embedding BLOBs (nullable; populated asynchronously after insert).
-const MIGRATE_TEXT_EMBEDDING: &str    = "ALTER TABLE labels ADD COLUMN text_embedding BLOB";
+const MIGRATE_TEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN text_embedding BLOB";
 const MIGRATE_CONTEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN context_embedding BLOB";
 /// Migration: track which fastembed model produced the stored vectors.
 /// NULL means the row has not been embedded yet (or was embedded before this
 /// column was added and needs re-embedding).
-const MIGRATE_EMBEDDING_MODEL: &str   = "ALTER TABLE labels ADD COLUMN embedding_model TEXT";
+const MIGRATE_EMBEDDING_MODEL: &str = "ALTER TABLE labels ADD COLUMN embedding_model TEXT";
 
 pub struct LabelStore {
     conn: Connection,
@@ -59,8 +59,11 @@ impl LabelStore {
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let db_path = skill_dir.join(LABELS_FILE);
         let conn = match Connection::open(&db_path) {
-            Ok(c)  => c,
-            Err(e) => { eprintln!("[labels] open {}: {e}", db_path.display()); return None; }
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[labels] open {}: {e}", db_path.display());
+                return None;
+            }
         };
         if let Err(e) = conn.execute_batch(DDL) {
             eprintln!("[labels] DDL: {e}");
@@ -77,7 +80,9 @@ impl LabelStore {
     /// Return the total number of labels in the database.
     pub fn count(&self) -> u64 {
         self.conn
-            .query_row("SELECT COUNT(*) FROM labels", [], |row| row.get::<_, i64>(0))
+            .query_row("SELECT COUNT(*) FROM labels", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .unwrap_or(0) as u64
     }
 
@@ -85,23 +90,29 @@ impl LabelStore {
     pub fn recent(&self, n: usize) -> Vec<LabelRow> {
         let mut stmt = match self.conn.prepare(
             "SELECT id, eeg_start, eeg_end, text, context, created_at
-             FROM labels ORDER BY created_at DESC LIMIT ?1"
+             FROM labels ORDER BY created_at DESC LIMIT ?1",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] recent: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[labels] recent: {e}");
+                return vec![];
+            }
         };
         let rows = match stmt.query_map([n as i64], |row| {
             Ok(LabelRow {
-                id:         row.get(0)?,
-                eeg_start:  row.get::<_, i64>(1)? as u64,
-                eeg_end:    row.get::<_, i64>(2)? as u64,
-                text:       row.get(3)?,
-                context:    row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                id: row.get(0)?,
+                eeg_start: row.get::<_, i64>(1)? as u64,
+                eeg_end: row.get::<_, i64>(2)? as u64,
+                text: row.get(3)?,
+                context: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
                 created_at: row.get::<_, i64>(5)? as u64,
             })
         }) {
-            Ok(r)  => r,
-            Err(e) => { eprintln!("[labels] recent map: {e}"); return vec![]; }
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[labels] recent map: {e}");
+                return vec![];
+            }
         };
         rows.filter_map(std::result::Result::ok).collect()
     }
@@ -110,27 +121,34 @@ impl LabelStore {
     #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &self,
-        eeg_start:   u64,
-        eeg_end:     u64,
+        eeg_start: u64,
+        eeg_end: u64,
         label_start: u64,
-        label_end:   u64,
-        text:        &str,
-        context:     &str,
-        created_at:  u64,
+        label_end: u64,
+        text: &str,
+        context: &str,
+        created_at: u64,
     ) -> Option<i64> {
         let r = self.conn.execute(
             "INSERT INTO labels
              (eeg_start, eeg_end, label_start, label_end, text, context, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                eeg_start as i64, eeg_end as i64,
-                label_start as i64, label_end as i64,
-                text, context, created_at as i64,
+                eeg_start as i64,
+                eeg_end as i64,
+                label_start as i64,
+                label_end as i64,
+                text,
+                context,
+                created_at as i64,
             ],
         );
         match r {
-            Ok(_)  => Some(self.conn.last_insert_rowid()),
-            Err(e) => { eprintln!("[labels] insert: {e}"); None }
+            Ok(_) => Some(self.conn.last_insert_rowid()),
+            Err(e) => {
+                eprintln!("[labels] insert: {e}");
+                None
+            }
         }
     }
 
@@ -138,23 +156,29 @@ impl LabelStore {
     pub fn list_all(&self) -> Vec<LabelRow> {
         let mut stmt = match self.conn.prepare(
             "SELECT id, eeg_start, eeg_end, text, context, created_at
-             FROM labels ORDER BY created_at DESC"
+             FROM labels ORDER BY created_at DESC",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] list_all: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[labels] list_all: {e}");
+                return vec![];
+            }
         };
         let rows = match stmt.query_map([], |row| {
             Ok(LabelRow {
-                id:         row.get(0)?,
-                eeg_start:  row.get::<_, i64>(1)? as u64,
-                eeg_end:    row.get::<_, i64>(2)? as u64,
-                text:       row.get(3)?,
-                context:    row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                id: row.get(0)?,
+                eeg_start: row.get::<_, i64>(1)? as u64,
+                eeg_end: row.get::<_, i64>(2)? as u64,
+                text: row.get(3)?,
+                context: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
                 created_at: row.get::<_, i64>(5)? as u64,
             })
         }) {
-            Ok(r)  => r,
-            Err(e) => { eprintln!("[labels] list_all map: {e}"); return vec![]; }
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[labels] list_all map: {e}");
+                return vec![];
+            }
         };
         rows.filter_map(std::result::Result::ok).collect()
     }
@@ -166,7 +190,10 @@ impl LabelStore {
             params![new_text, new_context, id],
         ) {
             Ok(n) => n > 0,
-            Err(e) => { eprintln!("[labels] update_text: {e}"); false }
+            Err(e) => {
+                eprintln!("[labels] update_text: {e}");
+                false
+            }
         }
     }
 
@@ -174,12 +201,12 @@ impl LabelStore {
     /// produced them.  Embeddings are stored as little-endian f32 byte arrays.
     pub fn update_embeddings(
         &self,
-        id:              i64,
-        text_emb:        &[f32],
-        context_emb:     &[f32],
-        model_code:      &str,
+        id: i64,
+        text_emb: &[f32],
+        context_emb: &[f32],
+        model_code: &str,
     ) -> bool {
-        let text_blob:    Vec<u8> = crate::util::f32_to_blob(text_emb);
+        let text_blob: Vec<u8> = crate::util::f32_to_blob(text_emb);
         let context_blob: Vec<u8> = crate::util::f32_to_blob(context_emb);
         match self.conn.execute(
             "UPDATE labels \
@@ -188,7 +215,10 @@ impl LabelStore {
             params![text_blob, context_blob, model_code, id],
         ) {
             Ok(n) => n > 0,
-            Err(e) => { eprintln!("[labels] update_embeddings: {e}"); false }
+            Err(e) => {
+                eprintln!("[labels] update_embeddings: {e}");
+                false
+            }
         }
     }
 
@@ -197,13 +227,20 @@ impl LabelStore {
     pub fn rows_needing_embed(&self, current_model: &str) -> Vec<(i64, String, String)> {
         let mut stmt = match self.conn.prepare(
             "SELECT id, text, context FROM labels \
-             WHERE text_embedding IS NULL OR embedding_model IS NULL OR embedding_model != ?1"
+             WHERE text_embedding IS NULL OR embedding_model IS NULL OR embedding_model != ?1",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] rows_needing_embed: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[labels] rows_needing_embed: {e}");
+                return vec![];
+            }
         };
         stmt.query_map(params![current_model], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
@@ -211,14 +248,19 @@ impl LabelStore {
 
     /// Return ALL rows — used by the explicit "re-embed everything" command.
     pub fn all_rows_for_embed(&self) -> Vec<(i64, String, String)> {
-        let mut stmt = match self.conn.prepare(
-            "SELECT id, text, context FROM labels"
-        ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] all_rows_for_embed: {e}"); return vec![]; }
+        let mut stmt = match self.conn.prepare("SELECT id, text, context FROM labels") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[labels] all_rows_for_embed: {e}");
+                return vec![];
+            }
         };
         stmt.query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
@@ -226,9 +268,15 @@ impl LabelStore {
 
     /// Delete a label by id.
     pub fn delete(&self, id: i64) -> bool {
-        match self.conn.execute("DELETE FROM labels WHERE id = ?1", params![id]) {
+        match self
+            .conn
+            .execute("DELETE FROM labels WHERE id = ?1", params![id])
+        {
             Ok(n) => n > 0,
-            Err(e) => { eprintln!("[labels] delete: {e}"); false }
+            Err(e) => {
+                eprintln!("[labels] delete: {e}");
+                false
+            }
         }
     }
 
@@ -242,13 +290,16 @@ impl LabelStore {
                      FROM labels WHERE created_at >= ?1
                      GROUP BY text ORDER BY cnt DESC LIMIT ?2",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[labels] top_texts: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![ts as i64, limit as i64], |row| {
                     Ok(LabelFreqRow {
-                        text:      row.get(0)?,
-                        count:     row.get::<_, i64>(1)? as u64,
+                        text: row.get(0)?,
+                        count: row.get::<_, i64>(1)? as u64,
                         last_used: row.get::<_, i64>(2)? as u64,
                     })
                 })
@@ -261,13 +312,16 @@ impl LabelStore {
                      FROM labels
                      GROUP BY text ORDER BY cnt DESC LIMIT ?1",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[labels] top_texts: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![limit as i64], |row| {
                     Ok(LabelFreqRow {
-                        text:      row.get(0)?,
-                        count:     row.get::<_, i64>(1)? as u64,
+                        text: row.get(0)?,
+                        count: row.get::<_, i64>(1)? as u64,
                         last_used: row.get::<_, i64>(2)? as u64,
                     })
                 })
@@ -296,23 +350,29 @@ impl LabelStore {
             "SELECT id, eeg_start, eeg_end, text, context, created_at
              FROM labels
              WHERE eeg_end >= ?1 AND eeg_start <= ?2
-             ORDER BY eeg_start"
+             ORDER BY eeg_start",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] query_range: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[labels] query_range: {e}");
+                return vec![];
+            }
         };
         let rows = match stmt.query_map(params![from as i64, to as i64], |row| {
             Ok(LabelRow {
-                id:         row.get(0)?,
-                eeg_start:  row.get::<_, i64>(1)? as u64,
-                eeg_end:    row.get::<_, i64>(2)? as u64,
-                text:       row.get(3)?,
-                context:    row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                id: row.get(0)?,
+                eeg_start: row.get::<_, i64>(1)? as u64,
+                eeg_end: row.get::<_, i64>(2)? as u64,
+                text: row.get(3)?,
+                context: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
                 created_at: row.get::<_, i64>(5)? as u64,
             })
         }) {
-            Ok(r)  => r,
-            Err(e) => { eprintln!("[labels] query_range map: {e}"); return vec![]; }
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[labels] query_range map: {e}");
+                return vec![];
+            }
         };
         rows.filter_map(std::result::Result::ok).collect()
     }
@@ -320,18 +380,18 @@ impl LabelStore {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LabelFreqRow {
-    pub text:      String,
-    pub count:     u64,
+    pub text: String,
+    pub count: u64,
     pub last_used: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LabelRow {
-    pub id:         i64,
-    pub eeg_start:  u64,
-    pub eeg_end:    u64,
-    pub text:       String,
-    pub context:    String,
+    pub id: i64,
+    pub eeg_start: u64,
+    pub eeg_end: u64,
+    pub text: String,
+    pub context: String,
     pub created_at: u64,
 }
 
@@ -339,7 +399,7 @@ pub struct LabelRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::{TempDir, tempdir};
+    use tempfile::{tempdir, TempDir};
 
     fn open_temp() -> (LabelStore, TempDir) {
         let dir = tempdir().expect("tempdir");
@@ -351,7 +411,9 @@ mod tests {
     fn insert_and_count() {
         let (store, _dir) = open_temp();
         assert_eq!(store.count(), 0);
-        let id = store.insert(100, 200, 100, 200, "alpha", "", 1_700_000_000).unwrap();
+        let id = store
+            .insert(100, 200, 100, 200, "alpha", "", 1_700_000_000)
+            .unwrap();
         assert!(id > 0);
         assert_eq!(store.count(), 1);
     }
@@ -359,8 +421,12 @@ mod tests {
     #[test]
     fn list_all_order() {
         let (store, _dir) = open_temp();
-        store.insert(100, 200, 100, 200, "first",  "", 1_000).unwrap();
-        store.insert(200, 300, 200, 300, "second", "", 2_000).unwrap();
+        store
+            .insert(100, 200, 100, 200, "first", "", 1_000)
+            .unwrap();
+        store
+            .insert(200, 300, 200, 300, "second", "", 2_000)
+            .unwrap();
         let rows = store.list_all();
         // newest first
         assert_eq!(rows[0].text, "second");
@@ -401,8 +467,10 @@ mod tests {
     #[test]
     fn query_range_filters_correctly() {
         let (store, _dir) = open_temp();
-        store.insert(100, 200, 100, 200, "in_range",     "", 1).unwrap();
-        store.insert(500, 600, 500, 600, "out_of_range", "", 2).unwrap();
+        store.insert(100, 200, 100, 200, "in_range", "", 1).unwrap();
+        store
+            .insert(500, 600, 500, 600, "out_of_range", "", 2)
+            .unwrap();
         let rows = store.query_range(50, 250);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].text, "in_range");
@@ -411,8 +479,16 @@ mod tests {
     #[test]
     fn top_texts_all_time() {
         let (store, _dir) = open_temp();
-        for i in 0..4u64 { store.insert(i, i+1, i, i+1, "focus", "", 1000 + i).unwrap(); }
-        for i in 0..2u64 { store.insert(i, i+1, i, i+1, "relax", "", 2000 + i).unwrap(); }
+        for i in 0..4u64 {
+            store
+                .insert(i, i + 1, i, i + 1, "focus", "", 1000 + i)
+                .unwrap();
+        }
+        for i in 0..2u64 {
+            store
+                .insert(i, i + 1, i, i + 1, "relax", "", 2000 + i)
+                .unwrap();
+        }
         store.insert(0, 1, 0, 1, "sleep", "", 3000).unwrap();
 
         let top = store.top_texts(10, None);
@@ -427,8 +503,16 @@ mod tests {
     #[test]
     fn top_texts_with_since_filter() {
         let (store, _dir) = open_temp();
-        for i in 0..5u64 { store.insert(i, i+1, i, i+1, "old", "", 100 + i).unwrap(); }
-        for i in 0..2u64 { store.insert(i, i+1, i, i+1, "new", "", 500 + i).unwrap(); }
+        for i in 0..5u64 {
+            store
+                .insert(i, i + 1, i, i + 1, "old", "", 100 + i)
+                .unwrap();
+        }
+        for i in 0..2u64 {
+            store
+                .insert(i, i + 1, i, i + 1, "new", "", 500 + i)
+                .unwrap();
+        }
 
         let top = store.top_texts(10, Some(400));
         assert_eq!(top.len(), 1);
@@ -440,7 +524,9 @@ mod tests {
     fn top_texts_respects_limit() {
         let (store, _dir) = open_temp();
         for i in 0..10u64 {
-            store.insert(i, i+1, i, i+1, &format!("label{}", i), "", i).unwrap();
+            store
+                .insert(i, i + 1, i, i + 1, &format!("label{}", i), "", i)
+                .unwrap();
         }
         assert_eq!(store.top_texts(3, None).len(), 3);
     }

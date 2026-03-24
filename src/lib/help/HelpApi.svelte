@@ -7,28 +7,28 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: WebSocket / LAN API -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t } from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 
-  const overviewKeys = [
-    ["helpApi.liveStreaming", "helpApi.liveStreamingBody"],
-    ["helpApi.commands",      "helpApi.commandsBody"],
-  ] as const;
+const overviewKeys = [
+  ["helpApi.liveStreaming", "helpApi.liveStreamingBody"],
+  ["helpApi.commands", "helpApi.commandsBody"],
+] as const;
 
-  const commandKeys = [
-    ["helpApi.cmdStatus",        "helpApi.cmdStatusParams",        "helpApi.cmdStatusDesc"],
-    ["helpApi.cmdSay",           "helpApi.cmdSayParams",           "helpApi.cmdSayDesc"],
-    ["helpApi.cmdCalibrate",     "helpApi.cmdCalibrateParams",     "helpApi.cmdCalibrateDesc"],
-    ["helpApi.cmdLabel",         "helpApi.cmdLabelParams",         "helpApi.cmdLabelDesc"],
-    ["helpApi.cmdSearch",        "helpApi.cmdSearchParams",        "helpApi.cmdSearchDesc"],
-    ["helpApi.cmdSessions",      "helpApi.cmdSessionsParams",      "helpApi.cmdSessionsDesc"],
-    ["helpApi.cmdCompare",       "helpApi.cmdCompareParams",       "helpApi.cmdCompareDesc"],
-    ["helpApi.cmdSleep",         "helpApi.cmdSleepParams",         "helpApi.cmdSleepDesc"],
-    ["helpApi.cmdUmap",          "helpApi.cmdUmapParams",          "helpApi.cmdUmapDesc"],
-    ["helpApi.cmdUmapPoll",      "helpApi.cmdUmapPollParams",      "helpApi.cmdUmapPollDesc"],
-  ] as const;
+const commandKeys = [
+  ["helpApi.cmdStatus", "helpApi.cmdStatusParams", "helpApi.cmdStatusDesc"],
+  ["helpApi.cmdSay", "helpApi.cmdSayParams", "helpApi.cmdSayDesc"],
+  ["helpApi.cmdCalibrate", "helpApi.cmdCalibrateParams", "helpApi.cmdCalibrateDesc"],
+  ["helpApi.cmdLabel", "helpApi.cmdLabelParams", "helpApi.cmdLabelDesc"],
+  ["helpApi.cmdSearch", "helpApi.cmdSearchParams", "helpApi.cmdSearchDesc"],
+  ["helpApi.cmdSessions", "helpApi.cmdSessionsParams", "helpApi.cmdSessionsDesc"],
+  ["helpApi.cmdCompare", "helpApi.cmdCompareParams", "helpApi.cmdCompareDesc"],
+  ["helpApi.cmdSleep", "helpApi.cmdSleepParams", "helpApi.cmdSleepDesc"],
+  ["helpApi.cmdUmap", "helpApi.cmdUmapParams", "helpApi.cmdUmapDesc"],
+  ["helpApi.cmdUmapPoll", "helpApi.cmdUmapPollParams", "helpApi.cmdUmapPollDesc"],
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

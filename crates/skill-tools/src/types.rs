@@ -15,10 +15,10 @@ pub struct LlmToolConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    pub date:       bool,
-    pub location:   bool,
+    pub date: bool,
+    pub location: bool,
     pub web_search: bool,
-    pub web_fetch:  bool,
+    pub web_fetch: bool,
 
     /// Web search provider configuration.
     #[serde(default)]
@@ -155,15 +155,19 @@ pub struct WebCacheConfig {
     pub domain_ttl_overrides: std::collections::HashMap<String, u64>,
 }
 
-fn default_search_ttl() -> u64 { 1_800 }
-fn default_fetch_ttl()  -> u64 { 7_200 }
+fn default_search_ttl() -> u64 {
+    1_800
+}
+fn default_fetch_ttl() -> u64 {
+    7_200
+}
 
 impl Default for WebCacheConfig {
     fn default() -> Self {
         Self {
-            enabled:              true,
-            search_ttl_secs:      default_search_ttl(),
-            fetch_ttl_secs:       default_fetch_ttl(),
+            enabled: true,
+            search_ttl_secs: default_search_ttl(),
+            fetch_ttl_secs: default_fetch_ttl(),
             domain_ttl_overrides: std::collections::HashMap::new(),
         }
     }
@@ -190,14 +194,16 @@ pub struct WebSearchProvider {
     pub searxng_url: String,
 }
 
-fn default_search_backend() -> String { "duckduckgo".into() }
+fn default_search_backend() -> String {
+    "duckduckgo".into()
+}
 
 impl Default for WebSearchProvider {
     fn default() -> Self {
         Self {
-            backend:       default_search_backend(),
+            backend: default_search_backend(),
             brave_api_key: String::new(),
-            searxng_url:   String::new(),
+            searxng_url: String::new(),
         }
     }
 }
@@ -244,7 +250,9 @@ pub struct ToolContextCompression {
     pub max_result_chars: usize,
 }
 
-fn default_compression_level() -> CompressionLevel { CompressionLevel::Normal }
+fn default_compression_level() -> CompressionLevel {
+    CompressionLevel::Normal
+}
 
 impl Default for ToolContextCompression {
     fn default() -> Self {
@@ -259,20 +267,24 @@ impl Default for ToolContextCompression {
 impl ToolContextCompression {
     /// Effective max search results based on level and override.
     pub fn effective_max_search_results(&self) -> usize {
-        if self.max_search_results > 0 { return self.max_search_results; }
+        if self.max_search_results > 0 {
+            return self.max_search_results;
+        }
         match self.level {
-            CompressionLevel::Off        => 10,
-            CompressionLevel::Normal     => 5,
+            CompressionLevel::Off => 10,
+            CompressionLevel::Normal => 5,
             CompressionLevel::Aggressive => 3,
         }
     }
 
     /// Effective max chars per tool result based on level and override.
     pub fn effective_max_result_chars(&self) -> usize {
-        if self.max_result_chars > 0 { return self.max_result_chars; }
+        if self.max_result_chars > 0 {
+            return self.max_result_chars;
+        }
         match self.level {
-            CompressionLevel::Off        => 16_000,
-            CompressionLevel::Normal     => 2_000,
+            CompressionLevel::Off => 16_000,
+            CompressionLevel::Normal => 2_000,
             CompressionLevel::Aggressive => 1_000,
         }
     }
@@ -280,8 +292,8 @@ impl ToolContextCompression {
     /// Effective max chars for web search results (tighter than general).
     pub fn effective_max_search_result_chars(&self) -> usize {
         match self.level {
-            CompressionLevel::Off        => 16_000,
-            CompressionLevel::Normal     => 1_500,
+            CompressionLevel::Off => 16_000,
+            CompressionLevel::Normal => 1_500,
             CompressionLevel::Aggressive => 800,
         }
     }
@@ -297,18 +309,32 @@ impl ToolContextCompression {
     }
 }
 
-fn default_true()                      -> bool { true }
-fn default_tool_execution_mode()       -> ToolExecutionMode { ToolExecutionMode::Parallel }
-fn default_max_tool_rounds()           -> usize { 15 }
-fn default_max_tool_calls_per_round()  -> usize { 4 }
-fn default_skills_refresh_interval()   -> u64  { 86_400 }
-fn default_retry_max_retries()         -> u32  { 2 }
-fn default_retry_base_delay_ms()       -> u64  { 1_000 }
+fn default_true() -> bool {
+    true
+}
+fn default_tool_execution_mode() -> ToolExecutionMode {
+    ToolExecutionMode::Parallel
+}
+fn default_max_tool_rounds() -> usize {
+    15
+}
+fn default_max_tool_calls_per_round() -> usize {
+    4
+}
+fn default_skills_refresh_interval() -> u64 {
+    86_400
+}
+fn default_retry_max_retries() -> u32 {
+    2
+}
+fn default_retry_base_delay_ms() -> u64 {
+    1_000
+}
 
 impl Default for ToolRetryConfig {
     fn default() -> Self {
         Self {
-            max_retries:   default_retry_max_retries(),
+            max_retries: default_retry_max_retries(),
             base_delay_ms: default_retry_base_delay_ms(),
         }
     }
@@ -317,23 +343,23 @@ impl Default for ToolRetryConfig {
 impl Default for LlmToolConfig {
     fn default() -> Self {
         Self {
-            enabled:            true,
-            date:               true,
-            location:           true,
-            web_search:         true,
-            web_fetch:          true,
+            enabled: true,
+            date: true,
+            location: true,
+            web_search: true,
+            web_fetch: true,
             web_search_provider: WebSearchProvider::default(),
-            bash:               false,
-            require_bash_edit:  false,
-            read_file:          false,
-            write_file:         false,
-            edit_file:          false,
-            skill_api:          true,
-            skill_api_port:     0,
-            execution_mode:     default_tool_execution_mode(),
-            max_rounds:         15,
+            bash: false,
+            require_bash_edit: false,
+            read_file: false,
+            write_file: false,
+            edit_file: false,
+            skill_api: true,
+            skill_api_port: 0,
+            execution_mode: default_tool_execution_mode(),
+            max_rounds: 15,
             max_calls_per_round: default_max_tool_calls_per_round(),
-            thinking_budget:    None,
+            thinking_budget: None,
             context_compression: ToolContextCompression::default(),
             skills_refresh_interval_secs: default_skills_refresh_interval(),
             skills_sync_on_launch: false,
@@ -372,7 +398,10 @@ mod tests {
 
     #[test]
     fn default_execution_mode_is_parallel() {
-        assert_eq!(LlmToolConfig::default().execution_mode, ToolExecutionMode::Parallel);
+        assert_eq!(
+            LlmToolConfig::default().execution_mode,
+            ToolExecutionMode::Parallel
+        );
     }
 
     #[test]
@@ -382,7 +411,10 @@ mod tests {
 
     #[test]
     fn default_skills_refresh_interval_is_24h() {
-        assert_eq!(LlmToolConfig::default().skills_refresh_interval_secs, 86_400);
+        assert_eq!(
+            LlmToolConfig::default().skills_refresh_interval_secs,
+            86_400
+        );
     }
 
     // ── JSON round-trip ───────────────────────────────────────────────────
@@ -415,7 +447,10 @@ mod tests {
         let mut cfg = LlmToolConfig::default();
         cfg.skill_api_port = 9999;
         let json = serde_json::to_string(&cfg).unwrap();
-        assert!(!json.contains("skill_api_port"), "skip field should not appear in JSON");
+        assert!(
+            !json.contains("skill_api_port"),
+            "skip field should not appear in JSON"
+        );
         let parsed: LlmToolConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.skill_api_port, 0);
     }
@@ -452,9 +487,18 @@ mod tests {
 
     #[test]
     fn compression_level_serialises_lowercase() {
-        assert_eq!(serde_json::to_string(&CompressionLevel::Off).unwrap(), "\"off\"");
-        assert_eq!(serde_json::to_string(&CompressionLevel::Normal).unwrap(), "\"normal\"");
-        assert_eq!(serde_json::to_string(&CompressionLevel::Aggressive).unwrap(), "\"aggressive\"");
+        assert_eq!(
+            serde_json::to_string(&CompressionLevel::Off).unwrap(),
+            "\"off\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CompressionLevel::Normal).unwrap(),
+            "\"normal\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CompressionLevel::Aggressive).unwrap(),
+            "\"aggressive\""
+        );
     }
 
     // ── ToolContextCompression ────────────────────────────────────────────
@@ -469,7 +513,10 @@ mod tests {
 
     #[test]
     fn compression_off_has_highest_limits() {
-        let off = ToolContextCompression { level: CompressionLevel::Off, ..Default::default() };
+        let off = ToolContextCompression {
+            level: CompressionLevel::Off,
+            ..Default::default()
+        };
         assert_eq!(off.effective_max_search_results(), 10);
         assert_eq!(off.effective_max_result_chars(), 16_000);
         assert!(!off.should_truncate_urls());
@@ -478,7 +525,10 @@ mod tests {
 
     #[test]
     fn compression_aggressive_has_lowest_limits() {
-        let agg = ToolContextCompression { level: CompressionLevel::Aggressive, ..Default::default() };
+        let agg = ToolContextCompression {
+            level: CompressionLevel::Aggressive,
+            ..Default::default()
+        };
         assert!(agg.effective_max_search_results() <= 3);
         assert!(agg.effective_max_result_chars() <= 1_000);
         assert!(agg.should_truncate_urls());
@@ -527,7 +577,10 @@ mod tests {
 
     #[test]
     fn retry_config_round_trips_through_json() {
-        let r = ToolRetryConfig { max_retries: 3, base_delay_ms: 500 };
+        let r = ToolRetryConfig {
+            max_retries: 3,
+            base_delay_ms: 500,
+        };
         let json = serde_json::to_string(&r).unwrap();
         let parsed: ToolRetryConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.max_retries, 3);
@@ -550,7 +603,10 @@ mod tests {
 
     #[test]
     fn retry_config_zero_retries_is_valid() {
-        let r = ToolRetryConfig { max_retries: 0, base_delay_ms: 0 };
+        let r = ToolRetryConfig {
+            max_retries: 0,
+            base_delay_ms: 0,
+        };
         let json = serde_json::to_string(&r).unwrap();
         let parsed: ToolRetryConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.max_retries, 0);

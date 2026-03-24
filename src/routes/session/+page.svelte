@@ -6,88 +6,89 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Standalone Session Detail view — opened from search results or history. -->
 <script lang="ts">
-  import { onMount }       from "svelte";
-  import { invoke }        from "@tauri-apps/api/core";
-  import { t }             from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import { SessionDetail } from "$lib/dashboard";
-  import { Spinner }       from "$lib/components/ui/spinner";
-  import Hypnogram         from "$lib/Hypnogram.svelte";
-  import type { SessionMetrics, EpochRow, CsvMetricsResult } from "$lib/dashboard/SessionDetail.svelte";
-  import type { SleepStages } from "$lib/types";
-  import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
-  import { fmtTime, fmtDateIso as fmtDate, fmtDuration } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Spinner } from "$lib/components/ui/spinner";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { SessionDetail } from "$lib/dashboard";
+import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
+import { fmtDateIso as fmtDate, fmtDuration, fmtTime } from "$lib/format";
+import Hypnogram from "$lib/Hypnogram.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { SleepStages } from "$lib/types";
 
-  // ── Parse query params ────────────────────────────────────────────────────
-  let csvPath = $state("");
-  let metrics = $state<SessionMetrics | null>(null);
-  let timeseries = $state<EpochRow[] | null>(null);
-  let loading = $state(true);
-  let error = $state("");
-  let sessionMeta = $state<Record<string, any> | null>(null);
-  let sleepData = $state<SleepStages | null>(null);
-  let sleepAnalysisResult = $state<SleepAnalysis | null>(null);
+// ── Parse query params ────────────────────────────────────────────────────
+let csvPath = $state("");
+let metrics = $state<SessionMetrics | null>(null);
+let timeseries = $state<EpochRow[] | null>(null);
+let loading = $state(true);
+let error = $state("");
+let sessionMeta = $state<Record<string, any> | null>(null);
+let sleepData = $state<SleepStages | null>(null);
+let sleepAnalysisResult = $state<SleepAnalysis | null>(null);
 
-  onMount(async () => {
-    const params = new URLSearchParams(window.location.search);
-    csvPath = params.get("csv_path") || "";
+onMount(async () => {
+  const params = new URLSearchParams(window.location.search);
+  csvPath = params.get("csv_path") || "";
 
-    if (!csvPath) {
-      error = "No csv_path provided.";
-      loading = false;
-      return;
-    }
-
-    // Try to load session metadata (JSON sidecar)
-    try {
-      const jsonPath = csvPath.replace(/\.csv$/, ".json");
-      // Read the sidecar file via a simple fetch or invoke
-      // Since this is a Tauri app, we can try reading it
-      // The get_csv_metrics command will give us the data
-    } catch (e) { console.warn("[session] read sidecar failed:", e); }
-
-    // Load metrics from CSV
-    try {
-      const result = await invoke<CsvMetricsResult>("get_csv_metrics", { csvPath });
-      if (result && result.n_rows > 0) {
-        metrics = result.summary;
-        timeseries = result.timeseries;
-      }
-    } catch (e1) {
-      console.warn("[session] CSV metrics failed:", e1);
-      // Try SQLite fallback — need start/end UTC from the path
-      // Extract date from the csv path to make a rough query
-    }
-
-    // Try loading session metadata
-    try {
-      const sessions = await invoke<Array<Record<string, unknown>>>("list_sessions");
-      const match = sessions.find((s) => s.csv_path === csvPath);
-      if (match) sessionMeta = match;
-    } catch (e) { console.warn("[session] list_sessions failed:", e); }
-
+  if (!csvPath) {
+    error = "No csv_path provided.";
     loading = false;
+    return;
+  }
 
-    // Load sleep data (non-blocking) if session is long enough (>30min)
-    if (sessionMeta?.session_start_utc && sessionMeta?.session_end_utc) {
-      const dur = sessionMeta.session_end_utc - sessionMeta.session_start_utc;
-      if (dur >= 1800) {
-        try {
-          const sleep = await invoke<SleepStages>("get_sleep_stages", {
-            startUtc: sessionMeta.session_start_utc,
-            endUtc: sessionMeta.session_end_utc,
-          });
-          if (sleep && sleep.epochs.length > 0) {
-            sleepData = sleep;
-            sleepAnalysisResult = analyzeSleep(sleep);
-          }
-        } catch { /* no sleep data available */ }
+  // Try to load session metadata (JSON sidecar)
+  try {
+    const jsonPath = csvPath.replace(/\.csv$/, ".json");
+    // Read the sidecar file via a simple fetch or invoke
+    // Since this is a Tauri app, we can try reading it
+    // The get_csv_metrics command will give us the data
+  } catch (e) {}
+
+  // Load metrics from CSV
+  try {
+    const result = await invoke<CsvMetricsResult>("get_csv_metrics", { csvPath });
+    if (result && result.n_rows > 0) {
+      metrics = result.summary;
+      timeseries = result.timeseries;
+    }
+  } catch (e1) {
+    // Try SQLite fallback — need start/end UTC from the path
+    // Extract date from the csv path to make a rough query
+  }
+
+  // Try loading session metadata
+  try {
+    const sessions = await invoke<Array<Record<string, unknown>>>("list_sessions");
+    const match = sessions.find((s) => s.csv_path === csvPath);
+    if (match) sessionMeta = match;
+  } catch (e) {}
+
+  loading = false;
+
+  // Load sleep data (non-blocking) if session is long enough (>30min)
+  if (sessionMeta?.session_start_utc && sessionMeta?.session_end_utc) {
+    const dur = sessionMeta.session_end_utc - sessionMeta.session_start_utc;
+    if (dur >= 1800) {
+      try {
+        const sleep = await invoke<SleepStages>("get_sleep_stages", {
+          startUtc: sessionMeta.session_start_utc,
+          endUtc: sessionMeta.session_end_utc,
+        });
+        if (sleep && sleep.epochs.length > 0) {
+          sleepData = sleep;
+          sleepAnalysisResult = analyzeSleep(sleep);
+        }
+      } catch {
+        /* no sleep data available */
       }
     }
-  });
+  }
+});
 
-  useWindowTitle("window.title.session");
+useWindowTitle("window.title.session");
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">

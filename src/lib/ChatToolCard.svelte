@@ -2,79 +2,103 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Expandable tool-use card shown inside assistant messages. -->
 <script lang="ts">
-  import { t }                from "$lib/i18n/index.svelte";
-  import { detectToolDanger } from "$lib/chat-utils";
-  import type { ToolUseEvent } from "$lib/chat-types";
+import type { ToolUseEvent } from "$lib/chat-types";
+import { detectToolDanger } from "$lib/chat-utils";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Props {
-    tu: ToolUseEvent;
-    onToggleExpand: () => void;
-    onCancel: () => void;
-  }
+interface Props {
+  tu: ToolUseEvent;
+  onToggleExpand: () => void;
+  onCancel: () => void;
+}
 
-  let { tu, onToggleExpand, onCancel }: Props = $props();
+let { tu, onToggleExpand, onCancel }: Props = $props();
 
-  // Track which source indices are expanded.
-  let expandedSources = $state(new Set<number>());
-  function toggleSource(i: number) {
-    const next = new Set(expandedSources);
-    if (next.has(i)) next.delete(i); else next.add(i);
-    expandedSources = next;
-  }
+// Track which source indices are expanded.
+let expandedSources = $state(new Set<number>());
+function toggleSource(i: number) {
+  const next = new Set(expandedSources);
+  if (next.has(i)) next.delete(i);
+  else next.add(i);
+  expandedSources = next;
+}
 
-  const icons: Record<string, string> = {
-    date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐",
-    bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎",
-  };
+const icons: Record<string, string> = {
+  date: "🕐",
+  location: "📍",
+  web_search: "🔍",
+  web_fetch: "🌐",
+  bash: "💻",
+  read_file: "📄",
+  write_file: "✏️",
+  edit_file: "🔧",
+  search_output: "🔎",
+};
 
-  const icon       = $derived(icons[tu.tool] ?? "🔧");
-  const toolLabel  = $derived.by(() => {
-    const key = `chat.tools.${tu.tool}`;
-    const translated = t(key);
-    return translated !== key ? translated : tu.tool;
-  });
-  /** Typed view of tu.result for property access. */
-  const res = $derived(tu.result as Record<string, unknown> | undefined);
+const icon = $derived(icons[tu.tool] ?? "🔧");
+const toolLabel = $derived.by(() => {
+  const key = `chat.tools.${tu.tool}`;
+  const translated = t(key);
+  return translated !== key ? translated : tu.tool;
+});
+/** Typed view of tu.result for property access. */
+const res = $derived(tu.result as Record<string, unknown> | undefined);
 
-  /** Type-safe string accessor for tool args. */
-  function arg(key: string): string {
-    const v = tu.args?.[key];
-    return typeof v === "string" ? v : "";
-  }
+/** Type-safe string accessor for tool args. */
+function arg(key: string): string {
+  const v = tu.args?.[key];
+  return typeof v === "string" ? v : "";
+}
 
-  interface SourceEntry {
-    domain?: string; url?: string; preview?: string;
-    chars: number; score?: number; best?: boolean;
-  }
-  /** Typed sources array from web_search result. */
-  const sources = $derived((res?.sources ?? []) as SourceEntry[]);
-  const bashCmd    = $derived(tu.tool === "bash" ? (arg("command") || String(res?.command ?? "")) : "");
-  const hasNonEmptyArgs = $derived(tu.args && Object.keys(tu.args).length > 0);
-  const hasDetails = $derived(!!(hasNonEmptyArgs || tu.result || tu.detail || bashCmd));
-  const dangerKey  = $derived(detectToolDanger(tu));
-  const isDangerous = $derived(!!dangerKey);
+interface SourceEntry {
+  domain?: string;
+  url?: string;
+  preview?: string;
+  chars: number;
+  score?: number;
+  best?: boolean;
+}
+/** Typed sources array from web_search result. */
+const sources = $derived((res?.sources ?? []) as SourceEntry[]);
+const bashCmd = $derived(tu.tool === "bash" ? arg("command") || String(res?.command ?? "") : "");
+const hasNonEmptyArgs = $derived(tu.args && Object.keys(tu.args).length > 0);
+const hasDetails = $derived(!!(hasNonEmptyArgs || tu.result || tu.detail || bashCmd));
+const dangerKey = $derived(detectToolDanger(tu));
+const isDangerous = $derived(!!dangerKey);
 
-  const borderColor = $derived(
-    tu.status === 'cancelled' ? 'border-amber-500/30'
-    : tu.status === 'calling' && isDangerous ? 'border-red-500/40'
-    : tu.status === 'calling'   ? 'border-primary/25'
-    : tu.status === 'done'      ? 'border-emerald-500/25'
-    :                             'border-red-500/25'
-  );
-  const bgColor = $derived(
-    tu.status === 'cancelled' ? 'bg-amber-500/5'
-    : tu.status === 'calling' && isDangerous ? 'bg-red-500/8'
-    : tu.status === 'calling'   ? 'bg-primary/5'
-    : tu.status === 'done'      ? 'bg-emerald-500/5'
-    :                             'bg-red-500/5'
-  );
-  const statusTextColor = $derived(
-    tu.status === 'cancelled' ? 'text-amber-600 dark:text-amber-400'
-    : tu.status === 'calling' && isDangerous ? 'text-red-600 dark:text-red-400'
-    : tu.status === 'calling'   ? 'text-primary'
-    : tu.status === 'done'      ? 'text-emerald-700 dark:text-emerald-300'
-    :                             'text-red-700 dark:text-red-300'
-  );
+const borderColor = $derived(
+  tu.status === "cancelled"
+    ? "border-amber-500/30"
+    : tu.status === "calling" && isDangerous
+      ? "border-red-500/40"
+      : tu.status === "calling"
+        ? "border-primary/25"
+        : tu.status === "done"
+          ? "border-emerald-500/25"
+          : "border-red-500/25",
+);
+const bgColor = $derived(
+  tu.status === "cancelled"
+    ? "bg-amber-500/5"
+    : tu.status === "calling" && isDangerous
+      ? "bg-red-500/8"
+      : tu.status === "calling"
+        ? "bg-primary/5"
+        : tu.status === "done"
+          ? "bg-emerald-500/5"
+          : "bg-red-500/5",
+);
+const statusTextColor = $derived(
+  tu.status === "cancelled"
+    ? "text-amber-600 dark:text-amber-400"
+    : tu.status === "calling" && isDangerous
+      ? "text-red-600 dark:text-red-400"
+      : tu.status === "calling"
+        ? "text-primary"
+        : tu.status === "done"
+          ? "text-emerald-700 dark:text-emerald-300"
+          : "text-red-700 dark:text-red-300",
+);
 </script>
 
 <div class="rounded-xl border {borderColor} {bgColor} overflow-hidden text-[0.68rem]">

@@ -245,26 +245,26 @@ impl WebCache {
                         continue;
                     }
                     let label = match ce.kind {
-                        CacheKind::WebSearch => {
-                            ce.data.get("query")
-                                .or_else(|| ce.data.get("compact"))
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.chars().take(80).collect::<String>())
-                                .unwrap_or_else(|| ce.key[..12].to_string())
-                        }
-                        CacheKind::WebFetch => {
-                            ce.data.get("url")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or(&ce.domain)
-                                .to_string()
-                        }
+                        CacheKind::WebSearch => ce
+                            .data
+                            .get("query")
+                            .or_else(|| ce.data.get("compact"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.chars().take(80).collect::<String>())
+                            .unwrap_or_else(|| ce.key[..12].to_string()),
+                        CacheKind::WebFetch => ce
+                            .data
+                            .get("url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&ce.domain)
+                            .to_string(),
                     };
                     let bytes = data.len() as u64;
                     out.push(CacheEntrySummary {
                         key: ce.key,
                         kind: match ce.kind {
                             CacheKind::WebSearch => "search".into(),
-                            CacheKind::WebFetch  => "fetch".into(),
+                            CacheKind::WebFetch => "fetch".into(),
                         },
                         domain: ce.domain,
                         label,
@@ -436,7 +436,9 @@ mod tests {
     fn tmp_cache(config: WebCacheConfig) -> WebCache {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
-            "skill_web_cache_test_{}_{}", std::process::id(), id
+            "skill_web_cache_test_{}_{}",
+            std::process::id(),
+            id
         ));
         let _ = std::fs::remove_dir_all(&dir);
         WebCache::new(dir, config)
@@ -448,7 +450,10 @@ mod tests {
 
     #[test]
     fn cache_disabled_returns_none() {
-        let c = tmp_cache(WebCacheConfig { enabled: false, ..default_config() });
+        let c = tmp_cache(WebCacheConfig {
+            enabled: false,
+            ..default_config()
+        });
         c.put_fetch("https://example.com", false, &json!({"ok": true}));
         assert!(c.get_fetch("https://example.com", false).is_none());
         c.clear();
@@ -518,7 +523,11 @@ mod tests {
             fetch_ttl_secs: 3600,
             ..default_config()
         });
-        c.put_fetch("https://news.example.com/article", false, &json!({"ok": true}));
+        c.put_fetch(
+            "https://news.example.com/article",
+            false,
+            &json!({"ok": true}),
+        );
         // Backdate.
         let key = cache_key_fetch("https://news.example.com/article", false);
         let path = c.entry_path(&key);
@@ -527,7 +536,9 @@ mod tests {
             entry.created_at = unix_secs().saturating_sub(2);
             let _ = std::fs::write(&path, serde_json::to_string(&entry).unwrap());
         }
-        assert!(c.get_fetch("https://news.example.com/article", false).is_none());
+        assert!(c
+            .get_fetch("https://news.example.com/article", false)
+            .is_none());
         c.clear();
     }
 
@@ -569,7 +580,10 @@ mod tests {
     #[test]
     fn extract_domain_works() {
         assert_eq!(extract_domain("https://example.com/path"), "example.com");
-        assert_eq!(extract_domain("http://sub.example.com:8080/x"), "sub.example.com");
+        assert_eq!(
+            extract_domain("http://sub.example.com:8080/x"),
+            "sub.example.com"
+        );
         assert_eq!(extract_domain("https://Example.COM"), "example.com");
     }
 

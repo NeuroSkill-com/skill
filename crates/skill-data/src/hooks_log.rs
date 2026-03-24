@@ -32,22 +32,22 @@ use serde::{Deserialize, Serialize};
 /// One row returned by [`HooksLog::query`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookLogRow {
-    pub id:               i64,
+    pub id: i64,
     pub triggered_at_utc: i64,
     /// Full copy of the `HookRule` serialised as JSON.
-    pub hook_json:        String,
+    pub hook_json: String,
     /// `HookLastTrigger` plus extra context (label_text, distance) as JSON.
-    pub trigger_json:     String,
+    pub trigger_json: String,
     /// Dispatched payload (command, text, ws context) as JSON.
-    pub payload_json:     String,
+    pub payload_json: String,
 }
 
 /// A fire event to be appended by the caller.
 pub struct HookFireEntry<'a> {
     pub triggered_at_utc: i64,
-    pub hook_json:        &'a str,
-    pub trigger_json:     &'a str,
-    pub payload_json:     &'a str,
+    pub hook_json: &'a str,
+    pub trigger_json: &'a str,
+    pub payload_json: &'a str,
 }
 
 // ── Main store ────────────────────────────────────────────────────────────────
@@ -58,8 +58,7 @@ pub struct HookFireEntry<'a> {
 /// the embed-worker thread that is writing.
 pub struct HooksLog {
     conn: rusqlite::Connection,
-    #[allow(dead_code)]
-    path: PathBuf,
+    _path: PathBuf,
 }
 
 impl HooksLog {
@@ -89,7 +88,7 @@ impl HooksLog {
             .map_err(|e| eprintln!("[hooks_log] DDL: {e}"))
             .ok()?;
 
-        Some(Self { conn, path })
+        Some(Self { conn, _path: path })
     }
 
     /// Append one fire event to the log.  Silently ignores write errors.
@@ -127,11 +126,11 @@ impl HooksLog {
 
         stmt.query_map(rusqlite::params![limit, offset], |row| {
             Ok(HookLogRow {
-                id:               row.get(0)?,
+                id: row.get(0)?,
                 triggered_at_utc: row.get(1)?,
-                hook_json:        row.get(2)?,
-                trigger_json:     row.get(3)?,
-                payload_json:     row.get(4)?,
+                hook_json: row.get(2)?,
+                trigger_json: row.get(3)?,
+                payload_json: row.get(4)?,
             })
         })
         .map(|rows| rows.flatten().collect())

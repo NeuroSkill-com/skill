@@ -6,252 +6,284 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Screenshots tab — capture, embedding model, re-embed -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { Button }    from "$lib/components/ui/button";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t }         from "$lib/i18n/index.svelte";
-  import {
-    EMBEDDING_EPOCH_SECS,
-    SCREENSHOT_INTERVAL_MIN_SECS,
-    SCREENSHOT_INTERVAL_MAX_SECS,
-    SCREENSHOT_INTERVAL_STEP_SECS,
-  } from "$lib/constants";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { Separator } from "$lib/components/ui/separator";
+import {
+  EMBEDDING_EPOCH_SECS,
+  SCREENSHOT_INTERVAL_MAX_SECS,
+  SCREENSHOT_INTERVAL_MIN_SECS,
+  SCREENSHOT_INTERVAL_STEP_SECS,
+} from "$lib/constants";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface ScreenshotConfig {
-    enabled:         boolean;
-    interval_secs:   number;
-    image_size:      number;
-    quality:         number;
-    session_only:    boolean;
-    embed_backend:   string;
-    fastembed_model: string;
-    ocr_enabled:     boolean;
-    ocr_engine:      string;
-    use_gpu:         boolean;
-  }
-  interface ConfigChangeResult {
-    model_changed: boolean;
-    stale_count:   number;
-  }
-  interface ReembedEstimate {
-    total:        number;
-    stale:        number;
-    unembedded:   number;
-    per_image_ms: number;
-    eta_secs:     number;
-  }
+// ── Types ──────────────────────────────────────────────────────────────────
+interface ScreenshotConfig {
+  enabled: boolean;
+  interval_secs: number;
+  image_size: number;
+  quality: number;
+  session_only: boolean;
+  embed_backend: string;
+  fastembed_model: string;
+  ocr_enabled: boolean;
+  ocr_engine: string;
+  use_gpu: boolean;
+}
+interface ConfigChangeResult {
+  model_changed: boolean;
+  stale_count: number;
+}
+interface ReembedEstimate {
+  total: number;
+  stale: number;
+  unembedded: number;
+  per_image_ms: number;
+  eta_secs: number;
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let config = $state<ScreenshotConfig>({
-    enabled: false,
-    interval_secs: 5,
-    image_size: 768,
-    quality: 60,
-    session_only: true,
-    embed_backend: "fastembed",
-    fastembed_model: "clip-vit-b-32",
-    ocr_enabled: true,
-    ocr_engine: "ocrs",
-    use_gpu: true,
-  });
+// ── State ──────────────────────────────────────────────────────────────────
+let config = $state<ScreenshotConfig>({
+  enabled: false,
+  interval_secs: 5,
+  image_size: 768,
+  quality: 60,
+  session_only: true,
+  embed_backend: "fastembed",
+  fastembed_model: "clip-vit-b-32",
+  ocr_enabled: true,
+  ocr_engine: "ocrs",
+  use_gpu: true,
+});
 
-  let saving      = $state(false);
-  let reembedding = $state(false);
-  let screenPermission = $state<boolean | null>(null);
-  /** The app-wide text embedding model (from Settings → Embeddings).
-   *  OCR text embeddings use this shared model now. */
-  let sharedTextModel = $state("");
-  const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-  let estimate    = $state<ReembedEstimate | null>(null);
-  let progress    = $state<{ done: number; total: number; elapsed_secs: number; eta_secs: number } | null>(null);
-  let modelChanged = $state(false);
-  let staleCount   = $state(0);
-  let unlisten: UnlistenFn | null = null;
+let saving = $state(false);
+let reembedding = $state(false);
+let screenPermission = $state<boolean | null>(null);
+/** The app-wide text embedding model (from Settings → Embeddings).
+ *  OCR text embeddings use this shared model now. */
+let sharedTextModel = $state("");
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+let estimate = $state<ReembedEstimate | null>(null);
+let progress = $state<{ done: number; total: number; elapsed_secs: number; eta_secs: number } | null>(null);
+let modelChanged = $state(false);
+let staleCount = $state(0);
+let unlisten: UnlistenFn | null = null;
 
-  // ── OCR search state ──────────────────────────────────────────────────────
+// ── OCR search state ──────────────────────────────────────────────────────
 
+// ── Pipeline metrics ──────────────────────────────────────────────────────
+interface PipelineMetrics {
+  captures: number;
+  capture_errors: number;
+  drops: number;
+  capture_us: number;
+  ocr_us: number;
+  resize_us: number;
+  save_us: number;
+  capture_total_us: number;
+  embeds: number;
+  embed_errors: number;
+  vision_embed_us: number;
+  text_embed_us: number;
+  embed_total_us: number;
+  queue_depth: number;
+  last_capture_unix: number;
+  last_embed_unix: number;
+  backoff_multiplier: number;
+}
+let pipeMetrics = $state<PipelineMetrics | null>(null);
+let metricsTimer: ReturnType<typeof setInterval> | null = null;
 
-  // ── Pipeline metrics ──────────────────────────────────────────────────────
-  interface PipelineMetrics {
-    captures: number; capture_errors: number; drops: number;
-    capture_us: number; ocr_us: number; resize_us: number; save_us: number; capture_total_us: number;
-    embeds: number; embed_errors: number;
-    vision_embed_us: number; text_embed_us: number; embed_total_us: number;
-    queue_depth: number;
-    last_capture_unix: number; last_embed_unix: number;
-    backoff_multiplier: number;
-  }
-  let pipeMetrics = $state<PipelineMetrics | null>(null);
-  let metricsTimer: ReturnType<typeof setInterval> | null = null;
+// ── Rolling history for charts (last 60 samples @ 2s = 2 minutes) ─────
+const HISTORY_LEN = 60;
+let captureHistory = $state<number[]>([]); // capture_total_us in ms
+let embedHistory = $state<number[]>([]); // embed_total_us in ms
+let queueHistory = $state<number[]>([]); // queue_depth
+let dropsHistory = $state<number[]>([]); // cumulative drops
+let captureBreakdown = $state<{ capture: number; ocr: number; resize: number; save: number }>({
+  capture: 0,
+  ocr: 0,
+  resize: 0,
+  save: 0,
+});
+let embedBreakdown = $state<{ vision: number; text: number }>({ vision: 0, text: 0 });
 
-  // ── Rolling history for charts (last 60 samples @ 2s = 2 minutes) ─────
-  const HISTORY_LEN = 60;
-  let captureHistory   = $state<number[]>([]);   // capture_total_us in ms
-  let embedHistory     = $state<number[]>([]);   // embed_total_us in ms
-  let queueHistory     = $state<number[]>([]);   // queue_depth
-  let dropsHistory     = $state<number[]>([]);   // cumulative drops
-  let captureBreakdown = $state<{capture: number; ocr: number; resize: number; save: number}>({capture:0,ocr:0,resize:0,save:0});
-  let embedBreakdown   = $state<{vision: number; text: number}>({vision:0,text:0});
+function pushHistory(arr: number[], val: number): number[] {
+  const next = [...arr, val];
+  return next.length > HISTORY_LEN ? next.slice(next.length - HISTORY_LEN) : next;
+}
 
-  function pushHistory(arr: number[], val: number): number[] {
-    const next = [...arr, val];
-    return next.length > HISTORY_LEN ? next.slice(next.length - HISTORY_LEN) : next;
-  }
+function fmtUs(us: number): string {
+  if (us < 1000) return `${us}µs`;
+  if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
+  return `${(us / 1_000_000).toFixed(2)}s`;
+}
 
-  function fmtUs(us: number): string {
-    if (us < 1000) return `${us}µs`;
-    if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
-    return `${(us / 1_000_000).toFixed(2)}s`;
-  }
+function fmtMs(ms: number): string {
+  if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
+  if (ms < 1000) return `${ms.toFixed(1)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
 
-  function fmtMs(ms: number): string {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
-    if (ms < 1000) return `${ms.toFixed(1)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
-
-  /// Build an SVG polyline `points` string from an array of values.
-  /// Maps values into a viewBox of width×height with optional Y padding.
-  function sparklinePath(data: number[], w: number, h: number, pad = 2): string {
-    if (data.length < 2) return "";
-    const maxV = Math.max(...data, 1);
-    const usableH = h - pad * 2;
-    return data.map((v, i) => {
+/// Build an SVG polyline `points` string from an array of values.
+/// Maps values into a viewBox of width×height with optional Y padding.
+function sparklinePath(data: number[], w: number, h: number, pad = 2): string {
+  if (data.length < 2) return "";
+  const maxV = Math.max(...data, 1);
+  const usableH = h - pad * 2;
+  return data
+    .map((v, i) => {
       const x = (i / (data.length - 1)) * w;
       const y = pad + usableH - (v / maxV) * usableH;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
+    })
+    .join(" ");
+}
+
+/// Build an SVG polygon points string for a filled area chart.
+function areaPath(data: number[], w: number, h: number, pad = 2): string {
+  if (data.length < 2) return "";
+  const line = sparklinePath(data, w, h, pad);
+  return `0,${h} ${line} ${w},${h}`;
+}
+
+// ── Recommended image size for current model ──────────────────────────────
+const recommendedSize = $derived.by(() => {
+  if (config.embed_backend === "mmproj" || config.embed_backend === "llm-vlm") return 768;
+  if (config.fastembed_model === "nomic-embed-vision-v1.5") return 768;
+  return 768;
+});
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function load() {
+  config = await invoke<ScreenshotConfig>("get_screenshot_config");
+  try {
+    estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
+  } catch {
+    estimate = null;
+  }
+  try {
+    sharedTextModel = await invoke<string>("get_embedding_model");
+  } catch {
+    sharedTextModel = "";
   }
 
-  /// Build an SVG polygon points string for a filled area chart.
-  function areaPath(data: number[], w: number, h: number, pad = 2): string {
-    if (data.length < 2) return "";
-    const line = sparklinePath(data, w, h, pad);
-    return `0,${h} ${line} ${w},${h}`;
+  if (isMac) {
+    try {
+      screenPermission = await invoke<boolean>("check_screen_recording_permission");
+    } catch {
+      screenPermission = null;
+    }
   }
+}
 
-  // ── Recommended image size for current model ──────────────────────────────
-  const recommendedSize = $derived.by(() => {
-    if (config.embed_backend === "mmproj" || config.embed_backend === "llm-vlm") return 768;
-    if (config.fastembed_model === "nomic-embed-vision-v1.5") return 768;
-    return 768;
-  });
+// ── Save config ────────────────────────────────────────────────────────────
+async function save() {
+  saving = true;
+  try {
+    const result = await invoke<ConfigChangeResult>("set_screenshot_config", { config });
+    modelChanged = result.model_changed;
+    staleCount = result.stale_count;
+    if (result.model_changed) {
+      try {
+        estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
+      } catch (e) {}
+    }
+  } finally {
+    saving = false;
+  }
+}
 
-  // ── Load ───────────────────────────────────────────────────────────────────
-  async function load() {
-    config = await invoke<ScreenshotConfig>("get_screenshot_config");
+// ── Toggle helpers (auto-save) ─────────────────────────────────────────────
+async function toggleEnabled() {
+  config.enabled = !config.enabled;
+  await save();
+}
+async function toggleSessionOnly() {
+  config.session_only = !config.session_only;
+  await save();
+}
+async function toggleOcr() {
+  config.ocr_enabled = !config.ocr_enabled;
+  await save();
+}
+async function toggleGpu() {
+  config.use_gpu = !config.use_gpu;
+  await save();
+}
+
+// ── Model change → auto-update image_size ─────────────────────────────────
+function onModelChange() {
+  config.image_size = recommendedSize;
+}
+
+// ── Re-embed ───────────────────────────────────────────────────────────────
+async function reembed() {
+  reembedding = true;
+  progress = null;
+  try {
+    await invoke("rebuild_screenshot_embeddings");
+    modelChanged = false;
+    staleCount = 0;
     try {
       estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
-    } catch { estimate = null; }
-    try {
-      sharedTextModel = await invoke<string>("get_embedding_model");
-    } catch { sharedTextModel = ""; }
-
-    if (isMac) {
-      try { screenPermission = await invoke<boolean>("check_screen_recording_permission"); }
-      catch { screenPermission = null; }
-    }
-  }
-
-  // ── Save config ────────────────────────────────────────────────────────────
-  async function save() {
-    saving = true;
-    try {
-      const result = await invoke<ConfigChangeResult>("set_screenshot_config", { config });
-      modelChanged = result.model_changed;
-      staleCount = result.stale_count;
-      if (result.model_changed) {
-        try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch (e) { console.warn("[screenshots] estimate_screenshot_reembed failed:", e); }
-      }
-    } finally {
-      saving = false;
-    }
-  }
-
-  // ── Toggle helpers (auto-save) ─────────────────────────────────────────────
-  async function toggleEnabled() {
-    config.enabled = !config.enabled;
-    await save();
-  }
-  async function toggleSessionOnly() {
-    config.session_only = !config.session_only;
-    await save();
-  }
-  async function toggleOcr() {
-    config.ocr_enabled = !config.ocr_enabled;
-    await save();
-  }
-  async function toggleGpu() {
-    config.use_gpu = !config.use_gpu;
-    await save();
-  }
-
-  // ── Model change → auto-update image_size ─────────────────────────────────
-  function onModelChange() {
-    config.image_size = recommendedSize;
-  }
-
-  // ── Re-embed ───────────────────────────────────────────────────────────────
-  async function reembed() {
-    reembedding = true;
+    } catch (e) {}
+  } finally {
+    reembedding = false;
     progress = null;
-    try {
-      await invoke("rebuild_screenshot_embeddings");
-      modelChanged = false;
-      staleCount = 0;
-      try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch (e) { console.warn("[screenshots] estimate_screenshot_reembed failed:", e); }
-    } finally {
-      reembedding = false;
-      progress = null;
-    }
   }
+}
 
-  function fmtEta(secs: number): string {
-    if (secs < 60) return `${Math.round(secs)}s`;
-    const m = Math.floor(secs / 60);
-    const s = Math.round(secs % 60);
-    return `${m}m ${s}s`;
-  }
+function fmtEta(secs: number): string {
+  if (secs < 60) return `${Math.round(secs)}s`;
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return `${m}m ${s}s`;
+}
 
-  async function refreshMetrics() {
-    try {
-      const m = await invoke<PipelineMetrics>("get_screenshot_metrics");
-      pipeMetrics = m;
-      // Push to rolling history (convert µs → ms)
-      captureHistory = pushHistory(captureHistory, m.capture_total_us / 1000);
-      embedHistory   = pushHistory(embedHistory, m.embed_total_us / 1000);
-      queueHistory   = pushHistory(queueHistory, m.queue_depth);
-      dropsHistory   = pushHistory(dropsHistory, m.drops);
-      captureBreakdown = {
-        capture: m.capture_us / 1000,
-        ocr:     m.ocr_us / 1000,
-        resize:  m.resize_us / 1000,
-        save:    m.save_us / 1000,
-      };
-      embedBreakdown = {
-        vision: m.vision_embed_us / 1000,
-        text:   m.text_embed_us / 1000,
-      };
-    } catch (e) { console.warn("[screenshots] get_screenshot_metrics failed:", e); }
-  }
+async function refreshMetrics() {
+  try {
+    const m = await invoke<PipelineMetrics>("get_screenshot_metrics");
+    pipeMetrics = m;
+    // Push to rolling history (convert µs → ms)
+    captureHistory = pushHistory(captureHistory, m.capture_total_us / 1000);
+    embedHistory = pushHistory(embedHistory, m.embed_total_us / 1000);
+    queueHistory = pushHistory(queueHistory, m.queue_depth);
+    dropsHistory = pushHistory(dropsHistory, m.drops);
+    captureBreakdown = {
+      capture: m.capture_us / 1000,
+      ocr: m.ocr_us / 1000,
+      resize: m.resize_us / 1000,
+      save: m.save_us / 1000,
+    };
+    embedBreakdown = {
+      vision: m.vision_embed_us / 1000,
+      text: m.text_embed_us / 1000,
+    };
+  } catch (e) {}
+}
 
-  onMount(async () => {
-    await load();
-    await refreshMetrics();
-    unlisten = await listen<{ done: number; total: number; elapsed_secs: number; eta_secs: number }>(
-      "screenshot-reembed-progress", e => { progress = e.payload; }
-    );
-    // Poll metrics every 2s when enabled
-    metricsTimer = setInterval(() => { if (config.enabled) refreshMetrics(); }, 2000);
-  });
-  onDestroy(() => {
-    unlisten?.();
-    if (metricsTimer) clearInterval(metricsTimer);
-  });
+onMount(async () => {
+  await load();
+  await refreshMetrics();
+  unlisten = await listen<{ done: number; total: number; elapsed_secs: number; eta_secs: number }>(
+    "screenshot-reembed-progress",
+    (e) => {
+      progress = e.payload;
+    },
+  );
+  // Poll metrics every 2s when enabled
+  metricsTimer = setInterval(() => {
+    if (config.enabled) refreshMetrics();
+  }, 2000);
+});
+onDestroy(() => {
+  unlisten?.();
+  if (metricsTimer) clearInterval(metricsTimer);
+});
 </script>
 
 <section class="flex flex-col gap-5">

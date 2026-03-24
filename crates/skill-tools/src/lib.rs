@@ -31,29 +31,28 @@ macro_rules! tool_log {
     };
 }
 
-pub mod types;
-pub mod parse;
+pub mod context;
 pub mod defs;
 pub mod exec;
+pub mod parse;
 pub(crate) mod search;
-pub mod context;
+pub mod types;
 pub mod web_cache;
 
 // Re-export the most-used types at crate root for convenience.
-pub use types::{LlmToolConfig, ToolExecutionMode, ToolContextCompression, CompressionLevel, WebCacheConfig};
-pub use parse::{
-    Tool, ToolFunction, ToolCall, ToolCallFunction,
-    ChatMessage, MessageContent, ContentPart, ImageUrl,
-    validate_tool_arguments, coerce_tool_call_arguments,
-    inject_tools_into_system_prompt,
-    extract_tool_calls,
-    strip_tool_call_blocks, strip_tool_call_blocks_preserve,
-    detect_garbled_tool_call, build_self_healing_message,
-};
+pub use context::{estimate_messages_tokens, estimate_tokens, trim_messages_to_fit};
 pub use defs::{
-    builtin_llm_tools, skill_api_tool, is_builtin_tool_enabled,
-    enabled_builtin_llm_tools, filter_allowed_tool_defs,
+    builtin_llm_tools, enabled_builtin_llm_tools, filter_allowed_tool_defs,
+    is_builtin_tool_enabled, skill_api_tool,
 };
 pub use exec::execute_builtin_tool_call;
 pub use exec::{set_bash_edit_hook, BashEditHook};
-pub use context::{estimate_tokens, estimate_messages_tokens, trim_messages_to_fit};
+pub use parse::{
+    build_self_healing_message, coerce_tool_call_arguments, detect_garbled_tool_call,
+    extract_tool_calls, inject_tools_into_system_prompt, strip_tool_call_blocks,
+    strip_tool_call_blocks_preserve, validate_tool_arguments, ChatMessage, ContentPart, ImageUrl,
+    MessageContent, Tool, ToolCall, ToolCallFunction, ToolFunction,
+};
+pub use types::{
+    CompressionLevel, LlmToolConfig, ToolContextCompression, ToolExecutionMode, WebCacheConfig,
+};

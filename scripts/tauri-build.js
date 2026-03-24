@@ -22,18 +22,16 @@
  *                   (cross-compile from Linux/macOS, or native MSYS2)
  */
 
-import { execSync } from "child_process";
-import { platform, cpus, arch } from "os";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync } from "fs";
-import { tmpdir } from "os";
+import { execSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { arch, cpus, platform, tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
 function runMarkdownRendererGuard() {
-  console.log("→ checking MarkdownRenderer.svelte guard …");
   execSync("node scripts/check-markdown-renderer.js", {
     cwd: root,
     stdio: "inherit",
@@ -66,7 +64,7 @@ function linuxTrayRuntimeLooksPresent() {
   }
 }
 
-function linuxInstallHintForTrayRuntime() {
+function _linuxInstallHintForTrayRuntime() {
   if (commandExists("apt-get")) {
     return [
       "  sudo apt update",
@@ -94,28 +92,13 @@ function linuxInstallHintForTrayRuntime() {
 function ensureLinuxTrayRuntimeForDev() {
   if (!isLinux || subcommand !== "dev") return;
   if (linuxTrayRuntimeLooksPresent()) return;
-
-  console.error(
-    [
-      "✖ Missing Linux tray runtime dependency: appindicator library.",
-      "",
-      "Tauri can panic at startup with:",
-      "  Failed to load ayatana-appindicator3 or appindicator3 dynamic library",
-      "",
-      "Install one of these runtime libraries, then run `npm run tauri dev` again:",
-      linuxInstallHintForTrayRuntime(),
-    ].join("\n")
-  );
   process.exit(1);
 }
 
 function parseExplicitBundleArg(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (
-      (arg === "--bundle" || arg === "--bundles") &&
-      i + 1 < args.length
-    ) {
+    if ((arg === "--bundle" || arg === "--bundles") && i + 1 < args.length) {
       return {
         index: i,
         consumesNext: true,
@@ -159,12 +142,8 @@ const needsEspeak = subcommand === "dev" || subcommand === "build";
 // ── Pass-through for subcommands that don't need espeak ───────────────────────
 if (!needsEspeak) {
   const passCmd =
-    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri")
-      ? ["cargo", "tauri"]
-      : ["npx", "tauri"];
-  const cmd = [...passCmd, subcommand, ...subArgs]
-    .filter(Boolean)
-    .join(" ");
+    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri") ? ["cargo", "tauri"] : ["npx", "tauri"];
+  const cmd = [...passCmd, subcommand, ...subArgs].filter(Boolean).join(" ");
   execSync(cmd, { cwd: root, stdio: "inherit" });
   process.exit(0);
 }
@@ -191,12 +170,13 @@ const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
 //   --bundle <targets>
 //   --bundles <targets>
 // and their --flag=value forms.
-const hasExplicitBundleArg = subArgs.some((arg) =>
-  arg === "--bundle" ||
-  arg === "--bundles" ||
-  arg === "--no-bundle" ||
-  arg.startsWith("--bundle=") ||
-  arg.startsWith("--bundles=")
+const hasExplicitBundleArg = subArgs.some(
+  (arg) =>
+    arg === "--bundle" ||
+    arg === "--bundles" ||
+    arg === "--no-bundle" ||
+    arg.startsWith("--bundle=") ||
+    arg.startsWith("--bundles="),
 );
 
 // ── Linux preflight: prevent accidental cross-target trap ───────────────────
@@ -205,12 +185,7 @@ const hasExplicitBundleArg = subArgs.some((arg) =>
 // pkg-config based sys crates (glib-sys, gobject-sys, etc.) to fail unless a
 // full cross sysroot/toolchain is configured. Most local builds intend native
 // host output, so fail fast with an actionable message.
-if (
-  isLinux &&
-  explicitTarget &&
-  explicitTarget.endsWith("-unknown-linux-gnu") &&
-  process.env.ALLOW_LINUX_CROSS !== "1"
-) {
+if (isLinux && explicitTarget?.endsWith("-unknown-linux-gnu") && process.env.ALLOW_LINUX_CROSS !== "1") {
   const hostArchMap = {
     x64: "x86_64",
     arm64: "aarch64",
@@ -220,21 +195,6 @@ if (
   if (rustHostArch) {
     const nativeTarget = `${rustHostArch}-unknown-linux-gnu`;
     if (explicitTarget !== nativeTarget) {
-      console.error(
-        [
-          "✖ Linux target mismatch detected.",
-          `  Host architecture target: ${nativeTarget}`,
-          `  Requested target:          ${explicitTarget}`,
-          "",
-          "This is a cross-compilation build and requires a configured target sysroot/pkg-config wrapper.",
-          "",
-          "Use native target for local builds:",
-          `  npm run tauri build -- --target ${nativeTarget}`,
-          "",
-          "If cross-compilation is intentional, set ALLOW_LINUX_CROSS=1 and configure",
-          "PKG_CONFIG / PKG_CONFIG_SYSROOT_DIR / PKG_CONFIG_PATH for the target toolchain.",
-        ].join("\n")
-      );
       process.exit(1);
     }
   }
@@ -245,18 +205,12 @@ let espeakLib;
 let platformFlags = []; // extra flags injected before the user's subArgs
 
 if (isMingwTarget) {
-  // MinGW cross-compilation — works from Linux, macOS, or MSYS2 on Windows.
-  console.log(
-    `→ building espeak-ng static library (MinGW) for ${explicitTarget} …`
-  );
   execSync("bash scripts/build-espeak-static-mingw.sh", {
     cwd: root,
     stdio: "inherit",
   });
   espeakLib = resolve(root, "src-tauri/espeak-static-mingw/lib");
-
 } else if (isMac) {
-  console.log("→ building espeak-ng static library …");
   execSync("bash scripts/build-espeak-static.sh", {
     cwd: root,
     stdio: "inherit",
@@ -276,28 +230,14 @@ if (isMingwTarget) {
   //
   // Callers can still opt into explicit bundling by passing --bundle/
   // --bundles (or their own --no-bundle) themselves.
-  if (
-    subcommand === "build" &&
-    !hasExplicitBundleArg
-  ) {
+  if (subcommand === "build" && !hasExplicitBundleArg) {
     platformFlags = [...platformFlags, "--no-bundle"];
-    console.log(
-      "→ macOS: injecting --no-bundle (avoids post-build bundling crash; " +
-      "binary still produced under src-tauri/target)"
-    );
   }
-
 } else if (isWin) {
-  // Native Windows — MSVC toolchain via PowerShell.
-  // Must run from a Developer PowerShell for VS so lib.exe is on PATH.
-
-  // Ensure the Vulkan SDK is present before building (required by llm-vulkan).
-  // The script is a no-op when the SDK is already installed.
-  console.log("→ ensuring Vulkan SDK is installed …");
-  execSync(
-    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\install-vulkan-sdk.ps1",
-    { cwd: root, stdio: "inherit" }
-  );
+  execSync("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\install-vulkan-sdk.ps1", {
+    cwd: root,
+    stdio: "inherit",
+  });
 
   // The install script sets $env:VULKAN_SDK inside its own child process, but
   // that env var dies when the child exits.  Re-detect the SDK root here and
@@ -314,47 +254,45 @@ if (isMingwTarget) {
     //   2. Registry key written by the LunarG installer (both 64- and 32-bit hives)
     //   3. Newest versioned directory under C:\VulkanSDK\
     const tmpScript = resolve(tmpdir(), `detect-vulkan-${Date.now()}.ps1`);
-    writeFileSync(tmpScript,
+    writeFileSync(
+      tmpScript,
       `$p = [System.Environment]::GetEnvironmentVariable('VULKAN_SDK', 'Machine')\r\n` +
-      `if (-not $p) {\r\n` +
-      `  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK', 'HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {\r\n` +
-      `    if (Test-Path $reg) {\r\n` +
-      `      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath\r\n` +
-      `      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }\r\n` +
-      `    }\r\n` +
-      `  }\r\n` +
-      `}\r\n` +
-      `if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {\r\n` +
-      `  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1\r\n` +
-      `  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }\r\n` +
-      `}\r\n` +
-      `if ($p) { Write-Output $p }\r\n`
+        `if (-not $p) {\r\n` +
+        `  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK', 'HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {\r\n` +
+        `    if (Test-Path $reg) {\r\n` +
+        `      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath\r\n` +
+        `      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }\r\n` +
+        `    }\r\n` +
+        `  }\r\n` +
+        `}\r\n` +
+        `if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {\r\n` +
+        `  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1\r\n` +
+        `  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }\r\n` +
+        `}\r\n` +
+        `if ($p) { Write-Output $p }\r\n`,
     );
     try {
-      const detected = execSync(
-        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`,
-        { cwd: root }
-      ).toString().trim();
+      const detected = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`, { cwd: root })
+        .toString()
+        .trim();
       if (detected) {
         process.env.VULKAN_SDK = detected;
-        console.log(`→ VULKAN_SDK detected and set: ${detected}`);
       } else {
-        console.warn("→ WARNING: VULKAN_SDK not detected after install — cargo may fail");
       }
-    } catch (e) {
-      console.warn(`→ WARNING: Vulkan SDK detection script failed: ${e.message}`);
+    } catch (_e) {
     } finally {
-      try { unlinkSync(tmpScript); } catch { /* ignore */ }
+      try {
+        unlinkSync(tmpScript);
+      } catch {
+        /* ignore */
+      }
     }
   } else {
-    console.log(`→ VULKAN_SDK already set: ${process.env.VULKAN_SDK}`);
   }
-
-  console.log("→ building espeak-ng static library (MSVC) …");
-  execSync(
-    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1",
-    { cwd: root, stdio: "inherit" }
-  );
+  execSync("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1", {
+    cwd: root,
+    stdio: "inherit",
+  });
   espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 
   // ── Windows: skip Tauri bundling for `build` subcommand ────────────────────
@@ -385,15 +323,8 @@ if (isMingwTarget) {
   //
   // Only inject the flag when the caller has not already explicitly passed
   // a --bundle or --no-bundle argument themselves.
-  if (
-    subcommand === "build" &&
-    !hasExplicitBundleArg
-  ) {
+  if (subcommand === "build" && !hasExplicitBundleArg) {
     platformFlags = ["--no-bundle"];
-    console.log(
-      "→ Windows: injecting --no-bundle (skips post-build signing crash; " +
-      "use release-windows.ps1 for full NSIS packaging)"
-    );
   }
 
   // ── Windows: enable Vulkan GPU offloading for LLM inference ────────────────
@@ -413,42 +344,23 @@ if (isMingwTarget) {
   // Only inject the flag when the caller hasn't already passed --features.
   if (!subArgs.includes("--features")) {
     platformFlags = [...platformFlags, "--features", "llm-vulkan"];
-    console.log(
-      "→ Windows: injecting --features llm-vulkan (Vulkan GPU offloading for LLM)"
-    );
   }
-
 } else {
   // Linux native.
 
   ensureLinuxTrayRuntimeForDev();
 
-  if (
-    subcommand === "dev" &&
-    !process.env.WEBKIT_DISABLE_DMABUF_RENDERER
-  ) {
+  if (subcommand === "dev" && !process.env.WEBKIT_DISABLE_DMABUF_RENDERER) {
     const inWayland =
-      (process.env.XDG_SESSION_TYPE || "").toLowerCase() === "wayland" ||
-      !!(process.env.WAYLAND_DISPLAY || "").trim();
+      (process.env.XDG_SESSION_TYPE || "").toLowerCase() === "wayland" || !!(process.env.WAYLAND_DISPLAY || "").trim();
     if (inWayland) {
       process.env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
-      console.log(
-        "→ Wayland detected: setting WEBKIT_DISABLE_DMABUF_RENDERER=1 " +
-        "(reduces WebKit/EGL DRI2 probe warnings)"
-      );
     }
   }
-
-  // Ensure the Vulkan SDK (headers + loader + glslc) is present before
-  // building.  The script is a no-op when the packages are already installed,
-  // so repeated `npm run tauri dev` calls are cheap.
-  console.log("→ ensuring Vulkan SDK is installed …");
   execSync("bash scripts/install-vulkan-sdk.sh", {
     cwd: root,
     stdio: "inherit",
   });
-
-  console.log("→ building espeak-ng static library …");
   execSync("bash scripts/build-espeak-static.sh", {
     cwd: root,
     stdio: "inherit",
@@ -469,9 +381,6 @@ if (isMingwTarget) {
   // Only inject the flag when the caller hasn't already passed --features.
   if (!subArgs.includes("--features")) {
     platformFlags = [...platformFlags, "--features", "llm-vulkan"];
-    console.log(
-      "→ Linux: injecting --features llm-vulkan (Vulkan GPU offloading for LLM)"
-    );
   }
 
   // ── Linux: skip Tauri bundling for default local builds ───────────────────
@@ -484,15 +393,8 @@ if (isMingwTarget) {
   // `--no-bundle` keeps local Linux builds stable by stopping after the Rust
   // binary is produced. Callers can still opt into explicit bundling by passing
   // `--bundle ...` (or their own `--no-bundle`) themselves.
-  if (
-    subcommand === "build" &&
-    !hasExplicitBundleArg
-  ) {
+  if (subcommand === "build" && !hasExplicitBundleArg) {
     platformFlags = [...platformFlags, "--no-bundle"];
-    console.log(
-      "→ Linux: injecting --no-bundle (avoids post-build bundling segfault; " +
-      "binary still produced under src-tauri/target/release)"
-    );
   }
 }
 
@@ -519,14 +421,12 @@ if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
   let onAlpine = false;
   try {
     onAlpine = readFileSync("/etc/os-release", "utf8").includes("ID=alpine");
-  } catch { /* not on Alpine or /etc/os-release unreadable */ }
+  } catch {
+    /* not on Alpine or /etc/os-release unreadable */
+  }
 
   if (onAlpine) {
     process.env.CARGO_BUILD_JOBS = String(cpus().length);
-    console.log(
-      `→ Alpine Linux detected: capping Cargo parallelism at ${process.env.CARGO_BUILD_JOBS} job(s)` +
-      ` to prevent OOM-induced cascade errors (set CARGO_BUILD_JOBS to override)`
-    );
   }
 }
 
@@ -555,17 +455,12 @@ const hasMold = detectMold();
 
 if (hasSccache) {
   process.env.RUSTC_WRAPPER = "sccache";
-  console.log("→ sccache detected — enabling compilation cache (RUSTC_WRAPPER=sccache)");
 } else if (!process.env.RUSTC_WRAPPER) {
-  const sccacheHint = isMac
+  const _sccacheHint = isMac
     ? "brew install sccache"
     : isWin
       ? "scoop install sccache  (or: cargo install sccache)"
       : "cargo install sccache  (or: sudo apt install sccache)";
-  console.log(
-    "→ sccache not found — builds will be slower on clean rebuilds" +
-    `\n  Install: ${sccacheHint}`
-  );
 }
 
 if (hasMold) {
@@ -573,25 +468,17 @@ if (hasMold) {
   // Uses the target from explicit --target arg or auto-detected host triple.
   const hostArchMap = { x64: "x86_64", arm64: "aarch64" };
   const hostArch = hostArchMap[arch()] || arch();
-  const targets = explicitTarget
-    ? [explicitTarget]
-    : [`${hostArch}-unknown-linux-gnu`];
+  const targets = explicitTarget ? [explicitTarget] : [`${hostArch}-unknown-linux-gnu`];
 
   for (const target of targets) {
     const envKey = target.toUpperCase().replace(/-/g, "_");
     if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
       process.env[`CARGO_TARGET_${envKey}_LINKER`] = "clang";
       process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] =
-        (process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || "") +
-        " -C link-arg=-fuse-ld=mold";
+        `${process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || ""} -C link-arg=-fuse-ld=mold`;
     }
   }
-  console.log("→ mold + clang detected — enabling fast linker (-fuse-ld=mold)");
 } else if (isLinux) {
-  console.log(
-    "→ mold/clang not found — using default linker" +
-    "\n  Install: sudo apt install mold clang  (faster linking)"
-  );
 }
 
 // ── Windows: fast linker (lld-link) ──────────────────────────────────────────
@@ -618,12 +505,7 @@ if (hasLldLink) {
   if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
     process.env[`CARGO_TARGET_${envKey}_LINKER`] = "lld-link";
   }
-  console.log("→ lld-link detected — enabling fast LLVM linker for Windows");
 } else if (isWin) {
-  console.log(
-    "→ lld-link not found — using default MSVC linker" +
-    "\n  Install: winget install LLVM.LLVM  (faster linking)"
-  );
 }
 
 // ── Run Tauri ─────────────────────────────────────────────────────────────────
@@ -637,13 +519,11 @@ if (hasLldLink) {
 // locally so it always matches the host CPU.
 //
 // Set TAURI_USE_NPX=1 to force the old npx path.
-const useCargo =
-  process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
+const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
 const tauriCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
 
 function runTauriWithArgs(args) {
   const cmd = [...tauriCmd, subcommand, ...args].join(" ").trimEnd();
-  console.log(`→ ${cmd}`);
   execSync(cmd, {
     cwd: root,
     stdio: "inherit",
@@ -653,7 +533,6 @@ function runTauriWithArgs(args) {
 
 function runTauriSubcommand(command, args) {
   const cmd = [...tauriCmd, command, ...args].join(" ").trimEnd();
-  console.log(`→ ${cmd}`);
   execSync(cmd, {
     cwd: root,
     stdio: "inherit",
@@ -662,9 +541,6 @@ function runTauriSubcommand(command, args) {
 }
 
 function tryLinuxBundleSubcommandFallback(baseArgs, bundleTarget) {
-  console.warn(
-    `→ Linux: retrying --bundles ${bundleTarget} via 'tauri bundle' after segfault in 'tauri build'`
-  );
   runTauriSubcommand("bundle", [...baseArgs, "--bundles", bundleTarget]);
 }
 
@@ -708,12 +584,10 @@ function hasBuiltReleaseBinary(targetTriple) {
   return existsSync(binaryPath);
 }
 
-function maybeTreatLinuxCrashAsCompileOnlySuccess(error, reason) {
+function maybeTreatLinuxCrashAsCompileOnlySuccess(error, _reason) {
   const crashExitCode = Number(error?.status);
   const isCrashExit = crashExitCode === 139 || crashExitCode === 134;
-  const targetLooksArm64 =
-    (explicitTarget ?? "").startsWith("aarch64-unknown-linux-gnu") ||
-    arch() === "arm64";
+  const targetLooksArm64 = (explicitTarget ?? "").startsWith("aarch64-unknown-linux-gnu") || arch() === "arm64";
 
   if (
     !isLinux ||
@@ -729,15 +603,6 @@ function maybeTreatLinuxCrashAsCompileOnlySuccess(error, reason) {
   if (!hasBuiltReleaseBinary(explicitTarget)) {
     return false;
   }
-
-  console.warn(
-    "→ Linux ARM64: Tauri bundling crashed (" +
-    `exit ${crashExitCode}) during ${reason}, ` +
-    "but release binary exists; treating build as successful without bundle artifacts"
-  );
-  console.warn(
-    "  Set DISABLE_LINUX_CRASH_COMPILE_FALLBACK=1 to force hard failure on this path"
-  );
   process.exit(0);
 }
 
@@ -749,10 +614,6 @@ function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
     const hasArtifacts = hasBundleArtifacts(explicitTarget, bundleTarget);
 
     if (isLinux && hasSegfaultExitCode && hasArtifacts) {
-      console.warn(
-        `→ Linux: tauri build exited with 139 for --bundles ${bundleTarget}, ` +
-        "but expected bundle artifacts were found; continuing"
-      );
       return;
     }
 
@@ -764,17 +625,10 @@ function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
         const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, bundleTarget);
 
         if (bundleSegfault && recoveredAfterBundleSegfault) {
-          console.warn(
-            `→ Linux: tauri bundle also exited with 139 for --bundles ${bundleTarget}, ` +
-            "but expected bundle artifacts were found; continuing"
-          );
           return;
         }
 
-        maybeTreatLinuxCrashAsCompileOnlySuccess(
-          bundleError,
-          `fallback 'tauri bundle --bundles ${bundleTarget}'`
-        );
+        maybeTreatLinuxCrashAsCompileOnlySuccess(bundleError, `fallback 'tauri bundle --bundles ${bundleTarget}'`);
 
         throw bundleError;
       }
@@ -784,10 +638,7 @@ function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
       }
     }
 
-    maybeTreatLinuxCrashAsCompileOnlySuccess(
-      error,
-      `'tauri build --bundles ${bundleTarget}'`
-    );
+    maybeTreatLinuxCrashAsCompileOnlySuccess(error, `'tauri build --bundles ${bundleTarget}'`);
 
     throw error;
   }
@@ -796,16 +647,8 @@ function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
 const finalArgs = [...platformFlags, ...subArgs];
 const bundleArg = parseExplicitBundleArg(finalArgs);
 const bundleTargets = splitBundleTargets(bundleArg?.value);
-const hasSingleBundleTarget =
-  isLinux &&
-  subcommand === "build" &&
-  bundleArg &&
-  bundleTargets.length === 1;
-const canRetryBundlesSequentially =
-  isLinux &&
-  subcommand === "build" &&
-  bundleArg &&
-  bundleTargets.length > 1;
+const hasSingleBundleTarget = isLinux && subcommand === "build" && bundleArg && bundleTargets.length === 1;
+const canRetryBundlesSequentially = isLinux && subcommand === "build" && bundleArg && bundleTargets.length > 1;
 
 // ── macOS .app assembly fallback ───────────────────────────────────────────
 // When the Tauri CLI bundler stack-overflows (exit 134 / SIGABRT) on macOS,
@@ -815,14 +658,11 @@ function assembleMacOsApp() {
   const triple = explicitTarget || "aarch64-apple-darwin";
   const binaryPath = resolve(root, "src-tauri/target", triple, "release/skill");
   if (!existsSync(binaryPath)) {
-    console.error("→ macOS .app assembly: release binary not found at", binaryPath);
     return false;
   }
 
   // Read product name and bundle config from tauri.conf.json
-  const tauriConf = JSON.parse(
-    readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf-8")
-  );
+  const tauriConf = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf-8"));
   const productName = tauriConf.productName || "NeuroSkill";
   const bundleId = tauriConf.identifier || "com.neuroskill.skill";
   const version = tauriConf.version || "0.0.0";
@@ -846,9 +686,7 @@ function assembleMacOsApp() {
   execSync(`chmod +x ${JSON.stringify(resolve(macOSDir, productName))}`, { cwd: root });
 
   // Copy Info.plist (prefer custom, then generate minimal)
-  const infoPlistSrc = macConf.infoPlist
-    ? resolve(root, "src-tauri", macConf.infoPlist)
-    : null;
+  const infoPlistSrc = macConf.infoPlist ? resolve(root, "src-tauri", macConf.infoPlist) : null;
   if (infoPlistSrc && existsSync(infoPlistSrc)) {
     // Read the custom plist and inject required keys if missing
     let plistContent = readFileSync(infoPlistSrc, "utf-8");
@@ -911,29 +749,17 @@ function assembleMacOsApp() {
       execSync(`mkdir -p ${JSON.stringify(dirname(dstPath))}`, { cwd: root });
       execSync(`ditto ${JSON.stringify(srcPath)} ${JSON.stringify(dstPath)}`, { cwd: root });
     } else {
-      console.warn(`  ⚠ resource not found: ${srcPath}`);
     }
   }
 
   // Copy entitlements (for ad-hoc signing)
-  const entitlements = macConf.entitlements
-    ? resolve(root, "src-tauri", macConf.entitlements)
-    : null;
+  const entitlements = macConf.entitlements ? resolve(root, "src-tauri", macConf.entitlements) : null;
 
   // Ad-hoc codesign
   try {
-    const signArgs = entitlements && existsSync(entitlements)
-      ? `--entitlements ${JSON.stringify(entitlements)}`
-      : "";
-    execSync(
-      `codesign --force --deep --sign - ${signArgs} ${JSON.stringify(appDir)}`,
-      { cwd: root, stdio: "inherit" }
-    );
-  } catch (e) {
-    console.warn("  ⚠ codesign failed (app may not launch on Gatekeeper-enabled systems):", e.message);
-  }
-
-  console.log(`✓ macOS .app assembled at: ${appDir}`);
+    const signArgs = entitlements && existsSync(entitlements) ? `--entitlements ${JSON.stringify(entitlements)}` : "";
+    execSync(`codesign --force --deep --sign - ${signArgs} ${JSON.stringify(appDir)}`, { cwd: root, stdio: "inherit" });
+  } catch (_e) {}
   return true;
 }
 
@@ -942,9 +768,7 @@ try {
 } catch (error) {
   const hasSegfaultExitCode = Number(error?.status) === 139;
   const hasCrashExitCode = Number(error?.status) === 134; // SIGABRT (stack overflow)
-  const baseArgs = bundleArg
-    ? removeBundleArg(finalArgs, bundleArg)
-    : [...finalArgs];
+  const baseArgs = bundleArg ? removeBundleArg(finalArgs, bundleArg) : [...finalArgs];
 
   // ── macOS: Tauri CLI bundler stack-overflow recovery ────────────────────
   // The Tauri CLI itself (not our app) can stack-overflow during the
@@ -953,19 +777,16 @@ try {
   if (isMac && (hasCrashExitCode || hasSegfaultExitCode) && subcommand === "build") {
     const hasBinary = hasBuiltReleaseBinary(explicitTarget);
     if (hasBinary) {
-      console.warn(
-        `→ macOS: Tauri CLI crashed (exit ${error.status}) during bundling; ` +
-        "release binary exists — assembling .app manually"
-      );
       // First, try compile-only to ensure binary is ready (may be a no-op)
       try {
         runTauriWithArgs([...removeBundleArg(finalArgs, bundleArg), "--no-bundle"]);
-      } catch (_) { /* binary already exists, ignore */ }
+      } catch (_) {
+        /* binary already exists, ignore */
+      }
 
       if (assembleMacOsApp()) {
         process.exit(0);
       }
-      console.error("→ macOS: manual .app assembly also failed");
     }
   }
 
@@ -973,35 +794,24 @@ try {
     const target = bundleTargets[0];
     const hasArtifacts = hasBundleArtifacts(explicitTarget, target);
     if (hasArtifacts) {
-      console.warn(
-        `→ Linux: tauri build exited with 139 for --bundles ${target}, ` +
-        "but expected bundle artifacts were found; treating as successful"
-      );
       process.exit(0);
     }
 
     try {
       tryLinuxBundleSubcommandFallback(baseArgs, target);
       if (hasBundleArtifacts(explicitTarget, target)) {
-        console.warn(
-          `→ Linux: recovered single-target bundle via 'tauri bundle' for --bundles ${target}`
-        );
         process.exit(0);
       }
     } catch (bundleError) {
       const bundleSegfault = Number(bundleError?.status) === 139;
       const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, target);
       if (bundleSegfault && recoveredAfterBundleSegfault) {
-        console.warn(
-          `→ Linux: tauri bundle exited with 139 for --bundles ${target}, ` +
-          "but expected bundle artifacts were found; treating as successful"
-        );
         process.exit(0);
       }
 
       maybeTreatLinuxCrashAsCompileOnlySuccess(
         bundleError,
-        `single-target fallback 'tauri bundle --bundles ${target}'`
+        `single-target fallback 'tauri bundle --bundles ${target}'`,
       );
       throw bundleError;
     }
@@ -1012,10 +822,6 @@ try {
   if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
     throw error;
   }
-
-  console.warn(
-    "→ Linux: tauri build exited with 139 during multi-bundle run; retrying each bundle target sequentially"
-  );
 
   for (const target of bundleTargets) {
     runBundleTargetWithLinuxSegfaultFallback(baseArgs, target);

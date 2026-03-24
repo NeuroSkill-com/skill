@@ -7,9 +7,9 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Windows & Overlays — all text pulled from i18n -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { t }       from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

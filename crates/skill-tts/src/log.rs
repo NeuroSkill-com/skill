@@ -19,8 +19,8 @@
 //! ```
 
 use std::sync::{
-    OnceLock,
     atomic::{AtomicBool, Ordering},
+    OnceLock,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -108,4 +108,3 @@ mod tests {
         set_log_enabled(true);
     }
 }
-

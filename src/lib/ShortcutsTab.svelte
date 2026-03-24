@@ -6,156 +6,176 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Shortcuts tab — Global Shortcuts · In-App Shortcuts · Command Palette -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { Badge }              from "$lib/components/ui/badge";
-  import { Button }             from "$lib/components/ui/button";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { Separator }          from "$lib/components/ui/separator";
-  import { t }                  from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let shortcut            = $state("");
-  let searchShortcut      = $state("");
-  let settingsShortcut    = $state("");
-  let calibrationShortcut = $state("");
-  let helpShortcut        = $state("");
-  let historyShortcut     = $state("");
-  let apiShortcut         = $state("");
-  let themeShortcut       = $state("");
-  let focusTimerShortcut  = $state("");
-  let shortcutError       = $state("");
-  let recording           = $state(false);
-  let recordingTarget     = $state<string>("label");
+// ── State ──────────────────────────────────────────────────────────────────
+let shortcut = $state("");
+let searchShortcut = $state("");
+let settingsShortcut = $state("");
+let calibrationShortcut = $state("");
+let helpShortcut = $state("");
+let historyShortcut = $state("");
+let apiShortcut = $state("");
+let themeShortcut = $state("");
+let focusTimerShortcut = $state("");
+let shortcutError = $state("");
+let recording = $state(false);
+let recordingTarget = $state<string>("label");
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
+// ── Helpers ────────────────────────────────────────────────────────────────
+const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
 
-  function shortcutTokens(acc: string): string[] {
-    return acc.split("+").map(p => {
-      if (p === "CmdOrCtrl") return isMac ? "⌘" : "Ctrl";
-      if (p === "Meta")      return isMac ? "⌘" : "Win";
-      if (p === "Shift")     return isMac ? "⇧" : "Shift";
-      if (p === "Alt")       return isMac ? "⌥" : "Alt";
-      if (p === "Ctrl")      return "Ctrl";
-      return p;
-    });
-  }
-
-  function keyEventToAccelerator(e: KeyboardEvent): string | null {
-    const ONLY_MODS = ["Control","Meta","Alt","Shift","AltGraph","CapsLock","NumLock","OS"];
-    if (ONLY_MODS.includes(e.key)) return null;
-    if (!e.ctrlKey && !e.metaKey && !e.altKey) return null;
-
-    const parts: string[] = [];
-    if (e.metaKey  &&  isMac)  parts.push("CmdOrCtrl");
-    else if (e.ctrlKey && !isMac) parts.push("CmdOrCtrl");
-    else if (e.ctrlKey)           parts.push("Ctrl");
-    else if (e.metaKey)           parts.push("Meta");
-    if (e.altKey)   parts.push("Alt");
-    if (e.shiftKey) parts.push("Shift");
-
-    const code = e.code;
-    let key: string | null = null;
-    if      (code.startsWith("Key"))   key = code.slice(3);
-    else if (code.startsWith("Digit")) key = code.slice(5);
-    else if (/^F\d+$/.test(code))      key = code;
-    else {
-      const MAP: Record<string,string> = {
-        Space:"Space", Enter:"Return", Tab:"Tab", Escape:"Escape",
-        Backspace:"Backspace", Delete:"Delete", Insert:"Insert",
-        Home:"Home", End:"End", PageUp:"PageUp", PageDown:"PageDown",
-        ArrowUp:"Up", ArrowDown:"Down", ArrowLeft:"Left", ArrowRight:"Right",
-        Minus:"Minus", Equal:"Equal", BracketLeft:"LeftBracket",
-        BracketRight:"RightBracket", Semicolon:"Semicolon", Quote:"Quote",
-        Comma:"Comma", Period:"Period", Slash:"Slash",
-      };
-      key = MAP[code] ?? null;
-    }
-    if (!key) return null;
-    parts.push(key);
-    return parts.join("+");
-  }
-
-  const SHORTCUT_COMMANDS: Record<string, string> = {
-    label:       "set_label_shortcut",
-    search:      "set_search_shortcut",
-    settings:    "set_settings_shortcut",
-    calibration: "set_calibration_shortcut",
-    help:        "set_help_shortcut",
-    history:     "set_history_shortcut",
-    api:         "set_api_shortcut",
-    theme:       "set_theme_shortcut",
-    focusTimer:  "set_focus_timer_shortcut",
-  };
-
-  function getShortcutValue(target: string): string {
-    if (target === "label")       return shortcut;
-    if (target === "search")      return searchShortcut;
-    if (target === "settings")    return settingsShortcut;
-    if (target === "calibration") return calibrationShortcut;
-    if (target === "help")        return helpShortcut;
-    if (target === "history")     return historyShortcut;
-    if (target === "api")         return apiShortcut;
-    if (target === "theme")       return themeShortcut;
-    if (target === "focusTimer")  return focusTimerShortcut;
-    return "";
-  }
-
-  function setShortcutValue(target: string, val: string) {
-    if (target === "label")       shortcut = val;
-    if (target === "search")      searchShortcut = val;
-    if (target === "settings")    settingsShortcut = val;
-    if (target === "calibration") calibrationShortcut = val;
-    if (target === "help")        helpShortcut = val;
-    if (target === "history")     historyShortcut = val;
-    if (target === "api")         apiShortcut = val;
-    if (target === "theme")       themeShortcut = val;
-    if (target === "focusTimer")  focusTimerShortcut = val;
-  }
-
-  async function applyShortcut(acc: string, target: string = recordingTarget) {
-    shortcutError = "";
-    try {
-      await invoke(SHORTCUT_COMMANDS[target], { shortcut: acc });
-      setShortcutValue(target, acc);
-      recording = false;
-    } catch (e) {
-      shortcutError = String(e);
-    }
-  }
-
-  async function clearShortcutFor(target: string) {
-    await applyShortcut("", target);
-  }
-
-  function startRecording(target: string) {
-    recordingTarget = target;
-    recording = true;
-    shortcutError = "";
-  }
-
-  function onRecordKeydown(e: KeyboardEvent) {
-    if (!recording) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") { recording = false; return; }
-    const acc = keyEventToAccelerator(e);
-    if (acc) applyShortcut(acc, recordingTarget);
-  }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    shortcut             = await invoke<string>("get_label_shortcut");
-    searchShortcut       = await invoke<string>("get_search_shortcut");
-    settingsShortcut     = await invoke<string>("get_settings_shortcut");
-    calibrationShortcut  = await invoke<string>("get_calibration_shortcut");
-    helpShortcut         = await invoke<string>("get_help_shortcut");
-    historyShortcut      = await invoke<string>("get_history_shortcut");
-    apiShortcut          = await invoke<string>("get_api_shortcut");
-    themeShortcut        = await invoke<string>("get_theme_shortcut");
-    focusTimerShortcut   = await invoke<string>("get_focus_timer_shortcut");
+function shortcutTokens(acc: string): string[] {
+  return acc.split("+").map((p) => {
+    if (p === "CmdOrCtrl") return isMac ? "⌘" : "Ctrl";
+    if (p === "Meta") return isMac ? "⌘" : "Win";
+    if (p === "Shift") return isMac ? "⇧" : "Shift";
+    if (p === "Alt") return isMac ? "⌥" : "Alt";
+    if (p === "Ctrl") return "Ctrl";
+    return p;
   });
+}
+
+function keyEventToAccelerator(e: KeyboardEvent): string | null {
+  const ONLY_MODS = ["Control", "Meta", "Alt", "Shift", "AltGraph", "CapsLock", "NumLock", "OS"];
+  if (ONLY_MODS.includes(e.key)) return null;
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) return null;
+
+  const parts: string[] = [];
+  if (e.metaKey && isMac) parts.push("CmdOrCtrl");
+  else if (e.ctrlKey && !isMac) parts.push("CmdOrCtrl");
+  else if (e.ctrlKey) parts.push("Ctrl");
+  else if (e.metaKey) parts.push("Meta");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+
+  const code = e.code;
+  let key: string | null = null;
+  if (code.startsWith("Key")) key = code.slice(3);
+  else if (code.startsWith("Digit")) key = code.slice(5);
+  else if (/^F\d+$/.test(code)) key = code;
+  else {
+    const MAP: Record<string, string> = {
+      Space: "Space",
+      Enter: "Return",
+      Tab: "Tab",
+      Escape: "Escape",
+      Backspace: "Backspace",
+      Delete: "Delete",
+      Insert: "Insert",
+      Home: "Home",
+      End: "End",
+      PageUp: "PageUp",
+      PageDown: "PageDown",
+      ArrowUp: "Up",
+      ArrowDown: "Down",
+      ArrowLeft: "Left",
+      ArrowRight: "Right",
+      Minus: "Minus",
+      Equal: "Equal",
+      BracketLeft: "LeftBracket",
+      BracketRight: "RightBracket",
+      Semicolon: "Semicolon",
+      Quote: "Quote",
+      Comma: "Comma",
+      Period: "Period",
+      Slash: "Slash",
+    };
+    key = MAP[code] ?? null;
+  }
+  if (!key) return null;
+  parts.push(key);
+  return parts.join("+");
+}
+
+const SHORTCUT_COMMANDS: Record<string, string> = {
+  label: "set_label_shortcut",
+  search: "set_search_shortcut",
+  settings: "set_settings_shortcut",
+  calibration: "set_calibration_shortcut",
+  help: "set_help_shortcut",
+  history: "set_history_shortcut",
+  api: "set_api_shortcut",
+  theme: "set_theme_shortcut",
+  focusTimer: "set_focus_timer_shortcut",
+};
+
+function getShortcutValue(target: string): string {
+  if (target === "label") return shortcut;
+  if (target === "search") return searchShortcut;
+  if (target === "settings") return settingsShortcut;
+  if (target === "calibration") return calibrationShortcut;
+  if (target === "help") return helpShortcut;
+  if (target === "history") return historyShortcut;
+  if (target === "api") return apiShortcut;
+  if (target === "theme") return themeShortcut;
+  if (target === "focusTimer") return focusTimerShortcut;
+  return "";
+}
+
+function setShortcutValue(target: string, val: string) {
+  if (target === "label") shortcut = val;
+  if (target === "search") searchShortcut = val;
+  if (target === "settings") settingsShortcut = val;
+  if (target === "calibration") calibrationShortcut = val;
+  if (target === "help") helpShortcut = val;
+  if (target === "history") historyShortcut = val;
+  if (target === "api") apiShortcut = val;
+  if (target === "theme") themeShortcut = val;
+  if (target === "focusTimer") focusTimerShortcut = val;
+}
+
+async function applyShortcut(acc: string, target: string = recordingTarget) {
+  shortcutError = "";
+  try {
+    await invoke(SHORTCUT_COMMANDS[target], { shortcut: acc });
+    setShortcutValue(target, acc);
+    recording = false;
+  } catch (e) {
+    shortcutError = String(e);
+  }
+}
+
+async function clearShortcutFor(target: string) {
+  await applyShortcut("", target);
+}
+
+function startRecording(target: string) {
+  recordingTarget = target;
+  recording = true;
+  shortcutError = "";
+}
+
+function onRecordKeydown(e: KeyboardEvent) {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === "Escape") {
+    recording = false;
+    return;
+  }
+  const acc = keyEventToAccelerator(e);
+  if (acc) applyShortcut(acc, recordingTarget);
+}
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(async () => {
+  shortcut = await invoke<string>("get_label_shortcut");
+  searchShortcut = await invoke<string>("get_search_shortcut");
+  settingsShortcut = await invoke<string>("get_settings_shortcut");
+  calibrationShortcut = await invoke<string>("get_calibration_shortcut");
+  helpShortcut = await invoke<string>("get_help_shortcut");
+  historyShortcut = await invoke<string>("get_history_shortcut");
+  apiShortcut = await invoke<string>("get_api_shortcut");
+  themeShortcut = await invoke<string>("get_theme_shortcut");
+  focusTimerShortcut = await invoke<string>("get_focus_timer_shortcut");
+});
 </script>
 
 <!-- ── Global Shortcuts ──────────────────────────────────────────────────────── -->

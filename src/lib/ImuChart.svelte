@@ -5,12 +5,12 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts" module>
-  /** IMU packet from the Rust backend. */
-  export interface ImuPacket {
-    sensor:    "accel" | "gyro";
-    samples:   [number, number, number][];  // 3 XYZ samples per packet
-    timestamp: number;
-  }
+/** IMU packet from the Rust backend. */
+export interface ImuPacket {
+  sensor: "accel" | "gyro";
+  samples: [number, number, number][]; // 3 XYZ samples per packet
+  timestamp: number;
+}
 </script>
 
 <script lang="ts">

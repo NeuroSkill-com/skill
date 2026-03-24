@@ -10,156 +10,160 @@
       (used for the auto-title applied when the first message is sent)
 -->
 <script lang="ts">
-  import { onMount, tick } from "svelte";
-  import { invoke }        from "@tauri-apps/api/core";
-  import { t }             from "$lib/i18n/index.svelte";
-  import { fmtDate }       from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount, tick } from "svelte";
+import { fmtDate } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
-  export interface SessionSummary {
-    id:            number;
-    title:         string;
-    preview:       string;
-    created_at:    number;
-    message_count: number;
-  }
+export interface SessionSummary {
+  id: number;
+  title: string;
+  preview: string;
+  created_at: number;
+  message_count: number;
+}
 
-  // ── Props ──────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────
 
-  let {
-    activeId,
-    onSelect,
-    onNew,
-    onDelete,
-  }: {
-    activeId:  number;
-    onSelect:  (id: number) => void;
-    onNew:     () => void;
-    onDelete:  (id: number) => void;
-  } = $props();
+let {
+  activeId,
+  onSelect,
+  onNew,
+  onDelete,
+}: {
+  activeId: number;
+  onSelect: (id: number) => void;
+  onNew: () => void;
+  onDelete: (id: number) => void;
+} = $props();
 
-  // ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────────────────
 
-  let sessions   = $state<SessionSummary[]>([]);
-  let archived   = $state<SessionSummary[]>([]);
-  let showArchive = $state(false);
-  let editingId  = $state<number | null>(null);
-  let editTitle  = $state("");
-  let editEl     = $state<HTMLInputElement | null>(null);
+let sessions = $state<SessionSummary[]>([]);
+let archived = $state<SessionSummary[]>([]);
+let showArchive = $state(false);
+let editingId = $state<number | null>(null);
+let editTitle = $state("");
+let editEl = $state<HTMLInputElement | null>(null);
 
-  // ── Exposed API (bind:this) ────────────────────────────────────────────────
+// ── Exposed API (bind:this) ────────────────────────────────────────────────
 
-  /** Reload the session list from the backend. */
-  export async function refresh() {
+/** Reload the session list from the backend. */
+export async function refresh() {
+  try {
+    sessions = await invoke<SessionSummary[]>("list_chat_sessions");
+  } catch (e) {}
+  if (showArchive) {
     try {
-      sessions = await invoke<SessionSummary[]>("list_chat_sessions");
-    } catch (e) {
-      console.error("[ChatSidebar] list_chat_sessions:", e);
-    }
-    if (showArchive) {
-      try {
-        archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
-      } catch (e) { console.warn("[chat-sidebar] list_archived_chat_sessions failed:", e); }
-    }
+      archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
+    } catch (e) {}
   }
+}
 
-  /** Patch the title of a single session in the local list (no round-trip). */
-  export function updateTitle(id: number, title: string) {
-    sessions = sessions.map(s => s.id === id ? { ...s, title } : s);
-  }
+/** Patch the title of a single session in the local list (no round-trip). */
+export function updateTitle(id: number, title: string) {
+  sessions = sessions.map((s) => (s.id === id ? { ...s, title } : s));
+}
 
-  // ── Inline rename ──────────────────────────────────────────────────────────
+// ── Inline rename ──────────────────────────────────────────────────────────
 
-  async function startEdit(s: SessionSummary, e: MouseEvent) {
-    e.stopPropagation();
-    editingId = s.id;
-    editTitle = s.title || displayLabel(s);
-    await tick();
-    editEl?.focus();
-    editEl?.select();
-  }
+async function startEdit(s: SessionSummary, e: MouseEvent) {
+  e.stopPropagation();
+  editingId = s.id;
+  editTitle = s.title || displayLabel(s);
+  await tick();
+  editEl?.focus();
+  editEl?.select();
+}
 
-  async function commitEdit() {
-    const id = editingId;
-    editingId = null;
-    if (id === null) return;
-    const title = editTitle.trim();
-    if (!title) return;
+async function commitEdit() {
+  const id = editingId;
+  editingId = null;
+  if (id === null) return;
+  const title = editTitle.trim();
+  if (!title) return;
+  try {
+    await invoke("rename_chat_session", { id, title });
+    sessions = sessions.map((s) => (s.id === id ? { ...s, title } : s));
+  } catch (e) {}
+}
+
+function cancelEdit(e?: KeyboardEvent) {
+  if (e && e.key !== "Escape") return;
+  editingId = null;
+}
+
+// ── Archive / Unarchive / Delete ───────────────────────────────────────────
+
+async function doArchive(id: number, e: MouseEvent) {
+  e.stopPropagation();
+  const session = sessions.find((s) => s.id === id);
+  sessions = sessions.filter((s) => s.id !== id);
+  if (session) archived = [session, ...archived];
+  try {
+    await invoke("archive_chat_session", { id });
+  } catch (e) {}
+  onDelete(id);
+}
+
+async function doUnarchive(id: number, e: MouseEvent) {
+  e.stopPropagation();
+  const session = archived.find((s) => s.id === id);
+  archived = archived.filter((s) => s.id !== id);
+  if (session) sessions = [session, ...sessions];
+  try {
+    await invoke("unarchive_chat_session", { id });
+  } catch (e) {}
+}
+
+async function doDelete(id: number, e: MouseEvent) {
+  e.stopPropagation();
+  archived = archived.filter((s) => s.id !== id);
+  try {
+    await invoke("delete_chat_session", { id });
+  } catch (e) {}
+}
+
+async function toggleArchive() {
+  showArchive = !showArchive;
+  if (showArchive) {
     try {
-      await invoke("rename_chat_session", { id, title });
-      sessions = sessions.map(s => s.id === id ? { ...s, title } : s);
-    } catch (e) { console.warn("[chat-sidebar] rename_chat_session failed:", e); }
+      archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
+    } catch (e) {}
   }
+}
 
-  function cancelEdit(e?: KeyboardEvent) {
-    if (e && e.key !== "Escape") return;
-    editingId = null;
-  }
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-  // ── Archive / Unarchive / Delete ───────────────────────────────────────────
+function displayLabel(s: SessionSummary): string {
+  if (s.title) return s.title;
+  if (s.preview) return s.preview;
+  return t("chat.sidebar.newConvo");
+}
 
-  async function doArchive(id: number, e: MouseEvent) {
-    e.stopPropagation();
-    const session = sessions.find(s => s.id === id);
-    sessions = sessions.filter(s => s.id !== id);
-    if (session) archived = [session, ...archived];
-    try { await invoke("archive_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] archive_chat_session failed:", e); }
-    onDelete(id);
-  }
+function shortLabel(s: SessionSummary): string {
+  const full = displayLabel(s);
+  return full.length > 10 ? `${full.slice(0, 10)}…` : full;
+}
 
-  async function doUnarchive(id: number, e: MouseEvent) {
-    e.stopPropagation();
-    const session = archived.find(s => s.id === id);
-    archived = archived.filter(s => s.id !== id);
-    if (session) sessions = [session, ...sessions];
-    try { await invoke("unarchive_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] unarchive_chat_session failed:", e); }
-  }
+function relTime(ms: number): string {
+  const diff = Date.now() - ms;
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return t("chat.sidebar.justNow");
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 3_600);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return t("chat.sidebar.yesterday");
+  if (d < 7) return `${d}d ago`;
+  return fmtDate(Math.floor(ms / 1000));
+}
 
-  async function doDelete(id: number, e: MouseEvent) {
-    e.stopPropagation();
-    archived = archived.filter(s => s.id !== id);
-    try { await invoke("delete_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] delete_chat_session failed:", e); }
-  }
+// ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  async function toggleArchive() {
-    showArchive = !showArchive;
-    if (showArchive) {
-      try {
-        archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
-      } catch (e) { console.warn("[chat-sidebar] list_archived_chat_sessions failed:", e); }
-    }
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  function displayLabel(s: SessionSummary): string {
-    if (s.title)   return s.title;
-    if (s.preview) return s.preview;
-    return t("chat.sidebar.newConvo");
-  }
-
-  function shortLabel(s: SessionSummary): string {
-    const full = displayLabel(s);
-    return full.length > 10 ? full.slice(0, 10) + "…" : full;
-  }
-
-  function relTime(ms: number): string {
-    const diff = Date.now() - ms;
-    const m = Math.floor(diff / 60_000);
-    if (m < 1)  return t("chat.sidebar.justNow");
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 3_600);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d === 1) return t("chat.sidebar.yesterday");
-    if (d < 7)  return `${d}d ago`;
-    return fmtDate(Math.floor(ms / 1000));
-  }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-
-  onMount(refresh);
+onMount(refresh);
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->

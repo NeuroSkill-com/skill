@@ -27,8 +27,8 @@
 //! `activity.sqlite` with the count of active seconds in that minute.
 
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
 };
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -67,17 +67,26 @@ end tell"#;
         .args(["-e", script])
         .output()
         .ok()?;
-    if !out.status.success() { return None; }
+    if !out.status.success() {
+        return None;
+    }
 
     let raw = String::from_utf8_lossy(&out.stdout);
     let raw = raw.trim();
     let mut parts = raw.splitn(3, "|||");
-    let app_name     = parts.next().unwrap_or("").trim().to_string();
-    let app_path     = parts.next().unwrap_or("").trim().to_string();
+    let app_name = parts.next().unwrap_or("").trim().to_string();
+    let app_path = parts.next().unwrap_or("").trim().to_string();
     let window_title = parts.next().unwrap_or("").trim().to_string();
-    if app_name.is_empty() { return None; }
+    if app_name.is_empty() {
+        return None;
+    }
 
-    Some(ActiveWindowInfo { app_name, app_path, window_title, activated_at: crate::unix_secs() })
+    Some(ActiveWindowInfo {
+        app_name,
+        app_path,
+        window_title,
+        activated_at: crate::unix_secs(),
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -87,8 +96,12 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         .output()
         .ok()
         .filter(|o| o.status.success())?;
-    let win_id = String::from_utf8_lossy(&win_id_out.stdout).trim().to_string();
-    if win_id.is_empty() { return None; }
+    let win_id = String::from_utf8_lossy(&win_id_out.stdout)
+        .trim()
+        .to_string();
+    if win_id.is_empty() {
+        return None;
+    }
 
     let window_title = std::process::Command::new("xdotool")
         .args(["getwindowname", &win_id])
@@ -129,7 +142,12 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    Some(ActiveWindowInfo { app_name, app_path, window_title, activated_at: crate::unix_secs() })
+    Some(ActiveWindowInfo {
+        app_name,
+        app_path,
+        window_title,
+        activated_at: crate::unix_secs(),
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -149,11 +167,11 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     //  user32  → GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId
     //  kernel32 → OpenProcess, QueryFullProcessImageNameW, CloseHandle
 
-    type Hwnd    = *mut core::ffi::c_void;
-    type Handle  = *mut core::ffi::c_void;
-    type Dword   = u32;
-    type Bool    = i32;
-    type Wchar   = u16;
+    type Hwnd = *mut core::ffi::c_void;
+    type Handle = *mut core::ffi::c_void;
+    type Dword = u32;
+    type Bool = i32;
+    type Wchar = u16;
 
     // PROCESS_QUERY_LIMITED_INFORMATION — sufficient for QueryFullProcessImageNameW
     // and available without elevation for most processes (Vista+).
@@ -170,14 +188,14 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     extern "system" {
         fn OpenProcess(
             dw_desired_access: Dword,
-            b_inherit_handle:  Bool,
-            dw_process_id:     Dword,
+            b_inherit_handle: Bool,
+            dw_process_id: Dword,
         ) -> Handle;
         fn QueryFullProcessImageNameW(
-            h_process:   Handle,
-            dw_flags:    Dword,
+            h_process: Handle,
+            dw_flags: Dword,
             lp_exe_name: *mut Wchar,
-            lpdw_size:   *mut Dword,
+            lpdw_size: *mut Dword,
         ) -> Bool;
         fn CloseHandle(h_object: Handle) -> Bool;
     }
@@ -188,7 +206,9 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     unsafe {
         // 1. Foreground window handle.
         let hwnd = GetForegroundWindow();
-        if hwnd.is_null() { return None; }
+        if hwnd.is_null() {
+            return None;
+        }
 
         // 2. Window title (wide string).
         let mut title_buf = [0u16; 512];
@@ -202,20 +222,23 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         // 3. Process ID owning the foreground window.
         let mut pid: Dword = 0;
         GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == 0 { return None; }
+        if pid == 0 {
+            return None;
+        }
 
         // 4. Open the process with minimal rights to read its image path.
         let hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         let (app_path, app_name) = if !hproc.is_null() {
             let mut path_buf = [0u16; 1024];
             let mut path_len = path_buf.len() as Dword;
-            let app_path = if QueryFullProcessImageNameW(
-                hproc, 0, path_buf.as_mut_ptr(), &mut path_len,
-            ) != 0 && path_len > 0 {
-                String::from_utf16_lossy(&path_buf[..path_len as usize])
-            } else {
-                String::new()
-            };
+            let app_path =
+                if QueryFullProcessImageNameW(hproc, 0, path_buf.as_mut_ptr(), &mut path_len) != 0
+                    && path_len > 0
+                {
+                    String::from_utf16_lossy(&path_buf[..path_len as usize])
+                } else {
+                    String::new()
+                };
             CloseHandle(hproc);
 
             // Derive a human-readable name from the exe filename (no extension).
@@ -228,7 +251,9 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
             (String::new(), String::new())
         };
 
-        if app_name.is_empty() && window_title.is_empty() { return None; }
+        if app_name.is_empty() && window_title.is_empty() {
+            return None;
+        }
 
         Some(ActiveWindowInfo {
             app_name,
@@ -255,18 +280,18 @@ fn poll_input_activity() -> (bool, bool) {
     type CGEventType = u32;
 
     // Event type constants from <CoreGraphics/CGEventTypes.h>
-    const STATE:              CGEventSourceStateID = 1;
-    const KEY_DOWN:           CGEventType = 10;
-    const MOUSE_MOVED:        CGEventType = 5;
-    const LEFT_MOUSE_DOWN:    CGEventType = 1;
-    const RIGHT_MOUSE_DOWN:   CGEventType = 3;
-    const SCROLL_WHEEL:       CGEventType = 22;
-    const OTHER_MOUSE_DOWN:   CGEventType = 25;
+    const STATE: CGEventSourceStateID = 1;
+    const KEY_DOWN: CGEventType = 10;
+    const MOUSE_MOVED: CGEventType = 5;
+    const LEFT_MOUSE_DOWN: CGEventType = 1;
+    const RIGHT_MOUSE_DOWN: CGEventType = 3;
+    const SCROLL_WHEEL: CGEventType = 22;
+    const OTHER_MOUSE_DOWN: CGEventType = 25;
 
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGEventSourceSecondsSinceLastEventType(
-            state:     CGEventSourceStateID,
+            state: CGEventSourceStateID,
             event_type: CGEventType,
         ) -> f64;
     }
@@ -276,13 +301,21 @@ fn poll_input_activity() -> (bool, bool) {
     unsafe {
         let kbd_idle = CGEventSourceSecondsSinceLastEventType(STATE, KEY_DOWN);
         // Take the minimum idle time across the mouse event types we care about.
-        let mouse_idle = [MOUSE_MOVED, LEFT_MOUSE_DOWN, RIGHT_MOUSE_DOWN,
-                          SCROLL_WHEEL, OTHER_MOUSE_DOWN]
-            .iter()
-            .map(|&ty| CGEventSourceSecondsSinceLastEventType(STATE, ty))
-            .fold(f64::INFINITY, f64::min);
+        let mouse_idle = [
+            MOUSE_MOVED,
+            LEFT_MOUSE_DOWN,
+            RIGHT_MOUSE_DOWN,
+            SCROLL_WHEEL,
+            OTHER_MOUSE_DOWN,
+        ]
+        .iter()
+        .map(|&ty| CGEventSourceSecondsSinceLastEventType(STATE, ty))
+        .fold(f64::INFINITY, f64::min);
 
-        (kbd_idle < ACTIVE_THRESHOLD_SECS, mouse_idle < ACTIVE_THRESHOLD_SECS)
+        (
+            kbd_idle < ACTIVE_THRESHOLD_SECS,
+            mouse_idle < ACTIVE_THRESHOLD_SECS,
+        )
     }
 }
 
@@ -361,7 +394,7 @@ fn poll_input_activity() -> (bool, bool) {
             return (false, false);
         }
         let now_tick = GetTickCount();
-        let idle_ms  = now_tick.wrapping_sub(info.dw_time) as f64;
+        let idle_ms = now_tick.wrapping_sub(info.dw_time) as f64;
         // GetLastInputInfo doesn't distinguish keyboard vs mouse.
         let active = idle_ms < (ACTIVE_THRESHOLD_SECS * 1_000.0);
         (active, active)
@@ -382,14 +415,16 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
         let enabled = app
             .state::<std::sync::Mutex<Box<AppState>>>()
             .lock_or_recover()
-            .input.track_active_window;
+            .input
+            .track_active_window;
 
         if !enabled {
             if last.is_some() {
                 last = None;
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .input.current_active_window = None;
+                    .input
+                    .current_active_window = None;
                 let _ = app.emit("active-window-changed", Option::<ActiveWindowInfo>::None);
             }
             continue;
@@ -398,11 +433,12 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
         let current = poll_active_window();
 
         let changed = match (&last, &current) {
-            (None, None)         => false,
-            (None, Some(_))      => true,
-            (Some(_), None)      => true,
-            (Some(prev), Some(cur)) =>
-                prev.app_name != cur.app_name || prev.window_title != cur.window_title,
+            (None, None) => false,
+            (None, Some(_)) => true,
+            (Some(_), None) => true,
+            (Some(prev), Some(cur)) => {
+                prev.app_name != cur.app_name || prev.window_title != cur.window_title
+            }
         };
 
         if changed {
@@ -410,12 +446,14 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
                 store.insert_active_window(info);
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .input.current_active_window = current.clone();
+                    .input
+                    .current_active_window = current.clone();
                 let _ = app.emit("active-window-changed", info.clone());
             } else {
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .input.current_active_window = None;
+                    .input
+                    .current_active_window = None;
                 let _ = app.emit("active-window-changed", Option::<ActiveWindowInfo>::None);
             }
             last = current;
@@ -442,22 +480,22 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
 /// The `enabled_flag` `AtomicBool` is checked on every iteration and can be
 /// flipped by `set_input_activity_tracking` without a restart.
 pub fn run_input_monitor(
-    app:          AppHandle,
+    app: AppHandle,
     enabled_flag: Arc<AtomicBool>,
-    kbd_ts:       Arc<AtomicU64>,
-    mouse_ts:     Arc<AtomicU64>,
-    kbd_count:    Arc<AtomicU64>,
-    mouse_count:  Arc<AtomicU64>,
-    store:        Arc<ActivityStore>,
+    kbd_ts: Arc<AtomicU64>,
+    mouse_ts: Arc<AtomicU64>,
+    kbd_count: Arc<AtomicU64>,
+    mouse_count: Arc<AtomicU64>,
+    store: Arc<ActivityStore>,
 ) {
     // Tracks the previous emitted timestamps so we only call app.emit on change.
-    let mut prev_emit_kbd:   u64 = 0;
+    let mut prev_emit_kbd: u64 = 0;
     let mut prev_emit_mouse: u64 = 0;
 
     // Tracks the count snapshots at the last 60-s flush.
-    let mut prev_flush_kbd:   u64 = 0;
+    let mut prev_flush_kbd: u64 = 0;
     let mut prev_flush_mouse: u64 = 0;
-    let mut last_flush_at:    u64 = 0;
+    let mut last_flush_at: u64 = 0;
 
     loop {
         std::thread::sleep(Duration::from_secs(1));
@@ -484,7 +522,7 @@ pub fn run_input_monitor(
         let k = kbd_ts.load(Ordering::Relaxed);
         let m = mouse_ts.load(Ordering::Relaxed);
         if k != prev_emit_kbd || m != prev_emit_mouse {
-            prev_emit_kbd   = k;
+            prev_emit_kbd = k;
             prev_emit_mouse = m;
             let _ = app.emit("input-activity", (k, m));
         }
@@ -507,7 +545,7 @@ pub fn run_input_monitor(
             let mc = mouse_count.load(Ordering::Relaxed);
             let dk = kc.saturating_sub(prev_flush_kbd);
             let dm = mc.saturating_sub(prev_flush_mouse);
-            prev_flush_kbd   = kc;
+            prev_flush_kbd = kc;
             prev_flush_mouse = mc;
 
             if dk > 0 || dm > 0 {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for the ScreenshotStore.
 
-use skill_data::screenshot_store::{ScreenshotStore, ScreenshotRow};
+use skill_data::screenshot_store::{ScreenshotRow, ScreenshotStore};
 use tempfile::tempdir;
 
 fn make_row(ts: u64, filename: &str) -> ScreenshotRow {

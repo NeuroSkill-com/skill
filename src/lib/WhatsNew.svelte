@@ -16,20 +16,22 @@ the Free Software Foundation, version 3 only. -->
   This component renders nothing visible.
 -->
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { invoke }  from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { onMount } from "svelte";
 
-  onMount(async () => {
-    try {
-      if (getCurrentWindow().label !== "main") return;
-      const [appVersion, seenVersion] = await Promise.all([
-        invoke<string>("get_app_version"),
-        invoke<string>("get_whats_new_seen_version"),
-      ]);
-      if (seenVersion !== appVersion) {
-        await invoke("open_whats_new_window");
-      }
-    } catch { /* fail silently — don't block startup */ }
-  });
+onMount(async () => {
+  try {
+    if (getCurrentWindow().label !== "main") return;
+    const [appVersion, seenVersion] = await Promise.all([
+      invoke<string>("get_app_version"),
+      invoke<string>("get_whats_new_seen_version"),
+    ]);
+    if (seenVersion !== appVersion) {
+      await invoke("open_whats_new_window");
+    }
+  } catch {
+    /* fail silently — don't block startup */
+  }
+});
 </script>

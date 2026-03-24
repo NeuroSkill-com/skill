@@ -15,8 +15,8 @@ use skill_data::util::ts_to_unix;
 pub mod cache;
 
 // Re-export types consumed by Tauri wrappers.
-pub use skill_data::label_store;
 pub use cache::*;
+pub use skill_data::label_store;
 
 // ── Session file helpers ──────────────────────────────────────────────────────
 
@@ -34,7 +34,9 @@ fn is_session_json(fname: &str) -> bool {
 /// Returns `true` if `fname` is a primary EEG data file (CSV or Parquet, not metrics/ppg).
 fn is_session_data(fname: &str) -> bool {
     let has_prefix = fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX);
-    if !has_prefix { return false; }
+    if !has_prefix {
+        return false;
+    }
     let is_eeg_csv = fname.ends_with(".csv")
         && !fname.ends_with("_metrics.csv")
         && !fname.ends_with("_ppg.csv")
@@ -47,14 +49,18 @@ fn is_session_data(fname: &str) -> bool {
 }
 
 /// Backward-compatible alias.
-fn is_session_csv(fname: &str) -> bool { is_session_data(fname) }
+fn is_session_csv(fname: &str) -> bool {
+    is_session_data(fname)
+}
 
 /// Extract the Unix timestamp from a session filename like `exg_1700000000.csv`,
 /// `exg_1700000000.parquet`, or `muse_1700000000.json`.
 fn extract_timestamp(fname: &str) -> Option<u64> {
-    fname.rsplit_once('_')
+    fname
+        .rsplit_once('_')
         .and_then(|(_, ts_part)| {
-            ts_part.strip_suffix(".csv")
+            ts_part
+                .strip_suffix(".csv")
                 .or_else(|| ts_part.strip_suffix(".parquet"))
                 .or_else(|| ts_part.strip_suffix(".json"))
         })
@@ -66,9 +72,13 @@ fn extract_timestamp(fname: &str) -> Option<u64> {
 pub fn find_metrics_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
     use skill_data::session_parquet::metrics_parquet_path;
     let pq = metrics_parquet_path(eeg_path);
-    if pq.exists() { return Some(pq); }
+    if pq.exists() {
+        return Some(pq);
+    }
     let csv = metrics_csv_path(eeg_path);
-    if csv.exists() { return Some(csv); }
+    if csv.exists() {
+        return Some(csv);
+    }
     None
 }
 
@@ -76,9 +86,13 @@ pub fn find_metrics_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
 pub fn find_ppg_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
     use skill_data::session_parquet::ppg_parquet_path;
     let pq = ppg_parquet_path(eeg_path);
-    if pq.exists() { return Some(pq); }
+    if pq.exists() {
+        return Some(pq);
+    }
     let csv = ppg_csv_path(eeg_path);
-    if csv.exists() { return Some(csv); }
+    if csv.exists() {
+        return Some(csv);
+    }
     None
 }
 
@@ -87,26 +101,26 @@ pub fn find_ppg_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
 /// A session entry read from a JSON sidecar file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SessionEntry {
-    pub csv_file:          String,
-    pub csv_path:          String,
+    pub csv_file: String,
+    pub csv_path: String,
     pub session_start_utc: Option<u64>,
-    pub session_end_utc:   Option<u64>,
+    pub session_end_utc: Option<u64>,
     pub session_duration_s: Option<u64>,
-    pub device_name:       Option<String>,
-    pub device_id:         Option<String>,
-    pub serial_number:     Option<String>,
-    pub mac_address:       Option<String>,
-    pub firmware_version:  Option<String>,
-    pub hardware_version:  Option<String>,
-    pub headset_preset:    Option<String>,
-    pub battery_pct:       Option<f64>,
-    pub total_samples:     Option<u64>,
-    pub sample_rate_hz:    Option<u64>,
-    pub labels:            Vec<LabelRow>,
-    pub file_size_bytes:   u64,
+    pub device_name: Option<String>,
+    pub device_id: Option<String>,
+    pub serial_number: Option<String>,
+    pub mac_address: Option<String>,
+    pub firmware_version: Option<String>,
+    pub hardware_version: Option<String>,
+    pub headset_preset: Option<String>,
+    pub battery_pct: Option<f64>,
+    pub total_samples: Option<u64>,
+    pub sample_rate_hz: Option<u64>,
+    pub labels: Vec<LabelRow>,
+    pub file_size_bytes: u64,
     /// Average signal-to-noise ratio (dB) for the session.
     /// `None` for legacy sessions recorded before SNR tracking.
-    pub avg_snr_db:        Option<f64>,
+    pub avg_snr_db: Option<f64>,
 }
 
 // ── Typed session JSON sidecar (replaces serde_json::Value for speed) ─────────
@@ -179,57 +193,57 @@ struct SessionDeviceMeta {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SessionMetrics {
-    pub n_epochs:         usize,
-    pub rel_delta:        f64,
-    pub rel_theta:        f64,
-    pub rel_alpha:        f64,
-    pub rel_beta:         f64,
-    pub rel_gamma:        f64,
-    pub rel_high_gamma:   f64,
-    pub relaxation:       f64,
-    pub engagement:       f64,
-    pub faa:              f64,
-    pub tar:              f64,
-    pub bar:              f64,
-    pub dtr:              f64,
-    pub pse:              f64,
-    pub apf:              f64,
-    pub bps:              f64,
-    pub snr:              f64,
-    pub coherence:        f64,
-    pub mu_suppression:   f64,
-    pub mood:             f64,
-    pub tbr:              f64,
-    pub sef95:            f64,
+    pub n_epochs: usize,
+    pub rel_delta: f64,
+    pub rel_theta: f64,
+    pub rel_alpha: f64,
+    pub rel_beta: f64,
+    pub rel_gamma: f64,
+    pub rel_high_gamma: f64,
+    pub relaxation: f64,
+    pub engagement: f64,
+    pub faa: f64,
+    pub tar: f64,
+    pub bar: f64,
+    pub dtr: f64,
+    pub pse: f64,
+    pub apf: f64,
+    pub bps: f64,
+    pub snr: f64,
+    pub coherence: f64,
+    pub mu_suppression: f64,
+    pub mood: f64,
+    pub tbr: f64,
+    pub sef95: f64,
     pub spectral_centroid: f64,
-    pub hjorth_activity:  f64,
-    pub hjorth_mobility:  f64,
+    pub hjorth_activity: f64,
+    pub hjorth_mobility: f64,
     pub hjorth_complexity: f64,
     pub permutation_entropy: f64,
-    pub higuchi_fd:       f64,
-    pub dfa_exponent:     f64,
-    pub sample_entropy:   f64,
-    pub pac_theta_gamma:  f64,
+    pub higuchi_fd: f64,
+    pub dfa_exponent: f64,
+    pub sample_entropy: f64,
+    pub pac_theta_gamma: f64,
     pub laterality_index: f64,
-    pub hr:               f64,
-    pub rmssd:            f64,
-    pub sdnn:             f64,
-    pub pnn50:            f64,
-    pub lf_hf_ratio:      f64,
+    pub hr: f64,
+    pub rmssd: f64,
+    pub sdnn: f64,
+    pub pnn50: f64,
+    pub lf_hf_ratio: f64,
     pub respiratory_rate: f64,
-    pub spo2_estimate:    f64,
-    pub perfusion_index:  f64,
-    pub stress_index:     f64,
-    pub blink_count:      f64,
-    pub blink_rate:       f64,
-    pub head_pitch:       f64,
-    pub head_roll:        f64,
-    pub stillness:        f64,
-    pub nod_count:        f64,
-    pub shake_count:      f64,
-    pub meditation:       f64,
-    pub cognitive_load:   f64,
-    pub drowsiness:       f64,
+    pub spo2_estimate: f64,
+    pub perfusion_index: f64,
+    pub stress_index: f64,
+    pub blink_count: f64,
+    pub blink_rate: f64,
+    pub head_pitch: f64,
+    pub head_roll: f64,
+    pub stillness: f64,
+    pub nod_count: f64,
+    pub shake_count: f64,
+    pub meditation: f64,
+    pub cognitive_load: f64,
+    pub drowsiness: f64,
 }
 
 // ── EpochRow ──────────────────────────────────────────────────────────────────
@@ -238,21 +252,58 @@ pub struct SessionMetrics {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct EpochRow {
     pub t: f64,
-    pub rd: f64, pub rt: f64, pub ra: f64, pub rb: f64, pub rg: f64,
-    pub relaxation: f64, pub engagement: f64,
+    pub rd: f64,
+    pub rt: f64,
+    pub ra: f64,
+    pub rb: f64,
+    pub rg: f64,
+    pub relaxation: f64,
+    pub engagement: f64,
     pub faa: f64,
-    pub tar: f64, pub bar: f64, pub dtr: f64, pub tbr: f64,
-    pub pse: f64, pub apf: f64, pub sef95: f64, pub sc: f64, pub bps: f64, pub snr: f64,
-    pub coherence: f64, pub mu: f64,
-    pub ha: f64, pub hm: f64, pub hc: f64,
-    pub pe: f64, pub hfd: f64, pub dfa: f64, pub se: f64, pub pac: f64, pub lat: f64,
+    pub tar: f64,
+    pub bar: f64,
+    pub dtr: f64,
+    pub tbr: f64,
+    pub pse: f64,
+    pub apf: f64,
+    pub sef95: f64,
+    pub sc: f64,
+    pub bps: f64,
+    pub snr: f64,
+    pub coherence: f64,
+    pub mu: f64,
+    pub ha: f64,
+    pub hm: f64,
+    pub hc: f64,
+    pub pe: f64,
+    pub hfd: f64,
+    pub dfa: f64,
+    pub se: f64,
+    pub pac: f64,
+    pub lat: f64,
     pub mood: f64,
-    pub hr: f64, pub rmssd: f64, pub sdnn: f64, pub pnn50: f64, pub lf_hf: f64,
-    pub resp: f64, pub spo2: f64, pub perf: f64, pub stress: f64,
-    pub blinks: f64, pub blink_r: f64,
-    pub pitch: f64, pub roll: f64, pub still: f64, pub nods: f64, pub shakes: f64,
-    pub med: f64, pub cog: f64, pub drow: f64,
-    pub gpu: f64, pub gpu_render: f64, pub gpu_tiler: f64,
+    pub hr: f64,
+    pub rmssd: f64,
+    pub sdnn: f64,
+    pub pnn50: f64,
+    pub lf_hf: f64,
+    pub resp: f64,
+    pub spo2: f64,
+    pub perf: f64,
+    pub stress: f64,
+    pub blinks: f64,
+    pub blink_r: f64,
+    pub pitch: f64,
+    pub roll: f64,
+    pub still: f64,
+    pub nods: f64,
+    pub shakes: f64,
+    pub med: f64,
+    pub cog: f64,
+    pub drow: f64,
+    pub gpu: f64,
+    pub gpu_render: f64,
+    pub gpu_tiler: f64,
 }
 
 // ── CsvMetricsResult ──────────────────────────────────────────────────────────
@@ -274,23 +325,23 @@ pub struct SleepEpoch {
     pub rel_delta: f64,
     pub rel_theta: f64,
     pub rel_alpha: f64,
-    pub rel_beta:  f64,
+    pub rel_beta: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SleepSummary {
-    pub total_epochs:  usize,
-    pub wake_epochs:   usize,
-    pub n1_epochs:     usize,
-    pub n2_epochs:     usize,
-    pub n3_epochs:     usize,
-    pub rem_epochs:    usize,
-    pub epoch_secs:    f64,
+    pub total_epochs: usize,
+    pub wake_epochs: usize,
+    pub n1_epochs: usize,
+    pub n2_epochs: usize,
+    pub n3_epochs: usize,
+    pub rem_epochs: usize,
+    pub epoch_secs: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SleepStages {
-    pub epochs:  Vec<SleepEpoch>,
+    pub epochs: Vec<SleepEpoch>,
     pub summary: SleepSummary,
 }
 
@@ -299,7 +350,7 @@ pub struct SleepStages {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HistoryStats {
     pub total_sessions: usize,
-    pub total_secs:     u64,
+    pub total_secs: u64,
     pub this_week_secs: u64,
     pub last_week_secs: u64,
 }
@@ -310,9 +361,9 @@ pub struct HistoryStats {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct EmbeddingSession {
     pub start_utc: u64,
-    pub end_utc:   u64,
-    pub n_epochs:  u64,
-    pub day:       String,
+    pub end_utc: u64,
+    pub n_epochs: u64,
+    pub day: String,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -346,7 +397,11 @@ pub fn list_session_days(skill_dir: &Path) -> Vec<String> {
                     }
                     false
                 });
-            if has_sessions { Some(s.to_string()) } else { None }
+            if has_sessions {
+                Some(s.to_string())
+            } else {
+                None
+            }
         })
         .collect();
     days.sort_by(|a, b| b.cmp(a));
@@ -360,20 +415,31 @@ pub fn list_sessions_for_day(
     label_store: Option<&label_store::LabelStore>,
 ) -> Vec<SessionEntry> {
     let day_dir = skill_dir.join(day);
-    if !day_dir.is_dir() { return vec![]; }
+    if !day_dir.is_dir() {
+        return vec![];
+    }
 
     let files: Vec<_> = std::fs::read_dir(&day_dir)
-        .into_iter().flatten().flatten().collect();
+        .into_iter()
+        .flatten()
+        .flatten()
+        .collect();
     let mut raw: Vec<(SessionEntry, Option<u64>, Option<u64>)> = Vec::new();
 
     // First pass: JSON sidecars
     for jf in &files {
         let jp = jf.path();
         let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !is_session_json(fname) { continue; }
+        if !is_session_json(fname) {
+            continue;
+        }
 
-        let Ok(json_bytes) = std::fs::read(&jp) else { continue };
-        let Ok(meta) = serde_json::from_slice::<SessionJsonMeta>(&json_bytes) else { continue };
+        let Ok(json_bytes) = std::fs::read(&jp) else {
+            continue;
+        };
+        let Ok(meta) = serde_json::from_slice::<SessionJsonMeta>(&json_bytes) else {
+            continue;
+        };
 
         let csv_file = meta.csv_file.unwrap_or_default();
         let csv_full = day_dir.join(&csv_file);
@@ -385,63 +451,81 @@ pub fn list_sessions_for_day(
             std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0)
         };
         let start = meta.session_start_utc;
-        let end   = meta.session_end_utc;
-        let dev   = &meta.device;
+        let end = meta.session_end_utc;
+        let dev = &meta.device;
         let str_field = |dev_field: &Option<String>, fallback: &Option<String>| -> Option<String> {
             dev_field.clone().or_else(|| fallback.clone())
         };
-        raw.push((SessionEntry {
-            csv_file,
-            csv_path:           csv_full.to_string_lossy().into_owned(),
-            session_start_utc:  start,
-            session_end_utc:    end,
-            session_duration_s: meta.session_duration_s
-                                    .or_else(|| start.zip(end).map(|(s, e)| e.saturating_sub(s))),
-            device_name:        str_field(&dev.name, &meta.device_name),
-            device_id:          str_field(&dev.id, &meta.device_id),
-            serial_number:      str_field(&dev.serial_number, &meta.serial_number),
-            mac_address:        str_field(&dev.mac_address, &meta.mac_address),
-            firmware_version:   str_field(&dev.firmware_version, &meta.firmware_version),
-            hardware_version:   str_field(&dev.hardware_version, &meta.hardware_version),
-            headset_preset:     str_field(&dev.preset, &meta.headset_preset),
-            battery_pct:        meta.battery_pct_end.or(meta.battery_pct),
-            total_samples:      meta.total_samples,
-            sample_rate_hz:     meta.sample_rate_hz,
-            labels:             vec![],
-            file_size_bytes:    csv_size,
-            avg_snr_db:         meta.avg_snr_db,
-        }, start, end));
+        raw.push((
+            SessionEntry {
+                csv_file,
+                csv_path: csv_full.to_string_lossy().into_owned(),
+                session_start_utc: start,
+                session_end_utc: end,
+                session_duration_s: meta
+                    .session_duration_s
+                    .or_else(|| start.zip(end).map(|(s, e)| e.saturating_sub(s))),
+                device_name: str_field(&dev.name, &meta.device_name),
+                device_id: str_field(&dev.id, &meta.device_id),
+                serial_number: str_field(&dev.serial_number, &meta.serial_number),
+                mac_address: str_field(&dev.mac_address, &meta.mac_address),
+                firmware_version: str_field(&dev.firmware_version, &meta.firmware_version),
+                hardware_version: str_field(&dev.hardware_version, &meta.hardware_version),
+                headset_preset: str_field(&dev.preset, &meta.headset_preset),
+                battery_pct: meta.battery_pct_end.or(meta.battery_pct),
+                total_samples: meta.total_samples,
+                sample_rate_hz: meta.sample_rate_hz,
+                labels: vec![],
+                file_size_bytes: csv_size,
+                avg_snr_db: meta.avg_snr_db,
+            },
+            start,
+            end,
+        ));
     }
 
     // Second pass: orphaned CSVs
     for cf in &files {
         let cp = cf.path();
         let cfname = cp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !is_session_csv(cfname) { continue; }
-        if cp.with_extension("json").exists() { continue; }
+        if !is_session_csv(cfname) {
+            continue;
+        }
+        if cp.with_extension("json").exists() {
+            continue;
+        }
         let meta_fs = std::fs::metadata(&cp);
         let csv_size = meta_fs.as_ref().map(std::fs::Metadata::len).unwrap_or(0);
         let ts: Option<u64> = extract_timestamp(cfname);
-        let end_ts: Option<u64> = meta_fs.ok()
+        let end_ts: Option<u64> = meta_fs
+            .ok()
             .and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs());
-        raw.push((SessionEntry {
-            csv_file:           cfname.to_string(),
-            csv_path:           cp.to_string_lossy().into_owned(),
-            session_start_utc:  ts,
-            session_end_utc:    end_ts,
-            session_duration_s: ts.zip(end_ts).map(|(s, e)| e.saturating_sub(s)),
-            device_name:        None, device_id: None, serial_number: None,
-            mac_address:        None, firmware_version: None, hardware_version: None,
-            headset_preset:     None,
-            battery_pct:        None,
-            total_samples:      None,
-            sample_rate_hz:     None, // unknown — no JSON metadata available
-            labels:             vec![],
-            file_size_bytes:    csv_size,
-            avg_snr_db:         None, // no sidecar available
-        }, ts, end_ts));
+        raw.push((
+            SessionEntry {
+                csv_file: cfname.to_string(),
+                csv_path: cp.to_string_lossy().into_owned(),
+                session_start_utc: ts,
+                session_end_utc: end_ts,
+                session_duration_s: ts.zip(end_ts).map(|(s, e)| e.saturating_sub(s)),
+                device_name: None,
+                device_id: None,
+                serial_number: None,
+                mac_address: None,
+                firmware_version: None,
+                hardware_version: None,
+                headset_preset: None,
+                battery_pct: None,
+                total_samples: None,
+                sample_rate_hz: None, // unknown — no JSON metadata available
+                labels: vec![],
+                file_size_bytes: csv_size,
+                avg_snr_db: None, // no sidecar available
+            },
+            ts,
+            end_ts,
+        ));
     }
 
     patch_session_timestamps(&mut raw);
@@ -468,24 +552,27 @@ pub fn list_sessions_for_day(
 /// Compute average SNR (dB) from the embeddings SQLite for sessions that
 /// lack `avg_snr_db` in their sidecar.  Only issues queries when there are
 /// sessions to backfill, and only one connection per day directory.
-fn backfill_avg_snr(
-    day_dir: &Path,
-    sessions: &mut [(SessionEntry, Option<u64>, Option<u64>)],
-) {
+fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
     // Any work to do?
     let needs_backfill = sessions.iter().any(|(s, ..)| s.avg_snr_db.is_none());
-    if !needs_backfill { return; }
+    if !needs_backfill {
+        return;
+    }
 
     let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-    if !db_path.exists() { return; }
+    if !db_path.exists() {
+        return;
+    }
 
     // Try read-only first (fast, no write-locking).  If the metrics_json
     // column doesn't exist (very old database), the prepare will fail.
     // In that case, run the migration via a read-write connection and
     // return early (all values will be NULL after migration anyway).
-    let flags_ro = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, flags_ro) else { return };
+    let flags_ro =
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, flags_ro) else {
+        return;
+    };
     let _ = conn.execute_batch("PRAGMA busy_timeout=1000;");
 
     let query = "SELECT AVG(json_extract(metrics_json, '$.snr'))
@@ -497,25 +584,30 @@ fn backfill_avg_snr(
     let needs_migration = conn.prepare(query).is_err();
     if needs_migration {
         drop(conn);
-        let flags_rw = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let flags_rw =
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
         if let Ok(rw) = rusqlite::Connection::open_with_flags(&db_path, flags_rw) {
             let _ = rw.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
         }
         return;
     }
 
-    let Ok(mut stmt) = conn.prepare(query) else { return };
+    let Ok(mut stmt) = conn.prepare(query) else {
+        return;
+    };
 
     for (session, start, end) in sessions.iter_mut() {
-        if session.avg_snr_db.is_some() { continue; }
-        let (Some(s), Some(e)) = (*start, *end) else { continue; };
+        if session.avg_snr_db.is_some() {
+            continue;
+        }
+        let (Some(s), Some(e)) = (*start, *end) else {
+            continue;
+        };
         let ts_start = skill_data::util::unix_to_ts(s);
-        let ts_end   = skill_data::util::unix_to_ts(e);
-        if let Ok(avg) = stmt.query_row(
-            rusqlite::params![ts_start, ts_end],
-            |row| row.get::<_, Option<f64>>(0),
-        ) {
+        let ts_end = skill_data::util::unix_to_ts(e);
+        if let Ok(avg) = stmt.query_row(rusqlite::params![ts_start, ts_end], |row| {
+            row.get::<_, Option<f64>>(0)
+        }) {
             session.avg_snr_db = avg;
         }
     }
@@ -525,21 +617,35 @@ fn backfill_avg_snr(
 pub fn delete_session(csv_path: &str) -> anyhow::Result<()> {
     let csv = std::path::PathBuf::from(csv_path);
     let json = csv.with_extension("json");
-    let ppg  = ppg_csv_path(&csv);
-    let met  = metrics_csv_path(&csv);
-    let imu  = skill_data::session_csv::imu_csv_path(&csv);
+    let ppg = ppg_csv_path(&csv);
+    let met = metrics_csv_path(&csv);
+    let imu = skill_data::session_csv::imu_csv_path(&csv);
     let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
     let cache = csv.with_file_name(format!("{stem}_metrics_cache.json"));
-    if csv.exists()   { std::fs::remove_file(&csv)?; }
-    if json.exists()  { std::fs::remove_file(&json)?; }
-    if ppg.exists()   { std::fs::remove_file(&ppg)?; }
-    if met.exists()   { std::fs::remove_file(&met)?; }
-    if imu.exists()   { std::fs::remove_file(&imu)?; }
-    if cache.exists() { let _ = std::fs::remove_file(&cache); }
+    if csv.exists() {
+        std::fs::remove_file(&csv)?;
+    }
+    if json.exists() {
+        std::fs::remove_file(&json)?;
+    }
+    if ppg.exists() {
+        std::fs::remove_file(&ppg)?;
+    }
+    if met.exists() {
+        std::fs::remove_file(&met)?;
+    }
+    if imu.exists() {
+        std::fs::remove_file(&imu)?;
+    }
+    if cache.exists() {
+        let _ = std::fs::remove_file(&cache);
+    }
     // Also try to delete Parquet variants.
     for suffix in ["", "_ppg", "_metrics", "_imu"] {
         let pq = csv.with_file_name(format!("{stem}{suffix}.parquet"));
-        if pq.exists() { let _ = std::fs::remove_file(&pq); }
+        if pq.exists() {
+            let _ = std::fs::remove_file(&pq);
+        }
     }
     Ok(())
 }
@@ -551,42 +657,62 @@ pub fn get_history_stats(skill_dir: &Path) -> HistoryStats {
         .unwrap_or_default()
         .as_secs();
     let days_since_epoch = now_secs / 86400;
-    let weekday           = (days_since_epoch + 3) % 7;
-    let this_week_start   = (days_since_epoch - weekday) * 86400;
-    let last_week_start   = this_week_start.saturating_sub(7 * 86400);
+    let weekday = (days_since_epoch + 3) % 7;
+    let this_week_start = (days_since_epoch - weekday) * 86400;
+    let last_week_start = this_week_start.saturating_sub(7 * 86400);
 
     let mut total_sessions = 0usize;
-    let mut total_secs     = 0u64;
+    let mut total_secs = 0u64;
     let mut this_week_secs = 0u64;
     let mut last_week_secs = 0u64;
 
     let day_dirs = std::fs::read_dir(skill_dir)
-        .into_iter().flatten().flatten()
+        .into_iter()
+        .flatten()
+        .flatten()
         .filter(|e| {
-            let n = e.file_name(); let s = n.to_string_lossy();
+            let n = e.file_name();
+            let s = n.to_string_lossy();
             s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) && e.path().is_dir()
         });
 
     for day_entry in day_dirs {
         let json_files = std::fs::read_dir(day_entry.path())
-            .into_iter().flatten().flatten()
+            .into_iter()
+            .flatten()
+            .flatten()
             .filter(|e| {
-                let n = e.file_name(); let s = n.to_string_lossy();
+                let n = e.file_name();
+                let s = n.to_string_lossy();
                 is_session_json(&s)
             });
         for jf in json_files {
-            let Ok(text) = std::fs::read_to_string(jf.path()) else { continue };
-            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
-            let Some(start) = meta["session_start_utc"].as_u64() else { continue };
+            let Ok(text) = std::fs::read_to_string(jf.path()) else {
+                continue;
+            };
+            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else {
+                continue;
+            };
+            let Some(start) = meta["session_start_utc"].as_u64() else {
+                continue;
+            };
             let end = meta["session_end_utc"].as_u64().unwrap_or(start);
             let dur = end.saturating_sub(start);
             total_sessions += 1;
-            total_secs     += dur;
-            if start >= this_week_start       { this_week_secs += dur; }
-            else if start >= last_week_start  { last_week_secs += dur; }
+            total_secs += dur;
+            if start >= this_week_start {
+                this_week_secs += dur;
+            } else if start >= last_week_start {
+                last_week_secs += dur;
+            }
         }
     }
-    HistoryStats { total_sessions, total_secs, this_week_secs, last_week_secs }
+    HistoryStats {
+        total_sessions,
+        total_secs,
+        this_week_secs,
+        last_week_secs,
+    }
 }
 
 /// Find a session CSV path that contains or is nearest to a given timestamp.
@@ -597,29 +723,50 @@ pub fn find_session_csv_for_timestamp(skill_dir: &Path, ts_utc: u64) -> Option<S
     let entries = std::fs::read_dir(skill_dir).ok()?;
     for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
-        if !path.is_dir() { continue; }
-        let Ok(files) = std::fs::read_dir(&path) else { continue };
+        if !path.is_dir() {
+            continue;
+        }
+        let Ok(files) = std::fs::read_dir(&path) else {
+            continue;
+        };
         for file in files.filter_map(std::result::Result::ok) {
             let jp = file.path();
             let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if !is_session_json(fname) { continue; }
-            let Ok(json) = std::fs::read_to_string(&jp) else { continue };
-            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&json) else { continue };
+            if !is_session_json(fname) {
+                continue;
+            }
+            let Ok(json) = std::fs::read_to_string(&jp) else {
+                continue;
+            };
+            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&json) else {
+                continue;
+            };
             let start = meta["session_start_utc"].as_u64();
             let end = meta["session_end_utc"].as_u64().or(start);
             let csv_file = meta["csv_file"].as_str().unwrap_or("");
-            if csv_file.is_empty() { continue; }
+            if csv_file.is_empty() {
+                continue;
+            }
             let csv_path = path.join(csv_file).to_string_lossy().into_owned();
             if let (Some(s), Some(e)) = (start, end) {
-                if ts_utc >= s && ts_utc <= e { containing = Some(csv_path); break; }
-                let dist = if ts_utc < s { s - ts_utc } else { ts_utc.saturating_sub(e) };
+                if ts_utc >= s && ts_utc <= e {
+                    containing = Some(csv_path);
+                    break;
+                }
+                let dist = if ts_utc < s {
+                    s - ts_utc
+                } else {
+                    ts_utc.saturating_sub(e)
+                };
                 match &nearest {
                     Some((best, _)) if *best <= dist => {}
                     _ => nearest = Some((dist, csv_path)),
                 }
             }
         }
-        if containing.is_some() { break; }
+        if containing.is_some() {
+            break;
+        }
     }
     containing.or_else(|| nearest.map(|(_, p)| p))
 }
@@ -631,20 +778,37 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
     let mut all_ts: Vec<(u64, usize)> = Vec::new();
     let mut day_names: Vec<String> = Vec::new();
 
-    let Ok(entries) = std::fs::read_dir(skill_dir) else { return vec![] };
+    let Ok(entries) = std::fs::read_dir(skill_dir) else {
+        return vec![];
+    };
     for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
-        if !path.is_dir() { continue; }
-        let day_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
-        if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) { continue; }
+        if !path.is_dir() {
+            continue;
+        }
+        let day_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+        if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
         let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() { continue; }
+        if !db_path.exists() {
+            continue;
+        }
         let Ok(conn) = rusqlite::Connection::open_with_flags(
             &db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) else { continue };
+        ) else {
+            continue;
+        };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") else { continue };
+        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp")
+        else {
+            continue;
+        };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
         let day_idx = day_names.len();
         day_names.push(day_name);
@@ -655,22 +819,40 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
         }
     }
 
-    if all_ts.is_empty() { return vec![]; }
+    if all_ts.is_empty() {
+        return vec![];
+    }
     all_ts.sort_by_key(|(ts, _)| *ts);
 
     let mut sessions: Vec<EmbeddingSession> = Vec::new();
     let mut start = all_ts[0].0;
-    let mut end   = start;
+    let mut end = start;
     let mut count: u64 = 1;
     let mut day_idx = all_ts[0].1;
 
     for &(ts, di) in &all_ts[1..] {
         if ts.saturating_sub(end) > GAP_SECS {
-            sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day: day_names[day_idx].clone() });
-            start = ts; end = ts; count = 1; day_idx = di;
-        } else { end = ts; count += 1; }
+            sessions.push(EmbeddingSession {
+                start_utc: start,
+                end_utc: end,
+                n_epochs: count,
+                day: day_names[day_idx].clone(),
+            });
+            start = ts;
+            end = ts;
+            count = 1;
+            day_idx = di;
+        } else {
+            end = ts;
+            count += 1;
+        }
     }
-    sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day: day_names[day_idx].clone() });
+    sessions.push(EmbeddingSession {
+        start_utc: start,
+        end_utc: end,
+        n_epochs: count,
+        day: day_names[day_idx].clone(),
+    });
     sessions.reverse();
     sessions
 }
@@ -695,14 +877,20 @@ fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
     let mut last: Option<u64> = None;
     for batch in reader {
         let Ok(batch) = batch else { continue };
-        let ts_col = batch.column(0)
-            .as_any().downcast_ref::<arrow_array::Float64Array>()?;
+        let ts_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<arrow_array::Float64Array>()?;
         for i in 0..ts_col.len() {
-            if ts_col.is_null(i) { continue; }
+            if ts_col.is_null(i) {
+                continue;
+            }
             let t = ts_col.value(i);
             if t > 1_000_000_000.0 {
                 let ts = t as u64;
-                if first.is_none() { first = Some(ts); }
+                if first.is_none() {
+                    first = Some(ts);
+                }
                 last = Some(ts);
             }
         }
@@ -713,11 +901,15 @@ fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
 fn read_metrics_csv_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
     use std::io::{Read, Seek, SeekFrom};
 
-    if !metrics_path.exists() { return None; }
+    if !metrics_path.exists() {
+        return None;
+    }
 
     let mut file = std::fs::File::open(metrics_path).ok()?;
     let file_len = file.metadata().ok()?.len();
-    if file_len == 0 { return None; }
+    if file_len == 0 {
+        return None;
+    }
 
     // Read the first ~4 KB to get the header + first data record.
     let head_size = (file_len as usize).min(4096);
@@ -759,8 +951,12 @@ fn parse_last_ts_from_bytes(data: &[u8]) -> Option<u64> {
     }
     // Try up to 5 lines from the end to find a valid timestamp.
     for _ in 0..5 {
-        if end == 0 { break; }
-        let line_start = data[..end].iter().rposition(|&b| b == b'\n')
+        if end == 0 {
+            break;
+        }
+        let line_start = data[..end]
+            .iter()
+            .rposition(|&b| b == b'\n')
             .map(|p| p + 1)
             .unwrap_or(0);
         let line = &data[line_start..end];
@@ -775,11 +971,17 @@ fn parse_last_ts_from_bytes(data: &[u8]) -> Option<u64> {
 /// Extract the first CSV field from a raw line and parse it as a Unix timestamp.
 fn parse_ts_from_line(line: &[u8]) -> Option<u64> {
     let line = line.strip_suffix(b"\r").unwrap_or(line);
-    if line.is_empty() { return None; }
+    if line.is_empty() {
+        return None;
+    }
     let field_end = line.iter().position(|&b| b == b',').unwrap_or(line.len());
     let field = std::str::from_utf8(&line[..field_end]).ok()?;
     let t: f64 = field.parse().ok()?;
-    if t > 1_000_000_000.0 { Some(t as u64) } else { None }
+    if t > 1_000_000_000.0 {
+        Some(t as u64)
+    } else {
+        None
+    }
 }
 
 fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
@@ -791,10 +993,10 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
         let mp = find_metrics_path(Path::new(&session.csv_path));
         let Some(mp) = mp else { continue };
         if let Some((first_ts, last_ts)) = read_metrics_time_range(&mp) {
-            *start                     = Some(first_ts);
-            *end                       = Some(last_ts);
-            session.session_start_utc  = Some(first_ts);
-            session.session_end_utc    = Some(last_ts);
+            *start = Some(first_ts);
+            *end = Some(last_ts);
+            session.session_start_utc = Some(first_ts);
+            session.session_end_utc = Some(last_ts);
             session.session_duration_s = Some(last_ts.saturating_sub(first_ts));
         }
     }
@@ -826,15 +1028,23 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     }
 
     let mut rdr = match csv::ReaderBuilder::new()
-        .has_headers(true).flexible(true).from_path(&metrics_path)
-    { Ok(r) => r, Err(e) => { eprintln!("[csv-metrics] open error: {e}"); return None; } };
+        .has_headers(true)
+        .flexible(true)
+        .from_path(&metrics_path)
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[csv-metrics] open error: {e}");
+            return None;
+        }
+    };
 
     // Detect channel count from header: find the "faa" column to determine
     // where per-channel band powers end and cross-channel indices begin.
     let header = rdr.headers().ok()?.clone();
     let faa_idx = header.iter().position(|h| h == "faa").unwrap_or(49);
     let n_band_cols = faa_idx - 1; // columns 1..faa_idx are per-channel bands
-    let n_ch = n_band_cols / 12;   // 12 band columns per channel
+    let n_ch = n_band_cols / 12; // 12 band columns per channel
     let ch_bases: Vec<usize> = (0..n_ch).map(|c| 1 + c * 12).collect();
     let x = faa_idx; // cross-channel offset
 
@@ -844,19 +1054,29 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
 
     for result in rdr.records() {
         let Ok(rec) = result else { continue };
-        if rec.len() < x + 23 { continue; } // need at least through laterality_index
+        if rec.len() < x + 23 {
+            continue;
+        } // need at least through laterality_index
 
         let f = |i: usize| -> f64 {
-            rec.get(i).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0)
+            rec.get(i)
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0)
         };
 
         let timestamp = f(0);
-        if timestamp <= 0.0 { continue; }
+        if timestamp <= 0.0 {
+            continue;
+        }
 
         let avg_rel = |band_offset: usize| -> f64 {
-            if ch_bases.is_empty() { return 0.0; }
+            if ch_bases.is_empty() {
+                return 0.0;
+            }
             let mut s = 0.0;
-            for &base in &ch_bases { s += f(base + 6 + band_offset); }
+            for &base in &ch_bases {
+                s += f(base + 6 + band_offset);
+            }
             s / ch_bases.len() as f64
         };
 
@@ -866,101 +1086,243 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         let rb = avg_rel(3);
         let rg = avg_rel(4);
 
-        let faa_v =f(x);   let tar_v =f(x+1); let bar_v =f(x+2); let dtr_v =f(x+3);
-        let pse_v =f(x+4); let apf_v =f(x+5); let bps_v =f(x+6); let snr_v =f(x+7);
-        let coh_v =f(x+8); let mu_v  =f(x+9); let mood_v=f(x+10);
-        let tbr_v =f(x+11);let sef_v =f(x+12);let sc_v  =f(x+13);
-        let ha_v  =f(x+14);let hm_v  =f(x+15);let hc_v  =f(x+16);
-        let pe_v  =f(x+17);let hfd_v =f(x+18);let dfa_v =f(x+19);
-        let se_v  =f(x+20);let pac_v =f(x+21);let lat_v =f(x+22);
-        let hr_v  =f(x+23);let rmssd_v=f(x+24);let sdnn_v=f(x+25);
-        let pnn_v =f(x+26);let lfhf_v=f(x+27);let resp_v=f(x+28);
-        let spo_v =f(x+29);let perf_v=f(x+30);let stress_v=f(x+31);
-        let blinks_v=f(x+32);let blink_r_v=f(x+33);
-        let pitch_v=f(x+34);let roll_v=f(x+35);let still_v=f(x+36);
-        let nods_v =f(x+37);let shakes_v=f(x+38);
-        let med_v =f(x+39);let cog_v =f(x+40);let drow_v=f(x+41);
-        let gpu_v =f(x+43);let gpu_r_v=f(x+44);let gpu_t_v=f(x+45);
+        let faa_v = f(x);
+        let tar_v = f(x + 1);
+        let bar_v = f(x + 2);
+        let dtr_v = f(x + 3);
+        let pse_v = f(x + 4);
+        let apf_v = f(x + 5);
+        let bps_v = f(x + 6);
+        let snr_v = f(x + 7);
+        let coh_v = f(x + 8);
+        let mu_v = f(x + 9);
+        let mood_v = f(x + 10);
+        let tbr_v = f(x + 11);
+        let sef_v = f(x + 12);
+        let sc_v = f(x + 13);
+        let ha_v = f(x + 14);
+        let hm_v = f(x + 15);
+        let hc_v = f(x + 16);
+        let pe_v = f(x + 17);
+        let hfd_v = f(x + 18);
+        let dfa_v = f(x + 19);
+        let se_v = f(x + 20);
+        let pac_v = f(x + 21);
+        let lat_v = f(x + 22);
+        let hr_v = f(x + 23);
+        let rmssd_v = f(x + 24);
+        let sdnn_v = f(x + 25);
+        let pnn_v = f(x + 26);
+        let lfhf_v = f(x + 27);
+        let resp_v = f(x + 28);
+        let spo_v = f(x + 29);
+        let perf_v = f(x + 30);
+        let stress_v = f(x + 31);
+        let blinks_v = f(x + 32);
+        let blink_r_v = f(x + 33);
+        let pitch_v = f(x + 34);
+        let roll_v = f(x + 35);
+        let still_v = f(x + 36);
+        let nods_v = f(x + 37);
+        let shakes_v = f(x + 38);
+        let med_v = f(x + 39);
+        let cog_v = f(x + 40);
+        let drow_v = f(x + 41);
+        let gpu_v = f(x + 43);
+        let gpu_r_v = f(x + 44);
+        let gpu_t_v = f(x + 45);
 
-        let mut sr = 0.0f64; let mut se2 = 0.0f64;
+        let mut sr = 0.0f64;
+        let mut se2 = 0.0f64;
         for &ch_base in &ch_bases {
             let a = f(ch_base + 6 + 2);
             let b = f(ch_base + 6 + 3);
             let t = f(ch_base + 6 + 1);
             let d1 = a + t;
             let d2 = b + t;
-            if d1 > 1e-6 { se2 += b / d1; }
-            if d2 > 1e-6 { sr += a / d2; }
+            if d1 > 1e-6 {
+                se2 += b / d1;
+            }
+            if d2 > 1e-6 {
+                sr += a / d2;
+            }
         }
-        let relax_v   = sigmoid100((sr / 4.0) as f32, 2.5, 1.0) as f64;
-        let engage_v  = sigmoid100((se2 / 4.0) as f32, 2.0, 0.8) as f64;
+        let relax_v = sigmoid100((sr / 4.0) as f32, 2.5, 1.0) as f64;
+        let engage_v = sigmoid100((se2 / 4.0) as f32, 2.0, 0.8) as f64;
 
         let row = EpochRow {
             t: timestamp,
-            rd, rt, ra, rb, rg,
-            relaxation: relax_v, engagement: engage_v,
+            rd,
+            rt,
+            ra,
+            rb,
+            rg,
+            relaxation: relax_v,
+            engagement: engage_v,
             faa: faa_v,
-            tar: tar_v, bar: bar_v, dtr: dtr_v, tbr: tbr_v,
-            pse: pse_v, apf: apf_v, sef95: sef_v, sc: sc_v, bps: bps_v, snr: snr_v,
-            coherence: coh_v, mu: mu_v,
-            ha: ha_v, hm: hm_v, hc: hc_v,
-            pe: pe_v, hfd: hfd_v, dfa: dfa_v, se: se_v, pac: pac_v, lat: lat_v,
+            tar: tar_v,
+            bar: bar_v,
+            dtr: dtr_v,
+            tbr: tbr_v,
+            pse: pse_v,
+            apf: apf_v,
+            sef95: sef_v,
+            sc: sc_v,
+            bps: bps_v,
+            snr: snr_v,
+            coherence: coh_v,
+            mu: mu_v,
+            ha: ha_v,
+            hm: hm_v,
+            hc: hc_v,
+            pe: pe_v,
+            hfd: hfd_v,
+            dfa: dfa_v,
+            se: se_v,
+            pac: pac_v,
+            lat: lat_v,
             mood: mood_v,
-            hr: hr_v, rmssd: rmssd_v, sdnn: sdnn_v, pnn50: pnn_v, lf_hf: lfhf_v,
-            resp: resp_v, spo2: spo_v, perf: perf_v, stress: stress_v,
-            blinks: blinks_v, blink_r: blink_r_v,
-            pitch: pitch_v, roll: roll_v, still: still_v, nods: nods_v, shakes: shakes_v,
-            med: med_v, cog: cog_v, drow: drow_v,
-            gpu: gpu_v, gpu_render: gpu_r_v, gpu_tiler: gpu_t_v,
+            hr: hr_v,
+            rmssd: rmssd_v,
+            sdnn: sdnn_v,
+            pnn50: pnn_v,
+            lf_hf: lfhf_v,
+            resp: resp_v,
+            spo2: spo_v,
+            perf: perf_v,
+            stress: stress_v,
+            blinks: blinks_v,
+            blink_r: blink_r_v,
+            pitch: pitch_v,
+            roll: roll_v,
+            still: still_v,
+            nods: nods_v,
+            shakes: shakes_v,
+            med: med_v,
+            cog: cog_v,
+            drow: drow_v,
+            gpu: gpu_v,
+            gpu_render: gpu_r_v,
+            gpu_tiler: gpu_t_v,
         };
 
-        sum.rel_delta += rd;   sum.rel_theta += rt;   sum.rel_alpha += ra;
-        sum.rel_beta  += rb;   sum.rel_gamma += rg;
-        sum.relaxation += relax_v;  sum.engagement += engage_v;
-        sum.faa += faa_v;      sum.tar += tar_v;      sum.bar += bar_v;
-        sum.dtr += dtr_v;      sum.tbr += tbr_v;
-        sum.pse += pse_v;      sum.apf += apf_v;      sum.bps += bps_v;
-        sum.snr += snr_v;      sum.coherence += coh_v; sum.mu_suppression += mu_v;
-        sum.mood += mood_v;    sum.sef95 += sef_v;     sum.spectral_centroid += sc_v;
-        sum.hjorth_activity += ha_v; sum.hjorth_mobility += hm_v; sum.hjorth_complexity += hc_v;
-        sum.permutation_entropy += pe_v; sum.higuchi_fd += hfd_v; sum.dfa_exponent += dfa_v;
-        sum.sample_entropy += se_v; sum.pac_theta_gamma += pac_v; sum.laterality_index += lat_v;
-        sum.hr += hr_v;        sum.rmssd += rmssd_v;   sum.sdnn += sdnn_v;
-        sum.pnn50 += pnn_v;    sum.lf_hf_ratio += lfhf_v; sum.respiratory_rate += resp_v;
-        sum.spo2_estimate += spo_v; sum.perfusion_index += perf_v; sum.stress_index += stress_v;
-        sum.blink_count += blinks_v; sum.blink_rate += blink_r_v;
-        sum.head_pitch += pitch_v; sum.head_roll += roll_v; sum.stillness += still_v;
-        sum.nod_count += nods_v; sum.shake_count += shakes_v;
-        sum.meditation += med_v; sum.cognitive_load += cog_v; sum.drowsiness += drow_v;
+        sum.rel_delta += rd;
+        sum.rel_theta += rt;
+        sum.rel_alpha += ra;
+        sum.rel_beta += rb;
+        sum.rel_gamma += rg;
+        sum.relaxation += relax_v;
+        sum.engagement += engage_v;
+        sum.faa += faa_v;
+        sum.tar += tar_v;
+        sum.bar += bar_v;
+        sum.dtr += dtr_v;
+        sum.tbr += tbr_v;
+        sum.pse += pse_v;
+        sum.apf += apf_v;
+        sum.bps += bps_v;
+        sum.snr += snr_v;
+        sum.coherence += coh_v;
+        sum.mu_suppression += mu_v;
+        sum.mood += mood_v;
+        sum.sef95 += sef_v;
+        sum.spectral_centroid += sc_v;
+        sum.hjorth_activity += ha_v;
+        sum.hjorth_mobility += hm_v;
+        sum.hjorth_complexity += hc_v;
+        sum.permutation_entropy += pe_v;
+        sum.higuchi_fd += hfd_v;
+        sum.dfa_exponent += dfa_v;
+        sum.sample_entropy += se_v;
+        sum.pac_theta_gamma += pac_v;
+        sum.laterality_index += lat_v;
+        sum.hr += hr_v;
+        sum.rmssd += rmssd_v;
+        sum.sdnn += sdnn_v;
+        sum.pnn50 += pnn_v;
+        sum.lf_hf_ratio += lfhf_v;
+        sum.respiratory_rate += resp_v;
+        sum.spo2_estimate += spo_v;
+        sum.perfusion_index += perf_v;
+        sum.stress_index += stress_v;
+        sum.blink_count += blinks_v;
+        sum.blink_rate += blink_r_v;
+        sum.head_pitch += pitch_v;
+        sum.head_roll += roll_v;
+        sum.stillness += still_v;
+        sum.nod_count += nods_v;
+        sum.shake_count += shakes_v;
+        sum.meditation += med_v;
+        sum.cognitive_load += cog_v;
+        sum.drowsiness += drow_v;
 
         rows.push(row);
         count += 1;
     }
 
-    if count == 0 { return None; }
+    if count == 0 {
+        return None;
+    }
 
     let n = count as f64;
     sum.n_epochs = count;
-    sum.rel_delta /= n;  sum.rel_theta /= n;  sum.rel_alpha /= n;
-    sum.rel_beta  /= n;  sum.rel_gamma /= n;
-    sum.relaxation /= n;  sum.engagement /= n;
-    sum.faa /= n;        sum.tar /= n;         sum.bar /= n;
-    sum.dtr /= n;        sum.tbr /= n;
-    sum.pse /= n;        sum.apf /= n;         sum.bps /= n;
-    sum.snr /= n;        sum.coherence /= n;   sum.mu_suppression /= n;
-    sum.mood /= n;       sum.sef95 /= n;       sum.spectral_centroid /= n;
-    sum.hjorth_activity /= n; sum.hjorth_mobility /= n; sum.hjorth_complexity /= n;
-    sum.permutation_entropy /= n; sum.higuchi_fd /= n; sum.dfa_exponent /= n;
-    sum.sample_entropy /= n; sum.pac_theta_gamma /= n; sum.laterality_index /= n;
-    sum.hr /= n;         sum.rmssd /= n;        sum.sdnn /= n;
-    sum.pnn50 /= n;      sum.lf_hf_ratio /= n;  sum.respiratory_rate /= n;
-    sum.spo2_estimate /= n; sum.perfusion_index /= n; sum.stress_index /= n;
+    sum.rel_delta /= n;
+    sum.rel_theta /= n;
+    sum.rel_alpha /= n;
+    sum.rel_beta /= n;
+    sum.rel_gamma /= n;
+    sum.relaxation /= n;
+    sum.engagement /= n;
+    sum.faa /= n;
+    sum.tar /= n;
+    sum.bar /= n;
+    sum.dtr /= n;
+    sum.tbr /= n;
+    sum.pse /= n;
+    sum.apf /= n;
+    sum.bps /= n;
+    sum.snr /= n;
+    sum.coherence /= n;
+    sum.mu_suppression /= n;
+    sum.mood /= n;
+    sum.sef95 /= n;
+    sum.spectral_centroid /= n;
+    sum.hjorth_activity /= n;
+    sum.hjorth_mobility /= n;
+    sum.hjorth_complexity /= n;
+    sum.permutation_entropy /= n;
+    sum.higuchi_fd /= n;
+    sum.dfa_exponent /= n;
+    sum.sample_entropy /= n;
+    sum.pac_theta_gamma /= n;
+    sum.laterality_index /= n;
+    sum.hr /= n;
+    sum.rmssd /= n;
+    sum.sdnn /= n;
+    sum.pnn50 /= n;
+    sum.lf_hf_ratio /= n;
+    sum.respiratory_rate /= n;
+    sum.spo2_estimate /= n;
+    sum.perfusion_index /= n;
+    sum.stress_index /= n;
     sum.blink_rate /= n;
-    sum.head_pitch /= n; sum.head_roll /= n;    sum.stillness /= n;
-    sum.meditation /= n; sum.cognitive_load /= n; sum.drowsiness /= n;
+    sum.head_pitch /= n;
+    sum.head_roll /= n;
+    sum.stillness /= n;
+    sum.meditation /= n;
+    sum.cognitive_load /= n;
+    sum.drowsiness /= n;
 
-    eprintln!("[csv-metrics] loaded {} rows from {}", count, metrics_path.display());
-    Some(CsvMetricsResult { n_rows: count, summary: sum, timeseries: rows })
+    eprintln!(
+        "[csv-metrics] loaded {} rows from {}",
+        count,
+        metrics_path.display()
+    );
+    Some(CsvMetricsResult {
+        n_rows: count,
+        summary: sum,
+        timeseries: rows,
+    })
 }
 
 /// Read metrics from a Parquet file.  Converts each row batch into the same
@@ -976,7 +1338,11 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     let reader = builder.build().ok()?;
 
     // Detect cross-channel offset from schema (find "faa" column).
-    let x = schema.fields().iter().position(|f| f.name() == "faa").unwrap_or(49);
+    let x = schema
+        .fields()
+        .iter()
+        .position(|f| f.name() == "faa")
+        .unwrap_or(49);
     let n_band_cols = x - 1;
     let n_ch = n_band_cols / 12;
     let ch_bases: Vec<usize> = (0..n_ch).map(|c| 1 + c * 12).collect();
@@ -991,119 +1357,291 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
         let n_rows = batch.num_rows();
 
         let cols: Vec<Option<&arrow_array::Float64Array>> = (0..n_cols)
-            .map(|i| batch.column(i).as_any().downcast_ref::<arrow_array::Float64Array>())
+            .map(|i| {
+                batch
+                    .column(i)
+                    .as_any()
+                    .downcast_ref::<arrow_array::Float64Array>()
+            })
             .collect();
 
         for row_idx in 0..n_rows {
             let f = |i: usize| -> f64 {
-                if i >= cols.len() { return 0.0; }
-                cols[i].map_or(0.0, |c| if c.is_null(row_idx) { 0.0 } else { c.value(row_idx) })
+                if i >= cols.len() {
+                    return 0.0;
+                }
+                cols[i].map_or(0.0, |c| {
+                    if c.is_null(row_idx) {
+                        0.0
+                    } else {
+                        c.value(row_idx)
+                    }
+                })
             };
 
-            if n_cols < x + 23 { continue; }
+            if n_cols < x + 23 {
+                continue;
+            }
             let timestamp = f(0);
-            if timestamp <= 0.0 { continue; }
+            if timestamp <= 0.0 {
+                continue;
+            }
 
             let avg_rel = |band_offset: usize| -> f64 {
-                if ch_bases.is_empty() { return 0.0; }
+                if ch_bases.is_empty() {
+                    return 0.0;
+                }
                 let mut s = 0.0;
-                for &base in &ch_bases { s += f(base + 6 + band_offset); }
+                for &base in &ch_bases {
+                    s += f(base + 6 + band_offset);
+                }
                 s / ch_bases.len() as f64
             };
 
-            let rd = avg_rel(0); let rt = avg_rel(1); let ra = avg_rel(2);
-            let rb = avg_rel(3); let rg = avg_rel(4);
+            let rd = avg_rel(0);
+            let rt = avg_rel(1);
+            let ra = avg_rel(2);
+            let rb = avg_rel(3);
+            let rg = avg_rel(4);
 
-            let faa_v=f(x);   let tar_v=f(x+1); let bar_v=f(x+2); let dtr_v=f(x+3);
-            let pse_v=f(x+4); let apf_v=f(x+5); let bps_v=f(x+6); let snr_v=f(x+7);
-            let coh_v=f(x+8); let mu_v=f(x+9);  let mood_v=f(x+10);
-            let tbr_v=f(x+11);let sef_v=f(x+12);let sc_v=f(x+13);
-            let ha_v=f(x+14); let hm_v=f(x+15); let hc_v=f(x+16);
-            let pe_v=f(x+17); let hfd_v=f(x+18);let dfa_v=f(x+19);
-            let se_v=f(x+20); let pac_v=f(x+21);let lat_v=f(x+22);
-            let hr_v=f(x+23); let rmssd_v=f(x+24);let sdnn_v=f(x+25);
-            let pnn_v=f(x+26);let lfhf_v=f(x+27);let resp_v=f(x+28);
-            let spo_v=f(x+29);let perf_v=f(x+30);let stress_v=f(x+31);
-            let blinks_v=f(x+32);let blink_r_v=f(x+33);
-            let pitch_v=f(x+34);let roll_v=f(x+35);let still_v=f(x+36);
-            let nods_v=f(x+37);let shakes_v=f(x+38);
-            let med_v=f(x+39);let cog_v=f(x+40);let drow_v=f(x+41);
-            let gpu_v=f(x+43);let gpu_r_v=f(x+44);let gpu_t_v=f(x+45);
+            let faa_v = f(x);
+            let tar_v = f(x + 1);
+            let bar_v = f(x + 2);
+            let dtr_v = f(x + 3);
+            let pse_v = f(x + 4);
+            let apf_v = f(x + 5);
+            let bps_v = f(x + 6);
+            let snr_v = f(x + 7);
+            let coh_v = f(x + 8);
+            let mu_v = f(x + 9);
+            let mood_v = f(x + 10);
+            let tbr_v = f(x + 11);
+            let sef_v = f(x + 12);
+            let sc_v = f(x + 13);
+            let ha_v = f(x + 14);
+            let hm_v = f(x + 15);
+            let hc_v = f(x + 16);
+            let pe_v = f(x + 17);
+            let hfd_v = f(x + 18);
+            let dfa_v = f(x + 19);
+            let se_v = f(x + 20);
+            let pac_v = f(x + 21);
+            let lat_v = f(x + 22);
+            let hr_v = f(x + 23);
+            let rmssd_v = f(x + 24);
+            let sdnn_v = f(x + 25);
+            let pnn_v = f(x + 26);
+            let lfhf_v = f(x + 27);
+            let resp_v = f(x + 28);
+            let spo_v = f(x + 29);
+            let perf_v = f(x + 30);
+            let stress_v = f(x + 31);
+            let blinks_v = f(x + 32);
+            let blink_r_v = f(x + 33);
+            let pitch_v = f(x + 34);
+            let roll_v = f(x + 35);
+            let still_v = f(x + 36);
+            let nods_v = f(x + 37);
+            let shakes_v = f(x + 38);
+            let med_v = f(x + 39);
+            let cog_v = f(x + 40);
+            let drow_v = f(x + 41);
+            let gpu_v = f(x + 43);
+            let gpu_r_v = f(x + 44);
+            let gpu_t_v = f(x + 45);
 
-            let mut sr = 0.0f64; let mut se2 = 0.0f64;
+            let mut sr = 0.0f64;
+            let mut se2 = 0.0f64;
             for &ch_base in &ch_bases {
-                let a = f(ch_base + 6 + 2); let b = f(ch_base + 6 + 3); let t = f(ch_base + 6 + 1);
-                let d1 = a + t; let d2 = b + t;
-                if d1 > 1e-6 { se2 += b / d1; }
-                if d2 > 1e-6 { sr += a / d2; }
+                let a = f(ch_base + 6 + 2);
+                let b = f(ch_base + 6 + 3);
+                let t = f(ch_base + 6 + 1);
+                let d1 = a + t;
+                let d2 = b + t;
+                if d1 > 1e-6 {
+                    se2 += b / d1;
+                }
+                if d2 > 1e-6 {
+                    sr += a / d2;
+                }
             }
-            let relax_v  = sigmoid100((sr / 4.0) as f32, 2.5, 1.0) as f64;
+            let relax_v = sigmoid100((sr / 4.0) as f32, 2.5, 1.0) as f64;
             let engage_v = sigmoid100((se2 / 4.0) as f32, 2.0, 0.8) as f64;
 
             let row = EpochRow {
-                t: timestamp, rd, rt, ra, rb, rg,
-                relaxation: relax_v, engagement: engage_v,
-                faa: faa_v, tar: tar_v, bar: bar_v, dtr: dtr_v, tbr: tbr_v,
-                pse: pse_v, apf: apf_v, sef95: sef_v, sc: sc_v, bps: bps_v, snr: snr_v,
-                coherence: coh_v, mu: mu_v,
-                ha: ha_v, hm: hm_v, hc: hc_v,
-                pe: pe_v, hfd: hfd_v, dfa: dfa_v, se: se_v, pac: pac_v, lat: lat_v,
+                t: timestamp,
+                rd,
+                rt,
+                ra,
+                rb,
+                rg,
+                relaxation: relax_v,
+                engagement: engage_v,
+                faa: faa_v,
+                tar: tar_v,
+                bar: bar_v,
+                dtr: dtr_v,
+                tbr: tbr_v,
+                pse: pse_v,
+                apf: apf_v,
+                sef95: sef_v,
+                sc: sc_v,
+                bps: bps_v,
+                snr: snr_v,
+                coherence: coh_v,
+                mu: mu_v,
+                ha: ha_v,
+                hm: hm_v,
+                hc: hc_v,
+                pe: pe_v,
+                hfd: hfd_v,
+                dfa: dfa_v,
+                se: se_v,
+                pac: pac_v,
+                lat: lat_v,
                 mood: mood_v,
-                hr: hr_v, rmssd: rmssd_v, sdnn: sdnn_v, pnn50: pnn_v, lf_hf: lfhf_v,
-                resp: resp_v, spo2: spo_v, perf: perf_v, stress: stress_v,
-                blinks: blinks_v, blink_r: blink_r_v,
-                pitch: pitch_v, roll: roll_v, still: still_v, nods: nods_v, shakes: shakes_v,
-                med: med_v, cog: cog_v, drow: drow_v,
-                gpu: gpu_v, gpu_render: gpu_r_v, gpu_tiler: gpu_t_v,
+                hr: hr_v,
+                rmssd: rmssd_v,
+                sdnn: sdnn_v,
+                pnn50: pnn_v,
+                lf_hf: lfhf_v,
+                resp: resp_v,
+                spo2: spo_v,
+                perf: perf_v,
+                stress: stress_v,
+                blinks: blinks_v,
+                blink_r: blink_r_v,
+                pitch: pitch_v,
+                roll: roll_v,
+                still: still_v,
+                nods: nods_v,
+                shakes: shakes_v,
+                med: med_v,
+                cog: cog_v,
+                drow: drow_v,
+                gpu: gpu_v,
+                gpu_render: gpu_r_v,
+                gpu_tiler: gpu_t_v,
             };
 
-            sum.rel_delta += rd;   sum.rel_theta += rt;   sum.rel_alpha += ra;
-            sum.rel_beta  += rb;   sum.rel_gamma += rg;
-            sum.relaxation += relax_v;  sum.engagement += engage_v;
-            sum.faa += faa_v; sum.tar += tar_v; sum.bar += bar_v; sum.dtr += dtr_v; sum.tbr += tbr_v;
-            sum.pse += pse_v; sum.apf += apf_v; sum.bps += bps_v; sum.snr += snr_v;
-            sum.coherence += coh_v; sum.mu_suppression += mu_v; sum.mood += mood_v;
-            sum.sef95 += sef_v; sum.spectral_centroid += sc_v;
-            sum.hjorth_activity += ha_v; sum.hjorth_mobility += hm_v; sum.hjorth_complexity += hc_v;
-            sum.permutation_entropy += pe_v; sum.higuchi_fd += hfd_v; sum.dfa_exponent += dfa_v;
-            sum.sample_entropy += se_v; sum.pac_theta_gamma += pac_v; sum.laterality_index += lat_v;
-            sum.hr += hr_v; sum.rmssd += rmssd_v; sum.sdnn += sdnn_v;
-            sum.pnn50 += pnn_v; sum.lf_hf_ratio += lfhf_v; sum.respiratory_rate += resp_v;
-            sum.spo2_estimate += spo_v; sum.perfusion_index += perf_v; sum.stress_index += stress_v;
-            sum.blink_count += blinks_v; sum.blink_rate += blink_r_v;
-            sum.head_pitch += pitch_v; sum.head_roll += roll_v; sum.stillness += still_v;
-            sum.nod_count += nods_v; sum.shake_count += shakes_v;
-            sum.meditation += med_v; sum.cognitive_load += cog_v; sum.drowsiness += drow_v;
+            sum.rel_delta += rd;
+            sum.rel_theta += rt;
+            sum.rel_alpha += ra;
+            sum.rel_beta += rb;
+            sum.rel_gamma += rg;
+            sum.relaxation += relax_v;
+            sum.engagement += engage_v;
+            sum.faa += faa_v;
+            sum.tar += tar_v;
+            sum.bar += bar_v;
+            sum.dtr += dtr_v;
+            sum.tbr += tbr_v;
+            sum.pse += pse_v;
+            sum.apf += apf_v;
+            sum.bps += bps_v;
+            sum.snr += snr_v;
+            sum.coherence += coh_v;
+            sum.mu_suppression += mu_v;
+            sum.mood += mood_v;
+            sum.sef95 += sef_v;
+            sum.spectral_centroid += sc_v;
+            sum.hjorth_activity += ha_v;
+            sum.hjorth_mobility += hm_v;
+            sum.hjorth_complexity += hc_v;
+            sum.permutation_entropy += pe_v;
+            sum.higuchi_fd += hfd_v;
+            sum.dfa_exponent += dfa_v;
+            sum.sample_entropy += se_v;
+            sum.pac_theta_gamma += pac_v;
+            sum.laterality_index += lat_v;
+            sum.hr += hr_v;
+            sum.rmssd += rmssd_v;
+            sum.sdnn += sdnn_v;
+            sum.pnn50 += pnn_v;
+            sum.lf_hf_ratio += lfhf_v;
+            sum.respiratory_rate += resp_v;
+            sum.spo2_estimate += spo_v;
+            sum.perfusion_index += perf_v;
+            sum.stress_index += stress_v;
+            sum.blink_count += blinks_v;
+            sum.blink_rate += blink_r_v;
+            sum.head_pitch += pitch_v;
+            sum.head_roll += roll_v;
+            sum.stillness += still_v;
+            sum.nod_count += nods_v;
+            sum.shake_count += shakes_v;
+            sum.meditation += med_v;
+            sum.cognitive_load += cog_v;
+            sum.drowsiness += drow_v;
 
             rows.push(row);
             count += 1;
         }
     }
 
-    if count == 0 { return None; }
+    if count == 0 {
+        return None;
+    }
     let n = count as f64;
     sum.n_epochs = count;
-    sum.rel_delta /= n; sum.rel_theta /= n; sum.rel_alpha /= n;
-    sum.rel_beta /= n; sum.rel_gamma /= n;
-    sum.relaxation /= n; sum.engagement /= n;
-    sum.faa /= n; sum.tar /= n; sum.bar /= n; sum.dtr /= n; sum.tbr /= n;
-    sum.pse /= n; sum.apf /= n; sum.bps /= n; sum.snr /= n;
-    sum.coherence /= n; sum.mu_suppression /= n; sum.mood /= n;
-    sum.sef95 /= n; sum.spectral_centroid /= n;
-    sum.hjorth_activity /= n; sum.hjorth_mobility /= n; sum.hjorth_complexity /= n;
-    sum.permutation_entropy /= n; sum.higuchi_fd /= n; sum.dfa_exponent /= n;
-    sum.sample_entropy /= n; sum.pac_theta_gamma /= n; sum.laterality_index /= n;
-    sum.hr /= n; sum.rmssd /= n; sum.sdnn /= n; sum.pnn50 /= n;
-    sum.lf_hf_ratio /= n; sum.respiratory_rate /= n;
-    sum.spo2_estimate /= n; sum.perfusion_index /= n; sum.stress_index /= n;
+    sum.rel_delta /= n;
+    sum.rel_theta /= n;
+    sum.rel_alpha /= n;
+    sum.rel_beta /= n;
+    sum.rel_gamma /= n;
+    sum.relaxation /= n;
+    sum.engagement /= n;
+    sum.faa /= n;
+    sum.tar /= n;
+    sum.bar /= n;
+    sum.dtr /= n;
+    sum.tbr /= n;
+    sum.pse /= n;
+    sum.apf /= n;
+    sum.bps /= n;
+    sum.snr /= n;
+    sum.coherence /= n;
+    sum.mu_suppression /= n;
+    sum.mood /= n;
+    sum.sef95 /= n;
+    sum.spectral_centroid /= n;
+    sum.hjorth_activity /= n;
+    sum.hjorth_mobility /= n;
+    sum.hjorth_complexity /= n;
+    sum.permutation_entropy /= n;
+    sum.higuchi_fd /= n;
+    sum.dfa_exponent /= n;
+    sum.sample_entropy /= n;
+    sum.pac_theta_gamma /= n;
+    sum.laterality_index /= n;
+    sum.hr /= n;
+    sum.rmssd /= n;
+    sum.sdnn /= n;
+    sum.pnn50 /= n;
+    sum.lf_hf_ratio /= n;
+    sum.respiratory_rate /= n;
+    sum.spo2_estimate /= n;
+    sum.perfusion_index /= n;
+    sum.stress_index /= n;
     sum.blink_rate /= n;
-    sum.head_pitch /= n; sum.head_roll /= n; sum.stillness /= n;
-    sum.meditation /= n; sum.cognitive_load /= n; sum.drowsiness /= n;
+    sum.head_pitch /= n;
+    sum.head_roll /= n;
+    sum.stillness /= n;
+    sum.meditation /= n;
+    sum.cognitive_load /= n;
+    sum.drowsiness /= n;
 
-    eprintln!("[parquet-metrics] loaded {} rows from {}", count, path.display());
-    Some(CsvMetricsResult { n_rows: count, summary: sum, timeseries: rows })
+    eprintln!(
+        "[parquet-metrics] loaded {} rows from {}",
+        count,
+        path.display()
+    );
+    Some(CsvMetricsResult {
+        n_rows: count,
+        summary: sum,
+        timeseries: rows,
+    })
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -21,11 +21,11 @@ use tao::{
 use wry::{WebContext, WebView, WebViewBuilder};
 
 // Platform-specific: allow event loop creation on non-main threads.
+use tao::platform::run_return::EventLoopExtRunReturn;
 #[cfg(target_os = "linux")]
 use tao::platform::unix::EventLoopBuilderExtUnix;
 #[cfg(target_os = "windows")]
 use tao::platform::windows::EventLoopBuilderExtWindows;
-use tao::platform::run_return::EventLoopExtRunReturn;
 
 #[cfg(target_os = "linux")]
 use tao::platform::unix::WindowExtUnix;
@@ -206,7 +206,8 @@ impl Browser {
         // `Browser::set_unavailable()` at startup to prevent this.
         if HEADLESS_UNAVAILABLE.load(Ordering::Relaxed) {
             return Err(HeadlessError::InitFailed(
-                "headless browser unavailable: main event loop is owned by the host application".into()
+                "headless browser unavailable: main event loop is owned by the host application"
+                    .into(),
             ));
         }
 
@@ -358,8 +359,7 @@ fn run_event_loop(
         http::Response::builder()
             .header("Content-Type", "text/html; charset=utf-8")
             .body(std::borrow::Cow::Borrowed(
-                b"<!DOCTYPE html><html><head><title></title></head><body></body></html>"
-                    as &[u8],
+                b"<!DOCTYPE html><html><head><title></title></head><body></body></html>" as &[u8],
             ))
             .expect("static HTTP response")
     });
@@ -400,7 +400,9 @@ fn run_event_loop(
         .with_devtools(config.devtools)
         .with_navigation_handler({
             move |url: String| {
-                let patterns = blocked_urls_nav.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let patterns = blocked_urls_nav
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 let blocked = patterns.iter().any(|p| url.contains(p.as_str()));
                 let ts = js_timestamp();
                 intercept_store_nav.push_navigation(NavigationEvent {
@@ -431,7 +433,9 @@ fn run_event_loop(
             // ── Async IPC replies (existing) ─────────────────────────
             // Expected format: "ipc_id:result_text"
             if let Some((id, result)) = body.split_once(':') {
-                let mut pending = pending_ipc_clone.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut pending = pending_ipc_clone
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 if let Some(reply) = pending.remove(id) {
                     let _ = reply.send(Response::Text(result.to_string()));
                 }
@@ -469,7 +473,8 @@ fn run_event_loop(
     // Wrapped in Arc<Mutex<Option>> so command handlers can borrow it;
     // dropped naturally when `run_return` finishes and the closure is
     // released — this avoids Win32 class-unregistration races (error 1412).
-    #[allow(clippy::arc_with_non_send_sync)] // WebView is thread-confined; Arc used for move into closure
+    #[allow(clippy::arc_with_non_send_sync)]
+    // WebView is thread-confined; Arc used for move into closure
     let webview: Arc<Mutex<Option<WebView>>> = Arc::new(Mutex::new(Some(webview)));
 
     event_loop.run_return(move |event, _target, control_flow| {
@@ -482,11 +487,19 @@ fn run_event_loop(
             Event::UserEvent(UserEvent::Command(envelope)) => {
                 let Envelope { command, reply } = envelope;
 
-                let wv_guard = webview.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let wv_guard = webview
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 if let Some(ref wv) = *wv_guard {
                     execute_command(
-                        wv, &window, &command, reply.clone(), &pending_ipc,
-                        config.mode, &intercept_store, &blocked_urls,
+                        wv,
+                        &window,
+                        &command,
+                        reply.clone(),
+                        &pending_ipc,
+                        config.mode,
+                        &intercept_store,
+                        &blocked_urls,
                     );
                 } else {
                     let _ = reply.send(Response::Error("webview destroyed".into()));
@@ -587,7 +600,11 @@ fn execute_command(
             // common cases (solid backgrounds, text, images, borders).
             // For pixel-perfect fidelity, inject the full html2canvas library
             // and use EvalJs instead.
-            eval_async_ipc(wv, pending_ipc, &reply, r#"
+            eval_async_ipc(
+                wv,
+                pending_ipc,
+                &reply,
+                r#"
                 (async () => {
                     const W = window.innerWidth  || document.documentElement.clientWidth  || 800;
                     const H = window.innerHeight || document.documentElement.clientHeight || 600;
@@ -664,7 +681,8 @@ fn execute_command(
 
                     return canvas.toDataURL('image/png');
                 })()
-            "#);
+            "#,
+            );
         }
 
         Command::PrintToPdf => {
@@ -873,11 +891,7 @@ fn execute_command(
         Command::SetSessionStorage { key, value } => {
             let k = js_escape(key);
             let v = js_escape(value);
-            eval_fire(
-                wv,
-                &format!("sessionStorage.setItem('{k}', '{v}')"),
-                &reply,
-            );
+            eval_fire(wv, &format!("sessionStorage.setItem('{k}', '{v}')"), &reply);
         }
 
         // ── Emulation ────────────────────────────────────────────────────
@@ -892,9 +906,9 @@ fn execute_command(
             // In headless mode the window is invisible, so the native
             // innerWidth/innerHeight stay 0.  Update the JS overrides.
             if mode == Mode::Headless {
-                let _ = wv.evaluate_script(
-                    &format!("if(window.__skillSetViewport) window.__skillSetViewport({width},{height});"),
-                );
+                let _ = wv.evaluate_script(&format!(
+                    "if(window.__skillSetViewport) window.__skillSetViewport({width},{height});"
+                ));
             }
             let _ = reply.send(Response::Ok);
         }
@@ -907,7 +921,11 @@ fn execute_command(
 
         // ── Cache ────────────────────────────────────────────────────────
         Command::ClearCache => {
-            eval_async_ipc(wv, pending_ipc, &reply, r#"
+            eval_async_ipc(
+                wv,
+                pending_ipc,
+                &reply,
+                r#"
                 (async () => {
                     if ('caches' in window) {
                         const names = await caches.keys();
@@ -915,11 +933,16 @@ fn execute_command(
                     }
                     return 'ok';
                 })()
-            "#);
+            "#,
+            );
         }
 
         Command::ClearBrowsingData => {
-            eval_async_ipc(wv, pending_ipc, &reply, r#"
+            eval_async_ipc(
+                wv,
+                pending_ipc,
+                &reply,
+                r#"
                 (async () => {
                     localStorage.clear();
                     sessionStorage.clear();
@@ -933,7 +956,8 @@ fn execute_command(
                     }
                     return 'ok';
                 })()
-            "#);
+            "#,
+            );
         }
 
         // ── Waiting ──────────────────────────────────────────────────────
@@ -942,8 +966,12 @@ fn execute_command(
             timeout_ms,
         } => {
             let sel = js_escape(selector);
-            eval_async_ipc(wv, pending_ipc, &reply, &format!(
-                r#"
+            eval_async_ipc(
+                wv,
+                pending_ipc,
+                &reply,
+                &format!(
+                    r#"
                 (async () => {{
                     const deadline = Date.now() + {timeout_ms};
                     while (Date.now() < deadline) {{
@@ -953,12 +981,17 @@ fn execute_command(
                     return 'timeout';
                 }})()
                 "#
-            ));
+                ),
+            );
         }
 
         Command::WaitForNavigation { timeout_ms } => {
-            eval_async_ipc(wv, pending_ipc, &reply, &format!(
-                r#"
+            eval_async_ipc(
+                wv,
+                pending_ipc,
+                &reply,
+                &format!(
+                    r#"
                 new Promise((resolve) => {{
                     const timer = setTimeout(() => resolve('timeout'), {timeout_ms});
                     window.addEventListener('load', () => {{
@@ -967,7 +1000,8 @@ fn execute_command(
                     }}, {{ once: true }});
                 }})
                 "#
-            ));
+                ),
+            );
         }
 
         // ── Network Interception ────────────────────────────────────────
@@ -994,12 +1028,17 @@ fn execute_command(
         }
 
         Command::SetBlockedUrls { patterns } => {
-            *blocked_urls.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = patterns.clone();
+            *blocked_urls
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = patterns.clone();
             let _ = reply.send(Response::Ok);
         }
 
         Command::ClearBlockedUrls => {
-            blocked_urls.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
+            blocked_urls
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clear();
             let _ = reply.send(Response::Ok);
         }
 
@@ -1029,7 +1068,10 @@ fn eval_async_ipc(
     let id_str = format!("__ipc_{id}");
 
     // Register the pending reply.
-    pending_ipc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id_str.clone(), reply.clone());
+    pending_ipc
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(id_str.clone(), reply.clone());
 
     let wrapped = format!(
         r#"
@@ -1043,7 +1085,10 @@ fn eval_async_ipc(
 
     if let Err(e) = wv.evaluate_script(&wrapped) {
         // Remove pending entry and send error immediately.
-        pending_ipc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&id_str);
+        pending_ipc
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&id_str);
         let _ = reply.send(Response::Error(format!("eval failed: {e}")));
     }
 }
@@ -1135,5 +1180,3 @@ pub fn cancel_current_fetch() {
 pub fn is_fetch_cancelled() -> bool {
     FETCH_CANCELLED.load(Ordering::Relaxed)
 }
-
-

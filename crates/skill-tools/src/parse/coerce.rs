@@ -8,8 +8,8 @@
 //! functions here normalise these so downstream validation and execution always
 //! see correct types.
 
-use serde_json::Value;
 use super::types::{Tool, ToolCall};
+use serde_json::Value;
 
 /// Recursively coerce `value` to match the types declared in `schema`.
 ///
@@ -94,8 +94,8 @@ pub(crate) fn coerce_value(value: &Value, schema: &Value) -> Value {
 ///
 /// Returns the coerced arguments as a parsed [`Value`].
 pub fn coerce_tool_call_arguments(call: &mut ToolCall, tools: &[Tool]) -> Value {
-    let args: Value = serde_json::from_str(&call.function.arguments)
-        .unwrap_or_else(|_| serde_json::json!({}));
+    let args: Value =
+        serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| serde_json::json!({}));
 
     let Some(tool) = tools.iter().find(|t| t.function.name == call.function.name) else {
         return args;
@@ -127,8 +127,10 @@ fn coerce_object(value: &Value, schema_obj: &serde_json::Map<String, Value>) -> 
     };
 
     let props = schema_obj.get("properties").and_then(|p| p.as_object());
-    let no_additional = schema_obj.get("additionalProperties")
-        .and_then(serde_json::Value::as_bool) == Some(false);
+    let no_additional = schema_obj
+        .get("additionalProperties")
+        .and_then(serde_json::Value::as_bool)
+        == Some(false);
 
     // When the schema forbids additional properties and has an `args`
     // property of type object, collect any unknown top-level keys
@@ -163,7 +165,8 @@ fn coerce_object_with_args_folding(
 
     // Collect existing nested args — accept both "args" and
     // "arguments" (common LLM alias).
-    let existing_args = obj.get("args")
+    let existing_args = obj
+        .get("args")
         .or_else(|| obj.get("arguments"))
         .and_then(|v| v.as_object())
         .cloned()
@@ -193,11 +196,15 @@ fn coerce_object_with_args_folding(
         for (k, v) in existing_args {
             merged.insert(k, v);
         }
-        let args_schema = schema_obj.get("properties")
+        let args_schema = schema_obj
+            .get("properties")
             .and_then(|p| p.get("args"))
             .cloned()
             .unwrap_or(Value::Bool(true));
-        out.insert("args".to_string(), coerce_value(&Value::Object(merged), &args_schema));
+        out.insert(
+            "args".to_string(),
+            coerce_value(&Value::Object(merged), &args_schema),
+        );
     }
 
     Value::Object(out)
@@ -210,9 +217,12 @@ fn coerce_array(value: &Value, schema_obj: &serde_json::Map<String, Value>) -> V
         if trimmed.starts_with('[') {
             if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
                 if let Some(arr) = parsed.as_array() {
-                    let items_schema = schema_obj.get("items").cloned()
+                    let items_schema = schema_obj
+                        .get("items")
+                        .cloned()
                         .unwrap_or(Value::Bool(true));
-                    let coerced: Vec<Value> = arr.iter()
+                    let coerced: Vec<Value> = arr
+                        .iter()
                         .map(|item| coerce_value(item, &items_schema))
                         .collect();
                     return Value::Array(coerced);
@@ -221,9 +231,12 @@ fn coerce_array(value: &Value, schema_obj: &serde_json::Map<String, Value>) -> V
         }
     }
     if let Some(arr) = value.as_array() {
-        let items_schema = schema_obj.get("items").cloned()
+        let items_schema = schema_obj
+            .get("items")
+            .cloned()
             .unwrap_or(Value::Bool(true));
-        let coerced: Vec<Value> = arr.iter()
+        let coerced: Vec<Value> = arr
+            .iter()
             .map(|item| coerce_value(item, &items_schema))
             .collect();
         return Value::Array(coerced);
@@ -250,7 +263,10 @@ fn coerce_to_bool(value: &Value) -> Option<bool> {
             "false" | "0" | "no" | "off" => Some(false),
             _ => None,
         },
-        Value::Number(n) => n.as_i64().map(|i| i != 0).or_else(|| n.as_f64().map(|f| f != 0.0)),
+        Value::Number(n) => n
+            .as_i64()
+            .map(|i| i != 0)
+            .or_else(|| n.as_f64().map(|f| f != 0.0)),
         _ => None,
     }
 }
@@ -277,7 +293,8 @@ fn coerce_to_number(value: &Value, integer_only: bool) -> Option<Value> {
                 }
             }
             if let Ok(f) = trimmed.parse::<f64>() {
-                if integer_only && f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                if integer_only && f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64
+                {
                     return Some(Value::Number(serde_json::Number::from(f as i64)));
                 }
                 serde_json::Number::from_f64(f).map(Value::Number)
@@ -285,7 +302,11 @@ fn coerce_to_number(value: &Value, integer_only: bool) -> Option<Value> {
                 None
             }
         }
-        Value::Bool(b) => Some(Value::Number(serde_json::Number::from(if *b { 1 } else { 0 }))),
+        Value::Bool(b) => Some(Value::Number(serde_json::Number::from(if *b {
+            1
+        } else {
+            0
+        }))),
         _ => None,
     }
 }

@@ -20,7 +20,11 @@ pub(crate) struct TruncatedOutput {
 /// Truncate from the tail (keep last N lines / max bytes).
 /// Suitable for bash output where the end (errors/results) matters most.
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn truncate_tool_output(content: &str, max_lines: usize, max_bytes: usize) -> TruncatedOutput {
+pub(crate) fn truncate_tool_output(
+    content: &str,
+    max_lines: usize,
+    max_bytes: usize,
+) -> TruncatedOutput {
     let total_bytes = content.len();
     let lines: Vec<&str> = content.split('\n').collect();
     let total_lines = lines.len();
@@ -60,7 +64,11 @@ pub(crate) fn truncate_tool_output(content: &str, max_lines: usize, max_bytes: u
 
 /// Truncate from the head (keep first N lines / max bytes).
 /// Suitable for file reads where you want to see the beginning.
-pub(crate) fn truncate_tool_output_head(content: &str, max_lines: usize, max_bytes: usize) -> TruncatedOutput {
+pub(crate) fn truncate_tool_output_head(
+    content: &str,
+    max_lines: usize,
+    max_bytes: usize,
+) -> TruncatedOutput {
     let total_bytes = content.len();
     let lines: Vec<&str> = content.split('\n').collect();
     let total_lines = lines.len();

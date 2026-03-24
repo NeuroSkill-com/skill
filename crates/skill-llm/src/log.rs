@@ -19,8 +19,8 @@
 //! ```
 
 use std::sync::{
-    OnceLock,
     atomic::{AtomicBool, Ordering},
+    OnceLock,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────

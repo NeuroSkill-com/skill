@@ -6,34 +6,40 @@
  * Extracted from `routes/history/+page.svelte`.
  */
 
+import type { EpochRow } from "$lib/dashboard/SessionDetail.svelte";
+import { dateToLocalKey, fmtTimeShort, fromUnix, pad } from "$lib/format";
 import type { LabelRow } from "$lib/types";
-import type { EpochRow }  from "$lib/dashboard/SessionDetail.svelte";
-import { fmtTimeShort, dateToLocalKey, fromUnix, pad, fmtBytes } from "$lib/format";
-import { SESSION_COLORS } from "$lib/constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface SessionEntry {
-  csv_file: string; csv_path: string;
-  session_start_utc: number | null; session_end_utc: number | null;
-  device_name: string | null; serial_number: string | null;
-  battery_pct: number | null; total_samples: number | null;
-  sample_rate_hz: number | null; labels: LabelRow[];
+  csv_file: string;
+  csv_path: string;
+  session_start_utc: number | null;
+  session_end_utc: number | null;
+  device_name: string | null;
+  serial_number: string | null;
+  battery_pct: number | null;
+  total_samples: number | null;
+  sample_rate_hz: number | null;
+  labels: LabelRow[];
   file_size_bytes: number;
   /** Average signal-to-noise ratio (dB) for the session. `null` for very old sessions. */
   avg_snr_db: number | null;
 }
 
 export interface HistoryStatsData {
-  total_sessions: number; total_secs: number;
-  this_week_secs: number; last_week_secs: number;
+  total_sessions: number;
+  total_secs: number;
+  this_week_secs: number;
+  last_week_secs: number;
 }
 
 // ── Grid constants ───────────────────────────────────────────────────────────
 
 export const GRID_COLS = 24;
 export const GRID_ROWS = 720;
-export const GRID_BIN  = 5;
+export const GRID_BIN = 5;
 
 // ── Session colors ───────────────────────────────────────────────────────────
 
@@ -55,8 +61,7 @@ export function fmtDurCompact(secs: number): string {
 export function totalDurationSecs(sessionList: SessionEntry[]): number {
   let total = 0;
   for (const s of sessionList) {
-    if (s.session_start_utc && s.session_end_utc)
-      total += s.session_end_utc - s.session_start_utc;
+    if (s.session_start_utc && s.session_end_utc) total += s.session_end_utc - s.session_start_utc;
   }
   return total;
 }
@@ -66,11 +71,17 @@ export function dayAggregateMetrics(
   sessionList: SessionEntry[],
   getTs: (csvPath: string) => EpochRow[] | null,
 ): { avgRelax: number; avgEngage: number; totalEpochs: number } | null {
-  let sumR = 0, sumE = 0, n = 0;
+  let sumR = 0,
+    sumE = 0,
+    n = 0;
   for (const s of sessionList) {
     const ts = getTs(s.csv_path);
     if (!ts) continue;
-    for (const ep of ts) { sumR += ep.relaxation; sumE += ep.engagement; n++; }
+    for (const ep of ts) {
+      sumR += ep.relaxation;
+      sumE += ep.engagement;
+      n++;
+    }
   }
   if (n === 0) return null;
   return { avgRelax: sumR / n, avgEngage: sumE / n, totalEpochs: n };
@@ -122,7 +133,9 @@ export function dateKey(utc: number): string {
 export function dateLabel(key: string): string {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    weekday: "short", month: "short", day: "numeric",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -143,7 +156,7 @@ export { fmtBytes as fmtSize } from "$lib/format";
 
 export function fmtSamples(n: number | null): string {
   if (!n) return "—";
-  return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : String(n);
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
 }
 
 export function dayPct(utc: number, dayStart: number): number {
@@ -188,7 +201,9 @@ export function buildLocalDays(utcDirs: string[], sessionStore: Map<string, Sess
   // 2) For any UTC dir we haven't loaded yet, approximate by converting the
   //    dir name to a date and applying the local timezone offset.
   for (const dir of utcDirs) {
-    const y = +dir.slice(0, 4), mo = +dir.slice(4, 6), d = +dir.slice(6, 8);
+    const y = +dir.slice(0, 4),
+      mo = +dir.slice(4, 6),
+      d = +dir.slice(6, 8);
     const utcNoon = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
     const localKey = dateToLocalKey(utcNoon);
     localSet.add(localKey);

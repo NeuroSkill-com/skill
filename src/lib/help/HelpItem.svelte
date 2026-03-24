@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Reusable help item card: bold title + body text. -->
 
 <script lang="ts">
-  let { title, body, id = undefined }: { title: string; body: string; id?: string } = $props();
+let { title, body, id = undefined }: { title: string; body: string; id?: string } = $props();
 </script>
 
 <div {id}

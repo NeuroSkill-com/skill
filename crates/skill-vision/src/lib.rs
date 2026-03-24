@@ -73,7 +73,11 @@ fn recognize_text_macos(rgba_pixels: &[u8], width: u32, height: u32) -> Option<S
         libc_free(ptr as *mut std::ffi::c_void);
 
         let text = text.trim().to_string();
-        if text.is_empty() { None } else { Some(text) }
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
+        }
     }
 }
 

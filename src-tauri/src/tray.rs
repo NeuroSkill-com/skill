@@ -9,9 +9,9 @@
 //! Pure helpers (progress-ring overlay, shortcut formatting, bucketing) live
 //! in the `skill-tray` crate.  This module wires them to the Tauri runtime.
 
-use std::sync::Mutex;
 use crate::AppStateExt;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -21,10 +21,7 @@ use tauri::{
 use crate::DeviceStatus;
 
 // ── Re-exports from skill-tray ────────────────────────────────────────────────
-pub use skill_tray::{
-    progress_bucket, progress_percent,
-    ellipsize_middle,
-};
+pub use skill_tray::{ellipsize_middle, progress_bucket, progress_percent};
 
 // ── Tray-update deduplication ─────────────────────────────────────────────────
 //
@@ -64,8 +61,8 @@ static CURRENT_MENU: Mutex<Option<Menu<tauri::Wry>>> = Mutex::new(None);
 #[cfg(feature = "llm")]
 #[derive(Clone)]
 struct TrayDownloadItem {
-    filename:   String,
-    progress:   f32,
+    filename: String,
+    progress: f32,
     status_msg: Option<String>,
 }
 
@@ -76,7 +73,11 @@ fn tray_download_items(app: &AppHandle) -> Vec<TrayDownloadItem> {
     let downloads = {
         let r = app.app_state();
         let g = r.lock_or_recover();
-        { let __a = g.llm.clone(); let __r = __a.lock_or_recover().downloads.clone(); __r }
+        {
+            let __a = g.llm.clone();
+            let __r = __a.lock_or_recover().downloads.clone();
+            __r
+        }
     };
 
     let mut items = downloads
@@ -102,12 +103,14 @@ fn tray_download_fingerprint(app: &AppHandle) -> String {
     let items = tray_download_items(app);
     items
         .into_iter()
-        .map(|item| format!(
-            "{}:{}:{}",
-            item.filename,
-            progress_bucket(item.progress),
-            item.status_msg.unwrap_or_default()
-        ))
+        .map(|item| {
+            format!(
+                "{}:{}:{}",
+                item.filename,
+                progress_bucket(item.progress),
+                item.status_msg.unwrap_or_default()
+            )
+        })
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -138,15 +141,15 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
 fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let r = app.app_state();
     let g = r.lock_or_recover();
-    let ls   = g.shortcuts.label_shortcut.clone();
-    let ss   = g.shortcuts.search_shortcut.clone();
+    let ls = g.shortcuts.label_shortcut.clone();
+    let ss = g.shortcuts.search_shortcut.clone();
     let sets = g.shortcuts.settings_shortcut.clone();
-    let cs   = g.shortcuts.calibration_shortcut.clone();
-    let hs   = g.shortcuts.help_shortcut.clone();
+    let cs = g.shortcuts.calibration_shortcut.clone();
+    let hs = g.shortcuts.help_shortcut.clone();
     let hist = g.shortcuts.history_shortcut.clone();
-    let api  = g.shortcuts.api_shortcut.clone();
-    let ts   = g.shortcuts.theme_shortcut.clone();
-    let ft   = g.shortcuts.focus_timer_shortcut.clone();
+    let api = g.shortcuts.api_shortcut.clone();
+    let ts = g.shortcuts.theme_shortcut.clone();
+    let ft = g.shortcuts.focus_timer_shortcut.clone();
     #[cfg(feature = "llm")]
     let chat = g.shortcuts.chat_shortcut.clone();
     #[cfg(not(feature = "llm"))]
@@ -155,7 +158,8 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
 
     let llm_downloads = tray_download_fingerprint(app);
 
-    let mut pair_parts = st.paired_devices
+    let mut pair_parts = st
+        .paired_devices
         .iter()
         .map(|d| format!("{}:{}", d.id, d.name))
         .collect::<Vec<_>>();
@@ -166,7 +170,9 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     // (disconnect vs cancel vs connect-to-X vs scan).
     let state = st.state.as_str();
 
-    format!("{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{llm_downloads}")
+    format!(
+        "{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{llm_downloads}"
+    )
 }
 
 /// Status key — things that only change text/enabled state of existing items.
@@ -179,7 +185,7 @@ fn status_key(st: &DeviceStatus) -> String {
         (((st.battery as u32) / 10) * 10).min(100)
     };
     let name = st.device_name.as_deref().unwrap_or("");
-    let tgt  = if st.state == "scanning" {
+    let tgt = if st.state == "scanning" {
         st.target_name.as_deref().unwrap_or("")
     } else {
         ""
@@ -198,15 +204,23 @@ fn menu_key(st: &DeviceStatus, app: &AppHandle) -> String {
 
 // ── Embedded icons ────────────────────────────────────────────────────────────
 
-const ICON_CONNECTED:    &[u8] = include_bytes!("../icons/tray-connected.png");
+const ICON_CONNECTED: &[u8] = include_bytes!("../icons/tray-connected.png");
 const ICON_DISCONNECTED: &[u8] = include_bytes!("../icons/tray-disconnected.png");
-const ICON_SCANNING:     &[u8] = include_bytes!("../icons/tray-scanning.png");
-const ICON_BT_OFF:       &[u8] = include_bytes!("../icons/tray-bt-off.png");
+const ICON_SCANNING: &[u8] = include_bytes!("../icons/tray-scanning.png");
+const ICON_BT_OFF: &[u8] = include_bytes!("../icons/tray-bt-off.png");
 
-fn icon_connected()             -> Image<'static> { Image::from_bytes(ICON_CONNECTED).expect("embedded tray icon") }
-pub(crate) fn icon_disconnected() -> Image<'static> { Image::from_bytes(ICON_DISCONNECTED).expect("embedded tray icon") }
-fn icon_scanning()              -> Image<'static> { Image::from_bytes(ICON_SCANNING).expect("embedded tray icon") }
-fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OFF).expect("embedded tray icon") }
+fn icon_connected() -> Image<'static> {
+    Image::from_bytes(ICON_CONNECTED).expect("embedded tray icon")
+}
+pub(crate) fn icon_disconnected() -> Image<'static> {
+    Image::from_bytes(ICON_DISCONNECTED).expect("embedded tray icon")
+}
+fn icon_scanning() -> Image<'static> {
+    Image::from_bytes(ICON_SCANNING).expect("embedded tray icon")
+}
+fn icon_bt_off() -> Image<'static> {
+    Image::from_bytes(ICON_BT_OFF).expect("embedded tray icon")
+}
 
 fn overlay_progress_bar(base: Image<'static>, progress: f32) -> Image<'static> {
     let width = base.width();
@@ -232,8 +246,16 @@ fn icon_with_progress(icon_state: &str, progress: Option<f32>) -> Image<'static>
 // ── Menu builder ──────────────────────────────────────────────────────────────
 
 pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Menu<tauri::Wry>> {
-    let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
-         help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
+    let (
+        label_shortcut,
+        search_shortcut,
+        settings_shortcut,
+        calibration_shortcut,
+        help_shortcut,
+        history_shortcut,
+        api_shortcut,
+        focus_timer_shortcut,
+    ) = {
         let r = app.app_state();
         let g = r.lock_or_recover();
         (
@@ -255,26 +277,44 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     };
 
     let menu = Menu::new(app)?;
-    menu.append(&MenuItem::with_id(app, "open_skill", "Open NeuroSkill™", true, Some("CmdOrCtrl+Shift+O"))?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "open_skill",
+        "Open NeuroSkill™",
+        true,
+        Some("CmdOrCtrl+Shift+O"),
+    )?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     // ── Status info (always present — updated in-place by update_status_items) ──
     let info_text = match st.state.as_str() {
         "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
-        "scanning"  => match &st.target_name {
+        "scanning" => match &st.target_name {
             Some(n) => format!("Searching for {n}…"),
-            None    => "Scanning for BCI device…".into(),
+            None => "Scanning for BCI device…".into(),
         },
-        "bt_off"    => "⚠ Bluetooth Unavailable".into(),
-        _           => "○ Disconnected".into(),
+        "bt_off" => "⚠ Bluetooth Unavailable".into(),
+        _ => "○ Disconnected".into(),
     };
-    menu.append(&MenuItem::with_id(app, "info", &info_text, false, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "info",
+        &info_text,
+        false,
+        None::<&str>,
+    )?)?;
 
     // Battery line (always present; hidden when no battery data)
     let has_batt = st.state == "connected" && st.battery > 0.0;
-    let batt_text = if has_batt { format!("🔋 {:.0}%", st.battery) } else { String::new() };
+    let batt_text = if has_batt {
+        format!("🔋 {:.0}%", st.battery)
+    } else {
+        String::new()
+    };
     let batt_item = MenuItem::with_id(app, "battery_info", &batt_text, false, None::<&str>)?;
-    if !has_batt { let _ = batt_item.set_enabled(false); }
+    if !has_batt {
+        let _ = batt_item.set_enabled(false);
+    }
     menu.append(&batt_item)?;
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -282,33 +322,80 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     // ── Action items (state-dependent — trigger full rebuild when they change) ──
     match st.state.as_str() {
         "connected" => {
-            menu.append(&MenuItem::with_id(app, "disconnect", "Disconnect", true, None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "disconnect",
+                "Disconnect",
+                true,
+                None::<&str>,
+            )?)?;
         }
         "scanning" => {
-            menu.append(&MenuItem::with_id(app, "cancel", "Cancel", true, None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "cancel",
+                "Cancel",
+                true,
+                None::<&str>,
+            )?)?;
         }
         "bt_off" => {
-            menu.append(&MenuItem::with_id(app, "retry",   "Retry Connection",         true, None::<&str>)?)?;
-            menu.append(&MenuItem::with_id(app, "open_bt", "Open Bluetooth Settings…", true, None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "retry",
+                "Retry Connection",
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "open_bt",
+                "Open Bluetooth Settings…",
+                true,
+                None::<&str>,
+            )?)?;
         }
-        _ => { // disconnected
+        _ => {
+            // disconnected
             if st.paired_devices.is_empty() {
-                menu.append(&MenuItem::with_id(app, "scan", "Scan for BCI Device", true, None::<&str>)?)?;
+                menu.append(&MenuItem::with_id(
+                    app,
+                    "scan",
+                    "Scan for BCI Device",
+                    true,
+                    None::<&str>,
+                )?)?;
             } else {
                 let mut paired = st.paired_devices.clone();
                 paired.sort_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
 
                 for dev in &paired {
-                    menu.append(&MenuItem::with_id(app, format!("connect:{}", dev.id),
-                        format!("Connect to {}", dev.name), true, None::<&str>)?)?;
+                    menu.append(&MenuItem::with_id(
+                        app,
+                        format!("connect:{}", dev.id),
+                        format!("Connect to {}", dev.name),
+                        true,
+                        None::<&str>,
+                    )?)?;
                 }
                 menu.append(&PredefinedMenuItem::separator(app)?)?;
-                menu.append(&MenuItem::with_id(app, "scan", "Scan for New Device", true, None::<&str>)?)?;
+                menu.append(&MenuItem::with_id(
+                    app,
+                    "scan",
+                    "Scan for New Device",
+                    true,
+                    None::<&str>,
+                )?)?;
                 menu.append(&PredefinedMenuItem::separator(app)?)?;
                 let fsub = Submenu::with_id(app, "forget_sub", "Forget Device", true)?;
                 for dev in &paired {
-                    fsub.append(&MenuItem::with_id(app, format!("forget:{}", dev.id),
-                        format!("Forget {}", dev.name), true, None::<&str>)?)?;
+                    fsub.append(&MenuItem::with_id(
+                        app,
+                        format!("forget:{}", dev.id),
+                        format!("Forget {}", dev.name),
+                        true,
+                        None::<&str>,
+                    )?)?;
                 }
                 menu.append(&fsub)?;
             }
@@ -320,13 +407,24 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         let downloads = tray_download_items(app);
         if !downloads.is_empty() {
             menu.append(&PredefinedMenuItem::separator(app)?)?;
-            let avg = downloads.iter().map(|item| item.progress).sum::<f32>() / downloads.len() as f32;
+            let avg =
+                downloads.iter().map(|item| item.progress).sum::<f32>() / downloads.len() as f32;
             let heading = if downloads.len() == 1 {
                 format!("⬇ LLM download {}", progress_percent(avg))
             } else {
-                format!("⬇ {} LLM downloads {}", downloads.len(), progress_percent(avg))
+                format!(
+                    "⬇ {} LLM downloads {}",
+                    downloads.len(),
+                    progress_percent(avg)
+                )
             };
-            menu.append(&MenuItem::with_id(app, "llm_download_info", &heading, false, None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "llm_download_info",
+                &heading,
+                false,
+                None::<&str>,
+            )?)?;
 
             for (index, item) in downloads.iter().take(3).enumerate() {
                 let label = format!(
@@ -334,7 +432,13 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
                     ellipsize_middle(&item.filename, 38),
                     progress_percent(item.progress)
                 );
-                menu.append(&MenuItem::with_id(app, format!("llm_download_item_{index}"), &label, false, None::<&str>)?)?;
+                menu.append(&MenuItem::with_id(
+                    app,
+                    format!("llm_download_item_{index}"),
+                    &label,
+                    false,
+                    None::<&str>,
+                )?)?;
                 if let Some(status) = item.status_msg.as_deref() {
                     if !status.trim().is_empty() {
                         menu.append(&MenuItem::with_id(
@@ -352,7 +456,11 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
                 menu.append(&MenuItem::with_id(
                     app,
                     "llm_download_more",
-                    format!("+{} more download{}", downloads.len() - 3, if downloads.len() == 4 { "" } else { "s" }),
+                    format!(
+                        "+{} more download{}",
+                        downloads.len() - 3,
+                        if downloads.len() == 4 { "" } else { "s" }
+                    ),
                     false,
                     None::<&str>,
                 )?)?;
@@ -362,57 +470,152 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
 
     let is_streaming = st.state == "connected";
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "focus_timer", "Focus Timer…", true, Some(focus_timer_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "calibrate",   "Calibrate…",   is_streaming, Some(calibration_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "search",      "Search…",      true, Some(search_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "label",       "Add Label…",   true, Some(label_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "history",     "History…",     true, Some(history_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "compare",     "Compare…",     true, Some("CmdOrCtrl+Shift+M"))?)?;
-    menu.append(&MenuItem::with_id(app, "settings",    "Settings…",    true, Some(settings_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "help",        "Help…",        true, Some(help_shortcut.as_str()))?)?;
-    menu.append(&MenuItem::with_id(app, "api",         "API Status…",  true, Some(api_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "focus_timer",
+        "Focus Timer…",
+        true,
+        Some(focus_timer_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "calibrate",
+        "Calibrate…",
+        is_streaming,
+        Some(calibration_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "search",
+        "Search…",
+        true,
+        Some(search_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "label",
+        "Add Label…",
+        true,
+        Some(label_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "history",
+        "History…",
+        true,
+        Some(history_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "compare",
+        "Compare…",
+        true,
+        Some("CmdOrCtrl+Shift+M"),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "settings",
+        "Settings…",
+        true,
+        Some(settings_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "help",
+        "Help…",
+        true,
+        Some(help_shortcut.as_str()),
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "api",
+        "API Status…",
+        true,
+        Some(api_shortcut.as_str()),
+    )?)?;
     #[cfg(feature = "llm")]
     {
-        menu.append(&MenuItem::with_id(app, "downloads", "Downloads…", true, None::<&str>)?)?;
-        menu.append(&MenuItem::with_id(app, "chat", "Chat…", true, Some(chat_shortcut.as_str()))?)?;
+        menu.append(&MenuItem::with_id(
+            app,
+            "downloads",
+            "Downloads…",
+            true,
+            None::<&str>,
+        )?)?;
+        menu.append(&MenuItem::with_id(
+            app,
+            "chat",
+            "Chat…",
+            true,
+            Some(chat_shortcut.as_str()),
+        )?)?;
     }
 
     {
-        let queue  = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();
-        let stats  = queue.stats();
+        let queue = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();
+        let stats = queue.stats();
         let total: i64 = stats["total_active"].as_i64().unwrap_or(0);
         if total > 0 {
-            let est: u64  = stats["est_secs"].as_u64().unwrap_or(0);
-            let running   = stats["running"].as_bool().unwrap_or(false);
+            let est: u64 = stats["est_secs"].as_u64().unwrap_or(0);
+            let running = stats["running"].as_bool().unwrap_or(false);
             let label = if running {
-                format!("⏳ {total} task{} in queue (~{est}s)", if total == 1 { "" } else { "s" })
+                format!(
+                    "⏳ {total} task{} in queue (~{est}s)",
+                    if total == 1 { "" } else { "s" }
+                )
             } else {
-                format!("⏳ {total} task{} queued (~{est}s)", if total == 1 { "" } else { "s" })
+                format!(
+                    "⏳ {total} task{} queued (~{est}s)",
+                    if total == 1 { "" } else { "s" }
+                )
             };
             menu.append(&PredefinedMenuItem::separator(app)?)?;
-            menu.append(&MenuItem::with_id(app, "queue_info", &label, false, None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "queue_info",
+                &label,
+                false,
+                None::<&str>,
+            )?)?;
         }
     }
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "check_update", "Check for Updates…", true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "about", format!("About {}…", crate::constants::APP_DISPLAY_NAME), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "check_update",
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "about",
+        format!("About {}…", crate::constants::APP_DISPLAY_NAME),
+        true,
+        None::<&str>,
+    )?)?;
     menu.append(&MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?)?;
     Ok(menu)
 }
 
 pub(crate) fn refresh_tray(app: &AppHandle) {
     let s_ref = app.app_state();
-    let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
+    let st = {
+        let g = s_ref.lock_or_recover();
+        g.status.clone()
+    };
 
-    let Some(tray) = app.tray_by_id("main") else { return };
+    let Some(tray) = app.tray_by_id("main") else {
+        return;
+    };
 
     // ── Icon + tooltip (only update when the state bucket changes) ────────────
     let icon_state: &'static str = match st.state.as_str() {
         "connected" => "connected",
-        "scanning"  => "scanning",
-        "bt_off"    => "bt_off",
-        _           => "disconnected",
+        "scanning" => "scanning",
+        "bt_off" => "bt_off",
+        _ => "disconnected",
     };
     let download_progress = tray_download_icon_progress(app);
     let icon_key = match download_progress {
@@ -420,18 +623,26 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         None => icon_state.to_string(),
     };
     {
-        let mut last = LAST_ICON_STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut last = LAST_ICON_STATE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *last != icon_key {
             let base_tip = match icon_state {
-                "connected"    => "NeuroSkill™ – Connected",
-                "scanning"     => "NeuroSkill™ – Scanning…",
-                "bt_off"       => "NeuroSkill™ – Bluetooth Off",
-                _              => "NeuroSkill™ – Disconnected",
+                "connected" => "NeuroSkill™ – Connected",
+                "scanning" => "NeuroSkill™ – Scanning…",
+                "bt_off" => "NeuroSkill™ – Bluetooth Off",
+                _ => "NeuroSkill™ – Disconnected",
             };
-            let icon = icon_with_progress(icon_state, download_progress.map(|(_, progress)| progress));
+            let icon =
+                icon_with_progress(icon_state, download_progress.map(|(_, progress)| progress));
             let tip = match download_progress {
-                Some((1, progress)) => format!("{base_tip} • LLM download {}", progress_percent(progress)),
-                Some((count, progress)) => format!("{base_tip} • {count} LLM downloads {}", progress_percent(progress)),
+                Some((1, progress)) => {
+                    format!("{base_tip} • LLM download {}", progress_percent(progress))
+                }
+                Some((count, progress)) => format!(
+                    "{base_tip} • {count} LLM downloads {}",
+                    progress_percent(progress)
+                ),
                 None => base_tip.to_string(),
             };
             let _ = tray.set_icon(Some(icon));
@@ -448,7 +659,9 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
 
     let full_key = menu_key(&st, app);
     {
-        let last = LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last = LAST_MENU_KEY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *last == full_key {
             return; // nothing changed at all
         }
@@ -456,7 +669,9 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
 
     let s_key = structure_key(&st, app);
     let structure_changed = {
-        let last = LAST_STRUCTURE_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last = LAST_STRUCTURE_KEY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *last != s_key
     };
 
@@ -464,7 +679,10 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         // Full rebuild — menu item count or identity changed.
         // First do a fast in-place status patch so the user sees the new
         // status text instantly, then rebuild the full menu asynchronously.
-        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
+        if let Some(ref menu) = *CURRENT_MENU
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        {
             update_status_items(menu, &st);
         }
         // Debounce rapid structural rebuilds.
@@ -483,19 +701,30 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         }
         if let Ok(m) = build_menu(app, &st) {
             let _ = tray.set_menu(Some(m.clone()));
-            *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(m);
-            *LAST_STRUCTURE_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = s_key;
-            *LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
+            *CURRENT_MENU
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(m);
+            *LAST_STRUCTURE_KEY
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = s_key;
+            *LAST_MENU_KEY
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
             LAST_MENU_REBUILD_MS.store(now_ms, std::sync::atomic::Ordering::Relaxed);
         } else {
             eprintln!("[tray] menu rebuild failed; preserving previous native menu");
         }
     } else {
         // Status-only update — patch existing items in-place (no set_menu).
-        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
+        if let Some(ref menu) = *CURRENT_MENU
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        {
             update_status_items(menu, &st);
         }
-        *LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
+        *LAST_MENU_KEY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
     }
 }
 
@@ -508,21 +737,24 @@ fn update_status_items(menu: &Menu<tauri::Wry>, st: &DeviceStatus) {
     if let Some(item) = menu.get("info").and_then(|k| k.as_menuitem().cloned()) {
         let text = match st.state.as_str() {
             "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
-            "scanning"  => match &st.target_name {
+            "scanning" => match &st.target_name {
                 Some(n) => format!("Searching for {n}…"),
-                None    => "Scanning for BCI device…".into(),
+                None => "Scanning for BCI device…".into(),
             },
-            "bt_off"    => "⚠ Bluetooth Unavailable".into(),
-            _           => "○ Disconnected".into(),
+            "bt_off" => "⚠ Bluetooth Unavailable".into(),
+            _ => "○ Disconnected".into(),
         };
         let _ = item.set_text(text);
     }
 
     // Battery line
-    if let Some(item) = menu.get("battery_info").and_then(|k| k.as_menuitem().cloned()) {
+    if let Some(item) = menu
+        .get("battery_info")
+        .and_then(|k| k.as_menuitem().cloned())
+    {
         if st.battery > 0.0 {
             let _ = item.set_text(format!("🔋 {:.0}%", st.battery));
-            let _ = item.set_enabled(true);  // make visible
+            let _ = item.set_enabled(true); // make visible
         } else {
             let _ = item.set_text("");
             let _ = item.set_enabled(false); // hide

@@ -2,81 +2,90 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat message list — renders user and assistant message bubbles. -->
 <script lang="ts">
-  import { tick }            from "svelte";
-  import { invoke }          from "@tauri-apps/api/core";
-  import { t }               from "$lib/i18n/index.svelte";
-  import { fmtMs }           from "$lib/format";
-  import { cleanLeadInForDisplay } from "$lib/chat-utils";
-  import MarkdownRenderer    from "$lib/MarkdownRenderer.svelte";
-  import ChatToolCard        from "$lib/ChatToolCard.svelte";
-  import type { Message, ServerStatus } from "$lib/chat-types";
+import { invoke } from "@tauri-apps/api/core";
+import { tick } from "svelte";
+import ChatToolCard from "$lib/ChatToolCard.svelte";
+import type { Message, ServerStatus } from "$lib/chat-types";
+import { cleanLeadInForDisplay } from "$lib/chat-utils";
+import { fmtMs } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
 
-  interface Props {
-    messages: Message[];
-    status: ServerStatus;
-    loadingDetail?: string;
-    generating: boolean;
-    streamStartMs: number;
-    streamTokens: number;
-    /** Callback to update a single message by id */
-    onUpdateMessage: (id: number, patch: Partial<Message>) => void;
-    /** Callback to update a specific toolUse entry */
-    onUpdateToolUse: (msgId: number, tuIdx: number, patch: Partial<import("$lib/chat-types").ToolUseEvent>) => void;
-    onCancelToolCall: (msgId: number, tuIdx: number, toolCallId: string | undefined) => void;
-    onEditAndResend: (msg: Message) => void;
-    onRegenerate: () => void;
-    onStartServer: () => void;
-  }
+interface Props {
+  messages: Message[];
+  status: ServerStatus;
+  loadingDetail?: string;
+  generating: boolean;
+  streamStartMs: number;
+  streamTokens: number;
+  /** Callback to update a single message by id */
+  onUpdateMessage: (id: number, patch: Partial<Message>) => void;
+  /** Callback to update a specific toolUse entry */
+  onUpdateToolUse: (msgId: number, tuIdx: number, patch: Partial<import("$lib/chat-types").ToolUseEvent>) => void;
+  onCancelToolCall: (msgId: number, tuIdx: number, toolCallId: string | undefined) => void;
+  onEditAndResend: (msg: Message) => void;
+  onRegenerate: () => void;
+  onStartServer: () => void;
+}
 
-  let {
-    messages,
-    status,
-    loadingDetail = "",
-    generating,
-    streamStartMs,
-    streamTokens,
-    onUpdateMessage,
-    onUpdateToolUse,
-    onCancelToolCall,
-    onEditAndResend,
-    onRegenerate,
-    onStartServer,
-  }: Props = $props();
+let {
+  messages,
+  status,
+  loadingDetail = "",
+  generating,
+  streamStartMs,
+  streamTokens,
+  onUpdateMessage,
+  onUpdateToolUse,
+  onCancelToolCall,
+  onEditAndResend,
+  onRegenerate,
+  onStartServer,
+}: Props = $props();
 
-  let msgsEl = $state<HTMLElement | null>(null);
-  let pinned = $state(true);
-  let copiedMsgId = $state<number | null>(null);
+let msgsEl = $state<HTMLElement | null>(null);
+let pinned = $state(true);
+let copiedMsgId = $state<number | null>(null);
 
-  const LOADING_STEPS: { key: string; i18n: "chat.loading.model" | "chat.loading.context" | "chat.loading.vision" | "chat.loading.warmup" }[] = [
-    { key: "loading_model",    i18n: "chat.loading.model" },
-    { key: "creating_context", i18n: "chat.loading.context" },
-    { key: "loading_vision",   i18n: "chat.loading.vision" },
-    { key: "warming_up",       i18n: "chat.loading.warmup" },
-  ];
-  const loadingSteps     = $derived(LOADING_STEPS.map(s => ({ key: s.key, label: t(s.i18n) })));
-  const loadingActiveIdx = $derived(LOADING_STEPS.findIndex(s => s.key === loadingDetail));
-  const loadingProgress  = $derived(loadingActiveIdx < 0 ? 5 : Math.min(95, ((loadingActiveIdx + 0.5) / LOADING_STEPS.length) * 100));
+const LOADING_STEPS: {
+  key: string;
+  i18n: "chat.loading.model" | "chat.loading.context" | "chat.loading.vision" | "chat.loading.warmup";
+}[] = [
+  { key: "loading_model", i18n: "chat.loading.model" },
+  { key: "creating_context", i18n: "chat.loading.context" },
+  { key: "loading_vision", i18n: "chat.loading.vision" },
+  { key: "warming_up", i18n: "chat.loading.warmup" },
+];
+const loadingSteps = $derived(LOADING_STEPS.map((s) => ({ key: s.key, label: t(s.i18n) })));
+const loadingActiveIdx = $derived(LOADING_STEPS.findIndex((s) => s.key === loadingDetail));
+const loadingProgress = $derived(
+  loadingActiveIdx < 0 ? 5 : Math.min(95, ((loadingActiveIdx + 0.5) / LOADING_STEPS.length) * 100),
+);
 
-  const SNAP_PX = 48;
+const SNAP_PX = 48;
 
-  export function scrollBottom(force = false) {
-    tick().then(() => {
-      if (msgsEl && (pinned || force)) msgsEl.scrollTop = msgsEl.scrollHeight;
-    });
-  }
+export function scrollBottom(force = false) {
+  tick().then(() => {
+    if (msgsEl && (pinned || force)) msgsEl.scrollTop = msgsEl.scrollHeight;
+  });
+}
 
-  export function getElement() { return msgsEl; }
+export function getElement() {
+  return msgsEl;
+}
 
-  function onMsgsScroll() {
-    if (!msgsEl) return;
-    pinned = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < SNAP_PX;
-  }
+function onMsgsScroll() {
+  if (!msgsEl) return;
+  pinned = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < SNAP_PX;
+}
 
-  function copyMessage(msg: Message) {
-    navigator.clipboard.writeText(msg.content).catch(e => console.warn("[chat] clipboard write failed:", e));
-    copiedMsgId = msg.id;
-    setTimeout(() => { if (copiedMsgId === msg.id) copiedMsgId = null; }, 1500);
-  }
+function copyMessage(msg: Message) {
+  navigator.clipboard.writeText(msg.content).catch((_e) => {});
+  copiedMsgId = msg.id;
+  setTimeout(() => {
+    if (copiedMsgId === msg.id) copiedMsgId = null;
+  }, 1500);
+}
 </script>
 
 <div class="relative flex-1 min-h-0">

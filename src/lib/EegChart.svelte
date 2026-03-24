@@ -5,22 +5,22 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script module lang="ts">
-  // ── Types ───────────────────────────────────────────────────────────────────
-  export interface SpectrogramColumn {
-    timestamp_ms: number;
-    /** power[channel][freq_bin], freq_bin 0–50 = 0 Hz … 50 Hz */
-    power: number[][];
-  }
+// ── Types ───────────────────────────────────────────────────────────────────
+export interface SpectrogramColumn {
+  timestamp_ms: number;
+  /** power[channel][freq_bin], freq_bin 0–50 = 0 Hz … 50 Hz */
+  power: number[][];
+}
 
-  /** Vertical event marker rendered on the waveform/spectrogram overlay. */
-  export interface EventMarker {
-    /** When the event occurred (Date.now()-style ms timestamp). */
-    timestamp_ms: number;
-    /** Short label rendered next to the line (e.g. "Eyes Open", "🏷"). */
-    label: string;
-    /** CSS colour for the vertical line. */
-    color: string;
-  }
+/** Vertical event marker rendered on the waveform/spectrogram overlay. */
+export interface EventMarker {
+  /** When the event occurred (Date.now()-style ms timestamp). */
+  timestamp_ms: number;
+  /** Short label rendered next to the line (e.g. "Eyes Open", "🏷"). */
+  label: string;
+  /** CSS colour for the vertical line. */
+  color: string;
+}
 </script>
 
 <script lang="ts">

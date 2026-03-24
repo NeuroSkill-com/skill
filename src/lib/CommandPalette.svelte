@@ -10,409 +10,460 @@ the Free Software Foundation, version 3 only. -->
   Supports fuzzy text filtering and keyboard navigation.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { fade }               from "svelte/transition";
-  import { t }                  from "$lib/i18n/index.svelte";
-  import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
-  import { addToast }           from "$lib/stores/toast.svelte";
-  import * as nav               from "$lib/navigation";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { fade } from "svelte/transition";
+import { t } from "$lib/i18n/index.svelte";
+import * as nav from "$lib/navigation";
+import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 
-  let open   = $state(false);
-  let query  = $state("");
-  let active = $state(0);
-  let inputEl: HTMLInputElement | undefined = $state();
+let open = $state(false);
+let query = $state("");
+let active = $state(0);
+let inputEl: HTMLInputElement | undefined = $state();
 
-  // ── Command definitions ────────────────────────────────────────────────────
+// ── Command definitions ────────────────────────────────────────────────────
 
-  interface Command {
-    id:       string;
-    icon:     string;
-    label:    string;
-    section:  string;
-    keywords?: string;
-    shortcut?: string;
-    action:   () => void | Promise<void>;
-  }
+interface Command {
+  id: string;
+  icon: string;
+  label: string;
+  section: string;
+  keywords?: string;
+  shortcut?: string;
+  action: () => void | Promise<void>;
+}
 
-  const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
-  const mod   = isMac ? "⌘" : "Ctrl";
+const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
+const mod = isMac ? "⌘" : "Ctrl";
 
-  function commands(): Command[] {
-    return [
-      // ── Navigation ─────────────────────────────────────────────────────
-      {
-        id: "open-settings", icon: "⚙", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openSettings"), shortcut: `${mod},`,
-        keywords: t("cmdK.kw.settings"),
-        action: nav.openSettings,
-      },
-      {
-        id: "open-help", icon: "?", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openHelp"),
-        keywords: t("cmdK.kw.help"),
-        action: nav.openHelp,
-      },
-      {
-        id: "open-history", icon: "🕐", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openHistory"),
-        keywords: t("cmdK.kw.history"),
-        action: nav.openHistory,
-      },
-      {
-        id: "open-compare", icon: "⚖", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openCompare"),
-        keywords: t("cmdK.kw.compare"),
-        action: nav.openCompare,
-      },
-      {
-        id: "open-search", icon: "🔍", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openSearch"), shortcut: `${mod}⇧S`,
-        keywords: t("cmdK.kw.search"),
-        action: nav.openSearch,
-      },
-      {
-        id: "open-label", icon: "🏷", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openLabel"), shortcut: `${mod}⇧L`,
-        keywords: t("cmdK.kw.label"),
-        action: nav.openLabel,
-      },
+function commands(): Command[] {
+  return [
+    // ── Navigation ─────────────────────────────────────────────────────
+    {
+      id: "open-settings",
+      icon: "⚙",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openSettings"),
+      shortcut: `${mod},`,
+      keywords: t("cmdK.kw.settings"),
+      action: nav.openSettings,
+    },
+    {
+      id: "open-help",
+      icon: "?",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openHelp"),
+      keywords: t("cmdK.kw.help"),
+      action: nav.openHelp,
+    },
+    {
+      id: "open-history",
+      icon: "🕐",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openHistory"),
+      keywords: t("cmdK.kw.history"),
+      action: nav.openHistory,
+    },
+    {
+      id: "open-compare",
+      icon: "⚖",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openCompare"),
+      keywords: t("cmdK.kw.compare"),
+      action: nav.openCompare,
+    },
+    {
+      id: "open-search",
+      icon: "🔍",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openSearch"),
+      shortcut: `${mod}⇧S`,
+      keywords: t("cmdK.kw.search"),
+      action: nav.openSearch,
+    },
+    {
+      id: "open-label",
+      icon: "🏷",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openLabel"),
+      shortcut: `${mod}⇧L`,
+      keywords: t("cmdK.kw.label"),
+      action: nav.openLabel,
+    },
 
-      // ── Device ─────────────────────────────────────────────────────────
-      {
-        id: "retry-connect", icon: "📡", section: t("cmdK.sectionDevice"),
-        label: t("cmdK.retryConnect"),
-        keywords: t("cmdK.kw.retryConnect"),
-        action: () => invoke("retry_connect"),
-      },
-      {
-        id: "open-bt-settings", icon: "📶", section: t("cmdK.sectionDevice"),
-        label: t("cmdK.openBtSettings"),
-        keywords: t("cmdK.kw.btSettings"),
-        action: nav.openBtSettings,
-      },
+    // ── Device ─────────────────────────────────────────────────────────
+    {
+      id: "retry-connect",
+      icon: "📡",
+      section: t("cmdK.sectionDevice"),
+      label: t("cmdK.retryConnect"),
+      keywords: t("cmdK.kw.retryConnect"),
+      action: () => invoke("retry_connect"),
+    },
+    {
+      id: "open-bt-settings",
+      icon: "📶",
+      section: t("cmdK.sectionDevice"),
+      label: t("cmdK.openBtSettings"),
+      keywords: t("cmdK.kw.btSettings"),
+      action: nav.openBtSettings,
+    },
 
-      // ── Calibration ────────────────────────────────────────────────────
-      {
-        id: "open-calibration", icon: "🎯", section: t("cmdK.sectionCalibration"),
-        label: t("cmdK.openCalibration"), shortcut: `${mod}⇧C`,
-        keywords: t("cmdK.kw.calibration"),
-        action: async () => {
-          try { await nav.openCalibration(); }
-          catch (e) { addToast("warning", t("cmdK.calibrationError"), String(e)); }
-        },
+    // ── Calibration ────────────────────────────────────────────────────
+    {
+      id: "open-calibration",
+      icon: "🎯",
+      section: t("cmdK.sectionCalibration"),
+      label: t("cmdK.openCalibration"),
+      shortcut: `${mod}⇧C`,
+      keywords: t("cmdK.kw.calibration"),
+      action: async () => {
+        try {
+          await nav.openCalibration();
+        } catch (e) {
+          addToast("warning", t("cmdK.calibrationError"), String(e));
+        }
       },
+    },
 
-      {
-        id: "open-api", icon: "🌐", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openApi"),
-        keywords: t("cmdK.kw.api"),
-        action: nav.openApi,
-      },
-      {
-        id: "open-labels", icon: "🏷", section: t("cmdK.sectionNavigation"),
-        label: t("labels.openLabels"),
-        keywords: "labels annotations notes tags all browse edit delete manage",
-        action: nav.openLabels,
-      },
-      {
-        id: "open-focus-timer", icon: "⏱", section: t("cmdK.sectionNavigation"),
-        label: t("focusTimer.openTimer"),
-        keywords: "pomodoro focus timer work break productivity neurofeedback session",
-        action: nav.openFocusTimer,
-      },
-      {
-        id: "open-downloads", icon: "⬇", section: t("cmdK.sectionNavigation"),
-        label: t("downloads.windowTitle"),
-        keywords: "downloads download manager llm models pause resume cancel delete progress",
-        action: nav.openDownloads,
-      },
-      {
-        id: "open-onboarding", icon: "🧭", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openOnboarding"),
-        keywords: t("cmdK.kw.onboarding"),
-        action: nav.openOnboarding,
-      },
-      {
-        id: "open-electrodes", icon: "🧠", section: t("cmdK.sectionNavigation"),
-        label: t("cmdK.openElectrodes"),
-        keywords: t("cmdK.kw.electrodes"),
-        action: nav.openHelp,
-      },
+    {
+      id: "open-api",
+      icon: "🌐",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openApi"),
+      keywords: t("cmdK.kw.api"),
+      action: nav.openApi,
+    },
+    {
+      id: "open-labels",
+      icon: "🏷",
+      section: t("cmdK.sectionNavigation"),
+      label: t("labels.openLabels"),
+      keywords: "labels annotations notes tags all browse edit delete manage",
+      action: nav.openLabels,
+    },
+    {
+      id: "open-focus-timer",
+      icon: "⏱",
+      section: t("cmdK.sectionNavigation"),
+      label: t("focusTimer.openTimer"),
+      keywords: "pomodoro focus timer work break productivity neurofeedback session",
+      action: nav.openFocusTimer,
+    },
+    {
+      id: "open-downloads",
+      icon: "⬇",
+      section: t("cmdK.sectionNavigation"),
+      label: t("downloads.windowTitle"),
+      keywords: "downloads download manager llm models pause resume cancel delete progress",
+      action: nav.openDownloads,
+    },
+    {
+      id: "open-onboarding",
+      icon: "🧭",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openOnboarding"),
+      keywords: t("cmdK.kw.onboarding"),
+      action: nav.openOnboarding,
+    },
+    {
+      id: "open-electrodes",
+      icon: "🧠",
+      section: t("cmdK.sectionNavigation"),
+      label: t("cmdK.openElectrodes"),
+      keywords: t("cmdK.kw.electrodes"),
+      action: nav.openHelp,
+    },
 
-      // ── Utilities ──────────────────────────────────────────────────────
-      {
-        id: "show-shortcuts", icon: "⌨", section: t("cmdK.sectionUtilities"),
-        label: t("cmdK.showShortcuts"), shortcut: "?",
-        keywords: t("cmdK.kw.shortcuts"),
-        action: () => {
-          close();
-          // Simulate pressing ? to open the shortcuts overlay
-          window.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
-        },
+    // ── Utilities ──────────────────────────────────────────────────────
+    {
+      id: "show-shortcuts",
+      icon: "⌨",
+      section: t("cmdK.sectionUtilities"),
+      label: t("cmdK.showShortcuts"),
+      shortcut: "?",
+      keywords: t("cmdK.kw.shortcuts"),
+      action: () => {
+        close();
+        // Simulate pressing ? to open the shortcuts overlay
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
       },
-      {
-        id: "toggle-hc", icon: "◑", section: t("cmdK.sectionUtilities"),
-        label: getHighContrast() ? t("cmdK.highContrastOff") : t("cmdK.highContrastOn"),
-        keywords: t("cmdK.kw.highContrast"),
-        action: () => { toggleHighContrast(); close(); },
+    },
+    {
+      id: "toggle-hc",
+      icon: "◑",
+      section: t("cmdK.sectionUtilities"),
+      label: getHighContrast() ? t("cmdK.highContrastOff") : t("cmdK.highContrastOn"),
+      keywords: t("cmdK.kw.highContrast"),
+      action: () => {
+        toggleHighContrast();
+        close();
       },
-      {
-        id: "check-updates", icon: "⬆", section: t("cmdK.sectionUtilities"),
-        label: t("cmdK.checkUpdates"),
-        keywords: t("cmdK.kw.updates"),
-        action: nav.openUpdates,
-      },
-    ];
-  }
+    },
+    {
+      id: "check-updates",
+      icon: "⬆",
+      section: t("cmdK.sectionUtilities"),
+      label: t("cmdK.checkUpdates"),
+      keywords: t("cmdK.kw.updates"),
+      action: nav.openUpdates,
+    },
+  ];
+}
 
-  // ── Fuzzy scoring ──────────────────────────────────────────────────────────
+// ── Fuzzy scoring ──────────────────────────────────────────────────────────
 
-  interface ScoredCommand extends Command {
-    /** Higher = better. 0 when there is no active query. */
-    matchScore:     number;
-    /** Indices inside cmd.label that matched the query (for highlight rendering). */
-    labelPositions: number[];
-  }
+interface ScoredCommand extends Command {
+  /** Higher = better. 0 when there is no active query. */
+  matchScore: number;
+  /** Indices inside cmd.label that matched the query (for highlight rendering). */
+  labelPositions: number[];
+}
 
-  /**
-   * fzf-style subsequence fuzzy match.
-   *
-   * Every character of `query` must appear somewhere in `text`, in order
-   * (subsequence / scattered match).  Returns `null` when that condition
-   * is not met.  Otherwise returns a numeric score and the matched positions.
-   *
-   * Scoring bonuses (additive, higher = better):
-   *  +15 per char that immediately follows the previous match (consecutive run)
-   *  + 5 × run_length on top of the consecutive bonus (rewards longer runs)
-   *  +10 first character of the target string matched
-   *  + 8 match lands on a word boundary (char before is space / - / _ / . / /)
-   *  + 3 matched character is uppercase in the original (camelCase boundary)
-   *  − 0.5 × gap_count  gap penalty (scattered matches score lower)
-   *  − 0.1 × text_length  length penalty (shorter texts beat longer ones)
-   */
-  function fuzzyScore(
-    query: string,
-    text: string,
-  ): { score: number; positions: number[] } | null {
-    const q = query.toLowerCase();
-    const t = text.toLowerCase();
+/**
+ * fzf-style subsequence fuzzy match.
+ *
+ * Every character of `query` must appear somewhere in `text`, in order
+ * (subsequence / scattered match).  Returns `null` when that condition
+ * is not met.  Otherwise returns a numeric score and the matched positions.
+ *
+ * Scoring bonuses (additive, higher = better):
+ *  +15 per char that immediately follows the previous match (consecutive run)
+ *  + 5 × run_length on top of the consecutive bonus (rewards longer runs)
+ *  +10 first character of the target string matched
+ *  + 8 match lands on a word boundary (char before is space / - / _ / . / /)
+ *  + 3 matched character is uppercase in the original (camelCase boundary)
+ *  − 0.5 × gap_count  gap penalty (scattered matches score lower)
+ *  − 0.1 × text_length  length penalty (shorter texts beat longer ones)
+ */
+function fuzzyScore(query: string, text: string): { score: number; positions: number[] } | null {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
 
-    // Forward greedy pass — find every query char in order
-    const positions: number[] = [];
-    let ti = 0;
-    for (let qi = 0; qi < q.length; qi++) {
-      let found = false;
-      while (ti < t.length) {
-        if (t[ti] === q[qi]) { positions.push(ti++); found = true; break; }
-        ti++;
+  // Forward greedy pass — find every query char in order
+  const positions: number[] = [];
+  let ti = 0;
+  for (let qi = 0; qi < q.length; qi++) {
+    let found = false;
+    while (ti < t.length) {
+      if (t[ti] === q[qi]) {
+        positions.push(ti++);
+        found = true;
+        break;
       }
-      if (!found) return null; // subsequence not present
+      ti++;
     }
-
-    // Score the positions
-    let score = 0;
-    let run   = 0;
-    for (let i = 0; i < positions.length; i++) {
-      const pos  = positions[i];
-      const prev = i > 0 ? positions[i - 1] : -2;
-
-      if (pos === prev + 1) {
-        run++;
-        score += 15 + run * 5;   // escalating consecutive-run bonus
-      } else {
-        run = 0;
-      }
-
-      if (pos === 0) score += 10;  // start-of-string
-
-      if (pos > 0) {
-        const pc = t[pos - 1];
-        if (pc === " " || pc === "-" || pc === "_" || pc === "." || pc === "/")
-          score += 8;              // word-boundary
-      }
-
-      if (text[pos] !== t[pos]) score += 3; // uppercase / camelCase boundary
-    }
-
-    // Gap penalty — penalise scattered matches
-    if (positions.length > 1) {
-      const span = positions[positions.length - 1] - positions[0] + 1;
-      score -= (span - positions.length) * 0.5;
-    }
-
-    // Length penalty — shorter targets rank higher for the same match quality
-    score -= t.length * 0.1;
-
-    return { score, positions };
+    if (!found) return null; // subsequence not present
   }
 
-  /**
-   * Score a single command against the query.
-   *
-   * Searches four fields with different weights:
-   *   label (1.0)  keywords (0.7)  id (0.4)  section (0.2)
-   *
-   * Label match positions are kept for character-level highlight rendering.
-   * Returns `matchScore: -Infinity` when no field matches.
-   */
-  function scoreCommand(q: string, cmd: Command): ScoredCommand {
-    if (!q) return { ...cmd, matchScore: 0, labelPositions: [] };
+  // Score the positions
+  let score = 0;
+  let run = 0;
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[i];
+    const prev = i > 0 ? positions[i - 1] : -2;
 
-    const lm = fuzzyScore(q, cmd.label);
-    const km = cmd.keywords ? fuzzyScore(q, cmd.keywords) : null;
-    const im = fuzzyScore(q, cmd.id);
-    const sm = fuzzyScore(q, cmd.section);
-
-    const best = Math.max(
-      lm ? lm.score * 1.0 : -Infinity,
-      km ? km.score * 0.7 : -Infinity,
-      im ? im.score * 0.4 : -Infinity,
-      sm ? sm.score * 0.2 : -Infinity,
-    );
-
-    if (!isFinite(best)) return { ...cmd, matchScore: -Infinity, labelPositions: [] };
-
-    return {
-      ...cmd,
-      matchScore:     best,
-      labelPositions: lm ? lm.positions : [],
-    };
-  }
-
-  /**
-   * Split `text` into alternating plain / highlighted segments.
-   * Used to render matched characters in a different colour.
-   */
-  function highlightSegments(
-    text: string,
-    positions: number[],
-  ): { t: string; hi: boolean }[] {
-    if (!positions.length) return [{ t: text, hi: false }];
-    const posSet = new Set(positions);
-    const out: { t: string; hi: boolean }[] = [];
-    let buf = "";
-    let bufHi = false;
-    for (let i = 0; i < text.length; i++) {
-      const hi = posSet.has(i);
-      if (hi !== bufHi && buf) { out.push({ t: buf, hi: bufHi }); buf = ""; }
-      bufHi = hi;
-      buf  += text[i];
+    if (pos === prev + 1) {
+      run++;
+      score += 15 + run * 5; // escalating consecutive-run bonus
+    } else {
+      run = 0;
     }
-    if (buf) out.push({ t: buf, hi: bufHi });
-    return out;
-  }
 
-  // ── Filtering & ranking ────────────────────────────────────────────────────
+    if (pos === 0) score += 10; // start-of-string
 
-  const isFiltering = $derived(query.trim().length > 0);
-
-  /**
-   * Flat list of matching commands.
-   * • No query   → all commands in their original order.
-   * • With query → only matching commands, sorted best-score-first.
-   */
-  let scored = $derived.by((): ScoredCommand[] => {
-    const cmds = commands();
-    if (!query.trim()) {
-      return cmds.map(c => ({ ...c, matchScore: 0, labelPositions: [] }));
+    if (pos > 0) {
+      const pc = t[pos - 1];
+      if (pc === " " || pc === "-" || pc === "_" || pc === "." || pc === "/") score += 8; // word-boundary
     }
-    const q = query.toLowerCase().trim();
-    return cmds
-      .map(c => scoreCommand(q, c))
-      .filter(c => isFinite(c.matchScore))
-      .sort((a, b) => b.matchScore - a.matchScore);
-  });
 
-  /**
-   * Sections used for rendering.
-   * • No query   → grouped by section with headers (original behaviour).
-   * • With query → single nameless group (flat sorted list, no header rendered).
-   */
-  let sections = $derived.by((): [string, ScoredCommand[]][] => {
-    if (isFiltering) return scored.length ? [["", scored]] : [];
-    const map = new Map<string, ScoredCommand[]>();
-    for (const c of scored) {
-      if (!map.has(c.section)) map.set(c.section, []);
-      map.get(c.section)!.push(c);
+    if (text[pos] !== t[pos]) score += 3; // uppercase / camelCase boundary
+  }
+
+  // Gap penalty — penalise scattered matches
+  if (positions.length > 1) {
+    const span = positions[positions.length - 1] - positions[0] + 1;
+    score -= (span - positions.length) * 0.5;
+  }
+
+  // Length penalty — shorter targets rank higher for the same match quality
+  score -= t.length * 0.1;
+
+  return { score, positions };
+}
+
+/**
+ * Score a single command against the query.
+ *
+ * Searches four fields with different weights:
+ *   label (1.0)  keywords (0.7)  id (0.4)  section (0.2)
+ *
+ * Label match positions are kept for character-level highlight rendering.
+ * Returns `matchScore: -Infinity` when no field matches.
+ */
+function scoreCommand(q: string, cmd: Command): ScoredCommand {
+  if (!q) return { ...cmd, matchScore: 0, labelPositions: [] };
+
+  const lm = fuzzyScore(q, cmd.label);
+  const km = cmd.keywords ? fuzzyScore(q, cmd.keywords) : null;
+  const im = fuzzyScore(q, cmd.id);
+  const sm = fuzzyScore(q, cmd.section);
+
+  const best = Math.max(
+    lm ? lm.score * 1.0 : -Infinity,
+    km ? km.score * 0.7 : -Infinity,
+    im ? im.score * 0.4 : -Infinity,
+    sm ? sm.score * 0.2 : -Infinity,
+  );
+
+  if (!Number.isFinite(best)) return { ...cmd, matchScore: -Infinity, labelPositions: [] };
+
+  return {
+    ...cmd,
+    matchScore: best,
+    labelPositions: lm ? lm.positions : [],
+  };
+}
+
+/**
+ * Split `text` into alternating plain / highlighted segments.
+ * Used to render matched characters in a different colour.
+ */
+function highlightSegments(text: string, positions: number[]): { t: string; hi: boolean }[] {
+  if (!positions.length) return [{ t: text, hi: false }];
+  const posSet = new Set(positions);
+  const out: { t: string; hi: boolean }[] = [];
+  let buf = "";
+  let bufHi = false;
+  for (let i = 0; i < text.length; i++) {
+    const hi = posSet.has(i);
+    if (hi !== bufHi && buf) {
+      out.push({ t: buf, hi: bufHi });
+      buf = "";
     }
-    return [...map.entries()];
-  });
-
-  // Reset keyboard selection whenever the result set changes
-  $effect(() => { void scored; active = 0; });
-
-  // ── Keyboard handling ──────────────────────────────────────────────────────
-
-  function handleGlobalKeydown(e: KeyboardEvent) {
-    // Cmd/Ctrl+K to toggle
-    if (e.key === "k" && (isMac ? e.metaKey : e.ctrlKey)) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (open) close(); else openPalette();
-      return;
-    }
-    // Escape to close
-    if (e.key === "Escape" && open) {
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-    }
+    bufHi = hi;
+    buf += text[i];
   }
+  if (buf) out.push({ t: buf, hi: bufHi });
+  return out;
+}
 
-  function handleInputKeydown(e: KeyboardEvent) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      active = Math.min(active + 1, scored.length - 1);
-      scrollActiveIntoView();
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      active = Math.max(active - 1, 0);
-      scrollActiveIntoView();
-    } else if (e.key === "Enter" && scored.length > 0) {
-      e.preventDefault();
-      runCommand(scored[active]);
-    }
+// ── Filtering & ranking ────────────────────────────────────────────────────
+
+const isFiltering = $derived(query.trim().length > 0);
+
+/**
+ * Flat list of matching commands.
+ * • No query   → all commands in their original order.
+ * • With query → only matching commands, sorted best-score-first.
+ */
+let scored = $derived.by((): ScoredCommand[] => {
+  const cmds = commands();
+  if (!query.trim()) {
+    return cmds.map((c) => ({ ...c, matchScore: 0, labelPositions: [] }));
   }
+  const q = query.toLowerCase().trim();
+  return cmds
+    .map((c) => scoreCommand(q, c))
+    .filter((c) => Number.isFinite(c.matchScore))
+    .sort((a, b) => b.matchScore - a.matchScore);
+});
 
-  function scrollActiveIntoView() {
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-cmd-index="${active}"]`);
-      el?.scrollIntoView({ block: "nearest" });
-    });
+/**
+ * Sections used for rendering.
+ * • No query   → grouped by section with headers (original behaviour).
+ * • With query → single nameless group (flat sorted list, no header rendered).
+ */
+let sections = $derived.by((): [string, ScoredCommand[]][] => {
+  if (isFiltering) return scored.length ? [["", scored]] : [];
+  const map = new Map<string, ScoredCommand[]>();
+  for (const c of scored) {
+    if (!map.has(c.section)) map.set(c.section, []);
+    map.get(c.section)?.push(c);
   }
+  return [...map.entries()];
+});
 
-  function openPalette() {
-    query  = "";
-    active = 0;
-    open   = true;
-    requestAnimationFrame(() => inputEl?.focus());
+// Reset keyboard selection whenever the result set changes
+$effect(() => {
+  void scored;
+  active = 0;
+});
+
+// ── Keyboard handling ──────────────────────────────────────────────────────
+
+function handleGlobalKeydown(e: KeyboardEvent) {
+  // Cmd/Ctrl+K to toggle
+  if (e.key === "k" && (isMac ? e.metaKey : e.ctrlKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (open) close();
+    else openPalette();
+    return;
   }
-
-  function close() {
-    open = false;
-  }
-
-  function runCommand(cmd: Command) {
+  // Escape to close
+  if (e.key === "Escape" && open) {
+    e.preventDefault();
+    e.stopPropagation();
     close();
-    cmd.action();
   }
+}
 
-  // Compute flat index for each command across grouped sections
-  function flatIndex(sectionIdx: number, itemIdx: number): number {
-    let idx = 0;
-    for (let s = 0; s < sectionIdx; s++) {
-      idx += sections[s][1].length;
-    }
-    return idx + itemIdx;
+function handleInputKeydown(e: KeyboardEvent) {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    active = Math.min(active + 1, scored.length - 1);
+    scrollActiveIntoView();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    active = Math.max(active - 1, 0);
+    scrollActiveIntoView();
+  } else if (e.key === "Enter" && scored.length > 0) {
+    e.preventDefault();
+    runCommand(scored[active]);
   }
+}
 
-  onMount(() => {
-    window.addEventListener("keydown", handleGlobalKeydown, true);
+function scrollActiveIntoView() {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-cmd-index="${active}"]`);
+    el?.scrollIntoView({ block: "nearest" });
   });
-  onDestroy(() => {
-    window.removeEventListener("keydown", handleGlobalKeydown, true);
-  });
+}
+
+function openPalette() {
+  query = "";
+  active = 0;
+  open = true;
+  requestAnimationFrame(() => inputEl?.focus());
+}
+
+function close() {
+  open = false;
+}
+
+function runCommand(cmd: Command) {
+  close();
+  cmd.action();
+}
+
+// Compute flat index for each command across grouped sections
+function flatIndex(sectionIdx: number, itemIdx: number): number {
+  let idx = 0;
+  for (let s = 0; s < sectionIdx; s++) {
+    idx += sections[s][1].length;
+  }
+  return idx + itemIdx;
+}
+
+onMount(() => {
+  window.addEventListener("keydown", handleGlobalKeydown, true);
+});
+onDestroy(() => {
+  window.removeEventListener("keydown", handleGlobalKeydown, true);
+});
 </script>
 
 {#if open}

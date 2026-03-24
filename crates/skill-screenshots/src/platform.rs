@@ -21,8 +21,8 @@ pub(crate) struct CapturedImage {
     pub(crate) raw_bytes: Vec<u8>,
     /// Pre-decoded image (avoids encode→decode round-trip on Linux/Windows).
     pub(crate) decoded: Option<image::DynamicImage>,
-    pub(crate) width:     u32,
-    pub(crate) height:    u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 // ── Motion detection ──────────────────────────────────────────────────────────
@@ -92,13 +92,21 @@ pub(crate) fn capture_burst(count: u32, delay: Duration) -> Vec<CapturedImage> {
 /// Returns `None` if capture fails or is unsupported.
 pub(crate) fn capture_active_window() -> Option<CapturedImage> {
     #[cfg(target_os = "macos")]
-    { capture_macos() }
+    {
+        capture_macos()
+    }
     #[cfg(target_os = "linux")]
-    { capture_linux() }
+    {
+        capture_linux()
+    }
     #[cfg(target_os = "windows")]
-    { capture_windows() }
+    {
+        capture_windows()
+    }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { None }
+    {
+        None
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -121,7 +129,9 @@ fn capture_macos() -> Option<CapturedImage> {
             .map(|s| s.success())
             .unwrap_or(false);
         if ok && tmp.exists() {
-            if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+            if let Some(img) = read_captured_image(&tmp) {
+                return Some(img);
+            }
         }
     }
 
@@ -135,7 +145,9 @@ fn capture_macos() -> Option<CapturedImage> {
         .map(|s| s.success())
         .unwrap_or(false);
     if ok && tmp.exists() {
-        if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+        if let Some(img) = read_captured_image(&tmp) {
+            return Some(img);
+        }
     }
 
     // ── Attempt 3: osascript fallback — full-screen screenshot via
@@ -153,7 +165,9 @@ fn capture_macos() -> Option<CapturedImage> {
         .map(|s| s.success())
         .unwrap_or(false);
     if ok && tmp.exists() {
-        if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+        if let Some(img) = read_captured_image(&tmp) {
+            return Some(img);
+        }
     }
 
     None
@@ -164,12 +178,21 @@ fn capture_macos() -> Option<CapturedImage> {
 fn read_captured_image(path: &Path) -> Option<CapturedImage> {
     let raw_bytes = std::fs::read(path).ok()?;
     let _ = std::fs::remove_file(path);
-    if raw_bytes.is_empty() { return None; }
+    if raw_bytes.is_empty() {
+        return None;
+    }
     let img = ImageReader::new(Cursor::new(&raw_bytes))
-        .with_guessed_format().ok()?
-        .decode().ok()?;
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
     let (w, h) = img.dimensions();
-    Some(CapturedImage { raw_bytes, decoded: Some(img), width: w, height: h })
+    Some(CapturedImage {
+        raw_bytes,
+        decoded: Some(img),
+        width: w,
+        height: h,
+    })
 }
 
 /// Get the CGWindowID of the frontmost application's main window via
@@ -186,15 +209,15 @@ fn macos_frontmost_window_id() -> Option<u64> {
     // ── CoreFoundation / CoreGraphics C types ──
     use std::os::raw::c_char;
 
-    type CFTypeRef       = *const c_void;
-    type CFAllocatorRef  = *const c_void;
-    type CFArrayRef      = *const c_void;
+    type CFTypeRef = *const c_void;
+    type CFAllocatorRef = *const c_void;
+    type CFArrayRef = *const c_void;
     type CFDictionaryRef = *const c_void;
-    type CFStringRef     = *const c_void;
-    type CFIndex         = isize;
-    type CGWindowID      = u32;
+    type CFStringRef = *const c_void;
+    type CFIndex = isize;
+    type CGWindowID = u32;
     // CFNumberType constants (i32 to match gpu_stats.rs)
-    type CFNumberType    = i32;
+    type CFNumberType = i32;
 
     const K_CF_NUMBER_SINT32_TYPE: CFNumberType = 3;
     const K_CF_NUMBER_SINT64_TYPE: CFNumberType = 4;
@@ -215,11 +238,12 @@ fn macos_frontmost_window_id() -> Option<u64> {
         fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
         fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: CFIndex) -> CFTypeRef;
         fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
-        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64)
+            -> bool;
         fn CFRelease(cf: CFTypeRef);
         fn CFStringCreateWithCString(
-            alloc:    CFAllocatorRef,
-            c_str:    *const c_char,
+            alloc: CFAllocatorRef,
+            c_str: *const c_char,
             encoding: u32,
         ) -> CFStringRef;
     }
@@ -232,26 +256,38 @@ fn macos_frontmost_window_id() -> Option<u64> {
     /// must be released by the caller via `CFRelease`.
     unsafe fn cfstr(s: &[u8]) -> CFStringRef {
         // SAFETY: `s` points to a static NUL-terminated literal.
-        unsafe { CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8) }
+        unsafe {
+            CFStringCreateWithCString(
+                std::ptr::null(),
+                s.as_ptr() as *const c_char,
+                K_CF_STRING_ENCODING_UTF8,
+            )
+        }
     }
 
     /// Helper: get an i32 from a CFNumber.
     ///
     /// SAFETY: `n` must be a valid CFNumber (or null, which is handled).
     unsafe fn cfnum_i32(n: CFTypeRef) -> Option<i32> {
-        if n.is_null() { return None; }
+        if n.is_null() {
+            return None;
+        }
         let mut v: i64 = 0;
         // SAFETY: `n` is a non-null CFNumber; `v` is properly sized.
         if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) } {
             Some(v as i32)
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Helper: get an i64 from a CFNumber (some fields may be i64).
     ///
     /// SAFETY: `n` must be a valid CFNumber (or null, which is handled).
     unsafe fn cfnum_i64(n: CFTypeRef) -> Option<i64> {
-        if n.is_null() { return None; }
+        if n.is_null() {
+            return None;
+        }
         let mut v: i64 = 0;
         // SAFETY: `n` is a non-null CFNumber; `v` is properly sized for both
         // the 64-bit and 32-bit read attempts.
@@ -262,7 +298,9 @@ fn macos_frontmost_window_id() -> Option<u64> {
             // SAFETY: fallback to 32-bit numeric type; same safety rationale.
             if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) } {
                 Some(v)
-            } else { None }
+            } else {
+                None
+            }
         }
     }
 
@@ -270,21 +308,21 @@ fn macos_frontmost_window_id() -> Option<u64> {
     // NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier
     // All of these are already linked via objc2-app-kit.
     let front_pid: i32 = {
-        use objc2::runtime::AnyObject;
         use objc2::msg_send;
+        use objc2::runtime::AnyObject;
         use objc2_app_kit::NSWorkspace;
 
         let workspace = NSWorkspace::sharedWorkspace();
         // SAFETY: NSWorkspace and NSRunningApplication are stable AppKit APIs.
         // `frontmostApplication` returns a nullable NSRunningApplication.
         // `processIdentifier` returns a pid_t (i32).
-        let front_app: Option<&AnyObject> = unsafe {
-            msg_send![&workspace, frontmostApplication]
-        };
+        let front_app: Option<&AnyObject> = unsafe { msg_send![&workspace, frontmostApplication] };
         let front_app = front_app?;
         // SAFETY: `front_app` is a valid NSRunningApplication; processIdentifier returns pid_t.
         let pid: i32 = unsafe { msg_send![front_app, processIdentifier] };
-        if pid <= 0 { return None; }
+        if pid <= 0 {
+            return None;
+        }
         pid
     };
 
@@ -292,16 +330,16 @@ fn macos_frontmost_window_id() -> Option<u64> {
     // arguments are valid CFStringRefs and the returned CFArrayRef is
     // non-null-checked before use. Memory is managed via CFRelease below.
     unsafe {
-        let key_pid    = cfstr(b"kCGWindowOwnerPID\0");
-        let key_layer  = cfstr(b"kCGWindowLayer\0");
+        let key_pid = cfstr(b"kCGWindowOwnerPID\0");
+        let key_layer = cfstr(b"kCGWindowLayer\0");
         let key_number = cfstr(b"kCGWindowNumber\0");
 
-        let list = CGWindowListCopyWindowInfo(
-            ON_SCREEN_ONLY | EXCLUDE_DESKTOP,
-            K_CG_NULL_WINDOW_ID,
-        );
+        let list =
+            CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, K_CG_NULL_WINDOW_ID);
         if list.is_null() {
-            CFRelease(key_pid); CFRelease(key_layer); CFRelease(key_number);
+            CFRelease(key_pid);
+            CFRelease(key_layer);
+            CFRelease(key_number);
             return None;
         }
 
@@ -310,17 +348,23 @@ fn macos_frontmost_window_id() -> Option<u64> {
 
         for i in 0..count {
             let dict = CFArrayGetValueAtIndex(list, i);
-            if dict.is_null() { continue; }
+            if dict.is_null() {
+                continue;
+            }
 
             // Match PID
             let pid_ref = CFDictionaryGetValue(dict, key_pid);
             let pid = cfnum_i32(pid_ref).unwrap_or(-1);
-            if pid != front_pid { continue; }
+            if pid != front_pid {
+                continue;
+            }
 
             // Layer must be 0 (normal window)
             let layer_ref = CFDictionaryGetValue(dict, key_layer);
             let layer = cfnum_i32(layer_ref).unwrap_or(-1);
-            if layer != 0 { continue; }
+            if layer != 0 {
+                continue;
+            }
 
             // Get window number
             let num_ref = CFDictionaryGetValue(dict, key_number);
@@ -342,7 +386,9 @@ fn macos_frontmost_window_id() -> Option<u64> {
 #[cfg(target_os = "linux")]
 fn capture_linux() -> Option<CapturedImage> {
     #[cfg(feature = "capture")]
-    { capture_xcap() }
+    {
+        capture_xcap()
+    }
     #[cfg(not(feature = "capture"))]
     {
         eprintln!("[screenshot] capture disabled (built without `capture` feature / xcap)");
@@ -361,27 +407,40 @@ fn capture_xcap() -> Option<CapturedImage> {
         // that reports as the current/focused window.
         for win in &windows {
             let dominated = win.is_minimized().unwrap_or(true);
-            if dominated { continue; }
+            if dominated {
+                continue;
+            }
             // xcap on Linux/Wayland: `current_monitor` + first non-minimized
             // window with a title is a reasonable heuristic.  The list is
             // ordered front-to-back on most compositors.
             let title = win.title().unwrap_or_default();
-            if title.is_empty() { continue; }
+            if title.is_empty() {
+                continue;
+            }
 
             match win.capture_image() {
                 Ok(rgba) => {
                     let w = rgba.width();
                     let h = rgba.height();
-                    if w == 0 || h == 0 { continue; }
+                    if w == 0 || h == 0 {
+                        continue;
+                    }
 
                     // Check for dark/empty screenshot (all zeros or near-zero)
                     let sample = rgba.as_raw();
                     let non_zero = sample.iter().take(4096).any(|&b| b > 5);
-                    if !non_zero { continue; }
+                    if !non_zero {
+                        continue;
+                    }
 
                     // Keep decoded image directly — no PNG encode round-trip
                     let dyn_img = image::DynamicImage::ImageRgba8(rgba);
-                    return Some(CapturedImage { raw_bytes: Vec::new(), decoded: Some(dyn_img), width: w, height: h });
+                    return Some(CapturedImage {
+                        raw_bytes: Vec::new(),
+                        decoded: Some(dyn_img),
+                        width: w,
+                        height: h,
+                    });
                 }
                 Err(e) => {
                     eprintln!("[screenshot] xcap window capture failed ({}): {e}", title);
@@ -401,15 +460,25 @@ fn capture_xcap() -> Option<CapturedImage> {
 fn capture_xcap_monitor() -> Option<CapturedImage> {
     if let Ok(monitors) = xcap::Monitor::all() {
         // Prefer the primary monitor, fall back to the first one.
-        let monitor = monitors.iter().find(|m| m.is_primary().unwrap_or(false)).or_else(|| monitors.first());
+        let monitor = monitors
+            .iter()
+            .find(|m| m.is_primary().unwrap_or(false))
+            .or_else(|| monitors.first());
         if let Some(mon) = monitor {
             match mon.capture_image() {
                 Ok(rgba) => {
                     let w = rgba.width();
                     let h = rgba.height();
-                    if w == 0 || h == 0 { return None; }
+                    if w == 0 || h == 0 {
+                        return None;
+                    }
                     let dyn_img = image::DynamicImage::ImageRgba8(rgba);
-                    return Some(CapturedImage { raw_bytes: Vec::new(), decoded: Some(dyn_img), width: w, height: h });
+                    return Some(CapturedImage {
+                        raw_bytes: Vec::new(),
+                        decoded: Some(dyn_img),
+                        width: w,
+                        height: h,
+                    });
                 }
                 Err(e) => {
                     eprintln!("[screenshot] xcap monitor capture failed: {e}");
@@ -436,8 +505,7 @@ fn capture_xcap_monitor() -> Option<CapturedImage> {
 fn capture_windows() -> Option<CapturedImage> {
     #[cfg(feature = "capture")]
     {
-        capture_windows_foreground()
-            .or_else(capture_xcap_monitor)
+        capture_windows_foreground().or_else(capture_xcap_monitor)
     }
     #[cfg(not(feature = "capture"))]
     {
@@ -459,9 +527,7 @@ fn capture_windows_foreground() -> Option<CapturedImage> {
     // Find the focused (foreground) window.
     // xcap's is_focused() calls GetForegroundWindow() internally and
     // compares it to the window's HWND — no capture or WM_PRINT is sent.
-    let target = windows.iter().find(|w| {
-        w.is_focused().unwrap_or(false)
-    });
+    let target = windows.iter().find(|w| w.is_focused().unwrap_or(false));
 
     if let Some(win) = target {
         if win.is_minimized().unwrap_or(false) {
@@ -472,12 +538,16 @@ fn capture_windows_foreground() -> Option<CapturedImage> {
             Ok(rgba) => {
                 let w = rgba.width();
                 let h = rgba.height();
-                if w == 0 || h == 0 { return None; }
+                if w == 0 || h == 0 {
+                    return None;
+                }
 
                 // Check for dark/empty screenshot (all zeros or near-zero)
                 let sample = rgba.as_raw();
                 let non_zero = sample.iter().take(4096).any(|&b| b > 5);
-                if !non_zero { return None; }
+                if !non_zero {
+                    return None;
+                }
 
                 let dyn_img = image::DynamicImage::ImageRgba8(rgba);
                 return Some(CapturedImage {
@@ -495,4 +565,3 @@ fn capture_windows_foreground() -> Option<CapturedImage> {
 
     None
 }
-

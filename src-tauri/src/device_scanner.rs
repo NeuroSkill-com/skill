@@ -28,8 +28,8 @@
 use std::time::Duration;
 
 use btleplug::api::{
-    Central, CentralEvent, CentralState, Manager as BtManager,
-    Peripheral as BtPeripheral, ScanFilter,
+    Central, CentralEvent, CentralState, Manager as BtManager, Peripheral as BtPeripheral,
+    ScanFilter,
 };
 use btleplug::platform::{Adapter as BtPlatformAdapter, Manager as BtPlatformManager};
 use futures_util::StreamExt;
@@ -39,9 +39,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::AppStateExt;
 use crate::{
-    MutexExt, ScannerHandle,
-    emit_devices, emit_status, refresh_tray, send_toast, start_session, upsert_discovered,
-    set_cortex_ws_state, ToastLevel,
+    emit_devices, emit_status, refresh_tray, send_toast, set_cortex_ws_state, start_session,
+    upsert_discovered, MutexExt, ScannerHandle, ToastLevel,
 };
 
 // ── Device log ring buffer ────────────────────────────────────────────────────
@@ -70,7 +69,10 @@ pub(crate) struct DeviceLogEntry {
 
 impl DeviceLogRing {
     fn new(capacity: usize) -> Self {
-        Self { entries: std::collections::VecDeque::with_capacity(capacity), capacity }
+        Self {
+            entries: std::collections::VecDeque::with_capacity(capacity),
+            capacity,
+        }
     }
 
     pub fn push(&mut self, tag: &str, msg: &str) {
@@ -154,9 +156,12 @@ pub(crate) fn classify_device_error(raw: &str) -> (String, bool) {
 /// Quick sanity-check that returns `Err` with a user message if no BT adapter
 /// is present or accessible.  Called at the start of every session attempt.
 pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
-    let mgr = BtPlatformManager::new().await
+    let mgr = BtPlatformManager::new()
+        .await
         .map_err(|e| classify_device_error(&e.to_string()))?;
-    let adapters = mgr.adapters().await
+    let adapters = mgr
+        .adapters()
+        .await
         .map_err(|e| classify_device_error(&e.to_string()))?;
     if adapters.is_empty() {
         return Err((
@@ -166,7 +171,8 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
              \u{2022} Windows 11: Settings \u{2192} Privacy & Security \u{2192} Bluetooth \
                \u{2014} make sure it is ON and NeuroSkill is allowed\n\
              \u{2022} Windows: Settings \u{2192} Bluetooth & devices \u{2192} toggle Bluetooth ON\n\
-             \u{2022} Linux: sudo systemctl start bluetooth".into(),
+             \u{2022} Linux: sudo systemctl start bluetooth"
+                .into(),
             true,
         ));
     }
@@ -189,7 +195,8 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
                      \u{2022} Windows 11: Settings \u{2192} Privacy & Security \u{2192} \
                        Bluetooth \u{2014} make sure it is ON and NeuroSkill is allowed\n\
                      \u{2022} If Bluetooth is on, try restarting the Bluetooth Support Service \
-                       (services.msc)".into(),
+                       (services.msc)"
+                        .into(),
                     true,
                 ));
             }
@@ -236,7 +243,10 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
         let no_paired = g.status.paired_devices.is_empty();
         let is_paired = g.status.paired_devices.iter().any(|d| d.id == id);
         let legacy_cortex_paired = id.starts_with("cortex:")
-            && g.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv");
+            && g.status
+                .paired_devices
+                .iter()
+                .any(|d| d.id == "cortex:emotiv");
         is_idle && (is_paired || legacy_cortex_paired || no_paired)
     };
     if should_auto {
@@ -269,52 +279,71 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
 
 /// Emit the `bt_off` UI state once per outage (edge-triggered).
 fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
-    if *emitted { return; }
+    if *emitted {
+        return;
+    }
     *emitted = true;
     app_log!(app, "scanner", "[ble] bluetooth off");
     device_log("ble", "Bluetooth off");
-    send_toast(app, ToastLevel::Error, "Bluetooth Off",
-        "Bluetooth is unavailable — turn it on to connect.");
+    send_toast(
+        app,
+        ToastLevel::Error,
+        "Bluetooth Off",
+        "Bluetooth is unavailable — turn it on to connect.",
+    );
     let do_emit = {
         let s = app.app_state();
         let mut g = s.lock_or_recover();
         let idle = matches!(g.status.state.as_str(), "disconnected" | "scanning");
         if idle {
-            g.status.state      = "bt_off".into();
+            g.status.state = "bt_off".into();
             g.status.device_error   = Some(
                 "Bluetooth is off \u{2014} turn it on to connect to your BCI device.\n\
                  On Windows 11: also check Settings \u{2192} Privacy & Security \u{2192} Bluetooth.".into()
             );
             g.pending_reconnect = false;
             true
-        } else { false }
+        } else {
+            false
+        }
     };
-    if do_emit { refresh_tray(app); emit_status(app); }
+    if do_emit {
+        refresh_tray(app);
+        emit_status(app);
+    }
 }
 
 /// Clear the `bt_off` state, trigger auto-reconnect, and (re)start scanning.
 async fn scanner_bt_on(
-    app:      &AppHandle,
-    emitted:  &mut bool,
+    app: &AppHandle,
+    emitted: &mut bool,
     scanning: &mut bool,
-    adapter:  &BtPlatformAdapter,
+    adapter: &BtPlatformAdapter,
 ) {
-    if !*emitted { return; }
+    if !*emitted {
+        return;
+    }
     *emitted = false;
     app_log!(app, "scanner", "[ble] bluetooth on");
     device_log("ble", "Bluetooth restored");
-    send_toast(app, ToastLevel::Info, "Bluetooth Restored",
-        "Bluetooth is back — reconnecting…");
+    send_toast(
+        app,
+        ToastLevel::Info,
+        "Bluetooth Restored",
+        "Bluetooth is back — reconnecting…",
+    );
 
     let (do_emit, preferred_id) = {
         let s = app.app_state();
         let mut g = s.lock_or_recover();
         if g.status.state == "bt_off" {
-            g.status.state      = "disconnected".into();
-            g.status.device_error   = None;
+            g.status.state = "disconnected".into();
+            g.status.device_error = None;
             g.pending_reconnect = true;
             (true, g.preferred_id.clone())
-        } else { (false, None) }
+        } else {
+            (false, None)
+        }
     };
     if do_emit {
         refresh_tray(app);
@@ -334,7 +363,9 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
     let mut bt_off_emitted = false;
 
     'outer: loop {
-        if cancel.is_cancelled() { return; }
+        if cancel.is_cancelled() {
+            return;
+        }
 
         // Acquire the BT adapter.
         let adapter = loop {
@@ -365,7 +396,11 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
         };
 
         let mut scanning = false;
-        match adapter.adapter_state().await.unwrap_or(CentralState::Unknown) {
+        match adapter
+            .adapter_state()
+            .await
+            .unwrap_or(CentralState::Unknown)
+        {
             CentralState::PoweredOn => {
                 scanner_bt_on(&app, &mut bt_off_emitted, &mut scanning, &adapter).await;
                 if !scanning && adapter.start_scan(ScanFilter::default()).await.is_ok() {
@@ -452,7 +487,9 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
 /// contains `usbserial` / `ttyUSB` in the path.  We accept any serial port
 /// whose product string or path matches known OpenBCI identifiers.
 fn detect_openbci_serial_ports() -> Vec<(String, String)> {
-    let Ok(ports) = serialport::available_ports() else { return Vec::new() };
+    let Ok(ports) = serialport::available_ports() else {
+        return Vec::new();
+    };
 
     let mut results = Vec::new();
     for port in ports {
@@ -463,7 +500,9 @@ fn detect_openbci_serial_ports() -> Vec<(String, String)> {
             serialport::SerialPortType::UsbPort(usb) => {
                 // OpenBCI Cyton dongle: FTDI FT231X (VID 0403, PID 6015)
                 let vid_match = usb.vid == 0x0403 && usb.pid == 0x6015;
-                let product_match = usb.product.as_deref()
+                let product_match = usb
+                    .product
+                    .as_deref()
                     .map(|p| {
                         let pl = p.to_lowercase();
                         pl.contains("ft231x") || pl.contains("openbci") || pl.contains("ftdi")
@@ -758,7 +797,10 @@ async fn run_device_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::Recei
     }
     if cfg.cortex {
         device_log("scanner", "Cortex backend enabled");
-        tasks.push(tokio::spawn(run_cortex_scanner(app.clone(), cancel.clone())));
+        tasks.push(tokio::spawn(run_cortex_scanner(
+            app.clone(),
+            cancel.clone(),
+        )));
     } else {
         device_log("scanner", "Cortex backend disabled by settings");
     }
@@ -770,7 +812,11 @@ async fn run_device_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::Recei
 #[allow(dead_code)]
 pub(crate) fn stop_background_scanner(app: &AppHandle) {
     let s_ref = app.app_state();
-    let tx = s_ref.lock_or_recover().scanner.take().map(|sh| sh.cancel_tx);
+    let tx = s_ref
+        .lock_or_recover()
+        .scanner
+        .take()
+        .map(|sh| sh.cancel_tx);
     if let Some(tx) = tx {
         let _ = tx.send(());
         app_log!(app, "scanner", "background scanner stopped");
@@ -781,10 +827,17 @@ pub(crate) fn stop_background_scanner(app: &AppHandle) {
 /// Idempotent — safe to call multiple times.
 pub(crate) fn start_background_scanner(app: &AppHandle) {
     let s_ref = app.app_state();
-    let already = { let g = s_ref.lock_or_recover(); g.scanner.is_some() };
-    if already { return; }
+    let already = {
+        let g = s_ref.lock_or_recover();
+        g.scanner.is_some()
+    };
+    if already {
+        return;
+    }
     let (tx, rx) = tokio::sync::oneshot::channel();
     s_ref.lock_or_recover().scanner = Some(ScannerHandle { cancel_tx: tx });
     let clone = app.clone();
-    tauri::async_runtime::spawn(async move { run_device_scanner(clone, rx).await; });
+    tauri::async_runtime::spawn(async move {
+        run_device_scanner(clone, rx).await;
+    });
 }

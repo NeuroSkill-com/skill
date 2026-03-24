@@ -9,152 +9,167 @@ the Free Software Foundation, version 3 only. -->
   currently active (KittenTTS or NeuTTS).  Voice chips adapt accordingly.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
-  type TtsProgress = {
-    phase: "step" | "ready" | "unloaded";
-    step:  number;
-    total: number;
-    label: string;
-  };
+type TtsProgress = {
+  phase: "step" | "ready" | "unloaded";
+  step: number;
+  total: number;
+  label: string;
+};
 
-  interface NeuttsVoice { id: string; lang: string; flag: string; gender: string; }
-  interface NeuttsConfig { enabled: boolean; voice_preset: string; }
+interface NeuttsVoice {
+  id: string;
+  lang: string;
+  flag: string;
+  gender: string;
+}
+interface NeuttsConfig {
+  enabled: boolean;
+  voice_preset: string;
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────────────────
 
-  let inputText = $state("Calibration starting. Eyes open.");
-  let speaking  = $state(false);
-  let ready     = $state(false);
-  let errorMsg  = $state("");
+let inputText = $state("Calibration starting. Eyes open.");
+let speaking = $state(false);
+let ready = $state(false);
+let errorMsg = $state("");
 
-  let dlStep  = $state(0);
-  let dlTotal = $state(3);
-  let dlLabel = $state("");
+let dlStep = $state(0);
+let dlTotal = $state(3);
+let dlLabel = $state("");
 
-  const dlPct = $derived(
-    ready   ? 100 :
-    dlStep  ? Math.max(4, Math.round((dlStep / Math.max(dlTotal, 1)) * 100)) :
-    0
-  );
+const dlPct = $derived(ready ? 100 : dlStep ? Math.max(4, Math.round((dlStep / Math.max(dlTotal, 1)) * 100)) : 0);
 
-  // ── Engine & voices ────────────────────────────────────────────────────────
+// ── Engine & voices ────────────────────────────────────────────────────────
 
-  let isNeutts        = $state(false);
-  let neuttsVoices    = $state<NeuttsVoice[]>([]);   // from tts_list_neutts_voices
-  let kittenVoices    = $state<string[]>(["Jasper"]);
-  let selectedVoice   = $state("");                  // "" = use saved default
+let isNeutts = $state(false);
+let neuttsVoices = $state<NeuttsVoice[]>([]); // from tts_list_neutts_voices
+let kittenVoices = $state<string[]>(["Jasper"]);
+let selectedVoice = $state(""); // "" = use saved default
 
-  // Quick-pick phrases mirroring the real calibration announcements
-  const SAMPLES: string[] = [
-    "Calibration starting. 2 actions, 3 loops.",
-    "Eyes Open",
-    "Eyes Closed",
-    "Mental Math",
-    "Deep Breathing",
-    "Break. Next: Eyes Open.",
-    "Calibration complete. 3 loops recorded.",
-    "Calibration cancelled.",
-  ];
+// Quick-pick phrases mirroring the real calibration announcements
+const SAMPLES: string[] = [
+  "Calibration starting. 2 actions, 3 loops.",
+  "Eyes Open",
+  "Eyes Closed",
+  "Mental Math",
+  "Deep Breathing",
+  "Break. Next: Eyes Open.",
+  "Calibration complete. 3 loops recorded.",
+  "Calibration cancelled.",
+];
 
-  // ── Event listener ─────────────────────────────────────────────────────────
+// ── Event listener ─────────────────────────────────────────────────────────
 
-  let unlistenTts:       UnlistenFn | null = null;
-  let unlistenEngine:    UnlistenFn | null = null;
+let unlistenTts: UnlistenFn | null = null;
+let unlistenEngine: UnlistenFn | null = null;
 
-  /** Re-detect the active engine and refresh voice lists + ready state. */
-  async function refreshEngine() {
-    ready     = false;
-    dlStep    = 0;
-    dlLabel   = "";
-    try {
-      const cfg = await invoke<NeuttsConfig>("get_neutts_config");
-      isNeutts = cfg.enabled;
-      if (isNeutts) {
-        selectedVoice = cfg.voice_preset || "";
-        neuttsVoices  = await invoke<NeuttsVoice[]>("tts_list_neutts_voices");
-      } else {
-        const v = await invoke<string[]>("tts_list_voices");
-        if (v.length) kittenVoices = v;
-        const active = await invoke<string>("tts_get_voice");
-        selectedVoice = active || (kittenVoices[0] ?? "Jasper");
-      }
-    } catch (e) { console.warn("[tts-test] refreshEngine failed:", e); }
-  }
+/** Re-detect the active engine and refresh voice lists + ready state. */
+async function refreshEngine() {
+  ready = false;
+  dlStep = 0;
+  dlLabel = "";
+  try {
+    const cfg = await invoke<NeuttsConfig>("get_neutts_config");
+    isNeutts = cfg.enabled;
+    if (isNeutts) {
+      selectedVoice = cfg.voice_preset || "";
+      neuttsVoices = await invoke<NeuttsVoice[]>("tts_list_neutts_voices");
+    } else {
+      const v = await invoke<string[]>("tts_list_voices");
+      if (v.length) kittenVoices = v;
+      const active = await invoke<string>("tts_get_voice");
+      selectedVoice = active || (kittenVoices[0] ?? "Jasper");
+    }
+  } catch (e) {}
+}
 
-  onMount(async () => {
+onMount(async () => {
+  await refreshEngine();
+
+  unlistenEngine = await listen("tts-engine-changed", async () => {
     await refreshEngine();
-
-    unlistenEngine = await listen("tts-engine-changed", async () => {
-      await refreshEngine();
-    });
-
-    unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
-      const p = ev.payload;
-      if (p.phase === "ready") {
-        ready  = true;
-        dlStep = dlTotal;
-        dlLabel = "";
-        // Refresh KittenTTS voice list now that model is loaded
-        if (!isNeutts) {
-          invoke<string[]>("tts_list_voices")
-            .then(v => { if (v.length) kittenVoices = v; })
-            .catch(e => console.warn("[tts-test] tts_list_voices failed:", e));
-        }
-      } else if (p.phase === "unloaded") {
-        ready   = false;
-        dlStep  = 0;
-        dlLabel = "";
-      } else {
-        dlStep  = p.step;
-        dlTotal = p.total;
-        dlLabel = p.label;
-      }
-    });
   });
 
-  onDestroy(() => { unlistenTts?.(); unlistenEngine?.(); });
-
-  // ── Voice helpers ──────────────────────────────────────────────────────────
-
-  function pickVoice(v: string) {
-    selectedVoice = v;
-    if (!isNeutts) {
-      // Persist active voice for KittenTTS globally
-      invoke("tts_set_voice", { voice: v }).catch(e => console.warn("[tts-test] tts_set_voice failed:", e));
+  unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
+    const p = ev.payload;
+    if (p.phase === "ready") {
+      ready = true;
+      dlStep = dlTotal;
+      dlLabel = "";
+      // Refresh KittenTTS voice list now that model is loaded
+      if (!isNeutts) {
+        invoke<string[]>("tts_list_voices")
+          .then((v) => {
+            if (v.length) kittenVoices = v;
+          })
+          .catch((_e) => {});
+      }
+    } else if (p.phase === "unloaded") {
+      ready = false;
+      dlStep = 0;
+      dlLabel = "";
+    } else {
+      dlStep = p.step;
+      dlTotal = p.total;
+      dlLabel = p.label;
     }
-    // For NeuTTS the voice is sent per-utterance in tts_speak; no global setter.
+  });
+});
+
+onDestroy(() => {
+  unlistenTts?.();
+  unlistenEngine?.();
+});
+
+// ── Voice helpers ──────────────────────────────────────────────────────────
+
+function pickVoice(v: string) {
+  selectedVoice = v;
+  if (!isNeutts) {
+    // Persist active voice for KittenTTS globally
+    invoke("tts_set_voice", { voice: v }).catch((_e) => {});
   }
+  // For NeuTTS the voice is sent per-utterance in tts_speak; no global setter.
+}
 
-  // ── Speak ──────────────────────────────────────────────────────────────────
+// ── Speak ──────────────────────────────────────────────────────────────────
 
-  async function speak() {
-    const text = inputText.trim();
-    if (!text || speaking) return;
-    speaking = true;
-    errorMsg = "";
-    try {
-      // Kick off init if idle
-      if (!ready) invoke("tts_init").catch(e => console.warn("[tts-test] tts_init failed:", e));
-      // Pass current voice selection; engine interprets it appropriately
-      const voiceArg = selectedVoice || undefined;
-      await invoke("tts_speak", { text, voice: voiceArg });
-    } catch (e) {
-      errorMsg = String(e);
-    } finally {
-      speaking = false;
-    }
+async function speak() {
+  const text = inputText.trim();
+  if (!text || speaking) return;
+  speaking = true;
+  errorMsg = "";
+  try {
+    // Kick off init if idle
+    if (!ready) invoke("tts_init").catch((_e) => {});
+    // Pass current voice selection; engine interprets it appropriately
+    const voiceArg = selectedVoice || undefined;
+    await invoke("tts_speak", { text, voice: voiceArg });
+  } catch (e) {
+    errorMsg = String(e);
+  } finally {
+    speaking = false;
   }
+}
 
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); speak(); }
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    speak();
   }
+}
 
-  function pickSample(s: string) { inputText = s; speak(); }
+function pickSample(s: string) {
+  inputText = s;
+  speak();
+}
 </script>
 
 <div class="rounded-xl border border-indigo-500/20 bg-indigo-50/40 dark:bg-indigo-500/5

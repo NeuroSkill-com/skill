@@ -12,16 +12,15 @@ use std::collections::VecDeque;
 use openbci::sample::{Sample, StreamHandle as OpenbciStreamHandle};
 
 use super::{
-    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame,
+    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame,
 };
 
 // ── OpenBciAdapter ────────────────────────────────────────────────────────────
 
 pub struct OpenBciAdapter {
     sample_rx: tokio::sync::mpsc::Receiver<Sample>,
-    desc:      DeviceDescriptor,
-    pending:   VecDeque<DeviceEvent>,
+    desc: DeviceDescriptor,
+    pending: VecDeque<DeviceEvent>,
     /// Whether a synthetic `Connected` event has been emitted yet.
     connected_emitted: bool,
     /// Device info to emit on the first call to `next_event`.
@@ -36,11 +35,7 @@ impl OpenBciAdapter {
     ///
     /// `info` will be emitted as a synthetic `Connected` event on the first
     /// call to [`next_event`](DeviceAdapter::next_event).
-    pub fn start(
-        stream: OpenbciStreamHandle,
-        desc: DeviceDescriptor,
-        info: DeviceInfo,
-    ) -> Self {
+    pub fn start(stream: OpenbciStreamHandle, desc: DeviceDescriptor, info: DeviceInfo) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<Sample>(256);
 
         // Bridge: blocking recv → async channel.

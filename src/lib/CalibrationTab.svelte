@@ -6,170 +6,255 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Calibration tab — multi-profile manager with N-action support. -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { Badge }              from "$lib/components/ui/badge";
-  import { Button }             from "$lib/components/ui/button";
-  import { Card, CardContent }  from "$lib/components/ui/card";
-  import { t }                  from "$lib/i18n/index.svelte";
-  import { fmtDateTimeLocale }  from "$lib/format";
-  import {
-    CALIBRATION_ACTION1_LABEL,
-    CALIBRATION_ACTION2_LABEL,
-    CALIBRATION_ACTION_DURATION_SECS,
-    CALIBRATION_BREAK_DURATION_SECS,
-    CALIBRATION_LOOP_COUNT,
-  } from "$lib/constants";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import {
+  CALIBRATION_ACTION_DURATION_SECS,
+  CALIBRATION_ACTION1_LABEL,
+  CALIBRATION_ACTION2_LABEL,
+  CALIBRATION_BREAK_DURATION_SECS,
+  CALIBRATION_LOOP_COUNT,
+} from "$lib/constants";
+import { fmtDateTimeLocale } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface CalibrationAction { label: string; duration_secs: number; }
-  interface CalibrationProfile {
-    id: string; name: string;
-    actions: CalibrationAction[];
-    break_duration_secs: number;
-    loop_count: number;
-    auto_start: boolean;
-    last_calibration_utc: number | null;
-  }
+// ── Types ──────────────────────────────────────────────────────────────────
+interface CalibrationAction {
+  label: string;
+  duration_secs: number;
+}
+interface CalibrationProfile {
+  id: string;
+  name: string;
+  actions: CalibrationAction[];
+  break_duration_secs: number;
+  loop_count: number;
+  auto_start: boolean;
+  last_calibration_utc: number | null;
+}
 
-  // ── Quick presets ──────────────────────────────────────────────────────────
-  interface Preset {
-    key: string; icon: string;
-    actions: CalibrationAction[];
-    breakSecs: number; loops: number;
-  }
-  const PRESETS: Preset[] = [
-    { key:"baseline", icon:"👁",  actions:[{label:"Eyes Open",duration_secs:20},{label:"Eyes Closed",duration_secs:20}], breakSecs:5,  loops:3 },
-    { key:"focus",    icon:"🧠",  actions:[{label:"Mental Math",duration_secs:30},{label:"Deep Breathing",duration_secs:30}], breakSecs:10, loops:3 },
-    { key:"meditation",icon:"🧘", actions:[{label:"Active Thinking",duration_secs:30},{label:"Mindful Rest",duration_secs:30}], breakSecs:10, loops:3 },
-    { key:"sleep",    icon:"🌙",  actions:[{label:"Alert",duration_secs:20},{label:"Drowsy",duration_secs:20}], breakSecs:10, loops:3 },
-    { key:"gaming",   icon:"🎮",  actions:[{label:"Focus Task",duration_secs:20},{label:"Passive Rest",duration_secs:20}], breakSecs:10, loops:3 },
-    { key:"children", icon:"🧒",  actions:[{label:"Active",duration_secs:10},{label:"Rest",duration_secs:10}], breakSecs:5,  loops:3 },
-    { key:"clinical", icon:"🔬",  actions:[{label:"Active",duration_secs:30},{label:"Rest",duration_secs:30}], breakSecs:15, loops:5 },
-    { key:"stress",   icon:"💆",  actions:[{label:"Calm Breathing",duration_secs:20},{label:"Stressor Task",duration_secs:20}], breakSecs:10, loops:3 },
-  ];
+// ── Quick presets ──────────────────────────────────────────────────────────
+interface Preset {
+  key: string;
+  icon: string;
+  actions: CalibrationAction[];
+  breakSecs: number;
+  loops: number;
+}
+const PRESETS: Preset[] = [
+  {
+    key: "baseline",
+    icon: "👁",
+    actions: [
+      { label: "Eyes Open", duration_secs: 20 },
+      { label: "Eyes Closed", duration_secs: 20 },
+    ],
+    breakSecs: 5,
+    loops: 3,
+  },
+  {
+    key: "focus",
+    icon: "🧠",
+    actions: [
+      { label: "Mental Math", duration_secs: 30 },
+      { label: "Deep Breathing", duration_secs: 30 },
+    ],
+    breakSecs: 10,
+    loops: 3,
+  },
+  {
+    key: "meditation",
+    icon: "🧘",
+    actions: [
+      { label: "Active Thinking", duration_secs: 30 },
+      { label: "Mindful Rest", duration_secs: 30 },
+    ],
+    breakSecs: 10,
+    loops: 3,
+  },
+  {
+    key: "sleep",
+    icon: "🌙",
+    actions: [
+      { label: "Alert", duration_secs: 20 },
+      { label: "Drowsy", duration_secs: 20 },
+    ],
+    breakSecs: 10,
+    loops: 3,
+  },
+  {
+    key: "gaming",
+    icon: "🎮",
+    actions: [
+      { label: "Focus Task", duration_secs: 20 },
+      { label: "Passive Rest", duration_secs: 20 },
+    ],
+    breakSecs: 10,
+    loops: 3,
+  },
+  {
+    key: "children",
+    icon: "🧒",
+    actions: [
+      { label: "Active", duration_secs: 10 },
+      { label: "Rest", duration_secs: 10 },
+    ],
+    breakSecs: 5,
+    loops: 3,
+  },
+  {
+    key: "clinical",
+    icon: "🔬",
+    actions: [
+      { label: "Active", duration_secs: 30 },
+      { label: "Rest", duration_secs: 30 },
+    ],
+    breakSecs: 15,
+    loops: 5,
+  },
+  {
+    key: "stress",
+    icon: "💆",
+    actions: [
+      { label: "Calm Breathing", duration_secs: 20 },
+      { label: "Stressor Task", duration_secs: 20 },
+    ],
+    breakSecs: 10,
+    loops: 3,
+  },
+];
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let profiles    = $state<CalibrationProfile[]>([]);
-  let activeId    = $state<string>("");
-  let editing     = $state<CalibrationProfile | null>(null);
-  let isNew       = $state(false);
-  let saving      = $state(false);
-  let now         = $state(Math.floor(Date.now() / 1000));
-  let nowTimer: ReturnType<typeof setInterval>;
+// ── State ──────────────────────────────────────────────────────────────────
+let profiles = $state<CalibrationProfile[]>([]);
+let activeId = $state<string>("");
+let editing = $state<CalibrationProfile | null>(null);
+let isNew = $state(false);
+let saving = $state(false);
+let now = $state(Math.floor(Date.now() / 1000));
+let nowTimer: ReturnType<typeof setInterval>;
 
-  const activeProfile = $derived(profiles.find(p => p.id === activeId) ?? profiles[0] ?? null);
+const activeProfile = $derived(profiles.find((p) => p.id === activeId) ?? profiles[0] ?? null);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function timeAgo(utc: number): string {
-    const diff = now - utc;
-    if (diff < 60)    return t("common.justNow");
-    if (diff < 3600)  return t("common.minutesAgo", { n: Math.floor(diff / 60) });
-    if (diff < 86400) return t("common.hoursAgo",   { n: Math.floor(diff / 3600) });
-    return t("common.daysAgo", { n: Math.floor(diff / 86400) });
-  }
+// ── Helpers ────────────────────────────────────────────────────────────────
+function timeAgo(utc: number): string {
+  const diff = now - utc;
+  if (diff < 60) return t("common.justNow");
+  if (diff < 3600) return t("common.minutesAgo", { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t("common.hoursAgo", { n: Math.floor(diff / 3600) });
+  return t("common.daysAgo", { n: Math.floor(diff / 86400) });
+}
 
-  function fmtDate(utc: number) {
-    return fmtDateTimeLocale(utc);
-  }
+function fmtDate(utc: number) {
+  return fmtDateTimeLocale(utc);
+}
 
-  async function load() {
-    profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
-    const active = await invoke<CalibrationProfile | null>("get_active_calibration");
-    activeId = active?.id ?? profiles[0]?.id ?? "";
-  }
+async function load() {
+  profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
+  const active = await invoke<CalibrationProfile | null>("get_active_calibration");
+  activeId = active?.id ?? profiles[0]?.id ?? "";
+}
 
-  async function selectProfile(id: string) {
-    activeId = id;
-    await invoke("set_active_calibration", { id });
-  }
+async function selectProfile(id: string) {
+  activeId = id;
+  await invoke("set_active_calibration", { id });
+}
 
-  function startEditNew() {
-    isNew = true;
-    editing = {
-      id: "", name: "",
-      actions: [
-        { label: CALIBRATION_ACTION1_LABEL, duration_secs: CALIBRATION_ACTION_DURATION_SECS },
-        { label: CALIBRATION_ACTION2_LABEL, duration_secs: CALIBRATION_ACTION_DURATION_SECS },
-      ],
-      break_duration_secs: CALIBRATION_BREAK_DURATION_SECS,
-      loop_count: CALIBRATION_LOOP_COUNT,
-      auto_start: false,
-      last_calibration_utc: null,
-    };
-  }
+function startEditNew() {
+  isNew = true;
+  editing = {
+    id: "",
+    name: "",
+    actions: [
+      { label: CALIBRATION_ACTION1_LABEL, duration_secs: CALIBRATION_ACTION_DURATION_SECS },
+      { label: CALIBRATION_ACTION2_LABEL, duration_secs: CALIBRATION_ACTION_DURATION_SECS },
+    ],
+    break_duration_secs: CALIBRATION_BREAK_DURATION_SECS,
+    loop_count: CALIBRATION_LOOP_COUNT,
+    auto_start: false,
+    last_calibration_utc: null,
+  };
+}
 
-  function startEditExisting(p: CalibrationProfile) {
-    isNew = false;
-    editing = { ...p, actions: p.actions.map(a => ({ ...a })) };
-  }
+function startEditExisting(p: CalibrationProfile) {
+  isNew = false;
+  editing = { ...p, actions: p.actions.map((a) => ({ ...a })) };
+}
 
-  function cancelEdit() { editing = null; }
+function cancelEdit() {
+  editing = null;
+}
 
-  async function saveEdit() {
-    if (!editing) return;
-    if (!editing.name.trim()) return;
-    if (editing.actions.length === 0) return;
-    saving = true;
-    try {
-      if (isNew) {
-        const created = await invoke<CalibrationProfile>("create_calibration_profile", { profile: editing });
-        await selectProfile(created.id);
-      } else {
-        await invoke("update_calibration_profile", { profile: editing });
-      }
-      editing = null;
-      await load();
-    } finally { saving = false; }
-  }
-
-  async function deleteProfile(id: string) {
-    if (profiles.length <= 1) return;
-    await invoke("delete_calibration_profile", { id });
+async function saveEdit() {
+  if (!editing) return;
+  if (!editing.name.trim()) return;
+  if (editing.actions.length === 0) return;
+  saving = true;
+  try {
+    if (isNew) {
+      const created = await invoke<CalibrationProfile>("create_calibration_profile", { profile: editing });
+      await selectProfile(created.id);
+    } else {
+      await invoke("update_calibration_profile", { profile: editing });
+    }
+    editing = null;
     await load();
+  } finally {
+    saving = false;
   }
+}
 
-  async function openCalibration() {
-    await invoke("open_calibration_window");
-  }
+async function deleteProfile(id: string) {
+  if (profiles.length <= 1) return;
+  await invoke("delete_calibration_profile", { id });
+  await load();
+}
 
-  function applyPreset(preset: Preset) {
-    if (!editing) return;
-    editing.actions        = preset.actions.map(a => ({ ...a }));
-    editing.break_duration_secs = preset.breakSecs;
-    editing.loop_count     = preset.loops;
-    if (!editing.name) editing.name = t(`calibration.preset.${preset.key}`);
-  }
+async function openCalibration() {
+  await invoke("open_calibration_window");
+}
 
-  function addAction() {
-    if (!editing) return;
-    editing.actions = [...editing.actions, { label: "", duration_secs: CALIBRATION_ACTION_DURATION_SECS }];
-  }
-  function removeAction(i: number) {
-    if (!editing || editing.actions.length <= 1) return;
-    editing.actions = editing.actions.filter((_, idx) => idx !== i);
-  }
-  function moveAction(i: number, dir: -1 | 1) {
-    if (!editing) return;
-    const j = i + dir;
-    if (j < 0 || j >= editing.actions.length) return;
-    const arr = [...editing.actions];
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    editing.actions = arr;
-  }
+function applyPreset(preset: Preset) {
+  if (!editing) return;
+  editing.actions = preset.actions.map((a) => ({ ...a }));
+  editing.break_duration_secs = preset.breakSecs;
+  editing.loop_count = preset.loops;
+  if (!editing.name) editing.name = t(`calibration.preset.${preset.key}`);
+}
 
-  const totalSecs = $derived.by(() => {
-    if (!editing) return 0;
-    const actionTotal = editing.actions.reduce((s, a) => s + a.duration_secs, 0);
-    const breakTotal  = editing.loop_count * editing.actions.length * editing.break_duration_secs;
-    return editing.loop_count * actionTotal + breakTotal;
-  });
+function addAction() {
+  if (!editing) return;
+  editing.actions = [...editing.actions, { label: "", duration_secs: CALIBRATION_ACTION_DURATION_SECS }];
+}
+function removeAction(i: number) {
+  if (!editing || editing.actions.length <= 1) return;
+  editing.actions = editing.actions.filter((_, idx) => idx !== i);
+}
+function moveAction(i: number, dir: -1 | 1) {
+  if (!editing) return;
+  const j = i + dir;
+  if (j < 0 || j >= editing.actions.length) return;
+  const arr = [...editing.actions];
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  editing.actions = arr;
+}
 
-  onMount(async () => {
-    await load();
-    nowTimer = setInterval(() => { now = Math.floor(Date.now() / 1000); }, 10_000);
-  });
-  onDestroy(() => clearInterval(nowTimer));
+const totalSecs = $derived.by(() => {
+  if (!editing) return 0;
+  const actionTotal = editing.actions.reduce((s, a) => s + a.duration_secs, 0);
+  const breakTotal = editing.loop_count * editing.actions.length * editing.break_duration_secs;
+  return editing.loop_count * actionTotal + breakTotal;
+});
+
+onMount(async () => {
+  await load();
+  nowTimer = setInterval(() => {
+    now = Math.floor(Date.now() / 1000);
+  }, 10_000);
+});
+onDestroy(() => clearInterval(nowTimer));
 </script>
 
 <section class="flex flex-col gap-4">

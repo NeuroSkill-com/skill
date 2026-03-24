@@ -4,7 +4,7 @@
 
 use std::sync::Mutex;
 
-use crate::{AppState, skill_dir};
+use crate::{skill_dir, AppState};
 
 // ── Hook distance suggestion ──────────────────────────────────────────────────
 
@@ -12,20 +12,20 @@ use crate::{AppState, skill_dir};
 #[derive(serde::Serialize)]
 pub struct HookDistanceSuggestion {
     /// Number of labels that text-matched at least one keyword.
-    pub label_n:    usize,
+    pub label_n: usize,
     /// Number of label EEG reference embeddings with real EEG data.
-    pub ref_n:      usize,
+    pub ref_n: usize,
     /// Number of recent EEG samples used for the distribution.
-    pub sample_n:   usize,
-    pub eeg_min:    f32,
-    pub eeg_p25:    f32,
-    pub eeg_p50:    f32,
-    pub eeg_p75:    f32,
-    pub eeg_max:    f32,
+    pub sample_n: usize,
+    pub eeg_min: f32,
+    pub eeg_p25: f32,
+    pub eeg_p50: f32,
+    pub eeg_p75: f32,
+    pub eeg_max: f32,
     /// Suggested `distance_threshold` value (p25 of the distribution).
-    pub suggested:  f32,
+    pub suggested: f32,
     /// Human-readable explanation of the suggestion.
-    pub note:       String,
+    pub note: String,
 }
 
 /// Suggest a `distance_threshold` value by analysing real HNSW and SQLite data.
@@ -43,14 +43,12 @@ pub struct HookDistanceSuggestion {
 #[tauri::command]
 pub async fn suggest_hook_distances(
     keywords: Vec<String>,
-    state:    tauri::State<'_, Mutex<Box<AppState>>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<HookDistanceSuggestion, String> {
     let skill_dir = skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        suggest_hook_distances_sync(keywords, &skill_dir)
-    })
-    .await
-    .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || suggest_hook_distances_sync(keywords, &skill_dir))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn suggest_hook_distances_sync(
@@ -65,7 +63,8 @@ fn suggest_hook_distances_sync(
             .to_owned(),
     };
 
-    let kws: Vec<String> = keywords.iter()
+    let kws: Vec<String> = keywords
+        .iter()
         .map(|k| k.trim().to_owned())
         .filter(|k| !k.is_empty())
         .collect();
@@ -85,7 +84,9 @@ fn suggest_hook_distances_sync(
     let all_labels: Vec<(i64, String, u64, u64)> = {
         let Ok(mut stmt) = conn.prepare(
             "SELECT id, text, eeg_start, eeg_end FROM labels WHERE length(trim(text)) > 0",
-        ) else { return empty; };
+        ) else {
+            return empty;
+        };
         stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
             .map(|rows| rows.flatten().collect())
             .unwrap_or_default()
@@ -109,7 +110,8 @@ fn suggest_hook_distances_sync(
     }
 
     // ── Step 2: get mean EEG embeddings for matched labels ───────────────────
-    let refs: Vec<Vec<f32>> = matched.iter()
+    let refs: Vec<Vec<f32>> = matched
+        .iter()
         .filter_map(|(_, _, eeg_start, eeg_end)| {
             crate::label_index::mean_eeg_for_window(skill_dir, *eeg_start, *eeg_end)
         })
@@ -152,7 +154,9 @@ fn suggest_hook_distances_sync(
     }
     if distances.is_empty() {
         return HookDistanceSuggestion {
-            label_n, ref_n, sample_n,
+            label_n,
+            ref_n,
+            sample_n,
             note: "Could not compute distances (dimension mismatch).".to_owned(),
             suggested: 0.1,
             ..empty
@@ -182,7 +186,18 @@ fn suggest_hook_distances_sync(
          Suggested threshold {suggested:.2} (p25 = fairly strict match).",
     );
 
-    HookDistanceSuggestion { label_n, ref_n, sample_n, eeg_min, eeg_p25, eeg_p50, eeg_p75, eeg_max, suggested, note }
+    HookDistanceSuggestion {
+        label_n,
+        ref_n,
+        sample_n,
+        eeg_min,
+        eeg_p25,
+        eeg_p50,
+        eeg_p75,
+        eeg_max,
+        suggested,
+        note,
+    }
 }
 
 /// Read up to `max` EEG embedding blobs from the most-recent daily `eeg.sqlite` files.
@@ -207,26 +222,38 @@ fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<
 
     for dir in &date_dirs {
         let db = dir.join(crate::constants::SQLITE_FILE);
-        if !db.exists() { continue; }
-        let Ok(conn) = skill_data::util::open_readonly(&db) else { continue };
+        if !db.exists() {
+            continue;
+        }
+        let Ok(conn) = skill_data::util::open_readonly(&db) else {
+            continue;
+        };
 
-        let Ok(mut stmt) = conn.prepare(
-            "SELECT eeg_embedding FROM embeddings ORDER BY timestamp DESC LIMIT ?1",
-        ) else { continue };
+        let Ok(mut stmt) =
+            conn.prepare("SELECT eeg_embedding FROM embeddings ORDER BY timestamp DESC LIMIT ?1")
+        else {
+            continue;
+        };
 
         let blobs: Vec<Vec<f32>> = stmt
-            .query_map(rusqlite::params![per_day as i64], |r| r.get::<_, Vec<u8>>(0))
+            .query_map(rusqlite::params![per_day as i64], |r| {
+                r.get::<_, Vec<u8>>(0)
+            })
             .map(|rows| {
                 rows.flatten()
-                    .map(|b| b.chunks_exact(4)
-                        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                        .collect())
+                    .map(|b| {
+                        b.chunks_exact(4)
+                            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                            .collect()
+                    })
                     .collect()
             })
             .unwrap_or_default();
 
         out.extend(blobs);
-        if out.len() >= max { break; }
+        if out.len() >= max {
+            break;
+        }
     }
     out
 }
@@ -238,16 +265,19 @@ fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<
 /// Runs on a blocking thread — opens and queries a SQLite database.
 #[tauri::command]
 pub async fn get_hook_log(
-    limit:  Option<i64>,
+    limit: Option<i64>,
     offset: Option<i64>,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<Vec<skill_data::hooks_log::HookLogRow>, String> {
     let skill_dir = skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         let Some(log) = skill_data::hooks_log::HooksLog::open(&skill_dir) else {
             return vec![];
         };
-        log.query(limit.unwrap_or(50).clamp(1, 500), offset.unwrap_or(0).max(0))
+        log.query(
+            limit.unwrap_or(50).clamp(1, 500),
+            offset.unwrap_or(0).max(0),
+        )
     })
     .await
     .map_err(|e| e.to_string())
@@ -257,7 +287,9 @@ pub async fn get_hook_log(
 ///
 /// Runs on a blocking thread — opens and queries a SQLite database.
 #[tauri::command]
-pub async fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<i64, String> {
+pub async fn get_hook_log_count(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<i64, String> {
     let skill_dir = skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         skill_data::hooks_log::HooksLog::open(&skill_dir)
@@ -268,17 +300,18 @@ pub async fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -
     .map_err(|e| e.to_string())
 }
 
-
 // ── Hook CRUD + keyword suggestions (moved from mod.rs) ──────────────────────
 
+use crate::settings::{HookRule, HookStatus};
+use crate::MutexExt;
 use std::collections::HashMap;
 use tauri::AppHandle;
-use crate::MutexExt;
-use crate::settings::{HookRule, HookStatus};
 
 pub fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
     h.name = h.name.trim().to_owned();
-    if h.name.is_empty() { return None; }
+    if h.name.is_empty() {
+        return None;
+    }
     h.command = h.command.trim().to_owned();
     h.text = h.text.trim().to_owned();
     let scenario = h.scenario.trim().to_lowercase();
@@ -286,7 +319,8 @@ pub fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
         "emotional" | "physical" | "cognitive" => scenario,
         _ => "any".to_owned(),
     };
-    h.keywords = h.keywords
+    h.keywords = h
+        .keywords
         .into_iter()
         .map(|k| k.trim().to_owned())
         .filter(|k| !k.is_empty())
@@ -316,8 +350,11 @@ pub fn set_hooks(
     {
         let mut s = state.lock_or_recover();
         s.hooks = clean;
-        let keep: std::collections::HashSet<String> = s.hooks.iter().map(|h| h.name.clone()).collect();
-        s.hook_runtime.lock_or_recover().retain(|name, _| keep.contains(name));
+        let keep: std::collections::HashSet<String> =
+            s.hooks.iter().map(|h| h.name.clone()).collect();
+        s.hook_runtime
+            .lock_or_recover()
+            .retain(|name, _| keep.contains(name));
     }
     crate::save_settings(&app);
 }
@@ -339,8 +376,8 @@ pub fn get_hook_statuses(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<H
 #[derive(serde::Serialize)]
 pub struct HookKeywordSuggestion {
     pub keyword: String,
-    pub source:  String,
-    pub score:   f32,
+    pub source: String,
+    pub score: f32,
 }
 
 fn norm_keyword(s: &str) -> String {
@@ -350,42 +387,67 @@ fn norm_keyword(s: &str) -> String {
 fn fuzzy_score(query: &str, candidate: &str) -> f32 {
     let q = norm_keyword(query);
     let c = norm_keyword(candidate);
-    if q.is_empty() || c.is_empty() { return 0.0; }
-    if q == c { return 1.0; }
-    if c.contains(&q) { return 0.92; }
-    if q.contains(&c) { return 0.88; }
-    if skill_exg::fuzzy_match(&q, &c) { return 0.75; }
+    if q.is_empty() || c.is_empty() {
+        return 0.0;
+    }
+    if q == c {
+        return 1.0;
+    }
+    if c.contains(&q) {
+        return 0.92;
+    }
+    if q.contains(&c) {
+        return 0.88;
+    }
+    if skill_exg::fuzzy_match(&q, &c) {
+        return 0.75;
+    }
     0.0
 }
 
 fn merge_suggestion(
     out: &mut HashMap<String, HookKeywordSuggestion>,
-    keyword: &str, source: &str, score: f32,
+    keyword: &str,
+    source: &str,
+    score: f32,
 ) {
     let k = keyword.trim();
-    if k.is_empty() || !score.is_finite() || score <= 0.0 { return; }
+    if k.is_empty() || !score.is_finite() || score <= 0.0 {
+        return;
+    }
     let key = norm_keyword(k);
-    if key.is_empty() { return; }
+    if key.is_empty() {
+        return;
+    }
     if let Some(existing) = out.get_mut(&key) {
         existing.score = existing.score.max(score);
-        if existing.source != source { existing.source = "both".to_owned(); }
+        if existing.source != source {
+            existing.source = "both".to_owned();
+        }
     } else {
-        out.insert(key, HookKeywordSuggestion {
-            keyword: k.to_owned(), source: source.to_owned(), score,
-        });
+        out.insert(
+            key,
+            HookKeywordSuggestion {
+                keyword: k.to_owned(),
+                source: source.to_owned(),
+                score,
+            },
+        );
     }
 }
 
 #[tauri::command]
 pub async fn suggest_hook_keywords(
-    draft:     String,
-    limit:     Option<usize>,
-    state:     tauri::State<'_, Mutex<Box<AppState>>>,
-    embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
+    draft: String,
+    limit: Option<usize>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+    embedder: tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<HookKeywordSuggestion>, String> {
     let q = draft.trim().to_owned();
-    if q.len() < 2 { return Ok(vec![]); }
+    if q.len() < 2 {
+        return Ok(vec![]);
+    }
 
     let max_n = limit.unwrap_or(8).clamp(1, 20);
     let skill_dir = skill_dir(&state);
@@ -409,7 +471,9 @@ pub async fn suggest_hook_keywords(
                     if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
                         for text in rows.flatten() {
                             let score = fuzzy_score(&q, &text);
-                            if score > 0.0 { merge_suggestion(&mut merged, &text, "fuzzy", score); }
+                            if score > 0.0 {
+                                merge_suggestion(&mut merged, &text, "fuzzy", score);
+                            }
                         }
                     }
                 }
@@ -420,11 +484,15 @@ pub async fn suggest_hook_keywords(
         {
             let mut guard = embedder.0.lock_or_recover();
             if let Some(te) = guard.as_mut() {
-                let mut vecs = te.embed(vec![q.as_str()], None).map_err(|e| e.to_string())?;
+                let mut vecs = te
+                    .embed(vec![q.as_str()], None)
+                    .map_err(|e| e.to_string())?;
                 let query_vec = vecs.remove(0);
                 let k = (max_n * 3).clamp(8, 48);
                 let ef = (k * 4).max(64);
-                let hits = crate::label_index::search_by_text_vec(&query_vec, k, ef, &skill_dir, &label_idx);
+                let hits = crate::label_index::search_by_text_vec(
+                    &query_vec, k, ef, &skill_dir, &label_idx,
+                );
                 for h in hits {
                     let score = (1.0 - (h.distance / 2.0)).clamp(0.0, 1.0);
                     merge_suggestion(&mut merged, &h.text, "embedding", score);
@@ -434,7 +502,9 @@ pub async fn suggest_hook_keywords(
 
         let mut out: Vec<HookKeywordSuggestion> = merged.into_values().collect();
         out.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.keyword.len().cmp(&b.keyword.len()))
         });
         out.truncate(max_n);

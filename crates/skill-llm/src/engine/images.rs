@@ -11,7 +11,9 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
     // data:<mime>;base64,<payload>
     let payload = data.split(';').nth(1)?.strip_prefix("base64,")?;
     use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD.decode(payload).ok()
+    base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .ok()
 }
 
 /// Decode all base64-embedded images across an entire messages array.
@@ -24,7 +26,8 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
 /// Call this before passing `messages` to `LlmServerState::chat` so the
 /// actor receives pre-decoded bytes alongside the text context.
 pub fn extract_images_from_messages(messages: &[Value]) -> Vec<Vec<u8>> {
-    messages.iter()
+    messages
+        .iter()
         .flat_map(|m| {
             m.get("content")
                 .map(extract_images_from_content)
@@ -36,10 +39,15 @@ pub fn extract_images_from_messages(messages: &[Value]) -> Vec<Vec<u8>> {
 /// Extract all raw image bytes from a single `content` value (string or parts array).
 /// Returns images in document order.
 fn extract_images_from_content(content: &Value) -> Vec<Vec<u8>> {
-    let Value::Array(parts) = content else { return Vec::new() };
-    parts.iter()
+    let Value::Array(parts) = content else {
+        return Vec::new();
+    };
+    parts
+        .iter()
         .filter_map(|p| {
-            if p.get("type")?.as_str() != Some("image_url") { return None; }
+            if p.get("type")?.as_str() != Some("image_url") {
+                return None;
+            }
             let url = p.get("image_url")?.get("url")?.as_str()?;
             decode_image_url(url)
         })

@@ -68,7 +68,7 @@ pub struct Skill {
 /// A diagnostic message from skill loading.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SkillDiagnostic {
-    pub level: String,   // "warning" | "collision"
+    pub level: String, // "warning" | "collision"
     pub message: String,
     pub path: String,
 }
@@ -188,12 +188,13 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
 
         if resolved.is_dir() {
             explicit_results.push(load_skills_from_dir(&resolved, "path", true));
-        } else if resolved.is_file()
-            && resolved.extension().map(|e| e == "md").unwrap_or(false)
-        {
+        } else if resolved.is_file() && resolved.extension().map(|e| e == "md").unwrap_or(false) {
             let (skill, diags) = load_skill_from_file(&resolved, "path");
             let skills = skill.into_iter().collect();
-            explicit_results.push(LoadSkillsResult { skills, diagnostics: diags });
+            explicit_results.push(LoadSkillsResult {
+                skills,
+                diagnostics: diags,
+            });
         } else {
             explicit_results.push(LoadSkillsResult {
                 skills: Vec::new(),
@@ -224,7 +225,10 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
 ///
 /// Skills with `disable_model_invocation = true` are excluded.
 pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
-    let visible: Vec<&Skill> = skills.iter().filter(|s| !s.disable_model_invocation).collect();
+    let visible: Vec<&Skill> = skills
+        .iter()
+        .filter(|s| !s.disable_model_invocation)
+        .collect();
     if visible.is_empty() {
         return String::new();
     }
@@ -242,8 +246,14 @@ pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
     for skill in &visible {
         lines.push("  <skill>".into());
         lines.push(format!("    <name>{}</name>", escape_xml(&skill.name)));
-        lines.push(format!("    <description>{}</description>", escape_xml(&skill.description)));
-        lines.push(format!("    <location>{}</location>", escape_xml(&skill.file_path)));
+        lines.push(format!(
+            "    <description>{}</description>",
+            escape_xml(&skill.description)
+        ));
+        lines.push(format!(
+            "    <location>{}</location>",
+            escape_xml(&skill.file_path)
+        ));
         lines.push("  </skill>".into());
     }
 
@@ -292,13 +302,21 @@ fn load_skills_from_dir_inner(
     let mut diagnostics = Vec::new();
 
     if !dir.exists() || !dir.is_dir() {
-        return LoadSkillsResult { skills, diagnostics };
+        return LoadSkillsResult {
+            skills,
+            diagnostics,
+        };
     }
 
     // Build ignore matcher from .gitignore / .ignore / .fdignore in this dir.
     let ig = build_ignore(dir, root_dir);
 
-    let Ok(entries) = fs::read_dir(dir) else { return LoadSkillsResult { skills, diagnostics } };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return LoadSkillsResult {
+            skills,
+            diagnostics,
+        };
+    };
 
     let mut entries_vec: Vec<fs::DirEntry> = entries.filter_map(std::result::Result::ok).collect();
     entries_vec.sort_by_key(std::fs::DirEntry::file_name);
@@ -340,7 +358,10 @@ fn load_skills_from_dir_inner(
                 break;
             }
             // Valid SKILL.md found — this dir is a skill root; do not recurse.
-            return LoadSkillsResult { skills, diagnostics };
+            return LoadSkillsResult {
+                skills,
+                diagnostics,
+            };
         }
         // SKILL.md exists but failed validation (e.g. missing description).
         // Continue to recurse into subdirectories — this supports index-style
@@ -352,7 +373,9 @@ fn load_skills_from_dir_inner(
     // Phase 2: no valid SKILL.md (or index) — scan children.
     for entry in &entries_vec {
         let name_os = entry.file_name();
-        let Some(name) = name_os.to_str() else { continue };
+        let Some(name) = name_os.to_str() else {
+            continue;
+        };
 
         // Skip SKILL.md — already handled in Phase 1.
         if name == SKILL_MARKER {
@@ -398,7 +421,10 @@ fn load_skills_from_dir_inner(
         }
     }
 
-    LoadSkillsResult { skills, diagnostics }
+    LoadSkillsResult {
+        skills,
+        diagnostics,
+    }
 }
 
 // ── Internal: single file loading ─────────────────────────────────────────────
@@ -421,10 +447,7 @@ fn load_skill_from_file(path: &Path, source: &str) -> (Option<Skill>, Vec<SkillD
 
     let (frontmatter, _body) = parse_frontmatter(&content);
     let skill_dir = path.parent().unwrap_or(Path::new("."));
-    let parent_dir_name = skill_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let parent_dir_name = skill_dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     // Description is required.
     let description = frontmatter
@@ -445,7 +468,10 @@ fn load_skill_from_file(path: &Path, source: &str) -> (Option<Skill>, Vec<SkillD
     if description.len() > MAX_DESCRIPTION_LENGTH {
         diags.push(SkillDiagnostic {
             level: "warning".into(),
-            message: format!("description exceeds {MAX_DESCRIPTION_LENGTH} characters ({})", description.len()),
+            message: format!(
+                "description exceeds {MAX_DESCRIPTION_LENGTH} characters ({})",
+                description.len()
+            ),
             path: path_str.clone(),
         });
     }
@@ -522,13 +548,20 @@ fn parse_frontmatter(content: &str) -> (serde_json::Map<String, serde_json::Valu
             let val = val.trim();
             // Strip quotes.
             let val = val
-                .strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
                 .or_else(|| val.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
                 .unwrap_or(val);
             match val {
-                "true" => { map.insert(key, serde_json::Value::Bool(true)); }
-                "false" => { map.insert(key, serde_json::Value::Bool(false)); }
-                _ => { map.insert(key, serde_json::Value::String(val.to_string())); }
+                "true" => {
+                    map.insert(key, serde_json::Value::Bool(true));
+                }
+                "false" => {
+                    map.insert(key, serde_json::Value::Bool(false));
+                }
+                _ => {
+                    map.insert(key, serde_json::Value::String(val.to_string()));
+                }
             }
         }
     }
@@ -554,7 +587,12 @@ fn build_ignore(dir: &Path, _root_dir: &Path) -> Option<ignore::gitignore::Gitig
     }
 }
 
-fn is_ignored(ig: &Option<ignore::gitignore::Gitignore>, path: &Path, _root: &Path, is_dir: bool) -> bool {
+fn is_ignored(
+    ig: &Option<ignore::gitignore::Gitignore>,
+    path: &Path,
+    _root: &Path,
+    is_dir: bool,
+) -> bool {
     let Some(ref gi) = ig else { return false };
     gi.matched(path, is_dir).is_ignore()
 }
@@ -594,7 +632,10 @@ description: A helpful skill
 "#;
         let (fm, body) = parse_frontmatter(content);
         assert_eq!(fm.get("name").unwrap().as_str().unwrap(), "my-skill");
-        assert_eq!(fm.get("description").unwrap().as_str().unwrap(), "A helpful skill");
+        assert_eq!(
+            fm.get("description").unwrap().as_str().unwrap(),
+            "A helpful skill"
+        );
         assert!(body.contains("Body content"));
     }
 
@@ -602,7 +643,10 @@ description: A helpful skill
     fn parse_frontmatter_boolean() {
         let content = "---\ndisable-model-invocation: true\ndescription: test\n---\nbody";
         let (fm, _) = parse_frontmatter(content);
-        assert_eq!(fm.get("disable-model-invocation").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            fm.get("disable-model-invocation").unwrap().as_bool(),
+            Some(true)
+        );
     }
 
     #[test]
@@ -631,7 +675,11 @@ description: A helpful skill
         let dir = std::env::temp_dir().join("skill_test_valid");
         let _ = fs::create_dir_all(&dir);
         let file = dir.join("SKILL.md");
-        fs::write(&file, "---\nname: my-skill\ndescription: Does something useful\n---\n# Instructions").unwrap();
+        fs::write(
+            &file,
+            "---\nname: my-skill\ndescription: Does something useful\n---\n# Instructions",
+        )
+        .unwrap();
 
         let (skill, diags) = load_skill_from_file(&file, "test");
         assert!(skill.is_some());
@@ -648,7 +696,11 @@ description: A helpful skill
         let root = std::env::temp_dir().join("skill_test_discover");
         let sub = root.join("my-skill");
         let _ = fs::create_dir_all(&sub);
-        fs::write(sub.join("SKILL.md"), "---\nname: my-skill\ndescription: A test skill\n---\n# Content").unwrap();
+        fs::write(
+            sub.join("SKILL.md"),
+            "---\nname: my-skill\ndescription: A test skill\n---\n# Content",
+        )
+        .unwrap();
 
         let result = load_skills_from_dir(&root, "test", true);
         assert_eq!(result.skills.len(), 1);
@@ -658,16 +710,14 @@ description: A helpful skill
 
     #[test]
     fn format_skills_xml() {
-        let skills = vec![
-            Skill {
-                name: "test-skill".into(),
-                description: "A test skill".into(),
-                file_path: "/tmp/test/SKILL.md".into(),
-                base_dir: "/tmp/test".into(),
-                source: "test".into(),
-                disable_model_invocation: false,
-            },
-        ];
+        let skills = vec![Skill {
+            name: "test-skill".into(),
+            description: "A test skill".into(),
+            file_path: "/tmp/test/SKILL.md".into(),
+            base_dir: "/tmp/test".into(),
+            source: "test".into(),
+            disable_model_invocation: false,
+        }];
         let output = format_skills_for_prompt(&skills);
         assert!(output.contains("<available_skills>"));
         assert!(output.contains("<name>test-skill</name>"));
@@ -688,10 +738,19 @@ description: A helpful skill
         // Sub-skill with valid SKILL.md
         let sub = root.join("skills").join("my-sub-skill");
         let _ = fs::create_dir_all(&sub);
-        fs::write(sub.join("SKILL.md"), "---\nname: my-sub-skill\ndescription: A valid sub-skill\n---\n# Content").unwrap();
+        fs::write(
+            sub.join("SKILL.md"),
+            "---\nname: my-sub-skill\ndescription: A valid sub-skill\n---\n# Content",
+        )
+        .unwrap();
 
         let result = load_skills_from_dir(&root, "test", true);
-        assert_eq!(result.skills.len(), 1, "expected 1 skill, got: {:?}", result.skills.iter().map(|s| &s.name).collect::<Vec<_>>());
+        assert_eq!(
+            result.skills.len(),
+            1,
+            "expected 1 skill, got: {:?}",
+            result.skills.iter().map(|s| &s.name).collect::<Vec<_>>()
+        );
         assert_eq!(result.skills[0].name, "my-sub-skill");
         let _ = fs::remove_dir_all(&root);
     }
@@ -700,8 +759,10 @@ description: A helpful skill
     fn discover_real_skills_submodule() {
         // Test against the actual skills/ git submodule if present.
         let skills_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent().unwrap()  // crates/
-            .parent().unwrap()  // project root
+            .parent()
+            .unwrap() // crates/
+            .parent()
+            .unwrap() // project root
             .join("skills");
         if !skills_dir.exists() {
             return; // skip if submodule not checked out
@@ -758,16 +819,14 @@ description: A helpful skill
 
     #[test]
     fn format_skills_excludes_disabled() {
-        let skills = vec![
-            Skill {
-                name: "hidden".into(),
-                description: "Should not appear".into(),
-                file_path: "/tmp/hidden/SKILL.md".into(),
-                base_dir: "/tmp/hidden".into(),
-                source: "test".into(),
-                disable_model_invocation: true,
-            },
-        ];
+        let skills = vec![Skill {
+            name: "hidden".into(),
+            description: "Should not appear".into(),
+            file_path: "/tmp/hidden/SKILL.md".into(),
+            base_dir: "/tmp/hidden".into(),
+            source: "test".into(),
+            disable_model_invocation: true,
+        }];
         let output = format_skills_for_prompt(&skills);
         assert!(output.is_empty());
     }

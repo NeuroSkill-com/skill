@@ -82,10 +82,10 @@ pub fn shortcut_suffix(shortcut: &str) -> String {
             let p = part.trim();
             match p {
                 "CmdOrCtrl" | "Command" | "Cmd" | "Meta" => modifiers.push('\u{2318}'),
-                "Ctrl" | "Control"                        => modifiers.push('\u{2303}'),
-                "Shift"                                   => modifiers.push('\u{21E7}'),
-                "Alt" | "Option"                          => modifiers.push('\u{2325}'),
-                "Plus"                                    => key = "+".into(),
+                "Ctrl" | "Control" => modifiers.push('\u{2303}'),
+                "Shift" => modifiers.push('\u{21E7}'),
+                "Alt" | "Option" => modifiers.push('\u{2325}'),
+                "Plus" => key = "+".into(),
                 other => {
                     let cleaned = other.replace("Arrow", "");
                     key = cleaned;
@@ -100,9 +100,9 @@ pub fn shortcut_suffix(shortcut: &str) -> String {
             let p = part.trim();
             match p {
                 "CmdOrCtrl" | "Command" | "Meta" => tokens.push("Ctrl".into()),
-                "Cmd"                             => tokens.push("Ctrl".into()),
-                "Option"                          => tokens.push("Alt".into()),
-                "Plus"                            => tokens.push("+".into()),
+                "Cmd" => tokens.push("Ctrl".into()),
+                "Option" => tokens.push("Alt".into()),
+                "Plus" => tokens.push("+".into()),
                 other => {
                     let cleaned = other.replace("Arrow", "");
                     tokens.push(cleaned);
@@ -134,12 +134,7 @@ pub fn with_shortcut(label: &str, shortcut: &str) -> String {
 ///
 /// Returns a new owned RGBA buffer with the ring composited on top.
 /// The caller is responsible for wrapping it in the platform's `Image` type.
-pub fn overlay_progress_bar(
-    base_rgba: &[u8],
-    width: u32,
-    height: u32,
-    progress: f32,
-) -> Vec<u8> {
+pub fn overlay_progress_bar(base_rgba: &[u8], width: u32, height: u32, progress: f32) -> Vec<u8> {
     let mut rgba = base_rgba.to_vec();
     let progress = progress.clamp(0.0, 1.0);
 
@@ -158,7 +153,7 @@ pub fn overlay_progress_bar(
     fn blend(rgba: &mut [u8], idx: usize, color: [u8; 4]) {
         let alpha = color[3] as u16;
         let inv = 255u16.saturating_sub(alpha);
-        rgba[idx]     = (((rgba[idx]     as u16 * inv) + (color[0] as u16 * alpha)) / 255) as u8;
+        rgba[idx] = (((rgba[idx] as u16 * inv) + (color[0] as u16 * alpha)) / 255) as u8;
         rgba[idx + 1] = (((rgba[idx + 1] as u16 * inv) + (color[1] as u16 * alpha)) / 255) as u8;
         rgba[idx + 2] = (((rgba[idx + 2] as u16 * inv) + (color[2] as u16 * alpha)) / 255) as u8;
         rgba[idx + 3] = rgba[idx + 3].max(color[3]);
@@ -232,7 +227,7 @@ pub fn overlay_progress_bar(
                 }
                 if !angle_in_arc(angle, start_angle, end_angle) {
                     let idx = ((y * width + x) * 4) as usize;
-                    rgba[idx]     = ((rgba[idx]     as u16 * 72) / 100) as u8;
+                    rgba[idx] = ((rgba[idx] as u16 * 72) / 100) as u8;
                     rgba[idx + 1] = ((rgba[idx + 1] as u16 * 72) / 100) as u8;
                     rgba[idx + 2] = ((rgba[idx + 2] as u16 * 72) / 100) as u8;
                 }

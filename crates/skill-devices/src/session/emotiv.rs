@@ -22,18 +22,15 @@ use tokio::sync::mpsc;
 
 use emotiv::prelude::*;
 use emotiv::protocol::{
-    CORTEX_STOP_ALL_STREAMS, CORTEX_CLOSE_SESSION,
-    HEADSET_DISCONNECTED, HEADSET_CONNECTION_FAILED,
+    CORTEX_CLOSE_SESSION, CORTEX_STOP_ALL_STREAMS, HEADSET_CONNECTION_FAILED, HEADSET_DISCONNECTED,
 };
 use skill_constants::{
-    EEG_CHANNELS,
-    EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES,
-    emotiv_sample_rate_from_id,
+    emotiv_sample_rate_from_id, EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_EPOC_EEG_CHANNELS,
 };
 
 use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame,
+    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame,
+    ImuFrame,
 };
 
 // ── EmotivAdapter ─────────────────────────────────────────────────────────────
@@ -41,8 +38,14 @@ use super::{
 /// Non-electrode column names in the Cortex EEG stream that must be
 /// filtered out when mapping DataLabels to electrode names.
 const EEG_NON_ELECTRODE: &[&str] = &[
-    "COUNTER", "INTERPOLATED", "MARKER", "MARKER_HARDWARE", "MARKERS",
-    "TIMESTAMP", "RAW_CQ", "BATTERY",
+    "COUNTER",
+    "INTERPOLATED",
+    "MARKER",
+    "MARKER_HARDWARE",
+    "MARKERS",
+    "TIMESTAMP",
+    "RAW_CQ",
+    "BATTERY",
 ];
 
 /// Returns `true` if a Cortex EEG column label is an actual electrode.
@@ -52,9 +55,9 @@ fn is_electrode(label: &str) -> bool {
 }
 
 pub struct EmotivAdapter {
-    rx:      mpsc::Receiver<CortexEvent>,
-    handle:  Option<CortexHandle>,
-    desc:    DeviceDescriptor,
+    rx: mpsc::Receiver<CortexEvent>,
+    handle: Option<CortexHandle>,
+    desc: DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
     /// Whether the descriptor has been auto-adjusted from DataLabels.
     auto_detected: bool,
@@ -64,7 +67,6 @@ pub struct EmotivAdapter {
     /// electrodes (set from DataLabels).  Empty until DataLabels arrives,
     /// in which case all samples are forwarded.
     electrode_indices: Vec<usize>,
-
 }
 
 impl EmotivAdapter {
@@ -110,9 +112,17 @@ impl EmotivAdapter {
         headset_id: String,
         initial_info: Option<DeviceInfo>,
     ) -> Self {
-        let channel_names: Vec<String> =
-            EMOTIV_EPOC_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
-        let mut adapter = Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names, headset_id);
+        let channel_names: Vec<String> = EMOTIV_EPOC_CHANNEL_NAMES
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        let mut adapter = Self::new(
+            rx,
+            handle,
+            EMOTIV_EPOC_EEG_CHANNELS,
+            channel_names,
+            headset_id,
+        );
         if let Some(info) = initial_info {
             adapter.pending.push_back(DeviceEvent::Connected(info));
         }
@@ -179,7 +189,8 @@ impl EmotivAdapter {
                 // The array contains non-electrode columns (COUNTER, INTERPOLATED,
                 // RAW_CQ, MARKERS, etc.) that must be skipped.
                 let channels: Vec<f64> = if !self.electrode_indices.is_empty() {
-                    self.electrode_indices.iter()
+                    self.electrode_indices
+                        .iter()
                         .map(|&i| data.samples.get(i).copied().unwrap_or(f64::NAN))
                         .collect()
                 } else {
@@ -198,12 +209,20 @@ impl EmotivAdapter {
             CortexEvent::Motion(data) => {
                 // Cortex motion stream: [COUNTER, INTERP, Q0, Q1, Q2, Q3, ACCX, ACCY, ACCZ, MAGX, MAGY, MAGZ]
                 let accel = if data.samples.len() >= 9 {
-                    [data.samples[6] as f32, data.samples[7] as f32, data.samples[8] as f32]
+                    [
+                        data.samples[6] as f32,
+                        data.samples[7] as f32,
+                        data.samples[8] as f32,
+                    ]
                 } else {
                     [0.0; 3]
                 };
                 let mag = if data.samples.len() >= 12 {
-                    Some([data.samples[9] as f32, data.samples[10] as f32, data.samples[11] as f32])
+                    Some([
+                        data.samples[9] as f32,
+                        data.samples[10] as f32,
+                        data.samples[11] as f32,
+                    ])
                 } else {
                     None
                 };
@@ -238,19 +257,19 @@ impl EmotivAdapter {
                 }
 
                 if !names.is_empty() {
-                    self.electrode_indices      = indices;
-                    self.desc.eeg_channels      = names.len();
-                    self.desc.pipeline_channels  = names.len().min(EEG_CHANNELS);
-                    self.desc.channel_names      = names;
+                    self.electrode_indices = indices;
+                    self.desc.eeg_channels = names.len();
+                    self.desc.pipeline_channels = names.len().min(EEG_CHANNELS);
+                    self.desc.channel_names = names;
                     self.auto_detected = true;
                 }
             }
 
             CortexEvent::Warning { code, .. }
                 if code == CORTEX_STOP_ALL_STREAMS
-                || code == CORTEX_CLOSE_SESSION
-                || code == HEADSET_DISCONNECTED
-                || code == HEADSET_CONNECTION_FAILED =>
+                    || code == CORTEX_CLOSE_SESSION
+                    || code == HEADSET_DISCONNECTED
+                    || code == HEADSET_CONNECTION_FAILED =>
             {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }

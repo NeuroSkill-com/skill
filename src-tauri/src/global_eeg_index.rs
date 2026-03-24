@@ -41,12 +41,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
+use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
 
 use serde::Serialize;
 
+use crate::constants::{
+    global_hnsw_file_for, GLOBAL_HNSW_FILE, HNSW_EF_CONSTRUCTION, HNSW_M, SQLITE_FILE,
+};
 use crate::MutexExt;
-use crate::constants::{GLOBAL_HNSW_FILE, HNSW_EF_CONSTRUCTION, HNSW_M, SQLITE_FILE, global_hnsw_file_for};
 
 // ── Managed state ─────────────────────────────────────────────────────────────
 
@@ -92,13 +94,12 @@ fn index_path_for(skill_dir: &Path, model_backend: &str) -> PathBuf {
 /// List all valid `YYYYMMDD` sub-directories under `skill_dir`, oldest first.
 fn date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(skill_dir) else { return out };
+    let Ok(rd) = std::fs::read_dir(skill_dir) else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.len() == 8
-            && name.bytes().all(|b| b.is_ascii_digit())
-            && entry.path().is_dir()
-        {
+        if name.len() == 8 && name.bytes().all(|b| b.is_ascii_digit()) && entry.path().is_dir() {
             out.push((name, entry.path()));
         }
     }
@@ -144,11 +145,14 @@ pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
 }
 
 /// Rebuild the global HNSW for a specific model backend.
-pub fn rebuild_from_scratch_for(skill_dir: &Path, model_backend: &str) -> LabeledIndex<Cosine, i64> {
+pub fn rebuild_from_scratch_for(
+    skill_dir: &Path,
+    model_backend: &str,
+) -> LabeledIndex<Cosine, i64> {
     eprintln!("[global_idx] rebuilding cross-day HNSW for model={model_backend} from all daily SQLite files…");
     let mut idx = fresh_index();
     let mut total_embeddings = 0usize;
-    let mut days_scanned     = 0usize;
+    let mut days_scanned = 0usize;
 
     // For ZUNA (default), also include legacy rows with NULL model_backend.
     let is_default = model_backend.is_empty() || model_backend == "zuna";
@@ -189,9 +193,11 @@ pub fn rebuild_from_scratch_for(skill_dir: &Path, model_backend: &str) -> Labele
                 .map(|r| r.flatten().collect())
                 .unwrap_or_default()
         } else {
-            stmt.query_map(rusqlite::params![model_backend], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map(|r| r.flatten().collect())
-                .unwrap_or_default()
+            stmt.query_map(rusqlite::params![model_backend], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map(|r| r.flatten().collect())
+            .unwrap_or_default()
         };
 
         for (ts, blob) in rows {
@@ -248,11 +254,11 @@ pub struct GlobalIndexStats {
     /// Number of embeddings currently in the index.
     pub total_embeddings: usize,
     /// Size of the on-disk file in bytes (0 if not yet saved).
-    pub file_size_bytes:  u64,
+    pub file_size_bytes: u64,
     /// Absolute path of the global HNSW file.
-    pub path:             String,
+    pub path: String,
     /// `true` once the startup load/build has completed.
-    pub ready:            bool,
+    pub ready: bool,
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -262,18 +268,21 @@ pub struct GlobalIndexStats {
 /// `ready: false` while the background build is still running.
 #[tauri::command]
 pub fn get_global_index_stats(
-    state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
+    state: tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> GlobalIndexStats {
     let skill_dir = crate::skill_dir(&state);
-    let path      = index_path(&skill_dir);
+    let path = index_path(&skill_dir);
     let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    let guard     = global.0.lock_or_recover();
+    let guard = global.0.lock_or_recover();
     GlobalIndexStats {
-        total_embeddings: guard.as_ref().map(fast_hnsw::LabeledIndex::len).unwrap_or(0),
-        file_size_bytes:  file_size,
-        path:             path.display().to_string(),
-        ready:            guard.is_some(),
+        total_embeddings: guard
+            .as_ref()
+            .map(fast_hnsw::LabeledIndex::len)
+            .unwrap_or(0),
+        file_size_bytes: file_size,
+        path: path.display().to_string(),
+        ready: guard.is_some(),
     }
 }
 
@@ -282,21 +291,21 @@ pub fn get_global_index_stats(
 /// file.  Runs on a blocking thread; may take a few seconds.
 #[tauri::command]
 pub async fn rebuild_global_eeg_index(
-    state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
+    state: tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> Result<GlobalIndexStats, String> {
-    let skill_dir  = crate::skill_dir(&state);
+    let skill_dir = crate::skill_dir(&state);
     let global_arc = global.arc();
 
     tokio::task::spawn_blocking(move || {
-        let new_idx   = rebuild_from_scratch(&skill_dir);
-        let path      = index_path(&skill_dir);
+        let new_idx = rebuild_from_scratch(&skill_dir);
+        let path = index_path(&skill_dir);
         let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let stats = GlobalIndexStats {
             total_embeddings: new_idx.len(),
-            file_size_bytes:  file_size,
-            path:             path.display().to_string(),
-            ready:            true,
+            file_size_bytes: file_size,
+            path: path.display().to_string(),
+            ready: true,
         };
         *global_arc.lock_or_recover() = Some(new_idx);
         Ok(stats)

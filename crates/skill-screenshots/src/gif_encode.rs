@@ -5,7 +5,6 @@
 //! These functions are not used in the periodic capture loop (GIF capture is
 //! script-only) but are kept available for the script/tool API.
 
-
 use std::io::Cursor;
 use std::path::Path;
 
@@ -47,8 +46,7 @@ pub(crate) fn encode_gif(
             let nw = (w as f64 * scale).round() as u32;
             let nh = (h as f64 * scale).round() as u32;
 
-            let resized =
-                img.resize_exact(nw, nh, image::imageops::FilterType::Triangle);
+            let resized = img.resize_exact(nw, nh, image::imageops::FilterType::Triangle);
             let mut canvas = DynamicImage::new_rgba8(target_size, target_size);
             let ox = (target_size - nw) / 2;
             let oy = (target_size - nh) / 2;
@@ -91,10 +89,7 @@ pub(crate) fn encode_gif(
 /// The "representative frame" captures the mid-point of the animation,
 /// which is more informative than the first or last frame for scrolling
 /// content.
-pub(crate) fn representative_frame_png(
-    frames: &[Vec<u8>],
-    target_size: u32,
-) -> Option<Vec<u8>> {
+pub(crate) fn representative_frame_png(frames: &[Vec<u8>], target_size: u32) -> Option<Vec<u8>> {
     if frames.is_empty() {
         return None;
     }

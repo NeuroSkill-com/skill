@@ -13,24 +13,36 @@
  *
  * These tests run fast (pure file-system reads) and act as a CI gate.
  */
-import { readdirSync, readFileSync } from "fs";
-import { resolve }                   from "path";
-import { describe, it, expect }      from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
 import { extractKeysFromDir as extractKeysWithValues, isExempt } from "../lib/i18n/i18n-utils";
 
 const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
-const LOCALES     = ["de", "fr", "he", "uk"] as const;
-const NS_FILES    = [
-  "common", "dashboard", "settings", "search", "calibration",
-  "history", "hooks", "llm", "onboarding", "screenshots",
-  "tts", "perm", "help", "help-ref", "ui",
+const LOCALES = ["de", "fr", "he", "uk"] as const;
+const NS_FILES = [
+  "common",
+  "dashboard",
+  "settings",
+  "search",
+  "calibration",
+  "history",
+  "hooks",
+  "llm",
+  "onboarding",
+  "screenshots",
+  "tts",
+  "perm",
+  "help",
+  "help-ref",
+  "ui",
 ];
 
 /** Extract quoted keys followed by `:` from a TypeScript locale file. */
 function extractKeys(filePath: string): Set<string> {
   const content = readFileSync(filePath, "utf8");
-  const keys    = new Set<string>();
-  const re      = /"([a-zA-Z][^"]*)"\s*:/g;
+  const keys = new Set<string>();
+  const re = /"([a-zA-Z][^"]*)"\s*:/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) keys.add(m[1]);
   return keys;
@@ -57,18 +69,18 @@ describe("i18n locale sync", () => {
     const localeKeys = extractKeysFromDir(resolve(LOCALES_DIR, locale));
 
     it(`${locale}/ has no missing keys vs en/`, () => {
-      const missing = [...enKeys].filter(k => !localeKeys.has(k));
+      const missing = [...enKeys].filter((k) => !localeKeys.has(k));
       expect(
         missing,
-        `${locale}/ is missing ${missing.length} key(s): ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`
+        `${locale}/ is missing ${missing.length} key(s): ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`,
       ).toHaveLength(0);
     });
 
     it(`${locale}/ has no extra keys vs en/`, () => {
-      const extra = [...localeKeys].filter(k => !enKeys.has(k));
+      const extra = [...localeKeys].filter((k) => !enKeys.has(k));
       expect(
         extra,
-        `${locale}/ has ${extra.length} extra key(s): ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`
+        `${locale}/ has ${extra.length} extra key(s): ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`,
       ).toHaveLength(0);
     });
 
@@ -81,20 +93,14 @@ describe("i18n locale sync", () => {
 describe("i18n namespace file sync", () => {
   for (const locale of LOCALES) {
     for (const ns of NS_FILES) {
-      const enNsKeys   = extractKeys(resolve(LOCALES_DIR, "en", `${ns}.ts`));
-      const locNsKeys  = extractKeys(resolve(LOCALES_DIR, locale, `${ns}.ts`));
+      const enNsKeys = extractKeys(resolve(LOCALES_DIR, "en", `${ns}.ts`));
+      const locNsKeys = extractKeys(resolve(LOCALES_DIR, locale, `${ns}.ts`));
 
       it(`${locale}/${ns}.ts has same keys as en/${ns}.ts`, () => {
-        const missing = [...enNsKeys].filter(k => !locNsKeys.has(k));
-        const extra   = [...locNsKeys].filter(k => !enNsKeys.has(k));
-        expect(
-          missing,
-          `${locale}/${ns}.ts missing: ${missing.slice(0, 3).join(", ")}`
-        ).toHaveLength(0);
-        expect(
-          extra,
-          `${locale}/${ns}.ts extra: ${extra.slice(0, 3).join(", ")}`
-        ).toHaveLength(0);
+        const missing = [...enNsKeys].filter((k) => !locNsKeys.has(k));
+        const extra = [...locNsKeys].filter((k) => !enNsKeys.has(k));
+        expect(missing, `${locale}/${ns}.ts missing: ${missing.slice(0, 3).join(", ")}`).toHaveLength(0);
+        expect(extra, `${locale}/${ns}.ts extra: ${extra.slice(0, 3).join(", ")}`).toHaveLength(0);
       });
     }
   }
@@ -113,16 +119,16 @@ describe("i18n placeholder consistency", () => {
   function dataPlaceholders(s: string): string[] {
     const matches = s.match(/\{[^}]+\}/g) ?? [];
     return matches
-      .map(m => m.slice(1, -1))
-      .filter(p => p.length <= 20 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p) && p !== "app");
+      .map((m) => m.slice(1, -1))
+      .filter((p) => p.length <= 20 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p) && p !== "app");
   }
 
   it("all locales preserve data-interpolation placeholders from en/", () => {
     // Build en values map from all namespace files
     const enValues = new Map<string, string>();
     for (const ns of NS_FILES) {
-      const content  = readFileSync(resolve(LOCALES_DIR, "en", `${ns}.ts`), "utf8");
-      const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+      const content = readFileSync(resolve(LOCALES_DIR, "en", `${ns}.ts`), "utf8");
+      const valueRe = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
       let m: RegExpExecArray | null;
       while ((m = valueRe.exec(content)) !== null) enValues.set(m[1], m[2]);
     }
@@ -131,15 +137,15 @@ describe("i18n placeholder consistency", () => {
 
     for (const locale of LOCALES) {
       for (const ns of NS_FILES) {
-        const content  = readFileSync(resolve(LOCALES_DIR, locale, `${ns}.ts`), "utf8");
-        const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+        const content = readFileSync(resolve(LOCALES_DIR, locale, `${ns}.ts`), "utf8");
+        const valueRe = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
         let m: RegExpExecArray | null;
         while ((m = valueRe.exec(content)) !== null) {
-          const key    = m[1];
+          const key = m[1];
           const locVal = m[2];
-          const enVal  = enValues.get(key);
+          const enVal = enValues.get(key);
           if (!enVal) continue;
-          const enPh  = new Set(dataPlaceholders(enVal));
+          const enPh = new Set(dataPlaceholders(enVal));
           const locPh = new Set(dataPlaceholders(locVal));
           for (const p of enPh) {
             if (!locPh.has(p)) failures.push(`${locale}/${ns}.ts["${key}"]: missing {${p}}`);
@@ -163,8 +169,8 @@ describe("i18n untranslated value detection", () => {
       for (const [key, enVal] of enMap) {
         const locVal = locMap.get(key);
         if (locVal === undefined) continue; // missing keys caught by key-sync tests
-        if (locVal !== enVal) continue;      // translated — value differs
-        if (isExempt(key, enVal)) continue;  // legitimately identical
+        if (locVal !== enVal) continue; // translated — value differs
+        if (isExempt(key, enVal)) continue; // legitimately identical
 
         untranslated.push(key);
       }
@@ -172,8 +178,11 @@ describe("i18n untranslated value detection", () => {
       expect(
         untranslated,
         `${locale}/ has ${untranslated.length} untranslated key(s) still in English:\n` +
-        untranslated.slice(0, 20).map(k => `  ${k}: "${(enMap.get(k) ?? "").substring(0, 60)}"`).join("\n") +
-        (untranslated.length > 20 ? `\n  … and ${untranslated.length - 20} more` : "")
+          untranslated
+            .slice(0, 20)
+            .map((k) => `  ${k}: "${(enMap.get(k) ?? "").substring(0, 60)}"`)
+            .join("\n") +
+          (untranslated.length > 20 ? `\n  … and ${untranslated.length - 20} more` : ""),
       ).toHaveLength(0);
     });
   }

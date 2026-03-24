@@ -8,14 +8,17 @@
  * without referencing any reactive state.
  */
 
-import type { LabelRow } from "$lib/types";
-import type { EpochRow }  from "$lib/dashboard/SessionDetail.svelte";
+import type { EpochRow } from "$lib/dashboard/SessionDetail.svelte";
 import { setupHiDpiCanvas } from "$lib/format";
 import {
+  assignLabelRainbowColors,
+  GRID_BIN,
+  GRID_COLS,
+  GRID_ROWS,
+  SESSION_COLORS,
   type SessionEntry,
-  GRID_COLS, GRID_ROWS, GRID_BIN,
-  SESSION_COLORS, assignLabelRainbowColors,
 } from "$lib/history-helpers";
+import type { LabelRow } from "$lib/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +45,7 @@ export function heatColor(count: number, maxC: number): string {
   if (count === 0) return "";
   const intensity = Math.min(1, count / Math.max(1, maxC));
   if (intensity < 0.25) return "bg-violet-200/60 dark:bg-violet-900/40";
-  if (intensity < 0.5)  return "bg-violet-300/70 dark:bg-violet-800/50";
+  if (intensity < 0.5) return "bg-violet-300/70 dark:bg-violet-800/50";
   if (intensity < 0.75) return "bg-violet-400/80 dark:bg-violet-700/60";
   return "bg-violet-500 dark:bg-violet-600/80";
 }
@@ -50,12 +53,9 @@ export function heatColor(count: number, maxC: number): string {
 // ── Epoch dot timeline (week / day views) ────────────────────────────────────
 
 /** Render session epoch dots and label markers on a timeline canvas. */
-export function renderDayDots(
-  canvas: HTMLCanvasElement,
-  data: DotTimelineData,
-  getTs: TsAccessor,
-) {
-  const w = canvas.clientWidth, h = canvas.clientHeight;
+export function renderDayDots(canvas: HTMLCanvasElement, data: DotTimelineData, getTs: TsAccessor) {
+  const w = canvas.clientWidth,
+    h = canvas.clientHeight;
   if (w === 0 || h === 0) return;
   const ctx = setupHiDpiCanvas(canvas, w, h);
 
@@ -67,7 +67,10 @@ export function renderDayDots(
   ctx.lineWidth = 0.5;
   for (let hr = 0; hr <= 24; hr += 3) {
     const x = (hr / 24) * w;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
   }
 
   // Draw hour labels at the top
@@ -81,9 +84,9 @@ export function renderDayDots(
 
   // Compute vertical layout: split height into bands per session
   const dotAreaTop = Math.max(10, h * 0.22);
-  const dotAreaH   = h - dotAreaTop - 2;
-  const nSessions  = sessions.length;
-  const bandH      = nSessions > 0 ? dotAreaH / nSessions : dotAreaH;
+  const dotAreaH = h - dotAreaTop - 2;
+  const nSessions = sessions.length;
+  const bandH = nSessions > 0 ? dotAreaH / nSessions : dotAreaH;
 
   // Draw epoch dots for each session
   sessions.forEach((session, sIdx) => {
@@ -92,7 +95,7 @@ export function renderDayDots(
     if (!ts || ts.length === 0) return;
 
     const bandY = dotAreaTop + sIdx * bandH;
-    const dotR  = Math.min(2.5, Math.max(1, bandH * 0.3));
+    const dotR = Math.min(2.5, Math.max(1, bandH * 0.3));
 
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.7;
@@ -136,12 +139,9 @@ export function renderDayDots(
 // ── Day-grid heatmap (24 cols × 720 rows) ────────────────────────────────────
 
 /** Render the 24×720 day-grid heatmap with session epochs, labels, and screenshots. */
-export function renderDayGrid(
-  canvas: HTMLCanvasElement,
-  data: GridData,
-  getTs: TsAccessor,
-) {
-  const w = canvas.clientWidth, h = canvas.clientHeight;
+export function renderDayGrid(canvas: HTMLCanvasElement, data: GridData, getTs: TsAccessor) {
+  const w = canvas.clientWidth,
+    h = canvas.clientHeight;
   if (w === 0 || h === 0) return;
   const ctx = setupHiDpiCanvas(canvas, w, h);
 
@@ -150,8 +150,8 @@ export function renderDayGrid(
   const rowH = h / GRID_ROWS;
 
   // ① Background — detect dark mode via the document class or media query
-  const isDark = document.documentElement.classList.contains("dark") ||
-                 window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const isDark =
+    document.documentElement.classList.contains("dark") || window.matchMedia("(prefers-color-scheme: dark)").matches;
   ctx.fillStyle = isDark ? "#0a0a14" : "#f8f8fa";
   ctx.fillRect(0, 0, w, h);
 
@@ -192,14 +192,20 @@ export function renderDayGrid(
   ctx.lineWidth = 0.5;
   for (let c = 1; c < GRID_COLS; c++) {
     const x = c * colW;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
   }
 
   // ⑤ Draw 15-minute horizontal grid lines (faint)
   ctx.strokeStyle = isDark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)";
   for (let min = 15; min < 60; min += 15) {
-    const y = (min * 60 / GRID_BIN) * rowH;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    const y = ((min * 60) / GRID_BIN) * rowH;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
   }
 
   // ⑥ Draw labels as rainbow circles at their grid position
@@ -286,22 +292,34 @@ export function renderDayGrid(
 /** Render a mini sparkline (relaxation + engagement lines) on a canvas. */
 export function renderSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {
   const dpr = devicePixelRatio || 1;
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  const w = canvas.clientWidth,
+    h = canvas.clientHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
   const ctx = canvas.getContext("2d")!;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (ts.length < 3) return;
-  const n = ts.length, maxPts = Math.min(n, w * 2), step = Math.max(1, Math.floor(n / maxPts));
-  const relaxVals: number[] = [], engageVals: number[] = [];
-  for (let i = 0; i < n; i += step) { relaxVals.push(ts[i].relaxation); engageVals.push(ts[i].engagement); }
+  const n = ts.length,
+    maxPts = Math.min(n, w * 2),
+    step = Math.max(1, Math.floor(n / maxPts));
+  const relaxVals: number[] = [],
+    engageVals: number[] = [];
+  for (let i = 0; i < n; i += step) {
+    relaxVals.push(ts[i].relaxation);
+    engageVals.push(ts[i].engagement);
+  }
   function drawLine(vals: number[], color: string) {
     const max = Math.max(...vals, 1);
-    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
     for (let i = 0; i < vals.length; i++) {
-      const x = (i / (vals.length - 1)) * w, y = h - (vals[i] / max) * h;
+      const x = (i / (vals.length - 1)) * w,
+        y = h - (vals[i] / max) * h;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
   }
-  drawLine(relaxVals, "#10b981"); drawLine(engageVals, "#f59e0b");
+  drawLine(relaxVals, "#10b981");
+  drawLine(engageVals, "#f59e0b");
 }

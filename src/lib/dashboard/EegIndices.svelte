@@ -5,32 +5,70 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import MetricTooltip from "./MetricTooltip.svelte";
-  import CollapsibleSection from "./CollapsibleSection.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import CollapsibleSection from "./CollapsibleSection.svelte";
+import MetricTooltip from "./MetricTooltip.svelte";
 
-  interface Props {
-    tar: number; bar: number; dtr: number; pse: number; apf: number;
-    mood: number; bps: number; snr: number; coherence: number; mu: number;
-    tbr: number; sef95: number; sc: number; ha: number; hm: number; hc: number;
-    pe: number; hfd: number; dfa: number; se: number; pac: number; lat: number;
-    headache: number; migraine: number;
-    /**
-     * Show the Mu Suppression metric.
-     * Set to `false` for devices without central electrodes (e.g. Muse),
-     * where mu-rhythm measurement is not meaningful.
-     * Defaults to `true` for unknown / future devices.
-     */
-    showMu?: boolean;
-  }
-  let {
-    tar, bar, dtr, pse, apf, mood, bps, snr, coherence, mu,
-    tbr, sef95, sc, ha, hm, hc, pe, hfd, dfa, se, pac, lat,
-    headache, migraine,
-    showMu = true,
-  }: Props = $props();
-
-
+interface Props {
+  tar: number;
+  bar: number;
+  dtr: number;
+  pse: number;
+  apf: number;
+  mood: number;
+  bps: number;
+  snr: number;
+  coherence: number;
+  mu: number;
+  tbr: number;
+  sef95: number;
+  sc: number;
+  ha: number;
+  hm: number;
+  hc: number;
+  pe: number;
+  hfd: number;
+  dfa: number;
+  se: number;
+  pac: number;
+  lat: number;
+  headache: number;
+  migraine: number;
+  /**
+   * Show the Mu Suppression metric.
+   * Set to `false` for devices without central electrodes (e.g. Muse),
+   * where mu-rhythm measurement is not meaningful.
+   * Defaults to `true` for unknown / future devices.
+   */
+  showMu?: boolean;
+}
+let {
+  tar,
+  bar,
+  dtr,
+  pse,
+  apf,
+  mood,
+  bps,
+  snr,
+  coherence,
+  mu,
+  tbr,
+  sef95,
+  sc,
+  ha,
+  hm,
+  hc,
+  pe,
+  hfd,
+  dfa,
+  se,
+  pac,
+  lat,
+  headache,
+  migraine,
+  showMu = true,
+}: Props = $props();
 </script>
 
 <CollapsibleSection title={t("dashboard.indices")} dotColor="text-cyan-500">

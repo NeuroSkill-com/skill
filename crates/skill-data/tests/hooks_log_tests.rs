@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for the HooksLog (hook fire event store).
 
-use skill_data::hooks_log::{HooksLog, HookFireEntry};
+use skill_data::hooks_log::{HookFireEntry, HooksLog};
 use tempfile::tempdir;
 
 #[test]

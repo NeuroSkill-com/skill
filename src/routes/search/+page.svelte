@@ -5,457 +5,610 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount }    from "svelte";
-  import { invoke }     from "@tauri-apps/api/core";
-  import { Button }     from "$lib/components/ui/button";
-  import { Badge }      from "$lib/components/ui/badge";
-  import { t }          from "$lib/i18n/index.svelte";
-  import { getAppName } from "$lib/stores/app-name.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter   from "$lib/DisclaimerFooter.svelte";
-  import { Spinner }        from "$lib/components/ui/spinner";
-  import UmapViewer3D       from "$lib/UmapViewer3D.svelte";
-  import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
-  import {
-    SEARCH_PAGE_SIZE, JOB_POLL_INTERVAL_MS, UMAP_POLL_INTERVAL_MS,
-    UMAP_COLOR_A, UMAP_COLOR_B,
-  } from "$lib/constants";
-  import {
-    pad, fmtTime, fmtDate, fmtDateTimeSecs as fmtDateTime,
-    fmtDuration as fmtDurationSecs, fmtUtcDay, fmtSecs,
-    fmtDateTimeLocalInput, parseDateTimeLocalInput,
-    dateToCompactKey, fromUnix, fmtDateTimeLocale,
-  } from "$lib/format";
-  import type { UmapPoint, UmapResult } from "$lib/types";
-  import {
-    type NeighborMetrics, type LabelEntry, type NeighborEntry, type QueryEntry,
-    type SearchResult, type LabelNeighbor, type SearchAnalysis,
-    type GraphNode, type GraphEdge, type JobTicket, type JobPollResult,
-    type ImgResult,
-    distColor, simPct, simWidth, metricChips,
-    computeSearchAnalysis, computeTemporalHeatmap, heatColor,
-    turboColor, DAY_NAMES, PRESETS,
-    buildTextKnnGraph, computeIxTimeHeatmap, ixHeatColor, dedupeFoundLabels,
-  } from "$lib/search-types";
-  import { generateUmapPlaceholder } from "$lib/compare-types";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { generateUmapPlaceholder } from "$lib/compare-types";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Spinner } from "$lib/components/ui/spinner";
+import {
+  JOB_POLL_INTERVAL_MS,
+  SEARCH_PAGE_SIZE,
+  UMAP_COLOR_A,
+  UMAP_COLOR_B,
+  UMAP_POLL_INTERVAL_MS,
+} from "$lib/constants";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import {
+  dateToCompactKey,
+  fmtDate,
+  fmtDateTimeSecs as fmtDateTime,
+  fmtDateTimeLocale,
+  fmtDateTimeLocalInput,
+  fmtDuration as fmtDurationSecs,
+  fmtSecs,
+  fmtTime,
+  fmtUtcDay,
+  fromUnix,
+  pad,
+  parseDateTimeLocalInput,
+} from "$lib/format";
+import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import {
+  buildTextKnnGraph,
+  computeIxTimeHeatmap,
+  computeSearchAnalysis,
+  computeTemporalHeatmap,
+  DAY_NAMES,
+  dedupeFoundLabels,
+  distColor,
+  type GraphEdge,
+  type GraphNode,
+  heatColor,
+  type ImgResult,
+  ixHeatColor,
+  type JobPollResult,
+  type JobTicket,
+  type LabelEntry,
+  type LabelNeighbor,
+  metricChips,
+  type NeighborEntry,
+  type NeighborMetrics,
+  PRESETS,
+  type QueryEntry,
+  type SearchAnalysis,
+  type SearchResult,
+  simPct,
+  simWidth,
+  turboColor,
+} from "$lib/search-types";
+import { getAppName } from "$lib/stores/app-name.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { UmapPoint, UmapResult } from "$lib/types";
+import UmapViewer3D from "$lib/UmapViewer3D.svelte";
 
-  // ── Formatting helpers ───────────────────────────────────────────────────
-  function toInputValue(d: Date) {
-    return fmtDateTimeLocalInput(Math.floor(d.getTime() / 1000));
+// ── Formatting helpers ───────────────────────────────────────────────────
+function toInputValue(d: Date) {
+  return fmtDateTimeLocalInput(Math.floor(d.getTime() / 1000));
+}
+function fromInputValue(s: string) {
+  return parseDateTimeLocalInput(s);
+}
+function fmtDuration(s: number, e: number) {
+  return fmtDurationSecs(e - s);
+}
+
+// Analysis chip rows (i18n labels)
+function analysisChips(sa: SearchAnalysis): Array<[string, string, string]> {
+  return [
+    [t("search.analysisNeighbors"), sa.totalNeighbors.toString(), ""],
+    [t("search.analysisDistMin"), sa.distMin.toFixed(4), "text-emerald-500"],
+    [t("search.analysisMeanSd"), `${sa.distMean.toFixed(4)} ± ${sa.distStddev.toFixed(4)}`, ""],
+    [t("search.analysisDistMax"), sa.distMax.toFixed(4), "text-red-400"],
+    [t("search.analysisPeakHour"), `${String(sa.peakHour).padStart(2, "0")}:00`, ""],
+  ];
+}
+
+// ── Mode ─────────────────────────────────────────────────────────────────
+type SearchMode = "eeg" | "text" | "interactive" | "images";
+let mode = $state<SearchMode>("interactive");
+const SEARCH_MODE_EVENT = "skill:search-mode";
+const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
+
+function normalizeSearchMode(value: unknown): SearchMode {
+  return value === "eeg" || value === "text" || value === "interactive" || value === "images" ? value : "interactive";
+}
+
+function emitSearchMode(value: SearchMode) {
+  window.dispatchEvent(new CustomEvent(SEARCH_MODE_EVENT, { detail: { mode: value } }));
+}
+
+function switchMode(m: SearchMode) {
+  mode = m;
+  error = "";
+  page = 0;
+}
+
+onMount(() => {
+  const onTitlebarSetMode = (event: Event) => {
+    const next = normalizeSearchMode((event as CustomEvent<{ mode?: unknown }>).detail?.mode);
+    switchMode(next);
+  };
+
+  window.addEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
+
+  const initialMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
+  switchMode(initialMode);
+  emitSearchMode(initialMode);
+
+  // Load screenshot server port for image URLs
+  invoke<[string, number]>("get_screenshots_dir")
+    .then(([, port]) => {
+      imgPort = port;
+    })
+    .catch((_e) => {});
+
+  return () => {
+    window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
+  };
+});
+
+$effect(() => {
+  const currentMode = mode;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("mode") !== currentMode) {
+    params.set("mode", currentMode);
+    const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+    history.replaceState(history.state, "", next);
   }
-  function fromInputValue(s: string) { return parseDateTimeLocalInput(s); }
-  function fmtDuration(s: number, e: number) { return fmtDurationSecs(e - s); }
+  emitSearchMode(currentMode);
+});
 
-  // Analysis chip rows (i18n labels)
-  function analysisChips(sa: SearchAnalysis): Array<[string, string, string]> {
-    return [
-      [t("search.analysisNeighbors"), sa.totalNeighbors.toString(),                               ""],
-      [t("search.analysisDistMin"),   sa.distMin.toFixed(4),                                      "text-emerald-500"],
-      [t("search.analysisMeanSd"),    `${sa.distMean.toFixed(4)} ± ${sa.distStddev.toFixed(4)}`,  ""],
-      [t("search.analysisDistMax"),   sa.distMax.toFixed(4),                                      "text-red-400"],
-      [t("search.analysisPeakHour"),  `${String(sa.peakHour).padStart(2, "0")}:00`,               ""],
-    ];
-  }
+// ── Shared ───────────────────────────────────────────────────────────────
+let kVal = $state(10);
+let error = $state("");
+let page = $state(0);
 
-  // ── Mode ─────────────────────────────────────────────────────────────────
-  type SearchMode = "eeg" | "text" | "interactive" | "images";
-  let mode = $state<SearchMode>("interactive");
-  const SEARCH_MODE_EVENT = "skill:search-mode";
-  const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
+// ── EEG mode ─────────────────────────────────────────────────────────────
+const now = new Date();
+const ago5 = new Date(now.getTime() - 5 * 60_000);
+let startInput = $state(toInputValue(ago5));
+let endInput = $state(toInputValue(now));
+let efVal = $state(50);
+let searching = $state(false);
+let searchCancelled = $state(false);
+let searchStatus = $state("");
+let searchElapsed = $state(0);
+let streamTotal = $state(0);
+let streamDone = $state(0);
+let streamDays = $state<string[]>([]);
+let labelFilter = $state("");
+let labelsOnly = $state(false);
+let result = $state<SearchResult | null>(null);
+let showAnalysis = $state(true);
 
-  function normalizeSearchMode(value: unknown): SearchMode {
-    return value === "eeg" || value === "text" || value === "interactive" || value === "images"
-      ? value
-      : "interactive";
-  }
+function applyPreset(mins: number) {
+  const e = new Date();
+  const s = new Date(e.getTime() - mins * 60_000);
+  startInput = toInputValue(s);
+  endInput = toInputValue(e);
+}
 
-  function emitSearchMode(value: SearchMode) {
-    window.dispatchEvent(new CustomEvent(SEARCH_MODE_EVENT, { detail: { mode: value } }));
-  }
-
-  function switchMode(m: SearchMode) { mode = m; error = ""; page = 0; }
-
-  onMount(() => {
-    const onTitlebarSetMode = (event: Event) => {
-      const next = normalizeSearchMode((event as CustomEvent<{ mode?: unknown }>).detail?.mode);
-      switchMode(next);
-    };
-
-    window.addEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
-
-    const initialMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
-    switchMode(initialMode);
-    emitSearchMode(initialMode);
-
-    // Load screenshot server port for image URLs
-    invoke<[string, number]>("get_screenshots_dir")
-      .then(([, port]) => { imgPort = port; })
-      .catch(e => console.warn("[search] get_screenshots_dir failed:", e));
-
-    return () => {
-      window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
-    };
-  });
-
-  $effect(() => {
-    const currentMode = mode;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") !== currentMode) {
-      params.set("mode", currentMode);
-      const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
-      history.replaceState(history.state, "", next);
-    }
-    emitSearchMode(currentMode);
-  });
-
-  // ── Shared ───────────────────────────────────────────────────────────────
-  let kVal  = $state(10);
-  let error = $state("");
-  let page  = $state(0);
-
-  // ── EEG mode ─────────────────────────────────────────────────────────────
-  const now  = new Date();
-  const ago5 = new Date(now.getTime() - 5 * 60_000);
-  let startInput      = $state(toInputValue(ago5));
-  let endInput        = $state(toInputValue(now));
-  let efVal           = $state(50);
-  let searching       = $state(false);
-  let searchCancelled = $state(false);
-  let searchStatus    = $state("");
-  let searchElapsed   = $state(0);
-  let streamTotal     = $state(0);
-  let streamDone      = $state(0);
-  let streamDays      = $state<string[]>([]);
-  let labelFilter     = $state("");
-  let labelsOnly      = $state(false);
-  let result          = $state<SearchResult | null>(null);
-  let showAnalysis    = $state(true);
-
-  function applyPreset(mins: number) {
-    const e = new Date(); const s = new Date(e.getTime() - mins * 60_000);
-    startInput = toInputValue(s); endInput = toInputValue(e);
-  }
-
-  const filtered = $derived.by(() => {
-    if (!result) return [];
-    let entries = result.results;
-    const lf = labelFilter.trim().toLowerCase();
-    if (lf || labelsOnly) {
-      entries = entries.map(q => {
-        const matched = q.neighbors.filter(nb => {
+const filtered = $derived.by(() => {
+  if (!result) return [];
+  let entries = result.results;
+  const lf = labelFilter.trim().toLowerCase();
+  if (lf || labelsOnly) {
+    entries = entries
+      .map((q) => {
+        const matched = q.neighbors.filter((nb) => {
           if (nb.labels.length === 0 && labelsOnly) return false;
           if (!lf) return true;
-          return nb.labels.some(l => l.text.toLowerCase().includes(lf));
+          return nb.labels.some((l) => l.text.toLowerCase().includes(lf));
         });
         return matched.length > 0 ? { ...q, neighbors: matched } : null;
-      }).filter((q): q is QueryEntry => q !== null);
-    }
-    return entries;
-  });
-  const totalPages = $derived(Math.ceil(filtered.length / SEARCH_PAGE_SIZE) || 0);
-  const pageSlice  = $derived(filtered.slice(page * SEARCH_PAGE_SIZE, (page + 1) * SEARCH_PAGE_SIZE));
+      })
+      .filter((q): q is QueryEntry => q !== null);
+  }
+  return entries;
+});
+const totalPages = $derived(Math.ceil(filtered.length / SEARCH_PAGE_SIZE) || 0);
+const pageSlice = $derived(filtered.slice(page * SEARCH_PAGE_SIZE, (page + 1) * SEARCH_PAGE_SIZE));
 
-  const searchAnalysis = $derived.by(() => result ? computeSearchAnalysis(result) : null);
-  const temporalHeatmap = $derived.by(() => result ? computeTemporalHeatmap(result) : null);
-  const heatmapMax = $derived(temporalHeatmap ? Math.max(...temporalHeatmap.flat(), 1) : 1);
+const searchAnalysis = $derived.by(() => (result ? computeSearchAnalysis(result) : null));
+const temporalHeatmap = $derived.by(() => (result ? computeTemporalHeatmap(result) : null));
+const heatmapMax = $derived(temporalHeatmap ? Math.max(...temporalHeatmap.flat(), 1) : 1);
 
-  // UMAP
-  let umapResult      = $state<UmapResult | null>(null);
-  let umapPlaceholder = $state<UmapResult | null>(null);
-  let umapLoading     = $state(false);
-  let umapEta         = $state("");
-  let umapElapsed     = $state(0);
-  let umapTimer: ReturnType<typeof setInterval> | null = null;
-  let showUmap        = $state(false);
-  let umapColorByDate = $state(false);
+// UMAP
+let umapResult = $state<UmapResult | null>(null);
+let umapPlaceholder = $state<UmapResult | null>(null);
+let umapLoading = $state(false);
+let umapEta = $state("");
+let umapElapsed = $state(0);
+let umapTimer: ReturnType<typeof setInterval> | null = null;
+let showUmap = $state(false);
+let umapColorByDate = $state(false);
 
-  function fireUmap() {
-    if (!result || result.results.length === 0) return;
-    const allNb = result.results.flatMap(q => q.neighbors);
-    if (!allNb.length) return;
-    umapResult = null; umapLoading = true; umapEta = "";
-    const nbMin = Math.min(...allNb.map(n => n.timestamp_unix));
-    const nbMax = Math.max(...allNb.map(n => n.timestamp_unix));
-    umapPlaceholder = generateUmapPlaceholder(Math.min(result.query_count, 200), Math.min(allNb.length, 200));
-    const t0 = performance.now(); umapElapsed = 0;
-    umapTimer = setInterval(() => { umapElapsed = Math.floor((performance.now() - t0) / 1000); }, 250);
-    invoke<JobTicket>("enqueue_umap_compare", {
-      aStartUtc: result.start_utc, aEndUtc: result.end_utc,
-      bStartUtc: nbMin, bEndUtc: nbMax,
-    }).then(ticket => {
-      umapEta = ticket.queue_position > 0 ? t("search.queued", { n: ticket.queue_position+1 }) : t("search.computing3d");
+function fireUmap() {
+  if (!result || result.results.length === 0) return;
+  const allNb = result.results.flatMap((q) => q.neighbors);
+  if (!allNb.length) return;
+  umapResult = null;
+  umapLoading = true;
+  umapEta = "";
+  const nbMin = Math.min(...allNb.map((n) => n.timestamp_unix));
+  const nbMax = Math.max(...allNb.map((n) => n.timestamp_unix));
+  umapPlaceholder = generateUmapPlaceholder(Math.min(result.query_count, 200), Math.min(allNb.length, 200));
+  const t0 = performance.now();
+  umapElapsed = 0;
+  umapTimer = setInterval(() => {
+    umapElapsed = Math.floor((performance.now() - t0) / 1000);
+  }, 250);
+  invoke<JobTicket>("enqueue_umap_compare", {
+    aStartUtc: result.start_utc,
+    aEndUtc: result.end_utc,
+    bStartUtc: nbMin,
+    bEndUtc: nbMax,
+  })
+    .then((ticket) => {
+      umapEta =
+        ticket.queue_position > 0 ? t("search.queued", { n: ticket.queue_position + 1 }) : t("search.computing3d");
       pollUmap(ticket.job_id);
-    }).catch(() => finishUmap());
-  }
-  /**
-   * Build a utc-seconds → label-text map from every labeled neighbor in the
-   * current EEG search result.  This is the authoritative source: the search
-   * command hydrates labels straight from the database, so no timestamp
-   * boundary condition can cause a miss here.
-   */
-  function buildNeighborLabelMap(): Map<number, string> {
-    const map = new Map<number, string>();
-    if (!result) return map;
-    for (const q of result.results) {
-      for (const nb of q.neighbors) {
-        if (nb.labels.length > 0 && !map.has(nb.timestamp_unix)) {
-          map.set(nb.timestamp_unix, nb.labels[0].text);
-        }
+    })
+    .catch(() => finishUmap());
+}
+/**
+ * Build a utc-seconds → label-text map from every labeled neighbor in the
+ * current EEG search result.  This is the authoritative source: the search
+ * command hydrates labels straight from the database, so no timestamp
+ * boundary condition can cause a miss here.
+ */
+function buildNeighborLabelMap(): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!result) return map;
+  for (const q of result.results) {
+    for (const nb of q.neighbors) {
+      if (nb.labels.length > 0 && !map.has(nb.timestamp_unix)) {
+        map.set(nb.timestamp_unix, nb.labels[0].text);
       }
     }
-    return map;
   }
+  return map;
+}
 
-  /**
-   * Merge the ground-truth label map into a raw UMAP result.
-   * Points the backend already labeled are left untouched;
-   * unlabeled points that match a neighbor timestamp get the label injected.
-   */
-  function enrichUmapLabels(raw: UmapResult, labelMap: Map<number, string>): UmapResult {
-    if (labelMap.size === 0) return raw;
-    const points = raw.points.map(pt =>
-      (!pt.label && labelMap.has(pt.utc)) ? { ...pt, label: labelMap.get(pt.utc)! } : pt
-    );
-    return { ...raw, points };
-  }
+/**
+ * Merge the ground-truth label map into a raw UMAP result.
+ * Points the backend already labeled are left untouched;
+ * unlabeled points that match a neighbor timestamp get the label injected.
+ */
+function enrichUmapLabels(raw: UmapResult, labelMap: Map<number, string>): UmapResult {
+  if (labelMap.size === 0) return raw;
+  const points = raw.points.map((pt) =>
+    !pt.label && labelMap.has(pt.utc) ? { ...pt, label: labelMap.get(pt.utc)! } : pt,
+  );
+  return { ...raw, points };
+}
 
-  async function pollUmap(jobId: number) {
-    while (true) {
-      await new Promise(r => setTimeout(r, UMAP_POLL_INTERVAL_MS));
-      try {
-        const r = await invoke<JobPollResult>("poll_job", { jobId });
-        if (r.status === "complete") {
-          const res = r.result as UmapResult | undefined;
-          let raw: UmapResult | null = res?.points?.length ? res : null;
-          if (raw) raw = enrichUmapLabels(raw, buildNeighborLabelMap());
-          umapResult = raw;
-          finishUmap(); return;
-        }
-        if (r.status === "error" || r.status === "not_found") { finishUmap(); return; }
-        umapEta = r.queue_position! > 0 ? t("search.queued", { n: r.queue_position!+1 }) : t("search.computing3d");
-      } catch { finishUmap(); return; }
-    }
-  }
-  function finishUmap() {
-    umapLoading = false; umapEta = "";
-    if (umapTimer) { clearInterval(umapTimer); umapTimer = null; }
-  }
-
-  async function searchEeg() {
-    const startUtc = fromInputValue(startInput);
-    const endUtc   = fromInputValue(endInput);
-    if (isNaN(startUtc) || isNaN(endUtc) || endUtc <= startUtc) { error = t("search.endAfterStart"); return; }
-    searching = true; searchCancelled = false; error = ""; result = null; page = 0;
-    streamTotal = 0; streamDone = 0; streamDays = [];
-    searchStatus = t("search.searching"); searchElapsed = 0;
-    const t0 = performance.now();
-    const timer = setInterval(() => { searchElapsed = Math.floor((performance.now()-t0)/1000); }, 500);
-    let acc: SearchResult = { start_utc: startUtc, end_utc: endUtc, k: kVal, ef: efVal, query_count: 0, searched_days: [], results: [] };
+async function pollUmap(jobId: number) {
+  while (true) {
+    await new Promise((r) => setTimeout(r, UMAP_POLL_INTERVAL_MS));
     try {
-      const { Channel } = await import("@tauri-apps/api/core");
-      const ch = new Channel<{ kind: string; query_count?: number; searched_days?: string[]; entry?: QueryEntry; done_count?: number; total?: number; error?: string; }>();
-      ch.onmessage = (msg) => {
-        if (searchCancelled) return;
-        if (msg.kind === "started")       { streamTotal = msg.query_count ?? 0; streamDays = msg.searched_days ?? []; acc.query_count = streamTotal; acc.searched_days = streamDays; searchStatus = t("search.searchingIndices"); }
-        else if (msg.kind === "result" && msg.entry) { streamDone = msg.done_count ?? streamDone+1; acc.results = [...acc.results, msg.entry]; result = { ...acc }; }
-        else if (msg.kind === "done")     { streamDone = msg.total ?? streamDone; }
-        else if (msg.kind === "error")    { error = msg.error ?? "Unknown error"; }
-      };
-      await invoke("stream_search_embeddings", { startUtc, endUtc, k: kVal || undefined, ef: efVal || undefined, onProgress: ch });
-      result = { ...acc };
-      // Mark "run a similarity search" onboarding step as done.
-      try {
-        const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
-        if (!ob.searchRun) { ob.searchRun = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-      } catch (e) { console.warn("[search] onboarding localStorage update failed:", e); }
-    } catch (e) { error = String(e); }
-    finally { clearInterval(timer); searching = false; searchStatus = ""; }
-    if (result && result.results.length > 0) { showUmap = true; fireUmap(); }
-  }
-
-  // ── Interactive mode ──────────────────────────────────────────────────────
-  let ixQuery        = $state("");
-  let ixKText        = $state(5);
-  let ixKEeg         = $state(5);
-  let ixKLabels      = $state(3);
-  let ixReachMinutes = $state(10);  // temporal window around each EEG point (1–60 min)
-  let ixSearching = $state(false);
-  let ixSearched  = $state(false);
-  let ixStatus    = $state("");
-  let ixNodes     = $state<GraphNode[]>([]);
-  let ixEdges     = $state<GraphEdge[]>([]);
-  let ixDot       = $state("");
-  let ixSvg       = $state("");      // SVG with PCA scatter layout
-  let ixSvgCol    = $state("");      // SVG with classic column layout
-  let showIxGraph    = $state(true);
-  let showIxCard     = $state(true);  // single collapsible card: query + pipeline + button
-  let ixDedupeLabels = $state(true);  // deduplicate found_labels by text
-  let ixUsePca       = $state(true);  // cluster found_labels by embedding similarity
-  let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
-  /**
-   * Screenshot results.  Keys are `"parentNodeId_filename"`, values carry
-   * the screenshot data.  The parentNodeId portion tells us which graph
-   * node the screenshot should be connected to (query, text_label, or
-   * eeg_point).
-   */
-  let ixScreenshotMap = $state<Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number }>>(new Map());
-
-  // ── Derived display graph (applies found-label deduplication) ────────────
-  const ixDisplayGraph = $derived.by(() => {
-    let { nodes: n, edges: e } = ixDedupeLabels
-      ? dedupeFoundLabels(ixNodes, ixEdges)
-      : { nodes: ixNodes, edges: ixEdges };
-
-    // Inject screenshot nodes + edges when the toggle is on and we have data
-    if (ixShowScreenshots && ixScreenshotMap.size > 0) {
-      const extraNodes: typeof n = [];
-      const extraEdges: typeof e = [];
-      // Collect valid parent IDs from current graph
-      const nodeIds = new Set(n.map(nd => nd.id));
-      let idx = 0;
-      for (const [key, ss] of ixScreenshotMap) {
-        // key = "parentNodeId\0filename"
-        const sepIdx = key.indexOf("\0");
-        const parentId = sepIdx > 0 ? key.slice(0, sepIdx) : key;
-        // Parent must exist in the current (possibly deduped) graph
-        if (!nodeIds.has(parentId)) continue;
-        const ssId = `ss_${idx++}_${ss.filename}`;
-        extraNodes.push({
-          id:             ssId,
-          kind:           "screenshot",
-          text:           ss.appName || ss.windowTitle || "Screenshot",
-          timestamp_unix: ss.unixTs,
-          distance:       ss.similarity,
-          parent_id:      parentId,
-          screenshot_url: imgSrc(ss.filename),
-          filename:       ss.filename,
-          app_name:       ss.appName,
-          window_title:   ss.windowTitle,
-          ocr_similarity: ss.similarity,
-        });
-        extraEdges.push({
-          from_id:  parentId,
-          to_id:    ssId,
-          distance: ss.similarity,
-          kind:     "screenshot_link",
-        });
+      const r = await invoke<JobPollResult>("poll_job", { jobId });
+      if (r.status === "complete") {
+        const res = r.result as UmapResult | undefined;
+        let raw: UmapResult | null = res?.points?.length ? res : null;
+        if (raw) raw = enrichUmapLabels(raw, buildNeighborLabelMap());
+        umapResult = raw;
+        finishUmap();
+        return;
       }
-      n = [...n, ...extraNodes];
-      e = [...e, ...extraEdges];
+      if (r.status === "error" || r.status === "not_found") {
+        finishUmap();
+        return;
+      }
+      umapEta = r.queue_position! > 0 ? t("search.queued", { n: r.queue_position! + 1 }) : t("search.computing3d");
+    } catch {
+      finishUmap();
+      return;
     }
-
-    return { nodes: n, edges: e };
-  });
-
-  // Fetch screenshots reactively when the toggle flips or new results arrive
-  $effect(() => {
-    const _show = ixShowScreenshots;
-    const _len  = ixNodes.length;
-    if (ixSearched && _show && _len > 0) {
-      fetchIxScreenshots();
-    } else if (!_show) {
-      ixScreenshotMap = new Map();
-    }
-  });
-
-  async function searchInteractive() {
-    if (!ixQuery.trim()) return;
-    // Compress the controls so the results panel gets maximum space
-    showIxCard = false;
-    ixSearching = true; ixSearched = false; error = "";
-    ixNodes = []; ixEdges = []; ixDot = ""; ixSvg = ""; ixSvgCol = ""; dotSavedPath = ""; svgSavedPath = ""; svgError = "";
-    ixStatus = t("search.interactiveStep1");
-    try {
-      const res = await invoke<{ nodes: GraphNode[]; edges: GraphEdge[]; dot: string; svg: string; svg_col: string }>(
-        "interactive_search", {
-          query:         ixQuery.trim(),
-          kText:         ixKText,
-          kEeg:          ixKEeg,
-          kLabels:       ixKLabels,
-          reachMinutes:  ixReachMinutes,
-          usePca:        ixUsePca,
-          svgLabels: {
-            layerQuery:        t("svg.layerQuery"),
-            layerTextMatches:  t("svg.layerTextMatches"),
-            layerEegNeighbors: t("svg.layerEegNeighbors"),
-            layerFoundLabels:  t("svg.layerFoundLabels"),
-            legendQuery:       t("svg.legendQuery"),
-            legendText:        t("svg.legendText"),
-            legendEeg:         t("svg.legendEeg"),
-            legendFound:       t("svg.legendFound"),
-            generatedBy:       t("svg.generatedBy", { app: getAppName() }),
-          },
-        }
-      );
-      ixNodes    = res.nodes;
-      ixEdges    = res.edges;
-      ixDot      = res.dot;
-      ixSvg      = res.svg;
-      ixSvgCol   = res.svg_col;
-      ixSearched = true;
-    } catch (e) { error = String(e); }
-    finally { ixSearching = false; ixStatus = ""; }
   }
+}
+function finishUmap() {
+  umapLoading = false;
+  umapEta = "";
+  if (umapTimer) {
+    clearInterval(umapTimer);
+    umapTimer = null;
+  }
+}
 
-  type SsEntry = { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number };
+async function searchEeg() {
+  const startUtc = fromInputValue(startInput);
+  const endUtc = fromInputValue(endInput);
+  if (Number.isNaN(startUtc) || Number.isNaN(endUtc) || endUtc <= startUtc) {
+    error = t("search.endAfterStart");
+    return;
+  }
+  searching = true;
+  searchCancelled = false;
+  error = "";
+  result = null;
+  page = 0;
+  streamTotal = 0;
+  streamDone = 0;
+  streamDays = [];
+  searchStatus = t("search.searching");
+  searchElapsed = 0;
+  const t0 = performance.now();
+  const timer = setInterval(() => {
+    searchElapsed = Math.floor((performance.now() - t0) / 1000);
+  }, 500);
+  let acc: SearchResult = {
+    start_utc: startUtc,
+    end_utc: endUtc,
+    k: kVal,
+    ef: efVal,
+    query_count: 0,
+    searched_days: [],
+    results: [],
+  };
+  try {
+    const { Channel } = await import("@tauri-apps/api/core");
+    const ch = new Channel<{
+      kind: string;
+      query_count?: number;
+      searched_days?: string[];
+      entry?: QueryEntry;
+      done_count?: number;
+      total?: number;
+      error?: string;
+    }>();
+    ch.onmessage = (msg) => {
+      if (searchCancelled) return;
+      if (msg.kind === "started") {
+        streamTotal = msg.query_count ?? 0;
+        streamDays = msg.searched_days ?? [];
+        acc.query_count = streamTotal;
+        acc.searched_days = streamDays;
+        searchStatus = t("search.searchingIndices");
+      } else if (msg.kind === "result" && msg.entry) {
+        streamDone = msg.done_count ?? streamDone + 1;
+        acc.results = [...acc.results, msg.entry];
+        result = { ...acc };
+      } else if (msg.kind === "done") {
+        streamDone = msg.total ?? streamDone;
+      } else if (msg.kind === "error") {
+        error = msg.error ?? "Unknown error";
+      }
+    };
+    await invoke("stream_search_embeddings", {
+      startUtc,
+      endUtc,
+      k: kVal || undefined,
+      ef: efVal || undefined,
+      onProgress: ch,
+    });
+    result = { ...acc };
+    // Mark "run a similarity search" onboarding step as done.
+    try {
+      const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+      if (!ob.searchRun) {
+        ob.searchRun = true;
+        localStorage.setItem("onboardDone", JSON.stringify(ob));
+      }
+    } catch (e) {}
+  } catch (e) {
+    error = String(e);
+  } finally {
+    clearInterval(timer);
+    searching = false;
+    searchStatus = "";
+  }
+  if (result && result.results.length > 0) {
+    showUmap = true;
+    fireUmap();
+  }
+}
 
-  /**
-   * Multi-strategy screenshot fetch:
-   *  1. Semantic text search with the query → attach to "query" node
-   *  2. Semantic text search per text_label → attach to that label node
-   *  3. Timestamp proximity (±30 min) per eeg_point → attach to that EEG node
-   *
-   * Deduplicates by filename so the same screenshot doesn't appear twice.
-   */
-  async function fetchIxScreenshots() {
-    if (!ixShowScreenshots) { ixScreenshotMap = new Map(); return; }
-    if (ixNodes.length === 0) { ixScreenshotMap = new Map(); return; }
+// ── Interactive mode ──────────────────────────────────────────────────────
+let ixQuery = $state("");
+let ixKText = $state(5);
+let ixKEeg = $state(5);
+let ixKLabels = $state(3);
+let ixReachMinutes = $state(10); // temporal window around each EEG point (1–60 min)
+let ixSearching = $state(false);
+let ixSearched = $state(false);
+let ixStatus = $state("");
+let ixNodes = $state<GraphNode[]>([]);
+let ixEdges = $state<GraphEdge[]>([]);
+let ixDot = $state("");
+let ixSvg = $state(""); // SVG with PCA scatter layout
+let ixSvgCol = $state(""); // SVG with classic column layout
+let showIxGraph = $state(true);
+let showIxCard = $state(true); // single collapsible card: query + pipeline + button
+let ixDedupeLabels = $state(true); // deduplicate found_labels by text
+let ixUsePca = $state(true); // cluster found_labels by embedding similarity
+let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
+/**
+ * Screenshot results.  Keys are `"parentNodeId_filename"`, values carry
+ * the screenshot data.  The parentNodeId portion tells us which graph
+ * node the screenshot should be connected to (query, text_label, or
+ * eeg_point).
+ */
+let ixScreenshotMap = $state<
+  Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number }>
+>(new Map());
 
-    type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number };
-    const results = new Map<string, SsEntry>();
-    const usedFilenames = new Set<string>();
+// ── Derived display graph (applies found-label deduplication) ────────────
+const ixDisplayGraph = $derived.by(() => {
+  let { nodes: n, edges: e } = ixDedupeLabels
+    ? dedupeFoundLabels(ixNodes, ixEdges)
+    : { nodes: ixNodes, edges: ixEdges };
 
-    function addResult(nodeId: string, r: SsResult) {
-      if (usedFilenames.has(r.filename)) return;
-      usedFilenames.add(r.filename);
-      results.set(nodeId + "\0" + r.filename, {
-        filename:    r.filename,
-        appName:     r.app_name,
-        windowTitle: r.window_title,
-        unixTs:      r.unix_ts,
-        similarity:  r.similarity ?? 0,
+  // Inject screenshot nodes + edges when the toggle is on and we have data
+  if (ixShowScreenshots && ixScreenshotMap.size > 0) {
+    const extraNodes: typeof n = [];
+    const extraEdges: typeof e = [];
+    // Collect valid parent IDs from current graph
+    const nodeIds = new Set(n.map((nd) => nd.id));
+    let idx = 0;
+    for (const [key, ss] of ixScreenshotMap) {
+      // key = "parentNodeId\0filename"
+      const sepIdx = key.indexOf("\0");
+      const parentId = sepIdx > 0 ? key.slice(0, sepIdx) : key;
+      // Parent must exist in the current (possibly deduped) graph
+      if (!nodeIds.has(parentId)) continue;
+      const ssId = `ss_${idx++}_${ss.filename}`;
+      extraNodes.push({
+        id: ssId,
+        kind: "screenshot",
+        text: ss.appName || ss.windowTitle || "Screenshot",
+        timestamp_unix: ss.unixTs,
+        distance: ss.similarity,
+        parent_id: parentId,
+        screenshot_url: imgSrc(ss.filename),
+        filename: ss.filename,
+        app_name: ss.appName,
+        window_title: ss.windowTitle,
+        ocr_similarity: ss.similarity,
+      });
+      extraEdges.push({
+        from_id: parentId,
+        to_id: ssId,
+        distance: ss.similarity,
+        kind: "screenshot_link",
       });
     }
+    n = [...n, ...extraNodes];
+    e = [...e, ...extraEdges];
+  }
 
-    const promises: Promise<void>[] = [];
+  return { nodes: n, edges: e };
+});
 
-    // Strategy 1: semantic search with the interactive query → attach to "query"
-    promises.push((async () => {
+// Fetch screenshots reactively when the toggle flips or new results arrive
+$effect(() => {
+  const _show = ixShowScreenshots;
+  const _len = ixNodes.length;
+  if (ixSearched && _show && _len > 0) {
+    fetchIxScreenshots();
+  } else if (!_show) {
+    ixScreenshotMap = new Map();
+  }
+});
+
+async function searchInteractive() {
+  if (!ixQuery.trim()) return;
+  // Compress the controls so the results panel gets maximum space
+  showIxCard = false;
+  ixSearching = true;
+  ixSearched = false;
+  error = "";
+  ixNodes = [];
+  ixEdges = [];
+  ixDot = "";
+  ixSvg = "";
+  ixSvgCol = "";
+  dotSavedPath = "";
+  svgSavedPath = "";
+  svgError = "";
+  ixStatus = t("search.interactiveStep1");
+  try {
+    const res = await invoke<{ nodes: GraphNode[]; edges: GraphEdge[]; dot: string; svg: string; svg_col: string }>(
+      "interactive_search",
+      {
+        query: ixQuery.trim(),
+        kText: ixKText,
+        kEeg: ixKEeg,
+        kLabels: ixKLabels,
+        reachMinutes: ixReachMinutes,
+        usePca: ixUsePca,
+        svgLabels: {
+          layerQuery: t("svg.layerQuery"),
+          layerTextMatches: t("svg.layerTextMatches"),
+          layerEegNeighbors: t("svg.layerEegNeighbors"),
+          layerFoundLabels: t("svg.layerFoundLabels"),
+          legendQuery: t("svg.legendQuery"),
+          legendText: t("svg.legendText"),
+          legendEeg: t("svg.legendEeg"),
+          legendFound: t("svg.legendFound"),
+          generatedBy: t("svg.generatedBy", { app: getAppName() }),
+        },
+      },
+    );
+    ixNodes = res.nodes;
+    ixEdges = res.edges;
+    ixDot = res.dot;
+    ixSvg = res.svg;
+    ixSvgCol = res.svg_col;
+    ixSearched = true;
+  } catch (e) {
+    error = String(e);
+  } finally {
+    ixSearching = false;
+    ixStatus = "";
+  }
+}
+
+type SsEntry = { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number };
+
+/**
+ * Multi-strategy screenshot fetch:
+ *  1. Semantic text search with the query → attach to "query" node
+ *  2. Semantic text search per text_label → attach to that label node
+ *  3. Timestamp proximity (±30 min) per eeg_point → attach to that EEG node
+ *
+ * Deduplicates by filename so the same screenshot doesn't appear twice.
+ */
+async function fetchIxScreenshots() {
+  if (!ixShowScreenshots) {
+    ixScreenshotMap = new Map();
+    return;
+  }
+  if (ixNodes.length === 0) {
+    ixScreenshotMap = new Map();
+    return;
+  }
+
+  type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number };
+  const results = new Map<string, SsEntry>();
+  const usedFilenames = new Set<string>();
+
+  function addResult(nodeId: string, r: SsResult) {
+    if (usedFilenames.has(r.filename)) return;
+    usedFilenames.add(r.filename);
+    results.set(`${nodeId}\0${r.filename}`, {
+      filename: r.filename,
+      appName: r.app_name,
+      windowTitle: r.window_title,
+      unixTs: r.unix_ts,
+      similarity: r.similarity ?? 0,
+    });
+  }
+
+  const promises: Promise<void>[] = [];
+
+  // Strategy 1: semantic search with the interactive query → attach to "query"
+  promises.push(
+    (async () => {
       try {
         const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
-          query: ixQuery.trim(), k: 5, mode: "semantic",
+          query: ixQuery.trim(),
+          k: 5,
+          mode: "semantic",
         });
         for (const h of hits) addResult("query", h);
-      } catch { /* no semantic index or model */ }
-    })());
+      } catch {
+        /* no semantic index or model */
+      }
+    })(),
+  );
 
-    // Strategy 2: semantic search per text_label text → attach to that label
-    const textLabels = ixNodes.filter(n => n.kind === "text_label" && n.text);
-    for (const tl of textLabels.slice(0, 5)) {
-      promises.push((async () => {
+  // Strategy 2: semantic search per text_label text → attach to that label
+  const textLabels = ixNodes.filter((n) => n.kind === "text_label" && n.text);
+  for (const tl of textLabels.slice(0, 5)) {
+    promises.push(
+      (async () => {
         try {
           const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
-            query: tl.text!, k: 2, mode: "semantic",
+            query: tl.text!,
+            k: 2,
+            mode: "semantic",
           });
           for (const h of hits) addResult(tl.id, h);
-        } catch { /* skip */ }
-      })());
-    }
+        } catch {
+          /* skip */
+        }
+      })(),
+    );
+  }
 
-    // Strategy 3: timestamp proximity (±30 min) per eeg_point
-    const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
-    for (const node of eegNodes) {
-      promises.push((async () => {
+  // Strategy 3: timestamp proximity (±30 min) per eeg_point
+  const eegNodes = ixNodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null);
+  for (const node of eegNodes) {
+    promises.push(
+      (async () => {
         try {
           const around = await invoke<SsResult[]>("get_screenshots_around", {
             timestamp: Math.floor(node.timestamp_unix!),
@@ -463,221 +616,264 @@ the Free Software Foundation, version 3 only. -->
           });
           if (around.length > 0) {
             // Pick the closest screenshot to the node timestamp
-            const sorted = [...around].sort((a, b) =>
-              Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!)
+            const sorted = [...around].sort(
+              (a, b) => Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!),
             );
             addResult(node.id, { ...sorted[0], similarity: 0 });
           }
-        } catch { /* skip */ }
-      })());
-    }
-
-    await Promise.all(promises);
-    ixScreenshotMap = results;
+        } catch {
+          /* skip */
+        }
+      })(),
+    );
   }
 
-  function onIxKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); searchInteractive(); }
+  await Promise.all(promises);
+  ixScreenshotMap = results;
+}
+
+function onIxKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    searchInteractive();
   }
+}
 
-  let dotSaving    = $state(false);
-  let dotSavedPath = $state("");
-  let svgSaving    = $state(false);
-  let svgSavedPath = $state("");
-  let svgError     = $state("");
+let dotSaving = $state(false);
+let dotSavedPath = $state("");
+let svgSaving = $state(false);
+let svgSavedPath = $state("");
+let svgError = $state("");
 
-  async function downloadDot() {
-    if (!ixDot || dotSaving) return;
-    dotSaving = true; dotSavedPath = "";
-    try {
-      let dotData = ixDot;
-      const disp = ixDisplayGraph;
-      const hasScreenshots = disp.nodes.some(n => n.kind === "screenshot");
-      if (hasScreenshots) {
-        dotData = await invoke<string>("regenerate_interactive_dot", {
-          nodes: disp.nodes.map(n => ({
-            id:             n.id,
-            kind:           n.kind,
-            text:           n.text ?? null,
-            timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
-            distance:       n.distance,
-            eeg_metrics:    n.eeg_metrics ?? null,
-            parent_id:      n.parent_id ?? null,
-            proj_x:         n.proj_x ?? null,
-            proj_y:         n.proj_y ?? null,
-            filename:       n.filename ?? null,
-            app_name:       n.app_name ?? null,
-            window_title:   n.window_title ?? null,
-            ocr_text:       null,
-            ocr_similarity: n.ocr_similarity ?? null,
-          })),
-          edges: disp.edges.map(e => ({
-            from_id:  e.from_id,
-            to_id:    e.to_id,
-            distance: e.distance,
-            kind:     e.kind,
-          })),
-        });
-      }
-      dotSavedPath = await invoke<string>("save_dot_file", { dot: dotData, query: ixQuery.trim() });
-    } catch (e) { error = String(e); }
-    finally { dotSaving = false; }
-  }
-
-  async function downloadSvg() {
-    svgSaving = true; svgSavedPath = ""; svgError = "";
-    try {
-      let svgData: string;
-      const disp = ixDisplayGraph;
-      const hasScreenshots = disp.nodes.some(n => n.kind === "screenshot");
-
-      if (hasScreenshots) {
-        // Re-generate SVG on the backend with screenshot nodes included
-        svgData = await invoke<string>("regenerate_interactive_svg", {
-          nodes: disp.nodes.map(n => ({
-            id:             n.id,
-            kind:           n.kind,
-            text:           n.text ?? null,
-            timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
-            distance:       n.distance,
-            eeg_metrics:    n.eeg_metrics ?? null,
-            parent_id:      n.parent_id ?? null,
-            proj_x:         n.proj_x ?? null,
-            proj_y:         n.proj_y ?? null,
-            filename:       n.filename ?? null,
-            app_name:       n.app_name ?? null,
-            window_title:   n.window_title ?? null,
-            ocr_text:       null,
-            ocr_similarity: n.ocr_similarity ?? null,
-          })),
-          edges: disp.edges.map(e => ({
-            from_id:  e.from_id,
-            to_id:    e.to_id,
-            distance: e.distance,
-            kind:     e.kind,
-          })),
-          svgLabels: {
-            layerQuery:        t("svg.layerQuery"),
-            layerTextMatches:  t("svg.layerTextMatches"),
-            layerEegNeighbors: t("svg.layerEegNeighbors"),
-            layerFoundLabels:  t("svg.layerFoundLabels"),
-            legendQuery:       t("svg.legendQuery"),
-            legendText:        t("svg.legendText"),
-            legendEeg:         t("svg.legendEeg"),
-            legendFound:       t("svg.legendFound"),
-            generatedBy:       t("svg.generatedBy", { app: getAppName() }),
-          },
-          usePca: ixUsePca,
-        });
-      } else {
-        svgData = ixUsePca ? ixSvg : ixSvgCol;
-      }
-
-      if (!svgData) { svgError = "No SVG data"; return; }
-      svgSavedPath = await invoke<string>("save_svg_file", { svg: svgData, query: ixQuery.trim() });
-    } catch (e) { svgError = String(e); }
-    finally { svgSaving = false; }
-  }
-
-  // ── Interactive time heatmap (days × hours) ─────────────────────────────
-  const ixTimeHeatmap = $derived.by(() => computeIxTimeHeatmap(ixNodes));
-
-  async function openSession(nb: NeighborEntry) {
-    try {
-      const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", { timestampUnix: nb.timestamp_unix, date: nb.date });
-      await invoke(ref ? "open_session_window" : "open_history_window", ref ? { csvPath: ref.csv_path } : {});
-    } catch { /* swallow */ }
-  }
-
-  // ── Text mode ─────────────────────────────────────────────────────────────
-  let textQuery     = $state("");
-  let textSearching = $state(false);
-  let textResults   = $state<LabelNeighbor[]>([]);
-  let textSearched  = $state(false);
-  let textFilter    = $state("");
-  let textSort      = $state<"sim" | "date">("sim");
-
-  // ── Text mode 3D kNN graph ─────────────────────────────────────────────
-  let showTextGraph = $state(true);
-  let textGraphData = $state<UmapResult | null>(null);
-
-  /**
-   * Build a client-side UmapResult for the text kNN results:
-   * - Query anchor at the origin (session 0)
-   * - Each result on a sphere shell whose radius = normalised distance (session 1)
-   * - Angular positions spread via the golden-angle Fibonacci spiral
-   */
-
-  // Rebuild whenever the filtered text results change
-  $effect(() => {
-    const r = textFiltered;
-    if (!textSearched || r.length === 0) { textGraphData = null; return; }
-    textGraphData = buildTextKnnGraph(r, textQuery.trim());
-  });
-
-  async function searchText() {
-    if (!textQuery.trim()) return;
-    textSearching = true; error = ""; textSearched = false; page = 0; textFilter = "";
-    try {
-      textResults = await invoke<LabelNeighbor[]>("search_labels_by_text", { query: textQuery.trim(), k: kVal });
-      textSearched = true;
-    } catch (e) { error = String(e); }
-    finally { textSearching = false; }
-  }
-
-  function onTextKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); searchText(); }
-  }
-
-  const textFiltered = $derived.by(() => {
-    let r = textResults;
-    const tf = textFilter.trim().toLowerCase();
-    if (tf) r = r.filter(x => x.text.toLowerCase().includes(tf) || x.context.toLowerCase().includes(tf));
-    if (textSort === "date") return [...r].sort((a, b) => b.eeg_start - a.eeg_start);
-    return r;  // similarity order is already from backend
-  });
-  const textMaxDist    = $derived(textFiltered.length > 0 ? Math.max(0.0001, ...textFiltered.map(r => r.distance)) : 1);
-  const textPageSlice  = $derived(textFiltered.slice(page * SEARCH_PAGE_SIZE, (page + 1) * SEARCH_PAGE_SIZE));
-  const textTotalPages = $derived(Math.ceil(textFiltered.length / SEARCH_PAGE_SIZE) || 0);
-
-  async function openSessionForLabel(nb: LabelNeighbor) {
-    try {
-      const dateStr = dateToCompactKey(fromUnix(nb.eeg_start));
-      const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", { timestampUnix: nb.eeg_start, date: dateStr });
-      await invoke(ref ? "open_session_window" : "open_history_window", ref ? { csvPath: ref.csv_path } : {});
-    } catch { /* swallow */ }
-  }
-
-  // ── Images mode (screenshot OCR search) ──────────────────────────────────
-  let imgQuery       = $state("");
-  let imgResults     = $state<ImgResult[]>([]);
-  let imgSearching   = $state(false);
-  let imgSearched    = $state(false);
-  let imgSearchMode  = $state<"substring" | "semantic">("substring");
-  let imgPort        = $state(8375);
-
-  function imgSrc(filename: string): string {
-    return filename ? `http://127.0.0.1:${imgPort}/screenshots/${filename}` : "";
-  }
-
-  async function searchImages() {
-    if (!imgQuery.trim()) return;
-    imgSearching = true;
-    imgSearched = false;
-    try {
-      imgResults = await invoke<ImgResult[]>("search_screenshots_by_text", {
-        query: imgQuery.trim(), k: 20, mode: imgSearchMode,
+async function downloadDot() {
+  if (!ixDot || dotSaving) return;
+  dotSaving = true;
+  dotSavedPath = "";
+  try {
+    let dotData = ixDot;
+    const disp = ixDisplayGraph;
+    const hasScreenshots = disp.nodes.some((n) => n.kind === "screenshot");
+    if (hasScreenshots) {
+      dotData = await invoke<string>("regenerate_interactive_dot", {
+        nodes: disp.nodes.map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          text: n.text ?? null,
+          timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
+          distance: n.distance,
+          eeg_metrics: n.eeg_metrics ?? null,
+          parent_id: n.parent_id ?? null,
+          proj_x: n.proj_x ?? null,
+          proj_y: n.proj_y ?? null,
+          filename: n.filename ?? null,
+          app_name: n.app_name ?? null,
+          window_title: n.window_title ?? null,
+          ocr_text: null,
+          ocr_similarity: n.ocr_similarity ?? null,
+        })),
+        edges: disp.edges.map((e) => ({
+          from_id: e.from_id,
+          to_id: e.to_id,
+          distance: e.distance,
+          kind: e.kind,
+        })),
       });
-      imgSearched = true;
-    } catch {
-      imgResults = [];
-      imgSearched = true;
-    } finally {
-      imgSearching = false;
     }
+    dotSavedPath = await invoke<string>("save_dot_file", { dot: dotData, query: ixQuery.trim() });
+  } catch (e) {
+    error = String(e);
+  } finally {
+    dotSaving = false;
   }
+}
 
-  useWindowTitle("window.title.search");
+async function downloadSvg() {
+  svgSaving = true;
+  svgSavedPath = "";
+  svgError = "";
+  try {
+    let svgData: string;
+    const disp = ixDisplayGraph;
+    const hasScreenshots = disp.nodes.some((n) => n.kind === "screenshot");
+
+    if (hasScreenshots) {
+      // Re-generate SVG on the backend with screenshot nodes included
+      svgData = await invoke<string>("regenerate_interactive_svg", {
+        nodes: disp.nodes.map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          text: n.text ?? null,
+          timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
+          distance: n.distance,
+          eeg_metrics: n.eeg_metrics ?? null,
+          parent_id: n.parent_id ?? null,
+          proj_x: n.proj_x ?? null,
+          proj_y: n.proj_y ?? null,
+          filename: n.filename ?? null,
+          app_name: n.app_name ?? null,
+          window_title: n.window_title ?? null,
+          ocr_text: null,
+          ocr_similarity: n.ocr_similarity ?? null,
+        })),
+        edges: disp.edges.map((e) => ({
+          from_id: e.from_id,
+          to_id: e.to_id,
+          distance: e.distance,
+          kind: e.kind,
+        })),
+        svgLabels: {
+          layerQuery: t("svg.layerQuery"),
+          layerTextMatches: t("svg.layerTextMatches"),
+          layerEegNeighbors: t("svg.layerEegNeighbors"),
+          layerFoundLabels: t("svg.layerFoundLabels"),
+          legendQuery: t("svg.legendQuery"),
+          legendText: t("svg.legendText"),
+          legendEeg: t("svg.legendEeg"),
+          legendFound: t("svg.legendFound"),
+          generatedBy: t("svg.generatedBy", { app: getAppName() }),
+        },
+        usePca: ixUsePca,
+      });
+    } else {
+      svgData = ixUsePca ? ixSvg : ixSvgCol;
+    }
+
+    if (!svgData) {
+      svgError = "No SVG data";
+      return;
+    }
+    svgSavedPath = await invoke<string>("save_svg_file", { svg: svgData, query: ixQuery.trim() });
+  } catch (e) {
+    svgError = String(e);
+  } finally {
+    svgSaving = false;
+  }
+}
+
+// ── Interactive time heatmap (days × hours) ─────────────────────────────
+const ixTimeHeatmap = $derived.by(() => computeIxTimeHeatmap(ixNodes));
+
+async function openSession(nb: NeighborEntry) {
+  try {
+    const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", {
+      timestampUnix: nb.timestamp_unix,
+      date: nb.date,
+    });
+    await invoke(ref ? "open_session_window" : "open_history_window", ref ? { csvPath: ref.csv_path } : {});
+  } catch {
+    /* swallow */
+  }
+}
+
+// ── Text mode ─────────────────────────────────────────────────────────────
+let textQuery = $state("");
+let textSearching = $state(false);
+let textResults = $state<LabelNeighbor[]>([]);
+let textSearched = $state(false);
+let textFilter = $state("");
+let textSort = $state<"sim" | "date">("sim");
+
+// ── Text mode 3D kNN graph ─────────────────────────────────────────────
+let showTextGraph = $state(true);
+let textGraphData = $state<UmapResult | null>(null);
+
+/**
+ * Build a client-side UmapResult for the text kNN results:
+ * - Query anchor at the origin (session 0)
+ * - Each result on a sphere shell whose radius = normalised distance (session 1)
+ * - Angular positions spread via the golden-angle Fibonacci spiral
+ */
+
+// Rebuild whenever the filtered text results change
+$effect(() => {
+  const r = textFiltered;
+  if (!textSearched || r.length === 0) {
+    textGraphData = null;
+    return;
+  }
+  textGraphData = buildTextKnnGraph(r, textQuery.trim());
+});
+
+async function searchText() {
+  if (!textQuery.trim()) return;
+  textSearching = true;
+  error = "";
+  textSearched = false;
+  page = 0;
+  textFilter = "";
+  try {
+    textResults = await invoke<LabelNeighbor[]>("search_labels_by_text", { query: textQuery.trim(), k: kVal });
+    textSearched = true;
+  } catch (e) {
+    error = String(e);
+  } finally {
+    textSearching = false;
+  }
+}
+
+function onTextKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    searchText();
+  }
+}
+
+const textFiltered = $derived.by(() => {
+  let r = textResults;
+  const tf = textFilter.trim().toLowerCase();
+  if (tf) r = r.filter((x) => x.text.toLowerCase().includes(tf) || x.context.toLowerCase().includes(tf));
+  if (textSort === "date") return [...r].sort((a, b) => b.eeg_start - a.eeg_start);
+  return r; // similarity order is already from backend
+});
+const textMaxDist = $derived(textFiltered.length > 0 ? Math.max(0.0001, ...textFiltered.map((r) => r.distance)) : 1);
+const textPageSlice = $derived(textFiltered.slice(page * SEARCH_PAGE_SIZE, (page + 1) * SEARCH_PAGE_SIZE));
+const textTotalPages = $derived(Math.ceil(textFiltered.length / SEARCH_PAGE_SIZE) || 0);
+
+async function openSessionForLabel(nb: LabelNeighbor) {
+  try {
+    const dateStr = dateToCompactKey(fromUnix(nb.eeg_start));
+    const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", {
+      timestampUnix: nb.eeg_start,
+      date: dateStr,
+    });
+    await invoke(ref ? "open_session_window" : "open_history_window", ref ? { csvPath: ref.csv_path } : {});
+  } catch {
+    /* swallow */
+  }
+}
+
+// ── Images mode (screenshot OCR search) ──────────────────────────────────
+let imgQuery = $state("");
+let imgResults = $state<ImgResult[]>([]);
+let imgSearching = $state(false);
+let imgSearched = $state(false);
+let imgSearchMode = $state<"substring" | "semantic">("substring");
+let imgPort = $state(8375);
+
+function imgSrc(filename: string): string {
+  return filename ? `http://127.0.0.1:${imgPort}/screenshots/${filename}` : "";
+}
+
+async function searchImages() {
+  if (!imgQuery.trim()) return;
+  imgSearching = true;
+  imgSearched = false;
+  try {
+    imgResults = await invoke<ImgResult[]>("search_screenshots_by_text", {
+      query: imgQuery.trim(),
+      k: 20,
+      mode: imgSearchMode,
+    });
+    imgSearched = true;
+  } catch {
+    imgResults = [];
+    imgSearched = true;
+  } finally {
+    imgSearching = false;
+  }
+}
+
+useWindowTitle("window.title.search");
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">

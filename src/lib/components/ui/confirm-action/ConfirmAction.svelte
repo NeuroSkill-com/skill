@@ -15,31 +15,24 @@ Usage:
   />
 -->
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+import { Button } from "$lib/components/ui/button";
 
-  interface Props {
-    /** Confirmation prompt text. */
-    message: string;
-    /** Label for the confirm (destructive) button. */
-    confirmLabel: string;
-    /** Label for the cancel button. */
-    cancelLabel: string;
-    /** Whether the confirm button is disabled (e.g. while deleting). */
-    disabled?: boolean;
-    /** Called when the user confirms the action. */
-    onconfirm: (e: MouseEvent) => void;
-    /** Called when the user cancels. */
-    oncancel: (e: MouseEvent) => void;
-  }
+interface Props {
+  /** Confirmation prompt text. */
+  message: string;
+  /** Label for the confirm (destructive) button. */
+  confirmLabel: string;
+  /** Label for the cancel button. */
+  cancelLabel: string;
+  /** Whether the confirm button is disabled (e.g. while deleting). */
+  disabled?: boolean;
+  /** Called when the user confirms the action. */
+  onconfirm: (e: MouseEvent) => void;
+  /** Called when the user cancels. */
+  oncancel: (e: MouseEvent) => void;
+}
 
-  let {
-    message,
-    confirmLabel,
-    cancelLabel,
-    disabled = false,
-    onconfirm,
-    oncancel,
-  }: Props = $props();
+let { message, confirmLabel, cancelLabel, disabled = false, onconfirm, oncancel }: Props = $props();
 </script>
 
 <div class="flex items-center gap-2">

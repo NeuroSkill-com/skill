@@ -51,7 +51,6 @@ pub struct LlmConfig {
     pub tools: LlmToolConfig,
 
     // ── Multimodal (requires `llm-mtmd` feature) ──────────────────────────────
-
     /// Path to the multimodal projector (mmproj) GGUF file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mmproj: Option<std::path::PathBuf>,
@@ -103,7 +102,6 @@ pub struct LlmConfig {
     pub gpu_memory_gen_threshold: f64,
 
     // ── Model metadata (populated by init.rs from the catalog entry) ──────────
-
     /// Model parameter count in billions (e.g. 7.0 for a 7B model).
     /// Used at runtime to estimate memory for dynamic context resizing.
     #[serde(default, skip_serializing)]
@@ -120,36 +118,50 @@ pub struct LlmConfig {
     pub max_context_length: u32,
 }
 
-fn default_llm_parallel()            -> usize { 1 }
-fn default_mmproj_n_threads()        -> i32   { 4 }
-fn default_autoload_mmproj()         -> bool  { true }
-fn default_flash_attention()         -> bool  { true }
-fn default_offload_kqv()             -> bool  { true }
-fn default_gpu_memory_threshold()    -> f64   { 0.5 }
-fn default_gpu_memory_gen_threshold() -> f64  { 0.3 }
+fn default_llm_parallel() -> usize {
+    1
+}
+fn default_mmproj_n_threads() -> i32 {
+    4
+}
+fn default_autoload_mmproj() -> bool {
+    true
+}
+fn default_flash_attention() -> bool {
+    true
+}
+fn default_offload_kqv() -> bool {
+    true
+}
+fn default_gpu_memory_threshold() -> f64 {
+    0.5
+}
+fn default_gpu_memory_gen_threshold() -> f64 {
+    0.3
+}
 
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            enabled:          false,
-            model_path:       None,
-            n_gpu_layers:     u32::MAX,
-            ctx_size:         None,
-            parallel:         default_llm_parallel(),
-            api_key:          None,
-            tools:            LlmToolConfig::default(),
-            mmproj:           None,
+            enabled: false,
+            model_path: None,
+            n_gpu_layers: u32::MAX,
+            ctx_size: None,
+            parallel: default_llm_parallel(),
+            api_key: None,
+            tools: LlmToolConfig::default(),
+            mmproj: None,
             mmproj_n_threads: default_mmproj_n_threads(),
-            no_mmproj_gpu:    false,
-            autoload_mmproj:  default_autoload_mmproj(),
-            verbose:          false,
-            autostart:        false,
-            flash_attention:  default_flash_attention(),
-            offload_kqv:      default_offload_kqv(),
-            gpu_memory_threshold:     default_gpu_memory_threshold(),
+            no_mmproj_gpu: false,
+            autoload_mmproj: default_autoload_mmproj(),
+            verbose: false,
+            autostart: false,
+            flash_attention: default_flash_attention(),
+            offload_kqv: default_offload_kqv(),
+            gpu_memory_threshold: default_gpu_memory_threshold(),
             gpu_memory_gen_threshold: default_gpu_memory_gen_threshold(),
-            params_b:         0.0,
-            quant:            String::new(),
+            params_b: 0.0,
+            quant: String::new(),
             max_context_length: 0,
         }
     }

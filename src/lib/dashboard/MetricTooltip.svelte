@@ -5,10 +5,13 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
+import type { Snippet } from "svelte";
 
-  interface Props { text: string; children: Snippet; }
-  let { text, children }: Props = $props();
+interface Props {
+  text: string;
+  children: Snippet;
+}
+let { text, children }: Props = $props();
 </script>
 
 <div class="metric-tip group relative">
