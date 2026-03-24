@@ -528,21 +528,18 @@ fn process_eeg(
 
         csv.push_metrics(csv_path, &snap);
 
-        // ── Accumulate SNR for the session sidecar ───────────────────────────
-        if snap.snr.is_finite() {
-            let sr = app.app_state();
-            let mut s = sr.lock_or_recover();
-            s.snr_sum   += snap.snr as f64;
-            s.snr_count += 1;
-        }
-
         // ── DND tick (all devices get this now) ──────────────────────────────
         run_dnd_tick(app, &snap);
 
-        // ── Write back & emit ────────────────────────────────────────────────
+        // ── Accumulate SNR + write back in a single lock ─────────────────────
         {
             let sr = app.app_state();
-            sr.lock_or_recover().latest_bands = Some(snap.clone());
+            let mut s = sr.lock_or_recover();
+            if snap.snr.is_finite() {
+                s.snr_sum   += snap.snr as f64;
+                s.snr_count += 1;
+            }
+            s.latest_bands = Some(snap.clone());
         }
         let _ = app.emit("eeg-bands", &snap);
         app.state::<WsBroadcaster>().send("eeg-bands", &snap);

@@ -479,21 +479,33 @@ fn backfill_avg_snr(
     let db_path = day_dir.join(skill_constants::SQLITE_FILE);
     if !db_path.exists() { return; }
 
-    // Open read-write so we can run the column migration if needed.
-    let Ok(conn) = rusqlite::Connection::open_with_flags(
-        &db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else { return };
+    // Try read-only first (fast, no write-locking).  If the metrics_json
+    // column doesn't exist (very old database), the prepare will fail.
+    // In that case, run the migration via a read-write connection and
+    // return early (all values will be NULL after migration anyway).
+    let flags_ro = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, flags_ro) else { return };
     let _ = conn.execute_batch("PRAGMA busy_timeout=1000;");
-    // Ensure the metrics_json column exists (no-op on modern databases).
-    let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
 
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT AVG(json_extract(metrics_json, '$.snr'))
+    let query = "SELECT AVG(json_extract(metrics_json, '$.snr'))
          FROM embeddings
          WHERE timestamp >= ?1 AND timestamp <= ?2
-           AND json_extract(metrics_json, '$.snr') IS NOT NULL"
-    ) else { return };
+           AND json_extract(metrics_json, '$.snr') IS NOT NULL";
+
+    // If prepare fails the column is missing — migrate and bail.
+    let needs_migration = conn.prepare(query).is_err();
+    if needs_migration {
+        drop(conn);
+        let flags_rw = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
+            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        if let Ok(rw) = rusqlite::Connection::open_with_flags(&db_path, flags_rw) {
+            let _ = rw.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
+        }
+        return;
+    }
+
+    let Ok(mut stmt) = conn.prepare(query) else { return };
 
     for (session, start, end) in sessions.iter_mut() {
         if session.avg_snr_db.is_some() { continue; }

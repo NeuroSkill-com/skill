@@ -75,8 +75,10 @@ pub fn init_tool_logger(app: &tauri::AppHandle) {
     // the user approve or cancel before execution.
     skill_tools::set_bash_edit_hook(std::sync::Arc::new(|command: &str| {
         // Truncate very long commands for the dialog display.
-        let display = if command.len() > 2000 {
-            format!("{}...\n\n({} chars total)", &command[..2000], command.len())
+        // Use char boundary to avoid panic on multi-byte UTF-8.
+        let display = if command.chars().count() > 2000 {
+            let truncated: String = command.chars().take(2000).collect();
+            format!("{}...\n\n({} chars total)", truncated, command.chars().count())
         } else {
             command.to_string()
         };

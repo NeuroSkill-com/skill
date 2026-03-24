@@ -27,6 +27,7 @@ pub fn set_bash_edit_hook(hook: BashEditHook) {
 }
 
 /// Clear the bash-edit hook (tests / shutdown).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn clear_bash_edit_hook() {
     *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }

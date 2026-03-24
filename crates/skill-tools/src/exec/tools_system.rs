@@ -78,11 +78,15 @@ pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path, requi
     if require_edit {
         crate::tool_log!("tool:bash", "[edit] presenting command for review");
         match request_bash_edit(&command).await {
-            Some(edited) => {
+            Some(edited) if !edited.trim().is_empty() => {
                 if edited != command {
                     crate::tool_log!("tool:bash", "[edit] command was modified by user");
                 }
                 command = edited;
+            }
+            Some(_) => {
+                crate::tool_log!("tool:bash", "[edit] user returned empty command");
+                return json!({ "ok": false, "tool": "bash", "error": "command cancelled by user (empty)" });
             }
             None => {
                 crate::tool_log!("tool:bash", "[edit] user cancelled bash command");
