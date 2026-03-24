@@ -133,20 +133,79 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots -- -D warnings
 
-      - name: cargo test (workspace crates)
+      # Determine which crates need testing based on changed files.
+      # On PRs: compare against the base branch.
+      # On pushes to main/develop: compare against the previous commit.
+      # On manual dispatch: test everything.
+      - name: Determine changed crates
+        id: changed
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            # First push or manual dispatch — test everything
+            CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg -p skill-screenshots"
+          else
+            CRATE_FLAGS=$(bash scripts/changed-crates.sh "$BASE")
+          fi
+
+          echo "crate_flags=$CRATE_FLAGS" >> "$GITHUB_OUTPUT"
+          if [[ -z "$CRATE_FLAGS" || "$CRATE_FLAGS" == "# "* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No testable crates affected — skipping cargo test"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Testing (unit): $CRATE_FLAGS"
+          fi
+
+          # Filter for crates that have integration tests (tests/*.rs).
+          # skill-llm E2E is excluded — it's gated by manual dispatch.
+          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots"
+          INT_FLAGS=""
+          for c in $INT_CRATES; do
+            if echo "$CRATE_FLAGS" | grep -qw "\-p $c"; then
+              INT_FLAGS="$INT_FLAGS -p $c"
+            fi
+          done
+          INT_FLAGS="$(echo "$INT_FLAGS" | xargs)"  # trim
+
+          if [[ -n "$INT_FLAGS" ]]; then
+            echo "int_flags=$INT_FLAGS" >> "$GITHUB_OUTPUT"
+            echo "skip_int=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Testing (integration): $INT_FLAGS"
+          else
+            echo "int_flags=" >> "$GITHUB_OUTPUT"
+            echo "skip_int=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No integration-testable crates affected"
+          fi
+
+      - name: cargo test (affected crates — unit)
+        if: steps.changed.outputs.skip != 'true'
         env:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: >
           cargo test --locked --target x86_64-unknown-linux-gnu
-          -p skill-eeg -p skill-data -p skill-constants -p skill-tools
-          -p skill-devices -p skill-settings -p skill-history
-          -p skill-health -p skill-router -p skill-llm
-          -p skill-autostart -p skill-tts -p skill-gpu
-          -p skill-headless -p skill-label-index
-          -p skill-skills -p skill-jobs -p skill-commands -p skill-exg
+          ${{ steps.changed.outputs.crate_flags }}
           --lib
+
+      - name: cargo test (affected crates — integration)
+        if: steps.changed.outputs.skip_int != 'true'
+        env:
+          RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
+        run: >
+          cargo test --locked --target x86_64-unknown-linux-gnu
+          ${{ steps.changed.outputs.int_flags }}
+          --test '*'
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
