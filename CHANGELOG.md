@@ -8,6 +8,68 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.58] — 2026-03-24
+
+### Features
+
+- **Auto-launch after install on Windows**: The NSIS finish page now shows a "Launch NeuroSkill™" checkbox (checked by default). The app is launched as the current user (not elevated) via the Explorer shell trick, so per-user paths, tray registration, and autostart work correctly.
+
+- **Extracted `search-logic.ts` module**: Pulled pure business logic (mode normalization, UMAP label enrichment, time helpers, analysis chips) out of the 2,169-line search page into a testable TypeScript module with 9 unit tests.
+
+- **Extracted `compare-logic.ts` module**: Pulled timeline helpers, session range selection, pointer-to-UTC conversion, and date formatting out of the 1,922-line compare page into a testable module with 14 unit tests.
+
+- **Added DSP pipeline integration tests**: New `dsp_pipeline_test.rs` for `skill-eeg` covering band analysis at multiple sample rates, beta/alpha dominance detection, quality monitoring, and reset behaviour (5 tests).
+
+- **Added `skill-headless` tests**: New `intercept_tests.rs` covering `InterceptStore` push/snapshot/clear, serialization round-trip, and default state (5 tests).
+
+- **Added `skill-screenshots` tests**: New `context_tests.rs` covering mock context, fastembed model resolution, and `ActiveWindowInfo` defaults (5 tests).
+
+- **Added `skill-jobs` integration tests**: New `queue_tests.rs` covering submit-and-poll, sequential execution ordering, error propagation, queue positioning, and unknown-job handling (5 tests).
+
+- **Added `skill-data` tests**: New `hooks_log_tests.rs` (4 tests) and `screenshot_store_tests.rs` (4 tests) covering database creation, insert, count, and pagination.
+
+### Bugfixes
+
+- **Fixed 2 broken tests in `src-tauri/src/constants.rs`**: The `embedding_overlap_samples_correct` and `embedding_hop_samples_correct` tests were asserting stale values (640) after `EMBEDDING_OVERLAP_SECS` changed from 2.5 to 0.0. Tests now derive expected values from the actual constants.
+
+- **Fixed compilation error in `skill-headless`**: Two `eval_fire()` calls passed `reply` by value instead of by reference.
+
+- **Fix ™ symbol mangled in Windows NSIS installer**: The `.nsi` script was written as UTF-8 without BOM. NSIS with `Unicode True` requires a BOM to detect UTF-8; without it, NSIS falls back to the system ANSI codepage and corrupts non-ASCII characters like ™ in the product display name, version info, registry entries, and shortcuts. Changed to UTF-8 with BOM.
+
+- **Fix Windows SxS "side-by-side configuration incorrect" error**: Added `CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"` to the workspace `.cargo/config.toml` `[env]` section so that cmake-based C/C++ dependencies (llama-cpp-sys, espeak-ng) use static CRT (`/MT`) matching Rust's `+crt-static` target feature. Previously this env var was only set in CI, causing local Windows builds to produce a CRT mismatch that triggered the SxS error on machines without the Visual C++ Redistributable.
+
+### Refactor
+
+- **Eliminated all clippy warnings across the workspace**: Resolved every warning from `cargo clippy --workspace` — from 500+ warnings to zero.
+
+  - Converted 21 `match` → `let...else` patterns across 10 files (api.rs, screenshot_cmds.rs, ws_commands, device_scanner, session_runner, session_connect, eeg_embeddings, label_cmds, skill-skills/sync, skill-llm/actor).
+  - Replaced 17 `lock().expect("lock poisoned")` calls with `lock_or_recover()` across skill-llm (handlers, logging, state, tool_orchestration) and src-tauri/api.
+  - Applied `cargo clippy --fix` auto-fixes: redundant closures, method call simplifications, let-else conversions.
+  - Added `// SAFETY:` comments to remaining undocumented `unsafe` blocks (skill_log, quit, active_window, window_cmds).
+  - Added `#![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]` to `build.rs` (build-time panics are standard practice).
+  - Added `#![allow(clippy::unwrap_used)]` to `image_encode_bench.rs` (benchmark binary).
+  - Disabled `needless_pass_by_value` lint (280 false positives from Tauri `#[command]` handlers).
+  - Disabled `expect_used` lint (50 legitimate uses in thread spawning, NonZero constructors, Tauri app builder — all unrecoverable).
+
+- **Split `skill-tools/src/parse.rs` into modules**: The 2,441-line monolith is now split into 7 focused sub-modules (`types`, `coerce`, `validate`, `extract`, `strip`, `inject`, `json_scan`) while preserving the full public API. All 161 tests continue to pass.
+
+- **Workspace-wide lint configuration**: Added `[workspace.lints]` in root `Cargo.toml` with consistent Clippy rules across all 22 crates — `unwrap_used`, `expect_used`, `undocumented_unsafe_blocks`, `needless_pass_by_value`, and more. All crates inherit via `[lints] workspace = true`.
+
+- **Eliminated `unwrap()` in library code**: Replaced the sole remaining `unwrap()` in production code (`skill-commands/src/graph.rs`) with safe `let-else`. All other `unwrap()` calls were already in tests/examples/benchmarks.
+
+- **Hardened `InterceptStore` lock handling**: Replaced `lock().expect("lock poisoned")` with graceful `if let Ok(guard)` pattern in `skill-headless` — poisoned locks now degrade gracefully instead of panicking.
+
+### Build
+
+- **Bust Windows CI caches**: Bumped Cargo and sccache cache keys (`windows-release-x86_64-msvc-v2`, `SCCACHE_GHA_VERSION=2`) to invalidate stale cmake artifacts that were compiled with dynamic CRT (`/MD`).
+- **Verify static CRT in Windows CI**: Added a post-compile `dumpbin /dependents` check that fails the build if `vcruntime140.dll`, `ucrtbase.dll`, or `msvcp*.dll` appear as dependencies, catching dynamic CRT leaks before packaging.
+
+- **Added `cargo audit` to CI**: New `cargo-audit` job in the CI pipeline scans for known dependency vulnerabilities on every push and PR.
+
+### Docs
+
+- **Added SAFETY comments to all `unsafe` blocks**: Documented invariants for every `unsafe` block in `skill-vision` (FFI OCR), `skill-gpu` (IOKit/sysctl), `skill-llm` (llama.cpp backend), and `skill-screenshots` (CoreFoundation/AppKit FFI).
+
 ## [0.0.57] — 2026-03-24
 
 ### Bugfixes
