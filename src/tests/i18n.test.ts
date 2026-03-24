@@ -16,6 +16,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { resolve }                   from "path";
 import { describe, it, expect }      from "vitest";
+import { extractKeysFromDir, isExempt } from "../lib/i18n/i18n-utils";
 
 const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
 const LOCALES     = ["de", "fr", "he", "uk"] as const;
@@ -149,4 +150,31 @@ describe("i18n placeholder consistency", () => {
 
     expect(failures, failures.slice(0, 10).join("\n")).toHaveLength(0);
   });
+});
+
+describe("i18n untranslated value detection", () => {
+  const enMap = extractKeysFromDir(resolve(LOCALES_DIR, "en"));
+
+  for (const locale of LOCALES) {
+    it(`${locale}/ has no untranslated values (identical to English)`, () => {
+      const locMap = extractKeysFromDir(resolve(LOCALES_DIR, locale));
+      const untranslated: string[] = [];
+
+      for (const [key, enVal] of enMap) {
+        const locVal = locMap.get(key);
+        if (locVal === undefined) continue; // missing keys caught by key-sync tests
+        if (locVal !== enVal) continue;      // translated — value differs
+        if (isExempt(key, enVal)) continue;  // legitimately identical
+
+        untranslated.push(key);
+      }
+
+      expect(
+        untranslated,
+        `${locale}/ has ${untranslated.length} untranslated key(s) still in English:\n` +
+        untranslated.slice(0, 20).map(k => `  ${k}: "${(enMap.get(k) ?? "").substring(0, 60)}"`).join("\n") +
+        (untranslated.length > 20 ? `\n  … and ${untranslated.length - 20} more` : "")
+      ).toHaveLength(0);
+    });
+  }
 });
