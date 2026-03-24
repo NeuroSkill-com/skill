@@ -325,6 +325,7 @@ print('  [ok] installer images generated')
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "Sections.nsh"
 
 ; ── General ─────────────────────────────────────────────────────────────
 Name "$ProductName"
@@ -353,6 +354,7 @@ $imageDirectives
 ; ── Pages ───────────────────────────────────────────────────────────────
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE"
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -384,7 +386,8 @@ Function LaunchAsCurrentUser
 FunctionEnd
 
 ; ── Install section ─────────────────────────────────────────────────────
-Section "Install"
+Section "$ProductName (required)" SEC_MAIN
+  SectionIn RO  ; required — cannot be unchecked
 $($installFiles -join "`n")
 
   ; Uninstaller
@@ -416,6 +419,94 @@ $($installFiles -join "`n")
 
   WriteRegStr HKLM "Software\$ProductName" "InstallDir" "`$INSTDIR"
 SectionEnd
+
+; ── Vulkan Runtime section (optional, auto-selected when missing) ───────
+; GPU-accelerated LLM inference requires the Vulkan loader (vulkan-1.dll).
+; Most Windows 10/11 PCs with discrete GPUs already have it.  If it is
+; missing, this section downloads and silently installs the LunarG Vulkan
+; Runtime, which is ~3 MB and redistributable.
+Section /o "Install Vulkan Runtime (GPU acceleration)" SEC_VULKAN
+  ; Temporary download path
+  StrCpy `$0 "`$TEMP\VulkanRT-Installer.exe"
+
+  ; Download the latest Vulkan Runtime installer from LunarG
+  DetailPrint "Downloading Vulkan Runtime..."
+  NSISdl::download "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" `$0
+  Pop `$1
+  StrCmp `$1 "success" +3
+    DetailPrint "Vulkan Runtime download failed (`$1). GPU acceleration may not work."
+    Goto vulkan_done
+
+  ; Silent install (/S = silent mode for the NSIS-based LunarG installer)
+  DetailPrint "Installing Vulkan Runtime..."
+  nsExec::ExecToLog '"`$0" /S'
+  Pop `$1
+  ; Non-zero exit is non-fatal — the app still works (falls back to CPU)
+  IntCmp `$1 0 +2
+    DetailPrint "Vulkan Runtime installer exited with code `$1 (non-fatal)."
+
+  Delete `$0
+
+  vulkan_done:
+SectionEnd
+
+; ── VC++ Redistributable section (optional, auto-selected when missing) ─
+; Some native dependencies (ONNX Runtime, etc.) require the Visual C++
+; 2015-2022 Redistributable.  The binary itself is statically linked, but
+; bundled DLLs or plugins may need vcruntime140.dll / msvcp140.dll.
+; The official Microsoft installer is ~25 MB and is a no-op if already
+; present — it silently exits with code 0 or 1638 (already installed).
+Section /o "Install VC++ Redistributable" SEC_VCREDIST
+  StrCpy `$0 "`$TEMP\vc_redist.x64.exe"
+
+  DetailPrint "Downloading Visual C++ Redistributable..."
+  NSISdl::download "https://aka.ms/vs/17/release/vc_redist.x64.exe" `$0
+  Pop `$1
+  StrCmp `$1 "success" +3
+    DetailPrint "VC++ Redistributable download failed (`$1). Some features may not work."
+    Goto vcredist_done
+
+  ; /install /quiet /norestart — standard silent switches for the VC++ installer.
+  ; Exit code 0 = success, 1638 = already installed (both are fine).
+  DetailPrint "Installing Visual C++ Redistributable..."
+  nsExec::ExecToLog '"`$0" /install /quiet /norestart'
+  Pop `$1
+  IntCmp `$1 0 vcredist_ok
+  IntCmp `$1 1638 vcredist_ok
+    DetailPrint "VC++ Redistributable installer exited with code `$1 (non-fatal)."
+    Goto vcredist_cleanup
+  vcredist_ok:
+    DetailPrint "Visual C++ Redistributable installed successfully."
+  vcredist_cleanup:
+  Delete `$0
+  vcredist_done:
+SectionEnd
+
+; ── Component descriptions ──────────────────────────────────────────────
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}     "Install $ProductDisplayName application files."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VULKAN}   "Download and install the Vulkan Runtime for GPU-accelerated LLM inference. Not needed if your GPU driver already provides Vulkan support."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST} "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+; ── Auto-select optional sections when prerequisites are missing ────────
+Function .onInit
+  ; Vulkan Runtime
+  IfFileExists "`$SYSDIR\vulkan-1.dll" vulkan_found vulkan_missing
+  vulkan_missing:
+    !insertmacro SelectSection `${SEC_VULKAN}
+    Goto vulkan_check_done
+  vulkan_found:
+  vulkan_check_done:
+
+  ; VC++ Redistributable — check for vcruntime140.dll
+  IfFileExists "`$SYSDIR\vcruntime140.dll" vcredist_found vcredist_missing
+  vcredist_missing:
+    !insertmacro SelectSection `${SEC_VCREDIST}
+    Goto vcredist_check_done
+  vcredist_found:
+  vcredist_check_done:
+FunctionEnd
 
 ; ── Uninstall section ───────────────────────────────────────────────────
 Section "Uninstall"
