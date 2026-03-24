@@ -124,7 +124,11 @@ pub(super) fn run_generation(
             }
             if !retry_ok {
                 llm_error!(app, log_buf, log_file, "decode error on prompt (batch at token {i}) — retry also failed");
-                token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
+                token_tx.send(InferToken::Error(
+                    "Decode error — the GPU failed to process the prompt. \
+                     Try sending the message again, or restart the model in Settings → LLM."
+                    .into()
+                )).ok();
                 return;
             }
             // Retry succeeded — break out of the outer loop since we

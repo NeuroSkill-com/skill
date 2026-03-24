@@ -291,7 +291,20 @@ pub(super) fn run_actor(
         }
         let ok = ctx.decode(&mut batch).is_ok();
         ctx.clear_kv_cache();
-        ok
+        if ok { return true; }
+
+        // Retry once after a brief delay (transient Metal failures).
+        llm_warn!(&app, &log_buf, log_file,
+            "warmup decode failed — retrying after 200ms");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let mut batch2 = LlamaBatch::new(n, 1);
+        for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
+            let last = i == n - 1;
+            if batch2.add(tok, i as i32, &[0], last).is_err() { return false; }
+        }
+        let ok2 = ctx.decode(&mut batch2).is_ok();
+        ctx.clear_kv_cache();
+        ok2
     })();
 
     if warmup_ok {
