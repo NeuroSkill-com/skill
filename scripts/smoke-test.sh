@@ -14,7 +14,7 @@ set -euo pipefail
 SESSION="smoke"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MDNS_TIMEOUT=180          # seconds to wait for mDNS registration
-TEST_ARGS="${*}"           # forward all args to test.ts
+TEST_ARGS="${*:-}"         # forward all args to test.ts
 
 # Kill previous session if it exists
 tmux kill-session -t "$SESSION" 2>/dev/null || true
