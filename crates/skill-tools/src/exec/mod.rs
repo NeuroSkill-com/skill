@@ -31,7 +31,7 @@ use crate::defs::is_builtin_tool_enabled;
 
 // Re-export public API items that were previously accessible from `exec`.
 pub use truncate::truncate_text;
-pub use helpers::resolve_tool_path;
+pub use helpers::{resolve_tool_path, retry_with_backoff};
 pub use safety::{check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook};
 
 // ── Public execution entry point ──────────────────────────────────────────────
@@ -70,7 +70,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
 
     let result = match call.function.name.as_str() {
         "date"          => tools_system::exec_date(),
-        "location"      => tools_system::exec_location().await,
+        "location"      => tools_system::exec_location(&allowed_tools.retry).await,
         "bash"          => tools_system::exec_bash(&args, scripts_dir, allowed_tools.require_bash_edit).await,
         "skill"         => tools_system::exec_skill(&args, allowed_tools).await,
         "web_search"    => tools_web::exec_web_search(&args, allowed_tools).await,

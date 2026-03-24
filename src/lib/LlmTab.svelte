@@ -58,6 +58,7 @@
     execution_mode: ToolExecutionMode;
     max_rounds: number;
     max_calls_per_round: number;
+    retry: { max_retries: number; base_delay_ms: number };
   }
 
   interface LlmConfig {
@@ -103,7 +104,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4 },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 15, max_calls_per_round: 4, retry: { max_retries: 2, base_delay_ms: 1000 } },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
     gpu_memory_threshold: 0.5, gpu_memory_gen_threshold: 0.3,

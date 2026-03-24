@@ -96,6 +96,9 @@ pub async fn chat_completions_ipc(
                     is_error,
                 });
             }
+            crate::llm::ToolEvent::RoundComplete { .. } => {
+                // Per-round usage tracking — logged at the orchestration layer.
+            }
         }
     });
     tokio::pin!(gen_fut);

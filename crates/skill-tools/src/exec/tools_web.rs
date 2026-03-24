@@ -21,24 +21,38 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
 
     let provider = allowed_tools.web_search_provider.clone();
     let compression = allowed_tools.context_compression.clone();
+    let max_retries = allowed_tools.retry.max_retries;
+    let base_delay = std::time::Duration::from_millis(allowed_tools.retry.base_delay_ms);
     tokio::task::spawn_blocking(move || {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(5))
-            .timeout_read(std::time::Duration::from_secs(10))
-            .build();
+        use super::helpers::retry_with_backoff;
 
-        // Try the configured backend first.
-        let mut results = match provider.backend.as_str() {
-            "brave" if !provider.brave_api_key.is_empty() => {
-                let r = search::brave_search(&agent, &provider.brave_api_key, &query);
-                if r.is_empty() { search::ddg_html_search(&agent, &query) } else { r }
+        // Retry the search backend call on transient failures (empty results
+        // from network errors).  The internal fallback (e.g. brave→ddg) still
+        // runs on each attempt.
+        let mut results = retry_with_backoff(max_retries, base_delay, || {
+            let agent = ureq::AgentBuilder::new()
+                .timeout_connect(std::time::Duration::from_secs(5))
+                .timeout_read(std::time::Duration::from_secs(10))
+                .build();
+
+            let r = match provider.backend.as_str() {
+                "brave" if !provider.brave_api_key.is_empty() => {
+                    let r = search::brave_search(&agent, &provider.brave_api_key, &query);
+                    if r.is_empty() { search::ddg_html_search(&agent, &query) } else { r }
+                }
+                "searxng" if !provider.searxng_url.is_empty() => {
+                    let r = search::searxng_search(&agent, &provider.searxng_url, &query);
+                    if r.is_empty() { search::ddg_html_search(&agent, &query) } else { r }
+                }
+                _ => search::ddg_html_search(&agent, &query),
+            };
+
+            if r.is_empty() {
+                Err(r) // retry on empty results
+            } else {
+                Ok(r)
             }
-            "searxng" if !provider.searxng_url.is_empty() => {
-                let r = search::searxng_search(&agent, &provider.searxng_url, &query);
-                if r.is_empty() { search::ddg_html_search(&agent, &query) } else { r }
-            }
-            _ => search::ddg_html_search(&agent, &query),
-        };
+        }).unwrap_or_else(|empty| empty);
 
         // Cap results based on compression settings.
         let max_results = compression.effective_max_search_results();
@@ -206,14 +220,14 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
     let max_content = allowed_tools.context_compression.effective_max_result_chars().max(1000);
 
     if render {
-        exec_web_fetch_render(args, &url, max_content).await
+        exec_web_fetch_render(args, &url, max_content, &allowed_tools.retry).await
     } else {
-        exec_web_fetch_plain(&url, max_content).await
+        exec_web_fetch_plain(&url, max_content, &allowed_tools.retry).await
     }
 }
 
 /// Headless browser rendering path for web_fetch.
-async fn exec_web_fetch_render(args: &Value, url: &str, max_content: usize) -> Value {
+async fn exec_web_fetch_render(args: &Value, url: &str, max_content: usize, _retry: &crate::types::ToolRetryConfig) -> Value {
     let wait_ms = args.get("wait_ms").and_then(serde_json::Value::as_u64).unwrap_or(2000);
     let selector = args.get("selector").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
     let eval_js = args.get("eval_js").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
@@ -262,29 +276,52 @@ async fn exec_web_fetch_render(args: &Value, url: &str, max_content: usize) -> V
     result
 }
 
-/// Plain HTTP fetch path for web_fetch.
-async fn exec_web_fetch_plain(url: &str, max_content: usize) -> Value {
+/// Plain HTTP fetch path for web_fetch (with retry on transient errors).
+async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::types::ToolRetryConfig) -> Value {
     let url_for_fetch = url.to_string();
+    let max_retries = retry.max_retries;
+    let base_delay = std::time::Duration::from_millis(retry.base_delay_ms);
     tokio::task::spawn_blocking(move || {
-        let agent = search::browser_agent();
-        let resp = search::set_browser_headers(agent.get(&url_for_fetch)).call();
+        use super::helpers::retry_with_backoff;
 
-        match resp {
-            Ok(r) => {
-                let status = r.status();
-                let content_type = r.header("Content-Type").unwrap_or("").to_string();
-                let body = r.into_string().unwrap_or_default();
-                json!({
-                    "ok": true,
-                    "tool": "web_fetch",
-                    "url": url_for_fetch,
-                    "status": status,
-                    "content_type": content_type,
-                    "content": truncate_text(&body, max_content),
-                    "truncated": body.chars().count() > max_content,
-                })
-            }
-            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
+        let result = retry_with_backoff(
+            max_retries,
+            base_delay,
+            || {
+                let agent = search::browser_agent();
+                let resp = search::set_browser_headers(agent.get(&url_for_fetch)).call();
+                match resp {
+                    Ok(r) => {
+                        let status = r.status();
+                        // Retry on server errors (5xx) and rate limits (429)
+                        if status == 429 || (500..600).contains(&status) {
+                            let body = r.into_string().unwrap_or_default();
+                            return Err(format!("HTTP {}: {}", status, body));
+                        }
+                        let content_type = r.header("Content-Type").unwrap_or("").to_string();
+                        let body = r.into_string().unwrap_or_default();
+                        Ok(json!({
+                            "ok": true,
+                            "tool": "web_fetch",
+                            "url": url_for_fetch,
+                            "status": status,
+                            "content_type": content_type,
+                            "content": truncate_text(&body, max_content),
+                            "truncated": body.chars().count() > max_content,
+                        }))
+                    }
+                    Err(ureq::Error::Status(code, resp)) if code == 429 || (500..600).contains(&code) => {
+                        let body = resp.into_string().unwrap_or_default();
+                        Err(format!("HTTP {}: {}", code, body))
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            },
+        );
+
+        match result {
+            Ok(val) => val,
+            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e }),
         }
     }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
 }
