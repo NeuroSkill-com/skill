@@ -184,6 +184,8 @@ const ui: Record<string, string> = {
   "updates.readyToRestart":            "מוכן להאתחל",
   "updates.restartToApply":            "הפעל מחדש את האפליקציה כדי ליישם את העדכון.",
   "updates.restartNow":                "הפעל מחדש כעת",
+  "updates.restartWhenReady":          "העדכון מוכן — הפעל מחדש כשנוח לך.",
+  "updates.sessionLiveBlocked":        "מתבצעת הקלטת EEG. יש לעצור את ההקלטה לפני הפעלה מחדש, או לסגור ולהפעיל מחדש מאוחר יותר.",
   "updates.restartingIn":              "מאתחל בעוד {secs} שניות…",
   "updates.downloadFailed":            "ההורדה נכשלה — לחץ על נסה שנית.",
   "updates.autoUpdateFailedOnline":    "העדכון האוטומטי נכשל. אנא הורד את הגרסה העדכנית ביותר אונליין.",
@@ -204,7 +206,7 @@ const ui: Record<string, string> = {
   "updates.autostart":                 "הפעלה בכניסה למערכת",
   "updates.autostartDesc":             "מתחיל אוטומטית כשנכנסים למחשב.",
   "updates.autoCheckDesc":             "בדוק עדכונים פעם ביום כאשר האפליקציה מתחילה.",
-  "updates.footer":                    "העדכונים מתקבלים ומותקנים אוטומטית. רק צריך להאתחל.",
+  "updates.footer":                    "עדכונים מורדים אוטומטית. הפעל מחדש כשנוח לך.",
 
   "whatsNew.title":   "מה חדש",
   "whatsNew.version": "גרסה {version}",

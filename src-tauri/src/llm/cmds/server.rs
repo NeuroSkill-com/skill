@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 use crate::MutexExt;
 use crate::AppState;
 use super::save_catalog;
-use crate::llm::{LlmLogEntry, LlmStatus, cell_status, push_log};
+use crate::llm::{LlmEventEmitter, LlmLogEntry, LlmStatus, cell_status, push_log};
 use crate::llm::catalog::DownloadState;
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
@@ -118,6 +118,8 @@ pub fn start_llm_server(
 
     // Spawn a background task — load the model without blocking the UI thread.
     tauri::async_runtime::spawn(async move {
+        let emitter = crate::llm::TauriEmitter(app.clone());
+        let log_buf2 = log_buf.clone();
         let emitter_arc: std::sync::Arc<dyn crate::llm::LlmEventEmitter> =
             std::sync::Arc::new(crate::llm::TauriEmitter(app));
         let result = tokio::task::spawn_blocking(move || {
@@ -129,14 +131,18 @@ pub fn start_llm_server(
         match result {
             Ok(Some(s))  => { *cell.lock_or_recover() = Some(s); }
             Ok(None)     => {
-                *start_error.lock_or_recover() = Some(
-                    "Failed to start LLM server. \
+                let msg = "Failed to start LLM server. \
                      Check that a model is downloaded and selected in Settings → LLM."
-                    .to_string()
-                );
+                    .to_string();
+                *start_error.lock_or_recover() = Some(msg.clone());
+                push_log(&emitter, &log_buf2, "error", &msg);
+                emitter.emit_event("llm:status", serde_json::json!({"status":"stopped","error":msg}));
             }
             Err(e) => {
-                *start_error.lock_or_recover() = Some(format!("Load task panicked: {e}"));
+                let msg = format!("Load task panicked: {e}");
+                *start_error.lock_or_recover() = Some(msg.clone());
+                push_log(&emitter, &log_buf2, "error", &msg);
+                emitter.emit_event("llm:status", serde_json::json!({"status":"stopped","error":msg}));
             }
         }
     });
@@ -274,6 +280,7 @@ pub fn switch_llm_model(
             config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
         }
 
+        let emitter = crate::llm::TauriEmitter(app2.clone());
         let emitter_arc: std::sync::Arc<dyn crate::llm::LlmEventEmitter> =
             std::sync::Arc::new(crate::llm::TauriEmitter(app2));
         let result = tokio::task::spawn_blocking(move || {
@@ -285,12 +292,14 @@ pub fn switch_llm_model(
         match result {
             Ok(Some(s)) => { *cell.lock_or_recover() = Some(s); }
             Ok(None) => {
-                *start_error.lock_or_recover() = Some(
-                    "Failed to start LLM server after model switch.".to_string()
-                );
+                let msg = "Failed to start LLM server after model switch.".to_string();
+                *start_error.lock_or_recover() = Some(msg.clone());
+                emitter.emit_event("llm:status", serde_json::json!({"status":"stopped","error":msg}));
             }
             Err(e) => {
-                *start_error.lock_or_recover() = Some(format!("Load task panicked: {e}"));
+                let msg = format!("Load task panicked: {e}");
+                *start_error.lock_or_recover() = Some(msg.clone());
+                emitter.emit_event("llm:status", serde_json::json!({"status":"stopped","error":msg}));
             }
         }
     });

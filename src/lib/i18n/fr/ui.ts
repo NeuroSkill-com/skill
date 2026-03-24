@@ -167,6 +167,8 @@ const ui: Record<string, string> = {
   "updates.readyToRestart":            "Prêt à redémarrer",
   "updates.restartToApply":            "Redémarrez l'application pour appliquer la mise à jour.",
   "updates.restartNow":                "Redémarrer maintenant",
+  "updates.restartWhenReady":          "Mise à jour prête — redémarrez quand vous êtes prêt.",
+  "updates.sessionLiveBlocked":        "Une session EEG est en cours d'enregistrement. Veuillez arrêter la session avant de redémarrer, ou fermez et redémarrez plus tard.",
   "updates.restartingIn":              "Redémarrage dans {secs} s...",
   "updates.downloadFailed":            "Échec du téléchargement - cliquez sur Réessayer.",
   "updates.autoUpdateFailedOnline":    "La mise à jour automatique a échoué. Veuillez télécharger la dernière version en ligne.",
@@ -187,7 +189,7 @@ const ui: Record<string, string> = {
   "updates.autostart":                 "Lancer à la connexion",
   "updates.autostartDesc":             "Démarre automatiquement quand vous ouvrez une session.",
   "updates.autoCheckDesc":             "Vérifier les mises à jour une fois par jour au démarrage de l'application.",
-  "updates.footer":                    "Les mises à jour sont téléchargées et installées automatiquement. Vous n'avez qu'à redémarrer.",
+  "updates.footer":                    "Les mises à jour sont téléchargées automatiquement. Redémarrez quand vous êtes prêt.",
 
   "whatsNew.title":   "Nouveautés",
   "whatsNew.version": "Version {version}",

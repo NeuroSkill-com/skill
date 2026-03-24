@@ -167,6 +167,8 @@ const ui: Record<string, string> = {
   "updates.readyToRestart":            "Bereit zum Neustarten",
   "updates.restartToApply":            "Starten Sie die App neu, um das Update anzuwenden.",
   "updates.restartNow":                "Jetzt neu starten",
+  "updates.restartWhenReady":          "Update bereit — starten Sie neu, wenn Sie bereit sind.",
+  "updates.sessionLiveBlocked":        "Eine EEG-Sitzung wird aufgezeichnet. Bitte stoppen Sie die Sitzung vor dem Neustart oder schließen Sie und starten Sie später neu.",
   "updates.restartingIn":              "Neustart in {secs} s…",
   "updates.downloadFailed":            "Download fehlgeschlagen — erneut versuchen.",
   "updates.autoUpdateFailedOnline":    "Automatisches Update fehlgeschlagen. Bitte laden Sie die neueste Version online herunter.",
@@ -187,7 +189,7 @@ const ui: Record<string, string> = {
   "updates.autostart":                 "Bei Anmeldung starten",
   "updates.autostartDesc":             "Startet automatisch, wenn du dich an deinem Computer anmeldest.",
   "updates.autoCheckDesc":             "Nach Updates prüfen, sobald die App startet, einmal pro Tag.",
-  "updates.footer":                    "Updates werden heruntergeladen und automatisch installiert. Sie müssen lediglich neu starten.",
+  "updates.footer":                    "Updates werden automatisch heruntergeladen. Starten Sie neu, wenn Sie bereit sind.",
 
   "whatsNew.title":   "Was ist neu",
   "whatsNew.version": "Version {version}",
