@@ -158,7 +158,10 @@ const needsEspeak = subcommand === "dev" || subcommand === "build";
 
 // ── Pass-through for subcommands that don't need espeak ───────────────────────
 if (!needsEspeak) {
-  const passCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
+  const passCmd =
+    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri")
+      ? ["cargo", "tauri"]
+      : ["npx", "tauri"];
   const cmd = [...passCmd, subcommand, ...subArgs]
     .filter(Boolean)
     .join(" ");
