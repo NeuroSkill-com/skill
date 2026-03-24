@@ -122,8 +122,7 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
         all_diags.extend(result.diagnostics);
         for skill in result.skills {
             // Resolve symlinks to detect duplicate files.
-            let real = fs::canonicalize(&skill.file_path)
-                .unwrap_or_else(|_| PathBuf::from(&skill.file_path));
+            let real = fs::canonicalize(&skill.file_path).unwrap_or_else(|_| PathBuf::from(&skill.file_path));
             if real_paths.contains(&real) {
                 continue; // silently skip symlink duplicates
             }
@@ -225,10 +224,7 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
 ///
 /// Skills with `disable_model_invocation = true` are excluded.
 pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
-    let visible: Vec<&Skill> = skills
-        .iter()
-        .filter(|s| !s.disable_model_invocation)
-        .collect();
+    let visible: Vec<&Skill> = skills.iter().filter(|s| !s.disable_model_invocation).collect();
     if visible.is_empty() {
         return String::new();
     }
@@ -250,10 +246,7 @@ pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
             "    <description>{}</description>",
             escape_xml(&skill.description)
         ));
-        lines.push(format!(
-            "    <location>{}</location>",
-            escape_xml(&skill.file_path)
-        ));
+        lines.push(format!("    <location>{}</location>", escape_xml(&skill.file_path)));
         lines.push("  </skill>".into());
     }
 
@@ -292,30 +285,19 @@ fn load_skills_from_dir(dir: &Path, source: &str, include_root_files: bool) -> L
     load_skills_from_dir_inner(dir, source, include_root_files, dir)
 }
 
-fn load_skills_from_dir_inner(
-    dir: &Path,
-    source: &str,
-    include_root_files: bool,
-    root_dir: &Path,
-) -> LoadSkillsResult {
+fn load_skills_from_dir_inner(dir: &Path, source: &str, include_root_files: bool, root_dir: &Path) -> LoadSkillsResult {
     let mut skills = Vec::new();
     let mut diagnostics = Vec::new();
 
     if !dir.exists() || !dir.is_dir() {
-        return LoadSkillsResult {
-            skills,
-            diagnostics,
-        };
+        return LoadSkillsResult { skills, diagnostics };
     }
 
     // Build ignore matcher from .gitignore / .ignore / .fdignore in this dir.
     let ig = build_ignore(dir, root_dir);
 
     let Ok(entries) = fs::read_dir(dir) else {
-        return LoadSkillsResult {
-            skills,
-            diagnostics,
-        };
+        return LoadSkillsResult { skills, diagnostics };
     };
 
     let mut entries_vec: Vec<fs::DirEntry> = entries.filter_map(std::result::Result::ok).collect();
@@ -341,9 +323,7 @@ fn load_skills_from_dir_inner(
             .ok()
             .map(|c| {
                 let (fm, _) = parse_frontmatter(&c);
-                fm.get("index")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false)
+                fm.get("index").and_then(serde_json::Value::as_bool).unwrap_or(false)
             })
             .unwrap_or(false);
 
@@ -358,10 +338,7 @@ fn load_skills_from_dir_inner(
                 break;
             }
             // Valid SKILL.md found — this dir is a skill root; do not recurse.
-            return LoadSkillsResult {
-                skills,
-                diagnostics,
-            };
+            return LoadSkillsResult { skills, diagnostics };
         }
         // SKILL.md exists but failed validation (e.g. missing description).
         // Continue to recurse into subdirectories — this supports index-style
@@ -421,10 +398,7 @@ fn load_skills_from_dir_inner(
         }
     }
 
-    LoadSkillsResult {
-        skills,
-        diagnostics,
-    }
+    LoadSkillsResult { skills, diagnostics }
 }
 
 // ── Internal: single file loading ─────────────────────────────────────────────
@@ -587,12 +561,7 @@ fn build_ignore(dir: &Path, _root_dir: &Path) -> Option<ignore::gitignore::Gitig
     }
 }
 
-fn is_ignored(
-    ig: &Option<ignore::gitignore::Gitignore>,
-    path: &Path,
-    _root: &Path,
-    is_dir: bool,
-) -> bool {
+fn is_ignored(ig: &Option<ignore::gitignore::Gitignore>, path: &Path, _root: &Path, is_dir: bool) -> bool {
     let Some(ref gi) = ig else { return false };
     gi.matched(path, is_dir).is_ignore()
 }
@@ -632,10 +601,7 @@ description: A helpful skill
 "#;
         let (fm, body) = parse_frontmatter(content);
         assert_eq!(fm.get("name").unwrap().as_str().unwrap(), "my-skill");
-        assert_eq!(
-            fm.get("description").unwrap().as_str().unwrap(),
-            "A helpful skill"
-        );
+        assert_eq!(fm.get("description").unwrap().as_str().unwrap(), "A helpful skill");
         assert!(body.contains("Body content"));
     }
 
@@ -643,10 +609,7 @@ description: A helpful skill
     fn parse_frontmatter_boolean() {
         let content = "---\ndisable-model-invocation: true\ndescription: test\n---\nbody";
         let (fm, _) = parse_frontmatter(content);
-        assert_eq!(
-            fm.get("disable-model-invocation").unwrap().as_bool(),
-            Some(true)
-        );
+        assert_eq!(fm.get("disable-model-invocation").unwrap().as_bool(), Some(true));
     }
 
     #[test]

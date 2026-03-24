@@ -87,9 +87,7 @@ impl ActivityStore {
             eprintln!("[activity] DDL: {e}");
             return None;
         }
-        Some(Self {
-            conn: Mutex::new(conn),
-        })
+        Some(Self { conn: Mutex::new(conn) })
     }
 
     // ── Writers ───────────────────────────────────────────────────────────────
@@ -113,12 +111,7 @@ impl ActivityStore {
 
     /// Flush current last-keyboard / last-mouse timestamps to the database.
     /// `None` means the device type was never used since tracking started.
-    pub fn insert_input_activity(
-        &self,
-        last_keyboard: Option<u64>,
-        last_mouse: Option<u64>,
-        sampled_at: u64,
-    ) {
+    pub fn insert_input_activity(&self, last_keyboard: Option<u64>, last_mouse: Option<u64>, sampled_at: u64) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
             "INSERT INTO input_activity (last_keyboard, last_mouse, sampled_at)

@@ -76,12 +76,8 @@ mod response;
 mod session;
 
 pub use command::Command;
-pub use engine::{
-    cancel_current_fetch, external_fetch_page, is_fetch_cancelled, Browser, BrowserConfig, Mode,
-};
+pub use engine::{cancel_current_fetch, external_fetch_page, is_fetch_cancelled, Browser, BrowserConfig, Mode};
 pub use error::HeadlessError;
-pub use intercept::{
-    InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent, NetworkLog,
-};
+pub use intercept::{InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent, NetworkLog};
 pub use response::Response;
 pub use session::{Cookie, StorageEntry};

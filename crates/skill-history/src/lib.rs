@@ -29,8 +29,7 @@ const LEGACY_PREFIX: &str = "muse_";
 
 /// Returns `true` if `fname` is a session JSON sidecar (exg_*.json or muse_*.json).
 fn is_session_json(fname: &str) -> bool {
-    (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX))
-        && fname.ends_with(".json")
+    (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX)) && fname.ends_with(".json")
 }
 
 /// Returns `true` if `fname` is a primary EEG data file (CSV or Parquet, not metrics/ppg).
@@ -397,21 +396,17 @@ pub fn list_session_days(skill_dir: &Path) -> Vec<String> {
             if !(s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) && e.path().is_dir()) {
                 return None;
             }
-            let has_sessions = std::fs::read_dir(e.path())
-                .into_iter()
-                .flatten()
-                .flatten()
-                .any(|f| {
-                    let fname = f.file_name();
-                    let fname = fname.to_string_lossy();
-                    if is_session_json(&fname) {
-                        return true;
-                    }
-                    if is_session_csv(&fname) {
-                        return !f.path().with_extension("json").exists();
-                    }
-                    false
-                });
+            let has_sessions = std::fs::read_dir(e.path()).into_iter().flatten().flatten().any(|f| {
+                let fname = f.file_name();
+                let fname = fname.to_string_lossy();
+                if is_session_json(&fname) {
+                    return true;
+                }
+                if is_session_csv(&fname) {
+                    return !f.path().with_extension("json").exists();
+                }
+                false
+            });
             if has_sessions {
                 Some(s.to_string())
             } else {
@@ -434,11 +429,7 @@ pub fn list_sessions_for_day(
         return vec![];
     }
 
-    let files: Vec<_> = std::fs::read_dir(&day_dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .collect();
+    let files: Vec<_> = std::fs::read_dir(&day_dir).into_iter().flatten().flatten().collect();
     let mut raw: Vec<(SessionEntry, Option<u64>, Option<u64>)> = Vec::new();
 
     // First pass: JSON sidecars
@@ -583,8 +574,7 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
     // column doesn't exist (very old database), the prepare will fail.
     // In that case, run the migration via a read-write connection and
     // return early (all values will be NULL after migration anyway).
-    let flags_ro =
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let flags_ro = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, flags_ro) else {
         return;
     };
@@ -599,8 +589,7 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
     let needs_migration = conn.prepare(query).is_err();
     if needs_migration {
         drop(conn);
-        let flags_rw =
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let flags_rw = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
         if let Ok(rw) = rusqlite::Connection::open_with_flags(&db_path, flags_rw) {
             let _ = rw.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
         }
@@ -620,9 +609,7 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         };
         let ts_start = skill_data::util::unix_to_ts(s);
         let ts_end = skill_data::util::unix_to_ts(e);
-        if let Ok(avg) = stmt.query_row(rusqlite::params![ts_start, ts_end], |row| {
-            row.get::<_, Option<f64>>(0)
-        }) {
+        if let Ok(avg) = stmt.query_row(rusqlite::params![ts_start, ts_end], |row| row.get::<_, Option<f64>>(0)) {
             session.avg_snr_db = avg;
         }
     }
@@ -801,11 +788,7 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
         if !path.is_dir() {
             continue;
         }
-        let day_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_string();
+        let day_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
         if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) {
             continue;
         }
@@ -820,8 +803,7 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
             continue;
         };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp")
-        else {
+        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") else {
             continue;
         };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
@@ -892,10 +874,7 @@ fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
     let mut last: Option<u64> = None;
     for batch in reader {
         let Ok(batch) = batch else { continue };
-        let ts_col = batch
-            .column(0)
-            .as_any()
-            .downcast_ref::<arrow_array::Float64Array>()?;
+        let ts_col = batch.column(0).as_any().downcast_ref::<arrow_array::Float64Array>()?;
         for i in 0..ts_col.len() {
             if ts_col.is_null(i) {
                 continue;
@@ -1016,4 +995,3 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
         }
     }
 }
-

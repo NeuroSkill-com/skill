@@ -23,17 +23,13 @@ static BASH_EDIT_HOOK: Mutex<Option<BashEditHook>> = Mutex::new(None);
 ///
 /// Call this once at app startup (e.g. from `setup()`).
 pub fn set_bash_edit_hook(hook: BashEditHook) {
-    *BASH_EDIT_HOOK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
+    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
 }
 
 /// Clear the bash-edit hook (tests / shutdown).
 #[allow(dead_code)]
 pub fn clear_bash_edit_hook() {
-    *BASH_EDIT_HOOK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
 /// Present a bash command for user review/editing.
@@ -48,12 +44,10 @@ pub(crate) async fn request_bash_edit(command: &str) -> Option<String> {
     match hook {
         Some(f) => {
             let cmd = command.to_string();
-            tokio::task::spawn_blocking(move || f(&cmd))
-                .await
-                .unwrap_or_else(|e| {
-                    crate::tool_log!("tool:bash", "[edit] hook panicked: {}", e);
-                    None
-                })
+            tokio::task::spawn_blocking(move || f(&cmd)).await.unwrap_or_else(|e| {
+                crate::tool_log!("tool:bash", "[edit] hook panicked: {}", e);
+                None
+            })
         }
         None => {
             // No hook registered — fall through to execute unmodified.
@@ -104,9 +98,7 @@ const SENSITIVE_PATH_PREFIXES: &[&str] = &[
 /// A match is only flagged if the pattern appears at the start of the string
 /// or is preceded by one of these characters.  This prevents false positives
 /// like "skill" matching "kill".
-const BOUNDARY_CHARS: &[char] = &[
-    ' ', '\t', '\n', '\r', ';', '|', '&', '(', ')', '{', '}', '`', '$', '/',
-];
+const BOUNDARY_CHARS: &[char] = &[' ', '\t', '\n', '\r', ';', '|', '&', '(', ')', '{', '}', '`', '$', '/'];
 
 /// Check if a bash command looks dangerous and return a human-readable reason.
 pub fn check_bash_safety(command: &str) -> Option<String> {

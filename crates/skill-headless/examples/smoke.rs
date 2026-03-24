@@ -67,9 +67,7 @@ fn main() {
 
     // ── GetContent ───────────────────────────────────────────────────────
     println!("\n[5] GetContent...");
-    let resp = browser
-        .send(Command::GetContent)
-        .expect("GetContent failed");
+    let resp = browser.send(Command::GetContent).expect("GetContent failed");
     let html = resp.as_text().unwrap_or("");
     println!("    HTML length: {} chars", html.len());
     assert!(html.contains("Hello Headless"), "expected heading in HTML");
@@ -211,21 +209,15 @@ fn main() {
         })
         .expect("SetLocalStorage failed");
     let resp = browser
-        .send(Command::GetLocalStorage {
-            key: "test_key".into(),
-        })
+        .send(Command::GetLocalStorage { key: "test_key".into() })
         .expect("GetLocalStorage failed");
     println!("    Get: {:?}", resp.as_text());
     assert_eq!(resp.as_text(), Some("test_val"), "localStorage mismatch");
     browser
-        .send(Command::RemoveLocalStorage {
-            key: "test_key".into(),
-        })
+        .send(Command::RemoveLocalStorage { key: "test_key".into() })
         .expect("RemoveLocalStorage failed");
     let resp = browser
-        .send(Command::GetLocalStorage {
-            key: "test_key".into(),
-        })
+        .send(Command::GetLocalStorage { key: "test_key".into() })
         .expect("GetLocalStorage after remove failed");
     println!("    After remove: {:?}", resp.as_text());
     assert_eq!(resp.as_text(), Some("null"), "expected null after remove");
@@ -240,9 +232,7 @@ fn main() {
         })
         .expect("SetSessionStorage failed");
     let resp = browser
-        .send(Command::GetSessionStorage {
-            key: "sess_key".into(),
-        })
+        .send(Command::GetSessionStorage { key: "sess_key".into() })
         .expect("GetSessionStorage failed");
     println!("    Get: {:?}", resp.as_text());
     assert_eq!(resp.as_text(), Some("sess_val"), "sessionStorage mismatch");
@@ -288,9 +278,7 @@ fn main() {
     // ── Reload ───────────────────────────────────────────────────────────
     println!("\n[20] Reload...");
     let resp = browser
-        .send(Command::Reload {
-            ignore_cache: false,
-        })
+        .send(Command::Reload { ignore_cache: false })
         .expect("Reload failed");
     println!("    Response: {:?}", resp);
     println!("    PASS");
@@ -374,9 +362,7 @@ fn main() {
 
     // ── Screenshot ─────────────────────────────────────────────────────
     println!("\n[27] Screenshot...");
-    let resp = browser
-        .send(Command::Screenshot)
-        .expect("Screenshot panicked");
+    let resp = browser.send(Command::Screenshot).expect("Screenshot panicked");
     let text = resp.as_text().unwrap_or("");
     let is_png = text.starts_with("data:image/png;base64,");
     println!("    Got PNG data URL: {is_png} ({} chars)", text.len());

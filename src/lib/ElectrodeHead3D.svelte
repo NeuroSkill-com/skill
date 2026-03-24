@@ -223,7 +223,7 @@ function electrodePosOnSurface(el: Electrode): Vector3 {
   const hits = _raycaster.intersectObject(headMesh, false);
   if (hits.length > 0) {
     const hit = hits[hits.length - 1];
-    return hit.point.clone().add(hit.face?.normal.clone().multiplyScalar(NORMAL_OFFSET));
+    return hit.point.clone().add(hit.face?.normal.clone().multiplyScalar(NORMAL_OFFSET) ?? new Vector3());
   }
 
   // Fallback: find the closest point on the mesh surface
@@ -328,7 +328,7 @@ function buildMuseBand(): BufferGeometry {
       const hits = _raycaster.intersectObject(headMesh, false);
       if (hits.length > 0) {
         const hit = hits[hits.length - 1];
-        p = hit.point.clone().add(hit.face?.normal.clone().multiplyScalar(0.08));
+        p = hit.point.clone().add(hit.face?.normal.clone().multiplyScalar(0.08) ?? new Vector3());
       }
     }
     pts.push(p);

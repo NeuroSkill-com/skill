@@ -242,9 +242,12 @@ mod tests {
     #[test]
     fn download_state_serde_roundtrip() {
         let states = vec![
-            DownloadState::NotDownloaded, DownloadState::Downloading,
-            DownloadState::Paused, DownloadState::Downloaded,
-            DownloadState::Failed, DownloadState::Cancelled,
+            DownloadState::NotDownloaded,
+            DownloadState::Downloading,
+            DownloadState::Paused,
+            DownloadState::Downloaded,
+            DownloadState::Failed,
+            DownloadState::Cancelled,
         ];
         for s in states {
             let json = serde_json::to_string(&s).unwrap();

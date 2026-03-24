@@ -9,18 +9,15 @@ use std::path::Path;
 use skill_data::util::{ts_to_unix, unix_to_ts};
 
 use super::{
-    find_metrics_path, load_metrics_csv, CsvMetricsResult, EpochRow, SessionMetrics, SleepEpoch,
-    SleepStages, SleepSummary,
+    find_metrics_path, load_metrics_csv, CsvMetricsResult, EpochRow, SessionMetrics, SleepEpoch, SleepStages,
+    SleepSummary,
 };
 
 // ── Disk cache ────────────────────────────────────────────────────────────────
 
 /// Cache file path: `exg_XXX.csv` → `exg_XXX_metrics_cache.json`
 fn metrics_cache_path(csv_path: &Path) -> std::path::PathBuf {
-    let stem = csv_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("exg");
+    let stem = csv_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     csv_path.with_file_name(format!("{stem}_metrics_cache.json"))
 }
 
@@ -32,12 +29,8 @@ pub fn load_csv_metrics_cached(csv_path: &Path) -> Option<CsvMetricsResult> {
     let cache_path = metrics_cache_path(csv_path);
 
     if cache_path.exists() {
-        let csv_mtime = std::fs::metadata(&metrics_file)
-            .ok()
-            .and_then(|m| m.modified().ok());
-        let cache_mtime = std::fs::metadata(&cache_path)
-            .ok()
-            .and_then(|m| m.modified().ok());
+        let csv_mtime = std::fs::metadata(&metrics_file).ok().and_then(|m| m.modified().ok());
+        let cache_mtime = std::fs::metadata(&cache_path).ok().and_then(|m| m.modified().ok());
         if let (Some(cm), Some(ca)) = (csv_mtime, cache_mtime) {
             if ca >= cm {
                 if let Ok(data) = std::fs::read(&cache_path) {
@@ -82,10 +75,7 @@ pub fn downsample_timeseries(ts: &mut Vec<EpochRow>, max: usize) {
 }
 
 /// Batch-load metrics for multiple sessions.
-pub fn get_day_metrics_batch(
-    csv_paths: &[String],
-    max_ts_points: usize,
-) -> HashMap<String, CsvMetricsResult> {
+pub fn get_day_metrics_batch(csv_paths: &[String], max_ts_points: usize) -> HashMap<String, CsvMetricsResult> {
     let mut out = HashMap::with_capacity(csv_paths.len());
     for path in csv_paths {
         if let Some(mut result) = load_csv_metrics_cached(Path::new(path)) {
@@ -190,8 +180,7 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
         let iter = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts_val: i64 = row.get(0)?;
             let utc = ts_to_unix(ts_val);
-            let g =
-                |i: usize| -> f64 { row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0) };
+            let g = |i: usize| -> f64 { row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0) };
             Ok(EpochRow {
                 t: utc as f64,
                 rd: g(1),
@@ -502,10 +491,8 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
         if !db_path.exists() {
             continue;
         }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) else {
+        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        else {
             continue;
         };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
@@ -807,9 +794,12 @@ pub fn compute_compare_insights(
             "stable"
         };
 
-        deltas.insert(metric.into(), serde_json::json!({
-            "a": r2f(ma), "b": r2f(mb), "abs": r2f(abs_delta), "pct": r2f(pct), "direction": direction,
-        }));
+        deltas.insert(
+            metric.into(),
+            serde_json::json!({
+                "a": r2f(ma), "b": r2f(mb), "abs": r2f(abs_delta), "pct": r2f(pct), "direction": direction,
+            }),
+        );
         match direction {
             "up" => improved.push(metric.into()),
             "down" => declined.push(metric.into()),
@@ -922,9 +912,7 @@ pub fn analyze_search_results(result: &skill_commands::SearchResult) -> serde_js
     for q in &result.results {
         for n in &q.neighbors {
             all_utcs.push(n.timestamp_unix);
-            *hour_dist
-                .entry(((n.timestamp_unix % 86400) / 3600) as u8)
-                .or_insert(0) += 1;
+            *hour_dist.entry(((n.timestamp_unix % 86400) / 3600) as u8).or_insert(0) += 1;
             *day_dist.entry(&n.date).or_insert(0) += 1;
         }
     }
@@ -1065,9 +1053,12 @@ pub fn compute_status_history(
             } else {
                 "stable"
             };
-            today_vs_avg.insert(metric.into(), serde_json::json!({
-                "today": r2f(tv), "avg_7d": r2f(wv), "delta_pct": r2f(delta_pct), "direction": direction,
-            }));
+            today_vs_avg.insert(
+                metric.into(),
+                serde_json::json!({
+                    "today": r2f(tv), "avg_7d": r2f(wv), "delta_pct": r2f(delta_pct), "direction": direction,
+                }),
+            );
         }
     }
     serde_json::json!({

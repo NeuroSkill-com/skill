@@ -212,8 +212,7 @@ fn detect_peaks_and_ibis(ir: &[f64], sr: f64) -> Vec<f64> {
         let end = (i + win / 2).min(bp.len());
         let window = &bp[start..end];
         let mean = window.iter().sum::<f64>() / window.len() as f64;
-        let std =
-            (window.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / window.len() as f64).sqrt();
+        let std = (window.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / window.len() as f64).sqrt();
         if bp[i] > mean + 0.6 * std {
             peaks.push(i);
         }
@@ -269,8 +268,7 @@ fn hrv_time_domain(ibis: &[f64]) -> (f64, f64, f64) {
 
     // SDNN
     let mean = ibis_ms.iter().sum::<f64>() / ibis_ms.len() as f64;
-    let sdnn =
-        (ibis_ms.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / ibis_ms.len() as f64).sqrt();
+    let sdnn = (ibis_ms.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / ibis_ms.len() as f64).sqrt();
 
     if ibis_ms.len() < 2 {
         return (0.0, sdnn, 0.0);
@@ -572,12 +570,8 @@ mod tests {
     #[test]
     fn test_spo2() {
         // Same amplitude ratio → R≈1.0 → SpO₂≈85
-        let ir: Vec<f64> = (0..128)
-            .map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin())
-            .collect();
-        let red: Vec<f64> = (0..128)
-            .map(|i| 800.0 + 8.0 * (i as f64 * 0.1).sin())
-            .collect();
+        let ir: Vec<f64> = (0..128).map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin()).collect();
+        let red: Vec<f64> = (0..128).map(|i| 800.0 + 8.0 * (i as f64 * 0.1).sin()).collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
         assert!((70.0..=100.0).contains(&spo2), "SpO2={spo2}");
     }
@@ -638,14 +632,8 @@ mod tests {
     fn hrv_time_domain_identical_ibis_gives_zero_sdnn_rmssd() {
         let ibis = vec![0.8; 10];
         let (rmssd, sdnn, pnn50) = hrv_time_domain(&ibis);
-        assert!(
-            rmssd < 1e-9,
-            "rmssd should be 0 for identical IBIs, got {rmssd}"
-        );
-        assert!(
-            sdnn < 1e-9,
-            "sdnn should be 0 for identical IBIs, got {sdnn}"
-        );
+        assert!(rmssd < 1e-9, "rmssd should be 0 for identical IBIs, got {rmssd}");
+        assert!(sdnn < 1e-9, "sdnn should be 0 for identical IBIs, got {sdnn}");
         assert_eq!(pnn50, 0.0);
     }
 
@@ -675,17 +663,10 @@ mod tests {
     #[test]
     fn spo2_result_clamped_to_valid_range() {
         // High R ratio would give SpO₂ < 70 → must be clamped to 70.
-        let ir: Vec<f64> = (0..64)
-            .map(|i| 1000.0 + 100.0 * (i as f64 * 0.3).sin())
-            .collect();
-        let red: Vec<f64> = (0..64)
-            .map(|i| 50.0 + 1.0 * (i as f64 * 0.3).sin())
-            .collect();
+        let ir: Vec<f64> = (0..64).map(|i| 1000.0 + 100.0 * (i as f64 * 0.3).sin()).collect();
+        let red: Vec<f64> = (0..64).map(|i| 50.0 + 1.0 * (i as f64 * 0.3).sin()).collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
-        assert!(
-            (70.0..=100.0).contains(&spo2),
-            "SpO₂={spo2} out of clamp range"
-        );
+        assert!((70.0..=100.0).contains(&spo2), "SpO₂={spo2} out of clamp range");
     }
 
     // ── perfusion_index_from_ir ───────────────────────────────────────────────
@@ -704,9 +685,7 @@ mod tests {
 
     #[test]
     fn perfusion_index_is_non_negative() {
-        let ir: Vec<f64> = (0..128)
-            .map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin())
-            .collect();
+        let ir: Vec<f64> = (0..128).map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin()).collect();
         assert!(perfusion_index_from_ir(&ir) >= 0.0);
     }
 

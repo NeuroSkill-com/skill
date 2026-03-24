@@ -75,10 +75,7 @@ pub enum Command {
     Click { selector: String },
 
     /// Type text into the focused element or a selector.
-    TypeText {
-        selector: Option<String>,
-        text: String,
-    },
+    TypeText { selector: Option<String>, text: String },
 
     /// Set a form input's value directly.
     SetValue { selector: String, value: String },
@@ -97,10 +94,7 @@ pub enum Command {
     GetCookies { domain: Option<String> },
 
     /// Delete cookies matching a name (and optional domain).
-    DeleteCookies {
-        name: String,
-        domain: Option<String>,
-    },
+    DeleteCookies { name: String, domain: Option<String> },
 
     /// Clear all cookies.
     ClearCookies,

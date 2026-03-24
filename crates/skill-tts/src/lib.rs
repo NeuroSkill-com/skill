@@ -56,11 +56,7 @@ static SKILL_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// that the TTS subsystem writes files into.
 pub fn init_tts_dirs(dir: &std::path::Path) {
     let _ = SKILL_DIR.set(dir.to_path_buf());
-    for sub in &[
-        "models/neutts",
-        "cache/neutts-wav",
-        "cache/neutts-ref-codes",
-    ] {
+    for sub in &["models/neutts", "cache/neutts-wav", "cache/neutts-ref-codes"] {
         let _ = std::fs::create_dir_all(skill_dir().join(sub));
     }
 }
@@ -421,9 +417,7 @@ pub fn tts_set_voice(voice: String) {
 
 /// Initialise the active TTS backend. Returns progress events via callback.
 #[allow(unused_variables)] // `emit` is used under tts-neutts / tts-kitten feature gates
-pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'static>(
-    emit: F,
-) -> anyhow::Result<()> {
+pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'static>(emit: F) -> anyhow::Result<()> {
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -469,9 +463,7 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
                     cb: Box::new(move |p| {
                         use kittentts::download::LoadProgress as KP;
                         let ev = match p {
-                            KP::Fetching { step, total, file } => {
-                                TtsProgressEvent::step(step, total, file)
-                            }
+                            KP::Fetching { step, total, file } => TtsProgressEvent::step(step, total, file),
                             KP::Loading => TtsProgressEvent::step(4, 4, "Loading model…".into()),
                         };
                         emit_c(ev);

@@ -52,10 +52,9 @@ pub use event::{LlmEventEmitter, NoopEmitter};
 #[cfg(feature = "llm")]
 pub use engine::{
     cell_status, extract_images_from_messages, init, new_log_buffer, new_state_cell, push_log,
-    run_chat_with_builtin_tools, shutdown_cell, AfterToolCallFn, BeforeToolCallFn, GenParams,
-    InferRequest, InferToken, LlmLogBuffer, LlmLogEntry, LlmLogFile, LlmServerState, LlmStateCell,
-    LlmStatus, ToolEvent,
+    run_chat_with_builtin_tools, shutdown_cell, AfterToolCallFn, BeforeToolCallFn, GenParams, InferRequest, InferToken,
+    LlmLogBuffer, LlmLogEntry, LlmLogFile, LlmServerState, LlmStateCell, LlmStatus, ToolEvent,
 };
+pub use error::{ChatStoreError, DownloadError, EngineError};
 #[cfg(feature = "llm")]
 pub use handlers::router;
-pub use error::{ChatStoreError, DownloadError, EngineError};

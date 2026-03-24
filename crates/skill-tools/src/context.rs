@@ -31,11 +31,7 @@ pub fn estimate_messages_tokens(messages: &[Value]) -> usize {
 /// 4. Then truncate remaining long tool results to a hard cap.
 /// 5. Then drop oldest non-system messages until the estimated
 ///    token count fits within 75% of `n_ctx` (leaving room for response).
-pub fn trim_messages_to_fit(
-    messages: &mut Vec<Value>,
-    n_ctx: usize,
-    compression: &ToolContextCompression,
-) {
+pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression: &ToolContextCompression) {
     if n_ctx == 0 {
         return;
     }
@@ -58,10 +54,10 @@ pub fn trim_messages_to_fit(
                 .and_then(|c| c.as_str())
                 .map(std::string::ToString::to_string)
             {
-                let is_web_search = content.contains("\"tool\":\"web_search\"")
-                    || content.contains("\"tool\": \"web_search\"");
-                let is_location = content.contains("\"tool\":\"location\"")
-                    || content.contains("\"tool\": \"location\"");
+                let is_web_search =
+                    content.contains("\"tool\":\"web_search\"") || content.contains("\"tool\": \"web_search\"");
+                let is_location =
+                    content.contains("\"tool\":\"location\"") || content.contains("\"tool\": \"location\"");
 
                 // For older tool results (not the most recent pair), compress harder.
                 let is_recent = i + 4 >= msg_count;
@@ -107,12 +103,7 @@ pub fn trim_messages_to_fit(
 
     // Phase 3: Drop oldest non-system, non-last-user messages if still too long.
     while estimate_messages_tokens(messages) > budget && messages.len() > 2 {
-        let start = if messages
-            .first()
-            .and_then(|m| m.get("role"))
-            .and_then(|r| r.as_str())
-            == Some("system")
-        {
+        let start = if messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system") {
             1
         } else {
             0
@@ -188,11 +179,7 @@ mod tests {
     #[test]
     fn trim_truncates_long_tool_results() {
         let long_content = "x".repeat(5000);
-        let mut messages = vec![
-            msg("system", "sys"),
-            tool_msg(&long_content),
-            msg("user", "hi"),
-        ];
+        let mut messages = vec![msg("system", "sys"), tool_msg(&long_content), msg("user", "hi")];
         let compression = ToolContextCompression {
             level: CompressionLevel::Normal,
             max_search_results: 0,
@@ -207,11 +194,7 @@ mod tests {
     #[test]
     fn trim_compression_off_does_not_truncate() {
         let long_content = "x".repeat(3000);
-        let mut messages = vec![
-            msg("system", "sys"),
-            tool_msg(&long_content),
-            msg("user", "hi"),
-        ];
+        let mut messages = vec![msg("system", "sys"), tool_msg(&long_content), msg("user", "hi")];
         let compression = ToolContextCompression {
             level: CompressionLevel::Off,
             max_search_results: 0,

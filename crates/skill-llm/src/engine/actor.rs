@@ -113,21 +113,12 @@ pub(super) fn run_actor(
     let backend: &LlamaBackend = &backend_md;
 
     // ── load model ──
-    let model_file_name = model_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("model");
+    let model_file_name = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("model");
     app.emit_event(
         "llm:status",
         json!({"status":"loading","detail":"loading_model","model":model_file_name}),
     );
-    llm_info!(
-        &app,
-        &log_buf,
-        log_file,
-        "loading model: {}",
-        model_path.display()
-    );
+    llm_info!(&app, &log_buf, log_file, "loading model: {}", model_path.display());
     let model_params = LlamaModelParams::default().with_n_gpu_layers(config.n_gpu_layers);
 
     let model = match LlamaModel::load_from_file(backend, &model_path, &model_params) {
@@ -197,13 +188,7 @@ pub(super) fn run_actor(
     {
         let n_layers = config.n_gpu_layers;
         if n_layers > 0 {
-            llm_info!(
-                &app,
-                &log_buf,
-                log_file,
-                "GPU offload requested: {} layer(s)",
-                n_layers
-            );
+            llm_info!(&app, &log_buf, log_file, "GPU offload requested: {} layer(s)", n_layers);
             llm_warn!(
                 &app,
                 &log_buf,
@@ -251,11 +236,19 @@ pub(super) fn run_actor(
         }
         mmproj_path.as_ref().and_then(|p| {
             use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
-            app.emit_event("llm:status", json!({"status":"loading","detail":"loading_vision","model":model_file_name}));
+            app.emit_event(
+                "llm:status",
+                json!({"status":"loading","detail":"loading_vision","model":model_file_name}),
+            );
 
             if !p.exists() {
-                llm_error!(&app, &log_buf, log_file,
-                    "mmproj file missing: {} — vision disabled", p.display());
+                llm_error!(
+                    &app,
+                    &log_buf,
+                    log_file,
+                    "mmproj file missing: {} — vision disabled",
+                    p.display()
+                );
                 return None;
             }
 
@@ -265,9 +258,10 @@ pub(super) fn run_actor(
                 // globally — `noop` has 'static lifetime (it's a function item).
                 unsafe extern "C" fn noop(
                     _level: u32,
-                    _text:  *const std::os::raw::c_char,
-                    _ud:    *mut   std::os::raw::c_void,
-                ) {}
+                    _text: *const std::os::raw::c_char,
+                    _ud: *mut std::os::raw::c_void,
+                ) {
+                }
                 // SAFETY: `noop` has a 'static lifetime (function item) and
                 // matches the expected C callback signature. null user-data is valid.
                 unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
@@ -275,10 +269,14 @@ pub(super) fn run_actor(
 
             let file_size = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
             if file_size < 1024 {
-                llm_error!(&app, &log_buf, log_file,
+                llm_error!(
+                    &app,
+                    &log_buf,
+                    log_file,
                     "mmproj file too small ({file_size} bytes): {} — \
                      likely a failed download; re-download in Settings → LLM",
-                    p.display());
+                    p.display()
+                );
                 return None;
             }
 
@@ -290,10 +288,16 @@ pub(super) fn run_actor(
 
             let mmproj_use_gpu = !config.no_mmproj_gpu || force_mmproj_gpu;
 
-            llm_info!(&app, &log_buf, log_file,
+            llm_info!(
+                &app,
+                &log_buf,
+                log_file,
                 "loading mmproj: {} ({:.1} MB, gpu={}, threads={})",
-                p.display(), file_size as f64 / 1_048_576.0,
-                mmproj_use_gpu, config.mmproj_n_threads);
+                p.display(),
+                file_size as f64 / 1_048_576.0,
+                mmproj_use_gpu,
+                config.mmproj_n_threads
+            );
 
             let try_load_mmproj = |use_gpu: bool| -> anyhow::Result<MtmdContext> {
                 let params = MtmdContextParams::default()
@@ -304,9 +308,9 @@ pub(super) fn run_actor(
                 match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     MtmdContext::init_from_file(p, &model, params)
                 })) {
-                    Ok(Ok(mc))     => Ok(mc),
-                    Ok(Err(e))     => Err(anyhow::anyhow!("{e}")),
-                    Err(_panic)    => Err(anyhow::anyhow!("panic in native code")),
+                    Ok(Ok(mc)) => Ok(mc),
+                    Ok(Err(e)) => Err(anyhow::anyhow!("{e}")),
+                    Err(_panic) => Err(anyhow::anyhow!("panic in native code")),
                 }
             };
 
@@ -315,8 +319,12 @@ pub(super) fn run_actor(
             let result = match result {
                 Ok(mc) => Ok(mc),
                 Err(ref gpu_err) if mmproj_use_gpu && cfg!(target_os = "linux") && !force_mmproj_gpu => {
-                    llm_warn!(&app, &log_buf, log_file,
-                        "mmproj GPU load failed ({gpu_err}); retrying on CPU…");
+                    llm_warn!(
+                        &app,
+                        &log_buf,
+                        log_file,
+                        "mmproj GPU load failed ({gpu_err}); retrying on CPU…"
+                    );
                     try_load_mmproj(false)
                 }
                 Err(e) => Err(e),
@@ -324,18 +332,32 @@ pub(super) fn run_actor(
 
             match result {
                 Ok(mc) => {
-                    llm_info!(&app, &log_buf, log_file,
+                    llm_info!(
+                        &app,
+                        &log_buf,
+                        log_file,
                         "mmproj loaded ✓ — vision={} audio={}",
-                        mc.supports_vision(), mc.supports_audio());
+                        mc.supports_vision(),
+                        mc.supports_audio()
+                    );
                     vision_flag.store(true, Ordering::Relaxed);
                     Some(mc)
                 }
                 Err(e) => {
-                    llm_error!(&app, &log_buf, log_file,
-                        "failed to load mmproj: {e} — file: {}", p.display());
-                    llm_info!(&app, &log_buf, log_file,
+                    llm_error!(
+                        &app,
+                        &log_buf,
+                        log_file,
+                        "failed to load mmproj: {e} — file: {}",
+                        p.display()
+                    );
+                    llm_info!(
+                        &app,
+                        &log_buf,
+                        log_file,
                         "vision disabled — to enable image input, \
-                         ensure the mmproj file matches your model or re-download it in Settings → LLM");
+                         ensure the mmproj file matches your model or re-download it in Settings → LLM"
+                    );
                     None
                 }
             }
@@ -351,56 +373,55 @@ pub(super) fn run_actor(
     };
 
     // ── Warmup / prewarm ──────────────────────────────────────────────────────
-    let warmup_ok =
-        (|| -> bool {
-            // Pre-check GPU memory to avoid Metal abort() during warmup.
-            let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.decode_threshold);
-            if !mem_ok {
-                llm_warn!(&app, &log_buf, log_file,
-                "skipping warmup — insufficient GPU memory ({:.2} GB free < {:.2} GB threshold)",
-                free_gb.unwrap_or(0.0), gpu_guard.decode_threshold);
-                return false;
-            }
-
-            let bos = model.token_bos();
-            let warmup_tokens = if let Ok(toks) = model.str_to_token(" ", AddBos::Always) {
-                toks
-            } else {
-                vec![bos]
-            };
-            let n = warmup_tokens.len().min(4);
-            let mut batch = LlamaBatch::new(n, 1);
-            for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
-                let last = i == n - 1;
-                if batch.add(tok, i as i32, &[0], last).is_err() {
-                    return false;
-                }
-            }
-            let ok = ctx.decode(&mut batch).is_ok();
-            ctx.clear_kv_cache();
-            if ok {
-                return true;
-            }
-
-            // Retry once after a brief delay (transient Metal failures).
+    let warmup_ok = (|| -> bool {
+        // Pre-check GPU memory to avoid Metal abort() during warmup.
+        let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.decode_threshold);
+        if !mem_ok {
             llm_warn!(
                 &app,
                 &log_buf,
                 log_file,
-                "warmup decode failed — retrying after 200ms"
+                "skipping warmup — insufficient GPU memory ({:.2} GB free < {:.2} GB threshold)",
+                free_gb.unwrap_or(0.0),
+                gpu_guard.decode_threshold
             );
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let mut batch2 = LlamaBatch::new(n, 1);
-            for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
-                let last = i == n - 1;
-                if batch2.add(tok, i as i32, &[0], last).is_err() {
-                    return false;
-                }
+            return false;
+        }
+
+        let bos = model.token_bos();
+        let warmup_tokens = if let Ok(toks) = model.str_to_token(" ", AddBos::Always) {
+            toks
+        } else {
+            vec![bos]
+        };
+        let n = warmup_tokens.len().min(4);
+        let mut batch = LlamaBatch::new(n, 1);
+        for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
+            let last = i == n - 1;
+            if batch.add(tok, i as i32, &[0], last).is_err() {
+                return false;
             }
-            let ok2 = ctx.decode(&mut batch2).is_ok();
-            ctx.clear_kv_cache();
-            ok2
-        })();
+        }
+        let ok = ctx.decode(&mut batch).is_ok();
+        ctx.clear_kv_cache();
+        if ok {
+            return true;
+        }
+
+        // Retry once after a brief delay (transient Metal failures).
+        llm_warn!(&app, &log_buf, log_file, "warmup decode failed — retrying after 200ms");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let mut batch2 = LlamaBatch::new(n, 1);
+        for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
+            let last = i == n - 1;
+            if batch2.add(tok, i as i32, &[0], last).is_err() {
+                return false;
+            }
+        }
+        let ok2 = ctx.decode(&mut batch2).is_ok();
+        ctx.clear_kv_cache();
+        ok2
+    })();
 
     if warmup_ok {
         llm_info!(
@@ -420,10 +441,7 @@ pub(super) fn run_actor(
 
     // Signal that the model is fully loaded and warmed up.
     ready_flag.store(true, Ordering::Relaxed);
-    let model_file = model_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("?");
+    let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
     let vision_loaded = vision_flag.load(Ordering::Relaxed);
     llm_info!(
         &app,
@@ -433,7 +451,10 @@ pub(super) fn run_actor(
         model_file,
         vision_loaded
     );
-    app.emit_event("llm:status", json!({"status":"running","model":model_file,"supports_vision":vision_loaded,"supports_tools":true}));
+    app.emit_event(
+        "llm:status",
+        json!({"status":"running","model":model_file,"supports_vision":vision_loaded,"supports_tools":true}),
+    );
 
     // ── event loop ──
     while let Some(req) = rx.blocking_recv() {
@@ -508,9 +529,8 @@ pub(super) fn run_actor(
                 let marker = "";
 
                 // ── Build chat messages ──────────────────────────────────────────
-                let build_chat_msgs =
-                    |msgs: &[serde_json::Value]| -> Vec<llama_cpp_4::model::LlamaChatMessage> {
-                        msgs.iter()
+                let build_chat_msgs = |msgs: &[serde_json::Value]| -> Vec<llama_cpp_4::model::LlamaChatMessage> {
+                    msgs.iter()
                         .filter_map(|m| {
                             let mut role = m.get("role")?.as_str()?.to_string();
                             let raw_content = extract_fn(m.get("content")?, marker);
@@ -523,7 +543,7 @@ pub(super) fn run_actor(
                             llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
                         })
                         .collect()
-                    };
+                };
 
                 // ── Fit prompt to context: grow context or trim history ──────────
                 // Strategy:
@@ -540,21 +560,13 @@ pub(super) fn run_actor(
                         let p = match model.apply_chat_template(None, chat_msgs, true) {
                             Ok(p) => p,
                             Err(e) => {
-                                llm_error!(
-                                    &app,
-                                    &log_buf,
-                                    log_file,
-                                    "apply_chat_template failed: {e}"
-                                );
-                                token_tx
-                                    .send(InferToken::Error(format!("template error: {e}")))
-                                    .ok();
+                                llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
+                                token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
                                 break 'build_prompt None;
                             }
                         };
 
-                        let Ok(tokens) = model.str_to_token(&p, llama_cpp_4::model::AddBos::Always)
-                        else {
+                        let Ok(tokens) = model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) else {
                             break 'build_prompt Some(p);
                         };
 
@@ -583,20 +595,15 @@ pub(super) fn run_actor(
                                     .as_ref()
                                     .and_then(|g| {
                                         if g.is_unified_memory {
-                                            g.free_memory_bytes
-                                                .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                                            g.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
                                         } else {
-                                            g.total_memory_bytes
-                                                .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                                            g.total_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
                                         }
                                     })
                                     .unwrap_or(0.0);
                                 let mem_budget = available_gb * 0.70;
-                                let estimated = crate::catalog::estimate_memory_gb(
-                                    config.params_b,
-                                    &config.quant,
-                                    needed_ctx,
-                                );
+                                let estimated =
+                                    crate::catalog::estimate_memory_gb(config.params_b, &config.quant, needed_ctx);
                                 estimated <= mem_budget
                             } else {
                                 false // no model metadata → don't risk OOM
@@ -632,25 +639,23 @@ pub(super) fn run_actor(
                                     Ok(new_c) => {
                                         ctx = new_c;
                                         n_ctx_flag.store(ctx.n_ctx() as usize, Ordering::Relaxed);
-                                        llm_info!(
-                                            &app,
-                                            &log_buf,
-                                            log_file,
-                                            "context resized to n_ctx={}",
-                                            ctx.n_ctx()
-                                        );
+                                        llm_info!(&app, &log_buf, log_file, "context resized to n_ctx={}", ctx.n_ctx());
                                         // Re-check with new budget
-                                        let new_budget = (ctx.n_ctx() as usize)
-                                            .saturating_sub(ctx.n_ctx() as usize / 4);
+                                        let new_budget =
+                                            (ctx.n_ctx() as usize).saturating_sub(ctx.n_ctx() as usize / 4);
                                         if tokens.len() < new_budget {
                                             break 'build_prompt Some(p);
                                         }
                                         // Still doesn't fit — fall through to trimming
                                     }
                                     Err(e) => {
-                                        llm_warn!(&app, &log_buf, log_file,
+                                        llm_warn!(
+                                            &app,
+                                            &log_buf,
+                                            log_file,
                                             "failed to grow context to {}: {e} — will trim messages instead",
-                                            new_ctx);
+                                            new_ctx
+                                        );
                                     }
                                 }
                             }
@@ -680,8 +685,7 @@ pub(super) fn run_actor(
                 if use_mtmd {
                     if let Some(ref mc) = mtmd_ctx {
                         run_generation_multimodal(
-                            &model, &mut ctx, mc, &app, &log_buf, log_file, prompt, images, params,
-                            token_tx, gpu_guard,
+                            &model, &mut ctx, mc, &app, &log_buf, log_file, prompt, images, params, token_tx, gpu_guard,
                         );
                         continue;
                     }
@@ -753,13 +757,7 @@ pub(super) fn run_actor(
                 })();
 
                 if let Ok(ref vecs) = embed_result {
-                    llm_info!(
-                        &app,
-                        &log_buf,
-                        log_file,
-                        "embeddings done — {} vector(s)",
-                        vecs.len()
-                    );
+                    llm_info!(&app, &log_buf, log_file, "embeddings done — {} vector(s)", vecs.len());
                 }
                 result_tx.send(embed_result).ok();
             }
@@ -769,16 +767,14 @@ pub(super) fn run_actor(
                 {
                     if let Some(ref mtmd) = mtmd_ctx {
                         use llama_cpp_4::mtmd::{
-                            MtmdBitmap, MtmdContext, MtmdInputChunkType, MtmdInputChunks,
-                            MtmdInputText,
+                            MtmdBitmap, MtmdContext, MtmdInputChunkType, MtmdInputChunks, MtmdInputText,
                         };
 
                         let embedding = (|| -> Option<Vec<f32>> {
                             let bitmap = MtmdBitmap::from_buf(mtmd, &bytes).ok()?;
                             let bitmap_refs = [&bitmap];
 
-                            let text =
-                                MtmdInputText::new(MtmdContext::default_marker(), false, false);
+                            let text = MtmdInputText::new(MtmdContext::default_marker(), false, false);
                             let mut chunks = MtmdInputChunks::new();
                             mtmd.tokenize(&text, &bitmap_refs, &mut chunks).ok()?;
 
@@ -800,8 +796,7 @@ pub(super) fn run_actor(
                                             *p /= n_tokens as f32;
                                         }
                                     }
-                                    let norm: f32 =
-                                        pooled.iter().map(|x| x * x).sum::<f32>().sqrt();
+                                    let norm: f32 = pooled.iter().map(|x| x * x).sum::<f32>().sqrt();
                                     if norm > 0.0 {
                                         for v in &mut pooled {
                                             *v /= norm;
@@ -844,11 +839,6 @@ pub(super) fn run_actor(
         }
     }
 
-    llm_info!(
-        &app,
-        &log_buf,
-        log_file,
-        "actor exiting — GPU resources released"
-    );
+    llm_info!(&app, &log_buf, log_file, "actor exiting — GPU resources released");
     app.emit_event("llm:status", json!({"status":"stopped"}));
 }

@@ -192,8 +192,7 @@ impl DeviceKind {
                 has_full_montage: false,
                 sample_rate_hz: 128.0,
                 electrode_names: sv(&[
-                    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1", "O2", "P8", "T8", "FC6", "F4",
-                    "F8", "AF4",
+                    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1", "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
                 ]),
             },
             Self::Idun => DeviceCapabilities {
@@ -439,92 +438,47 @@ mod tests {
 
     #[test]
     fn from_name_ganglion() {
-        assert_eq!(
-            DeviceKind::from_name(Some("Ganglion-1234")),
-            DeviceKind::Ganglion
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("Simblee-001")),
-            DeviceKind::Ganglion
-        );
+        assert_eq!(DeviceKind::from_name(Some("Ganglion-1234")), DeviceKind::Ganglion);
+        assert_eq!(DeviceKind::from_name(Some("Simblee-001")), DeviceKind::Ganglion);
     }
 
     #[test]
     fn from_name_openbci() {
-        assert_eq!(
-            DeviceKind::from_name(Some("OpenBCI-Cyton")),
-            DeviceKind::OpenBci
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("Cyton-ABCD")),
-            DeviceKind::OpenBci
-        );
+        assert_eq!(DeviceKind::from_name(Some("OpenBCI-Cyton")), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_name(Some("Cyton-ABCD")), DeviceKind::OpenBci);
     }
 
     #[test]
     fn from_name_mw75() {
-        assert_eq!(
-            DeviceKind::from_name(Some("Headphones-MW75-v2")),
-            DeviceKind::Mw75
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("Neurable-XYZ")),
-            DeviceKind::Mw75
-        );
+        assert_eq!(DeviceKind::from_name(Some("Headphones-MW75-v2")), DeviceKind::Mw75);
+        assert_eq!(DeviceKind::from_name(Some("Neurable-XYZ")), DeviceKind::Mw75);
     }
 
     #[test]
     fn from_name_hermes() {
-        assert_eq!(
-            DeviceKind::from_name(Some("Hermes-ABC")),
-            DeviceKind::Hermes
-        );
+        assert_eq!(DeviceKind::from_name(Some("Hermes-ABC")), DeviceKind::Hermes);
     }
 
     #[test]
     fn from_name_emotiv() {
-        assert_eq!(
-            DeviceKind::from_name(Some("Emotiv-EPOC-X")),
-            DeviceKind::Emotiv
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("EPOC-X-1234")),
-            DeviceKind::Emotiv
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("Insight-5ch")),
-            DeviceKind::Emotiv
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("FLEX-Saline")),
-            DeviceKind::Emotiv
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("MN8-Earbuds")),
-            DeviceKind::Emotiv
-        );
+        assert_eq!(DeviceKind::from_name(Some("Emotiv-EPOC-X")), DeviceKind::Emotiv);
+        assert_eq!(DeviceKind::from_name(Some("EPOC-X-1234")), DeviceKind::Emotiv);
+        assert_eq!(DeviceKind::from_name(Some("Insight-5ch")), DeviceKind::Emotiv);
+        assert_eq!(DeviceKind::from_name(Some("FLEX-Saline")), DeviceKind::Emotiv);
+        assert_eq!(DeviceKind::from_name(Some("MN8-Earbuds")), DeviceKind::Emotiv);
     }
 
     #[test]
     fn from_name_idun() {
-        assert_eq!(
-            DeviceKind::from_name(Some("IDUN-Guardian")),
-            DeviceKind::Idun
-        );
-        assert_eq!(
-            DeviceKind::from_name(Some("Guardian-001")),
-            DeviceKind::Idun
-        );
+        assert_eq!(DeviceKind::from_name(Some("IDUN-Guardian")), DeviceKind::Idun);
+        assert_eq!(DeviceKind::from_name(Some("Guardian-001")), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_name(Some("IGE-1234")), DeviceKind::Idun);
     }
 
     #[test]
     fn from_name_unknown() {
         assert_eq!(DeviceKind::from_name(None), DeviceKind::Unknown);
-        assert_eq!(
-            DeviceKind::from_name(Some("random-device")),
-            DeviceKind::Unknown
-        );
+        assert_eq!(DeviceKind::from_name(Some("random-device")), DeviceKind::Unknown);
     }
 
     #[test]
@@ -541,28 +495,16 @@ mod tests {
 
     #[test]
     fn from_kind_str_runtime_openbci() {
-        assert_eq!(
-            DeviceKind::from_kind_str("openbci_cyton"),
-            DeviceKind::OpenBci
-        );
-        assert_eq!(
-            DeviceKind::from_kind_str("openbci_cyton_daisy"),
-            DeviceKind::OpenBci
-        );
-        assert_eq!(
-            DeviceKind::from_kind_str("openbci_galea"),
-            DeviceKind::OpenBci
-        );
+        assert_eq!(DeviceKind::from_kind_str("openbci_cyton"), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_kind_str("openbci_cyton_daisy"), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_kind_str("openbci_galea"), DeviceKind::OpenBci);
     }
 
     #[test]
     fn from_kind_str_fallback_to_from_name() {
         // An advertising name should still work via fallback.
         assert_eq!(DeviceKind::from_kind_str("Muse-2-ABCD"), DeviceKind::Muse);
-        assert_eq!(
-            DeviceKind::from_kind_str("random-thing"),
-            DeviceKind::Unknown
-        );
+        assert_eq!(DeviceKind::from_kind_str("random-thing"), DeviceKind::Unknown);
     }
 
     #[test]

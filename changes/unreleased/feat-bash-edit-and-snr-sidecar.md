@@ -1,4 +1,0 @@
-### Features
-
-- **Editable bash commands in tool calling**: added a pluggable `BashEditHook` callback and `require_bash_edit` setting in `LlmToolConfig`. When enabled, every LLM-generated bash command is presented to the user for review/editing before execution. The user can modify the command or cancel it entirely. Register a UI callback via `set_bash_edit_hook()` at app startup. Backward compatible — when no hook is registered or the setting is off, commands execute as before.
-- **Record average SNR in session sidecar JSON**: the session runner now accumulates SNR (dB) across all band-power snapshots during a recording and writes `avg_snr_db` to the session sidecar JSON file on session end. The `SessionEntry` struct in `skill-history` now includes `avg_snr_db: Option<f64>` for frontend filtering. Legacy sessions without the field gracefully default to `None`.

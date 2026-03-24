@@ -22,11 +22,7 @@ describe("pickFamilyTarget", () => {
   });
 
   it("prefers Q4_K_M quantization", () => {
-    const entries = [
-      mkEntry({ quant: "Q8_0" }),
-      mkEntry({ quant: "Q4_K_M" }),
-      mkEntry({ quant: "Q4_0" }),
-    ];
+    const entries = [mkEntry({ quant: "Q8_0" }), mkEntry({ quant: "Q4_K_M" }), mkEntry({ quant: "Q4_0" })];
     expect(pickFamilyTarget(entries, "test", /test/)?.quant).toBe("Q4_K_M");
   });
 

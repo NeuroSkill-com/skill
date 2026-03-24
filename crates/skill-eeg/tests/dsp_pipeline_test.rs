@@ -28,15 +28,9 @@ fn band_analyzer_produces_snapshot_after_enough_samples() {
         analyzer.push(ch, &signal);
     }
 
-    assert!(
-        analyzer.latest.is_some(),
-        "should have produced at least one snapshot"
-    );
+    assert!(analyzer.latest.is_some(), "should have produced at least one snapshot");
     let snap = analyzer.latest.as_ref().unwrap();
-    assert!(
-        !snap.channels.is_empty(),
-        "snapshot should have channel powers"
-    );
+    assert!(!snap.channels.is_empty(), "snapshot should have channel powers");
 
     // 10 Hz is alpha — check that alpha is present
     for ch_pow in &snap.channels {
@@ -102,8 +96,5 @@ fn band_analyzer_reset_clears_state() {
     assert!(analyzer.latest.as_ref().is_some());
 
     analyzer.reset();
-    assert!(
-        analyzer.latest.as_ref().is_none(),
-        "reset should clear latest snapshot"
-    );
+    assert!(analyzer.latest.as_ref().is_none(), "reset should clear latest snapshot");
 }

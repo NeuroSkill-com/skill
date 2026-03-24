@@ -22,10 +22,7 @@ use tokio::sync::mpsc;
 use mw75::prelude::*;
 use skill_constants::{EEG_CHANNELS, MW75_CHANNEL_NAMES, MW75_EEG_CHANNELS, MW75_SAMPLE_RATE};
 
-use super::{
-    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame,
-};
+use super::{now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame};
 
 // ── Mw75Adapter ───────────────────────────────────────────────────────────────
 
@@ -47,13 +44,8 @@ impl Mw75Adapter {
     /// If an initial [`DeviceInfo`] is provided (e.g. because the RFCOMM
     /// factory already knows the device name), a synthetic `Connected` event
     /// is queued so the session runner sees it.
-    pub fn new(
-        rx: mpsc::Receiver<Mw75Event>,
-        handle: Arc<Mw75Handle>,
-        initial_info: Option<DeviceInfo>,
-    ) -> Self {
-        let channel_names: Vec<String> =
-            MW75_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+    pub fn new(rx: mpsc::Receiver<Mw75Event>, handle: Arc<Mw75Handle>, initial_info: Option<DeviceInfo>) -> Self {
+        let channel_names: Vec<String> = MW75_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
 
         let mut pending = VecDeque::new();
         if let Some(info) = initial_info {
@@ -86,12 +78,8 @@ impl Mw75Adapter {
 
     /// Test-only constructor that creates an adapter without a real BLE handle.
     #[cfg(test)]
-    pub(crate) fn new_for_test(
-        rx: mpsc::Receiver<Mw75Event>,
-        initial_info: Option<super::DeviceInfo>,
-    ) -> Self {
-        let channel_names: Vec<String> =
-            MW75_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+    pub(crate) fn new_for_test(rx: mpsc::Receiver<Mw75Event>, initial_info: Option<super::DeviceInfo>) -> Self {
+        let channel_names: Vec<String> = MW75_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
 
         let mut pending = VecDeque::new();
         if let Some(info) = initial_info {
@@ -130,11 +118,7 @@ impl Mw75Adapter {
             }
 
             Mw75Event::Eeg(pkt) => {
-                let ts = if pkt.timestamp > 0.0 {
-                    pkt.timestamp
-                } else {
-                    now_secs()
-                };
+                let ts = if pkt.timestamp > 0.0 { pkt.timestamp } else { now_secs() };
                 let channels: Vec<f64> = pkt.channels.iter().map(|&v| v as f64).collect();
                 self.pending.push_back(DeviceEvent::Eeg(EegFrame {
                     channels,

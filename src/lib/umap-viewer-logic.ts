@@ -96,11 +96,7 @@ export function randomPositions(count: number, seed = 42): Float32Array {
  * Compute per-point color array based on a normalized parameter (0-1 per point).
  * Returns a Float32Array of rgb triples.
  */
-export function buildColorArray(
-  values: number[],
-  isDark: boolean,
-  dimFactor = 0.75,
-): Float32Array {
+export function buildColorArray(values: number[], isDark: boolean, dimFactor = 0.75): Float32Array {
   const out = new Float32Array(values.length * 3);
   for (let i = 0; i < values.length; i++) {
     let [r, g, b] = turboApprox(values[i]);

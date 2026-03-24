@@ -166,10 +166,7 @@ impl Report {
                     let abbr: String = content.chars().take(64).collect();
                     self.pi(
                         w,
-                        &format!(
-                            "[{role}] {abbr}{}",
-                            if content.len() > 64 { "…" } else { "" }
-                        ),
+                        &format!("[{role}] {abbr}{}", if content.len() > 64 { "…" } else { "" }),
                     );
                 }
                 let resp: String = chat.response_text.replace('\n', " ⏎ ");
@@ -618,9 +615,7 @@ async fn run_tool_chat(
         eprintln!("[step {step_num}]   | {line}");
     }
 
-    let started = evts
-        .iter()
-        .any(|e| e.kind == "start" && e.tool_name == expect);
+    let started = evts.iter().any(|e| e.kind == "start" && e.tool_name == expect);
     let ok = evts
         .iter()
         .any(|e| e.kind == "end" && e.tool_name == expect && !e.is_error);
@@ -656,9 +651,7 @@ async fn run_tool_chat(
         name: step_name,
         duration: dur,
         status,
-        detail: format!(
-            "{t_s:.1} tok/s, prompt={pt}, completion={ct}, finish={fr}, tools={tools_called:?}"
-        ),
+        detail: format!("{t_s:.1} tok/s, prompt={pt}, completion={ct}, finish={fr}, tools={tools_called:?}"),
     };
     let chat = ChatRecord {
         label,
@@ -723,12 +716,7 @@ async fn e2e_download_start_and_chat() {
     report.model_quant = entry.quant.clone();
     let detail = format!(
         "{} ({:.2} GB, quant={}, params={:.1}B, family={}, max_ctx={})",
-        entry.filename,
-        entry.size_gb,
-        entry.quant,
-        entry.params_b,
-        entry.family_name,
-        entry.max_context_length,
+        entry.filename, entry.size_gb, entry.quant, entry.params_b, entry.family_name, entry.max_context_length,
     );
     eprintln!("[step 3] selected: {detail}");
     report.steps.push(Step {
@@ -750,12 +738,8 @@ async fn e2e_download_start_and_chat() {
         current_shard: 0,
         total_shards: entry.shard_count() as u16,
     }));
-    eprintln!(
-        "[step 4] downloading {} ({:.2} GB) …",
-        entry.filename, entry.size_gb
-    );
-    let local_path =
-        skill_llm::catalog::download_model(&entry, &progress).expect("download should succeed");
+    eprintln!("[step 4] downloading {} ({:.2} GB) …", entry.filename, entry.size_gb);
+    let local_path = skill_llm::catalog::download_model(&entry, &progress).expect("download should succeed");
     let dl_dur = t.elapsed();
     let dl_speed = if dl_dur.as_secs_f64() > 0.0 {
         (entry.size_gb as f64 * 1024.0) / dl_dur.as_secs_f64()
@@ -776,11 +760,7 @@ async fn e2e_download_start_and_chat() {
         detail,
     });
 
-    if let Some(e) = catalog
-        .entries
-        .iter_mut()
-        .find(|e| e.filename == entry.filename)
-    {
+    if let Some(e) = catalog.entries.iter_mut().find(|e| e.filename == entry.filename) {
         e.state = DownloadState::Downloaded;
         e.local_path = Some(local_path.clone());
     }
@@ -800,8 +780,7 @@ async fn e2e_download_start_and_chat() {
     let log_buf = new_log_buffer();
 
     eprintln!("[step 5] starting LLM server …");
-    let server = init(&config, &catalog, emitter, log_buf, &skill_dir)
-        .expect("init should return a running server");
+    let server = init(&config, &catalog, emitter, log_buf, &skill_dir).expect("init should return a running server");
     wait_ready(&server, Duration::from_secs(120));
     let load_dur = t.elapsed();
     let n_ctx = server.n_ctx.load(Ordering::Relaxed);
@@ -898,16 +877,8 @@ async fn e2e_download_start_and_chat() {
         thinking_budget: Some(0),
         ..GenParams::default()
     };
-    let (step, chat, date_ok) = run_tool_chat(
-        &server,
-        "Tool chat (date)",
-        "Tool chat (date)",
-        7,
-        msgs,
-        params,
-        "date",
-    )
-    .await;
+    let (step, chat, date_ok) =
+        run_tool_chat(&server, "Tool chat (date)", "Tool chat (date)", 7, msgs, params, "date").await;
     report.steps.push(step);
     report.chats.push(chat);
     assert!(date_ok, "date tool must be called and succeed");
@@ -955,9 +926,7 @@ async fn e2e_download_start_and_chat() {
         e.kind == "end"
             && e.tool_name == "skill"
             && !e.is_error
-            && (e.detail.contains("Muse-2")
-                || e.detail.contains("connected")
-                || e.detail.contains("1337"))
+            && (e.detail.contains("Muse-2") || e.detail.contains("connected") || e.detail.contains("1337"))
     });
     if got_mock_data {
         eprintln!("[step 8] ✅ mock EEG data received in tool result");
@@ -968,10 +937,7 @@ async fn e2e_download_start_and_chat() {
     report.steps.push(step);
     report.chats.push(chat);
     assert!(skill_ok, "skill tool must be called and succeed");
-    assert!(
-        got_mock_data,
-        "mock EEG data must appear in skill tool result"
-    );
+    assert!(got_mock_data, "mock EEG data must appear in skill tool result");
 
     // ── 9. VLM image embedding benchmark ────────────────────────────────────
     //
@@ -1098,9 +1064,5 @@ async fn e2e_download_start_and_chat() {
         .iter()
         .filter(|s| matches!(s.status, StepStatus::Fail(_)))
         .collect();
-    assert!(
-        failures.is_empty(),
-        "E2E test had {} failed step(s)",
-        failures.len()
-    );
+    assert!(failures.is_empty(), "E2E test had {} failed step(s)", failures.len());
 }

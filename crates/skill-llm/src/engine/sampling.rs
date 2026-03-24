@@ -58,11 +58,7 @@ pub(super) fn run_sampling_loop(
             stop_strings.push(s.to_string());
         }
     }
-    let max_stop_len = stop_strings
-        .iter()
-        .map(std::string::String::len)
-        .max()
-        .unwrap_or(0);
+    let max_stop_len = stop_strings.iter().map(std::string::String::len).max().unwrap_or(0);
     let hold_back = max_stop_len.saturating_sub(1);
 
     // Think-budget tracker (budget=0 is handled before this call; None = unlimited)
@@ -94,9 +90,7 @@ pub(super) fn run_sampling_loop(
             break;
         }
 
-        let piece = model
-            .token_to_str(token, Special::Plaintext)
-            .unwrap_or_default();
+        let piece = model.token_to_str(token, Special::Plaintext).unwrap_or_default();
 
         // After forced </think> injection: decode token into KV cache for
         // coherence, but suppress it from the output stream.
@@ -150,9 +144,7 @@ pub(super) fn run_sampling_loop(
             if pending.ends_with(stop.as_str()) {
                 let safe_end = pending.len().saturating_sub(stop.len());
                 if safe_end > 0 {
-                    token_tx
-                        .send(InferToken::Delta(pending[..safe_end].to_string()))
-                        .ok();
+                    token_tx.send(InferToken::Delta(pending[..safe_end].to_string())).ok();
                 }
                 finish_reason = "stop".to_string();
                 break 'gen;
@@ -162,10 +154,7 @@ pub(super) fn run_sampling_loop(
         // Emit safe prefix (hold back potential partial stop string).
         if pending.len() > hold_back {
             let emit_end = pending.len() - hold_back;
-            let emit_end = (0..=emit_end)
-                .rev()
-                .find(|&i| pending.is_char_boundary(i))
-                .unwrap_or(0);
+            let emit_end = (0..=emit_end).rev().find(|&i| pending.is_char_boundary(i)).unwrap_or(0);
             if emit_end > 0 {
                 let chunk: String = pending.drain(..emit_end).collect();
                 if token_tx.send(InferToken::Delta(chunk)).is_err() {
@@ -179,9 +168,14 @@ pub(super) fn run_sampling_loop(
         if n_cur.is_multiple_of(64) && gpu_guard.gen_threshold > 0.0 {
             let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.gen_threshold);
             if !mem_ok {
-                llm_warn!(app, log_buf, log_file,
+                llm_warn!(
+                    app,
+                    log_buf,
+                    log_file,
                     "stopping generation — GPU memory critically low ({:.2} GB free < {:.2} GB threshold)",
-                    free_gb.unwrap_or(0.0), gpu_guard.gen_threshold);
+                    free_gb.unwrap_or(0.0),
+                    gpu_guard.gen_threshold
+                );
                 token_tx
                     .send(InferToken::Delta(format!(
                         "\n\n*[Generation stopped: GPU memory low ({:.2} GB free). \
@@ -214,9 +208,7 @@ pub(super) fn run_sampling_loop(
         })
         .unwrap_or(pending.len());
     if flush_end > 0 {
-        token_tx
-            .send(InferToken::Delta(pending[..flush_end].to_string()))
-            .ok();
+        token_tx.send(InferToken::Delta(pending[..flush_end].to_string())).ok();
     }
 
     let n_gen = n_cur.saturating_sub(n_prompt);

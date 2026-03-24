@@ -24,10 +24,10 @@ import { onDestroy, onMount, tick } from "svelte";
 import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
 import ChatContextViewer from "$lib/ChatContextViewer.svelte";
 import ChatHeader from "$lib/ChatHeader.svelte";
-import type ChatInputBar from "$lib/ChatInputBar.svelte";
-import type ChatMessageList from "$lib/ChatMessageList.svelte";
+import ChatInputBar from "$lib/ChatInputBar.svelte";
+import ChatMessageList from "$lib/ChatMessageList.svelte";
 import ChatSettingsPanel from "$lib/ChatSettingsPanel.svelte";
-import type ChatSidebar from "$lib/ChatSidebar.svelte";
+import ChatSidebar from "$lib/ChatSidebar.svelte";
 import ChatToolsPanel from "$lib/ChatToolsPanel.svelte";
 import { buildEegBlock } from "$lib/chat-eeg";
 import {

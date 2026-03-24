@@ -68,16 +68,8 @@ pub(crate) fn hjorth_params(x: &[f32]) -> (f32, f32, f32) {
     }
     let ddm = ddx.iter().sum::<f32>() / ddx.len().max(1) as f32;
     let var2 = ddx.iter().map(|&v| (v - ddm).powi(2)).sum::<f32>() / ddx.len().max(1) as f32;
-    let mob_dx = if var1 > 1e-20 {
-        (var2 / var1).sqrt()
-    } else {
-        0.0
-    };
-    let complexity = if mobility > 1e-10 {
-        mob_dx / mobility
-    } else {
-        0.0
-    };
+    let mob_dx = if var1 > 1e-20 { (var2 / var1).sqrt() } else { 0.0 };
+    let complexity = if mobility > 1e-10 { mob_dx / mobility } else { 0.0 };
     (var0, mobility, complexity)
 }
 
@@ -306,14 +298,8 @@ pub(crate) fn pac_theta_gamma_fn(x: &[f32], sr: f32) -> f32 {
     for s in 0..n_subs {
         let start = s * hop;
         let sub = &x[start..start + sub_len];
-        let tp: f32 = theta_freqs
-            .iter()
-            .map(|&f| goertzel_power(sub, sr, f))
-            .sum();
-        let gp: f32 = gamma_freqs
-            .iter()
-            .map(|&f| goertzel_power(sub, sr, f))
-            .sum();
+        let tp: f32 = theta_freqs.iter().map(|&f| goertzel_power(sub, sr, f)).sum();
+        let gp: f32 = gamma_freqs.iter().map(|&f| goertzel_power(sub, sr, f)).sum();
         theta_pwr.push(tp);
         gamma_pwr.push(gp);
     }
@@ -481,14 +467,8 @@ mod tests {
     fn hjorth_varying_signal() {
         let signal: Vec<f32> = (0..256).map(|i| (i as f32 * 0.1).sin()).collect();
         let (activity, mobility, _complexity) = hjorth_params(&signal);
-        assert!(
-            activity > 0.0,
-            "sinusoidal signal should have non-zero activity"
-        );
-        assert!(
-            mobility > 0.0,
-            "sinusoidal signal should have non-zero mobility"
-        );
+        assert!(activity > 0.0, "sinusoidal signal should have non-zero activity");
+        assert!(mobility > 0.0, "sinusoidal signal should have non-zero mobility");
     }
 
     #[test]
@@ -517,19 +497,13 @@ mod tests {
     fn dfa_exponent_sinusoidal() {
         let signal: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
         let dfa = dfa_exponent(&signal);
-        assert!(
-            dfa.is_finite(),
-            "DFA should be finite for valid signal, got {dfa}"
-        );
+        assert!(dfa.is_finite(), "DFA should be finite for valid signal, got {dfa}");
     }
 
     #[test]
     fn higuchi_fd_sinusoidal() {
         let signal: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
         let hfd = higuchi_fd(&signal);
-        assert!(
-            hfd > 0.0 && hfd < 3.0,
-            "HFD={hfd} should be between 0 and 3"
-        );
+        assert!(hfd > 0.0 && hfd < 3.0, "HFD={hfd} should be between 0 and 3");
     }
 }

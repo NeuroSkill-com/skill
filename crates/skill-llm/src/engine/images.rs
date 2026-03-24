@@ -11,9 +11,7 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
     // data:<mime>;base64,<payload>
     let payload = data.split(';').nth(1)?.strip_prefix("base64,")?;
     use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD
-        .decode(payload)
-        .ok()
+    base64::engine::general_purpose::STANDARD.decode(payload).ok()
 }
 
 /// Decode all base64-embedded images across an entire messages array.
@@ -28,11 +26,7 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
 pub fn extract_images_from_messages(messages: &[Value]) -> Vec<Vec<u8>> {
     messages
         .iter()
-        .flat_map(|m| {
-            m.get("content")
-                .map(extract_images_from_content)
-                .unwrap_or_default()
-        })
+        .flat_map(|m| m.get("content").map(extract_images_from_content).unwrap_or_default())
         .collect()
 }
 

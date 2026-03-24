@@ -37,10 +37,7 @@ fn metrics_default_equals_new() {
     let d = ScreenshotMetrics::default();
     let n = ScreenshotMetrics::new();
     assert_eq!(d.snapshot().captures, n.snapshot().captures);
-    assert_eq!(
-        d.snapshot().backoff_multiplier,
-        n.snapshot().backoff_multiplier
-    );
+    assert_eq!(d.snapshot().backoff_multiplier, n.snapshot().backoff_multiplier);
 }
 
 #[test]

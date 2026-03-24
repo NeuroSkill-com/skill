@@ -14,9 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use skill_constants::{
-    CALIBRATION_ACTION1_LABEL, CALIBRATION_ACTION2_LABEL, CALIBRATION_ACTION_DURATION_SECS,
-    CALIBRATION_AUTO_START, CALIBRATION_BREAK_DURATION_SECS, CALIBRATION_LOOP_COUNT,
-    EMBEDDING_OVERLAP_SECS, SETTINGS_FILE, UMAP_CONFIG_FILE,
+    CALIBRATION_ACTION1_LABEL, CALIBRATION_ACTION2_LABEL, CALIBRATION_ACTION_DURATION_SECS, CALIBRATION_AUTO_START,
+    CALIBRATION_BREAK_DURATION_SECS, CALIBRATION_LOOP_COUNT, EMBEDDING_OVERLAP_SECS, SETTINGS_FILE, UMAP_CONFIG_FILE,
 };
 use skill_eeg::eeg_filter::FilterConfig;
 
@@ -97,10 +96,7 @@ impl OpenBciBoard {
 
     /// Returns `true` for boards that use the WiFi Shield.
     pub fn is_wifi(&self) -> bool {
-        matches!(
-            self,
-            Self::GanglionWifi | Self::CytonWifi | Self::CytonDaisyWifi
-        )
+        matches!(self, Self::GanglionWifi | Self::CytonWifi | Self::CytonDaisyWifi)
     }
 }
 
@@ -994,10 +990,7 @@ mod tests {
                 .iter()
                 .filter(|&&b| b)
                 .count();
-            assert!(
-                kinds <= 1,
-                "{board:?} reports more than one connection type"
-            );
+            assert!(kinds <= 1, "{board:?} reports more than one connection type");
         }
     }
 
@@ -1017,14 +1010,8 @@ mod tests {
     #[test]
     fn default_calibration_profile_action_labels_match_constants() {
         let p = CalibrationProfile::default();
-        assert_eq!(
-            p.actions[0].label,
-            skill_constants::CALIBRATION_ACTION1_LABEL
-        );
-        assert_eq!(
-            p.actions[1].label,
-            skill_constants::CALIBRATION_ACTION2_LABEL
-        );
+        assert_eq!(p.actions[0].label, skill_constants::CALIBRATION_ACTION1_LABEL);
+        assert_eq!(p.actions[1].label, skill_constants::CALIBRATION_ACTION2_LABEL);
     }
 
     #[test]
@@ -1038,10 +1025,7 @@ mod tests {
             p.actions[1].duration_secs,
             skill_constants::CALIBRATION_ACTION_DURATION_SECS
         );
-        assert_eq!(
-            p.break_duration_secs,
-            skill_constants::CALIBRATION_BREAK_DURATION_SECS
-        );
+        assert_eq!(p.break_duration_secs, skill_constants::CALIBRATION_BREAK_DURATION_SECS);
         assert_eq!(p.loop_count, skill_constants::CALIBRATION_LOOP_COUNT);
         assert_eq!(p.auto_start, skill_constants::CALIBRATION_AUTO_START);
     }
@@ -1073,9 +1057,7 @@ mod tests {
     #[test]
     fn tilde_path_contracts_home() {
         if let Ok(home) = std::env::var("HOME") {
-            let p = std::path::Path::new(&home)
-                .join(".skill")
-                .join("settings.json");
+            let p = std::path::Path::new(&home).join(".skill").join("settings.json");
             let result = tilde_path(&p);
             assert!(result.starts_with("~/"), "expected '~/...' got '{result}'");
         }

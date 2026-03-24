@@ -12,10 +12,7 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Helper: inject an HTML page via document.write and wait for render.
 fn load_html(browser: &Browser, html: &str) {
-    let escaped = html
-        .replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n");
+    let escaped = html.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
     browser
         .send(Command::EvalJsNoReturn {
             script: format!("document.open(); document.write('{escaped}'); document.close();"),
@@ -116,10 +113,7 @@ fn main() {
             })
             .unwrap();
         let bg = resp.as_text().unwrap();
-        assert!(
-            bg.contains("255") && bg.contains("0"),
-            "expected red bg, got: {bg}"
-        );
+        assert!(bg.contains("255") && bg.contains("0"), "expected red bg, got: {bg}");
     });
 
     test!("Render styled HTML — font size", {
@@ -213,8 +207,7 @@ fn main() {
         );
         let resp = browser
             .send(Command::EvalJs {
-                script: "JSON.stringify(document.getElementById('pos').getBoundingClientRect())"
-                    .into(),
+                script: "JSON.stringify(document.getElementById('pos').getBoundingClientRect())".into(),
             })
             .unwrap();
         let rect: serde_json::Value = serde_json::from_str(resp.as_text().unwrap()).unwrap();
@@ -304,12 +297,7 @@ fn main() {
 
     for &(w, h) in sizes {
         test!(&format!("Viewport {w}x{h}"), {
-            browser
-                .send(Command::SetViewport {
-                    width: w,
-                    height: h,
-                })
-                .unwrap();
+            browser.send(Command::SetViewport { width: w, height: h }).unwrap();
             std::thread::sleep(Duration::from_millis(300));
 
             let resp = browser
@@ -323,8 +311,7 @@ fn main() {
             let ih: u32 = parts[1].parse().unwrap_or(0);
             // Allow ~50px tolerance for window decorations / title bars.
             assert!(
-                (iw as i64 - w as i64).unsigned_abs() <= 50
-                    && (ih as i64 - h as i64).unsigned_abs() <= 50,
+                (iw as i64 - w as i64).unsigned_abs() <= 50 && (ih as i64 - h as i64).unsigned_abs() <= 50,
                 "expected ~{w}x{h}, got {iw}x{ih}"
             );
         });
@@ -446,8 +433,9 @@ fn main() {
     });
 
     test!("WebGL — shader compile + link", {
-        let resp = browser.send(Command::EvalJs {
-            script: r#"(() => {
+        let resp = browser
+            .send(Command::EvalJs {
+                script: r#"(() => {
                 const c = document.createElement('canvas');
                 const gl = c.getContext('webgl');
                 if (!gl) return 'no_webgl';
@@ -463,8 +451,10 @@ fn main() {
                 return gl.getShaderParameter(vs,gl.COMPILE_STATUS)+','+
                        gl.getShaderParameter(fs,gl.COMPILE_STATUS)+','+
                        gl.getProgramParameter(prog,gl.LINK_STATUS);
-            })()"#.into(),
-        }).unwrap();
+            })()"#
+                    .into(),
+            })
+            .unwrap();
         let t = resp.as_text().unwrap();
         if t == "no_webgl" {
             println!("  (skipped)");
@@ -499,12 +489,7 @@ fn main() {
     let ss_sizes: &[(u32, u32)] = &[(320, 240), (800, 600), (1920, 1080)];
     for &(w, h) in ss_sizes {
         test!(&format!("Screenshot at {w}x{h}"), {
-            browser
-                .send(Command::SetViewport {
-                    width: w,
-                    height: h,
-                })
-                .unwrap();
+            browser.send(Command::SetViewport { width: w, height: h }).unwrap();
             std::thread::sleep(Duration::from_millis(300));
 
             load_html(
@@ -516,10 +501,7 @@ fn main() {
 
             let resp = browser.send(Command::Screenshot).unwrap();
             let text = resp.as_text().unwrap_or("");
-            assert!(
-                text.starts_with("data:image/png;base64,"),
-                "no PNG at {w}x{h}"
-            );
+            assert!(text.starts_with("data:image/png;base64,"), "no PNG at {w}x{h}");
             let bytes = base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
             assert!(bytes.len() > 100, "too small: {} bytes", bytes.len());
             assert_eq!(&bytes[0..4], &[0x89, 0x50, 0x4E, 0x47]);
@@ -548,10 +530,7 @@ fn main() {
         let ua_line = stdout.lines().find(|l| l.starts_with("UA=")).unwrap_or("");
         let ua = ua_line.strip_prefix("UA=").unwrap_or("");
         println!("  (UA: {ua})");
-        assert!(
-            ua.contains("SkillHeadlessBot/1.0"),
-            "expected custom UA in: {ua}"
-        );
+        assert!(ua.contains("SkillHeadlessBot/1.0"), "expected custom UA in: {ua}");
     });
 
     test!("Default user-agent — contains WebKit/Mozilla", {

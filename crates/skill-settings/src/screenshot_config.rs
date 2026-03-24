@@ -8,9 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use skill_constants::{
-    EMBEDDING_EPOCH_SECS, SCREENSHOT_INTERVAL_MAX_MULT, SCREENSHOT_INTERVAL_MIN_MULT,
-};
+use skill_constants::{EMBEDDING_EPOCH_SECS, SCREENSHOT_INTERVAL_MAX_MULT, SCREENSHOT_INTERVAL_MIN_MULT};
 
 pub fn default_screenshot_interval() -> u32 {
     5

@@ -26,30 +26,21 @@ pub const PPG_SAMPLE_RATE: f64 = skill_constants::PPG_SAMPLE_RATE as f64;
 /// Derive the PPG CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_ppg.csv`
 pub fn ppg_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("exg");
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_ppg.csv"))
 }
 
 /// Derive the metrics CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_metrics.csv`
 pub fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("exg");
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_metrics.csv"))
 }
 
 /// Derive the IMU CSV path from an EEG CSV path.
 /// `exg_1700000000.csv` → `exg_1700000000_imu.csv`
 pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("exg");
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_imu.csv"))
 }
 
@@ -146,8 +137,7 @@ const BAND_SUFFIXES: [&str; 12] = [
 /// Layout: `timestamp_s`, then `<ch>_<band>` × N channels × 12 bands,
 /// then the 46 cross-channel columns.
 pub fn build_metrics_header(channel_names: &[&str]) -> Vec<String> {
-    let mut header =
-        Vec::with_capacity(1 + channel_names.len() * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
+    let mut header = Vec::with_capacity(1 + channel_names.len() * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
     header.push("timestamp_s".to_string());
     for ch in channel_names {
         for suffix in &BAND_SUFFIXES {
@@ -311,10 +301,7 @@ impl CsvState {
         Ok(Self {
             wtr,
             n_eeg: n,
-            channel_labels: labels
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
+            channel_labels: labels.iter().map(std::string::ToString::to_string).collect(),
             bufs: (0..n).map(|_| VecDeque::new()).collect(),
             ts_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             written: 0,
@@ -330,13 +317,7 @@ impl CsvState {
     }
 
     /// Buffer `samples` for `electrode` and flush any complete rows to disk.
-    pub fn push_eeg(
-        &mut self,
-        electrode: usize,
-        samples: &[f64],
-        packet_ts: f64,
-        sample_rate: f64,
-    ) {
+    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         if electrode >= self.n_eeg {
             return;
         }
@@ -345,12 +326,7 @@ impl CsvState {
             self.ts_bufs[electrode].push_back(packet_ts + i as f64 / sample_rate);
         }
 
-        let ready = self
-            .bufs
-            .iter()
-            .map(std::collections::VecDeque::len)
-            .min()
-            .unwrap_or(0);
+        let ready = self.bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         let n = self.n_eeg;
         for _ in 0..ready {
             let Some(ts) = self.ts_bufs[0].pop_front() else {
@@ -413,10 +389,7 @@ impl CsvState {
                     self.ppg_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[csv] failed to create PPG file {}: {e}",
-                        ppg_path.display()
-                    );
+                    eprintln!("[csv] failed to create PPG file {}: {e}", ppg_path.display());
                     return;
                 }
             }
@@ -504,10 +477,7 @@ impl CsvState {
                     self.imu_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[csv] failed to create IMU file {}: {e}",
-                        imu_path.display()
-                    );
+                    eprintln!("[csv] failed to create IMU file {}: {e}", imu_path.display());
                     return;
                 }
             }
@@ -544,23 +514,15 @@ impl CsvState {
             let path = metrics_csv_path(eeg_csv_path);
             match csv::Writer::from_path(&path) {
                 Ok(mut w) => {
-                    let label_refs: Vec<&str> = self
-                        .channel_labels
-                        .iter()
-                        .map(std::string::String::as_str)
-                        .collect();
+                    let label_refs: Vec<&str> = self.channel_labels.iter().map(std::string::String::as_str).collect();
                     let header = build_metrics_header(&label_refs);
-                    let header_refs: Vec<&str> =
-                        header.iter().map(std::string::String::as_str).collect();
+                    let header_refs: Vec<&str> = header.iter().map(std::string::String::as_str).collect();
                     let _ = w.write_record(&header_refs);
                     eprintln!("[csv] Metrics file opened: {}", path.display());
                     self.metrics_wtr = Some(w);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[csv] failed to create metrics file {}: {e}",
-                        path.display()
-                    );
+                    eprintln!("[csv] failed to create metrics file {}: {e}", path.display());
                     return;
                 }
             }

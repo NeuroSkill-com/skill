@@ -21,10 +21,7 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
         return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
     }
 
-    let render = args
-        .get("render")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+    let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
     let render_count = args
         .get("render_count")
         .and_then(serde_json::Value::as_u64)
@@ -138,11 +135,7 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
     }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }));
 
     // Cache successful results.
-    if result
-        .get("ok")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
+    if result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false) {
         if let Some(cache) = crate::web_cache::global() {
             cache.put_search(&query_for_cache, &backend, render, &result);
         }
@@ -165,10 +158,7 @@ fn build_compact_search_response(
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            let text = r
-                .get("rendered_text")
-                .and_then(|t| t.as_str())
-                .unwrap_or("");
+            let text = r.get("rendered_text").and_then(|t| t.as_str()).unwrap_or("");
             (i, search::score_rendered_text(text))
         })
         .collect();
@@ -189,15 +179,8 @@ fn build_compact_search_response(
         .map(|(i, r)| {
             let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
             let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("");
-            let rendered = r
-                .get("rendered_text")
-                .and_then(|t| t.as_str())
-                .unwrap_or("");
-            let score = scored
-                .iter()
-                .find(|(idx, _)| *idx == i)
-                .map(|(_, s)| *s)
-                .unwrap_or(0);
+            let rendered = r.get("rendered_text").and_then(|t| t.as_str()).unwrap_or("");
+            let score = scored.iter().find(|(idx, _)| *idx == i).map(|(_, s)| *s).unwrap_or(0);
             let domain = url.split('/').nth(2).unwrap_or(url);
             json!({
                 "domain": domain,
@@ -277,10 +260,7 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
         return json!({ "ok": false, "tool": "web_fetch", "error": "url must start with http:// or https://" });
     }
 
-    let render = args
-        .get("render")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+    let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
     // Check persistent web cache first.
     if let Some(cache) = crate::web_cache::global() {
@@ -290,10 +270,7 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
         }
     }
 
-    let max_content = allowed_tools
-        .context_compression
-        .effective_max_result_chars()
-        .max(1000);
+    let max_content = allowed_tools.context_compression.effective_max_result_chars().max(1000);
 
     let result = if render {
         exec_web_fetch_render(args, &url, max_content, &allowed_tools.retry).await
@@ -302,11 +279,7 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
     };
 
     // Cache successful results.
-    if result
-        .get("ok")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
+    if result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false) {
         if let Some(cache) = crate::web_cache::global() {
             cache.put_fetch(&url, render, &result);
         }
@@ -322,10 +295,7 @@ async fn exec_web_fetch_render(
     max_content: usize,
     _retry: &crate::types::ToolRetryConfig,
 ) -> Value {
-    let wait_ms = args
-        .get("wait_ms")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(2000);
+    let wait_ms = args.get("wait_ms").and_then(serde_json::Value::as_u64).unwrap_or(2000);
     let selector = args
         .get("selector")
         .and_then(|v| v.as_str())
@@ -338,17 +308,10 @@ async fn exec_web_fetch_render(
     let url_owned = url.to_string();
 
     let mut result = tokio::task::spawn_blocking(move || {
-        search::headless_fetch_url(
-            &url_for_fetch,
-            wait_ms,
-            selector.as_deref(),
-            eval_js.as_deref(),
-        )
+        search::headless_fetch_url(&url_for_fetch, wait_ms, selector.as_deref(), eval_js.as_deref())
     })
     .await
-    .unwrap_or_else(
-        |e| json!({ "ok": false, "tool": "web_fetch", "url": url_owned, "error": e.to_string() }),
-    );
+    .unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url_owned, "error": e.to_string() }));
 
     // If headless browser is unavailable, fall back to plain HTTP fetch.
     let should_fallback = result
@@ -381,7 +344,9 @@ async fn exec_web_fetch_render(
                 }
                 Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_fallback, "error": e.to_string() }),
             }
-        }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
+        })
+        .await
+        .unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
     }
 
     // Cap rendered content to the configured limit.
@@ -399,11 +364,7 @@ async fn exec_web_fetch_render(
 }
 
 /// Plain HTTP fetch path for web_fetch (with retry on transient errors).
-async fn exec_web_fetch_plain(
-    url: &str,
-    max_content: usize,
-    retry: &crate::types::ToolRetryConfig,
-) -> Value {
+async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::types::ToolRetryConfig) -> Value {
     let url_for_fetch = url.to_string();
     let max_retries = retry.max_retries;
     let base_delay = std::time::Duration::from_millis(retry.base_delay_ms);
@@ -433,9 +394,7 @@ async fn exec_web_fetch_plain(
                         "truncated": body.chars().count() > max_content,
                     }))
                 }
-                Err(ureq::Error::Status(code, resp))
-                    if code == 429 || (500..600).contains(&code) =>
-                {
+                Err(ureq::Error::Status(code, resp)) if code == 429 || (500..600).contains(&code) => {
                     let body = resp.into_string().unwrap_or_default();
                     Err(format!("HTTP {}: {}", code, body))
                 }
@@ -449,7 +408,5 @@ async fn exec_web_fetch_plain(
         }
     })
     .await
-    .unwrap_or_else(
-        |e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }),
-    )
+    .unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
 }

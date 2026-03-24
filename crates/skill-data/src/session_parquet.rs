@@ -63,9 +63,7 @@ pub fn imu_parquet_path(csv_path: &Path) -> PathBuf {
 // ── Writer properties ─────────────────────────────────────────────────────────
 
 fn writer_props() -> WriterProperties {
-    WriterProperties::builder()
-        .set_compression(Compression::SNAPPY)
-        .build()
+    WriterProperties::builder().set_compression(Compression::SNAPPY).build()
 }
 
 // ── ParquetState ──────────────────────────────────────────────────────────────
@@ -122,10 +120,8 @@ impl ParquetState {
         }
         let eeg_schema = Arc::new(Schema::new(fields));
 
-        let file = std::fs::File::create(&pq_path)
-            .with_context(|| format!("parquet create {}", pq_path.display()))?;
-        let eeg_wtr = ArrowWriter::try_new(file, eeg_schema.clone(), Some(writer_props()))
-            .context("parquet writer")?;
+        let file = std::fs::File::create(&pq_path).with_context(|| format!("parquet create {}", pq_path.display()))?;
+        let eeg_wtr = ArrowWriter::try_new(file, eeg_schema.clone(), Some(writer_props())).context("parquet writer")?;
 
         // PPG schema
         let ppg_fields = vec![
@@ -201,13 +197,7 @@ impl ParquetState {
 
     // ── EEG ──────────────────────────────────────────────────────────────────
 
-    pub fn push_eeg(
-        &mut self,
-        electrode: usize,
-        samples: &[f64],
-        packet_ts: f64,
-        sample_rate: f64,
-    ) {
+    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         if electrode >= self.n_eeg {
             return;
         }
@@ -229,9 +219,7 @@ impl ParquetState {
 
         // Build column arrays.
         let n = self.n_eeg;
-        let ts_col: Vec<f64> = (0..ready)
-            .filter_map(|_| self.eeg_ts[0].pop_front())
-            .collect();
+        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_ts[0].pop_front()).collect();
         for k in 1..n {
             for _ in 0..ready {
                 self.eeg_ts[k].pop_front();
@@ -241,9 +229,7 @@ impl ParquetState {
         let mut columns: Vec<Arc<dyn arrow_array::Array>> = Vec::with_capacity(n + 1);
         columns.push(Arc::new(Float64Array::from(ts_col)));
         for k in 0..n {
-            let col: Vec<f64> = (0..ready)
-                .filter_map(|_| self.eeg_bufs[k].pop_front())
-                .collect();
+            let col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_bufs[k].pop_front()).collect();
             columns.push(Arc::new(Float64Array::from(col)));
         }
 
@@ -289,17 +275,15 @@ impl ParquetState {
         // Lazy-open PPG writer.
         if self.ppg_wtr.is_none() {
             match std::fs::File::create(&self.ppg_path) {
-                Ok(f) => {
-                    match ArrowWriter::try_new(f, self.ppg_schema.clone(), Some(writer_props())) {
-                        Ok(w) => {
-                            self.ppg_wtr = Some(w);
-                        }
-                        Err(e) => {
-                            eprintln!("[parquet] PPG writer error: {e}");
-                            return;
-                        }
+                Ok(f) => match ArrowWriter::try_new(f, self.ppg_schema.clone(), Some(writer_props())) {
+                    Ok(w) => {
+                        self.ppg_wtr = Some(w);
                     }
-                }
+                    Err(e) => {
+                        eprintln!("[parquet] PPG writer error: {e}");
+                        return;
+                    }
+                },
                 Err(e) => {
                     eprintln!("[parquet] PPG create error: {e}");
                     return;
@@ -307,29 +291,19 @@ impl ParquetState {
             }
         }
 
-        let ts_col: Vec<f64> = (0..ready)
-            .filter_map(|_| self.ppg_ts[0].pop_front())
-            .collect();
+        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.ppg_ts[0].pop_front()).collect();
         for k in 1..3 {
             for _ in 0..ready {
                 self.ppg_ts[k].pop_front();
             }
         }
 
-        let ambient: Vec<f64> = (0..ready)
-            .filter_map(|_| self.ppg_bufs[0].pop_front())
-            .collect();
-        let infrared: Vec<f64> = (0..ready)
-            .filter_map(|_| self.ppg_bufs[1].pop_front())
-            .collect();
-        let red: Vec<f64> = (0..ready)
-            .filter_map(|_| self.ppg_bufs[2].pop_front())
-            .collect();
+        let ambient: Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[0].pop_front()).collect();
+        let infrared: Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[1].pop_front()).collect();
+        let red: Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[2].pop_front()).collect();
 
         let vitals_row = |field: fn(&PpgMetrics) -> f64| -> Vec<f64> {
-            (0..ready)
-                .map(|_| ppg_vitals.map_or(f64::NAN, field))
-                .collect()
+            (0..ready).map(|_| ppg_vitals.map_or(f64::NAN, field)).collect()
         };
 
         let columns: Vec<Arc<dyn arrow_array::Array>> = vec![
@@ -366,18 +340,15 @@ impl ParquetState {
         // Lazy-open metrics writer.
         if self.metrics_wtr.is_none() {
             match std::fs::File::create(&self.metrics_path) {
-                Ok(f) => {
-                    match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(writer_props()))
-                    {
-                        Ok(w) => {
-                            self.metrics_wtr = Some(w);
-                        }
-                        Err(e) => {
-                            eprintln!("[parquet] metrics writer error: {e}");
-                            return;
-                        }
+                Ok(f) => match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(writer_props())) {
+                    Ok(w) => {
+                        self.metrics_wtr = Some(w);
                     }
-                }
+                    Err(e) => {
+                        eprintln!("[parquet] metrics writer error: {e}");
+                        return;
+                    }
+                },
                 Err(e) => {
                     eprintln!("[parquet] metrics create error: {e}");
                     return;
@@ -458,17 +429,9 @@ impl ParquetState {
             opt_u64(snap.nod_count),
             opt_u64(snap.shake_count),
         ]);
-        row.extend_from_slice(&[
-            opt(snap.meditation),
-            opt(snap.cognitive_load),
-            opt(snap.drowsiness),
-        ]);
+        row.extend_from_slice(&[opt(snap.meditation), opt(snap.cognitive_load), opt(snap.drowsiness)]);
         row.push(opt_u16(snap.temperature_raw));
-        row.extend_from_slice(&[
-            opt(snap.gpu_overall),
-            opt(snap.gpu_render),
-            opt(snap.gpu_tiler),
-        ]);
+        row.extend_from_slice(&[opt(snap.gpu_overall), opt(snap.gpu_render), opt(snap.gpu_tiler)]);
 
         self.metrics_pending.push(row);
         self.metrics_rows += 1;
@@ -522,17 +485,15 @@ impl ParquetState {
         // Lazy-open IMU writer.
         if self.imu_wtr.is_none() {
             match std::fs::File::create(&self.imu_path) {
-                Ok(f) => {
-                    match ArrowWriter::try_new(f, self.imu_schema.clone(), Some(writer_props())) {
-                        Ok(w) => {
-                            self.imu_wtr = Some(w);
-                        }
-                        Err(e) => {
-                            eprintln!("[parquet] IMU writer error: {e}");
-                            return;
-                        }
+                Ok(f) => match ArrowWriter::try_new(f, self.imu_schema.clone(), Some(writer_props())) {
+                    Ok(w) => {
+                        self.imu_wtr = Some(w);
                     }
-                }
+                    Err(e) => {
+                        eprintln!("[parquet] IMU writer error: {e}");
+                        return;
+                    }
+                },
                 Err(e) => {
                     eprintln!("[parquet] IMU create error: {e}");
                     return;

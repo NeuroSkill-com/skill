@@ -507,11 +507,7 @@ mod tests {
     #[test]
     fn all_builtin_tools_have_function_type() {
         for tool in builtin_llm_tools() {
-            assert_eq!(
-                tool.tool_type, "function",
-                "tool {} has wrong type",
-                tool.function.name
-            );
+            assert_eq!(tool.tool_type, "function", "tool {} has wrong type", tool.function.name);
         }
     }
 
@@ -535,10 +531,7 @@ mod tests {
 
     #[test]
     fn builtin_tools_contain_expected_names() {
-        let names: Vec<String> = builtin_llm_tools()
-            .iter()
-            .map(|t| t.function.name.clone())
-            .collect();
+        let names: Vec<String> = builtin_llm_tools().iter().map(|t| t.function.name.clone()).collect();
         assert!(names.contains(&"date".into()));
         assert!(names.contains(&"web_search".into()));
         assert!(names.contains(&"web_fetch".into()));
@@ -582,10 +575,7 @@ mod tests {
         let mut cfg = LlmToolConfig::default();
         cfg.skill_api = true;
         cfg.skill_api_port = 0;
-        assert!(
-            !is_builtin_tool_enabled(&cfg, "skill"),
-            "skill needs port > 0"
-        );
+        assert!(!is_builtin_tool_enabled(&cfg, "skill"), "skill needs port > 0");
 
         cfg.skill_api_port = 8080;
         assert!(is_builtin_tool_enabled(&cfg, "skill"));
@@ -663,26 +653,17 @@ mod tests {
 
     #[test]
     fn hyphenated_prefix_resolves() {
-        assert_eq!(
-            resolve_skill_alias("neuroskill-sessions"),
-            Some("sessions".into())
-        );
+        assert_eq!(resolve_skill_alias("neuroskill-sessions"), Some("sessions".into()));
     }
 
     #[test]
     fn underscore_prefix_resolves() {
-        assert_eq!(
-            resolve_skill_alias("neuroskill_sessions"),
-            Some("sessions".into())
-        );
+        assert_eq!(resolve_skill_alias("neuroskill_sessions"), Some("sessions".into()));
     }
 
     #[test]
     fn hooks_folder_maps_to_hooks_status() {
-        assert_eq!(
-            resolve_skill_alias("neuroskill-hooks"),
-            Some("hooks_status".into())
-        );
+        assert_eq!(resolve_skill_alias("neuroskill-hooks"), Some("hooks_status".into()));
     }
 
     #[test]
@@ -695,10 +676,7 @@ mod tests {
 
     #[test]
     fn search_images_alias_resolves() {
-        assert_eq!(
-            resolve_skill_alias("search-images"),
-            Some("search_screenshots".into())
-        );
+        assert_eq!(resolve_skill_alias("search-images"), Some("search_screenshots".into()));
     }
 
     #[test]
@@ -728,31 +706,16 @@ mod tests {
     #[test]
     fn hyphenated_cli_names_resolve() {
         // Generic hyphen-to-underscore fallback for any known command
-        assert_eq!(
-            resolve_skill_alias("search-labels"),
-            Some("search_labels".into())
-        );
-        assert_eq!(
-            resolve_skill_alias("sleep-schedule"),
-            Some("sleep_schedule".into())
-        );
-        assert_eq!(
-            resolve_skill_alias("session-metrics"),
-            Some("session_metrics".into())
-        );
-        assert_eq!(
-            resolve_skill_alias("hooks-status"),
-            Some("hooks_status".into())
-        );
+        assert_eq!(resolve_skill_alias("search-labels"), Some("search_labels".into()));
+        assert_eq!(resolve_skill_alias("sleep-schedule"), Some("sleep_schedule".into()));
+        assert_eq!(resolve_skill_alias("session-metrics"), Some("session_metrics".into()));
+        assert_eq!(resolve_skill_alias("hooks-status"), Some("hooks_status".into()));
         assert_eq!(resolve_skill_alias("dnd-set"), Some("dnd_set".into()));
         assert_eq!(
             resolve_skill_alias("interactive-search"),
             Some("interactive_search".into())
         );
-        assert_eq!(
-            resolve_skill_alias("health-summary"),
-            Some("health_summary".into())
-        );
+        assert_eq!(resolve_skill_alias("health-summary"), Some("health_summary".into()));
     }
 
     #[test]

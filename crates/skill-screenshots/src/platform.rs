@@ -60,9 +60,7 @@ pub(crate) fn motion_score(prev: &[u8], curr: &[u8]) -> f32 {
         .pixels()
         .zip(curr_img.pixels())
         .filter(|(p, c)| {
-            p[0].abs_diff(c[0]) > TOLERANCE
-                || p[1].abs_diff(c[1]) > TOLERANCE
-                || p[2].abs_diff(c[2]) > TOLERANCE
+            p[0].abs_diff(c[0]) > TOLERANCE || p[1].abs_diff(c[1]) > TOLERANCE || p[2].abs_diff(c[2]) > TOLERANCE
         })
         .count();
 
@@ -154,10 +152,7 @@ fn capture_macos() -> Option<CapturedImage> {
     // AppleScript.  Works on older macOS or when screencapture is
     // restricted but osascript retains screen access.
     let _ = std::fs::remove_file(&tmp);
-    let script = format!(
-        "do shell script \"screencapture -x -t png {}\"",
-        tmp.to_string_lossy()
-    );
+    let script = format!("do shell script \"screencapture -x -t png {}\"", tmp.to_string_lossy());
     let ok = Command::new("osascript")
         .args(["-e", &script])
         .status()
@@ -238,14 +233,9 @@ fn macos_frontmost_window_id() -> Option<u64> {
         fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
         fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: CFIndex) -> CFTypeRef;
         fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
-        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64)
-            -> bool;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
         fn CFRelease(cf: CFTypeRef);
-        fn CFStringCreateWithCString(
-            alloc: CFAllocatorRef,
-            c_str: *const c_char,
-            encoding: u32,
-        ) -> CFStringRef;
+        fn CFStringCreateWithCString(alloc: CFAllocatorRef, c_str: *const c_char, encoding: u32) -> CFStringRef;
     }
 
     const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
@@ -256,13 +246,7 @@ fn macos_frontmost_window_id() -> Option<u64> {
     /// must be released by the caller via `CFRelease`.
     unsafe fn cfstr(s: &[u8]) -> CFStringRef {
         // SAFETY: `s` points to a static NUL-terminated literal.
-        unsafe {
-            CFStringCreateWithCString(
-                std::ptr::null(),
-                s.as_ptr() as *const c_char,
-                K_CF_STRING_ENCODING_UTF8,
-            )
-        }
+        unsafe { CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8) }
     }
 
     /// Helper: get an i32 from a CFNumber.
@@ -334,8 +318,7 @@ fn macos_frontmost_window_id() -> Option<u64> {
         let key_layer = cfstr(b"kCGWindowLayer\0");
         let key_number = cfstr(b"kCGWindowNumber\0");
 
-        let list =
-            CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, K_CG_NULL_WINDOW_ID);
+        let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, K_CG_NULL_WINDOW_ID);
         if list.is_null() {
             CFRelease(key_pid);
             CFRelease(key_layer);

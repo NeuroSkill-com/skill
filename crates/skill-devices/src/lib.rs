@@ -106,18 +106,8 @@ pub fn enrich_band_snapshot(snap: &mut BandSnapshot, ctx: &SnapshotContext) {
 /// - Stillness (head-pose stillness × 0.2)
 /// - HRV component (RMSSD / 100 × 20, capped at 20; defaults to 10 if no PPG)
 pub fn compute_meditation(snap: &BandSnapshot, stillness: f64, rmssd: Option<f64>) -> f64 {
-    let alpha_dom = snap
-        .channels
-        .iter()
-        .map(|ch| ch.rel_alpha as f64)
-        .sum::<f64>()
-        / snap.channels.len().max(1) as f64;
-    let beta_dom = snap
-        .channels
-        .iter()
-        .map(|ch| ch.rel_beta as f64)
-        .sum::<f64>()
-        / snap.channels.len().max(1) as f64;
+    let alpha_dom = snap.channels.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
+    let beta_dom = snap.channels.iter().map(|ch| ch.rel_beta as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
     let alpha_component = (alpha_dom * 200.0).min(40.0);
     let beta_penalty = (beta_dom * 100.0).min(20.0);
     let still_component = stillness * 0.2;
@@ -169,14 +159,8 @@ pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
             return 50.0;
         }
         let mid = n / 2;
-        frontal_theta = snap.channels[..mid]
-            .iter()
-            .map(|c| c.rel_theta as f64)
-            .collect();
-        parietal_alpha = snap.channels[mid..]
-            .iter()
-            .map(|c| c.rel_alpha as f64)
-            .collect();
+        frontal_theta = snap.channels[..mid].iter().map(|c| c.rel_theta as f64).collect();
+        parietal_alpha = snap.channels[mid..].iter().map(|c| c.rel_alpha as f64).collect();
     }
 
     let avg_frontal = frontal_theta.iter().sum::<f64>() / frontal_theta.len() as f64;
@@ -197,12 +181,7 @@ pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
 /// - Alpha spindle component: mean rel_alpha × 100, capped at 20
 pub fn compute_drowsiness(snap: &BandSnapshot) -> f64 {
     let tar = snap.tar as f64;
-    let alpha_dom = snap
-        .channels
-        .iter()
-        .map(|ch| ch.rel_alpha as f64)
-        .sum::<f64>()
-        / snap.channels.len().max(1) as f64;
+    let alpha_dom = snap.channels.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
     let tar_component = (tar / 3.0 * 80.0).min(80.0);
     let alpha_spindle = (alpha_dom * 100.0).min(20.0);
     (tar_component + alpha_spindle).clamp(0.0, 100.0)
@@ -368,12 +347,7 @@ pub struct DndDecision {
 ///
 /// Pure function: reads `config` and mutates `state`, returns a `DndDecision`
 /// that tells the caller what OS calls and UI updates to perform.
-pub fn dnd_tick(
-    config: &DndConfig,
-    state: &mut DndState,
-    focus_score: f64,
-    snr_db: f32,
-) -> DndDecision {
+pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_db: f32) -> DndDecision {
     let window = (config.duration_secs as usize * 4).max(8);
     let exit_window = (config.exit_duration_secs as usize * 4).max(4);
     let lookback_window = (config.focus_lookback_secs as usize * 4).max(4);
@@ -413,8 +387,7 @@ pub fn dnd_tick(
         emit_active = false;
         set_dnd_to = Some((false, String::new()));
         send_exit_notification = config.exit_notification;
-        exit_body =
-            "Signal quality (SNR) dropped below threshold for 1 minute. Focus mode deactivated.";
+        exit_body = "Signal quality (SNR) dropped below threshold for 1 minute. Focus mode deactivated.";
     } else if config.enabled {
         if avg_score >= config.focus_threshold {
             state.below_ticks = 0;
@@ -423,10 +396,7 @@ pub fn dnd_tick(
                 set_dnd_to = Some((true, config.focus_mode_identifier.clone()));
             }
         } else if state.active {
-            let recent_had_focus = state
-                .score_history
-                .iter()
-                .any(|&v| v >= config.focus_threshold);
+            let recent_had_focus = state.score_history.iter().any(|&v| v >= config.focus_threshold);
             if recent_had_focus {
                 state.below_ticks = 0;
                 below_ticks = 0;

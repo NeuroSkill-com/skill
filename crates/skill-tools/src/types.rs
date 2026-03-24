@@ -398,10 +398,7 @@ mod tests {
 
     #[test]
     fn default_execution_mode_is_parallel() {
-        assert_eq!(
-            LlmToolConfig::default().execution_mode,
-            ToolExecutionMode::Parallel
-        );
+        assert_eq!(LlmToolConfig::default().execution_mode, ToolExecutionMode::Parallel);
     }
 
     #[test]
@@ -411,10 +408,7 @@ mod tests {
 
     #[test]
     fn default_skills_refresh_interval_is_24h() {
-        assert_eq!(
-            LlmToolConfig::default().skills_refresh_interval_secs,
-            86_400
-        );
+        assert_eq!(LlmToolConfig::default().skills_refresh_interval_secs, 86_400);
     }
 
     // ── JSON round-trip ───────────────────────────────────────────────────
@@ -447,10 +441,7 @@ mod tests {
         let mut cfg = LlmToolConfig::default();
         cfg.skill_api_port = 9999;
         let json = serde_json::to_string(&cfg).unwrap();
-        assert!(
-            !json.contains("skill_api_port"),
-            "skip field should not appear in JSON"
-        );
+        assert!(!json.contains("skill_api_port"), "skip field should not appear in JSON");
         let parsed: LlmToolConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.skill_api_port, 0);
     }
@@ -487,14 +478,8 @@ mod tests {
 
     #[test]
     fn compression_level_serialises_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&CompressionLevel::Off).unwrap(),
-            "\"off\""
-        );
-        assert_eq!(
-            serde_json::to_string(&CompressionLevel::Normal).unwrap(),
-            "\"normal\""
-        );
+        assert_eq!(serde_json::to_string(&CompressionLevel::Off).unwrap(), "\"off\"");
+        assert_eq!(serde_json::to_string(&CompressionLevel::Normal).unwrap(), "\"normal\"");
         assert_eq!(
             serde_json::to_string(&CompressionLevel::Aggressive).unwrap(),
             "\"aggressive\""

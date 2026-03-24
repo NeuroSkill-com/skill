@@ -30,8 +30,7 @@ use skill_constants::DND_LINUX_MODE_ID as LINUX_MODE_ID;
 use skill_constants::DND_WINDOWS_MODE_ID as WINDOWS_MODE_ID;
 
 #[cfg(target_os = "linux")]
-static PORTAL_INHIBIT_HANDLE: std::sync::OnceLock<std::sync::Mutex<Option<String>>> =
-    std::sync::OnceLock::new();
+static PORTAL_INHIBIT_HANDLE: std::sync::OnceLock<std::sync::Mutex<Option<String>>> = std::sync::OnceLock::new();
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
@@ -88,11 +87,7 @@ pub fn query_os_active() -> Option<bool> {
     {
         query_windows_dnd_active()
     }
-    #[cfg(all(
-        not(target_os = "macos"),
-        not(target_os = "linux"),
-        not(target_os = "windows")
-    ))]
+    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
     None
 }
 
@@ -129,10 +124,7 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
                 true
             }
             Err(e) => {
-                eprintln!(
-                    "[dnd] {} failed: {e}",
-                    if enabled { "enable" } else { "disable" }
-                );
+                eprintln!("[dnd] {} failed: {e}", if enabled { "enable" } else { "disable" });
                 false
             }
         }
@@ -147,11 +139,7 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
         let _ = mode_identifier;
         set_windows_dnd(enabled)
     }
-    #[cfg(all(
-        not(target_os = "macos"),
-        not(target_os = "linux"),
-        not(target_os = "windows")
-    ))]
+    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
     {
         let _ = (enabled, mode_identifier);
         true
@@ -203,20 +191,13 @@ pub fn list_focus_modes() -> Vec<FocusModeOption> {
             name: "Do Not Disturb".to_owned(),
         }]
     }
-    #[cfg(all(
-        not(target_os = "macos"),
-        not(target_os = "linux"),
-        not(target_os = "windows")
-    ))]
+    #[cfg(all(not(target_os = "macos"), not(target_os = "linux"), not(target_os = "windows")))]
     Vec::new()
 }
 
 #[cfg(target_os = "linux")]
 fn run_cmd(program: &str, args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
+    let out = std::process::Command::new(program).args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -245,24 +226,14 @@ fn query_linux_dnd_active() -> Option<bool> {
 
 #[cfg(target_os = "linux")]
 fn set_linux_dnd(enabled: bool) -> bool {
-    let portal_cleared = if enabled {
-        false
-    } else {
-        set_portal_dnd(false)
-    };
+    let portal_cleared = if enabled { false } else { set_portal_dnd(false) };
 
     if set_gnome_dnd(enabled) {
-        eprintln!(
-            "[dnd] linux gnome {} OK",
-            if enabled { "enable" } else { "disable" }
-        );
+        eprintln!("[dnd] linux gnome {} OK", if enabled { "enable" } else { "disable" });
         return true;
     }
     if set_kde_dnd(enabled) {
-        eprintln!(
-            "[dnd] linux kde {} OK",
-            if enabled { "enable" } else { "disable" }
-        );
+        eprintln!("[dnd] linux kde {} OK", if enabled { "enable" } else { "disable" });
         return true;
     }
 
@@ -284,10 +255,7 @@ fn set_linux_dnd(enabled: bool) -> bool {
 
 #[cfg(target_os = "linux")]
 fn query_gnome_show_banners() -> Option<bool> {
-    let output = run_cmd(
-        "gsettings",
-        &["get", "org.gnome.desktop.notifications", "show-banners"],
-    )?;
+    let output = run_cmd("gsettings", &["get", "org.gnome.desktop.notifications", "show-banners"])?;
     if output.eq_ignore_ascii_case("true") {
         return Some(false);
     }
@@ -302,12 +270,7 @@ fn set_gnome_dnd(enabled: bool) -> bool {
     let show_banners = if enabled { "false" } else { "true" };
     run_cmd_ok(
         "gsettings",
-        &[
-            "set",
-            "org.gnome.desktop.notifications",
-            "show-banners",
-            show_banners,
-        ],
+        &["set", "org.gnome.desktop.notifications", "show-banners", show_banners],
     )
 }
 
@@ -379,8 +342,7 @@ fn set_portal_dnd(enabled: bool) -> bool {
         }
 
         let token = format!("neuroskill_dnd_{}", std::process::id());
-        let options =
-            format!("{{'reason': <'NeuroSkill focus automation'>, 'handle_token': <'{token}'>}}");
+        let options = format!("{{'reason': <'NeuroSkill focus automation'>, 'handle_token': <'{token}'>}}");
         let out = run_cmd(
             "gdbus",
             &[
@@ -460,10 +422,7 @@ fn parse_gdbus_object_path(output: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn run_cmd_windows(program: &str, args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
+    let out = std::process::Command::new(program).args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -538,10 +497,7 @@ fn set_windows_dnd(enabled: bool) -> bool {
             if enabled { "enable" } else { "disable" }
         );
     } else {
-        eprintln!(
-            "[dnd] windows {} failed",
-            if enabled { "enable" } else { "disable" }
-        );
+        eprintln!("[dnd] windows {} failed", if enabled { "enable" } else { "disable" });
     }
     ok
 }

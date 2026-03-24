@@ -11,11 +11,7 @@ use super::truncate::truncate_tool_output_head;
 // ── read_file ─────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_read_file(args: &Value) -> Value {
-    let path = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "read_file", "error": "missing path" });
     }
@@ -88,16 +84,8 @@ pub(crate) async fn exec_read_file(args: &Value) -> Value {
 // ── write_file ────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_write_file(args: &Value) -> Value {
-    let path = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let content = args
-        .get("content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "write_file", "error": "missing path" });
     }
@@ -140,21 +128,9 @@ pub(crate) async fn exec_write_file(args: &Value) -> Value {
 // ── edit_file ─────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_edit_file(args: &Value) -> Value {
-    let path = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let old_text = args
-        .get("old_text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let new_text = args
-        .get("new_text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let old_text = args.get("old_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let new_text = args.get("new_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "edit_file", "error": "missing path" });
     }
@@ -236,11 +212,7 @@ pub(crate) async fn exec_edit_file(args: &Value) -> Value {
 // ── search_output ─────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_search_output(args: &Value) -> Value {
-    let path = args
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "search_output", "error": "missing path" });
     }
@@ -252,14 +224,8 @@ pub(crate) async fn exec_search_output(args: &Value) -> Value {
         .get("context_lines")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(2) as usize;
-    let head_n = args
-        .get("head")
-        .and_then(serde_json::Value::as_u64)
-        .map(|v| v as usize);
-    let tail_n = args
-        .get("tail")
-        .and_then(serde_json::Value::as_u64)
-        .map(|v| v as usize);
+    let head_n = args.get("head").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+    let tail_n = args.get("tail").and_then(serde_json::Value::as_u64).map(|v| v as usize);
     let line_start = args
         .get("line_start")
         .and_then(serde_json::Value::as_u64)
@@ -354,9 +320,7 @@ fn exec_search_output_regex(
 ) -> Value {
     let re = match regex::RegexBuilder::new(pat).case_insensitive(true).build() {
         Ok(r) => r,
-        Err(e) => {
-            return json!({ "ok": false, "tool": "search_output", "error": format!("invalid regex: {}", e) })
-        }
+        Err(e) => return json!({ "ok": false, "tool": "search_output", "error": format!("invalid regex: {}", e) }),
     };
 
     let mut matches: Vec<String> = Vec::new();

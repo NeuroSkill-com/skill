@@ -149,13 +149,8 @@ mod macos {
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
         fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
-        fn CFStringCreateWithCString(
-            alloc: CFAllocatorRef,
-            c_str: *const c_char,
-            encoding: u32,
-        ) -> CFStringRef;
-        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64)
-            -> bool;
+        fn CFStringCreateWithCString(alloc: CFAllocatorRef, c_str: *const c_char, encoding: u32) -> CFStringRef;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
         fn CFRelease(cf: CFTypeRef);
     }
 
@@ -289,14 +284,7 @@ mod macos {
         // SAFETY: `host_statistics64` fills the MaybeUninit buffer with VM
         // stats. We pass the correct HOST_VM_INFO64 flavour and count.
         // `assume_init` is safe only after a successful (kr == 0) return.
-        let kr = unsafe {
-            host_statistics64(
-                mach_host_self(),
-                HOST_VM_INFO64,
-                stats.as_mut_ptr(),
-                &mut count,
-            )
-        };
+        let kr = unsafe { host_statistics64(mach_host_self(), HOST_VM_INFO64, stats.as_mut_ptr(), &mut count) };
         if kr != 0 {
             return None;
         }
@@ -313,9 +301,7 @@ mod macos {
         let c = CString::new(s).unwrap_or_default();
         // SAFETY: `CString::as_ptr` returns a valid NUL-terminated pointer.
         // The returned CFStringRef is released below if non-null.
-        let cf = unsafe {
-            CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), K_CF_STRING_ENCODING_UTF8)
-        };
+        let cf = unsafe { CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), K_CF_STRING_ENCODING_UTF8) };
         let result = f(cf);
         if !cf.is_null() {
             // SAFETY: `cf` was created by CFStringCreateWithCString; we own it.
@@ -367,9 +353,7 @@ mod macos {
             // converts from any stored numeric type. The pointer cast is safe
             // because both f64 and i64 are 8 bytes and CFNumberGetValue
             // writes exactly that many bytes on success.
-            if unsafe {
-                CFNumberGetValue(v, CF_NUMBER_FLOAT64_TYPE, &mut out as *mut f64 as *mut i64)
-            } {
+            if unsafe { CFNumberGetValue(v, CF_NUMBER_FLOAT64_TYPE, &mut out as *mut f64 as *mut i64) } {
                 Some(out)
             } else {
                 None
@@ -395,13 +379,7 @@ mod macos {
         }
         // Fallback: float (some discrete AMD/Nvidia drivers).
         // Values > 1.0 are already percentage-style (0–100); ≤ 1.0 are fractional.
-        dict_f64(dict, key).map(|f| {
-            if f > 1.0 {
-                (f / 100.0) as f32
-            } else {
-                f as f32
-            }
-        })
+        dict_f64(dict, key).map(|f| if f > 1.0 { (f / 100.0) as f32 } else { f as f32 })
     }
 
     // ── IOAccelerator loop ────────────────────────────────────────────────
@@ -432,9 +410,7 @@ mod macos {
         let mut iter: IOIteratorT = 0;
         // SAFETY: `matching` is a valid CFMutableDictionaryRef from
         // IOServiceMatching. IOServiceGetMatchingServices consumes it.
-        if unsafe { IOServiceGetMatchingServices(K_IO_MASTER_PORT_DEFAULT, matching, &mut iter) }
-            != KERN_SUCCESS
-        {
+        if unsafe { IOServiceGetMatchingServices(K_IO_MASTER_PORT_DEFAULT, matching, &mut iter) } != KERN_SUCCESS {
             return vec![];
         }
 
@@ -449,9 +425,7 @@ mod macos {
 
             let mut props: CFMutableDictRef = std::ptr::null_mut();
             // SAFETY: `entry` is a valid IO object from IOIteratorNext.
-            let kr = unsafe {
-                IORegistryEntryCreateCFProperties(entry, &mut props, std::ptr::null(), 0)
-            };
+            let kr = unsafe { IORegistryEntryCreateCFProperties(entry, &mut props, std::ptr::null(), 0) };
 
             if kr == KERN_SUCCESS && !props.is_null() {
                 // SAFETY: `props` is a valid CFDictionaryRef; `k` is a valid CFStringRef.
@@ -548,10 +522,7 @@ mod macos {
                                     overall: ewma_overall.unwrap_or(raw.overall),
                                     ..raw
                                 };
-                                *shared
-                                    .lock()
-                                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                                    Some(smoothed);
+                                *shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(smoothed);
                             }
 
                             std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
@@ -578,15 +549,11 @@ mod macos {
         let accs = read_accelerators();
 
         // Pick the most active accelerator (highest overall utilisation).
-        let best = accs.iter().max_by(|a, b| {
-            a.overall
-                .partial_cmp(&b.overall)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        let best = accs
+            .iter()
+            .max_by(|a, b| a.overall.partial_cmp(&b.overall).unwrap_or(std::cmp::Ordering::Equal));
 
-        let (render, tiler, overall) = best
-            .map(|b| (b.render, b.tiler, b.overall))
-            .unwrap_or((0.0, 0.0, 0.0));
+        let (render, tiler, overall) = best.map(|b| (b.render, b.tiler, b.overall)).unwrap_or((0.0, 0.0, 0.0));
 
         if is_apple_silicon() {
             // Unified memory — GPU and CPU share system RAM.
@@ -666,10 +633,7 @@ mod non_macos {
             return None;
         }
         let gib: f64 = 1024.0 * 1024.0 * 1024.0;
-        let total_bytes = specs
-            .total_gpu_vram_gb
-            .map(|gb| (gb * gib) as u64)
-            .filter(|&b| b > 0);
+        let total_bytes = specs.total_gpu_vram_gb.map(|gb| (gb * gib) as u64).filter(|&b| b > 0);
 
         Some(StaticGpuInfo {
             total_bytes,
@@ -704,9 +668,7 @@ mod non_macos {
                         .spawn(move || loop {
                             std::thread::sleep(FREE_RAM_INTERVAL);
                             let bytes = sample_free_ram();
-                            let mut guard = shared
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            let mut guard = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                             guard.bytes = bytes;
                             guard.refreshed = Instant::now();
                         })
@@ -725,9 +687,8 @@ mod non_macos {
     /// used during initial detection.
     fn sample_free_ram() -> Option<u64> {
         use sysinfo::{MemoryRefreshKind, RefreshKind, System};
-        let mut sys = System::new_with_specifics(
-            RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()),
-        );
+        let mut sys =
+            System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()));
         sys.refresh_memory();
         let available = sys.available_memory();
         if available > 0 {
@@ -747,9 +708,7 @@ mod non_macos {
         // the current available-RAM figure.
         let free_bytes = if static_info.unified_memory {
             let cache = ensure_free_ram_poller(true);
-            let guard = cache
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             guard.bytes
         } else {
             // Discrete GPU: we have no live free-VRAM source without NVML/ADL.

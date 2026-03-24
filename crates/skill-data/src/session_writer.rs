@@ -52,9 +52,7 @@ impl SessionWriter {
             StorageFormat::Csv => CsvState::open_with_labels(csv_path, labels)
                 .map(SessionWriter::Csv)
                 .context("CSV open error"),
-            StorageFormat::Parquet => {
-                ParquetState::open_with_labels(csv_path, labels).map(SessionWriter::Parquet)
-            }
+            StorageFormat::Parquet => ParquetState::open_with_labels(csv_path, labels).map(SessionWriter::Parquet),
             StorageFormat::Both => {
                 let csv = CsvState::open_with_labels(csv_path, labels).context("CSV open error")?;
                 let pq = ParquetState::open_with_labels(csv_path, labels)?;
@@ -63,13 +61,7 @@ impl SessionWriter {
         }
     }
 
-    pub fn push_eeg(
-        &mut self,
-        electrode: usize,
-        samples: &[f64],
-        packet_ts: f64,
-        sample_rate: f64,
-    ) {
+    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         match self {
             Self::Csv(c) => c.push_eeg(electrode, samples, packet_ts, sample_rate),
             Self::Parquet(p) => p.push_eeg(electrode, samples, packet_ts, sample_rate),

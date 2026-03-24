@@ -285,9 +285,7 @@ impl HealthStore {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
             .ok()?;
         conn.execute_batch(DDL).ok()?;
-        Some(Self {
-            conn: Mutex::new(conn),
-        })
+        Some(Self { conn: Mutex::new(conn) })
     }
 
     /// Upsert a batch of HealthKit samples (idempotent).
@@ -310,10 +308,13 @@ impl HealthStore {
         if !payload.sleep.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO sleep_samples (source_id, start_utc, end_utc, value, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)"
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             ) {
                 for s in &payload.sleep {
-                    if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.value, now]).is_ok() {
+                    if stmt
+                        .execute(params![s.source_id, s.start_utc, s.end_utc, s.value, now])
+                        .is_ok()
+                    {
                         result.sleep_upserted += 1;
                     }
                 }
@@ -359,10 +360,13 @@ impl HealthStore {
         if !payload.heart_rate.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO heart_rate_samples (source_id, timestamp, bpm, context, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)"
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             ) {
                 for hr in &payload.heart_rate {
-                    if stmt.execute(params![hr.source_id, hr.timestamp, hr.bpm, hr.context, now]).is_ok() {
+                    if stmt
+                        .execute(params![hr.source_id, hr.timestamp, hr.bpm, hr.context, now])
+                        .is_ok()
+                    {
                         result.heart_rate_upserted += 1;
                     }
                 }
@@ -372,10 +376,13 @@ impl HealthStore {
         if !payload.steps.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO steps_samples (source_id, start_utc, end_utc, count, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)"
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             ) {
                 for s in &payload.steps {
-                    if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.count, now]).is_ok() {
+                    if stmt
+                        .execute(params![s.source_id, s.start_utc, s.end_utc, s.count, now])
+                        .is_ok()
+                    {
                         result.steps_upserted += 1;
                     }
                 }
@@ -385,7 +392,7 @@ impl HealthStore {
         if !payload.mindfulness.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO mindfulness_samples (source_id, start_utc, end_utc, created_at)
-                 VALUES (?1, ?2, ?3, ?4)"
+                 VALUES (?1, ?2, ?3, ?4)",
             ) {
                 for m in &payload.mindfulness {
                     if stmt.execute(params![m.source_id, m.start_utc, m.end_utc, now]).is_ok() {
@@ -530,13 +537,7 @@ impl HealthStore {
         .unwrap_or_default()
     }
 
-    pub fn query_metrics(
-        &self,
-        metric_type: &str,
-        start_utc: i64,
-        end_utc: i64,
-        limit: i64,
-    ) -> Vec<HealthMetricRow> {
+    pub fn query_metrics(&self, metric_type: &str, start_utc: i64, end_utc: i64, limit: i64) -> Vec<HealthMetricRow> {
         let conn = lock_or_recover(&self.conn);
         let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, metric_type, timestamp, value, unit, metadata, created_at
@@ -563,9 +564,7 @@ impl HealthStore {
 
     pub fn list_metric_types(&self) -> Vec<String> {
         let conn = lock_or_recover(&self.conn);
-        let Ok(mut stmt) =
-            conn.prepare("SELECT DISTINCT metric_type FROM health_metrics ORDER BY metric_type")
-        else {
+        let Ok(mut stmt) = conn.prepare("SELECT DISTINCT metric_type FROM health_metrics ORDER BY metric_type") else {
             return vec![];
         };
         stmt.query_map([], |row| row.get(0))
@@ -600,15 +599,21 @@ impl HealthStore {
             )
             .unwrap_or(0);
 
-        let total_steps: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(count), 0) FROM steps_samples WHERE start_utc >= ?1 AND start_utc <= ?2",
-            params![start_utc, end_utc], |r| r.get(0),
-        ).unwrap_or(0);
+        let total_steps: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(count), 0) FROM steps_samples WHERE start_utc >= ?1 AND start_utc <= ?2",
+                params![start_utc, end_utc],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
 
-        let mindful_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM mindfulness_samples WHERE start_utc >= ?1 AND start_utc <= ?2",
-            params![start_utc, end_utc], |r| r.get(0),
-        ).unwrap_or(0);
+        let mindful_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM mindfulness_samples WHERE start_utc >= ?1 AND start_utc <= ?2",
+                params![start_utc, end_utc],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
 
         let metric_count: i64 = conn
             .query_row(

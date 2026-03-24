@@ -17,8 +17,8 @@ use muse_rs::prelude::*;
 use skill_constants::{CHANNEL_NAMES, EEG_CHANNELS, MUSE_SAMPLE_RATE};
 
 use super::{
-    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame, PpgFrame,
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame,
+    PpgFrame,
 };
 
 // ── MuseAdapter ───────────────────────────────────────────────────────────────
@@ -53,11 +53,7 @@ impl MuseAdapter {
             handle,
             desc: DeviceDescriptor {
                 kind: "muse",
-                caps: DeviceCaps::EEG
-                    | DeviceCaps::PPG
-                    | DeviceCaps::IMU
-                    | DeviceCaps::BATTERY
-                    | DeviceCaps::META,
+                caps: DeviceCaps::EEG | DeviceCaps::PPG | DeviceCaps::IMU | DeviceCaps::BATTERY | DeviceCaps::META,
                 eeg_channels: MUSE_EEG_CHANNELS,
                 eeg_sample_rate: MUSE_SAMPLE_RATE as f64,
                 channel_names,
@@ -102,8 +98,7 @@ impl MuseAdapter {
             }
 
             // Use the average of the per-channel timestamps for this frame.
-            let avg_ts: f64 =
-                self.ch_ts[..MUSE_EEG_CHANNELS].iter().sum::<f64>() / MUSE_EEG_CHANNELS as f64;
+            let avg_ts: f64 = self.ch_ts[..MUSE_EEG_CHANNELS].iter().sum::<f64>() / MUSE_EEG_CHANNELS as f64;
 
             for _ in 0..min_len {
                 let channels: Vec<f64> = (0..MUSE_EEG_CHANNELS)

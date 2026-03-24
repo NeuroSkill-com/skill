@@ -35,9 +35,7 @@ use serde::{Deserialize, Serialize};
 use skill_constants::{hnsw_index_file_for, HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
 
 pub mod graph;
-pub use graph::{
-    dot_edge_label, dot_esc, dot_node_label, generate_dot, generate_svg, generate_svg_3d, SvgLabels,
-};
+pub use graph::{dot_edge_label, dot_esc, dot_node_label, generate_dot, generate_svg, generate_svg_3d, SvgLabels};
 
 // Re-export shared utilities so downstream crates keep compiling.
 pub use skill_data::util::{fmt_unix_utc, ts_to_unix, unix_to_ts, MutexExt};
@@ -230,11 +228,7 @@ pub fn load_day_index_for(date: String, dir: PathBuf, model_backend: &str) -> Op
                 idx.len(),
                 model_backend
             );
-            Some(DayIndex {
-                date,
-                dir,
-                index: idx,
-            })
+            Some(DayIndex { date, dir, index: idx })
         }
         Err(e) => {
             eprintln!("[search] HNSW load {}: {e}", path.display());
@@ -520,8 +514,7 @@ pub fn search_embeddings_in_range_for(
 
     // ── Decide search backend ─────────────────────────────────────────────
     let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
-    let global_idx: Option<&LabeledIndex<Cosine, i64>> =
-        global_guard.as_deref().and_then(|opt| opt.as_ref());
+    let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard.as_deref().and_then(|opt| opt.as_ref());
     let global_ready = global_idx.map(|idx| !idx.is_empty()).unwrap_or(false);
 
     // Per-day indices — only loaded when the global index is not ready.
@@ -576,18 +569,11 @@ pub fn search_embeddings_in_range_for(
                     raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            raw_candidates
-                .sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
             raw_candidates.truncate(k);
             candidates.reserve(raw_candidates.len());
             for (di, hid, ts, dist) in raw_candidates {
-                candidates.push((
-                    day_indices[di].date.clone(),
-                    day_indices[di].dir.clone(),
-                    hid,
-                    ts,
-                    dist,
-                ));
+                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
             }
         }
 
@@ -663,16 +649,7 @@ pub fn stream_search_inner(
     global_index: GlobalIndexHandle,
     emit: &dyn Fn(SearchProgress),
 ) {
-    stream_search_inner_for(
-        skill_dir,
-        start_utc,
-        end_utc,
-        k,
-        ef,
-        global_index,
-        emit,
-        "zuna",
-    );
+    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna");
 }
 
 /// Model-aware variant of [`stream_search_inner`].
@@ -694,8 +671,7 @@ pub fn stream_search_inner_for(
 
     // ── Decide backend ───────────────────────────────────────────────────
     let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
-    let global_idx: Option<&LabeledIndex<Cosine, i64>> =
-        global_guard.as_deref().and_then(|opt| opt.as_ref());
+    let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard.as_deref().and_then(|opt| opt.as_ref());
     let global_ready = global_idx.map(|i| !i.is_empty()).unwrap_or(false);
 
     let day_indices: Vec<DayIndex> = if global_ready {
@@ -765,18 +741,11 @@ pub fn stream_search_inner_for(
                     raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            raw_candidates
-                .sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
             raw_candidates.truncate(k);
             candidates.reserve(raw_candidates.len());
             for (di, hid, ts, dist) in raw_candidates {
-                candidates.push((
-                    day_indices[di].date.clone(),
-                    day_indices[di].dir.clone(),
-                    hid,
-                    ts,
-                    dist,
-                ));
+                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
             }
         }
 
@@ -854,11 +823,7 @@ pub struct SessionRef {
     pub device_name: Option<String>,
 }
 
-pub fn find_session_for_timestamp_in(
-    skill_dir: &Path,
-    timestamp_unix: u64,
-    date: &str,
-) -> Option<SessionRef> {
+pub fn find_session_for_timestamp_in(skill_dir: &Path, timestamp_unix: u64, date: &str) -> Option<SessionRef> {
     let day_dir = skill_dir.join(date);
     if !day_dir.exists() {
         return None;
@@ -886,12 +851,8 @@ pub fn find_session_for_timestamp_in(
             continue;
         };
 
-        let start = meta
-            .get("session_start_utc")
-            .and_then(serde_json::Value::as_u64);
-        let end = meta
-            .get("session_end_utc")
-            .and_then(serde_json::Value::as_u64);
+        let start = meta.get("session_start_utc").and_then(serde_json::Value::as_u64);
+        let end = meta.get("session_end_utc").and_then(serde_json::Value::as_u64);
 
         if let (Some(s), Some(e)) = (start, end) {
             // Resolve data file: try .parquet first, fall back to .csv.
@@ -1150,10 +1111,7 @@ pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
     };
     let pc2 = power_iter(&centered2, init2);
 
-    let coords: Vec<(f32, f32)> = centered
-        .iter()
-        .map(|v| (dot(v, &pc1), dot(v, &pc2)))
-        .collect();
+    let coords: Vec<(f32, f32)> = centered.iter().map(|v| (dot(v, &pc1), dot(v, &pc2))).collect();
     let x_min = coords.iter().map(|&(x, _)| x).fold(f32::MAX, f32::min);
     let x_max = coords.iter().map(|&(x, _)| x).fold(f32::MIN, f32::max);
     let y_min = coords.iter().map(|&(_, y)| y).fold(f32::MAX, f32::min);
@@ -1395,21 +1353,13 @@ mod tests {
 
     #[test]
     fn pca_2d_output_length_matches_input() {
-        let data = vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-        ];
+        let data = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0]];
         assert_eq!(pca_2d(&data).len(), 3);
     }
 
     #[test]
     fn pca_2d_points_are_separated() {
-        let data = vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-        ];
+        let data = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0]];
         let pts = pca_2d(&data);
         // Not all identical
         assert!(pts.iter().any(|p| *p != pts[0]));

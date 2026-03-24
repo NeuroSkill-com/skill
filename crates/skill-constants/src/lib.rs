@@ -193,8 +193,7 @@ pub const HERMES_EEG_CHANNELS: usize = 8;
 pub const HERMES_SAMPLE_RATE: f64 = 250.0;
 
 /// Hermes V1 channel labels (generic — exact placement depends on montage).
-pub const HERMES_CHANNEL_NAMES: [&str; HERMES_EEG_CHANNELS] =
-    ["Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2"];
+pub const HERMES_CHANNEL_NAMES: [&str; HERMES_EEG_CHANNELS] = ["Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2"];
 
 /// Neurable MW75 Neuro EEG channel count (12 channels at 500 Hz).
 pub const MW75_EEG_CHANNELS: usize = 12;
@@ -254,8 +253,7 @@ pub const EMOTIV_EPOC_CHANNEL_NAMES: [&str; EMOTIV_EPOC_EEG_CHANNELS] = [
 ];
 
 /// Emotiv Insight channel labels (5 electrodes).
-pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] =
-    ["AF3", "AF4", "T7", "T8", "Pz"];
+pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] = ["AF3", "AF4", "T7", "T8", "Pz"];
 
 /// IDUN Guardian EEG channel count (single bipolar channel at 250 Hz).
 pub const IDUN_EEG_CHANNELS: usize = 1;
@@ -421,8 +419,7 @@ pub const SCREENSHOT_INTERVAL_MIN_MULT: u32 = 1;
 pub const SCREENSHOT_INTERVAL_MAX_MULT: u32 = 12;
 
 /// Raw samples per embedding epoch per channel.
-pub const EMBEDDING_EPOCH_SAMPLES: usize =
-    (MUSE_SAMPLE_RATE as usize) * (EMBEDDING_EPOCH_SECS as usize);
+pub const EMBEDDING_EPOCH_SAMPLES: usize = (MUSE_SAMPLE_RATE as usize) * (EMBEDDING_EPOCH_SECS as usize);
 
 /// Default overlap between consecutive embedding epochs (seconds).
 pub const EMBEDDING_OVERLAP_SECS: f32 = 0.0;
@@ -522,12 +519,10 @@ pub const SCREENSHOT_HNSW_SAVE_EVERY: usize = 10;
 pub const SCREENSHOTS_OCR_HNSW: &str = "screenshots_ocr.hnsw";
 
 /// URL for the ocrs text-detection model (~10 MB).
-pub const OCR_DETECTION_MODEL_URL: &str =
-    "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
+pub const OCR_DETECTION_MODEL_URL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
 
 /// URL for the ocrs text-recognition model (~10 MB).
-pub const OCR_RECOGNITION_MODEL_URL: &str =
-    "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
+pub const OCR_RECOGNITION_MODEL_URL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
 
 /// Filename for the cached OCR detection model.
 pub const OCR_DETECTION_MODEL_FILE: &str = "text-detection.rten";
@@ -735,14 +730,10 @@ pub const APP_COPYRIGHT: &str = "© 2025–2026 NeuroSkill.com";
 /// Ordered list of contributors.
 pub const APP_AUTHORS: &[(&str, &str)] = &[
     ("Eugene Hauptmann", "Lead developer & EEG signal processing"),
-    (
-        "Nataliya Kosmyna",
-        "Neuroscience and Brain Computer Interfaces",
-    ),
+    ("Nataliya Kosmyna", "Neuroscience and Brain Computer Interfaces"),
 ];
 
-pub const APP_ACKNOWLEDGEMENTS: &str =
-    "Built with Tauri, SvelteKit, and the ZUNA EEG foundation model by Zyphra. \
+pub const APP_ACKNOWLEDGEMENTS: &str = "Built with Tauri, SvelteKit, and the ZUNA EEG foundation model by Zyphra. \
      EEG band-power research based on work by Klimesch (1999), \
      Pope et al. (1995), and Kosmyna & Maes (2019).";
 
@@ -844,10 +835,7 @@ mod tests {
         assert_eq!(HERMES_CHANNEL_NAMES.len(), HERMES_EEG_CHANNELS);
         assert_eq!(MW75_CHANNEL_NAMES.len(), MW75_EEG_CHANNELS);
         assert_eq!(EMOTIV_EPOC_CHANNEL_NAMES.len(), EMOTIV_EPOC_EEG_CHANNELS);
-        assert_eq!(
-            EMOTIV_INSIGHT_CHANNEL_NAMES.len(),
-            EMOTIV_INSIGHT_EEG_CHANNELS
-        );
+        assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
         assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
     }
 

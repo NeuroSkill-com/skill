@@ -338,7 +338,7 @@ impl EegAccumulator {
                     ws_broadcaster,
                     hook_runtime,
                     app,
-                )
+                );
             })
             .expect("[embed] failed to spawn background thread");
         tx

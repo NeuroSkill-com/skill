@@ -74,8 +74,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::band_metrics::*;
 use crate::constants::{
-    BANDS, BAND_COLORS, BAND_HOP, BAND_SYMBOLS, BAND_WINDOW, CHANNEL_NAMES, EEG_CHANNELS,
-    MUSE_SAMPLE_RATE, NUM_BANDS,
+    BANDS, BAND_COLORS, BAND_HOP, BAND_SYMBOLS, BAND_WINDOW, CHANNEL_NAMES, EEG_CHANNELS, MUSE_SAMPLE_RATE, NUM_BANDS,
 };
 
 // ── Output types ─────────────────────────────────────────────────────────────
@@ -348,10 +347,7 @@ impl BandAnalyzer {
     ///
     /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`Self::new_with_rate`]
     /// with the device's actual sample rate for correct spectral analysis.
-    #[deprecated(
-        since = "0.1.0",
-        note = "use BandAnalyzer::new_with_rate(sample_rate) instead"
-    )]
+    #[deprecated(since = "0.1.0", note = "use BandAnalyzer::new_with_rate(sample_rate) instead")]
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::new_with_rate(MUSE_SAMPLE_RATE)
@@ -462,13 +458,7 @@ impl BandAnalyzer {
         // position.  The window tapers to zero at both ends, eliminating the
         // spectral leakage caused by the abrupt block edges.
         let signals: Vec<Vec<f32>> = (0..EEG_CHANNELS)
-            .map(|ch| {
-                self.window[ch]
-                    .iter()
-                    .zip(&self.hann)
-                    .map(|(&v, &w)| v * w)
-                    .collect()
-            })
+            .map(|ch| self.window[ch].iter().zip(&self.hann).map(|(&v, &w)| v * w).collect())
             .collect();
 
         // ── 3. GPU: forward FFT — all 4 channels in one dispatch ─────────────
@@ -712,13 +702,7 @@ impl BandAnalyzer {
         // Normalised by log₂(5) to give range [0, 1].
         let mut pse_sum = 0.0f32;
         for ch in &ch_powers {
-            let p = [
-                ch.rel_delta,
-                ch.rel_theta,
-                ch.rel_alpha,
-                ch.rel_beta,
-                ch.rel_gamma,
-            ];
+            let p = [ch.rel_delta, ch.rel_theta, ch.rel_alpha, ch.rel_beta, ch.rel_gamma];
             let total_p: f32 = p.iter().sum();
             let safe_t = if total_p > 1e-12 { total_p } else { 1.0 };
             let mut h = 0.0f32;
@@ -792,8 +776,7 @@ impl BandAnalyzer {
         let faa_norm = (faa * 5.0).clamp(-1.0, 1.0); // ±0.2 → ±1
         let tar_norm = 1.0 - tar.min(3.0) / 3.0; // 0→1, 3→0
         let bar_norm = bar.min(3.0) / 3.0; // 0→0, 3→1
-        let mood = (50.0 + 20.0 * faa_norm + 15.0 * (tar_norm - 0.5) + 15.0 * (bar_norm - 0.5))
-            .clamp(0.0, 100.0);
+        let mood = (50.0 + 20.0 * faa_norm + 15.0 * (tar_norm - 0.5) + 15.0 * (bar_norm - 0.5)).clamp(0.0, 100.0);
 
         // ── TBR (absolute θ / β) ────────────────────────────────────────────
         let mut tbr_sum = 0.0f32;
@@ -888,10 +871,9 @@ impl BandAnalyzer {
         // Cortical hyperexcitability: elevated beta + suppressed alpha + high BAR.
         // Headache states show increased excitability and altered alpha generation.
         //
-        let headache_index = (0.35 * c01(mean_rel_beta * 5.0)
-            + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0))
-            + 0.30 * c01(bar / 2.5))
-            * 100.0;
+        let headache_index =
+            (0.35 * c01(mean_rel_beta * 5.0) + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0)) + 0.30 * c01(bar / 2.5))
+                * 100.0;
 
         // ── Migraine ──────────────────────────────────────────────────────────
         // Cortical spreading depression proxy: elevated delta + alpha suppression
@@ -910,19 +892,17 @@ impl BandAnalyzer {
         // complexity of the time series).  Higher = richer, more complex EEG.
         // LZC peaks in conscious states and collapses during NREM sleep / anaesthesia.
         //
-        let consciousness_lzc = (0.60 * c01(permutation_entropy_val)
-            + 0.40 * c01((higuchi_fd_val - 1.0).max(0.0) / 1.5))
-            * 100.0;
+        let consciousness_lzc =
+            (0.60 * c01(permutation_entropy_val) + 0.40 * c01((higuchi_fd_val - 1.0).max(0.0) / 1.5)) * 100.0;
 
         // ── Consciousness: Wakefulness level ──────────────────────────────────
         // Inverse drowsiness modulated by BAR (alertness) and TAR (drowsiness).
         // High BAR + low TAR → high wakefulness; these ratios covary tightly with
         // EEG-defined arousal and alpha/theta dominance patterns.
         //
-        let consciousness_wakefulness = (0.40 * c01(bar / 2.5)
-            + 0.35 * (1.0 - c01(tar / 3.0))
-            + 0.25 * (1.0 - c01(drowsiness_proxy / 100.0)))
-            * 100.0;
+        let consciousness_wakefulness =
+            (0.40 * c01(bar / 2.5) + 0.35 * (1.0 - c01(tar / 3.0)) + 0.25 * (1.0 - c01(drowsiness_proxy / 100.0)))
+                * 100.0;
 
         // ── Consciousness: Information Integration proxy ───────────────────────
         // Global workspace proxy: inter-channel coherence × theta–gamma PAC
@@ -932,8 +912,7 @@ impl BandAnalyzer {
         // measures.
         //
         let consciousness_integration =
-            (0.40 * c01(coherence * 2.5) + 0.40 * c01(pac_theta_gamma * 3.0) + 0.20 * c01(pse))
-                * 100.0;
+            (0.40 * c01(coherence * 2.5) + 0.40 * c01(pac_theta_gamma * 3.0) + 0.20 * c01(pse)) * 100.0;
 
         self.latest = Some(BandSnapshot {
             timestamp: now,
@@ -1004,9 +983,7 @@ mod tests {
     /// Generate a pure sine wave at `freq_hz` Hz.
     fn sine(freq_hz: f64, n: usize) -> Vec<f64> {
         let sr = MUSE_SAMPLE_RATE as f64;
-        (0..n)
-            .map(|i| (2.0 * PI * freq_hz * i as f64 / sr).sin())
-            .collect()
+        (0..n).map(|i| (2.0 * PI * freq_hz * i as f64 / sr).sin()).collect()
     }
 
     /// Push identical `signal` to all active channels interleaved (sample by
@@ -1025,8 +1002,7 @@ mod tests {
                 a.push(ch, &signal[i..i + 1]);
             }
         }
-        a.latest
-            .expect("signal was long enough but snapshot is None")
+        a.latest.expect("signal was long enough but snapshot is None")
     }
 
     // ── Constants sanity ──────────────────────────────────────────────────────
@@ -1105,12 +1081,7 @@ mod tests {
         let signal = sine(10.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
-            let sum = ch.rel_delta
-                + ch.rel_theta
-                + ch.rel_alpha
-                + ch.rel_beta
-                + ch.rel_gamma
-                + ch.rel_high_gamma;
+            let sum = ch.rel_delta + ch.rel_theta + ch.rel_alpha + ch.rel_beta + ch.rel_gamma + ch.rel_high_gamma;
             assert!(
                 (sum - 1.0).abs() < 1e-4,
                 "{}: relative powers sum to {sum}, expected 1.0",
@@ -1162,17 +1133,8 @@ mod tests {
         let signal = sine(20.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(
-                ch.dominant, "beta",
-                "{}: dominant = '{}'",
-                ch.channel, ch.dominant
-            );
-            assert!(
-                ch.rel_beta > 0.8,
-                "{}: rel_beta = {:.3}",
-                ch.channel,
-                ch.rel_beta
-            );
+            assert_eq!(ch.dominant, "beta", "{}: dominant = '{}'", ch.channel, ch.dominant);
+            assert!(ch.rel_beta > 0.8, "{}: rel_beta = {:.3}", ch.channel, ch.rel_beta);
         }
     }
 
@@ -1182,17 +1144,8 @@ mod tests {
         let signal = sine(6.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(
-                ch.dominant, "theta",
-                "{}: dominant = '{}'",
-                ch.channel, ch.dominant
-            );
-            assert!(
-                ch.rel_theta > 0.7,
-                "{}: rel_theta = {:.3}",
-                ch.channel,
-                ch.rel_theta
-            );
+            assert_eq!(ch.dominant, "theta", "{}: dominant = '{}'", ch.channel, ch.dominant);
+            assert!(ch.rel_theta > 0.7, "{}: rel_theta = {:.3}", ch.channel, ch.rel_theta);
         }
     }
 
@@ -1202,17 +1155,8 @@ mod tests {
         let signal = sine(2.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(
-                ch.dominant, "delta",
-                "{}: dominant = '{}'",
-                ch.channel, ch.dominant
-            );
-            assert!(
-                ch.rel_delta > 0.7,
-                "{}: rel_delta = {:.3}",
-                ch.channel,
-                ch.rel_delta
-            );
+            assert_eq!(ch.dominant, "delta", "{}: dominant = '{}'", ch.channel, ch.dominant);
+            assert!(ch.rel_delta > 0.7, "{}: rel_delta = {:.3}", ch.channel, ch.rel_delta);
         }
     }
 
@@ -1222,17 +1166,8 @@ mod tests {
         let signal = sine(40.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(
-                ch.dominant, "gamma",
-                "{}: dominant = '{}'",
-                ch.channel, ch.dominant
-            );
-            assert!(
-                ch.rel_gamma > 0.7,
-                "{}: rel_gamma = {:.3}",
-                ch.channel,
-                ch.rel_gamma
-            );
+            assert_eq!(ch.dominant, "gamma", "{}: dominant = '{}'", ch.channel, ch.dominant);
+            assert!(ch.rel_gamma > 0.7, "{}: rel_gamma = {:.3}", ch.channel, ch.rel_gamma);
         }
     }
 
@@ -1320,12 +1255,7 @@ mod tests {
         let signal = vec![0.0_f64; BAND_WINDOW * 2];
         let s = run(&signal);
         for ch in &s.channels {
-            let sum = ch.rel_delta
-                + ch.rel_theta
-                + ch.rel_alpha
-                + ch.rel_beta
-                + ch.rel_gamma
-                + ch.rel_high_gamma;
+            let sum = ch.rel_delta + ch.rel_theta + ch.rel_alpha + ch.rel_beta + ch.rel_gamma + ch.rel_high_gamma;
             // All zero → sum = 0, not 1 (zero signal has no valid distribution)
             assert!(sum.is_finite(), "{}: sum is not finite", ch.channel);
         }

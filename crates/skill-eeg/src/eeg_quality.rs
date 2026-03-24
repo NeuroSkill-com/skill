@@ -38,8 +38,7 @@ use serde::Serialize;
 use std::collections::VecDeque;
 
 use skill_constants::{
-    QUALITY_CLIP_UV, QUALITY_FAIR_RMS, QUALITY_NO_SIGNAL_RMS, QUALITY_POOR_CLIPS, QUALITY_POOR_RMS,
-    QUALITY_WINDOW,
+    QUALITY_CLIP_UV, QUALITY_FAIR_RMS, QUALITY_NO_SIGNAL_RMS, QUALITY_POOR_CLIPS, QUALITY_POOR_RMS, QUALITY_WINDOW,
 };
 
 // ── Thresholds (from skill-constants) ─────────────────────────────────────────
@@ -98,9 +97,7 @@ impl QualityMonitor {
     pub fn with_window(channels: usize, window: usize) -> Self {
         let window = window.max(32); // safety floor
         Self {
-            bufs: (0..channels)
-                .map(|_| VecDeque::with_capacity(window + 1))
-                .collect(),
+            bufs: (0..channels).map(|_| VecDeque::with_capacity(window + 1)).collect(),
             window,
             min_samples: window / 4,
         }
@@ -169,10 +166,7 @@ impl QualityMonitor {
 
         // ── Clip count (AC-coupled — subtract mean so DC-coupled devices
         //    like Emotiv don't trigger false clips from their baseline) ──
-        let clips = buf
-            .iter()
-            .filter(|&&x| (x - mean).abs() > THRESH_CLIP_UV)
-            .count();
+        let clips = buf.iter().filter(|&&x| (x - mean).abs() > THRESH_CLIP_UV).count();
 
         if clips >= THRESH_POOR_CLIPS || rms > THRESH_POOR_RMS {
             return SignalQuality::Poor;

@@ -204,7 +204,7 @@ export function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null 
   const centroid = (arr: UmapPoint[]) => ({
     x: arr.reduce((s, p) => s + p.x, 0) / arr.length,
     y: arr.reduce((s, p) => s + p.y, 0) / arr.length,
-    z: arr.reduce((s, p) => s + p.z, 0) / arr.length,
+    z: arr.reduce((s, p) => s + (p.z ?? 0), 0) / arr.length,
   });
   const dist = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
     Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
@@ -212,8 +212,12 @@ export function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null 
   const cA = centroid(ptsA);
   const cB = centroid(ptsB);
   const interCluster = dist(cA, cB);
-  const intraSpreadA = Math.sqrt(ptsA.reduce((s, p) => s + dist(p, cA) ** 2, 0) / ptsA.length);
-  const intraSpreadB = Math.sqrt(ptsB.reduce((s, p) => s + dist(p, cB) ** 2, 0) / ptsB.length);
+  const intraSpreadA = Math.sqrt(
+    ptsA.reduce((s, p) => s + dist({ x: p.x, y: p.y, z: p.z ?? 0 }, cA) ** 2, 0) / ptsA.length,
+  );
+  const intraSpreadB = Math.sqrt(
+    ptsB.reduce((s, p) => s + dist({ x: p.x, y: p.y, z: p.z ?? 0 }, cB) ** 2, 0) / ptsB.length,
+  );
   const avgIntra = (intraSpreadA + intraSpreadB) / 2;
   const separationScore = avgIntra > 0 ? interCluster / avgIntra : 0;
 

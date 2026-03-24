@@ -80,9 +80,7 @@ impl LabelStore {
     /// Return the total number of labels in the database.
     pub fn count(&self) -> u64 {
         self.conn
-            .query_row("SELECT COUNT(*) FROM labels", [], |row| {
-                row.get::<_, i64>(0)
-            })
+            .query_row("SELECT COUNT(*) FROM labels", [], |row| row.get::<_, i64>(0))
             .unwrap_or(0) as u64
     }
 
@@ -199,13 +197,7 @@ impl LabelStore {
 
     /// Persist pre-computed embeddings for a label row, recording which model
     /// produced them.  Embeddings are stored as little-endian f32 byte arrays.
-    pub fn update_embeddings(
-        &self,
-        id: i64,
-        text_emb: &[f32],
-        context_emb: &[f32],
-        model_code: &str,
-    ) -> bool {
+    pub fn update_embeddings(&self, id: i64, text_emb: &[f32], context_emb: &[f32], model_code: &str) -> bool {
         let text_blob: Vec<u8> = crate::util::f32_to_blob(text_emb);
         let context_blob: Vec<u8> = crate::util::f32_to_blob(context_emb);
         match self.conn.execute(
@@ -268,10 +260,7 @@ impl LabelStore {
 
     /// Delete a label by id.
     pub fn delete(&self, id: i64) -> bool {
-        match self
-            .conn
-            .execute("DELETE FROM labels WHERE id = ?1", params![id])
-        {
+        match self.conn.execute("DELETE FROM labels WHERE id = ?1", params![id]) {
             Ok(n) => n > 0,
             Err(e) => {
                 eprintln!("[labels] delete: {e}");
@@ -411,9 +400,7 @@ mod tests {
     fn insert_and_count() {
         let (store, _dir) = open_temp();
         assert_eq!(store.count(), 0);
-        let id = store
-            .insert(100, 200, 100, 200, "alpha", "", 1_700_000_000)
-            .unwrap();
+        let id = store.insert(100, 200, 100, 200, "alpha", "", 1_700_000_000).unwrap();
         assert!(id > 0);
         assert_eq!(store.count(), 1);
     }
@@ -421,12 +408,8 @@ mod tests {
     #[test]
     fn list_all_order() {
         let (store, _dir) = open_temp();
-        store
-            .insert(100, 200, 100, 200, "first", "", 1_000)
-            .unwrap();
-        store
-            .insert(200, 300, 200, 300, "second", "", 2_000)
-            .unwrap();
+        store.insert(100, 200, 100, 200, "first", "", 1_000).unwrap();
+        store.insert(200, 300, 200, 300, "second", "", 2_000).unwrap();
         let rows = store.list_all();
         // newest first
         assert_eq!(rows[0].text, "second");
@@ -468,9 +451,7 @@ mod tests {
     fn query_range_filters_correctly() {
         let (store, _dir) = open_temp();
         store.insert(100, 200, 100, 200, "in_range", "", 1).unwrap();
-        store
-            .insert(500, 600, 500, 600, "out_of_range", "", 2)
-            .unwrap();
+        store.insert(500, 600, 500, 600, "out_of_range", "", 2).unwrap();
         let rows = store.query_range(50, 250);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].text, "in_range");
@@ -480,14 +461,10 @@ mod tests {
     fn top_texts_all_time() {
         let (store, _dir) = open_temp();
         for i in 0..4u64 {
-            store
-                .insert(i, i + 1, i, i + 1, "focus", "", 1000 + i)
-                .unwrap();
+            store.insert(i, i + 1, i, i + 1, "focus", "", 1000 + i).unwrap();
         }
         for i in 0..2u64 {
-            store
-                .insert(i, i + 1, i, i + 1, "relax", "", 2000 + i)
-                .unwrap();
+            store.insert(i, i + 1, i, i + 1, "relax", "", 2000 + i).unwrap();
         }
         store.insert(0, 1, 0, 1, "sleep", "", 3000).unwrap();
 
@@ -504,14 +481,10 @@ mod tests {
     fn top_texts_with_since_filter() {
         let (store, _dir) = open_temp();
         for i in 0..5u64 {
-            store
-                .insert(i, i + 1, i, i + 1, "old", "", 100 + i)
-                .unwrap();
+            store.insert(i, i + 1, i, i + 1, "old", "", 100 + i).unwrap();
         }
         for i in 0..2u64 {
-            store
-                .insert(i, i + 1, i, i + 1, "new", "", 500 + i)
-                .unwrap();
+            store.insert(i, i + 1, i, i + 1, "new", "", 500 + i).unwrap();
         }
 
         let top = store.top_texts(10, Some(400));
@@ -524,9 +497,7 @@ mod tests {
     fn top_texts_respects_limit() {
         let (store, _dir) = open_temp();
         for i in 0..10u64 {
-            store
-                .insert(i, i + 1, i, i + 1, &format!("label{}", i), "", i)
-                .unwrap();
+            store.insert(i, i + 1, i, i + 1, &format!("label{}", i), "", i).unwrap();
         }
         assert_eq!(store.top_texts(3, None).len(), 3);
     }

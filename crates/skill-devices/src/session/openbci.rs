@@ -11,9 +11,7 @@ use std::collections::VecDeque;
 
 use openbci::sample::{Sample, StreamHandle as OpenbciStreamHandle};
 
-use super::{
-    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame,
-};
+use super::{DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame};
 
 // ── OpenBciAdapter ────────────────────────────────────────────────────────────
 

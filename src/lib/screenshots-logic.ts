@@ -48,11 +48,13 @@ export function sparklinePath(data: number[], w: number, h: number, pad = 2): st
   const max = Math.max(...data);
   const range = max - min || 1;
   const xStep = (w - pad * 2) / (data.length - 1);
-  return data.map((v, i) => {
-    const x = pad + i * xStep;
-    const y = h - pad - ((v - min) / range) * (h - pad * 2);
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  return data
+    .map((v, i) => {
+      const x = pad + i * xStep;
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
 }
 
 /**

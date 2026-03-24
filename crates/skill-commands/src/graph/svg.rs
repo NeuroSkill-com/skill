@@ -8,9 +8,7 @@ use crate::{fmt_unix_utc, InteractiveGraphEdge, InteractiveGraphNode};
 
 /// Escape a string for SVG/XML text content.
 pub(crate) fn svg_esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 /// Truncate to at most `n` Unicode chars, appending `…` if clipped.
@@ -28,16 +26,12 @@ pub(crate) fn trunc(s: &str, n: usize) -> String {
 pub(crate) fn turbo_hex(t: f64) -> String {
     let c = t.clamp(0.0, 1.0);
     let r = (0.13572138
-        + c * (4.61539260
-            + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c * 59.28637943)))))
+        + c * (4.61539260 + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c * 59.28637943)))))
         .clamp(0.0, 1.0);
-    let g = (0.09140261
-        + c * (2.19418839
-            + c * (4.84296658 + c * (-14.18503333 + c * (4.27729857 + c * 2.82956604)))))
+    let g = (0.09140261 + c * (2.19418839 + c * (4.84296658 + c * (-14.18503333 + c * (4.27729857 + c * 2.82956604)))))
         .clamp(0.0, 1.0);
     let b = (0.10667330
-        + c * (12.64194608
-            + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c * 27.34824973)))))
+        + c * (12.64194608 + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c * 27.34824973)))))
         .clamp(0.0, 1.0);
     format!(
         "#{:02x}{:02x}{:02x}",
@@ -78,15 +72,7 @@ fn default_legend_screenshot() -> String {
 }
 
 /// Iteratively separate overlapping label ellipses in the SVG scatter area.
-fn separate_labels_svg(
-    pos: &mut [(f64, f64)],
-    w: f64,
-    h: f64,
-    cx_min: f64,
-    cx_max: f64,
-    cy_min: f64,
-    cy_max: f64,
-) {
+fn separate_labels_svg(pos: &mut [(f64, f64)], w: f64, h: f64, cx_min: f64, cx_max: f64, cy_min: f64, cy_max: f64) {
     let min_x = w + 8.0;
     let min_y = h + 8.0;
 
@@ -152,13 +138,7 @@ pub fn generate_svg(
     const FL_ROW_GAP: f64 = 6.0;
     const FL_HDR_H: f64 = 14.0;
 
-    let kind_order = [
-        "query",
-        "text_label",
-        "eeg_point",
-        "found_label",
-        "screenshot",
-    ];
+    let kind_order = ["query", "text_label", "eeg_point", "found_label", "screenshot"];
     let layers: Vec<Vec<&InteractiveGraphNode>> = kind_order
         .iter()
         .map(|k| nodes.iter().filter(|n| n.kind == *k).collect())
@@ -186,11 +166,8 @@ pub fn generate_svg(
     tl_hours.dedup();
     let n_tl_days = tl_days.len().max(1);
     let n_tl_hours = tl_hours.len().max(1);
-    let tl_day_idx: std::collections::HashMap<&str, usize> = tl_days
-        .iter()
-        .enumerate()
-        .map(|(i, d)| (d.as_str(), i))
-        .collect();
+    let tl_day_idx: std::collections::HashMap<&str, usize> =
+        tl_days.iter().enumerate().map(|(i, d)| (d.as_str(), i)).collect();
     let tl_hour_idx: std::collections::HashMap<u32, usize> =
         tl_hours.iter().enumerate().map(|(i, &h)| (h, i)).collect();
     let max_tl_stack: usize = {
@@ -203,9 +180,7 @@ pub fn generate_svg(
         counts.values().copied().max().unwrap_or(1)
     };
     let tl_col_w = NW + TL_COL_GAP;
-    let tl_cell_h = TL_CELL_PAD * 2.0
-        + max_tl_stack as f64 * NH
-        + max_tl_stack.saturating_sub(1) as f64 * TL_ROW_GAP;
+    let tl_cell_h = TL_CELL_PAD * 2.0 + max_tl_stack as f64 * NH + max_tl_stack.saturating_sub(1) as f64 * TL_ROW_GAP;
     let tl_grid_w = n_tl_hours as f64 * tl_col_w - TL_COL_GAP;
     let tl_grid_h = n_tl_days as f64 * tl_cell_h;
 
@@ -236,13 +211,8 @@ pub fn generate_svg(
             .map(std::string::ToString::to_string)
             .collect()
     };
-    fl_parents.sort_by_key(|p| {
-        p.strip_prefix("ep_")
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(0)
-    });
-    let mut fl_by_parent: std::collections::HashMap<String, Vec<&InteractiveGraphNode>> =
-        Default::default();
+    fl_parents.sort_by_key(|p| p.strip_prefix("ep_").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0));
+    let mut fl_by_parent: std::collections::HashMap<String, Vec<&InteractiveGraphNode>> = Default::default();
     for nd in &layers[3] {
         if let Some(pid) = nd.parent_id.as_deref() {
             fl_by_parent.entry(pid.to_string()).or_default().push(nd);
@@ -287,13 +257,8 @@ pub fn generate_svg(
             .map(std::string::ToString::to_string)
             .collect()
     };
-    ss_parents.sort_by_key(|p| {
-        p.strip_prefix("ep_")
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(0)
-    });
-    let mut ss_by_parent: std::collections::HashMap<String, Vec<&InteractiveGraphNode>> =
-        Default::default();
+    ss_parents.sort_by_key(|p| p.strip_prefix("ep_").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0));
+    let mut ss_by_parent: std::collections::HashMap<String, Vec<&InteractiveGraphNode>> = Default::default();
     for nd in &layers[4] {
         if let Some(pid) = nd.parent_id.as_deref() {
             ss_by_parent.entry(pid.to_string()).or_default().push(nd);
@@ -324,11 +289,7 @@ pub fn generate_svg(
     let tl_band_top = query_y + (QR + 8.0) + BAND_GAP;
     let tl_grid_top = tl_band_top + BAND_PAD + HOUR_LBL_H;
     let tl_band_bot = tl_grid_top + tl_grid_h + BAND_PAD;
-    let eeg_band_top = if has_tl {
-        tl_band_bot + BAND_GAP
-    } else {
-        tl_band_top
-    };
+    let eeg_band_top = if has_tl { tl_band_bot + BAND_GAP } else { tl_band_top };
     let eeg_grid_top = eeg_band_top + BAND_PAD + HOUR_LBL_H;
     let eeg_band_bot = eeg_grid_top + n_eeg_days as f64 * EEG_CELL_H + BAND_PAD;
     let fl_band_top = if has_eeg {
@@ -370,21 +331,14 @@ pub fn generate_svg(
             let slot = *cell_slots.entry((row, col)).or_insert(0);
             cell_slots.entry((row, col)).and_modify(|s| *s += 1);
             let cx = cells_x0 + col as f64 * tl_col_w + NW / 2.0;
-            let cy = tl_grid_top
-                + row as f64 * tl_cell_h
-                + TL_CELL_PAD
-                + slot as f64 * (NH + TL_ROW_GAP)
-                + NH / 2.0;
+            let cy = tl_grid_top + row as f64 * tl_cell_h + TL_CELL_PAD + slot as f64 * (NH + TL_ROW_GAP) + NH / 2.0;
             pos.insert(nd.id.clone(), (cx, cy));
         }
     }
 
     if has_eeg {
-        let day_idx: std::collections::HashMap<&str, usize> = eeg_days
-            .iter()
-            .enumerate()
-            .map(|(i, d)| (d.as_str(), i))
-            .collect();
+        let day_idx: std::collections::HashMap<&str, usize> =
+            eeg_days.iter().enumerate().map(|(i, d)| (d.as_str(), i)).collect();
         let hour_idx: std::collections::HashMap<u32, usize> =
             eeg_hours.iter().enumerate().map(|(i, &h)| (h, i)).collect();
         let block_w = DAY_LBL_W + eeg_grid_w;
@@ -471,13 +425,7 @@ pub fn generate_svg(
         .filter_map(|n| n.timestamp_unix)
         .collect();
     let ts_min = eeg_ts.iter().copied().min().unwrap_or(0);
-    let ts_rng = eeg_ts
-        .iter()
-        .copied()
-        .max()
-        .unwrap_or(1)
-        .saturating_sub(ts_min)
-        .max(1) as f64;
+    let ts_rng = eeg_ts.iter().copied().max().unwrap_or(1).saturating_sub(ts_min).max(1) as f64;
     let eeg_fill = |ts: Option<u64>| -> String {
         ts.map(|t| turbo_hex((t.saturating_sub(ts_min)) as f64 / ts_rng))
             .unwrap_or_else(|| "#f59e0b".into())
@@ -814,7 +762,8 @@ pub fn generate_svg(
         };
         o.push_str(&format!(
             "  <path d=\"M{sx1:.1},{sy1:.1} C{x1:.1},{cp1y:.1} {x2:.1},{cp2y:.1} {sx2:.1},{sy2:.1}\" \
-             fill=\"none\" stroke=\"{col}\" stroke-width=\"1.8\" opacity=\"0.65\"{da} marker-end=\"url(#{mid})\"/>\n"));
+             fill=\"none\" stroke=\"{col}\" stroke-width=\"1.8\" opacity=\"0.65\"{da} marker-end=\"url(#{mid})\"/>\n"
+        ));
     }
 
     // ── Nodes ─────────────────────────────────────────────────────────────
@@ -835,7 +784,9 @@ pub fn generate_svg(
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{NW:.1}\" height=\"{NH:.1}\" rx=\"6\" \
                      fill=\"{fill}\" fill-opacity=\"0.90\"/>\n",
-                    cx - NW / 2.0, cy - NH / 2.0));
+                    cx - NW / 2.0,
+                    cy - NH / 2.0
+                ));
             }
             "found_label" => {
                 o.push_str(&format!(
@@ -850,7 +801,11 @@ pub fn generate_svg(
                 o.push_str(&format!(
                     "  <polygon points=\"{cx:.1},{:.1} {:.1},{cy:.1} {cx:.1},{:.1} {:.1},{cy:.1}\" \
                      fill=\"{fill}\" fill-opacity=\"0.92\"/>\n",
-                    cy - s, cx + s * 1.35, cy + s, cx - s * 1.35));
+                    cy - s,
+                    cx + s * 1.35,
+                    cy + s,
+                    cx - s * 1.35
+                ));
             }
             "screenshot" => {
                 // Rounded rect with a small camera icon accent
@@ -867,7 +822,11 @@ pub fn generate_svg(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"8\" height=\"6\" rx=\"1\" \
                      fill=\"white\" fill-opacity=\"0.55\"/>\n\
                      <circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"1.5\" fill=\"{fill}\" fill-opacity=\"0.75\"/>\n",
-                    gx, gy, gx + 4.0, gy + 3.0));
+                    gx,
+                    gy,
+                    gx + 4.0,
+                    gy + 3.0
+                ));
             }
             _ => {}
         }
@@ -885,7 +844,8 @@ pub fn generate_svg(
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{cy:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"7\" font-weight=\"600\" fill=\"white\">{}</text>\n",
-                    svg_esc(&time_str)));
+                    svg_esc(&time_str)
+                ));
             }
             "screenshot" => {
                 let title = nd
@@ -894,31 +854,30 @@ pub fn generate_svg(
                     .or(nd.app_name.as_deref())
                     .unwrap_or("screenshot");
                 let primary = trunc(title, 18);
-                let ty = if nd.timestamp_unix.is_some() {
-                    cy - 7.0
-                } else {
-                    cy
-                };
+                let ty = if nd.timestamp_unix.is_some() { cy - 7.0 } else { cy };
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{ty:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"9\" font-weight=\"600\" fill=\"white\">{}</text>\n",
-                    svg_esc(&primary)));
+                    svg_esc(&primary)
+                ));
                 if let Some(ts) = nd.timestamp_unix {
                     o.push_str(&format!(
                         "  <text x=\"{cx:.1}\" y=\"{:.1}\" text-anchor=\"middle\" \
                          dominant-baseline=\"middle\" font-size=\"7\" fill=\"white\" opacity=\"0.72\">{}</text>\n",
-                        cy + 8.5, svg_esc(&fmt_unix_utc(ts))));
+                        cy + 8.5,
+                        svg_esc(&fmt_unix_utc(ts))
+                    ));
                 }
             }
             _ => {
                 let primary = trunc(nd.text.as_deref().unwrap_or(""), 20);
-                let has_sub = nd.timestamp_unix.is_some()
-                    && matches!(nd.kind.as_str(), "text_label" | "found_label");
+                let has_sub = nd.timestamp_unix.is_some() && matches!(nd.kind.as_str(), "text_label" | "found_label");
                 let ty = if has_sub { cy - 7.0 } else { cy };
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{ty:.1}\" text-anchor=\"middle\" \
                      dominant-baseline=\"middle\" font-size=\"10\" font-weight=\"600\" fill=\"white\">{}</text>\n",
-                    svg_esc(&primary)));
+                    svg_esc(&primary)
+                ));
                 if has_sub {
                     if let Some(ts) = nd.timestamp_unix {
                         o.push_str(&format!(

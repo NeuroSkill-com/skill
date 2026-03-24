@@ -55,10 +55,7 @@ pub fn dot_node_label(n: &InteractiveGraphNode) -> String {
 }
 
 /// Build a short edge label.
-pub fn dot_edge_label(
-    e: &InteractiveGraphEdge,
-    ts_map: &std::collections::HashMap<String, u64>,
-) -> String {
+pub fn dot_edge_label(e: &InteractiveGraphEdge, ts_map: &std::collections::HashMap<String, u64>) -> String {
     match e.kind.as_str() {
         "text_sim" => {
             let pct = ((1.0 - e.distance) * 100.0).clamp(0.0, 100.0);

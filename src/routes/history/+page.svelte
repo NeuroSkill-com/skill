@@ -433,7 +433,7 @@ async function loadDay(idx: number) {
     // Single IPC call loads all remaining sessions' metrics at once.
     if (needsBatch.length > 0) void loadMetricsBatch(needsBatch);
   } catch (e) {
-    if (loadSeq === seq)
+    if (loadSeq === seq) console.error("loadDay error:", e);
   } finally {
     if (loadSeq === seq) dayLoading = false;
   }

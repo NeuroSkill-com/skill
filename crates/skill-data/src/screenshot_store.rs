@@ -62,14 +62,11 @@ CREATE INDEX IF NOT EXISTS idx_ss_model    ON screenshots (model_backend, model_
 
 // ── Migrations ────────────────────────────────────────────────────────────────
 
-const MIGRATE_OCR_TEXT: &str =
-    "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
+const MIGRATE_OCR_TEXT: &str = "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
 const MIGRATE_OCR_EMBEDDING: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
-const MIGRATE_OCR_DIM: &str =
-    "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
+const MIGRATE_OCR_DIM: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
 const MIGRATE_OCR_HNSW: &str = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
-const MIGRATE_GIF_FILENAME: &str =
-    "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
+const MIGRATE_GIF_FILENAME: &str = "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -203,19 +200,14 @@ impl ScreenshotStore {
         ] {
             let _ = conn.execute(sql, []);
         }
-        Some(Self {
-            conn: Mutex::new(conn),
-        })
+        Some(Self { conn: Mutex::new(conn) })
     }
 
     /// Insert a new screenshot record.
     pub fn insert(&self, row: &ScreenshotRow) -> Option<i64> {
         let conn = self.conn.lock_or_recover();
         let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
-        let ocr_blob: Option<Vec<u8>> = row
-            .ocr_embedding
-            .as_ref()
-            .map(|v| crate::util::f32_to_blob(v));
+        let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
         conn.execute(
             "INSERT INTO screenshots (
                 timestamp, unix_ts, filename, width, height, file_size,
@@ -264,11 +256,9 @@ impl ScreenshotStore {
     /// Count screenshots that have no embedding.
     pub fn count_unembedded(&self) -> usize {
         let conn = self.conn.lock_or_recover();
-        conn.query_row(
-            "SELECT COUNT(*) FROM screenshots WHERE embedding IS NULL",
-            [],
-            |r| r.get::<_, i64>(0),
-        )
+        conn.query_row("SELECT COUNT(*) FROM screenshots WHERE embedding IS NULL", [], |r| {
+            r.get::<_, i64>(0)
+        })
         .unwrap_or(0) as usize
     }
 
@@ -436,13 +426,7 @@ impl ScreenshotStore {
     }
 
     /// Update OCR text and embedding for a specific row.
-    pub fn update_ocr(
-        &self,
-        id: i64,
-        ocr_text: &str,
-        ocr_embedding: Option<&[f32]>,
-        ocr_hnsw_id: Option<u64>,
-    ) {
+    pub fn update_ocr(&self, id: i64, ocr_text: &str, ocr_embedding: Option<&[f32]>, ocr_hnsw_id: Option<u64>) {
         let conn = self.conn.lock_or_recover();
         let blob: Option<Vec<u8>> = ocr_embedding.map(crate::util::f32_to_blob);
         let dim = ocr_embedding.map_or(0i64, |e| e.len() as i64);
@@ -567,11 +551,9 @@ impl ScreenshotStore {
     /// Get the timestamp for a row by id.
     pub fn get_timestamp(&self, id: i64) -> Option<i64> {
         let conn = self.conn.lock_or_recover();
-        conn.query_row(
-            "SELECT timestamp FROM screenshots WHERE id = ?1",
-            params![id],
-            |r| r.get(0),
-        )
+        conn.query_row("SELECT timestamp FROM screenshots WHERE id = ?1", params![id], |r| {
+            r.get(0)
+        })
         .ok()
     }
 
@@ -579,10 +561,8 @@ impl ScreenshotStore {
     #[allow(dead_code)]
     pub fn count_all(&self) -> usize {
         let conn = self.conn.lock_or_recover();
-        conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| {
-            r.get::<_, i64>(0)
-        })
-        .unwrap_or(0) as usize
+        conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0))
+            .unwrap_or(0) as usize
     }
 
     /// Return counts for the screenshot store: total, with embeddings,
@@ -590,9 +570,7 @@ impl ScreenshotStore {
     pub fn summary_counts(&self) -> ScreenshotSummary {
         let conn = self.conn.lock_or_recover();
         let total = conn
-            .query_row("SELECT COUNT(*) FROM screenshots", [], |r| {
-                r.get::<_, i64>(0)
-            })
+            .query_row("SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0))
             .unwrap_or(0) as u64;
         let with_embedding = conn
             .query_row(
@@ -602,11 +580,9 @@ impl ScreenshotStore {
             )
             .unwrap_or(0) as u64;
         let with_ocr = conn
-            .query_row(
-                "SELECT COUNT(*) FROM screenshots WHERE ocr_text != ''",
-                [],
-                |r| r.get::<_, i64>(0),
-            )
+            .query_row("SELECT COUNT(*) FROM screenshots WHERE ocr_text != ''", [], |r| {
+                r.get::<_, i64>(0)
+            })
             .unwrap_or(0) as u64;
         let with_ocr_embedding = conn
             .query_row(

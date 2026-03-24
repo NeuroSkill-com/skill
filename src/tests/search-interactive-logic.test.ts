@@ -10,12 +10,12 @@ import {
 } from "$lib/search-interactive-logic";
 import type { GraphEdge, GraphNode } from "$lib/search-types";
 
-function mkNode(id: string, kind = "text_label", text = "test"): GraphNode {
+function mkNode(id: string, kind: GraphNode["kind"] = "text_label", text = "test"): GraphNode {
   return { id, kind, text, distance: 0.1 };
 }
 
 function mkEdge(from: string, to: string): GraphEdge {
-  return { from_id: from, to_id: to, distance: 0.1, kind: "text_link" };
+  return { from_id: from, to_id: to, distance: 0.1, kind: "text_sim" };
 }
 
 describe("buildDisplayGraph", () => {
@@ -101,7 +101,7 @@ describe("serialiseEdgesForBackend", () => {
     const [serialised] = serialiseEdgesForBackend([edge]);
     expect(serialised.from_id).toBe("a");
     expect(serialised.to_id).toBe("b");
-    expect(serialised.kind).toBe("text_link");
+    expect(serialised.kind).toBe("text_sim");
   });
 });
 

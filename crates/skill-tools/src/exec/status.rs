@@ -27,10 +27,7 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
         if let Some(b) = dev["battery"].as_f64() {
             out.push_str(&format!("Battery: {:.0}%\n", b));
         }
-        out.push_str(&format!(
-            "EEG samples: {}",
-            dev["sample_count"].as_u64().unwrap_or(0)
-        ));
+        out.push_str(&format!("EEG samples: {}", dev["sample_count"].as_u64().unwrap_or(0)));
         let ppg = dev["ppg_sample_count"].as_u64().unwrap_or(0);
         if ppg > 0 {
             out.push_str(&format!(" | PPG samples: {}", ppg));
@@ -87,10 +84,7 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
 
     // ── Apps ──────────────────────────────────────────────────────────────
     let apps = &v["apps"];
-    let has_apps = apps["top_all_time"]
-        .as_array()
-        .map(|a| !a.is_empty())
-        .unwrap_or(false);
+    let has_apps = apps["top_all_time"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
     if has_apps {
         out.push_str("\n# Most Used Apps\n");
         format_app_list(&mut out, "All time", &apps["top_all_time"]);
@@ -110,16 +104,8 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
             ss["with_ocr"].as_u64().unwrap_or(0),
             ss["with_ocr_embedding"].as_u64().unwrap_or(0),
         ));
-        format_ocr_apps(
-            &mut out,
-            "Top screenshotted apps (all time)",
-            &ss["top_apps_all_time"],
-        );
-        format_ocr_apps(
-            &mut out,
-            "Top screenshotted apps (24h)",
-            &ss["top_apps_24h"],
-        );
+        format_ocr_apps(&mut out, "Top screenshotted apps (all time)", &ss["top_apps_all_time"]);
+        format_ocr_apps(&mut out, "Top screenshotted apps (24h)", &ss["top_apps_24h"]);
     }
 
     // ── Signal quality ───────────────────────────────────────────────────
@@ -196,10 +182,7 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
     if !hooks.is_null() {
         let total = hooks["total"].as_u64().unwrap_or(0);
         let enabled = hooks["enabled"].as_u64().unwrap_or(0);
-        out.push_str(&format!(
-            "\n# Hooks\nTotal: {} | Enabled: {}\n",
-            total, enabled
-        ));
+        out.push_str(&format!("\n# Hooks\nTotal: {} | Enabled: {}\n", total, enabled));
         if let Some(lt) = hooks["latest_trigger"].as_object() {
             let hook = lt.get("hook").and_then(|v| v.as_str()).unwrap_or("?");
             let text = lt.get("label_text").and_then(|v| v.as_str()).unwrap_or("");
@@ -213,10 +196,7 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
     if total_ep > 0 {
         let epoch_s = sleep["epoch_secs"].as_u64().unwrap_or(30);
         let total_mins = (total_ep * epoch_s) / 60;
-        out.push_str(&format!(
-            "\n# Sleep (48h window)\nTotal: {}m | ",
-            total_mins
-        ));
+        out.push_str(&format!("\n# Sleep (48h window)\nTotal: {}m | ", total_mins));
         let stages = [
             ("Wake", "wake_epochs"),
             ("N1", "n1_epochs"),

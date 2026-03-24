@@ -206,9 +206,9 @@ impl Default for FilterConfig {
     fn default() -> Self {
         Self {
             sample_rate: MUSE_SAMPLE_RATE,
-            low_pass_hz: Some(DEFAULT_LP_HZ), // remove EMG / alias noise
-            high_pass_hz: Some(DEFAULT_HP_HZ), // remove DC drift
-            notch: Some(PowerlineFreq::Hz60), // US 60 Hz default
+            low_pass_hz: Some(DEFAULT_LP_HZ),        // remove EMG / alias noise
+            high_pass_hz: Some(DEFAULT_HP_HZ),       // remove DC drift
+            notch: Some(PowerlineFreq::Hz60),        // US 60 Hz default
             notch_bandwidth_hz: DEFAULT_NOTCH_BW_HZ, // ±BW Hz around each harmonic
         }
     }
@@ -434,12 +434,7 @@ impl EegFilter {
         //
         // The next hop's overlap = the last OVERLAP samples of this window.
         // signals[ch][HOP..] has exactly OVERLAP = 224 elements.
-        for (ov, sig) in self
-            .overlap
-            .iter_mut()
-            .zip(signals.iter())
-            .take(EEG_CHANNELS)
-        {
+        for (ov, sig) in self.overlap.iter_mut().zip(signals.iter()).take(EEG_CHANNELS) {
             ov.copy_from_slice(&sig[HOP..]);
         }
 
@@ -587,9 +582,7 @@ mod tests {
 
     fn sine(freq_hz: f64, n: usize) -> Vec<f64> {
         let sr = MUSE_SAMPLE_RATE as f64;
-        (0..n)
-            .map(|i| (2.0 * PI * freq_hz * i as f64 / sr).sin())
-            .collect()
+        (0..n).map(|i| (2.0 * PI * freq_hz * i as f64 / sr).sin()).collect()
     }
 
     fn rms(v: &[f64]) -> f64 {
@@ -644,10 +637,7 @@ mod tests {
 
     #[test]
     fn full_band_eu_has_eu_notch() {
-        assert_eq!(
-            FilterConfig::full_band_eu().notch,
-            Some(PowerlineFreq::Hz50)
-        );
+        assert_eq!(FilterConfig::full_band_eu().notch, Some(PowerlineFreq::Hz50));
     }
 
     #[test]
@@ -679,11 +669,7 @@ mod tests {
             f.push(ch, &[0.5; 4]);
         }
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(
-                f.queued[ch].len(),
-                0,
-                "queued[{ch}] should be empty in passthrough"
-            );
+            assert_eq!(f.queued[ch].len(), 0, "queued[{ch}] should be empty in passthrough");
         }
     }
 
@@ -703,11 +689,7 @@ mod tests {
         assert_eq!(f.pending_len(0), 0, "partial push should not fire");
         // Push the rest of channel 0 → batch fires (only channel 0 is active).
         f.push(0, &[0.0]);
-        assert_eq!(
-            f.pending_len(0),
-            HOP,
-            "full push to only active ch should fire"
-        );
+        assert_eq!(f.pending_len(0), HOP, "full push to only active ch should fire");
     }
 
     #[test]
@@ -742,12 +724,7 @@ mod tests {
             f.push(ch, &vec![0.0; HOP * hops]);
         }
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(
-                f.pending_len(ch),
-                HOP * hops,
-                "ch {ch}: expected {}",
-                HOP * hops
-            );
+            assert_eq!(f.pending_len(ch), HOP * hops, "ch {ch}: expected {}", HOP * hops);
         }
     }
 
@@ -774,10 +751,7 @@ mod tests {
         for ch in 0..EEG_CHANNELS {
             assert_eq!(f.queued[ch].len(), 0, "queued[{ch}] not cleared");
             assert_eq!(f.pending_len(ch), 0, "pending[{ch}] not cleared");
-            assert!(
-                f.overlap[ch].iter().all(|&v| v == 0.0),
-                "overlap[{ch}] not cleared"
-            );
+            assert!(f.overlap[ch].iter().all(|&v| v == 0.0), "overlap[{ch}] not cleared");
         }
     }
 
@@ -996,11 +970,7 @@ mod tests {
         f.set_config(FilterConfig::full_band_eu());
         assert_eq!(f.config.notch, Some(PowerlineFreq::Hz50));
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(
-                f.pending_len(ch),
-                0,
-                "pending[{ch}] must be cleared on preset switch"
-            );
+            assert_eq!(f.pending_len(ch), 0, "pending[{ch}] must be cleared on preset switch");
         }
     }
 }

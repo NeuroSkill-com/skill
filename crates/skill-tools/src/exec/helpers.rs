@@ -32,11 +32,7 @@ pub fn resolve_tool_path(path: &str) -> std::path::PathBuf {
 ///
 /// Designed for network I/O in blocking contexts (e.g. inside
 /// `tokio::task::spawn_blocking`).
-pub fn retry_with_backoff<T, E, F>(
-    max_retries: u32,
-    base_delay: std::time::Duration,
-    mut f: F,
-) -> Result<T, E>
+pub fn retry_with_backoff<T, E, F>(max_retries: u32, base_delay: std::time::Duration, mut f: F) -> Result<T, E>
 where
     F: FnMut() -> Result<T, E>,
 {
