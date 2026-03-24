@@ -32,7 +32,7 @@ pub struct LlmLogEntry {
     pub message: String,
 }
 
-/// Shared log ring-buffer (max [`LOG_CAP`] entries, oldest dropped first).
+/// Shared log ring-buffer (max `LOG_CAP` entries, oldest dropped first).
 pub type LlmLogBuffer = Arc<Mutex<VecDeque<LlmLogEntry>>>;
 
 /// Maximum number of log lines kept in memory.

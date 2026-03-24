@@ -14,7 +14,7 @@
 //! 1. Add a variant to [`DeviceKind`].
 //! 2. Fill in [`DeviceCapabilities`] via [`DeviceKind::capabilities`].
 //! 3. Add a detection clause in [`DeviceKind::from_name`].
-//! 4. Add entries to [`SUPPORTED_COMPANIES`] if the device should appear in
+//! 4. Add entries to `SUPPORTED_COMPANIES` if the device should appear in
 //!    the "Supported Devices" UI.
 
 use serde::{Deserialize, Serialize};

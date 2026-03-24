@@ -10,7 +10,7 @@
 //! - [`extract`]  — tool-call extraction from raw assistant output
 //! - [`strip`]    — stripping tool-call blocks from message content
 //! - [`inject`]   — injecting tool definitions into system prompts
-//! - [`json_scan`]— balanced JSON range finders
+//! - `json_scan` — balanced JSON range finders
 
 pub mod types;
 pub mod coerce;

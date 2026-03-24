@@ -79,7 +79,7 @@ pub use crate::constants::FILTER_WINDOW   as WINDOW;
 
 /// One spectrogram time-slice: raw PSD for all 4 channels at one hop.
 ///
-/// Produced inside [`EegFilter::process_one_hop`] as a zero-cost side-effect
+/// Produced inside `EegFilter::process_one_hop` as a zero-cost side-effect
 /// of the FFT that is already being run for the signal filter.  The PSD is
 /// sampled *before* the LP/HP/notch mask so the spectrogram shows the true
 /// raw spectrum, not the filtered one.
@@ -184,7 +184,7 @@ pub struct FilterConfig {
     /// Powerline notch filter preset.
     ///
     /// When `Some`, zeroes the fundamental frequency and every harmonic up to
-    /// Nyquist within a ±[`notch_bandwidth_hz`] band.  `None` disables the
+    /// Nyquist within a ±`notch_bandwidth_hz` band.  `None` disables the
     /// notch entirely.
     pub notch: Option<PowerlineFreq>,
 

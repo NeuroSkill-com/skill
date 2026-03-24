@@ -2,7 +2,7 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! HTTP/REST handlers for the LLM inference server.
 //!
-//! Mounted by [`super::engine::router`] under `/v1/*` paths.
+//! Mounted by `super::engine::router` under `/v1/*` paths.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 use skill_constants::MutexExt;

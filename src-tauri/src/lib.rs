@@ -86,7 +86,7 @@ pub(crate) use device_scanner::start_background_scanner;
 /// Generic device session runner (replaces per-device session modules).
 mod session_runner;
 
-/// Per-device scan / connect factories → Box<dyn DeviceAdapter>.
+/// Per-device scan / connect factories → `Box<dyn DeviceAdapter>`.
 mod session_connect;
 
 /// Session history listing and streaming Tauri commands.

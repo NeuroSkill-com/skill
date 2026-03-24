@@ -58,7 +58,7 @@ impl ArtifactDetector {
     /// Create a detector using the default Muse layout (AF7=1, AF8=2 @ 256 Hz).
     ///
     /// **Deprecated:** defaults to 256 Hz and Muse electrode layout.
-    /// Use [`with_channels`] with the device's actual sample rate and channel
+    /// Use [`Self::with_channels`] with the device's actual sample rate and channel
     /// names for correct blink detection on non-Muse devices.
     #[deprecated(since = "0.1.0", note = "use ArtifactDetector::with_channels(sample_rate, channel_names) instead")]
     #[allow(clippy::new_without_default)]

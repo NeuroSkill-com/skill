@@ -40,7 +40,7 @@ static CALLBACK: OnceLock<Box<LogCallback>> = OnceLock::new();
 
 /// Enable or disable LLM log output globally.
 ///
-/// When disabled, [`llm_log!`] calls are short-circuited before formatting.
+/// When disabled, `llm_log!` calls are short-circuited before formatting.
 /// Enabled by default so that logs are visible during early init.
 pub fn set_log_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);

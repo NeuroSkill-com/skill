@@ -62,7 +62,7 @@ pub enum Command {
     /// Inject a `<script>` tag with the given source URL.
     InjectScriptUrl { url: String },
 
-    /// Inject inline JavaScript (wrapped in <script>).
+    /// Inject inline JavaScript (wrapped in `<script>`).
     InjectScriptContent { content: String },
 
     /// Query a CSS selector and return outer HTML of matching elements.
@@ -166,7 +166,7 @@ pub enum Command {
     ///
     /// Once enabled, `fetch()` and `XMLHttpRequest` calls are monkey-patched
     /// to record all traffic.  Navigation events are also captured.
-    /// Retrieve collected traffic with [`GetInterceptedRequests`].
+    /// Retrieve collected traffic with `GetInterceptedRequests`.
     EnableInterception,
 
     /// Disable request/response interception.

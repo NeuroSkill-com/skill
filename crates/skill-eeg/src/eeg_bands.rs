@@ -328,7 +328,7 @@ pub struct BandSnapshot {
 ///
 /// Maintains a per-channel ring buffer of the most recent [`BAND_WINDOW`]
 /// samples.  Each time all 4 channels have accumulated [`BAND_HOP`] new
-/// samples, [`compute_snapshot`] is called:
+/// samples, `compute_snapshot` is called:
 ///
 /// 1. Applies a Hann window to the 512-sample analysis block.
 /// 2. Calls **`fft_batch`** — one GPU dispatch for all 4 channels.
@@ -360,7 +360,7 @@ pub struct BandAnalyzer {
 impl BandAnalyzer {
     /// Create a new analyser with pre-computed Hann coefficients.
     ///
-    /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`new_with_rate`]
+    /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`Self::new_with_rate`]
     /// with the device's actual sample rate for correct spectral analysis.
     #[deprecated(since = "0.1.0", note = "use BandAnalyzer::new_with_rate(sample_rate) instead")]
     #[allow(clippy::new_without_default)]

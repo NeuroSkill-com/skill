@@ -21,7 +21,7 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
 /// order.  Plain HTTP/S image URLs are silently skipped — only
 /// `data:<mime>;base64,<…>` data-URLs are supported.
 ///
-/// Call this before passing `messages` to [`LlmServerState::chat`] so the
+/// Call this before passing `messages` to `LlmServerState::chat` so the
 /// actor receives pre-decoded bytes alongside the text context.
 pub fn extract_images_from_messages(messages: &[Value]) -> Vec<Vec<u8>> {
     messages.iter()

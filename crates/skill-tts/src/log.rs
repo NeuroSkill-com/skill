@@ -40,7 +40,7 @@ static CALLBACK: OnceLock<Box<LogCallback>> = OnceLock::new();
 
 /// Enable or disable TTS log output globally.
 ///
-/// When disabled, [`tts_log!`] calls are short-circuited before formatting.
+/// When disabled, `tts_log!` calls are short-circuited before formatting.
 /// Enabled by default so that logs are visible during early init.
 pub fn set_log_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
@@ -62,7 +62,7 @@ where
     let _ = CALLBACK.set(Box::new(cb));
 }
 
-/// Write a single log line.  Prefer the [`tts_log!`] macro instead.
+/// Write a single log line.  Prefer the `tts_log!` macro instead.
 ///
 /// * If a callback was registered via [`set_log_callback`] → delegates there.
 /// * Otherwise → `eprintln!("[{tag}] {msg}")`.

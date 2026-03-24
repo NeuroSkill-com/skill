@@ -11,7 +11,7 @@
 //! `~/.skill/model_config.json` and loaded at app startup.
 //!
 //! [`EegModelStatus`] is a live snapshot populated by the background embed
-//! worker and exposed through the [`get_eeg_model_status`] Tauri command.
+//! worker and exposed through the `get_eeg_model_status` Tauri command.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -160,7 +160,7 @@ impl EegModelConfig {
 ///
 /// Held in an `Arc<Mutex<EegModelStatus>>` shared between the worker thread
 /// and the Tauri command handler.  The worker writes; the UI polls via
-/// [`get_eeg_model_status`].
+/// `get_eeg_model_status`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EegModelStatus {
     /// `true` once the ZUNA encoder has been loaded on the wgpu device.
