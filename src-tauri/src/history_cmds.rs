@@ -82,7 +82,7 @@ pub(crate) async fn list_sessions_for_day(
 #[tauri::command]
 pub(crate) async fn delete_session(csv_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        skill_history::delete_session(&csv_path)
+        skill_history::delete_session(&csv_path).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Inference actor — the OS thread that owns the model and context.
 
+use anyhow::Context;
 use std::{
     num::NonZeroU32,
     sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
@@ -210,7 +211,7 @@ pub(super) fn run_actor(
                 p.display(), file_size as f64 / 1_048_576.0,
                 mmproj_use_gpu, config.mmproj_n_threads);
 
-            let try_load_mmproj = |use_gpu: bool| -> Result<MtmdContext, String> {
+            let try_load_mmproj = |use_gpu: bool| -> anyhow::Result<MtmdContext> {
                 let params = MtmdContextParams::default()
                     .use_gpu(use_gpu)
                     .n_threads(config.mmproj_n_threads)
@@ -220,8 +221,8 @@ pub(super) fn run_actor(
                     MtmdContext::init_from_file(p, &model, params)
                 })) {
                     Ok(Ok(mc))     => Ok(mc),
-                    Ok(Err(e))     => Err(format!("{e}")),
-                    Err(_panic)    => Err("panic in native code".into()),
+                    Ok(Err(e))     => Err(anyhow::anyhow!("{e}")),
+                    Err(_panic)    => Err(anyhow::anyhow!("panic in native code")),
                 }
             };
 
@@ -527,18 +528,18 @@ pub(super) fn run_actor(
                 let mut emb_ctx = match model.new_context(backend, emb_params) {
                     Ok(c)  => c,
                     Err(e) => {
-                        result_tx.send(Err(e.to_string())).ok();
+                        result_tx.send(Err(anyhow::anyhow!("{e}"))).ok();
                         continue;
                     }
                 };
 
-                let embed_result: Result<Vec<Vec<f32>>, String> = (|| {
+                let embed_result: anyhow::Result<Vec<Vec<f32>>> = (|| {
                     let mut all = Vec::new();
                     for text in &inputs {
                         emb_ctx.clear_kv_cache();
 
                         let tokens = model.str_to_token(text, AddBos::Always)
-                            .map_err(|e| e.to_string())?;
+                            ?;
                         let n = tokens.len().min(emb_ctx.n_ctx() as usize - 1);
 
                         let mut batch = LlamaBatch::new(n + 1, 1);
@@ -548,10 +549,10 @@ pub(super) fn run_actor(
                         }
 
                         emb_ctx.decode(&mut batch)
-                            .map_err(|_| "embed decode error".to_string())?;
+                            .context("embed decode error")?;
 
                         let vec = emb_ctx.embeddings_seq_ith(0)
-                            .map_err(|e| e.to_string())?;
+                            ?;
                         all.push(vec.to_vec());
                     }
                     Ok(all)

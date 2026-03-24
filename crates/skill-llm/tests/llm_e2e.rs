@@ -489,7 +489,7 @@ async fn run_tool_chat(
         Err(e) => {
             eprintln!("[step {step_num}] ❌ {e}");
             let step = Step { name: step_name, duration: dur,
-                status: StepStatus::Fail(e.clone()), detail: String::new() };
+                status: StepStatus::Fail(e.to_string()), detail: String::new() };
             let chat = ChatRecord { label, messages_in: messages,
                 response_text: String::new(), visible_text: visible,
                 finish_reason: "error".into(), prompt_tokens: 0, completion_tokens: 0,

@@ -574,7 +574,7 @@ pub fn umap(app: &AppHandle, msg: &Value) -> Result<Value, String> {
                 epoch_ms:     ep.epoch_ms,
             });
         });
-        umap_compute_inner(&sd, a_start, a_end, b_start, b_end, Some(cb))
+        umap_compute_inner(&sd, a_start, a_end, b_start, b_end, Some(cb)).map_err(|e| e.to_string())
     });
 
     Ok(serde_json::json!({

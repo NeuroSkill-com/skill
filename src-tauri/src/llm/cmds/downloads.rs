@@ -137,18 +137,18 @@ pub fn download_llm_model(
                             }
                         }
                     }
-                    Err(ref e) if e == "cancelled" => {
+                    Err(ref e) if e.to_string() == "cancelled" => {
                         entry.state      = DownloadState::Cancelled;
                         entry.status_msg = Some("Cancelled.".into());
                         entry.progress   = 0.0;
                     }
-                    Err(ref e) if e == "paused" => {
+                    Err(ref e) if e.to_string() == "paused" => {
                         entry.state      = DownloadState::Paused;
                         entry.status_msg = Some("Paused.".into());
                     }
                     Err(e) => {
                         entry.state      = DownloadState::Failed;
-                        entry.status_msg = Some(e);
+                        entry.status_msg = Some(e.to_string());
                         entry.progress   = 0.0;
                     }
                 }

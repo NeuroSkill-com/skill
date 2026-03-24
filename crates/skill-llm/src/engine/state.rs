@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 
 use crate::config::LlmToolConfig;
 use super::protocol::{InferRequest, InferToken, GenParams};
+use anyhow::Context;
 
 // ── Shared state (held in axum Router via `.with_state()`) ────────────────────
 
@@ -92,14 +93,14 @@ impl LlmServerState {
         messages: Vec<Value>,
         images:   Vec<Vec<u8>>,
         params:   GenParams,
-    ) -> Result<mpsc::UnboundedReceiver<InferToken>, String> {
+    ) -> anyhow::Result<mpsc::UnboundedReceiver<InferToken>> {
         if !self.is_ready() {
-            return Err("LLM model still loading — retry in a few seconds".to_string());
+            anyhow::bail!("LLM model still loading — retry in a few seconds")
         }
         let (tok_tx, tok_rx) = mpsc::unbounded_channel();
         self.req_tx
             .send(InferRequest::Generate { messages, images, params, token_tx: tok_tx })
-            .map_err(|_| "LLM actor has exited".to_string())?;
+            .context("LLM actor has exited")?;
         Ok(tok_rx)
     }
 }

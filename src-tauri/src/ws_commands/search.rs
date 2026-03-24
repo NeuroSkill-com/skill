@@ -295,7 +295,7 @@ pub(super) fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
                 epoch_ms:     ep.epoch_ms,
             });
         });
-        umap_compute_inner(&sd, as2, ae2, bs2, be2, Some(cb))
+        umap_compute_inner(&sd, as2, ae2, bs2, be2, Some(cb)).map_err(|e| e.to_string())
     });
 
     Ok(serde_json::json!({

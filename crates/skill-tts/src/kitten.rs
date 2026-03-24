@@ -12,6 +12,7 @@ use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use tokio::sync::oneshot;
 
 use crate::{play_f32_audio, init_espeak_data_path};
+use anyhow::Context;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ pub fn set_voice(voice: String) {
 // ─── Worker channel ───────────────────────────────────────────────────────────
 
 pub enum Cmd {
-    Init  { cb: Box<dyn FnMut(LoadProgress) + Send + 'static>, done: oneshot::Sender<Result<(), String>> },
+    Init  { cb: Box<dyn FnMut(LoadProgress) + Send + 'static>, done: oneshot::Sender<anyhow::Result<()>> },
     Speak { text: String, voice: String, done: oneshot::Sender<()> },
     Unload { done: oneshot::Sender<()> },
     Shutdown { done: std::sync::mpsc::SyncSender<()> },
@@ -96,7 +97,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         done.send(Ok(())).ok();
                     }
                     Err(e) => {
-                        done.send(Err(format!("kittentts load failed: {e}"))).ok();
+                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}"))).ok();
                     }
                 }
             }
@@ -161,11 +162,11 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
 fn speak_inner(
     model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &str,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let t0      = std::time::Instant::now();
     let samples = model
         .generate(text, voice, SPEED, true)
-        .map_err(|e| format!("synthesis failed for {text:?}: {e}"))?;
+        .with_context(|| format!("synthesis failed for {text:?}"))?;
     if samples.is_empty() {
         tts_log!("tts", "no samples for {text:?} voice={voice:?}");
         return Ok(());

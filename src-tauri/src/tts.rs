@@ -39,13 +39,13 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
     let emit = move |ev: TtsProgressEvent| {
         app.emit(TTS_PROGRESS_EVENT, ev).ok();
     };
-    skill_tts::tts_init_with_callback(emit).await
+    skill_tts::tts_init_with_callback(emit).await.map_err(|e| e.to_string())
 }
 
 /// Unload the active TTS backend, freeing memory.
 #[tauri::command]
 pub async fn tts_unload(app_handle: AppHandle) -> Result<(), String> {
-    let result = skill_tts::tts_unload().await;
+    let result = skill_tts::tts_unload().await.map_err(|e| e.to_string());
     #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
     if result.is_ok() {
         app_handle.emit(TTS_PROGRESS_EVENT, TtsProgressEvent::unloaded()).ok();

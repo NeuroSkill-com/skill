@@ -228,7 +228,7 @@ Done."#;
         let result = validate_tool_arguments(&tool, &args);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Validation failed"));
+        assert!(err.to_string().contains("Validation failed"));
     }
 
     #[test]

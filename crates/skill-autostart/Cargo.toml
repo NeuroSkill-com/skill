@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Platform-specific launch-at-login (autostart) registration — extracted workspace crate"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 
 [lints]

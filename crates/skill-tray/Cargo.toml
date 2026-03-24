@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "System tray icon helpers — progress-ring overlay, shortcut formatting, dedup fingerprints — extracted workspace crate"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 
 [lints]

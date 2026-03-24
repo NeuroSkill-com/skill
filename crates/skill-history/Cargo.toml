@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Session history, metrics, time-series, sleep staging, and analysis — extracted workspace crate"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 skill-commands  = { path = "../skill-commands" }

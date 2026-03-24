@@ -119,7 +119,7 @@ pub async fn chat_completions_ipc(
                     });
                 }
                 Err(msg) => {
-                    let _ = channel.send(ChatChunk::Error { message: msg });
+                    let _ = channel.send(ChatChunk::Error { message: msg.to_string() });
                 }
             }
         }

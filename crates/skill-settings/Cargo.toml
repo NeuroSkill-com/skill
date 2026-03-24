@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Persistent configuration types and disk I/O — extracted workspace crate"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants    = { path = "../skill-constants" }
 skill-eeg          = { path = "../skill-eeg" }
 skill-tts          = { path = "../skill-tts" }

@@ -39,6 +39,7 @@ pub mod neutts;
 use std::num::NonZero;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use anyhow::Context;
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use std::sync::atomic::Ordering;
 #[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
@@ -364,7 +365,7 @@ pub fn tts_set_voice(voice: String) {
 #[allow(unused_variables)] // `emit` is used under tts-neutts / tts-kitten feature gates
 pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'static>(
     emit: F,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -373,7 +374,7 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
                 return Ok(());
             }
             if neutts::LOADING.load(Ordering::Relaxed) {
-                return Err("NeuTTS is already loading".into());
+                anyhow::bail!("NeuTTS is already loading")
             }
             let (backbone, gguf, preset, wav, text) = neutts::read_cfg();
             let (tx, rx) = tokio::sync::oneshot::channel();
@@ -386,12 +387,12 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
                 ref_text:      text,
                 cb:   Box::new(move |p| emit_c(neutts::progress_to_event(p))),
                 done: tx,
-            }).map_err(|e| format!("neutts init channel send: {e}"))?;
-            let result = rx.await.map_err(|e| format!("neutts init channel recv: {e}"))
+            }).map_err(|e| anyhow::anyhow!("neutts init channel send: {e}"))?;
+            let result = rx.await.context("neutts init channel recv")
                 .and_then(|r| r);
             match &result {
                 Ok(_)    => emit(TtsProgressEvent::ready(3)),
-                Err(msg) => emit(TtsProgressEvent::error(msg.clone())),
+                Err(msg) => emit(TtsProgressEvent::error(msg.to_string())),
             }
             return result;
         }
@@ -415,29 +416,29 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
                     emit_c(ev);
                 }),
                 done: tx,
-            }).map_err(|e| format!("kitten init channel send: {e}"))?;
-            let result = rx.await.map_err(|e| format!("kitten init channel recv: {e}"))
+            }).map_err(|e| anyhow::anyhow!("kitten init channel send: {e}"))?;
+            let result = rx.await.context("kitten init channel recv")
                 .and_then(|r| r);
             match &result {
                 Ok(_)    => emit(TtsProgressEvent::ready(4)),
-                Err(msg) => emit(TtsProgressEvent::error(msg.clone())),
+                Err(msg) => emit(TtsProgressEvent::error(msg.to_string())),
             }
             return result;
         }
     }
     #[allow(unreachable_code)]
-    Err("no TTS backend compiled".into())
+    Err(anyhow::anyhow!("no TTS backend compiled"))
 }
 
 /// Unload the active TTS backend.
-pub async fn tts_unload() -> Result<(), String> {
+pub async fn tts_unload() -> anyhow::Result<()> {
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
             neutts::get_tx().send(neutts::Cmd::Unload { done: tx })
-                .map_err(|e| format!("neutts unload channel send: {e}"))?;
-            rx.await.map_err(|e| format!("neutts unload channel recv: {e}"))?;
+                .map_err(|e| anyhow::anyhow!("neutts unload channel send: {e}"))?;
+            rx.await.context("neutts unload channel recv")?;
             return Ok(());
         }
     } else {
@@ -445,11 +446,11 @@ pub async fn tts_unload() -> Result<(), String> {
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
             kitten::get_tx().send(kitten::Cmd::Unload { done: tx })
-                .map_err(|e| format!("kitten unload channel send: {e}"))?;
-            rx.await.map_err(|e| format!("kitten unload channel recv: {e}"))?;
+                .map_err(|e| anyhow::anyhow!("kitten unload channel send: {e}"))?;
+            rx.await.context("kitten unload channel recv")?;
             return Ok(());
         }
     }
     #[allow(unreachable_code)]
-    Err("no TTS backend compiled".into())
+    Err(anyhow::anyhow!("no TTS backend compiled"))
 }

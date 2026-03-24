@@ -9,6 +9,7 @@ use crate::ppg_analysis::PpgMetrics;
 use crate::session_csv::CsvState;
 use crate::session_parquet::ParquetState;
 use skill_eeg::eeg_bands::BandSnapshot;
+use anyhow::Context;
 
 /// Storage format for EEG recordings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,12 +47,12 @@ pub enum SessionWriter {
 
 impl SessionWriter {
     /// Open a new session file with the given channel labels.
-    pub fn open(csv_path: &Path, labels: &[&str], format: StorageFormat) -> Result<Self, String> {
+    pub fn open(csv_path: &Path, labels: &[&str], format: StorageFormat) -> anyhow::Result<Self> {
         match format {
             StorageFormat::Csv => {
                 CsvState::open_with_labels(csv_path, labels)
                     .map(SessionWriter::Csv)
-                    .map_err(|e| format!("CSV open error: {e}"))
+                    .context("CSV open error")
             }
             StorageFormat::Parquet => {
                 ParquetState::open_with_labels(csv_path, labels)
@@ -59,7 +60,7 @@ impl SessionWriter {
             }
             StorageFormat::Both => {
                 let csv = CsvState::open_with_labels(csv_path, labels)
-                    .map_err(|e| format!("CSV open error: {e}"))?;
+                    .context("CSV open error")?;
                 let pq = ParquetState::open_with_labels(csv_path, labels)?;
                 Ok(SessionWriter::Both(csv, pq))
             }

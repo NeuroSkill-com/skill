@@ -158,26 +158,27 @@ fn save_meta(path: &Path, meta: &SyncMeta) {
     }
 }
 
-fn download(url: &str) -> Result<Vec<u8>, String> {
+fn download(url: &str) -> anyhow::Result<Vec<u8>> {
     let resp = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(60))
         .redirects(5)
         .build()
         .get(url)
         .call()
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let mut buf = Vec::new();
     resp.into_reader()
         .read_to_end(&mut buf)
-        .map_err(|e: std::io::Error| e.to_string())?;
+        ?;
     Ok(buf)
 }
 
-fn extract_tarball(data: &[u8], dest: &Path) -> Result<(), String> {
+fn extract_tarball(data: &[u8], dest: &Path) -> anyhow::Result<()> {
     let gz = flate2::read::GzDecoder::new(data);
     let mut archive = tar::Archive::new(gz);
-    archive.unpack(dest).map_err(|e| e.to_string())
+    archive.unpack(dest)?;
+    Ok(())
 }
 
 fn find_single_child_dir(parent: &Path) -> Option<PathBuf> {

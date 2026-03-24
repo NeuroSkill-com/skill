@@ -317,7 +317,7 @@ pub fn umap_compute_inner(
     b_start: u64,
     b_end: u64,
     on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
-) -> Result<serde_json::Value, String> {
+) -> anyhow::Result<serde_json::Value> {
     // ── Check cache first ────────────────────────────────────────────────
     let cache_path = umap_cache_path(skill_dir, a_start, a_end, b_start, b_end);
     if let Some(cached) = umap_cache_load(&cache_path) {
@@ -418,7 +418,7 @@ pub fn umap_compute_inner(
                 "unknown panic".to_string()
             };
             eprintln!("[umap] UMAP fit panicked: {msg}");
-            return Err(format!("UMAP projection failed: {msg}"));
+            anyhow::bail!("UMAP projection failed: {msg}")
         }
     };
 

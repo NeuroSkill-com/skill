@@ -149,6 +149,7 @@ pub(crate) fn enqueue_umap_compare(
             });
         });
         ws_commands::umap_compute_inner(&sd, a_start_utc, a_end_utc, b_start_utc, b_end_utc, Some(cb))
+            .map_err(|e| e.to_string())
     })
 }
 

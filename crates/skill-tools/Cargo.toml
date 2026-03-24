@@ -10,6 +10,7 @@ default   = ["headless"]
 headless  = ["dep:skill-headless"]
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-headless  = { path = "../skill-headless", optional = true }
 serde       = { version = "1", features = ["derive"] }

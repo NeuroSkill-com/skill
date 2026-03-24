@@ -167,7 +167,7 @@ async fn chat_completions(
                 })).into_response()
             }
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
     }
 }
 
@@ -234,7 +234,7 @@ async fn embeddings(
             })).collect();
             Json(json!({"object":"list","data":data,"model":state.model_name})).into_response()
         }
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response(),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
         Err(_)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"actor died"}))).into_response(),
     }
 }
@@ -278,7 +278,7 @@ async fn stream_chat_response(
                     return;
                 }
                 InferToken::Error(e) => {
-                    let data = serde_json::to_string(&json!({"error":e})).unwrap_or_default();
+                    let data = serde_json::to_string(&json!({"error": e.to_string()})).unwrap_or_default();
                     yield Ok(sse::Event::default().data(data));
                     return;
                 }
@@ -312,7 +312,7 @@ async fn collect_chat_response(
                 break;
             }
             InferToken::Error(e) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
             }
         }
     }
@@ -364,7 +364,7 @@ async fn stream_completion_response(
                 }
                 InferToken::Error(e) => {
                     yield Ok(sse::Event::default().data(
-                        serde_json::to_string(&json!({"error":e})).unwrap_or_default()
+                        serde_json::to_string(&json!({"error": e.to_string()})).unwrap_or_default()
                     ));
                     return;
                 }
@@ -391,7 +391,7 @@ async fn collect_completion_response(
             InferToken::Delta(t)                   => text.push_str(&t),
             InferToken::Done { finish_reason: fr, .. } => { finish_reason = fr; break; }
             InferToken::Error(e)                   => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
             }
         }
     }

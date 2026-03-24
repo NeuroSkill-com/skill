@@ -453,7 +453,7 @@ pub fn list_sessions_for_day(
 }
 
 /// Delete a session's CSV + JSON sidecar + metrics + IMU cache files.
-pub fn delete_session(csv_path: &str) -> Result<(), String> {
+pub fn delete_session(csv_path: &str) -> anyhow::Result<()> {
     let csv = std::path::PathBuf::from(csv_path);
     let json = csv.with_extension("json");
     let ppg  = ppg_csv_path(&csv);
@@ -461,11 +461,11 @@ pub fn delete_session(csv_path: &str) -> Result<(), String> {
     let imu  = skill_data::session_csv::imu_csv_path(&csv);
     let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
     let cache = csv.with_file_name(format!("{stem}_metrics_cache.json"));
-    if csv.exists()   { std::fs::remove_file(&csv).map_err(|e| e.to_string())?; }
-    if json.exists()  { std::fs::remove_file(&json).map_err(|e| e.to_string())?; }
-    if ppg.exists()   { std::fs::remove_file(&ppg).map_err(|e| e.to_string())?; }
-    if met.exists()   { std::fs::remove_file(&met).map_err(|e| e.to_string())?; }
-    if imu.exists()   { std::fs::remove_file(&imu).map_err(|e| e.to_string())?; }
+    if csv.exists()   { std::fs::remove_file(&csv)?; }
+    if json.exists()  { std::fs::remove_file(&json)?; }
+    if ppg.exists()   { std::fs::remove_file(&ppg)?; }
+    if met.exists()   { std::fs::remove_file(&met)?; }
+    if imu.exists()   { std::fs::remove_file(&imu)?; }
     if cache.exists() { let _ = std::fs::remove_file(&cache); }
     // Also try to delete Parquet variants.
     for suffix in ["", "_ppg", "_metrics", "_imu"] {

@@ -24,6 +24,7 @@ use parquet::file::properties::WriterProperties;
 use crate::ppg_analysis::PpgMetrics;
 use crate::session_csv::{ppg_csv_path, metrics_csv_path, PPG_SAMPLE_RATE, build_metrics_header};
 use skill_eeg::eeg_bands::BandSnapshot;
+use anyhow::Context;
 
 // ── Row-group flush threshold ─────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ pub struct ParquetState {
 
 impl ParquetState {
     /// Open a new Parquet EEG file with the given channel labels.
-    pub fn open_with_labels(csv_path: &Path, labels: &[&str]) -> Result<Self, String> {
+    pub fn open_with_labels(csv_path: &Path, labels: &[&str]) -> anyhow::Result<Self> {
         let pq_path = eeg_parquet_path(csv_path);
         let n = labels.len();
 
@@ -122,9 +123,9 @@ impl ParquetState {
         let eeg_schema = Arc::new(Schema::new(fields));
 
         let file = std::fs::File::create(&pq_path)
-            .map_err(|e| format!("parquet create {}: {e}", pq_path.display()))?;
+            .with_context(|| format!("parquet create {}", pq_path.display()))?;
         let eeg_wtr = ArrowWriter::try_new(file, eeg_schema.clone(), Some(writer_props()))
-            .map_err(|e| format!("parquet writer: {e}"))?;
+            .context("parquet writer")?;
 
         // PPG schema
         let ppg_fields = vec![

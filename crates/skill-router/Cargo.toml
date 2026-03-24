@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "WebSocket/HTTP command routing, UMAP projection, embedding loaders, EEG metric rounding — extracted workspace crate"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-commands  = { path = "../skill-commands" }
 skill-data      = { path = "../skill-data" }

@@ -554,7 +554,7 @@ pub fn set_autostart_enabled(
         .as_deref()
         .unwrap_or("skill")
         .to_lowercase();
-    autostart::set_enabled(&name, enabled)
+    autostart::set_enabled(&name, enabled).map_err(|e| e.to_string())
 }
 
 // ── Update-check interval ──────────────────────────────────────────────────────

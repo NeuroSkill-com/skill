@@ -22,6 +22,7 @@
 //! To add a new model or change a description, **only edit `llm_catalog.json`**
 //! — no Rust code changes are required.
 
+use anyhow::Context;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -579,7 +580,7 @@ pub fn download_file(
     filename:   &str,
     progress:   &Arc<Mutex<DownloadProgress>>,
     size_bytes: u64,
-) -> Result<PathBuf, String> {
+) -> anyhow::Result<PathBuf> {
     use std::io::{Read, Write};
 
     // ── 0. Initial state ──────────────────────────────────────────────────────
@@ -591,11 +592,11 @@ pub fn download_file(
             if p.pause_requested {
                 p.state      = DownloadState::Paused;
                 p.status_msg = Some("Paused.".into());
-                return Err("paused".into());
+                anyhow::bail!("paused")
             }
             p.state      = DownloadState::Cancelled;
             p.status_msg = Some("Cancelled.".into());
-            return Err("cancelled".into());
+            anyhow::bail!("cancelled")
         }
         p.state      = DownloadState::Downloading;
         p.status_msg = Some(format!("Connecting to HuggingFace ({repo_id})…"));
@@ -623,7 +624,7 @@ pub fn download_file(
     //       {commit}/
     //         {filename}  ← symlink (Unix) / hardlink (Windows) → ../../blobs/{sha256}
     let (model_dir, blobs_dir, refs_dir) = skill_data::util::hf_ensure_dirs(repo_id)
-        .map_err(|e| format!("create HF cache dirs: {e}"))?;
+        .context("create HF cache dirs")?;
 
     // ── 3. Build HTTP agents ──────────────────────────────────────────────────
     // Separate agents for metadata (short timeout) and download (long timeout).
@@ -668,11 +669,11 @@ pub fn download_file(
     let api_resp = auth(meta_agent.get(&api_url))
         .set("User-Agent", "skill-app/1.0")
         .call()
-        .map_err(|e| format!("HF metadata API error: {e}"))?;
+        .context("HF metadata API error")?;
 
     let info: serde_json::Value = api_resp
         .into_json()
-        .map_err(|e| format!("HF metadata JSON parse: {e}"))?;
+        .context("HF metadata JSON parse")?;
 
     let commit_sha: String = info["sha"]
         .as_str()
@@ -685,7 +686,7 @@ pub fn download_file(
         .and_then(|siblings| {
             siblings.iter().find(|e| e["rfilename"].as_str() == Some(filename))
         })
-        .ok_or_else(|| format!("{filename}: not listed in {repo_id} manifest"))?;
+        .ok_or_else(|| anyhow::anyhow!("{filename}: not listed in {repo_id} manifest"))?;
 
     // LFS sha256 → the blob's content hash, used as the blob filename on disk.
     // hf_hub derives this from the `x-linked-etag` response header (after
@@ -694,7 +695,7 @@ pub fn download_file(
         .as_str()
         .map(|s| s.trim_start_matches("sha256:").to_string())
         .ok_or_else(|| {
-            format!("{filename}: LFS sha256 absent in manifest — is this a non-LFS file?")
+            anyhow::anyhow!("{filename}: LFS sha256 absent in manifest — is this a non-LFS file?")
         })?;
 
     let remote_size: u64 = file_meta["lfs"]["size"]
@@ -752,16 +753,16 @@ pub fn download_file(
     let resp = get.call().map_err(|e| match e {
         ureq::Error::Status(code, r) => {
             let body = r.into_string().unwrap_or_default();
-            format!("HTTP {code} for {filename}: {body}")
+            anyhow::anyhow!("HTTP {code} for {filename}: {body}")
         }
-        other => format!("download error: {other}"),
+        other => anyhow::anyhow!("download error: {other}"),
     })?;
 
     let http_status = resp.status();
     // 200 = server ignored Range and sent full content → restart from byte 0.
     // 206 = server honoured Range → append to existing .incomplete file.
     if http_status != 200 && http_status != 206 {
-        return Err(format!("unexpected HTTP {http_status} for {filename}"));
+        anyhow::bail!("unexpected HTTP {http_status} for {filename}")
     }
     let writing_from: u64 = if http_status == 206 { resume_from } else { 0 };
 
@@ -772,7 +773,7 @@ pub fn download_file(
         .append(writing_from > 0)   // append only when the server honoured Range
         .truncate(writing_from == 0) // full restart: discard any stale partial data
         .open(&incomplete_path)
-        .map_err(|e| format!("open .incomplete file: {e}"))?;
+        .context("open .incomplete file")?;
 
     // ── 9. Stream response bytes to disk ──────────────────────────────────────
     let mut reader  = resp.into_reader();
@@ -784,11 +785,11 @@ pub fn download_file(
     loop {
         let n = reader
             .read(&mut buf)
-            .map_err(|e| format!("read error while downloading {filename}: {e}"))?;
+            .with_context(|| format!("read error while downloading {filename}"))?;
         if n == 0 { break; }
 
         file.write_all(&buf[..n])
-            .map_err(|e| format!("write error for {filename}: {e}"))?;
+            .with_context(|| format!("write error for {filename}"))?;
         written += n as u64;
 
         // Update progress and honour cancellation inside the same lock acquisition
@@ -805,11 +806,11 @@ pub fn download_file(
             if p.pause_requested {
                 p.state      = DownloadState::Paused;
                 p.status_msg = Some("Paused — resume to continue.".into());
-                return Err("paused".into());
+                anyhow::bail!("paused")
             }
             p.state      = DownloadState::Cancelled;
             p.status_msg = Some("Cancelled — will resume next time.".into());
-            return Err("cancelled".into());
+            anyhow::bail!("cancelled")
         }
     }
     drop(file); // explicit flush + close before rename
@@ -817,10 +818,10 @@ pub fn download_file(
     // ── 10. Sanity-check downloaded size ─────────────────────────────────────
     let final_size = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
     if final_size < remote_size {
-        return Err(format!(
+        anyhow::bail!(
             "Incomplete download for {filename}: \
              received {final_size} of {remote_size} bytes"
-        ));
+        )
     }
 
     // ── 11. Atomic promotion: .incomplete → blob ──────────────────────────────
@@ -828,7 +829,7 @@ pub fn download_file(
     // On the same filesystem (guaranteed: both paths are inside the HF Hub
     // cache directory) this is an O(1) atomic rename — no data is copied.
     std::fs::rename(&incomplete_path, &blob_path)
-        .map_err(|e| format!("rename .incomplete → blob: {e}"))?;
+        .context("rename .incomplete → blob")?;
 
     // ── 12. Register in the HF Hub cache structure ────────────────────────────
     let final_path =
@@ -856,7 +857,7 @@ pub fn download_file(
 pub fn download_model(
     entry:    &LlmModelEntry,
     progress: &Arc<Mutex<DownloadProgress>>,
-) -> Result<PathBuf, String> {
+) -> anyhow::Result<PathBuf> {
     let filenames: Vec<&str> = entry.all_filenames().collect();
     let total_shards = filenames.len();
 
@@ -885,9 +886,9 @@ pub fn download_model(
             let p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if p.cancelled {
                 if p.pause_requested {
-                    return Err("paused".into());
+                    anyhow::bail!("paused")
                 }
-                return Err("cancelled".into());
+                anyhow::bail!("cancelled")
             }
         }
 
@@ -960,15 +961,16 @@ pub fn download_model(
             Err(e) => {
                 // Propagate the error state to the overall progress.
                 let mut op = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                if e == "paused" {
+                let msg = e.to_string();
+                if msg == "paused" {
                     op.state = DownloadState::Paused;
                     op.status_msg = Some(format!("Paused at shard {}/{}.", i + 1, total_shards));
-                } else if e == "cancelled" {
+                } else if msg == "cancelled" {
                     op.state = DownloadState::Cancelled;
                     op.status_msg = Some("Cancelled.".into());
                 } else {
                     op.state = DownloadState::Failed;
-                    op.status_msg = Some(format!("Shard {}/{} failed: {}", i + 1, total_shards, e));
+                    op.status_msg = Some(format!("Shard {}/{} failed: {}", i + 1, total_shards, msg));
                 }
                 return Err(e);
             }
@@ -983,7 +985,7 @@ pub fn download_model(
         p.progress   = 1.0;
     }
 
-    first_path.ok_or_else(|| "no shard files to download".into())
+    first_path.ok_or_else(|| anyhow::anyhow!("no shard files to download"))
 }
 
 /// Register a completed blob in the HF Hub snapshot directory structure so that
@@ -1002,10 +1004,10 @@ fn register_snapshot(
     commit_sha: &str,
     filename:   &str,
     blob_path:  &Path,
-) -> Result<PathBuf, String> {
+) -> anyhow::Result<PathBuf> {
     // Write refs/main so hf_hub can resolve the snapshot directory.
     std::fs::write(refs_dir.join("main"), commit_sha)
-        .map_err(|e| format!("write refs/main: {e}"))?;
+        .context("write refs/main")?;
 
     // Build the snapshot directory, handling filenames that contain subdirectories
     // (e.g. "subfolder/model.gguf" — uncommon but valid in HF repos).
@@ -1015,7 +1017,7 @@ fn register_snapshot(
     std::fs::create_dir_all(
         snapshot_link.parent().unwrap_or(&snapshot_dir),
     )
-    .map_err(|e| format!("create snapshot dir: {e}"))?;
+    .context("create snapshot dir")?;
 
     // Remove a stale link left by a previous (possibly failed) registration.
     if snapshot_link.exists() || snapshot_link.symlink_metadata().is_ok() {
@@ -1042,16 +1044,16 @@ fn register_snapshot(
         let parents = "../".repeat(depth + 1); // +1 for the commit_sha dir level
         let relative_target = format!("{parents}blobs/{blob_name}");
         std::os::unix::fs::symlink(&relative_target, &snapshot_link)
-            .map_err(|e| format!("create symlink: {e}"))?;
+            .context("create symlink")?;
     }
 
     #[cfg(windows)]
     std::fs::hard_link(blob_path, &snapshot_link)
-        .map_err(|e| format!("create hardlink: {e}"))?;
+        .context("create hardlink")?;
 
     #[cfg(not(any(unix, windows)))]
     std::fs::copy(blob_path, &snapshot_link)
-        .map_err(|e| format!("copy blob to snapshot: {e}"))?;
+        .context("copy blob to snapshot")?;
 
     Ok(snapshot_link)
 }

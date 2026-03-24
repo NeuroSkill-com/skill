@@ -1,0 +1,3 @@
+### Refactor
+
+- **Adopt `anyhow` across all workspace crates**: Replaced `Result<T, String>` error handling with `anyhow::Result<T>` throughout the crate layer. `map_err(|e| format!(...))` chains are now `.context()` / `.with_context()`, and `Err(format!(...))` becomes `anyhow::bail!(...)`. The Tauri command boundary in `src-tauri/` converts back to `String` via `.map_err(|e| e.to_string())`. `skill-jobs` retains `Result<Value, String>` for stored/cloned job results. `skill-headless` retains its `HeadlessError` enum. A migration script (`scripts/adopt_anyhow.py`) automates the bulk of the conversion.

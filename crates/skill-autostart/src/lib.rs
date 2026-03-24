@@ -17,6 +17,8 @@
 //! The plist / desktop file / registry key is always named after `app_name`
 //! (lowercased) so multiple Tauri apps on the same machine can coexist.
 
+use anyhow::Context;
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Returns `true` if launch-at-login is currently registered for this app.
@@ -34,10 +36,10 @@ pub fn is_enabled(app_name: &str) -> bool {
 /// Enable or disable launch-at-login.
 ///
 /// Derives the executable path from [`std::env::current_exe`].
-pub fn set_enabled(app_name: &str, enabled: bool) -> Result<(), String> {
+pub fn set_enabled(app_name: &str, enabled: bool) -> anyhow::Result<()> {
     if enabled {
         let exe = std::env::current_exe()
-            .map_err(|e| format!("cannot locate executable: {e}"))?
+            .context("cannot locate executable")?
             .to_string_lossy()
             .to_string();
         enable(app_name, &exe)
@@ -48,7 +50,7 @@ pub fn set_enabled(app_name: &str, enabled: bool) -> Result<(), String> {
 
 // ── Platform dispatch ─────────────────────────────────────────────────────────
 
-fn enable(app_name: &str, exe: &str) -> Result<(), String> {
+fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     return macos::enable(app_name, exe);
     #[cfg(target_os = "linux")]
@@ -56,10 +58,10 @@ fn enable(app_name: &str, exe: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     return windows::enable(app_name, exe);
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { let _ = (app_name, exe); Err("autostart not supported on this platform".into()) }
+    { let _ = (app_name, exe); Err(anyhow::anyhow!("autostart not supported on this platform")) }
 }
 
-fn disable(app_name: &str) -> Result<(), String> {
+fn disable(app_name: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     return macos::disable(app_name);
     #[cfg(target_os = "linux")]
@@ -67,7 +69,7 @@ fn disable(app_name: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     return windows::disable(app_name);
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { let _ = app_name; Err("autostart not supported on this platform".into()) }
+    { let _ = app_name; Err(anyhow::anyhow!("autostart not supported on this platform")) }
 }
 
 // ── macOS — LaunchAgent plist ─────────────────────────────────────────────────
@@ -75,6 +77,7 @@ fn disable(app_name: &str) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 mod macos {
     use std::path::PathBuf;
+    use anyhow::Context;
     use skill_constants::AUTOSTART_PLIST_LABEL_PREFIX;
 
     fn plist_path(app_name: &str) -> Option<PathBuf> {
@@ -89,8 +92,8 @@ mod macos {
         plist_path(app_name).map(|p| p.exists()).unwrap_or(false)
     }
 
-    pub fn enable(app_name: &str, exe: &str) -> Result<(), String> {
-        let path = plist_path(app_name).ok_or_else(|| "HOME not set".to_string())?;
+    pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
+        let path = plist_path(app_name).ok_or_else(|| anyhow::anyhow!("HOME not set"))?;
         if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
         let label = format!("{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem");
         let plist = format!(
@@ -116,14 +119,14 @@ mod macos {
 "#
         );
         std::fs::write(&path, plist)
-            .map_err(|e| format!("failed to write LaunchAgent: {e}"))
+            .context("failed to write LaunchAgent")
     }
 
-    pub fn disable(app_name: &str) -> Result<(), String> {
-        let path = plist_path(app_name).ok_or_else(|| "HOME not set".to_string())?;
+    pub fn disable(app_name: &str) -> anyhow::Result<()> {
+        let path = plist_path(app_name).ok_or_else(|| anyhow::anyhow!("HOME not set"))?;
         if path.exists() {
             std::fs::remove_file(&path)
-                .map_err(|e| format!("failed to remove LaunchAgent: {e}"))?;
+                .context("failed to remove LaunchAgent")?;
         }
         Ok(())
     }
@@ -134,6 +137,7 @@ mod macos {
 #[cfg(target_os = "linux")]
 mod linux {
     use std::path::PathBuf;
+    use anyhow::Context;
 
     fn desktop_path(app_name: &str) -> PathBuf {
         let base = std::env::var("XDG_CONFIG_HOME")
@@ -150,7 +154,7 @@ mod linux {
         desktop_path(app_name).exists()
     }
 
-    pub fn enable(app_name: &str, exe: &str) -> Result<(), String> {
+    pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let path = desktop_path(app_name);
         if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
         // Capitalise first letter for display name
@@ -166,14 +170,14 @@ mod linux {
              Hidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\n"
         );
         std::fs::write(&path, desktop)
-            .map_err(|e| format!("failed to write autostart .desktop: {e}"))
+            .context("failed to write autostart .desktop")
     }
 
-    pub fn disable(app_name: &str) -> Result<(), String> {
+    pub fn disable(app_name: &str) -> anyhow::Result<()> {
         let path = desktop_path(app_name);
         if path.exists() {
             std::fs::remove_file(&path)
-                .map_err(|e| format!("failed to remove autostart .desktop: {e}"))?;
+                .context("failed to remove autostart .desktop")?;
         }
         Ok(())
     }
@@ -235,6 +239,8 @@ mod tests {
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use anyhow::Context;
+
     const REG_PATH: &str =
         r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -246,20 +252,20 @@ mod windows {
             .unwrap_or(false)
     }
 
-    pub fn enable(app_name: &str, exe: &str) -> Result<(), String> {
+    pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let out = std::process::Command::new("reg")
             .args(["add", REG_PATH, "/v", app_name,
                    "/t", "REG_SZ", "/d", exe, "/f"])
             .output()
-            .map_err(|e| format!("reg add failed: {e}"))?;
+            .context("reg add failed")?;
         if out.status.success() {
             Ok(())
         } else {
-            Err(String::from_utf8_lossy(&out.stderr).into_owned())
+            anyhow::bail!("{}", String::from_utf8_lossy(&out.stderr))
         }
     }
 
-    pub fn disable(app_name: &str) -> Result<(), String> {
+    pub fn disable(app_name: &str) -> anyhow::Result<()> {
         // Ignore "not found" errors — the key may never have been written.
         let _ = std::process::Command::new("reg")
             .args(["delete", REG_PATH, "/v", app_name, "/f"])

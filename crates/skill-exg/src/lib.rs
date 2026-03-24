@@ -14,6 +14,7 @@ use skill_constants::{ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE, LUNA_CONFIG_FILE};
 use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
+use anyhow::Context;
 
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
@@ -144,13 +145,13 @@ pub fn register_hf_snapshot(
     commit_sha: &str,
     filename:   &str,
     blob_path:  &Path,
-) -> Result<PathBuf, String> {
+) -> anyhow::Result<PathBuf> {
     std::fs::write(refs_dir.join("main"), commit_sha)
-        .map_err(|e| format!("write refs/main: {e}"))?;
+        .context("write refs/main")?;
 
     let snapshot_dir  = model_dir.join("snapshots").join(commit_sha);
     std::fs::create_dir_all(&snapshot_dir)
-        .map_err(|e| format!("create snapshot dir: {e}"))?;
+        .context("create snapshot dir")?;
 
     let snapshot_link = snapshot_dir.join(filename);
     if snapshot_link.exists() || snapshot_link.symlink_metadata().is_ok() {
@@ -164,16 +165,16 @@ pub fn register_hf_snapshot(
         let parents   = "../".repeat(depth + 1);
         let rel_target = format!("{parents}blobs/{blob_name}");
         std::os::unix::fs::symlink(&rel_target, &snapshot_link)
-            .map_err(|e| format!("create symlink: {e}"))?;
+            .context("create symlink")?;
     }
 
     #[cfg(windows)]
     std::fs::hard_link(blob_path, &snapshot_link)
-        .map_err(|e| format!("create hardlink: {e}"))?;
+        .context("create hardlink")?;
 
     #[cfg(not(any(unix, windows)))]
     std::fs::copy(blob_path, &snapshot_link)
-        .map_err(|e| format!("copy blob to snapshot: {e}"))?;
+        .context("copy blob to snapshot")?;
 
     Ok(snapshot_link)
 }

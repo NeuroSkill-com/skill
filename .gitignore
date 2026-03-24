@@ -24,6 +24,7 @@ src-tauri/keys/.env.keys
 
 rust_out
 TODO.md
+AGENTS.md
 # docs/screenshots/gifs/*.gif
 
 .gitrub_activity

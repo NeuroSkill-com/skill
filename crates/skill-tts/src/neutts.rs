@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 
 use crate::{play_f32_audio, skill_dir, init_espeak_data_path};
+use anyhow::Context;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ pub enum Cmd {
         ref_wav_path:  String,
         ref_text:      String,
         cb:   Box<dyn FnMut(neutts::download::LoadProgress) + Send + 'static>,
-        done: oneshot::Sender<Result<(), String>>,
+        done: oneshot::Sender<anyhow::Result<()>>,
     },
     /// `voice_override`: an optional preset name that overrides the reference
     /// for this single utterance only (without mutating stored state).
@@ -186,7 +187,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                         Err(e) => {
                             LOADING.store(false, Ordering::Relaxed);
-                            done.send(Err(format!("neutts backbone load failed: {e}"))).ok();
+                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}"))).ok();
                             continue;
                         }
                     }
@@ -194,7 +195,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
                 let Some(model_ref) = model.as_ref() else {
                     LOADING.store(false, Ordering::Relaxed);
-                    done.send(Err("NeuTTS model not loaded".into())).ok();
+                    done.send(Err(anyhow::anyhow!("NeuTTS model not loaded"))).ok();
                     continue;
                 };
                 let (codes, txt, vkey) = load_ref_codes(
@@ -319,7 +320,7 @@ fn load<F>(
     backbone_repo: &str,
     gguf_file:     Option<&str>,
     mut on_progress: F,
-) -> Result<neutts::NeuTTS, String>
+) -> anyhow::Result<neutts::NeuTTS>
 where
     F: FnMut(neutts::download::LoadProgress),
 {
@@ -332,7 +333,7 @@ where
     let hf_cache = Cache::from_env();
     let api      = HfApiBuilder::new()
         .build()
-        .map_err(|e| format!("Failed to init HF client: {e}"))?;
+        .context("Failed to init HF client")?;
 
     // ── Step 1/3: backbone GGUF → standard HF cache ───────────────────────────
     on_progress(LoadProgress::Fetching {
@@ -346,11 +347,11 @@ where
         Some(f) => f.to_string(),
         None => {
             let info = api.model(backbone_repo.to_string()).info()
-                .map_err(|e| format!("repo info for '{backbone_repo}': {e}"))?;
+                .with_context(|| format!("repo info for '{backbone_repo}'"))?;
             info.siblings.into_iter()
                 .map(|s| s.rfilename)
                 .find(|f| f.ends_with(".gguf"))
-                .ok_or_else(|| format!("no .gguf file in '{backbone_repo}'"))?
+                .ok_or_else(|| anyhow::anyhow!("no .gguf file in '{backbone_repo}'"))?
         }
     };
 
@@ -390,7 +391,7 @@ where
             component: format!("converting {CODEC_SOURCE_FILE} → {CODEC_DECODER_FILE}"),
         });
         convert_neucodec_checkpoint(&bin_path, &decoder_dest, 16, CODEC_DECODER_REPO)
-            .map_err(|e| format!("checkpoint conversion failed: {e}"))?;
+            .context("checkpoint conversion failed")?;
         decoder_dest
     };
 
@@ -404,7 +405,7 @@ where
         .unwrap_or("en-us")
         .to_string();
     neutts::NeuTTS::load_with_decoder(&backbone_path, &decoder_path, &language)
-        .map_err(|e| format!("failed to load NeuTTS: {e}"))
+        .context("failed to load NeuTTS")
 }
 
 /// HuggingFace download with byte-level progress, checking `cache` first.
@@ -414,7 +415,7 @@ fn hf_dl<F: FnMut(u64, u64)>(
     repo_id:  &str,
     filename: &str,
     mut on_bytes: F,
-) -> Result<PathBuf, String> {
+) -> anyhow::Result<PathBuf> {
     use hf_hub::api::Progress;
 
     let cache_repo = cache.repo(Repo::model(repo_id.to_string()));
@@ -430,7 +431,7 @@ fn hf_dl<F: FnMut(u64, u64)>(
     }
     api.model(repo_id.to_string())
         .download_with_progress(filename, Prog { cb: on_bytes, done: 0, total: 0 })
-        .map_err(|e| format!("download '{filename}' from '{repo_id}': {e}"))
+        .with_context(|| format!("download '{filename}' from '{repo_id}'"))
 }
 
 // ─── Reference code loading ───────────────────────────────────────────────────
@@ -507,12 +508,12 @@ fn load_ref_codes(
 
 fn synthesize(
     model: &neutts::NeuTTS, text: &str, ref_codes: &[i32], ref_text: &str,
-) -> Result<Vec<f32>, String> {
+) -> anyhow::Result<Vec<f32>> {
     let t0    = std::time::Instant::now();
     let audio = model.infer(text, ref_codes, ref_text)
-        .map_err(|e| format!("neutts synthesis failed for {text:?}: {e}"))?;
+        .with_context(|| format!("neutts synthesis failed for {text:?}"))?;
     if audio.is_empty() {
-        return Err(format!("synthesis returned no samples for {text:?}"));
+        anyhow::bail!("synthesis returned no samples for {text:?}")
     }
     tts_log!("neutts",
         "synthesised {} samples ({:.2} s) in {} ms \u{2014} text={text:?}",

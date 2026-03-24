@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Skill markdown discovery, parsing, and prompt injection for NeuroSkill LLM chat"
 
 [dependencies]
+anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"

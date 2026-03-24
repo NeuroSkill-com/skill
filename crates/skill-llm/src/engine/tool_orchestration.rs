@@ -18,6 +18,7 @@ use super::images::extract_images_from_messages;
 use skill_tools::defs::{enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled};
 use skill_tools::exec::execute_builtin_tool_call;
 use skill_tools::context::trim_messages_to_fit;
+use anyhow::Context;
 
 
 // ── Stream sanitizer ──────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ impl ToolCallStreamSanitizer {
 async fn collect_infer_output<F>(
     mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
     mut on_visible_delta: F,
-) -> Result<(String, String, usize, usize, usize), String>
+) -> anyhow::Result<(String, String, usize, usize, usize)>
 where
     F: FnMut(&str),
 {
@@ -80,7 +81,7 @@ where
                 n_ctx = nc;
                 break;
             }
-            InferToken::Error(e) => return Err(e),
+            InferToken::Error(e) => return Err(anyhow::anyhow!("{e}")),
         }
     }
 
@@ -121,7 +122,7 @@ pub async fn run_chat_with_builtin_tools<F, G>(
     mut tools_from_req: Vec<tools::Tool>,
     mut on_visible_delta: F,
     mut on_tool_event: G,
-) -> Result<(String, String, usize, usize, usize), String>
+) -> anyhow::Result<(String, String, usize, usize, usize)>
 where
     F: FnMut(&str),
     G: FnMut(ToolEvent),
@@ -201,7 +202,7 @@ where
                 params: round_params,
                 token_tx: tok_tx,
             })
-            .map_err(|_| "LLM actor has exited".to_string())?;
+            .context("LLM actor has exited")?;
 
         let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) = collect_infer_output(tok_rx, |delta| {
             on_visible_delta(delta);
@@ -398,7 +399,7 @@ where
         return Ok((fallback, "stop".into(), 0, 0, n_ctx));
     }
 
-    Err(format!("tool-calling round limit reached ({max_rounds} rounds). You can increase this in Settings → LLM → Tools → Max rounds."))
+    Err(anyhow::anyhow!("tool-calling round limit reached ({max_rounds} rounds). You can increase this in Settings → LLM → Tools → Max rounds."))
 }
 
 // ── Prior-round condensation ──────────────────────────────────────────────────
@@ -546,7 +547,7 @@ fn validate_and_prepare(
     if let Some(tool_def) = tool_defs.get(&tc.function.name) {
         match tools::validate_tool_arguments(tool_def, &args) {
             Ok(validated) => Ok(validated),
-            Err(err_msg) => Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg })),
+            Err(err_msg) => Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg.to_string() })),
         }
     } else {
         Ok(args)

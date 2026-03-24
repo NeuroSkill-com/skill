@@ -786,7 +786,7 @@ async fn llm_chat_post(
     let mut tok_rx = match server.chat(messages, images, params) {
         Ok(rx)  => rx,
         Err(e)  => {
-            let body = json!({ "command": "llm_chat", "ok": false, "error": e });
+            let body = json!({ "command": "llm_chat", "ok": false, "error": e.to_string() });
             state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
             return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
         }
@@ -1112,7 +1112,7 @@ async fn handle_llm_chat_ws(
             state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
         }
         Ok(Err(e)) => {
-            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
+            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e.to_string()}));
             state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
         }
         Err(e) => {

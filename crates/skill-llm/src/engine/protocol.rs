@@ -31,7 +31,7 @@ pub enum InferRequest {
     /// Compute mean-pooled embeddings for a list of strings.
     Embed {
         inputs:    Vec<String>,
-        result_tx: tokio::sync::oneshot::Sender<Result<Vec<Vec<f32>>, String>>,
+        result_tx: tokio::sync::oneshot::Sender<anyhow::Result<Vec<Vec<f32>>>>,
     },
     /// Embed a single image via the loaded mmproj vision projector.
     /// Used by the screenshot worker for visual-similarity embeddings.

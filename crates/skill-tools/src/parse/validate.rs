@@ -5,6 +5,7 @@
 use serde_json::Value;
 use super::types::Tool;
 use super::coerce::coerce_value;
+use anyhow::Context;
 
 /// Validate tool-call arguments against the tool's JSON Schema `parameters`.
 ///
@@ -17,7 +18,7 @@ use super::coerce::coerce_value;
 /// `"3"` instead of `3`, or a bare string instead of an object.  The coercion
 /// step normalises these so the downstream validation and execution always see
 /// correct types.
-pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, String> {
+pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> anyhow::Result<Value> {
     let Some(ref schema) = tool.function.parameters else {
         // No schema defined — accept any arguments.
         return Ok(args.clone());
@@ -27,7 +28,7 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Strin
     let coerced = coerce_value(args, schema);
 
     let compiled = jsonschema::validator_for(schema)
-        .map_err(|e| format!("Invalid tool schema for \"{}\": {e}", tool.function.name))?;
+        .with_context(|| format!("Invalid tool schema for \"{}\"", tool.function.name))?;
 
     let errors: Vec<String> = compiled
         .iter_errors(&coerced)
@@ -43,12 +44,12 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Strin
         .collect();
 
     if !errors.is_empty() {
-        return Err(format!(
+        anyhow::bail!(
             "Validation failed for tool \"{}\":\n{}\n\nReceived arguments:\n{}",
             tool.function.name,
             errors.join("\n"),
             serde_json::to_string_pretty(&coerced).unwrap_or_default()
-        ));
+        )
     }
 
     Ok(coerced)
