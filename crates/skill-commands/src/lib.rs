@@ -1093,3 +1093,106 @@ pub fn file_ts(secs: u64) -> String {
     let yr   = if mo <= 2 { y + 1 } else { y };
     format!("{yr:04}{mo:02}{d:02}_{h:02}{m:02}{s:02}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── query_slug ────────────────────────────────────────────────────────
+
+    #[test]
+    fn query_slug_basic() {
+        assert_eq!(query_slug("Hello World", 50), "hello_world");
+    }
+
+    #[test]
+    fn query_slug_special_chars_stripped() {
+        assert_eq!(query_slug("focus!@#$%^&*()", 50), "focus");
+    }
+
+    #[test]
+    fn query_slug_max_length() {
+        // Takes first 10 chars "this is a ", trims, then replaces spaces → "this_is_a"
+        assert_eq!(query_slug("this is a very long query", 10), "this_is_a");
+    }
+
+    #[test]
+    fn query_slug_preserves_hyphens_underscores() {
+        assert_eq!(query_slug("my-cool_query", 50), "my-cool_query");
+    }
+
+    #[test]
+    fn query_slug_empty() {
+        assert_eq!(query_slug("", 50), "");
+    }
+
+    // ── file_ts ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn file_ts_epoch() {
+        // 1970-01-01 00:00:00 UTC
+        assert_eq!(file_ts(0), "19700101_000000");
+    }
+
+    #[test]
+    fn file_ts_known_date() {
+        // 2024-01-15 13:30:45 UTC = 1705325445
+        assert_eq!(file_ts(1705325445), "20240115_133045");
+    }
+
+    #[test]
+    fn file_ts_recent() {
+        // 2026-03-24 12:00:00 UTC = 1774267200
+        let ts = file_ts(1774267200);
+        assert!(ts.starts_with("2026"), "expected 2026, got {ts}");
+    }
+
+    // ── pca_2d ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn pca_2d_empty() {
+        assert!(pca_2d(&[]).is_empty());
+    }
+
+    #[test]
+    fn pca_2d_single_point() {
+        let result = pca_2d(&[vec![1.0, 2.0, 3.0]]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], (0.0, 0.0));
+    }
+
+    #[test]
+    fn pca_2d_output_length_matches_input() {
+        let data = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
+        assert_eq!(pca_2d(&data).len(), 3);
+    }
+
+    #[test]
+    fn pca_2d_points_are_separated() {
+        let data = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
+        let pts = pca_2d(&data);
+        // Not all identical
+        assert!(pts.iter().any(|p| *p != pts[0]));
+    }
+
+    // ── pca_3d ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn pca_3d_output_length_matches_input() {
+        let data = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        assert_eq!(pca_3d(&data).len(), 4);
+    }
+}

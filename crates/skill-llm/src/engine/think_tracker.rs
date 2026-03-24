@@ -74,3 +74,76 @@ impl ThinkTracker {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_think_block_returns_none() {
+        let mut t = ThinkTracker::new(Some(100));
+        assert!(t.feed("Hello world").is_none());
+        assert!(t.feed("No thinking here.").is_none());
+    }
+
+    #[test]
+    fn natural_close_within_budget() {
+        let mut t = ThinkTracker::new(Some(100));
+        assert!(t.feed("<think>").is_none());
+        assert!(t.feed("reasoning...").is_none());
+        assert!(t.feed("</think>").is_none());
+        // After close, further feeds should return None
+        assert!(t.feed("more text").is_none());
+    }
+
+    #[test]
+    fn budget_exceeded_injects_close() {
+        let mut t = ThinkTracker::new(Some(3));
+        assert!(t.feed("<think>").is_none());
+        assert!(t.feed("tok1").is_none()); // count=1
+        assert!(t.feed("tok2").is_none()); // count=2
+        let inject = t.feed("tok3");       // count=3 = budget
+        assert_eq!(inject, Some("\n</think>\n".to_string()));
+        // After forced close, no more injections
+        assert!(t.feed("tok4").is_none());
+    }
+
+    #[test]
+    fn unlimited_budget_never_injects() {
+        let mut t = ThinkTracker::new(None);
+        assert!(t.feed("<think>").is_none());
+        for i in 0..1000 {
+            assert!(t.feed(&format!("tok{i}")).is_none());
+        }
+    }
+
+    #[test]
+    fn split_tags_across_pieces() {
+        let mut t = ThinkTracker::new(Some(5));
+        assert!(t.feed("<thi").is_none());
+        assert!(t.feed("nk>").is_none()); // now inside
+        assert!(t.feed("reasoning").is_none()); // count=1
+        assert!(t.feed("</thi").is_none());     // count=2, partial close
+        assert!(t.feed("nk>").is_none());        // natural close detected
+        // Should be closed now
+        assert!(t.feed("after").is_none());
+    }
+
+    #[test]
+    fn zero_budget_means_no_tracker() {
+        // Budget of None (which is what budget=0 maps to upstream)
+        let mut t = ThinkTracker::new(None);
+        assert!(t.feed("<think>").is_none());
+        assert!(t.feed("tok").is_none());
+    }
+
+    #[test]
+    fn multibyte_chars_dont_panic() {
+        let mut t = ThinkTracker::new(Some(50));
+        assert!(t.feed("<think>").is_none());
+        // Feed lots of CJK chars to exercise the tag_buf drain boundary logic
+        for _ in 0..30 {
+            assert!(t.feed("\u{4e16}\u{754c}\u{4f60}\u{597d}").is_none());
+        }
+    }
+}
