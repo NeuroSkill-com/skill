@@ -40,16 +40,43 @@ tmux new-session -d -s "$SESSION" -c "$DIR" \
       fi
     done
     kill \$DNS_PID 2>/dev/null || true
-    rm -f \"\$MDNS_OUT\"
 
     if [ \$FOUND -eq 0 ]; then
+      rm -f \"\$MDNS_OUT\"
       echo '✗ Timed out waiting for Skill mDNS service.'
       echo 'Press Enter to close.'; read; exit 1
     fi
 
-    echo '✓ Service found — running tests…'
+    echo '✓ Service found — resolving port…'
+
+    # Extract the service instance name from the browse output
+    SVC_NAME=\$(grep 'Add.*_skill._tcp' \"\$MDNS_OUT\" | head -1 | awk -F'   +' '{print \$NF}' | sed 's/^ *//;s/ *\$//')
+    rm -f \"\$MDNS_OUT\"
+
+    # Resolve the service to get the port via dns-sd -L
+    RESOLVE_OUT=\$(mktemp)
+    dns-sd -L \"\$SVC_NAME\" _skill._tcp local > \"\$RESOLVE_OUT\" 2>&1 &
+    RESOLVE_PID=\$!
+    DISCOVERED_PORT=
+    for i in \$(seq 1 15); do
+      PORT_MATCH=\$(grep -o 'port [0-9]*' \"\$RESOLVE_OUT\" 2>/dev/null | head -1 | awk '{print \$2}')
+      if [ -n \"\$PORT_MATCH\" ]; then
+        DISCOVERED_PORT=\$PORT_MATCH
+        break
+      fi
+      sleep 1
+    done
+    kill \$RESOLVE_PID 2>/dev/null || true
+    rm -f \"\$RESOLVE_OUT\"
+
+    if [ -z \"\$DISCOVERED_PORT\" ]; then
+      echo '✗ mDNS service found but could not resolve port.'
+      echo 'Press Enter to close.'; read; exit 1
+    fi
+
+    echo \"✓ Resolved port \$DISCOVERED_PORT — running tests…\"
     sleep 2
-    npx tsx test.ts $TEST_ARGS
+    npx tsx test.ts \$DISCOVERED_PORT $TEST_ARGS
     STATUS=\$?
 
     echo ''
