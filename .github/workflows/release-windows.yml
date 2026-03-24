@@ -545,6 +545,7 @@ jobs:
           # Windows versions.  The Tauri updater's zip crate only supports
           # standard Deflate (method 8); Deflate64 (method 9) causes
           # "unsupported compression method" at update time.
+          Add-Type -AssemblyName System.IO.Compression
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::Open(
             $zipPath,
