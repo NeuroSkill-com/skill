@@ -8,6 +8,10 @@ on:
   # Allow manual re-runs from the Actions tab on any branch.
   workflow_dispatch:
     inputs:
+      run_all_tests:
+        description: "Run ALL crate tests (skip change detection)"
+        type: boolean
+        default: false
       run_llm_e2e:
         description: "Run LLM E2E integration test"
         type: boolean
@@ -148,9 +152,14 @@ jobs:
             BASE=""
           fi
 
-          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+          ALL_CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg -p skill-screenshots"
+
+          if [[ "${{ inputs.run_all_tests }}" == "true" ]]; then
+            # Manual dispatch with run_all_tests — test everything
+            CRATE_FLAGS="$ALL_CRATE_FLAGS"
+          elif [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
             # First push or manual dispatch — test everything
-            CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg -p skill-screenshots"
+            CRATE_FLAGS="$ALL_CRATE_FLAGS"
           else
             CRATE_FLAGS=$(bash scripts/changed-crates.sh "$BASE")
           fi
