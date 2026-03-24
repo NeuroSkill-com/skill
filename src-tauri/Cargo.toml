@@ -324,10 +324,13 @@ dispatch2        = "0.3.1"
 neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "5.11.0" }
-# ONNX Runtime with download-binaries strategy — fetches pre-built onnxruntime
-# shared library at build time on Linux and Windows (no system install needed).
-ort = { version = "=2.0.0-rc.11", default-features = false, features = ["download-binaries"] }
+# ort-download-binaries-native-tls enables both ort/download-binaries and
+# ort/tls-native, which is required: download-binaries alone triggers a
+# compile_error! in ort-sys demanding a TLS feature be selected.
+fastembed = { version = "5.11.0", features = ["ort-download-binaries-native-tls"] }
+# Explicit ort entry — mirrors the features fastembed already activates so
+# our own code can reference ort types directly without a separate TLS fix.
+ort = { version = "=2.0.0-rc.11", default-features = false, features = ["download-binaries", "tls-native"] }
 # llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
 # entry so that when the `llm` feature is active the Vulkan backend is compiled
 # in automatically on Linux and Windows.
