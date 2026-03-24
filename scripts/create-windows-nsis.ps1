@@ -180,6 +180,105 @@ try {
         Write-Warning "  onnxruntime.dll not found in build output — binary may fail to start"
     }
 
+    # ── Bundle VC++ CRT DLLs (app-local deployment) ─────────────────────────
+    # The binary uses dynamic CRT (/MD) because native deps (DirectML, ONNX
+    # Runtime, Vulkan loader) ship as pre-built /MD DLLs.  Bundling the CRT
+    # DLLs alongside skill.exe means users don't need the VC++ Redistributable
+    # pre-installed.  Windows finds DLLs in the exe directory first (app-local).
+    #
+    # Required DLLs: vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll,
+    #                msvcp140_1.dll, vcomp140.dll (OpenMP, used by llama.cpp)
+    #
+    # Source: CRT_REDIST_DIR env var (set by CI), or auto-detected via vswhere.
+    $crtRedistDir = $env:CRT_REDIST_DIR
+    if (-not $crtRedistDir -or -not (Test-Path $crtRedistDir)) {
+        # Auto-detect from Visual Studio installation
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (Test-Path $vswhere) {
+            $vsPath = & $vswhere -latest -property installationPath 2>$null
+            if ($vsPath) {
+                $redistRoot = Join-Path $vsPath "VC\Redist\MSVC"
+                if (Test-Path $redistRoot) {
+                    $crtRedistDir = Get-ChildItem $redistRoot -Directory |
+                                      Sort-Object Name -Descending |
+                                      ForEach-Object { Join-Path $_.FullName "x64\Microsoft.VC143.CRT" } |
+                                      Where-Object { Test-Path $_ } |
+                                      Select-Object -First 1
+                    if (-not $crtRedistDir) {
+                        # Fallback to VC142
+                        $crtRedistDir = Get-ChildItem $redistRoot -Directory |
+                                          Sort-Object Name -Descending |
+                                          ForEach-Object { Join-Path $_.FullName "x64\Microsoft.VC142.CRT" } |
+                                          Where-Object { Test-Path $_ } |
+                                          Select-Object -First 1
+                    }
+                }
+            }
+        }
+    }
+
+    $crtDllNames = @(
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "vcomp140.dll"
+    )
+
+    # If no redist dir found yet, fall back to System32 (works if VC++ Redist
+    # is installed system-wide, e.g. by the CI step or on developer machines).
+    if (-not $crtRedistDir -or -not (Test-Path $crtRedistDir)) {
+        $sys32 = "$env:SystemRoot\System32"
+        $allInSys32 = $true
+        foreach ($dllName in @("vcruntime140.dll", "msvcp140.dll")) {
+            if (-not (Test-Path (Join-Path $sys32 $dllName))) { $allInSys32 = $false; break }
+        }
+        if ($allInSys32) {
+            $crtRedistDir = $sys32
+            Write-Host "  [info] Using System32 as CRT source: $crtRedistDir"
+        }
+    }
+
+    $bundledCrt = @()
+    if ($crtRedistDir -and (Test-Path $crtRedistDir)) {
+        foreach ($dllName in $crtDllNames) {
+            $src = Join-Path $crtRedistDir $dllName
+            if (Test-Path $src) {
+                Copy-Item $src (Join-Path $Staging $dllName) -Force
+                $bundledCrt += $dllName
+                Write-Host "  [ok] $dllName (from $crtRedistDir)"
+            }
+        }
+    }
+
+    if ($bundledCrt.Count -eq 0) {
+        Write-Error @"
+VC++ CRT DLLs not found. The installer cannot be built without them.
+
+The binary uses dynamic CRT (/MD) and requires vcruntime140.dll etc.
+to be bundled alongside skill.exe for app-local deployment.
+
+Fix: ensure Visual Studio with the 'Desktop development with C++'
+workload is installed, or set `$env:CRT_REDIST_DIR to the directory
+containing the MSVC redistributable DLLs (e.g.
+  C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\14.x.y\x64\Microsoft.VC143.CRT
+).
+"@
+        exit 1
+    }
+
+    # Verify all required DLLs were found
+    $requiredCrt = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
+    $missingCrt = $requiredCrt | Where-Object { $_ -notin $bundledCrt }
+    if ($missingCrt.Count -gt 0) {
+        Write-Error "Required CRT DLLs missing from bundle: $($missingCrt -join ', ')"
+        Write-Host "Found: $($bundledCrt -join ', ')"
+        Write-Host "CRT redist dir: $crtRedistDir"
+        exit 1
+    }
+
+    Write-Host "  [ok] Bundled $($bundledCrt.Count) CRT DLLs for app-local deployment"
+
     # Resources (espeak-ng-data, neutts-samples)
     $resources = $Conf.bundle.resources
     if ($resources) {
@@ -314,12 +413,23 @@ print('  [ok] installer images generated')
         $installFiles += '  File "onnxruntime.dll"'
     }
 
+    # Bundle VC++ CRT DLLs (app-local deployment)
+    $crtDlls = Get-ChildItem $Staging -Filter "*.dll" |
+                 Where-Object { $_.Name -match "(?i)^(vcruntime|msvcp|concrt|vcomp)" }
+    foreach ($dll in $crtDlls) {
+        $installFiles += "  File `"$($dll.Name)`""
+    }
+
     $uninstallFiles = @()
     $uninstallFiles += '  Delete "$INSTDIR\skill.exe"'
     $uninstallFiles += '  Delete "$INSTDIR\icon.ico"'
     $uninstallFiles += '  Delete "$INSTDIR\onnxruntime.dll"'
     foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE")) {
         $uninstallFiles += "  Delete `"`$INSTDIR\$doc`""
+    }
+    # VC++ CRT DLLs (app-local deployment)
+    foreach ($dll in $crtDlls) {
+        $uninstallFiles += "  Delete `"`$INSTDIR\$($dll.Name)`""
     }
 
     # Resource directories
@@ -516,13 +626,13 @@ Section /o "Install Vulkan Runtime (GPU acceleration)" SEC_VULKAN
   vulkan_done:
 SectionEnd
 
-; ── VC++ Redistributable section (optional, auto-selected when missing) ─
-; Some native dependencies (ONNX Runtime, etc.) require the Visual C++
-; 2015-2022 Redistributable.  The binary itself is statically linked, but
-; bundled DLLs or plugins may need vcruntime140.dll / msvcp140.dll.
+; ── VC++ Redistributable section (on by default) ───────────────────────
+; The binary uses dynamic CRT (/MD) and requires vcruntime140.dll /
+; msvcp140.dll.  CRT DLLs are bundled app-locally in `$INSTDIR, but the
+; full VC++ Redistributable is also installed as a system-wide fallback.
 ; The official Microsoft installer is ~25 MB and is a no-op if already
 ; present — it silently exits with code 0 or 1638 (already installed).
-Section /o "Install VC++ Redistributable" SEC_VCREDIST
+Section "Install VC++ Redistributable" SEC_VCREDIST
   StrCpy `$0 "`$TEMP\vc_redist.x64.exe"
 
   DetailPrint "Downloading Visual C++ Redistributable..."
@@ -600,7 +710,7 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}      "Install $ProductDisplayName application files."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VULKAN}    "Download and install the Vulkan Runtime for GPU-accelerated LLM inference. Not needed if your GPU driver already provides Vulkan support."
-  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST}  "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST}  "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required for the application to run. CRT DLLs are also bundled locally, but the system-wide install ensures long-term compatibility. Safe to install even if already present."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_WEBVIEW2}  "Download and install the Microsoft Edge WebView2 Runtime. Required to display the application interface. Already included in Windows 11."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_TDR}       "Increase the Windows GPU timeout from 2 to 60 seconds. Prevents GPU driver resets during long LLM inference runs. Requires a reboot."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_AUTOSTART} "Start $ProductDisplayName automatically when you log in to Windows. You can change this later in the app settings."
@@ -616,13 +726,8 @@ Function .onInit
   vulkan_found:
   vulkan_check_done:
 
-  ; VC++ Redistributable — check for vcruntime140.dll
-  IfFileExists "`$SYSDIR\vcruntime140.dll" vcredist_found vcredist_missing
-  vcredist_missing:
-    !insertmacro SelectSection `${SEC_VCREDIST}
-    Goto vcredist_check_done
-  vcredist_found:
-  vcredist_check_done:
+  ; VC++ Redistributable — always on by default (Section without /o).
+  ; No auto-select logic needed since the section is already enabled.
 
   ; WebView2 — check registry for installed WebView2 Runtime
   ; The Evergreen Runtime writes to this key on both per-user and per-machine installs.
@@ -728,6 +833,9 @@ SectionEnd
     Write-Host "Contents:"
     Write-Host "  - $BinaryName"
     Write-Host "  - icon.ico"
+    foreach ($dll in $bundledCrt) {
+        Write-Host "  - $dll (CRT app-local)"
+    }
     foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE")) {
         if (Test-Path (Join-Path $Staging $doc)) {
             Write-Host "  - $doc"

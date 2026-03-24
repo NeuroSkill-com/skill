@@ -78,12 +78,15 @@ target-dir = "src-tauri/target"
 # `relative = true` resolves paths relative to this file's parent (project root).
 
 [env]
-# Static CRT for cmake-based -sys crates (llama-cpp-sys, espeak-ng, etc.).
-# All C/C++ deps must use /MT (static CRT) to match Rust's +crt-static
-# target feature on Windows.  Without this, local builds produce a CRT
-# mismatch and Windows shows "side-by-side configuration is incorrect".
+# Dynamic CRT for cmake-based -sys crates (llama-cpp-sys, espeak-ng, etc.).
+# Several native dependencies (DirectML, ONNX Runtime, Vulkan loader) ship
+# as pre-built DLLs linked against the dynamic CRT (/MD).  Mixing /MT and
+# /MD in the same process causes heap corruption and "side-by-side
+# configuration is incorrect" errors.  Using /MD everywhere is consistent
+# and the NSIS installer bundles the VC++ Redistributable DLLs app-locally
+# so end users don't need a separate install.
 # On non-Windows platforms cmake ignores this variable.
-CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
+CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDLL"
 
 ESPEAK_LIB_DIR      = { value = "src-tauri/espeak-static/lib",   relative = true }
 # ESPEAK_BUILD_SCRIPT is read by kittentts/neutts build scripts to auto-build
@@ -179,15 +182,15 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 #
 # Install: winget install LLVM.LLVM
 
-# +crt-static: statically link the MSVC C/C++ runtime (ucrt + vcruntime) into
-# the binary so users don't need the Visual C++ Redistributable installed.
-# Without this, Windows shows "side-by-side configuration is incorrect" on
-# machines that lack the matching vcruntime140.dll / ucrtbase.dll.
+# Dynamic CRT: the binary links against vcruntime140.dll / msvcp140.dll.
+# The NSIS installer bundles these DLLs app-locally (in $INSTDIR alongside
+# skill.exe) so users don't need the VC++ Redistributable pre-installed.
+# The installer also offers to download the full VC++ Redist as a fallback.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-args=/STACK:8388608", "-C", "target-feature=+crt-static"]
+rustflags = ["-C", "link-args=/STACK:8388608"]
 
 [target.aarch64-pc-windows-msvc]
-rustflags = ["-C", "link-args=/STACK:8388608", "-C", "target-feature=+crt-static"]
+rustflags = ["-C", "link-args=/STACK:8388608"]
 
 # ── Windows MinGW (x86_64-pc-windows-gnu): MinGW bash build script ────────────
 #

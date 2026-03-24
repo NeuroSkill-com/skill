@@ -265,6 +265,23 @@ jobs:
           $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "[ok] NSIS_DIR=$nsisDir"
 
+      # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
+      # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
+      # DLLs app-locally alongside skill.exe.  This step ensures they exist on
+      # the runner — either via the VS installation or by downloading the
+      # official VC++ Redistributable from Microsoft.
+      - name: Ensure VC++ CRT DLLs available
+        id: vcredist
+        shell: powershell
+        run: |
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/ensure-vcredist.ps1")
+
+          # Export for subsequent steps
+          if (-not $env:CRT_REDIST_DIR) {
+            Write-Error "ensure-vcredist.ps1 did not set CRT_REDIST_DIR"
+            exit 1
+          }
+
       # ── Pre-flight: verify every required secret is set ──────────────────────
       # Fails fast (before the 15-min build) if any secret is missing.
       # Values are never printed.
@@ -481,11 +498,11 @@ jobs:
           # directory to the Windows Path variable.
           SCCACHE_GHA_ENABLED: "true"
           SCCACHE_CACHE_SIZE:  "10G"
-          # Static CRT: all C/C++ deps built by cmake must use /MT (static CRT)
-          # to match Rust's +crt-static target feature set in .cargo/config.toml.
-          # Without this, users without VC++ Redistributable get "side-by-side
-          # configuration is incorrect" errors on launch.
-          CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+          # Dynamic CRT: native deps (DirectML, ONNX Runtime, Vulkan loader)
+          # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
+          # mismatch.  The NSIS installer bundles the VC++ Redist DLLs
+          # app-locally so end users don't need a separate install.
+          CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreadedDLL
           # Let sccache cache C/C++ compilations from cmake-based -sys crates
           # (llama-cpp-sys-4, espeak-ng, etc.).  Without these, only rustc
           # invocations go through sccache — the heavy cmake builds are
@@ -516,14 +533,10 @@ jobs:
           path: src-tauri/target/cargo-timings/
           retention-days: 30
 
-      # ── Verify static CRT (no dynamic vcruntime/ucrt dependency) ────────────
-      #
-      # +crt-static and CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded should produce
-      # a binary with zero dependency on vcruntime140.dll / ucrtbase.dll.  If a
-      # cmake-based -sys crate sneaks in a /MD object, the final exe silently
-      # gains a dynamic CRT dep and users without the VC++ Redistributable get
-      # "side-by-side configuration is incorrect" on launch.  Catch it here.
-      - name: Verify static CRT linkage
+      # ── Log binary dependencies (diagnostic) ──────────────────────────────
+      # CRT DLLs were already located in the "Ensure VC++ CRT DLLs available"
+      # step before the build.  This step just logs the dependency list.
+      - name: Log binary dependencies
         shell: powershell
         run: |
           $exe = "src-tauri/target/release/skill.exe"
@@ -532,20 +545,11 @@ jobs:
             exit 1
           }
 
-          $deps = & dumpbin /dependents $exe | Select-String -Pattern "vcruntime|ucrt|msvcp" -CaseSensitive:$false
-          if ($deps) {
-            Write-Host "::error::Binary has dynamic CRT dependencies -- static CRT linkage failed:"
-            $deps | ForEach-Object { Write-Host "  $_" }
-            Write-Host ""
-            Write-Host "Full dependency list:"
-            & dumpbin /dependents $exe
-            exit 1
-          }
-
-          Write-Host "[ok] No dynamic CRT dependencies detected -- binary is fully statically linked."
-          Write-Host ""
-          Write-Host "Dependencies:"
+          Write-Host "Binary dependencies:"
           & dumpbin /dependents $exe
+
+          Write-Host ""
+          Write-Host "CRT DLLs will be bundled from: $env:CRT_REDIST_DIR"
 
       # ── Package NSIS installer ───────────────────────────────────────────────
       #
