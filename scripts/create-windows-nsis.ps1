@@ -558,6 +558,15 @@ Section /o "Increase GPU timeout for LLM inference" SEC_TDR
   DetailPrint "GPU TDR timeout set to 60 seconds (reboot required to take effect)."
 SectionEnd
 
+; ── Launch at login section (on by default) ─────────────────────────────
+; Registers the app in HKCU\...\Run so it starts automatically on login.
+; The user can also toggle this later from Settings inside the app.
+; Uses the same registry key that the in-app autostart crate writes.
+Section "Launch at login" SEC_AUTOSTART
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "skill" '"`$INSTDIR\skill.exe"'
+  DetailPrint "Autostart enabled (HKCU\Software\Microsoft\Windows\CurrentVersion\Run\skill)."
+SectionEnd
+
 ; ── Component descriptions ──────────────────────────────────────────────
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}      "Install $ProductDisplayName application files."
@@ -565,6 +574,7 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST}  "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_WEBVIEW2}  "Download and install the Microsoft Edge WebView2 Runtime. Required to display the application interface. Already included in Windows 11."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_TDR}       "Increase the Windows GPU timeout from 2 to 60 seconds. Prevents GPU driver resets during long LLM inference runs. Requires a reboot."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_AUTOSTART} "Start $ProductDisplayName automatically when you log in to Windows. You can change this later in the app settings."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; ── Auto-select optional sections when prerequisites are missing ────────
