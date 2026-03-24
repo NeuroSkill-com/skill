@@ -84,6 +84,16 @@ jobs:
         with:
           workspaces: ". -> src-tauri/target"
 
+      # ── ONNX Runtime binary cache ──────────────────────────────────────────
+      # ort-sys downloads ~200 MB static libs from cdn.pyke.io during build.
+      # Cache them so the download only happens once (avoids CDN flakiness).
+      - name: Cache ONNX Runtime binaries (ort-sys)
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ort.pyke.io
+          key: linux-ort-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-ort-
+
       # ── Build cache (sccache + mold) ──────────────────────────────────────────
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
