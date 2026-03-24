@@ -149,11 +149,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
+      # Retry handles transient ETXTBSY from esbuild postinstall on Linux.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm ci
 
       # Run i18n sync first — it's cheap and catches missing translation keys
       # before the slower svelte-check.
@@ -218,11 +219,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
+      # Retry handles transient ETXTBSY from esbuild postinstall on Linux.
       - name: Install JS dependencies
-        run: npm ci
+        run: npm ci || npm ci
 
       # Catch PowerShell encoding bugs (e.g. UTF-8 multi-byte sequences that
       # Windows-1252-reading PS5.1 misinterprets as string delimiters) before
@@ -497,7 +499,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: npm audit
