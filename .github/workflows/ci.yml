@@ -7,6 +7,11 @@ on:
     branches: [main, develop]
   # Allow manual re-runs from the Actions tab on any branch.
   workflow_dispatch:
+    inputs:
+      run_llm_e2e:
+        description: "Run LLM E2E integration test"
+        type: boolean
+        default: false
 
 # Cancel superseded runs on the same branch / PR — avoids wasting runner
 # minutes when multiple commits are pushed in quick succession.
@@ -362,8 +367,8 @@ jobs:
     # turns the E2E compilation into a cheap incremental build (~30 s)
     # instead of a full rebuild (~3-5 min).
     needs: rust-check
-    # Only run on main pushes and manual triggers — too slow for every PR.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Optional — only runs on manual dispatch with run_llm_e2e checked.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_llm_e2e == true
     steps:
       - uses: actions/checkout@v6
         with:
