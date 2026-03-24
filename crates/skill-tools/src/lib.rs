@@ -53,4 +53,5 @@ pub use defs::{
     enabled_builtin_llm_tools, filter_allowed_tool_defs,
 };
 pub use exec::execute_builtin_tool_call;
+pub use exec::{set_bash_edit_hook, BashEditHook};
 pub use context::{estimate_tokens, estimate_messages_tokens, trim_messages_to_fit};

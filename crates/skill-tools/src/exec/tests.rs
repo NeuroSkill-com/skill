@@ -7,6 +7,7 @@ use super::truncate::*;
 use super::helpers::*;
 use super::safety::*;
 use super::status::format_status_as_text;
+use super::safety::{request_bash_edit, set_bash_edit_hook, clear_bash_edit_hook};
 
 // ── truncate_text ─────────────────────────────────────────────────────────
 
@@ -296,4 +297,36 @@ fn status_text_connected_with_scores() {
     assert!(text.contains("Meditation: 72.5"));
     assert!(text.contains("Bands: Delta: 0.250"));
     assert!(text.contains("Total sessions: 15"));
+}
+
+// ── bash edit hook ────────────────────────────────────────────────────
+
+#[test]
+fn bash_edit_hook_default_is_none() {
+    // Without a hook set, request_bash_edit returns Some(original)
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let result = rt.block_on(request_bash_edit("echo hello"));
+    assert_eq!(result, Some("echo hello".to_string()));
+}
+
+#[test]
+fn bash_edit_hook_can_modify() {
+    use std::sync::Arc;
+    set_bash_edit_hook(Arc::new(|cmd: &str| {
+        Some(format!("{} --safe", cmd))
+    }));
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let result = rt.block_on(request_bash_edit("rm -rf /tmp/test"));
+    assert_eq!(result, Some("rm -rf /tmp/test --safe".to_string()));
+    clear_bash_edit_hook();
+}
+
+#[test]
+fn bash_edit_hook_can_cancel() {
+    use std::sync::Arc;
+    set_bash_edit_hook(Arc::new(|_cmd: &str| None));
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let result = rt.block_on(request_bash_edit("dangerous command"));
+    assert_eq!(result, None);
+    clear_bash_edit_hook();
 }

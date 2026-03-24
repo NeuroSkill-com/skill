@@ -528,6 +528,14 @@ fn process_eeg(
 
         csv.push_metrics(csv_path, &snap);
 
+        // ── Accumulate SNR for the session sidecar ───────────────────────────
+        if snap.snr.is_finite() {
+            let sr = app.app_state();
+            let mut s = sr.lock_or_recover();
+            s.snr_sum   += snap.snr as f64;
+            s.snr_count += 1;
+        }
+
         // ── DND tick (all devices get this now) ──────────────────────────────
         run_dnd_tick(app, &snap);
 

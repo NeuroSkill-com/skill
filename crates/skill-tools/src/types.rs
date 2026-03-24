@@ -28,6 +28,13 @@ pub struct LlmToolConfig {
     #[serde(default)]
     pub bash: bool,
 
+    /// When `true`, every LLM-generated bash command is presented for user
+    /// review/editing before execution.  The user can modify the command or
+    /// cancel it entirely.  Requires a UI callback via [`set_bash_edit_hook`].
+    /// Default: `false`.
+    #[serde(default)]
+    pub require_bash_edit: bool,
+
     /// Allow the LLM to read file contents.
     #[serde(default)]
     pub read_file: bool,
@@ -242,6 +249,7 @@ impl Default for LlmToolConfig {
             web_fetch:          true,
             web_search_provider: WebSearchProvider::default(),
             bash:               false,
+            require_bash_edit:  false,
             read_file:          false,
             write_file:         false,
             edit_file:          false,

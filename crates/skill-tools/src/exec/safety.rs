@@ -1,8 +1,62 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! Safety checks and user-approval dialogs for dangerous tool operations.
+//! Safety checks, user-approval dialogs, and bash-edit hook for tool operations.
 
+use std::sync::{Arc, Mutex};
 use serde_json::json;
+
+// ── Pluggable bash-edit callback ──────────────────────────────────────────────
+
+/// Callback signature for bash command editing.
+///
+/// Receives the original command and returns:
+/// - `Some(edited_command)` — the (possibly modified) command to execute
+/// - `None` — the user cancelled; do not execute
+pub type BashEditHook = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
+static BASH_EDIT_HOOK: Mutex<Option<BashEditHook>> = Mutex::new(None);
+
+/// Register a callback that is invoked before every LLM-generated bash command.
+///
+/// The callback runs on a blocking thread.  It should display the command to the
+/// user, allow editing, and return `Some(final_command)` or `None` to cancel.
+///
+/// Call this once at app startup (e.g. from `setup()`).
+pub fn set_bash_edit_hook(hook: BashEditHook) {
+    *hook_cell().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
+}
+
+/// Clear the bash-edit hook (tests / shutdown).
+#[allow(dead_code)]
+pub fn clear_bash_edit_hook() {
+    *hook_cell().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+}
+
+/// Present a bash command for user review/editing.
+///
+/// Returns `Some(command)` (possibly edited) or `None` if cancelled.
+pub(crate) async fn request_bash_edit(command: &str) -> Option<String> {
+    let hook = hook_cell()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+
+    match hook {
+        Some(f) => {
+            let cmd = command.to_string();
+            tokio::task::spawn_blocking(move || f(&cmd))
+                .await
+                .unwrap_or_else(|e| {
+                    crate::tool_log!("tool:bash", "[edit] hook panicked: {}", e);
+                    None
+                })
+        }
+        None => {
+            // No hook registered — fall through to execute unmodified.
+            Some(command.to_string())
+        }
+    }
+}
 
 /// Patterns that indicate a potentially dangerous bash command.
 const DANGEROUS_BASH_PATTERNS: &[&str] = &[

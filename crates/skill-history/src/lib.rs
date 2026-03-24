@@ -104,6 +104,9 @@ pub struct SessionEntry {
     pub sample_rate_hz:    Option<u64>,
     pub labels:            Vec<LabelRow>,
     pub file_size_bytes:   u64,
+    /// Average signal-to-noise ratio (dB) for the session.
+    /// `None` for legacy sessions recorded before SNR tracking.
+    pub avg_snr_db:        Option<f64>,
 }
 
 // ── Typed session JSON sidecar (replaces serde_json::Value for speed) ─────────
@@ -145,6 +148,9 @@ struct SessionJsonMeta {
     battery_pct_end: Option<f64>,
     #[serde(default)]
     battery_pct: Option<f64>,
+    /// Average SNR (dB) across the session — written by the session runner.
+    #[serde(default)]
+    avg_snr_db: Option<f64>,
     #[serde(default)]
     total_samples: Option<u64>,
     #[serde(default)]
@@ -403,6 +409,7 @@ pub fn list_sessions_for_day(
             sample_rate_hz:     meta.sample_rate_hz,
             labels:             vec![],
             file_size_bytes:    csv_size,
+            avg_snr_db:         meta.avg_snr_db,
         }, start, end));
     }
 
@@ -433,6 +440,7 @@ pub fn list_sessions_for_day(
             sample_rate_hz:     None, // unknown — no JSON metadata available
             labels:             vec![],
             file_size_bytes:    csv_size,
+            avg_snr_db:         None, // no sidecar available
         }, ts, end_ts));
     }
 
@@ -1121,5 +1129,26 @@ mod tests {
         assert_eq!(meta.device_name.as_deref(), Some("Muse S"));
         assert_eq!(meta.device.name, None);
         assert_eq!(meta.battery_pct, Some(42.0));
+    }
+
+    #[test]
+    fn typed_session_json_with_avg_snr() {
+        let json = r#"{
+            "csv_file": "exg_1700000000.csv",
+            "session_start_utc": 1700000000,
+            "avg_snr_db": 12.5
+        }"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.avg_snr_db, Some(12.5));
+    }
+
+    #[test]
+    fn typed_session_json_without_avg_snr() {
+        let json = r#"{
+            "csv_file": "exg_1700000000.csv",
+            "session_start_utc": 1700000000
+        }"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.avg_snr_db, None);
     }
 }

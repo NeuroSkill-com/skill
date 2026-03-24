@@ -396,6 +396,11 @@ pub struct AppState {
     pub retry_attempt: u32,
     pub session_start_utc: Option<u64>,
 
+    /// Accumulated SNR (dB) for the current session — used to compute the
+    /// average SNR written to the session sidecar JSON for quality filtering.
+    pub snr_sum:   f64,
+    pub snr_count: u64,
+
     // ── Infrastructure ────────────────────────────────────────────────────
     pub skill_dir:        std::path::PathBuf,
     pub logger:           std::sync::Arc<SkillLogger>,
@@ -550,6 +555,8 @@ impl Default for AppState {
             pending_reconnect: false,
             retry_attempt:     0,
             session_start_utc: None,
+            snr_sum:           0.0,
+            snr_count:         0,
             label_store: label_store::LabelStore::open(&skill_dir),
 
             shortcuts: ShortcutState::default(),

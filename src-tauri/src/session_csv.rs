@@ -82,6 +82,7 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
 
         // ── Signal quality at session end ────────────────────────────────
         "channel_quality":        s.status.channel_quality,
+        "avg_snr_db":             if s.snr_count > 0 { Some(s.snr_sum / s.snr_count as f64) } else { None::<f64> },
 
         // ── Filter / processing config ───────────────────────────────────
         "filter_config":          s.status.filter_config,

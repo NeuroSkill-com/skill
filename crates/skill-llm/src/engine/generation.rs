@@ -98,9 +98,39 @@ pub(super) fn run_generation(
             if batch.add(token, j as i32, &[0], logits).is_err() { break; }
         }
         if ctx.decode(&mut batch).is_err() {
-            llm_error!(app, log_buf, log_file, "decode error on prompt (batch at token {i})");
-            token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
-            return;
+            // Metal on macOS can transiently fail (GPU busy, command buffer
+            // timeout).  Clear the KV cache and retry the entire prompt once
+            // before giving up.
+            llm_warn!(app, log_buf, log_file,
+                "decode failed on prompt batch at token {i} — retrying after KV cache reset");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            ctx.clear_kv_cache();
+
+            // Rebuild from token 0 so KV state is consistent.
+            let mut retry_ok = true;
+            let mut ri = 0;
+            while ri < n_prompt {
+                let rend = (ri + n_batch).min(n_prompt);
+                let mut rb = LlamaBatch::new(rend - ri, 1);
+                for (j, &token) in tokens.iter().enumerate().take(rend).skip(ri) {
+                    let logits = j == n_prompt - 1;
+                    if rb.add(token, j as i32, &[0], logits).is_err() { break; }
+                }
+                if ctx.decode(&mut rb).is_err() {
+                    retry_ok = false;
+                    break;
+                }
+                ri = rend;
+            }
+            if !retry_ok {
+                llm_error!(app, log_buf, log_file, "decode error on prompt (batch at token {i}) — retry also failed");
+                token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
+                return;
+            }
+            // Retry succeeded — break out of the outer loop since we
+            // already processed the entire prompt.
+            llm_info!(app, log_buf, log_file, "prompt decode succeeded on retry");
+            break;
         }
         i = end;
     }
@@ -197,10 +227,18 @@ pub(super) fn run_generation_multimodal(
     let n_batch = ctx.n_batch() as i32;
     let mut n_past = 0i32;
     if let Err(e) = mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past) {
-        let msg = format!("mtmd eval error: {e}");
-        llm_error!(app, log_buf, log_file, "{msg}");
-        token_tx.send(InferToken::Error(msg)).ok();
-        return;
+        // Retry once after KV cache reset (transient Metal failures).
+        llm_warn!(app, log_buf, log_file, "mtmd eval failed: {e} — retrying after KV cache reset");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        ctx.clear_kv_cache();
+        n_past = 0;
+        if let Err(e2) = mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past) {
+            let msg = format!("mtmd eval error: {e2} (retry also failed, original: {e})");
+            llm_error!(app, log_buf, log_file, "{msg}");
+            token_tx.send(InferToken::Error(msg)).ok();
+            return;
+        }
+        llm_info!(app, log_buf, log_file, "multimodal eval succeeded on retry");
     }
 
     let n_prompt = n_past as usize;
