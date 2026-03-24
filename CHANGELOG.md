@@ -8,6 +8,54 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.61] — 2026-03-24
+
+### CLI
+
+- **Detect competing cargo processes in bump**: `npm run bump` now checks for other running `cargo` processes before starting clippy/test preflight checks and warns that they may cause hangs due to the global cargo package-cache lock. The user is prompted to continue or abort.
+
+## [0.0.60] — 2026-03-24
+
+### Performance
+
+- **LLM E2E reuses clippy build cache**: The `llm-e2e` CI job now runs after `rust-check` (`needs: rust-check`) and shares its Cargo build cache via `Swatinem/rust-cache` (`save-if: false`). This turns the E2E compilation into a cheap incremental build instead of a full rebuild (~3–5 min saved). The linker (mold + clang), target triple, and `CMAKE_*_COMPILER_LAUNCHER: sccache` env vars are aligned with `rust-check` to maximise cache hits. The Vulkan SDK (~200 MB) now uses the same `actions/cache` key as `rust-check`, skipping download on cache hit. System deps (including mold + clang) are merged into one cached `awalsh128/cache-apt-pkgs-action` step, eliminating a separate `apt-get update` round-trip.
+- **Halve LLM E2E test runtime (67s → 33s)**: Reduced `ctx_size` from 4096 to 2048 (test prompts are < 600 tokens). Reduced tool-chat `max_tokens` from 128 to 64 — the model was wasting inference echoing full JSON results (117-128 tokens) when it only needs ~25 tokens for the tool call and a short summary. Added `[profile.test.package.llama-cpp-sys-4]` and `llama-cpp-4` with `opt-level = 3` so the C++ inference engine runs optimized even in test builds, boosting tok/s by ~20%.
+- **LLM E2E is now opt-in**: The `llm-e2e` job no longer runs automatically on push. It is triggered only via manual `workflow_dispatch` with the `run_llm_e2e` checkbox enabled. The Discord notification shows ⏭️ when skipped.
+
+### Bugfixes
+
+- **Regenerate Cargo.lock during bump**: `npm run bump` now runs `cargo generate-lockfile` after updating version in `src-tauri/Cargo.toml`, preventing CI `--locked` build failures due to stale lockfile.
+
+- **Add missing safety comment for unsafe block**: Added `// SAFETY:` comment on the Linux `RLIMIT_STACK` unsafe block in `main.rs` to satisfy `clippy::undocumented_unsafe_blocks` (Rust 1.94).
+
+- **Fix i18n test import shadowing**: The `extractKeysFromDir` import from `i18n-utils.ts` was shadowing the local test helper of the same name, causing 8 pre-existing key-sync test failures. Renamed to `extractKeysWithValues` in the test import.
+
+### Build
+
+- **CI/Release speed improvements**: Estimated 7-12 min savings per CI run via multiple optimizations:
+  - Removed redundant `cargo check` step — `clippy` is a strict superset and already compiles everything.
+  - Merged duplicate `cargo-audit` and `audit` jobs into a single security audit job.
+  - Moved audit to run only on main/develop pushes (advisory, not PR-blocking).
+  - Added concurrency groups to `ci.yml` to cancel superseded runs on the same branch/PR.
+  - Replaced manual `--workspace -p crate1 -p crate2 ...` clippy invocations with `--workspace --exclude skill`.
+  - Switched Linux CI from manual `actions/cache` to `Swatinem/rust-cache` for smarter per-crate invalidation (matching release workflows).
+  - Cached Vulkan SDK on Linux CI (previously downloaded ~200 MB on every run).
+  - Added `mold` fast linker + `clang` to Linux CI (previously only in release-linux).
+  - Added `fetch-depth: 1` to CI jobs that don't need full git history.
+  - Added `--locked` flag to all release cargo build commands for reproducible builds.
+  - Added `--timings` flag and cargo-timings artifact upload to macOS and Linux release workflows (previously Windows only) for build profiling.
+  - Removed redundant `cargo check` on Windows CI — `clippy` already covers it.
+  - Fixed Discord notification to show "skipped" emoji for audit when it doesn't run on PRs.
+  - Added `CMAKE_C_COMPILER_LAUNCHER` / `CMAKE_CXX_COMPILER_LAUNCHER` sccache integration to macOS, Linux CI, and preview builds (previously Windows release only) so cmake-based -sys crate compilations (llama-cpp-sys, espeak-ng) are cached across runs.
+
+- **Commit Cargo.lock**: Removed `Cargo.lock` from `.gitignore` and committed it so that `cargo clippy --locked` and CI builds succeed without needing to regenerate the lockfile.
+
+### i18n
+
+- **Untranslated value detection**: Added a vitest check (`i18n untranslated value detection`) that fails when any non-English locale contains values identical to English that are not in the exemption list. The exemption logic (brand names, technical acronyms, formulas, academic citations, etc.) is now shared between `i18n-utils.ts`, the `audit-i18n.ts` script, and the test suite. A new `check:i18n` npm script runs the audit with `--check` for CI gating.
+
+- **Translate all untranslated strings**: Translated 388 strings across 4 locales (de, fr, he, uk) that were still in English. Covers common UI (errors, dismiss, zoom reset, goal reached), supported devices and setup instructions, device API settings, API authentication, screenshot/OCR pipeline labels, screen recording permissions, history streaks, LLM tool settings, onboarding, and search screenshot tab. Added brand/product names and cross-language cognates to the exemption list.
+
 ## [0.0.59] — 2026-03-24
 
 ### Features
