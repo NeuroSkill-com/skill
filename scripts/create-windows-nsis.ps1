@@ -442,6 +442,13 @@ $($installFiles -join "`n")
 
   WriteRegStr HKLM "Software\$ProductName" "InstallDir" "`$INSTDIR"
 
+  ; ── Enable Win32 long paths ──────────────────────────────────────────────
+  ; HuggingFace model cache paths can exceed the 260-char MAX_PATH limit.
+  ; This registry key (available since Windows 10 1607) lifts the restriction
+  ; for long-path-aware applications.  Requires a reboot to take effect, but
+  ; the installer does not force one — it takes effect on next login.
+  WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\FileSystem" "LongPathsEnabled" 1
+
   ; ── Windows Firewall rule for the local LLM/WebSocket server ───────────
   ; The app listens on localhost for LLM inference and WebSocket commands.
   ; Pre-adding a firewall rule prevents the "allow access?" popup on first
@@ -540,12 +547,24 @@ Section /o "Install WebView2 Runtime (required for UI)" SEC_WEBVIEW2
   webview2_done:
 SectionEnd
 
+; ── GPU TDR timeout section (optional) ──────────────────────────────────
+; Windows kills GPU compute shaders after 2 seconds by default (Timeout
+; Detection and Recovery).  LLM inference on GPU can exceed this, causing
+; the driver to reset and the inference to fail.  Increasing TdrDelay to
+; 60 seconds prevents this.  Requires a reboot to take effect.
+; See: https://learn.microsoft.com/en-us/windows-hardware/drivers/display/tdr-registry-keys
+Section /o "Increase GPU timeout for LLM inference" SEC_TDR
+  WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "TdrDelay" 60
+  DetailPrint "GPU TDR timeout set to 60 seconds (reboot required to take effect)."
+SectionEnd
+
 ; ── Component descriptions ──────────────────────────────────────────────
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}      "Install $ProductDisplayName application files."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VULKAN}    "Download and install the Vulkan Runtime for GPU-accelerated LLM inference. Not needed if your GPU driver already provides Vulkan support."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST}  "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
   !insertmacro MUI_DESCRIPTION_TEXT `${SEC_WEBVIEW2}  "Download and install the Microsoft Edge WebView2 Runtime. Required to display the application interface. Already included in Windows 11."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_TDR}       "Increase the Windows GPU timeout from 2 to 60 seconds. Prevents GPU driver resets during long LLM inference runs. Requires a reboot."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; ── Auto-select optional sections when prerequisites are missing ────────
@@ -579,8 +598,17 @@ Function .onInit
   webview2_check_done:
 FunctionEnd
 
+; ── Uninstall: kill running instance ─────────────────────────────────────
+Function un.KillRunningInstance
+  nsExec::ExecToLog 'taskkill /F /IM skill.exe'
+  Sleep 500
+FunctionEnd
+
 ; ── Uninstall section ───────────────────────────────────────────────────
 Section "Uninstall"
+  ; Kill the app if it is still running
+  Call un.KillRunningInstance
+
 $($uninstallFiles -join "`n")
   Delete "`$INSTDIR\uninstall.exe"
 
@@ -593,12 +621,25 @@ $($uninstallFiles -join "`n")
   ; Firewall rule
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName"'
 
+  ; Autostart registry entry (the app registers as "skill" in HKCU\...\Run)
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "skill"
+
   ; Registry
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName"
   DeleteRegKey HKLM "Software\$ProductName"
 
   ; Remove install directory (only if empty after file deletions)
   RMDir "`$INSTDIR"
+
+  ; ── Offer to remove user data ────────────────────────────────────────
+  ; %LOCALAPPDATA%\NeuroSkill contains settings, sessions, databases, and
+  ; downloaded models.  Ask the user whether to keep or delete it.
+  IfFileExists "`$LOCALAPPDATA\NeuroSkill\*.*" 0 skip_data_prompt
+    MessageBox MB_YESNO|MB_ICONQUESTION "Do you want to remove your $ProductDisplayName data folder?$\n$\n`$LOCALAPPDATA\NeuroSkill$\n$\nThis includes settings, session recordings, and downloaded AI models. Choose No to keep your data for a future reinstall." IDYES remove_data
+      Goto skip_data_prompt
+    remove_data:
+      RMDir /r "`$LOCALAPPDATA\NeuroSkill"
+  skip_data_prompt:
 SectionEnd
 "@
 
