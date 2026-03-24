@@ -26,15 +26,15 @@ if [ -n "$STAGED_I18N" ]; then
     fi
 fi
 
-# ── Frontend formatting (Biome) ──────────────────────────────────────────────
-STAGED_TS_SVELTE=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.svelte' '*.js' 2>/dev/null || true)
+# ── Frontend formatting (Biome — .ts/.js only; Svelte parsing is partial) ────
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.js' 2>/dev/null | grep -v node_modules || true)
 
-if [ -n "$STAGED_TS_SVELTE" ]; then
+if [ -n "$STAGED_TS" ]; then
     echo "🎨 Checking frontend formatting…"
-    if ! npx biome format --no-errors-on-unmatched $STAGED_TS_SVELTE 2>&1; then
+    if ! npx biome format --no-errors-on-unmatched $STAGED_TS 2>&1; then
         echo ""
         echo "❌ Frontend formatting issues found."
-        echo "   Run:  npm run lint:fix"
+        echo "   Run:  npm run format"
         ERRORS=1
     else
         echo "✅ Frontend formatting OK."

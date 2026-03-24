@@ -16,25 +16,37 @@
 
 const isDev = import.meta.env.DEV;
 
-function _timestamp(): string {
+function timestamp(): string {
   return new Date().toISOString();
 }
 
+/* biome-ignore lint/suspicious/noConsole: this IS the logger */
+const _debug = console.debug.bind(console);
+/* biome-ignore lint/suspicious/noConsole: this IS the logger */
+const _log = console.log.bind(console);
+/* biome-ignore lint/suspicious/noConsole: this IS the logger */
+const _warn = console.warn.bind(console);
+/* biome-ignore lint/suspicious/noConsole: this IS the logger */
+const _error = console.error.bind(console);
+
 export const log = {
   /** Debug-level: stripped from production builds. */
-  debug(..._args: unknown[]): void {
-    if (isDev)
+  debug(...args: unknown[]): void {
+    if (isDev) _debug(`[${timestamp()}] [DEBUG]`, ...args);
   },
 
   /** Informational: stripped from production builds. */
-  info(..._args: unknown[]): void {
-    // biome-ignore lint/suspicious/noConsoleLog: structured logger
-    if (isDev)
+  info(...args: unknown[]): void {
+    if (isDev) _log(`[${timestamp()}] [INFO]`, ...args);
   },
 
   /** Warning: preserved in production. */
-  warn(..._args: unknown[]): void {},
+  warn(...args: unknown[]): void {
+    _warn(`[${timestamp()}] [WARN]`, ...args);
+  },
 
   /** Error: preserved in production. */
-  error(..._args: unknown[]): void {},
+  error(...args: unknown[]): void {
+    _error(`[${timestamp()}] [ERROR]`, ...args);
+  },
 };

@@ -426,7 +426,9 @@ async function loadDay(idx: number) {
       if (mc) {
         tsCache[s.csv_path] = mc.timeseries ?? [];
         metricsCache[s.csv_path] = mc.summary;
-      } else needsBatch.push(s.csv_path);
+      } else {
+        needsBatch.push(s.csv_path);
+      }
     }
     // Single IPC call loads all remaining sessions' metrics at once.
     if (needsBatch.length > 0) void loadMetricsBatch(needsBatch);
