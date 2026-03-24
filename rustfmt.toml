@@ -1,0 +1,7 @@
+# ── Workspace rustfmt configuration ────────────────────────────────────────────
+#
+# Preserves the column-alignment style used throughout the codebase for struct
+# fields and match arms while keeping everything else at the stable defaults.
+
+edition = "2021"
+max_width = 120

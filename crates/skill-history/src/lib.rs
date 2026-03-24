@@ -100,6 +100,8 @@ pub fn find_ppg_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
 
 /// A session entry read from a JSON sidecar file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+/// A session entry populated from the JSON sidecar file of an EEG recording.
+/// Contains device metadata, timing, sample counts, labels, and file size.
 pub struct SessionEntry {
     pub csv_file: String,
     pub csv_path: String,
@@ -192,6 +194,8 @@ struct SessionDeviceMeta {
 // ── SessionMetrics ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// Aggregated band-power metrics computed from a session's metrics CSV.
+/// Each field is the mean across all epochs in the session.
 pub struct SessionMetrics {
     pub n_epochs: usize,
     pub rel_delta: f64,
@@ -250,6 +254,8 @@ pub struct SessionMetrics {
 
 /// A single epoch's metrics, returned as part of a time-series query.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// A single epoch (time window) of band-power metrics from a session.
+/// Corresponds to one row in the metrics CSV file.
 pub struct EpochRow {
     pub t: f64,
     pub rd: f64,
@@ -310,6 +316,7 @@ pub struct EpochRow {
 
 /// Combined summary + time-series data loaded directly from `_metrics.csv`.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// Result of loading a session's metrics CSV: per-epoch time-series + summary.
 pub struct CsvMetricsResult {
     pub n_rows: usize,
     pub summary: SessionMetrics,
@@ -319,6 +326,7 @@ pub struct CsvMetricsResult {
 // ── Sleep types ───────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// A single sleep staging epoch (30-second window).
 pub struct SleepEpoch {
     pub utc: u64,
     pub stage: u8,
@@ -329,6 +337,7 @@ pub struct SleepEpoch {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// Summary statistics for a sleep session (total time in each stage).
 pub struct SleepSummary {
     pub total_epochs: usize,
     pub wake_epochs: usize,
@@ -340,6 +349,7 @@ pub struct SleepSummary {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+/// Complete sleep staging result: per-epoch classification + summary.
 pub struct SleepStages {
     pub epochs: Vec<SleepEpoch>,
     pub summary: SleepSummary,
@@ -348,6 +358,7 @@ pub struct SleepStages {
 // ── History stats ─────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+/// High-level recording statistics: total sessions, hours, and weekly breakdown.
 pub struct HistoryStats {
     pub total_sessions: usize,
     pub total_secs: u64,
@@ -359,6 +370,8 @@ pub struct HistoryStats {
 
 /// One contiguous recording range discovered from embedding timestamps.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+/// A contiguous recording session discovered from embedding timestamps.
+/// Used when the JSON sidecar is missing (legacy or corrupted data).
 pub struct EmbeddingSession {
     pub start_utc: u64,
     pub end_utc: u64,

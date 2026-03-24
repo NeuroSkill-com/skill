@@ -98,6 +98,9 @@ pub(super) fn run_actor(
             // pointers, no Drop). When we don't own the backend (neutts already
             // initialised it), we create a zero-filled placeholder that is never
             // dropped (ManuallyDrop) and never used for initialization.
+            // SAFETY: `LlamaBackend` is a plain struct of integer handles /
+            // pointers with no Drop impl. A zeroed instance is valid (null
+            // handles) and is wrapped in ManuallyDrop so it is never dropped.
             (
                 std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }),
                 false,

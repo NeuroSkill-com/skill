@@ -56,6 +56,7 @@ pub type GlobalIndexHandle = Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>
 
 /// A user label whose EEG window overlaps a found embedding.
 #[derive(Debug, Serialize, Clone)]
+/// A label with its text, context, and time range from the label store.
 pub struct LabelEntry {
     pub id: i64,
     /// Unix-second start of the EEG window captured during labelling.
@@ -70,6 +71,7 @@ pub struct LabelEntry {
 
 /// Compact EEG metrics attached to a search neighbor.
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
+/// Per-epoch EEG band-power metrics attached to a search neighbor.
 pub struct NeighborMetrics {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relaxation: Option<f64>,
@@ -113,6 +115,7 @@ pub struct NeighborMetrics {
 
 /// One embedding found by the HNSW nearest-neighbour search.
 #[derive(Debug, Serialize, Clone)]
+/// A single EEG embedding neighbor found by HNSW search.
 pub struct NeighborEntry {
     /// Zero-based insertion id within the day's HNSW index.
     pub hnsw_id: usize,
@@ -135,6 +138,7 @@ pub struct NeighborEntry {
 
 /// Results for one query embedding.
 #[derive(Debug, Serialize, Clone)]
+/// One query epoch with its K nearest neighbors from the HNSW search.
 pub struct QueryEntry {
     pub timestamp: i64,
     pub timestamp_unix: u64,
@@ -143,6 +147,7 @@ pub struct QueryEntry {
 
 /// Top-level result returned by [`search_embeddings_in_range`].
 #[derive(Debug, Serialize)]
+/// Complete search result: all query epochs, their neighbors, and timing.
 pub struct SearchResult {
     pub start_utc: u64,
     pub end_utc: u64,
@@ -157,6 +162,7 @@ pub struct SearchResult {
 
 /// Progress event streamed by streaming search.
 #[derive(Debug, Serialize, Clone)]
+/// Progress update during a streaming EEG search.
 pub struct SearchProgress {
     /// Kind: "started" | "result" | "done" | "error"
     pub kind: String,
@@ -181,6 +187,7 @@ pub struct SearchProgress {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/// A loaded daily HNSW index with its date and embedding count.
 pub struct DayIndex {
     pub date: String,
     pub dir: PathBuf,
