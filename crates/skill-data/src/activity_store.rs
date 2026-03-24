@@ -178,7 +178,7 @@ impl ActivityStore {
                 activated_at: row.get::<_, i64>(4)? as u64,
             })
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -200,7 +200,7 @@ impl ActivityStore {
                 sampled_at:    row.get::<_, i64>(3)? as u64,
             })
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -225,7 +225,7 @@ impl ActivityStore {
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
             None => {
@@ -244,7 +244,7 @@ impl ActivityStore {
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
         }
@@ -271,7 +271,7 @@ impl ActivityStore {
                 mouse_count: row.get::<_, i64>(2)? as u64,
             }),
         )
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 }

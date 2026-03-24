@@ -281,7 +281,7 @@ fn lf_hf_from_ibis(ibis: &[f64]) -> f64 {
     let mut t = Vec::with_capacity(ibis.len() + 1);
     t.push(0.0);
     for ibi in ibis { t.push(t.last().unwrap_or(&0.0) + ibi); }
-    let total_time = match t.last() { Some(&v) => v, None => return 0.0 };
+    let Some(&total_time) = t.last() else { return 0.0 };
     if total_time < 5.0 { return 0.0; } // Need at least 5s for meaningful LF
 
     let n_resamp = (total_time * resample_rate) as usize;

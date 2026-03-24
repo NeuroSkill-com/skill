@@ -16,7 +16,7 @@ fn record_and_query() {
     let dir = tempdir().expect("tmpdir");
     let log = HooksLog::open(dir.path()).expect("open");
 
-    log.record(HookFireEntry {
+    log.record(&HookFireEntry {
         triggered_at_utc: 1700000000,
         hook_json: r#"{"name":"test-hook"}"#,
         trigger_json: r#"{"type":"meditation_high"}"#,
@@ -36,13 +36,13 @@ fn count_tracks_entries() {
 
     assert_eq!(log.count(), 0);
 
-    log.record(HookFireEntry {
+    log.record(&HookFireEntry {
         triggered_at_utc: 1700000001,
         hook_json: r#"{"name":"hook1"}"#,
         trigger_json: r#"{"type":"focus_low"}"#,
         payload_json: r#"{"action":"notify"}"#,
     });
-    log.record(HookFireEntry {
+    log.record(&HookFireEntry {
         triggered_at_utc: 1700000002,
         hook_json: r#"{"name":"hook2"}"#,
         trigger_json: r#"{"type":"battery_low"}"#,
@@ -58,7 +58,7 @@ fn query_with_offset() {
     let log = HooksLog::open(dir.path()).expect("open");
 
     for i in 0..5 {
-        log.record(HookFireEntry {
+        log.record(&HookFireEntry {
             triggered_at_utc: 1700000000 + i,
             hook_json: &format!(r#"{{"name":"hook-{i}"}}"#),
             trigger_json: r#"{"type":"test"}"#,

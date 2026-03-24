@@ -308,7 +308,7 @@ impl HookMatcher {
                     "command": &entry.hook.command,
                     "text":    &entry.hook.text,
                 })).unwrap_or_default();
-                log.record(skill_data::hooks_log::HookFireEntry {
+                log.record(&skill_data::hooks_log::HookFireEntry {
                     triggered_at_utc: ts_utc as i64,
                     hook_json:        &hook_json,
                     trigger_json:     &trigger_json,

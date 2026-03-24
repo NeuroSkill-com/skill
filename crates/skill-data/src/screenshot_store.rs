@@ -282,7 +282,7 @@ impl ScreenshotStore {
                 filename: r.get(1)?,
             })
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Update embedding for a specific row.
@@ -330,7 +330,7 @@ impl ScreenshotStore {
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Find a screenshot by its exact YYYYMMDDHHmmss timestamp (HNSW payload).
@@ -376,7 +376,7 @@ impl ScreenshotStore {
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Load all OCR text embeddings from the database (for HNSW rebuild).
@@ -395,7 +395,7 @@ impl ScreenshotStore {
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Update OCR text and embedding for a specific row.
@@ -446,7 +446,7 @@ impl ScreenshotStore {
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Get rows that have no vision embedding yet (captured but not embedded).
@@ -463,7 +463,7 @@ impl ScreenshotStore {
                 filename: r.get(1)?,
             })
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Get rows that have no OCR text yet (ocr_text is empty).
@@ -480,7 +480,7 @@ impl ScreenshotStore {
                 filename: r.get(1)?,
             })
         }) else { return vec![] };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Fetch the vision embedding, model provenance, OCR text, and OCR
@@ -578,7 +578,7 @@ impl ScreenshotStore {
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
             None => {
@@ -597,7 +597,7 @@ impl ScreenshotStore {
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
         }
