@@ -16,8 +16,8 @@ describe("turboApprox", () => {
   });
 
   it("clamps out-of-range inputs", () => {
-    const [r1, g1, b1] = turboApprox(-1);
-    const [r2, g2, b2] = turboApprox(2);
+    const [r1] = turboApprox(-1);
+    const [r2] = turboApprox(2);
     expect(r1).toBeGreaterThanOrEqual(0);
     expect(r2).toBeGreaterThanOrEqual(0);
   });
@@ -58,9 +58,9 @@ describe("normalisePoints", () => {
 
   it("handles 2D points (z=undefined)", () => {
     const pts = [
-      { x: 0, y: 0, utc: 0, label: null, set: "a" },
-      { x: 1, y: 1, utc: 1, label: null, set: "a" },
-    ] as any[];
+      { x: 0, y: 0, z: undefined as number | undefined, utc: 0, label: null, set: "a" },
+      { x: 1, y: 1, z: undefined as number | undefined, utc: 1, label: null, set: "a" },
+    ];
     const arr = normalisePoints(pts);
     expect(arr.length).toBe(6);
     expect(Number.isFinite(arr[2])).toBe(true); // z should be finite

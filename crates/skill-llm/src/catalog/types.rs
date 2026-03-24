@@ -176,3 +176,80 @@ pub struct DownloadProgress {
     /// Total number of shards (0 or 1 = single file).
     pub total_shards: u16,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_entry(filename: &str, shards: &[&str]) -> LlmModelEntry {
+        LlmModelEntry {
+            repo: "test/repo".into(),
+            filename: filename.into(),
+            quant: "Q4_K_M".into(),
+            size_gb: 2.0,
+            description: String::new(),
+            family_id: "test".into(),
+            family_name: "Test".into(),
+            family_desc: String::new(),
+            tags: vec![],
+            params_b: 4.0,
+            max_context_length: 4096,
+            is_mmproj: false,
+            recommended: false,
+            advanced: false,
+            shard_files: shards.iter().map(|s| s.to_string()).collect(),
+            local_path: None,
+            state: DownloadState::NotDownloaded,
+            status_msg: None,
+            progress: 0.0,
+            initiated_at_unix: None,
+        }
+    }
+
+    #[test]
+    fn single_file_is_not_split() {
+        let e = mk_entry("model.gguf", &[]);
+        assert!(!e.is_split());
+        assert_eq!(e.shard_count(), 1);
+    }
+
+    #[test]
+    fn multi_shard_is_split() {
+        let e = mk_entry("model-00001.gguf", &["model-00001.gguf", "model-00002.gguf"]);
+        assert!(e.is_split());
+        assert_eq!(e.shard_count(), 2);
+    }
+
+    #[test]
+    fn all_filenames_single() {
+        let e = mk_entry("model.gguf", &[]);
+        let names: Vec<&str> = e.all_filenames().collect();
+        assert_eq!(names, vec!["model.gguf"]);
+    }
+
+    #[test]
+    fn all_filenames_sharded() {
+        let e = mk_entry("a-00001.gguf", &["a-00001.gguf", "a-00002.gguf", "a-00003.gguf"]);
+        let names: Vec<&str> = e.all_filenames().collect();
+        assert_eq!(names, vec!["a-00001.gguf", "a-00002.gguf", "a-00003.gguf"]);
+    }
+
+    #[test]
+    fn download_state_default_is_not_downloaded() {
+        assert_eq!(DownloadState::default(), DownloadState::NotDownloaded);
+    }
+
+    #[test]
+    fn download_state_serde_roundtrip() {
+        let states = vec![
+            DownloadState::NotDownloaded, DownloadState::Downloading,
+            DownloadState::Paused, DownloadState::Downloaded,
+            DownloadState::Failed, DownloadState::Cancelled,
+        ];
+        for s in states {
+            let json = serde_json::to_string(&s).unwrap();
+            let parsed: DownloadState = serde_json::from_str(&json).unwrap();
+            assert_eq!(s, parsed);
+        }
+    }
+}

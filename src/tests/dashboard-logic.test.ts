@@ -39,9 +39,10 @@ describe("computeRawScores", () => {
   it("returns scores for valid channels", () => {
     const result = computeRawScores([{ rel_alpha: 0.3, rel_beta: 0.4, rel_theta: 0.2 }]);
     expect(result).not.toBeNull();
-    expect(result!.focus).toBeGreaterThan(0);
-    expect(result!.relax).toBeGreaterThan(0);
-    expect(result!.engagement).toBeGreaterThan(0);
+    if (!result) return; // type narrowing
+    expect(result.focus).toBeGreaterThan(0);
+    expect(result.relax).toBeGreaterThan(0);
+    expect(result.engagement).toBeGreaterThan(0);
   });
   it("handles zero-power channels gracefully", () => {
     const result = computeRawScores([{ rel_alpha: 0, rel_beta: 0, rel_theta: 0 }]);
