@@ -93,7 +93,7 @@ impl HooksLog {
     }
 
     /// Append one fire event to the log.  Silently ignores write errors.
-    pub fn record(&self, entry: HookFireEntry<'_>) {
+    pub fn record(&self, entry: &HookFireEntry<'_>) {
         let r = self.conn.execute(
             "INSERT INTO hook_events
              (triggered_at_utc, hook_json, trigger_json, payload_json)

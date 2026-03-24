@@ -103,7 +103,7 @@ impl LabelStore {
             Ok(r)  => r,
             Err(e) => { eprintln!("[labels] recent map: {e}"); return vec![]; }
         };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Insert a label row.  Returns the new `rowid` on success.
@@ -156,7 +156,7 @@ impl LabelStore {
             Ok(r)  => r,
             Err(e) => { eprintln!("[labels] list_all map: {e}"); return vec![]; }
         };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 
     /// Update the text and context of an existing label by id.
@@ -205,7 +205,7 @@ impl LabelStore {
         stmt.query_map(params![current_model], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -220,7 +220,7 @@ impl LabelStore {
         stmt.query_map([], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -252,7 +252,7 @@ impl LabelStore {
                         last_used: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
             None => {
@@ -271,7 +271,7 @@ impl LabelStore {
                         last_used: row.get::<_, i64>(2)? as u64,
                     })
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
                 .unwrap_or_default()
             }
         }
@@ -314,7 +314,7 @@ impl LabelStore {
             Ok(r)  => r,
             Err(e) => { eprintln!("[labels] query_range map: {e}"); return vec![]; }
         };
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(std::result::Result::ok).collect()
     }
 }
 

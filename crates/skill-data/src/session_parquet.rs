@@ -207,7 +207,7 @@ impl ParquetState {
         }
 
         // Drain complete rows (all channels have data).
-        let ready = self.eeg_bufs.iter().map(|b| b.len()).min().unwrap_or(0);
+        let ready = self.eeg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         if ready == 0 { return; }
 
         // Build column arrays.
@@ -249,7 +249,7 @@ impl ParquetState {
             self.ppg_ts[channel].push_back(packet_ts + i as f64 / PPG_SAMPLE_RATE);
         }
 
-        let ready = self.ppg_bufs.iter().map(|b| b.len()).min().unwrap_or(0);
+        let ready = self.ppg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         if ready == 0 { return; }
 
         // Lazy-open PPG writer.

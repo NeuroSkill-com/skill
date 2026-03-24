@@ -180,7 +180,7 @@ impl CsvState {
         Ok(Self {
             wtr,
             n_eeg:   n,
-            channel_labels: labels.iter().map(|s| s.to_string()).collect(),
+            channel_labels: labels.iter().map(std::string::ToString::to_string).collect(),
             bufs:    (0..n).map(|_| VecDeque::new()).collect(),
             ts_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             written: 0,
@@ -203,7 +203,7 @@ impl CsvState {
             self.ts_bufs[electrode].push_back(packet_ts + i as f64 / sample_rate);
         }
 
-        let ready = self.bufs.iter().map(|b| b.len()).min().unwrap_or(0);
+        let ready = self.bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         let n = self.n_eeg;
         for _ in 0..ready {
             let Some(ts) = self.ts_bufs[0].pop_front() else { break };
@@ -259,7 +259,7 @@ impl CsvState {
             self.ppg_ts_bufs[channel].push_back(packet_ts + i as f64 / PPG_SAMPLE_RATE);
         }
 
-        let ready = self.ppg_bufs.iter().map(|b| b.len()).min().unwrap_or(0);
+        let ready = self.ppg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         if let Some(ref mut wtr) = self.ppg_wtr {
             for _ in 0..ready {
                 let Some(ts) = self.ppg_ts_bufs[0].pop_front() else { break };
@@ -348,9 +348,9 @@ impl CsvState {
             let path = metrics_csv_path(eeg_csv_path);
             match csv::Writer::from_path(&path) {
                 Ok(mut w) => {
-                    let label_refs: Vec<&str> = self.channel_labels.iter().map(|s| s.as_str()).collect();
+                    let label_refs: Vec<&str> = self.channel_labels.iter().map(std::string::String::as_str).collect();
                     let header = build_metrics_header(&label_refs);
-                    let header_refs: Vec<&str> = header.iter().map(|s| s.as_str()).collect();
+                    let header_refs: Vec<&str> = header.iter().map(std::string::String::as_str).collect();
                     let _ = w.write_record(&header_refs);
                     eprintln!("[csv] Metrics file opened: {}", path.display());
                     self.metrics_wtr = Some(w);

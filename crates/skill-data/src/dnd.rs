@@ -146,10 +146,7 @@ pub fn list_focus_modes() -> Vec<FocusModeOption> {
     {
         use macos_focus::FocusManager;
 
-        let mgr = match FocusManager::new() {
-            Ok(m)  => m,
-            Err(_) => return builtin_modes(),
-        };
+        let Ok(mgr) = FocusManager::new() else { return builtin_modes() };
         match mgr.available_modes() {
             Ok(modes) => modes.iter().map(|m| FocusModeOption {
                 identifier: m.identifier().to_owned(),
