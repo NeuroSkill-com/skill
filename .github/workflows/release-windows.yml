@@ -450,6 +450,37 @@ jobs:
           path: src-tauri/target/cargo-timings/
           retention-days: 30
 
+      # ── Verify static CRT (no dynamic vcruntime/ucrt dependency) ────────────
+      #
+      # +crt-static and CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded should produce
+      # a binary with zero dependency on vcruntime140.dll / ucrtbase.dll.  If a
+      # cmake-based -sys crate sneaks in a /MD object, the final exe silently
+      # gains a dynamic CRT dep and users without the VC++ Redistributable get
+      # "side-by-side configuration is incorrect" on launch.  Catch it here.
+      - name: Verify static CRT linkage
+        shell: powershell
+        run: |
+          $exe = "src-tauri/target/release/skill.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Error "skill.exe not found at $exe"
+            exit 1
+          }
+
+          $deps = & dumpbin /dependents $exe | Select-String -Pattern "vcruntime|ucrt|msvcp" -CaseSensitive:$false
+          if ($deps) {
+            Write-Host "::error::Binary has dynamic CRT dependencies — static CRT linkage failed:"
+            $deps | ForEach-Object { Write-Host "  $_" }
+            Write-Host ""
+            Write-Host "Full dependency list:"
+            & dumpbin /dependents $exe
+            exit 1
+          }
+
+          Write-Host "[ok] No dynamic CRT dependencies detected — binary is fully statically linked."
+          Write-Host ""
+          Write-Host "Dependencies:"
+          & dumpbin /dependents $exe
+
       # ── Package NSIS installer ───────────────────────────────────────────────
       #
       # Runs the NSIS packaging script against the pre-built binary, then

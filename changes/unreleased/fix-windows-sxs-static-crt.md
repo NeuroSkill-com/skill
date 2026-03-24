@@ -5,3 +5,4 @@
 ### Build
 
 - **Bust Windows CI caches**: Bumped Cargo and sccache cache keys (`windows-release-x86_64-msvc-v2`, `SCCACHE_GHA_VERSION=2`) to invalidate stale cmake artifacts that were compiled with dynamic CRT (`/MD`).
+- **Verify static CRT in Windows CI**: Added a post-compile `dumpbin /dependents` check that fails the build if `vcruntime140.dll`, `ucrtbase.dll`, or `msvcp*.dll` appear as dependencies, catching dynamic CRT leaks before packaging.
