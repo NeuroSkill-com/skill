@@ -116,8 +116,15 @@ jobs:
         run: |
           echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
           echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
+          # Version the sccache GHA cache so it can be busted manually by
+          # incrementing this value (e.g. after a toolchain or LLVM upgrade).
+          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
 
-      # ── Node.js ───────────────────────────────────────────────────────────────
+      # ── Node.js + frontend build ─────────────────────────────────────────────
+      # Moved before SDK installs so the frontend compiles while heavy SDKs
+      # (Vulkan, LLVM, espeak) are set up afterwards — no dependency between
+      # the two.  On cache-warm runs the frontend finishes in < 30 s, so the
+      # wall-clock saving comes from not blocking the SDK steps behind it.
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -127,22 +134,55 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      # ── NSIS (required by scripts/create-windows-nsis.ps1) ─────────────────
-      # GitHub's windows-latest image does not guarantee NSIS is preinstalled.
-      # Ensure makensis exists before running `npm run taur:build:win:nsis`.
-      - name: Install NSIS
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify Tauri frontend bundle structure
+        run: npm run -s verify:tauri:frontend
+
+      # ── NSIS + Vulkan SDK (parallel install) ─────────────────────────────────
+      # NSIS and the Vulkan SDK are independent of each other and of the Rust
+      # toolchain.  Installing them in a single step via background jobs cuts
+      # ~1-2 min of sequential wait time on cache-miss runs.
+      - name: Cache Vulkan SDK
+        uses: actions/cache@v5
+        with:
+          path: C:\VulkanSDK
+          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
+
+      - name: Install NSIS + Vulkan SDK (parallel)
         shell: powershell
         run: |
-          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
-          if (-not $makensis) {
-            Write-Host "[info] NSIS not found on PATH; installing via Chocolatey"
-            choco install nsis -y --no-progress
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Failed to install NSIS via Chocolatey"
-              exit $LASTEXITCODE
+          # ── NSIS (background) ────────────────────────────────────────────────
+          $nsisJob = Start-Job -ScriptBlock {
+            $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+            if (-not $makensis) {
+              Write-Output "[info] NSIS not found on PATH; installing via Chocolatey"
+              choco install nsis -y --no-progress
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to install NSIS via Chocolatey (exit $LASTEXITCODE)"
+              }
             }
           }
 
+          # ── Vulkan SDK (foreground — needs env export) ───────────────────────
+          & .\scripts\install-vulkan-sdk.ps1
+          if (-not $env:VULKAN_SDK) {
+            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
+            exit 1
+          }
+          "VULKAN_SDK=$env:VULKAN_SDK" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
+
+          # ── Wait for NSIS ────────────────────────────────────────────────────
+          $nsisJob | Wait-Job | Receive-Job
+          if ($nsisJob.State -eq 'Failed') {
+            Write-Error "NSIS background install failed"
+            exit 1
+          }
+
+          # Locate makensis and export NSIS_DIR
           $makensis = Get-Command makensis -ErrorAction SilentlyContinue
           if ($makensis) {
             $nsisDir = Split-Path -Parent $makensis.Source
@@ -243,42 +283,6 @@ jobs:
         if: steps.cache-espeak.outputs.cache-hit != 'true'
         shell: powershell
         run: .\scripts\build-espeak-static.ps1
-
-      # ── Vulkan SDK ────────────────────────────────────────────────────────────
-      # The llm-vulkan feature (Vulkan GPU back-end for llama.cpp) is always
-      # enabled on Windows.  The Vulkan SDK is NOT pre-installed on GitHub
-      # Actions runners, so we download it here and cache the result.
-      #
-      # Cache key is the hash of the install script; changing the script
-      # (e.g. to pin a specific SDK version) automatically busts the cache.
-      #
-      # Cache hit:  install script detects C:\VulkanSDK via filesystem and exits
-      #             immediately — no network I/O, total overhead < 5 s.
-      # Cache miss: install script downloads the ~200 MB installer from
-      #             sdk.lunarg.com, runs it silently (/S), and the populated
-      #             C:\VulkanSDK tree is stored in the cache for future runs.
-      #
-      # After either path, VULKAN_SDK is written to $GITHUB_ENV so that
-      # subsequent steps (cargo / CMake FindVulkan) can locate the headers and
-      # vulkan-1.lib without relying on the machine-level env var that the
-      # installer would normally set — that var is not restored by cache restore.
-      - name: Cache Vulkan SDK
-        uses: actions/cache@v5
-        with:
-          path: C:\VulkanSDK
-          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
-
-      - name: Install Vulkan SDK + export VULKAN_SDK
-        shell: powershell
-        run: |
-          .\scripts\install-vulkan-sdk.ps1
-          if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
-            exit 1
-          }
-          "VULKAN_SDK=$env:VULKAN_SDK" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
 
       # ── Import Windows code-signing certificate (optional) ───────────────────
       # Skipped when WINDOWS_CERTIFICATE is not set (unsigned build).
@@ -400,13 +404,6 @@ jobs:
             Write-Host "[info] lld-link not found under C:\LLVM; falling back to MSVC link.exe"
           }
 
-      # ── Build frontend ────────────────────────────────────────────────────────
-      - name: Build frontend
-        run: npm run build
-
-      - name: Verify Tauri frontend bundle structure
-        run: npm run -s verify:tauri:frontend
-
       # ── Compile Rust (cargo build only) ──────────────────────────────────────
       #
       # Split from packaging so CI timing shows compile vs NSIS separately.
@@ -430,11 +427,28 @@ jobs:
           # Without this, users without VC++ Redistributable get "side-by-side
           # configuration is incorrect" errors on launch.
           CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+          # Let sccache cache C/C++ compilations from cmake-based -sys crates
+          # (llama-cpp-sys-4, espeak-ng, etc.).  Without these, only rustc
+          # invocations go through sccache — the heavy cmake builds are
+          # re-done from scratch every time.
+          CMAKE_C_COMPILER_LAUNCHER:   sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           set -euo pipefail
           sccache --show-stats || true
-          cargo build -p skill --release --features custom-protocol,llm-vulkan,screenshots
+          cargo build -p skill --release --features custom-protocol,llm-vulkan,screenshots --timings
           sccache --show-stats || true
+
+      # ── Upload cargo build timings ───────────────────────────────────────────
+      # The --timings flag produces an HTML report showing per-crate compile
+      # durations.  Upload it so slow crates can be identified and targeted.
+      - name: Upload cargo build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-windows
+          path: src-tauri/target/cargo-timings/
+          retention-days: 30
 
       # ── Package NSIS installer ───────────────────────────────────────────────
       #
