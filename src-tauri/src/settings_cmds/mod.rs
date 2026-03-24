@@ -784,7 +784,58 @@ pub fn set_llm_config(
         *server.allowed_tools.lock_or_recover() = new_tools;
     }
 
+    // Live-update the web cache configuration.
+    skill_tools::web_cache::update_config(config.tools.web_cache.clone());
+
     save_settings(&app);
+}
+
+// ── Web cache commands ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn web_cache_stats() -> serde_json::Value {
+    match skill_tools::web_cache::global() {
+        Some(cache) => serde_json::to_value(cache.stats()).unwrap_or_default(),
+        None => serde_json::json!({"total_entries": 0, "expired_entries": 0, "total_bytes": 0}),
+    }
+}
+
+#[tauri::command]
+pub fn web_cache_list() -> Vec<serde_json::Value> {
+    match skill_tools::web_cache::global() {
+        Some(cache) => cache.list_entries()
+            .into_iter()
+            .filter_map(|e| serde_json::to_value(e).ok())
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+#[tauri::command]
+pub fn web_cache_clear() -> u64 {
+    if let Some(cache) = skill_tools::web_cache::global() {
+        let stats = cache.stats();
+        cache.clear();
+        stats.total_entries
+    } else {
+        0
+    }
+}
+
+#[tauri::command]
+pub fn web_cache_remove_domain(domain: String) -> u64 {
+    match skill_tools::web_cache::global() {
+        Some(cache) => cache.remove_by_domain(&domain),
+        None => 0,
+    }
+}
+
+#[tauri::command]
+pub fn web_cache_remove_entry(key: String) -> bool {
+    match skill_tools::web_cache::global() {
+        Some(cache) => cache.remove_entry(&key),
+        None => false,
+    }
 }
 
 /// Open a native file-picker dialog for selecting a GGUF model file.

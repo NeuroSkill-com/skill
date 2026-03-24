@@ -271,6 +271,7 @@ use settings_cmds::{
     get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
     get_sleep_config, set_sleep_config,
     get_llm_config, set_llm_config, pick_gguf_file,
+    web_cache_stats, web_cache_list, web_cache_clear, web_cache_remove_domain, web_cache_remove_entry,
     get_screenshot_config, set_screenshot_config,
     estimate_screenshot_reembed, rebuild_screenshot_embeddings,
     get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
@@ -1350,6 +1351,7 @@ pub fn run() {
             get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
             get_sleep_config, set_sleep_config,
             get_llm_config, set_llm_config, pick_gguf_file,
+            web_cache_stats, web_cache_list, web_cache_clear, web_cache_remove_domain, web_cache_remove_entry,
             // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)
             #[cfg(feature = "llm")]
             get_llm_catalog,

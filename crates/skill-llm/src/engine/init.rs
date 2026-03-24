@@ -165,6 +165,17 @@ pub fn init(
     let scripts_dir = skill_dir.join("chats").join("scripts");
     let _ = std::fs::create_dir_all(&scripts_dir);
 
+    // Initialise the persistent web cache for search/fetch tool results.
+    {
+        let cache_dir = skill_dir.join("web_cache");
+        let cache_cfg = config.tools.web_cache.clone();
+        skill_tools::web_cache::init_global(cache_dir, cache_cfg);
+        // Evict expired entries on startup (non-blocking best-effort).
+        if let Some(cache) = skill_tools::web_cache::global() {
+            cache.evict_expired();
+        }
+    }
+
     // Discover Agent Skills from all configured locations.
     let exe_dir = std::env::current_exe()
         .ok()

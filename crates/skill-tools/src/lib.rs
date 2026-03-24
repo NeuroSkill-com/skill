@@ -11,6 +11,7 @@
 //! - **context** — context-aware history trimming for tool conversations
 //! - **log** — standalone pluggable logger for tool-call tracing
 
+pub mod error;
 pub mod log;
 
 /// Log a message from the tool-call subsystem.
@@ -36,9 +37,10 @@ pub mod defs;
 pub mod exec;
 pub(crate) mod search;
 pub mod context;
+pub mod web_cache;
 
 // Re-export the most-used types at crate root for convenience.
-pub use types::{LlmToolConfig, ToolExecutionMode, ToolContextCompression, CompressionLevel};
+pub use types::{LlmToolConfig, ToolExecutionMode, ToolContextCompression, CompressionLevel, WebCacheConfig};
 pub use parse::{
     Tool, ToolFunction, ToolCall, ToolCallFunction,
     ChatMessage, MessageContent, ContentPart, ImageUrl,
