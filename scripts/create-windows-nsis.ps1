@@ -326,6 +326,7 @@ print('  [ok] installer images generated')
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "Sections.nsh"
+!include "nsDialogs.nsh"
 
 ; ── General ─────────────────────────────────────────────────────────────
 Name "$ProductName"
@@ -385,9 +386,31 @@ Function LaunchAsCurrentUser
   Exec '"`$WINDIR\explorer.exe" "`$INSTDIR\skill.exe"'
 FunctionEnd
 
+; ── Kill running instance before install ─────────────────────────────────
+; If the app is already running, the installer cannot replace skill.exe.
+; Gracefully ask the user, then force-kill if needed.
+Function KillRunningInstance
+  FindWindow `$0 "" "$ProductDisplayName"
+  IntCmp `$0 0 not_running
+    ; App window found — ask user
+    MessageBox MB_OKCANCEL|MB_ICONINFORMATION "$ProductDisplayName is currently running and must be closed before installing.$\n$\nClick OK to close it automatically, or Cancel to abort." IDOK kill_it
+      Abort
+    kill_it:
+    ; Try graceful WM_CLOSE first
+    SendMessage `$0 `${WM_CLOSE} 0 0
+    Sleep 2000
+    ; Force-kill if still running
+    nsExec::ExecToLog 'taskkill /F /IM skill.exe'
+    Sleep 500
+  not_running:
+FunctionEnd
+
 ; ── Install section ─────────────────────────────────────────────────────
 Section "$ProductName (required)" SEC_MAIN
   SectionIn RO  ; required — cannot be unchecked
+
+  ; Kill any running instance before overwriting files
+  Call KillRunningInstance
 $($installFiles -join "`n")
 
   ; Uninstaller
@@ -418,6 +441,13 @@ $($installFiles -join "`n")
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "EstimatedSize" `$0
 
   WriteRegStr HKLM "Software\$ProductName" "InstallDir" "`$INSTDIR"
+
+  ; ── Windows Firewall rule for the local LLM/WebSocket server ───────────
+  ; The app listens on localhost for LLM inference and WebSocket commands.
+  ; Pre-adding a firewall rule prevents the "allow access?" popup on first
+  ; launch.  Failure is non-fatal (user can allow manually).
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName"'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="$ProductName" dir=in action=allow program="`$INSTDIR\skill.exe" enable=yes profile=private,public'
 SectionEnd
 
 ; ── Vulkan Runtime section (optional, auto-selected when missing) ───────
@@ -482,11 +512,40 @@ Section /o "Install VC++ Redistributable" SEC_VCREDIST
   vcredist_done:
 SectionEnd
 
+; ── WebView2 Runtime section (optional, auto-selected when missing) ─────
+; Tauri 2 requires the Microsoft Edge WebView2 Runtime to render the app
+; UI.  It is built into Windows 11 but may be absent on older Windows 10
+; machines.  The Evergreen Bootstrapper is ~1.8 MB and installs silently.
+Section /o "Install WebView2 Runtime (required for UI)" SEC_WEBVIEW2
+  StrCpy `$0 "`$TEMP\MicrosoftEdgeWebview2Setup.exe"
+
+  DetailPrint "Downloading WebView2 Runtime..."
+  NSISdl::download "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `$0
+  Pop `$1
+  StrCmp `$1 "success" +3
+    DetailPrint "WebView2 download failed (`$1). The app may not display correctly."
+    Goto webview2_done
+
+  ; /silent /install — standard quiet switches for the Evergreen Bootstrapper.
+  DetailPrint "Installing WebView2 Runtime..."
+  nsExec::ExecToLog '"`$0" /silent /install'
+  Pop `$1
+  IntCmp `$1 0 webview2_ok
+    DetailPrint "WebView2 installer exited with code `$1 (may already be installed)."
+    Goto webview2_cleanup
+  webview2_ok:
+    DetailPrint "WebView2 Runtime installed successfully."
+  webview2_cleanup:
+  Delete `$0
+  webview2_done:
+SectionEnd
+
 ; ── Component descriptions ──────────────────────────────────────────────
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}     "Install $ProductDisplayName application files."
-  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VULKAN}   "Download and install the Vulkan Runtime for GPU-accelerated LLM inference. Not needed if your GPU driver already provides Vulkan support."
-  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST} "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_MAIN}      "Install $ProductDisplayName application files."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VULKAN}    "Download and install the Vulkan Runtime for GPU-accelerated LLM inference. Not needed if your GPU driver already provides Vulkan support."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_VCREDIST}  "Download and install the Microsoft Visual C++ 2015-2022 Redistributable (x64). Required by some GPU and AI components. Safe to install even if already present."
+  !insertmacro MUI_DESCRIPTION_TEXT `${SEC_WEBVIEW2}  "Download and install the Microsoft Edge WebView2 Runtime. Required to display the application interface. Already included in Windows 11."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; ── Auto-select optional sections when prerequisites are missing ────────
@@ -506,6 +565,18 @@ Function .onInit
     Goto vcredist_check_done
   vcredist_found:
   vcredist_check_done:
+
+  ; WebView2 — check registry for installed WebView2 Runtime
+  ; The Evergreen Runtime writes to this key on both per-user and per-machine installs.
+  ReadRegStr `$0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+  StrCmp `$0 "" 0 webview2_reg_found
+  ReadRegStr `$0 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+  StrCmp `$0 "" 0 webview2_reg_found
+    ; Not found — select the WebView2 section
+    !insertmacro SelectSection `${SEC_WEBVIEW2}
+    Goto webview2_check_done
+  webview2_reg_found:
+  webview2_check_done:
 FunctionEnd
 
 ; ── Uninstall section ───────────────────────────────────────────────────
@@ -518,6 +589,9 @@ $($uninstallFiles -join "`n")
   Delete "`$SMPROGRAMS\$ProductName\Uninstall.lnk"
   RMDir "`$SMPROGRAMS\$ProductName"
   Delete "`$DESKTOP\$ProductName.lnk"
+
+  ; Firewall rule
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName"'
 
   ; Registry
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName"
