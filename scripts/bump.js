@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, openSync, readSync, closeSync } from "fs";
 import { execSync } from "child_process";
 import { compileChangelog } from "./compile-changelog.js";
 
@@ -141,8 +141,55 @@ const TEST_CRATES = [
   "skill-gpu",
 ];
 
+function checkForCompetingCargo() {
+  try {
+    const out = execSync(
+      `ps -eo pid,command | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`,
+      { encoding: "utf8" }
+    ).trim();
+    if (!out) return;
+    const lines = out.split("\n").filter(Boolean);
+    if (lines.length === 0) return;
+    console.warn("\n[preflight] ⚠  Other cargo processes detected:");
+    for (const l of lines) console.warn(`  ${l.trim()}`);
+    console.warn(
+      "\n  Cargo uses a global package-cache lock (~/.cargo/.package-cache)."
+    );
+    console.warn(
+      "  The bump clippy steps will block until these finish.\n"
+    );
+    const rl = require("readline").createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const fd = openSync("/dev/tty", "r");
+    const buf = Buffer.alloc(1);
+    process.stdout.write("  Continue anyway? [y/N] ");
+    rl.close();
+    let answer = "";
+    // Read characters synchronously from the terminal
+    while (true) {
+      const bytesRead = readSync(fd, buf, 0, 1);
+      if (bytesRead === 0) break;
+      const ch = buf.toString("utf8", 0, 1);
+      if (ch === "\n" || ch === "\r") break;
+      answer += ch;
+    }
+    closeSync(fd);
+    if (!/^y(es)?$/i.test(answer.trim())) {
+      throw new Error("Bump aborted: competing cargo processes running.");
+    }
+  } catch (err) {
+    if (err.message.includes("Bump aborted")) throw err;
+    // ignore ps/grep failures
+  }
+}
+
 function runPreflightChecks() {
   console.log("Running preflight checks before bump...");
+
+  // ── Competing cargo processes ─────────────────────────────────────────────
+  checkForCompetingCargo();
 
   // ── Frontend checks ───────────────────────────────────────────────────────
   runCheckStep("npm run check", "npm run check");

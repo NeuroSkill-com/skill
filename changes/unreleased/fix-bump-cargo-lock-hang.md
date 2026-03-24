@@ -1,0 +1,3 @@
+### CLI
+
+- **Detect competing cargo processes in bump**: `npm run bump` now checks for other running `cargo` processes before starting clippy/test preflight checks and warns that they may cause hangs due to the global cargo package-cache lock. The user is prompted to continue or abort.
