@@ -177,7 +177,7 @@ pub fn init(
             let p = cwd.join(skill_constants::SKILLS_SUBDIR);
             if p.is_dir() { Some(p) } else { None }
         });
-    let skills_result = skill_skills::load_skills(skill_skills::LoadSkillsOptions {
+    let skills_result = skill_skills::load_skills(&skill_skills::LoadSkillsOptions {
         cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
         skill_dir: skill_dir.to_path_buf(),
         bundled_dir: bundled_skills_dir,

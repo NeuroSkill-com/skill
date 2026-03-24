@@ -112,7 +112,7 @@ impl Default for LoadSkillsOptions {
 ///
 /// Returns skills and any validation diagnostics.  Skills are deduplicated by
 /// name; the first loaded wins (user > project > bundled > explicit paths).
-pub fn load_skills(options: LoadSkillsOptions) -> LoadSkillsResult {
+pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
     let mut skill_map: HashMap<String, Skill> = HashMap::new();
     let mut real_paths: HashSet<PathBuf> = HashSet::new();
     let mut all_diags: Vec<SkillDiagnostic> = Vec::new();
@@ -298,13 +298,10 @@ fn load_skills_from_dir_inner(
     // Build ignore matcher from .gitignore / .ignore / .fdignore in this dir.
     let ig = build_ignore(dir, root_dir);
 
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return LoadSkillsResult { skills, diagnostics },
-    };
+    let Ok(entries) = fs::read_dir(dir) else { return LoadSkillsResult { skills, diagnostics } };
 
-    let mut entries_vec: Vec<fs::DirEntry> = entries.filter_map(|e| e.ok()).collect();
-    entries_vec.sort_by_key(|e| e.file_name());
+    let mut entries_vec: Vec<fs::DirEntry> = entries.filter_map(std::result::Result::ok).collect();
+    entries_vec.sort_by_key(std::fs::DirEntry::file_name);
 
     // Phase 1: check for SKILL.md in this directory.
     let mut _is_index = false;
@@ -327,7 +324,7 @@ fn load_skills_from_dir_inner(
             .map(|c| {
                 let (fm, _) = parse_frontmatter(&c);
                 fm.get("index")
-                    .and_then(|v| v.as_bool())
+                    .and_then(serde_json::Value::as_bool)
                     .unwrap_or(false)
             })
             .unwrap_or(false);
@@ -458,7 +455,7 @@ fn load_skill_from_file(path: &Path, source: &str) -> (Option<Skill>, Vec<SkillD
         .get("name")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .unwrap_or_else(|| parent_dir_name.to_string());
 
     // Validate name.
@@ -472,7 +469,7 @@ fn load_skill_from_file(path: &Path, source: &str) -> (Option<Skill>, Vec<SkillD
 
     let disable = frontmatter
         .get("disable-model-invocation")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
     (

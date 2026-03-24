@@ -117,7 +117,7 @@ pub fn list_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<SkillIn
             if p.is_dir() { Some(p) } else { None }
         });
 
-    let result = skill_skills::load_skills(skill_skills::LoadSkillsOptions {
+    let result = skill_skills::load_skills(&skill_skills::LoadSkillsOptions {
         cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
         skill_dir: skill_dir.to_path_buf(),
         bundled_dir,
