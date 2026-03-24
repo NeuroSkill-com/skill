@@ -71,6 +71,38 @@
       {/each}
     </div>
 
+    <!-- Require bash edit (only visible when bash is enabled) -->
+    {#if toolConfig.bash}
+      <button
+        onclick={() => onUpdate({ require_bash_edit: !toolConfig.require_bash_edit })}
+        class="flex items-center gap-2 mt-1.5 w-full px-2.5 py-1.5 rounded-lg border transition-all
+               cursor-pointer select-none text-left
+               {toolConfig.require_bash_edit
+                 ? 'border-primary/40 bg-primary/8 text-foreground'
+                 : 'border-border bg-background text-muted-foreground/50 hover:border-muted-foreground/30'}">
+        <span class="text-sm shrink-0">👁️</span>
+        <div class="flex flex-col gap-0 min-w-0">
+          <span class="text-[0.63rem] font-medium truncate">
+            {t("chat.tools.requireBashEdit")}
+          </span>
+          <span class="text-[0.5rem] text-muted-foreground/50 truncate leading-tight">
+            {t("chat.tools.requireBashEditDesc")}
+          </span>
+        </div>
+        <div class="ml-auto shrink-0 w-3 h-3 rounded-full border-2 flex items-center justify-center
+                    {toolConfig.require_bash_edit
+                      ? 'border-primary bg-primary'
+                      : 'border-muted-foreground/30 bg-transparent'}">
+          {#if toolConfig.require_bash_edit}
+            <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2">
+              <polyline points="2 5 4 7 8 3"/>
+            </svg>
+          {/if}
+        </div>
+      </button>
+    {/if}
+
     <!-- Tool execution mode toggle -->
     <div class="mt-1.5">
       <div class="flex items-center justify-between gap-2 mb-1">

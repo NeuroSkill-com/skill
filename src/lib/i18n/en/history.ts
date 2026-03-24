@@ -95,6 +95,7 @@ const history: Record<string, string> = {
   "history.samples":        "Samples",
   "history.device":         "Device",
   "history.battery":        "Battery",
+  "history.snr":            "Signal Quality",
   "history.label":          "label",
   "history.labels":         "labels",
   "history.delete":         "Delete",

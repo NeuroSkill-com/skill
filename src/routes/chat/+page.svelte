@@ -48,6 +48,7 @@
   // ── State ──────────────────────────────────────────────────────────────────
 
   let status         = $state<ServerStatus>("stopped");
+  let startError     = $state("");
   let modelName      = $state("");
   let nCtx           = $state(0);
   let supportsVision = $state(false);
@@ -393,7 +394,9 @@
         status = s.status; modelName = s.model_name; nCtx = s.n_ctx ?? 0;
         supportsVision = s.supports_vision ?? false; supportsTools = s.supports_tools ?? false;
         if (s.start_error && s.status === "stopped") {
-          console.error("[chat] LLM start error:", s.start_error);
+          startError = s.start_error;
+        } else if (s.status === "running") {
+          startError = "";
         }
       } catch (e) { console.warn("[chat] poll status failed:", e); }
     }, 1500);
@@ -401,6 +404,7 @@
 
   async function startServer() {
     status = "loading";
+    startError = "";
     try { await invoke("start_llm_server"); }
     catch (e) { console.error("start_llm_server failed:", e); status = "stopped"; return; }
     // Restart the poll timer so we pick up status transitions even if the
@@ -851,7 +855,7 @@
           enabled: cfg.tools.enabled ?? true,
           date: cfg.tools.date ?? true, location: cfg.tools.location ?? true,
           web_search: cfg.tools.web_search ?? true, web_fetch: cfg.tools.web_fetch ?? true,
-          bash: cfg.tools.bash ?? false, read_file: cfg.tools.read_file ?? false,
+          bash: cfg.tools.bash ?? false, require_bash_edit: cfg.tools.require_bash_edit ?? false, read_file: cfg.tools.read_file ?? false,
           write_file: cfg.tools.write_file ?? false, edit_file: cfg.tools.edit_file ?? false,
           skill_api: cfg.tools.skill_api ?? true,
           execution_mode: cfg.tools.execution_mode ?? "parallel",
@@ -870,7 +874,8 @@
         if (ev.payload.supports_vision !== undefined) supportsVision = ev.payload.supports_vision;
         if ((ev.payload as any).supports_tools !== undefined) supportsTools = (ev.payload as any).supports_tools;
         if ((ev.payload as any).n_ctx !== undefined) nCtx = (ev.payload as any).n_ctx;
-        if (status === "running") clearInterval(pollTimer!);
+        if ((ev.payload as any).error) startError = (ev.payload as any).error;
+        if (status === "running") { clearInterval(pollTimer!); startError = ""; }
         if (status === "stopped") { supportsVision = false; supportsTools = false; nCtx = 0; }
       });
     } catch (e) { console.warn("[chat] listen llm:status failed:", e); }
@@ -954,6 +959,18 @@
       onToggleEeg={() => eegContext = !eegContext}
       onToggleContextBreakdown={() => showContextBreakdown = !showContextBreakdown}
     />
+
+    {#if startError}
+      <div class="px-3 py-1.5 text-[0.7rem] bg-red-500/10 text-red-600 dark:text-red-400 border-b border-red-500/20 flex items-center gap-2">
+        <svg viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        <span class="flex-1 min-w-0 truncate">{startError}</span>
+        <button onclick={() => startError = ""} class="shrink-0 p-0.5 rounded hover:bg-red-500/20 cursor-pointer">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+        </button>
+      </div>
+    {/if}
 
     {#if showContextBreakdown && nCtx > 0}
       <ChatContextBreakdown
