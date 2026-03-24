@@ -340,6 +340,16 @@ Unicode True
 $imageDirectives
 !define MUI_ABORTWARNING
 
+; ── Finish page: launch app after install ───────────────────────────────
+; MUI_FINISHPAGE_RUN is intentionally left empty — we use a custom callback
+; (un-elevated launch) instead.  The installer runs as admin
+; (RequestExecutionLevel admin), so a naive Exec/ExecShell would launch the
+; app as Administrator.  The MUI_FINISHPAGE_RUN_FUNCTION callback invokes
+; explorer.exe to start the app in the real user's context (not elevated).
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_TEXT "Launch $ProductDisplayName"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchAsCurrentUser
+
 ; ── Pages ───────────────────────────────────────────────────────────────
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE"
@@ -359,6 +369,19 @@ VIAddVersionKey "ProductVersion" "$Version"
 VIAddVersionKey "FileVersion" "$Version"
 VIAddVersionKey "LegalCopyright" "GPL-3.0-only"
 VIAddVersionKey "FileDescription" "$ProductDisplayName Installer"
+
+; ── Launch helper (drop admin elevation) ────────────────────────────────
+; The installer runs elevated (admin).  Launching the app directly with
+; Exec/ExecShell would run it as Administrator, which breaks per-user
+; paths, tray registration, and autostart.
+;
+; The reliable no-plugin approach: use the Windows "runas" trick in
+; reverse — ask Explorer (running as the real user) to open the exe.
+; We do this by invoking explorer.exe with the full exe path, which
+; causes Explorer to ShellExecute it in the user's own session context.
+Function LaunchAsCurrentUser
+  Exec '"`$WINDIR\explorer.exe" "`$INSTDIR\skill.exe"'
+FunctionEnd
 
 ; ── Install section ─────────────────────────────────────────────────────
 Section "Install"
