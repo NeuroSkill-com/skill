@@ -414,9 +414,12 @@ $($uninstallFiles -join "`n")
 SectionEnd
 "@
 
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($NsiScript, $nsiContent, $utf8NoBom)
-    Write-Host "  [ok] NSIS script written"
+    # NSIS with `Unicode True` requires a BOM to detect UTF-8 encoding.
+    # Without BOM it falls back to the system ANSI codepage and mangles
+    # non-ASCII characters like ™ in the product display name.
+    $utf8WithBom = New-Object System.Text.UTF8Encoding($true)
+    [System.IO.File]::WriteAllText($NsiScript, $nsiContent, $utf8WithBom)
+    Write-Host "  [ok] NSIS script written (UTF-8 with BOM)"
 
     # ── Run NSIS ────────────────────────────────────────────────────────────
     Write-Host "  Compiling installer ..."
