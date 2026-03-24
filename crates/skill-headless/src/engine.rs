@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Core browser engine — spawns a hidden wry webview and processes commands.
+// Core browser engine — spawns a hidden wry webview and processes commands.
+//
+// This module uses `.expect("lock poisoned")` on Mutex locks throughout.
+// Poison recovery is not meaningful here — if one thread panics while holding
+// a lock, the engine state is unrecoverably corrupt.
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},

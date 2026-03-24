@@ -65,6 +65,7 @@ pub fn init_tts_dirs(dir: &std::path::Path) {
 
 /// Store the runtime path to bundled NeuTTS voice-preset sample files.
 /// Called from `lib.rs` setup once the Tauri resource dir is known.
+#[allow(clippy::needless_pass_by_value)] // consumed by neutts::set_samples_dir when feature is enabled
 pub fn init_neutts_samples_dir(path: PathBuf) {
     #[cfg(feature = "tts-neutts")]
     neutts::set_samples_dir(path);
@@ -336,6 +337,7 @@ pub fn tts_get_voice() -> String {
 }
 
 /// Set the active voice name.
+#[allow(clippy::needless_pass_by_value)] // consumed by neutts::set_voice_preset when feature is enabled
 pub fn tts_set_voice(voice: String) {
     #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
     let _ = &voice;
