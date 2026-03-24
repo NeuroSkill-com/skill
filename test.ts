@@ -288,46 +288,55 @@ function fmt(v: unknown): string {
 async function discover(): Promise<number> {
   if (PORT) return PORT;
 
-  // Strategy 1: bonjour-service mDNS discovery
-  info("trying mDNS discovery (bonjour-service)…");
-  const port = await new Promise<number | null>((resolve) => {
-    const instance = new Bonjour();
-    const timeout = setTimeout(() => {
-      browser.stop();
-      instance.destroy();
-      resolve(null);
-    }, 5000);
-
-    const browser = instance.find({ type: "skill" }, (service) => {
-      clearTimeout(timeout);
-      browser.stop();
-      const port = service.port;
-      info(`mDNS found: ${service.name} @ ${service.host}:${port}`);
-      instance.destroy();
-      resolve(port);
-    });
-  });
-
-  if (port) return port;
-
-  // Strategy 2: lsof fallback (Unix)
-  try {
-    info("trying lsof fallback…");
-    const ps = execSync("pgrep -if 'skill' 2>/dev/null || true", { encoding: "utf8" }).trim();
-    if (ps) {
-      const pids = ps.split("\n").map(s => s.trim()).filter(Boolean);
-      for (const pid of pids) {
-        try {
-          const lsof = execSync(`lsof -iTCP -sTCP:LISTEN -nP -p ${pid} 2>/dev/null || true`, { encoding: "utf8" });
-          for (const m of lsof.matchAll(/:(\d{4,5})\s+\(LISTEN\)/g)) {
-            if (await testWs(Number(m[1]))) return Number(m[1]);
-          }
-        } catch {}
-      }
+  // Retry discovery indefinitely until Ctrl-C.
+  // Each attempt tries mDNS (5s timeout) then lsof fallback.
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    if (attempt === 1) {
+      info("discovering Skill port (retries until Ctrl-C)…");
+    } else {
+      info(`discovery attempt #${attempt} — retrying in 3s…`);
+      await new Promise(r => setTimeout(r, 3000));
     }
-  } catch {}
 
-  die("Could not discover port. Pass it manually: npx tsx test.ts <port>");
+    // Strategy 1: bonjour-service mDNS discovery
+    const port = await new Promise<number | null>((resolve) => {
+      const instance = new Bonjour();
+      const timeout = setTimeout(() => {
+        browser.stop();
+        instance.destroy();
+        resolve(null);
+      }, 5000);
+
+      const browser = instance.find({ type: "skill" }, (service) => {
+        clearTimeout(timeout);
+        browser.stop();
+        const port = service.port;
+        info(`mDNS found: ${service.name} @ ${service.host}:${port}`);
+        instance.destroy();
+        resolve(port);
+      });
+    });
+
+    if (port) return port;
+
+    // Strategy 2: lsof fallback (Unix)
+    try {
+      const ps = execSync("pgrep -if 'skill' 2>/dev/null || true", { encoding: "utf8" }).trim();
+      if (ps) {
+        const pids = ps.split("\n").map(s => s.trim()).filter(Boolean);
+        for (const pid of pids) {
+          try {
+            const lsof = execSync(`lsof -iTCP -sTCP:LISTEN -nP -p ${pid} 2>/dev/null || true`, { encoding: "utf8" });
+            for (const m of lsof.matchAll(/:(\d{4,5})\s+\(LISTEN\)/g)) {
+              if (await testWs(Number(m[1]))) return Number(m[1]);
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
