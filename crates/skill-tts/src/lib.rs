@@ -39,6 +39,7 @@ pub mod neutts;
 use std::num::NonZero;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use anyhow::Context;
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use std::sync::atomic::Ordering;
