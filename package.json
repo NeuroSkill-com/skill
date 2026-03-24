@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.0.55",
+  "version": "0.0.56",
   "description": "",
   "type": "module",
   "scripts": {
@@ -12,7 +12,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:llm:e2e": "cargo test -p skill-llm --features llm --test llm_e2e -- --nocapture",
-    "test:smoke": "bash smoke-test.sh",
     "preview": "vite preview",
     "check:markdown-renderer": "node scripts/check-markdown-renderer.js",
     "verify:tauri:frontend": "node scripts/verify-tauri-frontend-structure.js",

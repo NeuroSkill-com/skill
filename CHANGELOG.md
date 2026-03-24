@@ -8,6 +8,22 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.56] — 2026-03-24
+
+### Features
+
+- **Smoke test script**: Added `smoke-test.sh` and `npm run test:smoke` to launch the app and run `test.ts` end-to-end inside a tmux session, waiting for mDNS service discovery before starting tests.
+
+- **Full WS command test coverage**: Added smoke tests in `test.ts` for all previously untested WebSocket commands: `session_metrics`, calibration CRUD (`get_calibration`, `create_calibration`, `update_calibration`, `delete_calibration`), `sleep_schedule` / `sleep_schedule_set`, health commands (`health_summary`, `health_metric_types`, `health_query`, `health_sync`), and extended LLM management commands (`llm_downloads`, `llm_refresh_catalog`, `llm_hardware_fit`, `llm_select_model`, `llm_select_mmproj`, `llm_pause_download`, `llm_resume_download`, `llm_set_autoload_mmproj`, `llm_add_model`). All 58 dispatch table commands now have corresponding tests.
+
+### Performance
+
+- **Faster Windows release builds**: Added `CMAKE_C_COMPILER_LAUNCHER` and `CMAKE_CXX_COMPILER_LAUNCHER` env vars so sccache caches C/C++ compilations from cmake-based -sys crates (llama-cpp-sys-4, etc.), not just rustc. Added `[profile.release]` with `lto = "thin"` and `codegen-units = 8` for faster linking. Moved frontend build before SDK installs to reduce idle time. Combined NSIS and Vulkan SDK installs into a single parallel step. Added sccache GHA cache versioning and `--timings` cargo flag with artifact upload for build profiling.
+
+### Bugfixes
+
+- **Fix Windows CI zip assembly loading**: Load `System.IO.Compression` assembly explicitly before `System.IO.Compression.FileSystem` in the "Sign installer + create updater artifacts" step. On some PowerShell runtimes (notably PowerShell Core on GitHub Actions), loading only `FileSystem` does not implicitly load the base `System.IO.Compression` assembly, causing `Unable to find type [System.IO.Compression.ZipArchiveMode]` errors during NSIS updater zip creation.
+
 ## [0.0.55] — 2026-03-24
 
 ### Bugfixes

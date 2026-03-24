@@ -7,7 +7,7 @@ description = "Headless browser engine — CDP-like API over wry/tao for navigat
 
 [dependencies]
 # Windowing — hidden window hosts the webview; provides event loop + proxy.
-tao = { version = "0.34", default-features = false }
+tao = { version = "0.34", default-features = false, features = ["rwh_06"] }
 
 # WebView — system webview with full JS, DOM, network stack.
 wry = { version = "0.54" }
@@ -24,5 +24,5 @@ base64     = "0.22"
 
 # Platform-specific tao features
 [target.'cfg(target_os = "linux")'.dependencies]
-tao = { version = "0.34", features = ["x11"] }
+tao = { version = "0.34", features = ["x11", "rwh_06"] }
 gtk = "0.18"
