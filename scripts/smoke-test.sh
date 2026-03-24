@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SESSION="smoke"
-DIR="$(cd "$(dirname "$0")" && pwd)"
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MDNS_TIMEOUT=180          # seconds to wait for mDNS registration
 TEST_ARGS="${*}"           # forward all args to test.ts
 
