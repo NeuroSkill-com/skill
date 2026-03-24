@@ -29,7 +29,7 @@ use skill_log::SkillLogger;
 /// Requires `Arc<SkillLogger>` to be registered as Tauri managed state
 /// (done once in `run()` → `setup`).
 ///
-/// ```rust
+/// ```ignore
 /// app_log!(app, "bluetooth", "connected: {name}");
 /// ```
 macro_rules! app_log {

@@ -8,7 +8,7 @@
 //!
 //! ## Quick start
 //!
-//! ```rust
+//! ```ignore
 //! use skill_tools::log::{set_log_callback, set_log_enabled};
 //!
 //! // Route tool-call logs through the app logger

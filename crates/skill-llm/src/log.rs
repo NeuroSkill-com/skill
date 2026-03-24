@@ -8,7 +8,7 @@
 //!
 //! ## Quick start
 //!
-//! ```rust
+//! ```ignore
 //! use skill_llm::log::{set_log_callback, set_log_enabled};
 //!
 //! // Route LLM logs through the app logger

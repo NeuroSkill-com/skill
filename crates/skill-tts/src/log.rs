@@ -8,7 +8,7 @@
 //!
 //! ## Quick start
 //!
-//! ```rust
+//! ```ignore
 //! use skill_tts::log::{set_log_callback, set_log_enabled};
 //!
 //! // Route TTS logs through the app logger

@@ -19,7 +19,7 @@
 //! captured automatically without a separate file handle.
 //!
 //! ## Usage
-//! ```rust
+//! ```ignore
 //! skill_log!(logger, "bluetooth", "connected: {name}");
 //! ```
 

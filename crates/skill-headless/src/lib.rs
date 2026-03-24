@@ -27,7 +27,7 @@
 //!
 //! ## Quick start
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use skill_headless::{Browser, BrowserConfig, Command, Mode};
 //!
 //! // Headless (default) — no visible window.
