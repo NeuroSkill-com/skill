@@ -180,14 +180,14 @@ const search: Record<string, string> = {
   "search.exportSavingDot":   "שומר…",
   "search.exportRenderingSvg":"מעבד…",
   "search.exportError":       "שגיאה",
-  "search.modeImages": "Images",
-  "search.imageQueryLabel": "SEARCH SCREENSHOT TEXT",
-  "search.imagePlaceholder": "Search text visible in captured screenshots…",
-  "search.imageMatchText": "Text Match",
-  "search.imageMatchSemantic": "Semantic",
-  "search.imageResultsCount": "screenshots",
-  "search.imageEmptyState": "Search text extracted from captured screenshots. Use 'Text Match' for exact substring search or 'Semantic' for meaning-based search.",
-  "search.imageNoResults": "No matching screenshots found.",
+  "search.modeImages": "תמונות",
+  "search.imageQueryLabel": "חפש טקסט בצילומי מסך",
+  "search.imagePlaceholder": "חפש טקסט הנראה בצילומי מסך…",
+  "search.imageMatchText": "התאמת טקסט",
+  "search.imageMatchSemantic": "סמנטי",
+  "search.imageResultsCount": "צילומי מסך",
+  "search.imageEmptyState": "חפש טקסט שחולץ מצילומי מסך. השתמש ב'התאמת טקסט' לחיפוש מדויק או 'סמנטי' לחיפוש לפי משמעות.",
+  "search.imageNoResults": "לא נמצאו צילומי מסך תואמים.",
 };
 
 export default search;

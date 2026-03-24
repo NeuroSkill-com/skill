@@ -16,7 +16,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { resolve }                   from "path";
 import { describe, it, expect }      from "vitest";
-import { extractKeysFromDir, isExempt } from "../lib/i18n/i18n-utils";
+import { extractKeysFromDir as extractKeysWithValues, isExempt } from "../lib/i18n/i18n-utils";
 
 const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
 const LOCALES     = ["de", "fr", "he", "uk"] as const;
@@ -153,11 +153,11 @@ describe("i18n placeholder consistency", () => {
 });
 
 describe("i18n untranslated value detection", () => {
-  const enMap = extractKeysFromDir(resolve(LOCALES_DIR, "en"));
+  const enMap = extractKeysWithValues(resolve(LOCALES_DIR, "en"));
 
   for (const locale of LOCALES) {
     it(`${locale}/ has no untranslated values (identical to English)`, () => {
-      const locMap = extractKeysFromDir(resolve(LOCALES_DIR, locale));
+      const locMap = extractKeysWithValues(resolve(LOCALES_DIR, locale));
       const untranslated: string[] = [];
 
       for (const [key, enVal] of enMap) {

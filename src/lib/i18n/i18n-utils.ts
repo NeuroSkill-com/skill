@@ -153,6 +153,31 @@ export const EXEMPT_KEY_PREFIXES = [
   "chat.tools.argsLabel",       // "Arguments" technical
   "dnd.exitDurationValue",      // "{min} min" template
   "dnd.buildingScore",          // template with placeholders
+  "settings.supportedDevices.company.", // company names (InteraXon, Neurable, OpenBCI, Emotiv)
+  "settings.supportedDevices.device.",  // device product names (Muse 2, EPOC X, etc.)
+  "settings.scanner.bleDesc",   // device list "Muse, MW75, Hermes, Ganglion, IDUN"
+  "settings.scanner.cortex",    // "Emotiv Cortex" product name
+  "settings.scanner.ble",       // "Bluetooth LE" technology standard
+  "settings.deviceApi.emotivTitle",  // "Emotiv Cortex" product name
+  "settings.deviceApi.idunTitle",    // "IDUN Cloud" product name
+  "settings.deviceApi.openbciTitle", // "OpenBCI" product name
+  "settings.deviceApi.clientId",     // "Client ID" technical term
+  "settings.deviceApi.clientSecret", // "Client Secret" technical term
+  "settings.deviceApi.apiToken",     // "API Token" technical term
+  "settings.apiTokenLabel",     // "Bearer Token" technical term
+  "settings.logScanner",        // "Scanner" technical term
+  "settings.logChatStore",      // "Chat Store" technical term
+  "screenshots.modelNomic",     // model product name
+  "screenshots.backendLlmVlm",  // "LLM VLM" technical label
+  "screenshots.ocrEngineAppleVision", // "Apple Vision" product name
+  "screenshots.ocrEngineOcrs",  // "ocrs" engine name
+  "llm.tools.skillApi",         // product name
+  "chat.tools.skill_api",       // product name
+  "about.discord",              // brand name
+  "helpDash.community",         // "Community" cognate
+  "chat.ctx.messagesCount",     // "messages" cognate (FR)
+  "chat.tools.sourcesLabel",    // "Sources" cognate (FR)
+  "search.modeImages",          // "Images" cognate (FR)
 ];
 
 /** Exact keys that are always the same across locales. */

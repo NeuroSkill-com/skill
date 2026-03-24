@@ -181,13 +181,13 @@ const search: Record<string, string> = {
   "search.exportRenderingSvg":"rendu en cours...",
   "search.exportError":       "erreur",
   "search.modeImages": "Images",
-  "search.imageQueryLabel": "SEARCH SCREENSHOT TEXT",
+  "search.imageQueryLabel": "RECHERCHER TEXTE DES CAPTURES",
   "search.imagePlaceholder": "Search text visible in captured screenshots...",
-  "search.imageMatchText": "Text Match",
-  "search.imageMatchSemantic": "Semantic",
-  "search.imageResultsCount": "screenshots",
-  "search.imageEmptyState": "Search text extracted from captured screenshots. Use 'Text Match' for exact substring search or 'Semantic' for meaning-based search.",
-  "search.imageNoResults": "No matching screenshots found.",
+  "search.imageMatchText": "Correspondance texte",
+  "search.imageMatchSemantic": "Sémantique",
+  "search.imageResultsCount": "captures d'écran",
+  "search.imageEmptyState": "Recherchez du texte extrait des captures d'écran. Utilisez « Correspondance texte » pour une recherche exacte ou « Sémantique » pour une recherche par sens.",
+  "search.imageNoResults": "Aucune capture d'écran correspondante trouvée.",
 };
 
 export default search;

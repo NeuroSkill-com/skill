@@ -180,14 +180,14 @@ const search: Record<string, string> = {
   "search.exportSavingDot":   "збереження…",
   "search.exportRenderingSvg":"рендеринг…",
   "search.exportError":       "помилка",
-  "search.modeImages": "Images",
-  "search.imageQueryLabel": "SEARCH SCREENSHOT TEXT",
-  "search.imagePlaceholder": "Search text visible in captured screenshots…",
-  "search.imageMatchText": "Text Match",
-  "search.imageMatchSemantic": "Semantic",
-  "search.imageResultsCount": "screenshots",
-  "search.imageEmptyState": "Search text extracted from captured screenshots. Use 'Text Match' for exact substring search or 'Semantic' for meaning-based search.",
-  "search.imageNoResults": "No matching screenshots found.",
+  "search.modeImages": "Зображення",
+  "search.imageQueryLabel": "ПОШУК ТЕКСТУ НА ЗНІМКАХ",
+  "search.imagePlaceholder": "Шукати видимий текст на знімках екрана…",
+  "search.imageMatchText": "Текстовий збіг",
+  "search.imageMatchSemantic": "Семантичний",
+  "search.imageResultsCount": "знімків екрана",
+  "search.imageEmptyState": "Шукайте текст, вилучений зі знімків екрана. Використовуйте «Текстовий збіг» для точного пошуку або «Семантичний» для пошуку за змістом.",
+  "search.imageNoResults": "Відповідних знімків екрана не знайдено.",
 };
 
 export default search;

@@ -172,7 +172,7 @@ const search: Record<string, string> = {
   "search.interactiveKEeg":             "EEG-k",
   "search.interactiveKLabels":          "Label-k",
   "search.interactiveDedupe":           "Beschriftungen deduplizieren",
-  "search.interactiveScreenshots":      "Screenshots",
+  "search.interactiveScreenshots":      "Bildschirmfotos",
   "search.exportDotTitle":    "Als Graphviz-DOT-Quelle speichern",
   "search.exportSvgTitle":    "Als SVG speichern",
   "search.exportSavedTitle":  "Gespeichert: {path}",

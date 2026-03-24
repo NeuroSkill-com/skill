@@ -86,9 +86,9 @@ const onboarding: Record<string, string> = {
   "onboarding.finish":            "Завершити",
   "onboarding.models.ocrTitle": "OCR Models",
   "onboarding.models.ocrDesc": "Text detection + recognition models for extracting text from screenshots. Enables text search across captured screens (~10 MB each).",
-  "onboarding.screenRecTitle": "Screen Recording Permission",
-  "onboarding.screenRecDesc": "Required on macOS to capture other application windows for the screenshot system. Without it, screenshots may be blank.",
-  "onboarding.screenRecOpen": "Open Settings",
+  "onboarding.screenRecTitle": "Дозвіл на запис екрана",
+  "onboarding.screenRecDesc": "Потрібен на macOS для захоплення вікон інших програм для системи знімків екрана. Без нього знімки можуть бути порожніми.",
+  "onboarding.screenRecOpen": "Відкрити налаштування",
 };
 
 export default onboarding;
