@@ -121,6 +121,19 @@ codegen-units = 1
 # codegen-units = 8 allows the backend to parallelise within each crate.
 # Combined with thin LTO the final binary is only ~1-2 % larger than
 # codegen-units = 1 + fat LTO, but compiles significantly faster.
+# ── Test profile ──────────────────────────────────────────────────────────────
+#
+# llama-cpp-sys-4 wraps the llama.cpp C++ library.  Without optimisations,
+# CPU inference runs at a fraction of native speed, making the LLM E2E test
+# painfully slow (~1-2 tok/s instead of 20+ tok/s).  Optimising just this
+# -sys crate (and its transitive C++ build) has no measurable impact on
+# incremental test compile times since it is already built by cmake.
+[profile.test.package.llama-cpp-sys-4]
+opt-level = 3
+
+[profile.test.package.llama-cpp-4]
+opt-level = 3
+
 [profile.release]
 lto           = "thin"
 codegen-units = 8

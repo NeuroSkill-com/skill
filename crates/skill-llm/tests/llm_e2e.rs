@@ -309,7 +309,9 @@ fn best_test_model(catalog: &LlmCatalog) -> Option<&LlmModelEntry> {
     let non_mmproj: Vec<&LlmModelEntry> = catalog.entries.iter()
         .filter(|e| !e.is_mmproj)
         .collect();
-    // Smallest recommended model with params >= 1.5B
+    // Smallest recommended model with params >= 1.5B — needs to be large
+    // enough for reliable tool-call generation.  Models below 1.5B (e.g.
+    // 1.2B) fail to produce tool calls consistently on CPU.
     let mut capable: Vec<&&LlmModelEntry> = non_mmproj.iter()
         .filter(|e| e.recommended && e.params_b >= 1.5)
         .collect();
@@ -622,7 +624,9 @@ async fn e2e_download_start_and_chat() {
     let config = LlmConfig {
         enabled: true,
         n_gpu_layers: u32::MAX,
-        ctx_size: Some(4096),
+        // 2048 is plenty for the short test prompts (< 200 tokens each)
+        // and halves KV-cache allocation vs the previous 4096.
+        ctx_size: Some(2048),
         ..LlmConfig::default()
     };
     let emitter: Arc<dyn LlmEventEmitter> = Arc::new(NoopEmitter);
@@ -689,7 +693,10 @@ async fn e2e_download_start_and_chat() {
         json!({"role": "user",   "content": "What is today's date? Call the date tool to check."}),
     ];
     let params = GenParams {
-        max_tokens: 128, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        // 64 tokens is enough for the tool-call XML (~25 tok) and the
+        // post-tool summary.  Prevents the model from echoing the entire
+        // JSON result verbatim, saving ~60 tokens of wasted inference.
+        max_tokens: 64, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
     };
     let (step, chat, date_ok) = run_tool_chat(&server, "Tool chat (date)", "Tool chat (date)", 7, msgs, params, "date").await;
     report.steps.push(step);
@@ -714,7 +721,7 @@ async fn e2e_download_start_and_chat() {
         json!({"role": "user",   "content": "What is my current EEG status? Use the skill tool with the status command to check."}),
     ];
     let params = GenParams {
-        max_tokens: 128, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 64, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
     };
     let (step, chat, skill_ok) = run_tool_chat(
         &server, "Tool chat (skill status)", "Tool chat (skill status)", 8, msgs, params, "skill",
