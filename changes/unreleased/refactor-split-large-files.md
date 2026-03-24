@@ -1,0 +1,4 @@
+### Refactor
+
+- **Split `skill-tools/src/exec.rs` into focused sub-modules**: decomposed the 1724-line monolithic file into 9 focused modules under `exec/` — `mod.rs` (dispatch, 97 lines), `tools_system.rs` (date/location/bash/skill), `tools_web.rs` (web_search/web_fetch), `tools_fs.rs` (read_file/write_file/edit_file/search_output), `status.rs` (status text formatter), `truncate.rs` (output truncation helpers), `safety.rs` (dangerous-operation detection and approval), `helpers.rs` (path resolution, UTC formatting), `tests.rs`. No file exceeds 345 lines.
+- **Split `skill-commands/src/graph.rs` into focused sub-modules**: decomposed the 1482-line monolithic file into 5 modules under `graph/` — `mod.rs` (re-exports), `dot.rs` (Graphviz DOT generation), `svg.rs` (2-D layered SVG), `svg_3d.rs` (3-D perspective SVG), `tests.rs`. All public API re-exports preserved for backward compatibility.
