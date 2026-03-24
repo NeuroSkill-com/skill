@@ -455,9 +455,58 @@ pub fn list_sessions_for_day(
         }
     }
 
+    // Backfill avg_snr_db from SQLite for sessions that don't have it in the
+    // sidecar (legacy sessions recorded before SNR tracking was added).
+    // This is a cheap AVG() query — no full table scan of raw data.
+    backfill_avg_snr(&day_dir, &mut raw);
+
     let mut sessions: Vec<SessionEntry> = raw.into_iter().map(|(s, _, _)| s).collect();
     sessions.sort_by(|a, b| b.session_start_utc.cmp(&a.session_start_utc));
     sessions
+}
+
+/// Compute average SNR (dB) from the embeddings SQLite for sessions that
+/// lack `avg_snr_db` in their sidecar.  Only issues queries when there are
+/// sessions to backfill, and only one connection per day directory.
+fn backfill_avg_snr(
+    day_dir: &Path,
+    sessions: &mut [(SessionEntry, Option<u64>, Option<u64>)],
+) {
+    // Any work to do?
+    let needs_backfill = sessions.iter().any(|(s, ..)| s.avg_snr_db.is_none());
+    if !needs_backfill { return; }
+
+    let db_path = day_dir.join(skill_constants::SQLITE_FILE);
+    if !db_path.exists() { return; }
+
+    // Open read-write so we can run the column migration if needed.
+    let Ok(conn) = rusqlite::Connection::open_with_flags(
+        &db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) else { return };
+    let _ = conn.execute_batch("PRAGMA busy_timeout=1000;");
+    // Ensure the metrics_json column exists (no-op on modern databases).
+    let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT AVG(json_extract(metrics_json, '$.snr'))
+         FROM embeddings
+         WHERE timestamp >= ?1 AND timestamp <= ?2
+           AND json_extract(metrics_json, '$.snr') IS NOT NULL"
+    ) else { return };
+
+    for (session, start, end) in sessions.iter_mut() {
+        if session.avg_snr_db.is_some() { continue; }
+        let (Some(s), Some(e)) = (*start, *end) else { continue; };
+        let ts_start = skill_data::util::unix_to_ts(s);
+        let ts_end   = skill_data::util::unix_to_ts(e);
+        if let Ok(avg) = stmt.query_row(
+            rusqlite::params![ts_start, ts_end],
+            |row| row.get::<_, Option<f64>>(0),
+        ) {
+            session.avg_snr_db = avg;
+        }
+    }
 }
 
 /// Delete a session's CSV + JSON sidecar + metrics + IMU cache files.
