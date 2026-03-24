@@ -269,7 +269,9 @@ containing the MSVC redistributable DLLs (e.g.
 
     # Verify all required DLLs were found
     $requiredCrt = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
-    $missingCrt = $requiredCrt | Where-Object { $_ -notin $bundledCrt }
+    # Under strict mode, Where-Object may return $null (no misses) or a scalar
+    # string (single miss). Force array semantics before reading .Count.
+    $missingCrt = @($requiredCrt | Where-Object { $_ -notin $bundledCrt })
     if ($missingCrt.Count -gt 0) {
         Write-Error "Required CRT DLLs missing from bundle: $($missingCrt -join ', ')"
         Write-Host "Found: $($bundledCrt -join ', ')"
