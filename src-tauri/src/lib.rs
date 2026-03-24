@@ -1167,7 +1167,9 @@ pub fn run() {
             if code == EXCEPTION_ACCESS_VIOLATION {
                 // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
                 let addr = unsafe { (*record).exception_address as usize };
+                // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
                 let info0 = unsafe { (*record).exception_information[0] }; // 0=read, 1=write, 8=DEP
+                // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
                 let info1 = unsafe { (*record).exception_information[1] }; // target address
                 let op = match info0 {
                     0 => "reading",
