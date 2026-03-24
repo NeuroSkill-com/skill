@@ -74,24 +74,29 @@ jobs:
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
-      # ── Remove Git's link.exe ─────────────────────────────────────────────────
-      # Git for Windows ships a Unix hard-link utility at
-      # C:\Program Files\Git\usr\bin\link.exe.  The GitHub Actions
-      # windows-latest runner adds that directory via $GITHUB_PATH, which is
-      # prepended to PATH at the start of every step and cannot be overridden
-      # by writing to $GITHUB_ENV.  As a result, PATH-filtering approaches are
-      # silently undone each step and Rust keeps resolving link.exe to Git's
-      # copy instead of MSVC's linker, producing "extra operand" errors.
-      # Deleting the file directly is the only reliable fix.
-      - name: Remove Git's link.exe (shadows MSVC linker)
+      # ── Remove Git's link.exe and tar.exe ────────────────────────────────────
+      # Git for Windows prepends C:\Program Files\Git\usr\bin to PATH at every
+      # step via $GITHUB_PATH (re-applied each step, so runtime PATH changes
+      # don't survive — only direct file deletion works).  Two binaries cause
+      # problems:
+      #
+      #   link.exe — Unix hard-link utility; shadows MSVC's linker, producing
+      #              "extra operand" build errors.
+      #   tar.exe  — GNU tar used by actions/cache with --posix, which strips
+      #              or corrupts non-POSIX Windows paths in the saved archive,
+      #              breaking cache restores.  Deleting it forces the use of
+      #              C:\Windows\System32\tar.exe (built-in bsdtar 3.x).
+      - name: Remove Git's link.exe and tar.exe (shadow MSVC linker / corrupt cache)
         shell: powershell
         run: |
-          $gitLink = "C:\Program Files\Git\usr\bin\link.exe"
-          if (Test-Path $gitLink) {
-            Remove-Item $gitLink -Force
-            Write-Host "[ok] Deleted $gitLink"
-          } else {
-            Write-Host "[skip] $gitLink not found - nothing to remove"
+          foreach ($bin in @("link.exe", "tar.exe")) {
+            $path = "C:\Program Files\Git\usr\bin\$bin"
+            if (Test-Path $path) {
+              Remove-Item $path -Force
+              Write-Host "[ok] Deleted $path"
+            } else {
+              Write-Host "[skip] $path not found"
+            }
           }
 
       # ── Rust toolchain ────────────────────────────────────────────────────────

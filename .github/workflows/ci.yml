@@ -196,18 +196,27 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       # Git for Windows ships a Unix hard-link utility at
-      # C:\Program Files\Git\usr\bin\link.exe which $GITHUB_PATH prepends
-      # at every step, silently shadowing MSVC's linker.  Deleting it is the
-      # only reliable fix (PATH-filtering is undone each step).
-      - name: Remove Git's link.exe (shadows MSVC linker)
+      # C:\Program Files\Git\usr\bin prepends two problematic binaries to PATH
+      # at every step (GITHUB_PATH is re-applied each step so runtime deletions
+      # don't survive, but file-level deletions do):
+      #
+      #   link.exe — silently shadows MSVC's linker → build picks wrong linker
+      #   tar.exe  — GNU tar used by actions/cache post-cleanup with --posix,
+      #              which restricts filenames to POSIX-portable characters and
+      #              corrupts / drops Windows paths in the Rust build cache.
+      #              Removing it forces actions/cache to use the built-in
+      #              C:\Windows\System32\tar.exe (bsdtar 3.x) instead.
+      - name: Remove Git's link.exe and tar.exe (shadow MSVC linker / corrupt cache)
         shell: powershell
         run: |
-          $gitLink = "C:\Program Files\Git\usr\bin\link.exe"
-          if (Test-Path $gitLink) {
-            Remove-Item $gitLink -Force
-            Write-Host "[ok] Deleted $gitLink"
-          } else {
-            Write-Host "[skip] $gitLink not found - nothing to remove"
+          foreach ($bin in @("link.exe", "tar.exe")) {
+            $path = "C:\Program Files\Git\usr\bin\$bin"
+            if (Test-Path $path) {
+              Remove-Item $path -Force
+              Write-Host "[ok] Deleted $path"
+            } else {
+              Write-Host "[skip] $path not found"
+            }
           }
 
       - name: Install Rust stable
