@@ -78,6 +78,13 @@ target-dir = "src-tauri/target"
 # `relative = true` resolves paths relative to this file's parent (project root).
 
 [env]
+# Static CRT for cmake-based -sys crates (llama-cpp-sys, espeak-ng, etc.).
+# All C/C++ deps must use /MT (static CRT) to match Rust's +crt-static
+# target feature on Windows.  Without this, local builds produce a CRT
+# mismatch and Windows shows "side-by-side configuration is incorrect".
+# On non-Windows platforms cmake ignores this variable.
+CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
+
 ESPEAK_LIB_DIR      = { value = "src-tauri/espeak-static/lib",   relative = true }
 # ESPEAK_BUILD_SCRIPT is read by kittentts/neutts build scripts to auto-build
 # the static archive when ESPEAK_LIB_DIR does not yet contain the library.
