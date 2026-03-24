@@ -468,7 +468,7 @@ jobs:
 
           $deps = & dumpbin /dependents $exe | Select-String -Pattern "vcruntime|ucrt|msvcp" -CaseSensitive:$false
           if ($deps) {
-            Write-Host "::error::Binary has dynamic CRT dependencies — static CRT linkage failed:"
+            Write-Host "::error::Binary has dynamic CRT dependencies -- static CRT linkage failed:"
             $deps | ForEach-Object { Write-Host "  $_" }
             Write-Host ""
             Write-Host "Full dependency list:"
@@ -476,7 +476,7 @@ jobs:
             exit 1
           }
 
-          Write-Host "[ok] No dynamic CRT dependencies detected — binary is fully statically linked."
+          Write-Host "[ok] No dynamic CRT dependencies detected -- binary is fully statically linked."
           Write-Host ""
           Write-Host "Dependencies:"
           & dumpbin /dependents $exe
