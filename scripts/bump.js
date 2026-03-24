@@ -253,6 +253,14 @@ if (result.entryCount > 0) {
   console.log("  ✓  CHANGELOG.md (Unreleased → versioned section, no fragments)");
 }
 
+// ── regenerate Cargo.lock ─────────────────────────────────────────────────────
+// The version change in Cargo.toml invalidates the lockfile.  Regenerate it
+// so CI `--locked` builds don't fail.
+
+console.log("\nRegenerating Cargo.lock...");
+execSync("cargo generate-lockfile", { stdio: "inherit" });
+console.log("  ✓  Cargo.lock");
+
 // ── clean Rust build artifacts ────────────────────────────────────────────────
 
 console.log("\nCleaning Rust build artifacts...");
