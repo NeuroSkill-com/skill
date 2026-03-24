@@ -491,7 +491,7 @@ jobs:
     needs: [rust-check, windows-check, frontend-check, audit, llm-e2e]
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 1
       - name: Send CI result to Discord
