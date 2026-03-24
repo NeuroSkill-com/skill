@@ -14,6 +14,7 @@
   interface Props {
     messages: Message[];
     status: ServerStatus;
+    loadingDetail?: string;
     generating: boolean;
     streamStartMs: number;
     streamTokens: number;
@@ -30,6 +31,7 @@
   let {
     messages,
     status,
+    loadingDetail = "",
     generating,
     streamStartMs,
     streamTokens,
@@ -44,6 +46,16 @@
   let msgsEl = $state<HTMLElement | null>(null);
   let pinned = $state(true);
   let copiedMsgId = $state<number | null>(null);
+
+  const LOADING_STEPS: { key: string; i18n: "chat.loading.model" | "chat.loading.context" | "chat.loading.vision" | "chat.loading.warmup" }[] = [
+    { key: "loading_model",    i18n: "chat.loading.model" },
+    { key: "creating_context", i18n: "chat.loading.context" },
+    { key: "loading_vision",   i18n: "chat.loading.vision" },
+    { key: "warming_up",       i18n: "chat.loading.warmup" },
+  ];
+  const loadingSteps     = $derived(LOADING_STEPS.map(s => ({ key: s.key, label: t(s.i18n) })));
+  const loadingActiveIdx = $derived(LOADING_STEPS.findIndex(s => s.key === loadingDetail));
+  const loadingProgress  = $derived(loadingActiveIdx < 0 ? 5 : Math.min(95, ((loadingActiveIdx + 0.5) / LOADING_STEPS.length) * 100));
 
   const SNAP_PX = 48;
 
@@ -108,16 +120,40 @@
           </div>
         </div>
       {:else if status === "loading"}
-        <div class="flex flex-col items-center gap-2">
+        <div class="flex flex-col items-center gap-3 w-full max-w-xs">
           <p class="text-[0.82rem] font-semibold text-foreground">{t("chat.status.loading")}</p>
-          <p class="text-[0.7rem] text-muted-foreground">
-            {t("chat.empty.loadingHint")}
-          </p>
-          <div class="mt-1 flex gap-1">
-            {#each [0,1,2] as i}
-              <span class="w-2 h-2 rounded-full bg-violet-500/60 animate-bounce"
-                    style="animation-delay: {i * 0.15}s"></span>
+
+          <!-- Step indicators -->
+          <div class="flex flex-col gap-1.5 w-full">
+            {#each loadingSteps as step, i}
+              <div class="flex items-center gap-2 text-[0.7rem] {loadingActiveIdx > i
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : loadingActiveIdx === i
+                  ? 'text-violet-600 dark:text-violet-400'
+                  : 'text-muted-foreground/40'}">
+                {#if loadingActiveIdx > i}
+                  <svg viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                  </svg>
+                {:else if loadingActiveIdx === i}
+                  <svg class="w-3.5 h-3.5 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+                    <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                  </svg>
+                {:else}
+                  <div class="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 rounded-full bg-current opacity-40"></div>
+                  </div>
+                {/if}
+                <span class:font-medium={loadingActiveIdx === i}>{step.label}</span>
+              </div>
             {/each}
+          </div>
+
+          <!-- Progress bar -->
+          <div class="w-full h-1 rounded-full bg-muted overflow-hidden">
+            <div class="h-full rounded-full bg-violet-500 transition-all duration-700 ease-out"
+                 style="width: {loadingProgress}%"></div>
           </div>
         </div>
       {:else}
