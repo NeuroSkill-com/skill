@@ -8,6 +8,36 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.68] — 2026-03-24
+
+### Performance
+
+- **Selective crate testing in CI**: `cargo test` now only runs for crates affected by the current changeset. A new `scripts/changed-crates.sh` script computes the transitive closure of reverse dependencies from changed files, so PRs that touch a single crate skip unrelated test suites. Both unit tests (`--lib`) and integration tests (`--test '*'`) are selectively run for affected crates. Workspace-wide changes (Cargo.lock, .cargo/config.toml, ci.yml) still trigger a full test run as a safety net.
+
+### Bugfixes
+
+- **Stabilize CI ORT linking**: preinstall ONNX Runtime 1.23.2 from Microsoft releases on Linux/Windows CI jobs, then export `ORT_LIB_LOCATION` and `ORT_PREFER_DYNAMIC_LINK=1` so `ort-sys` does not depend on flaky `cdn.pyke.io` downloads during clippy/test runs.
+
+- **Cache ONNX Runtime binaries in CI**: `ort-sys` downloads ~200 MB static libraries from `cdn.pyke.io` during build. Added `actions/cache` for the download directory (`~/.cache/ort.pyke.io` on Linux, `%LOCALAPPDATA%/ort.pyke.io` on Windows) across CI, release-linux, and release-windows workflows to prevent recurring build failures caused by CDN flakiness.
+
+- **Ensure Windows release bundles ONNX Runtime DLL**: release workflow now installs ONNX Runtime 1.23.2 from Microsoft releases, exports `ORT_LIB_LOCATION` / `ORT_PREFER_DYNAMIC_LINK`, and stages `onnxruntime.dll` into release output directories before NSIS packaging.
+
+- **Windows: switch to dynamic CRT with app-local DLL bundling**: Removed `+crt-static` which failed for native dependencies (DirectML, ONNX Runtime, Vulkan loader) that ship as pre-built `/MD` DLLs. The build now uses `/MD` (dynamic CRT) consistently, and the NSIS installer bundles `vcruntime140.dll`, `msvcp140.dll`, and related CRT DLLs alongside `skill.exe` for app-local deployment. The VC++ Redistributable download section is also enabled by default as a system-wide fallback. This eliminates the "side-by-side configuration is incorrect" errors on Windows machines without the VC++ Redistributable.
+
+- **Fix Windows NSIS packaging strict-mode crash**: normalize the `$missingCrt` result to an array before reading `.Count` in `scripts/create-windows-nsis.ps1`. This prevents a PowerShell strict-mode failure when `Where-Object` returns `$null` (no missing CRT DLLs).
+
+### Refactor
+
+- **Normalized LLM catalog format**: Refactored `llm_catalog.json` from a flat array of 389 entries to a normalized `families` + `models` structure. Family metadata (name, description, repo, tags, params_b, max_context_length) is stored once per family instead of duplicated across every quant. File size reduced from 264 KB to 136 KB (48% smaller). The persisted user catalog in `skill_dir` auto-migrates from the old flat format on first load — no user action required. Runtime in-memory representation (`LlmCatalog` with flat `Vec<LlmModelEntry>`) is unchanged, so all downstream Rust and frontend code continues to work without modification.
+
+### Build
+
+- **Windows CI: replace static CRT verification with dependency logging**: The release workflow now logs binary dependencies and verifies the CRT redist DLLs can be located for bundling, instead of failing on dynamic CRT linkage.
+
+### LLM
+
+- **Qwen3 30B-A3B Instruct full quant coverage**: Added all 9 missing GGUF quants (IQ3_S, IQ4_XS, Q3_K_S variants) from `byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF` to the LLM catalog, bringing the total to 15 entries covering the full range of available quantisations.
+
 ## [0.0.67] — 2026-03-24
 
 ### Bugfixes
