@@ -20,8 +20,14 @@
 
 - **Extracted `search-logic.ts` module**: Pulled pure business logic (mode normalization, UMAP label enrichment, time helpers, analysis chips) out of the 2,169-line search page into a testable TypeScript module with 9 unit tests.
 
+- **Extracted `compare-logic.ts` module**: Pulled timeline helpers, session range selection, pointer-to-UTC conversion, and date formatting out of the 1,922-line compare page into a testable module with 14 unit tests.
+
 - **Added DSP pipeline integration tests**: New `dsp_pipeline_test.rs` for `skill-eeg` covering band analysis at multiple sample rates, beta/alpha dominance detection, quality monitoring, and reset behaviour (5 tests).
 
 - **Added `skill-headless` tests**: New `intercept_tests.rs` covering `InterceptStore` push/snapshot/clear, serialization round-trip, and default state (5 tests).
 
 - **Added `skill-screenshots` tests**: New `context_tests.rs` covering mock context, fastembed model resolution, and `ActiveWindowInfo` defaults (5 tests).
+
+- **Added `skill-jobs` integration tests**: New `queue_tests.rs` covering submit-and-poll, sequential execution ordering, error propagation, queue positioning, and unknown-job handling (5 tests).
+
+- **Added `skill-data` tests**: New `hooks_log_tests.rs` (4 tests) and `screenshot_store_tests.rs` (4 tests) covering database creation, insert, count, and pagination.
