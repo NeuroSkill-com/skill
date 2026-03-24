@@ -164,8 +164,11 @@ fn linux_has_appindicator_runtime() -> bool {
         let Ok(c_name) = std::ffi::CString::new(name) else {
             continue;
         };
+        // SAFETY: `c_name` is a valid NUL-terminated C string that outlives the call.
+        // `dlopen` with RTLD_LAZY|RTLD_LOCAL is safe for probing library availability.
         let handle = unsafe { libc::dlopen(c_name.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL) };
         if !handle.is_null() {
+            // SAFETY: `handle` is a non-null pointer returned by `dlopen` above.
             let _ = unsafe { libc::dlclose(handle) };
             return true;
         }
@@ -1124,6 +1127,9 @@ fn setup_background_tasks(app: &mut tauri::App) {
 pub fn run() {
     // ── Windows: install a vectored exception handler for crash diagnostics ──
     #[cfg(target_os = "windows")]
+    // SAFETY: Raw Win32 FFI for crash diagnostics. The handler only reads
+    // exception pointers provided by the OS after a null check, and the
+    // `AddVectoredExceptionHandler` call is safe with a valid function pointer.
     unsafe {
         // Raw Win32 FFI — no windows-sys dependency needed.
         #[repr(C)]
@@ -1151,13 +1157,18 @@ pub fn run() {
 
         unsafe extern "system" fn crash_handler(info: *mut ExceptionPointers) -> i32 {
             if info.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
-            let record = (*info).exception_record;
+            // SAFETY: `info` is non-null (checked above) and points to a valid
+            // OS-provided `ExceptionPointers` structure for the duration of this call.
+            let record = unsafe { (*info).exception_record };
             if record.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
-            let code = (*record).exception_code;
+            // SAFETY: `record` is non-null (checked above) and points to a valid
+            // OS-provided `ExceptionRecord` structure.
+            let code = unsafe { (*record).exception_code };
             if code == EXCEPTION_ACCESS_VIOLATION {
-                let addr = (*record).exception_address as usize;
-                let info0 = (*record).exception_information[0]; // 0=read, 1=write, 8=DEP
-                let info1 = (*record).exception_information[1]; // target address
+                // SAFETY: Same as above — reading fields from a valid ExceptionRecord.
+                let addr = unsafe { (*record).exception_address as usize };
+                let info0 = unsafe { (*record).exception_information[0] }; // 0=read, 1=write, 8=DEP
+                let info1 = unsafe { (*record).exception_information[1] }; // target address
                 let op = match info0 {
                     0 => "reading",
                     1 => "writing",

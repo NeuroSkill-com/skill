@@ -109,7 +109,7 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     let app_name = wm_class
         .split('"')
         .nth(3)
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| window_title.clone());
 
@@ -182,6 +182,9 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         fn CloseHandle(h_object: Handle) -> Bool;
     }
 
+    // SAFETY: All Win32 FFI calls below use valid handles obtained from the OS.
+    // Buffers are stack-allocated with known sizes and passed with correct lengths.
+    // Handles are closed after use. No aliasing or lifetime issues.
     unsafe {
         // 1. Foreground window handle.
         let hwnd = GetForegroundWindow();
@@ -346,6 +349,9 @@ fn poll_input_activity() -> (bool, bool) {
         fn GetTickCount() -> u32;
     }
 
+    // SAFETY: `Lastinputinfo` is a simple repr(C) struct initialised with the correct
+    // `cb_size`. `GetLastInputInfo` and `GetTickCount` are safe Win32 calls with no
+    // aliasing or lifetime concerns.
     unsafe {
         let mut info = Lastinputinfo {
             cb_size: mem::size_of::<Lastinputinfo>() as u32,
