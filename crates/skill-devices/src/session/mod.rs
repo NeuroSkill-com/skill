@@ -35,7 +35,6 @@ mod tests;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bitflags::bitflags;
-use serde::{Deserialize, Serialize};
 
 // ── Capability flags ──────────────────────────────────────────────────────────
 
@@ -44,7 +43,7 @@ bitflags! {
     ///
     /// Declared by each adapter at construction time; inspected by the
     /// generic session runner to decide which processing paths to enable.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     pub struct DeviceCaps: u32 {
         /// Multi-channel EEG voltage data.
         const EEG     = 0b0000_0001;

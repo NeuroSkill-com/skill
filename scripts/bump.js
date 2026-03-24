@@ -390,25 +390,27 @@ async function runPreflightChecks() {
   // Linux tauri deps (no command — handled inline)
   steps.push({ label: "linux tauri deps", command: null });
 
-  // Clippy per workspace crate
-  for (const crate of WORKSPACE_CRATES) {
+  // Clippy all workspace crates in a single invocation
+  {
+    const pkgFlags = WORKSPACE_CRATES.map((c) => `-p ${c}`).join(" ");
     steps.push({
-      label: `clippy ${crate}`,
-      command: `cargo clippy -p ${crate} -- -D warnings`,
+      label: `clippy workspace (${WORKSPACE_CRATES.length} crates)`,
+      command: `cargo clippy ${pkgFlags} -- -D warnings`,
     });
   }
 
-  // Clippy app crate
+  // Clippy app crate (depends on workspace artifacts already built above)
   steps.push({
     label: "clippy src-tauri",
     command: "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
   });
 
-  // Tests per crate
-  for (const crate of TEST_CRATES) {
+  // Test all test crates in a single invocation
+  {
+    const pkgFlags = TEST_CRATES.map((c) => `-p ${c}`).join(" ");
     steps.push({
-      label: `test ${crate}`,
-      command: `cargo test -p ${crate} --lib`,
+      label: `test workspace (${TEST_CRATES.length} crates)`,
+      command: `cargo test ${pkgFlags} --lib`,
     });
   }
 
@@ -590,12 +592,6 @@ async function main() {
   console.log("\nRegenerating Cargo.lock...");
   execSync("cargo generate-lockfile", { stdio: "inherit" });
   console.log("  ✓  Cargo.lock");
-
-  // ── clean Rust build artifacts ──────────────────────────────────────────────
-
-  console.log("\nCleaning Rust build artifacts...");
-  execSync("npm run clean:rust", { stdio: "inherit" });
-  console.log("  ✓  clean:rust");
 
   console.log(`\nDone! Version is now ${newVersion}`);
 }

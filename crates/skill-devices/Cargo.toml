@@ -17,7 +17,7 @@ serde_json = "1"
 # Only `sync` is needed (mpsc, oneshot) — no runtime, no I/O.
 async-trait = "0.1"
 tokio       = { version = "1", features = ["sync", "rt"] }
-bitflags    = "2"
+bitflags    = { version = "2", features = ["serde"] }
 
 # Muse EEG – library only, no TUI feature
 muse-rs = { version = "0.1.0", default-features = false }
