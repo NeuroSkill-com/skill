@@ -48,6 +48,7 @@
   // ── State ──────────────────────────────────────────────────────────────────
 
   let status         = $state<ServerStatus>("stopped");
+  let loadingDetail  = $state("");
   let startError     = $state("");
   let modelName      = $state("");
   let nCtx           = $state(0);
@@ -966,7 +967,7 @@
           <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
         </svg>
         <span class="flex-1 min-w-0 truncate">{startError}</span>
-        <button onclick={() => startError = ""} class="shrink-0 p-0.5 rounded hover:bg-red-500/20 cursor-pointer">
+        <button onclick={() => startError = ""} aria-label="Dismiss error" class="shrink-0 p-0.5 rounded hover:bg-red-500/20 cursor-pointer">
           <svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
         </button>
       </div>
@@ -1027,6 +1028,7 @@
         bind:this={msgListRef}
         {messages}
         {status}
+        {loadingDetail}
         {generating}
         {streamStartMs}
         {streamTokens}

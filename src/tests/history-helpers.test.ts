@@ -21,6 +21,7 @@ function session(overrides: Partial<SessionEntry> = {}): SessionEntry {
     battery_pct: 80, total_samples: 256000,
     sample_rate_hz: 256, labels: [],
     file_size_bytes: 1024,
+    avg_snr_db: null,
     ...overrides,
   };
 }
