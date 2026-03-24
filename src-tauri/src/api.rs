@@ -1065,6 +1065,11 @@ async fn handle_llm_chat_ws(
                         "command": "llm_chat", "type": "tool_status",
                         "tool_name": tool_name, "status": status, "detail": detail,
                     }),
+                    ToolEvent::RoundComplete { round, prompt_tokens, completion_tokens, tool_calls_count } => json!({
+                        "command": "llm_chat", "type": "tool_round_complete",
+                        "round": round, "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens, "tool_calls_count": tool_calls_count,
+                    }),
                 };
                 let _ = tool_tx.send(msg);
             },

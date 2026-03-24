@@ -329,3 +329,46 @@ fn bash_edit_hook_lifecycle() {
     let result = rt.block_on(request_bash_edit("safe command"));
     assert_eq!(result, Some("safe command".to_string()));
 }
+
+// ── retry_with_backoff ────────────────────────────────────────────────
+
+#[test]
+fn retry_succeeds_immediately() {
+    let result = retry_with_backoff(3, std::time::Duration::from_millis(1), || {
+        Ok::<&str, &str>("ok")
+    });
+    assert_eq!(result, Ok("ok"));
+}
+
+#[test]
+fn retry_succeeds_on_second_attempt() {
+    let mut attempts = 0u32;
+    let result = retry_with_backoff(3, std::time::Duration::from_millis(1), || {
+        attempts += 1;
+        if attempts < 2 { Err("fail") } else { Ok("ok") }
+    });
+    assert_eq!(result, Ok("ok"));
+    assert_eq!(attempts, 2);
+}
+
+#[test]
+fn retry_exhausts_all_attempts() {
+    let mut attempts = 0u32;
+    let result = retry_with_backoff(2, std::time::Duration::from_millis(1), || {
+        attempts += 1;
+        Err::<(), &str>("always fails")
+    });
+    assert_eq!(result, Err("always fails"));
+    assert_eq!(attempts, 3); // initial + 2 retries
+}
+
+#[test]
+fn retry_zero_retries_runs_once() {
+    let mut attempts = 0u32;
+    let result = retry_with_backoff(0, std::time::Duration::from_millis(1), || {
+        attempts += 1;
+        Err::<(), &str>("fail")
+    });
+    assert_eq!(result, Err("fail"));
+    assert_eq!(attempts, 1);
+}

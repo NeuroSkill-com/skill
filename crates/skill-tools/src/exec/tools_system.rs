@@ -38,29 +38,47 @@ pub(crate) fn exec_date() -> Value {
 
 // ── location ──────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_location() -> Value {
-    tokio::task::spawn_blocking(|| {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(2))
-            .timeout_read(std::time::Duration::from_secs(3))
-            .build();
-        let resp = agent.get("https://ipwho.is/").call();
-        match resp {
-            Ok(r) => {
-                let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
-                json!({
-                    "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
-                    "tool": "location",
-                    "country": v.get("country").cloned().unwrap_or(Value::Null),
-                    "region": v.get("region").cloned().unwrap_or(Value::Null),
-                    "city": v.get("city").cloned().unwrap_or(Value::Null),
-                    "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
-                    "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
-                    "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
-                    "ip": v.get("ip").cloned().unwrap_or(Value::Null),
-                })
-            }
-            Err(e) => json!({ "ok": false, "tool": "location", "error": e.to_string() }),
+pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Value {
+    let max_retries = retry.max_retries;
+    let base_delay = std::time::Duration::from_millis(retry.base_delay_ms);
+    tokio::task::spawn_blocking(move || {
+        use super::helpers::retry_with_backoff;
+
+        let result = retry_with_backoff(
+            max_retries,
+            base_delay,
+            || {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(2))
+                    .timeout_read(std::time::Duration::from_secs(3))
+                    .build();
+                let resp = agent.get("https://ipwho.is/").call();
+                match resp {
+                    Ok(r) => {
+                        let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+                        Ok(json!({
+                            "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
+                            "tool": "location",
+                            "country": v.get("country").cloned().unwrap_or(Value::Null),
+                            "region": v.get("region").cloned().unwrap_or(Value::Null),
+                            "city": v.get("city").cloned().unwrap_or(Value::Null),
+                            "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
+                            "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
+                            "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
+                            "ip": v.get("ip").cloned().unwrap_or(Value::Null),
+                        }))
+                    }
+                    Err(ureq::Error::Status(code, _)) if code == 429 || (500..600).contains(&code) => {
+                        Err(format!("HTTP {}", code))
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            },
+        );
+
+        match result {
+            Ok(val) => val,
+            Err(e) => json!({ "ok": false, "tool": "location", "error": e }),
         }
     }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "location", "error": e.to_string() }))
 }

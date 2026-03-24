@@ -34,6 +34,10 @@
     max_search_results: number;
     max_result_chars: number;
   }
+  interface ToolRetryConfig {
+    max_retries: number;
+    base_delay_ms: number;
+  }
   interface LlmToolsConfig {
     enabled: boolean;
     date: boolean;
@@ -51,6 +55,7 @@
     max_calls_per_round: number;
     context_compression: ToolContextCompression;
     skills_refresh_interval_secs: number;
+    retry: ToolRetryConfig;
   }
 
   interface LlmConfig {
@@ -68,7 +73,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, skill_api: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 }, skills_refresh_interval_secs: 86400 },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, skill_api: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 15, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 }, skills_refresh_interval_secs: 86400, retry: { max_retries: 2, base_delay_ms: 1000 } },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -380,7 +385,7 @@
             <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.maxRoundsDesc")}</span>
           </div>
           <div class="flex items-center gap-1">
-            {#each [1, 3, 5, 10] as val}
+            {#each [1, 3, 5, 10, 15] as val}
               <button
                 onclick={async () => { config = { ...config, tools: { ...config.tools, max_rounds: val } }; await saveConfig(); }}
                 class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
@@ -478,6 +483,55 @@
               </div>
             </div>
           {/if}
+        </div>
+
+        <!-- Network retry settings -->
+        <div class="flex flex-col gap-3 pt-2">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.retrySection")}</span>
+            <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.retrySectionDesc")}</span>
+          </div>
+
+          <div class="flex gap-3">
+            <!-- Max retries -->
+            <div class="flex-1 flex flex-col gap-1">
+              <label for="retry-max" class="text-[0.62rem] text-muted-foreground">
+                {t("llm.tools.retryMaxRetries")}
+              </label>
+              <div class="flex items-center gap-1">
+                {#each [0, 1, 2, 3] as val}
+                  <button
+                    onclick={async () => { config = { ...config, tools: { ...config.tools, retry: { ...config.tools.retry, max_retries: val } } }; await saveConfig(); }}
+                    class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
+                           {config.tools.retry.max_retries === val
+                             ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                             : 'border-border bg-background text-muted-foreground hover:text-foreground'}">
+                    {val}
+                  </button>
+                {/each}
+              </div>
+              <span class="text-[0.54rem] text-muted-foreground/60">{t("llm.tools.retryMaxRetriesDesc")}</span>
+            </div>
+            <!-- Base delay -->
+            <div class="flex-1 flex flex-col gap-1">
+              <label for="retry-delay" class="text-[0.62rem] text-muted-foreground">
+                {t("llm.tools.retryBaseDelay")}
+              </label>
+              <div class="flex items-center gap-1">
+                {#each [500, 1000, 2000, 3000] as val}
+                  <button
+                    onclick={async () => { config = { ...config, tools: { ...config.tools, retry: { ...config.tools.retry, base_delay_ms: val } } }; await saveConfig(); }}
+                    class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
+                           {config.tools.retry.base_delay_ms === val
+                             ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                             : 'border-border bg-background text-muted-foreground hover:text-foreground'}">
+                    {val}{t("llm.tools.retryMs")}
+                  </button>
+                {/each}
+              </div>
+              <span class="text-[0.54rem] text-muted-foreground/60">{t("llm.tools.retryBaseDelayDesc")}</span>
+            </div>
+          </div>
         </div>
       </div>
 

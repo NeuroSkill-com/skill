@@ -111,6 +111,15 @@ pub enum ToolEvent {
     ExecutionStart { tool_call_id: String, tool_name: String, args: Value },
     /// Tool execution finished.
     ExecutionEnd { tool_call_id: String, tool_name: String, result: Value, is_error: bool },
+    /// Emitted after each inference + tool-execution round completes.
+    /// Allows consumers to track cumulative token usage across the
+    /// multi-round tool-calling loop (inspired by agentic CLI patterns).
+    RoundComplete {
+        round:             usize,
+        prompt_tokens:     usize,
+        completion_tokens: usize,
+        tool_calls_count:  usize,
+    },
 }
 
 // ── Main orchestration loop ───────────────────────────────────────────────────
@@ -182,9 +191,11 @@ where
     let mut last_tool_result: Option<String> = None;
     let mut dedup_nudge_count = 0u32;
     let mut self_heal_count = 0u32;
+    let mut cumulative_prompt_tokens = 0usize;
+    let mut cumulative_completion_tokens = 0usize;
     const MAX_SELF_HEAL_ATTEMPTS: u32 = 2;
 
-    for _ in 0..=max_rounds {
+    for round_idx in 0..=max_rounds {
         // ── Context-aware history trimming ──────────────────────────────
         trim_messages_to_fit(&mut messages, n_ctx, &compression);
 
@@ -207,6 +218,8 @@ where
         let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) = collect_infer_output(tok_rx, |delta| {
             on_visible_delta(delta);
         }).await?;
+        cumulative_prompt_tokens += prompt_tokens;
+        cumulative_completion_tokens += completion_tokens;
         let tool_calls = tools::extract_tool_calls(&assistant_text);
         if tool_calls.is_empty() {
             // ── Self-healing: detect garbled tool-call attempts ──────────
@@ -389,6 +402,14 @@ where
         if compression.should_compress_old_results() {
             condense_prior_tool_results(&mut messages, tool_results_start);
         }
+
+        // Emit per-round usage so consumers can track cumulative costs.
+        on_tool_event(ToolEvent::RoundComplete {
+            round:             round_idx + 1,
+            prompt_tokens:     cumulative_prompt_tokens,
+            completion_tokens: cumulative_completion_tokens,
+            tool_calls_count:  selected_calls.len(),
+        });
     }
 
     // If we exhausted all rounds but have a tool result, return it as a
