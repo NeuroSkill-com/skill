@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, openSync, readSync, closeSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { compileChangelog } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -27,48 +27,6 @@ function validateVersion(v) {
     throw new Error(`Version must be in x.x.x format, got "${v}"`);
   }
   return v;
-}
-
-function runCheckStep(label, command) {
-  let output = "";
-  try {
-    // Merge stderr into stdout so we capture warnings from both streams
-    output = execSync(`${command} 2>&1`, { encoding: "utf8" }) || "";
-  } catch (err) {
-    // execSync throws on non-zero exit — clear progress line, show output, re-throw
-    process.stdout.write("\r\x1b[K");
-    output = (err.stdout || "").toString();
-    if (output) process.stdout.write(output);
-    console.error(`\n[preflight] ✗ ${label} — command failed`);
-    throw err;
-  }
-
-  // Detect warning lines in combined output — treat any warning as fatal.
-  // Exclude:
-  //  - "0 warnings" summary lines
-  //  - config directives like `deny(warnings)` or `warnings =`
-  //  - cargo build-script `warning: <crate>@<ver>:` info messages (cargo:warning= from build.rs)
-  //  - "warning: build failed" (cargo's own message when a build error already occurred)
-  const warningLines = output
-    .split("\n")
-    .filter(
-      (line) =>
-        /\bwarning\b/i.test(line) &&
-        !/0 warnings/i.test(line) &&
-        !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
-        !/^warning: \S+@\S+:/i.test(line.trim()) &&
-        !/^warning: build failed/i.test(line.trim())
-    );
-
-  if (warningLines.length > 0) {
-    process.stdout.write("\r\x1b[K");
-    console.error(`[preflight] ✗ ${label} — ${warningLines.length} warning(s) detected:`);
-    for (const w of warningLines.slice(0, 10)) {
-      console.error(`  ${w.trim()}`);
-    }
-    if (output) process.stdout.write(output);
-    throw new Error(`Bump aborted: warnings found during "${label}"`);
-  }
 }
 
 function hasPkgConfig(packageName) {
@@ -151,7 +109,7 @@ function checkForCompetingCargo() {
     if (!out) return;
     const lines = out.split("\n").filter(Boolean);
     if (lines.length === 0) return;
-    console.warn("\n[preflight] ⚠  Other cargo processes detected:");
+    console.warn("\n[preflight] Warning: Other cargo processes detected:");
     for (const l of lines) console.warn(`  ${l.trim()}`);
     console.warn(
       "\n  Cargo uses a global package-cache lock (~/.cargo/.package-cache)."
@@ -159,16 +117,10 @@ function checkForCompetingCargo() {
     console.warn(
       "  The bump clippy steps will block until these finish.\n"
     );
-    const rl = require("readline").createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
     const fd = openSync("/dev/tty", "r");
     const buf = Buffer.alloc(1);
     process.stdout.write("  Continue anyway? [y/N] ");
-    rl.close();
     let answer = "";
-    // Read characters synchronously from the terminal
     while (true) {
       const bytesRead = readSync(fd, buf, 0, 1);
       if (bytesRead === 0) break;
@@ -186,7 +138,9 @@ function checkForCompetingCargo() {
   }
 }
 
-// ── progress bar helpers ─────────────────────────────────────────────────────
+// ── TUI progress helpers ─────────────────────────────────────────────────────
+
+const CSI = "\x1b[";
 
 function formatDuration(ms) {
   const totalSec = Math.round(ms / 1000);
@@ -195,22 +149,231 @@ function formatDuration(ms) {
   return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
 }
 
-function printProgress(current, total, stepLabel, elapsedMs, etaMs) {
-  const cols = process.stdout.columns || 80;
-  const pct = Math.round((current / total) * 100);
-  const barTotal = Math.max(10, Math.min(30, cols - 60));
-  const filled = Math.round((current / total) * barTotal);
-  const bar = "█".repeat(filled) + "░".repeat(barTotal - filled);
-
-  const elapsed = formatDuration(elapsedMs);
-  const eta = etaMs > 0 ? formatDuration(etaMs) : "--";
-  const line = `  [${bar}] ${current}/${total} (${pct}%) | elapsed ${elapsed} | ETA ${eta} | ${stepLabel}`;
-
-  // Overwrite current line
-  process.stdout.write(`\r\x1b[K${line}`);
+/**
+ * Detect warning lines in command output — treat any warning as fatal.
+ * Returns array of warning lines.
+ */
+function extractWarnings(output) {
+  return output
+    .split("\n")
+    .filter(
+      (line) =>
+        /\bwarning\b/i.test(line) &&
+        !/0 warnings/i.test(line) &&
+        !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
+        !/^warning: \S+@\S+:/i.test(line.trim()) &&
+        !/^warning: build failed/i.test(line.trim())
+    );
 }
 
-function runPreflightChecks() {
+/**
+ * TUI class — manages a scrolling log area above a fixed progress bar.
+ *
+ * Layout:
+ *   row 1..rows-2   — scrolling log output
+ *   row rows-1      — separator
+ *   row rows        — progress bar
+ *
+ * Uses ANSI scroll region to keep the bottom 2 lines pinned.
+ */
+class BumpTUI {
+  constructor(totalSteps) {
+    this.totalSteps = totalSteps;
+    this.currentStep = 0;
+    this.stepLabel = "";
+    this.startTime = Date.now();
+    this.stepTimes = [];
+    this.rows = process.stdout.rows || 40;
+    this.cols = process.stdout.columns || 80;
+    this.timer = null;
+
+    // Listen for terminal resize
+    process.stdout.on("resize", () => {
+      this.rows = process.stdout.rows || 40;
+      this.cols = process.stdout.columns || 80;
+      this._setupScrollRegion();
+      this._renderBar();
+    });
+  }
+
+  start() {
+    // Clear screen and set up scroll region
+    process.stdout.write(`${CSI}2J${CSI}H`); // clear + home
+    this._setupScrollRegion();
+    this._renderBar();
+
+    // Update progress bar every second
+    this.timer = setInterval(() => this._renderBar(), 1000);
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    // Reset scroll region to full screen
+    process.stdout.write(`${CSI}r`);
+    // Move cursor below the bar
+    process.stdout.write(`${CSI}${this.rows};1H\n`);
+  }
+
+  _setupScrollRegion() {
+    // Scroll region: rows 1..(rows-2) for log output
+    const scrollEnd = Math.max(1, this.rows - 2);
+    process.stdout.write(`${CSI}1;${scrollEnd}r`);
+  }
+
+  /** Write log text into the scroll region (above the bar). */
+  log(text) {
+    const scrollEnd = Math.max(1, this.rows - 2);
+    // Save cursor, move to end of scroll region, print, restore cursor
+    process.stdout.write(`${CSI}s`);                      // save
+    process.stdout.write(`${CSI}${scrollEnd};1H`);        // move to bottom of scroll area
+    process.stdout.write("\n");                            // scroll up if needed
+    // Write each line — handle multi-line text
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) {
+        process.stdout.write(`${CSI}${scrollEnd};1H\n`);
+      }
+      process.stdout.write(lines[i]);
+    }
+    process.stdout.write(`${CSI}u`);                      // restore
+    this._renderBar();                                     // redraw bar in case scroll corrupted it
+  }
+
+  /** Update current step info and redraw bar. */
+  setStep(index, label) {
+    if (index > 0 && this.currentStep < index) {
+      // record previous step time
+      // (stepTimes is used for ETA estimation)
+    }
+    this.currentStep = index;
+    this.stepLabel = label;
+    this._renderBar();
+  }
+
+  /** Record how long a step took (for ETA). */
+  recordStepTime(ms) {
+    this.stepTimes.push(ms);
+  }
+
+  /** Mark a step as passed — logs a green checkmark. */
+  stepPassed(label, durationMs) {
+    this.log(`  \x1b[32m✓\x1b[0m  ${label}  \x1b[2m(${formatDuration(durationMs)})\x1b[0m`);
+  }
+
+  /** Mark a step as failed — logs a red cross. */
+  stepFailed(label) {
+    this.log(`  \x1b[31m✗\x1b[0m  ${label}`);
+  }
+
+  /** Render the separator + progress bar on the bottom 2 rows. */
+  _renderBar() {
+    const cols = this.cols;
+    const rows = this.rows;
+    const current = this.currentStep;
+    const total = this.totalSteps;
+
+    const elapsedMs = Date.now() - this.startTime;
+    const avgMs = this.stepTimes.length > 0
+      ? this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length
+      : 0;
+    const remaining = total - current;
+    const etaMs = this.stepTimes.length > 0 ? avgMs * remaining : 0;
+
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    const barWidth = Math.max(10, Math.min(30, cols - 60));
+    const filled = Math.round((current / total) * barWidth);
+    const bar = "\x1b[32m" + "█".repeat(filled) + "\x1b[0m" + "\x1b[2m" + "░".repeat(barWidth - filled) + "\x1b[0m";
+
+    const elapsed = formatDuration(elapsedMs);
+    const eta = etaMs > 0 ? formatDuration(etaMs) : "--";
+
+    const sepRow = rows - 1;
+    const barRow = rows;
+
+    // Separator line
+    const sep = "\x1b[2m" + "─".repeat(cols) + "\x1b[0m";
+
+    // Progress line
+    const stepText = this.stepLabel.length > 30
+      ? this.stepLabel.slice(0, 29) + "…"
+      : this.stepLabel;
+    const progressLine =
+      `  [${bar}] ${current}/${total} (${pct}%) | ${elapsed} elapsed | ETA ${eta} | ${stepText}`;
+
+    // Draw separator and progress bar (outside scroll region)
+    process.stdout.write(`${CSI}${sepRow};1H${CSI}K${sep}`);
+    process.stdout.write(`${CSI}${barRow};1H${CSI}K${progressLine}`);
+  }
+}
+
+// ── run a command with streamed output ───────────────────────────────────────
+
+function runCommandStreaming(label, command, tui) {
+  return new Promise((resolve, reject) => {
+    const parts = command.split(" ");
+    // Use shell to handle pipes, redirects, 2>&1
+    const child = spawn("bash", ["-c", `${command} 2>&1`], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, FORCE_COLOR: "1" },
+    });
+
+    let output = "";
+
+    child.stdout.on("data", (data) => {
+      const text = data.toString();
+      output += text;
+      // Stream each line to the TUI log area
+      const lines = text.split("\n");
+      for (const line of lines) {
+        if (line.length > 0) {
+          tui.log(line);
+        }
+      }
+    });
+
+    child.stderr.on("data", (data) => {
+      const text = data.toString();
+      output += text;
+      const lines = text.split("\n");
+      for (const line of lines) {
+        if (line.length > 0) {
+          tui.log(line);
+        }
+      }
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`Command failed with exit code ${code}: ${label}`));
+        return;
+      }
+
+      // Check for warnings
+      const warningLines = extractWarnings(output);
+      if (warningLines.length > 0) {
+        tui.log(`\x1b[33m[preflight] ${warningLines.length} warning(s) in ${label}:\x1b[0m`);
+        for (const w of warningLines.slice(0, 10)) {
+          tui.log(`  \x1b[33m${w.trim()}\x1b[0m`);
+        }
+        reject(new Error(`Bump aborted: warnings found during "${label}"`));
+        return;
+      }
+
+      resolve(output);
+    });
+
+    child.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
+// ── preflight checks (async with TUI) ───────────────────────────────────────
+
+async function runPreflightChecks() {
   console.log("Running preflight checks before bump...\n");
 
   // ── Competing cargo processes ─────────────────────────────────────────────
@@ -250,37 +413,51 @@ function runPreflightChecks() {
   }
 
   const total = steps.length;
-  const startAll = Date.now();
-  const stepTimes = []; // elapsed ms per completed step
+  const tui = new BumpTUI(total);
+  tui.start();
 
-  for (let i = 0; i < total; i++) {
-    const { label, command } = steps[i];
+  tui.log("\x1b[1m[preflight] Starting checks...\x1b[0m");
 
-    // Calculate ETA from average step duration so far
-    const avgMs = stepTimes.length > 0
-      ? stepTimes.reduce((a, b) => a + b, 0) / stepTimes.length
-      : 0;
-    const remaining = total - i;
-    const etaMs = stepTimes.length > 0 ? avgMs * remaining : 0;
+  try {
+    for (let i = 0; i < total; i++) {
+      const { label, command } = steps[i];
+      tui.setStep(i, label);
 
-    printProgress(i, total, label, Date.now() - startAll, etaMs);
+      const stepStart = Date.now();
 
-    const stepStart = Date.now();
-
-    if (command === null) {
-      // Special: linux tauri deps check (no shell command)
-      ensureLinuxTauriDeps();
-    } else {
-      runCheckStep(label, command);
+      if (command === null) {
+        // Special: linux tauri deps check
+        ensureLinuxTauriDeps();
+        const dt = Date.now() - stepStart;
+        tui.recordStepTime(dt);
+        tui.stepPassed(label, dt);
+      } else {
+        try {
+          await runCommandStreaming(label, command, tui);
+          const dt = Date.now() - stepStart;
+          tui.recordStepTime(dt);
+          tui.stepPassed(label, dt);
+        } catch (err) {
+          tui.stepFailed(label);
+          tui.stop();
+          console.error(`\n[preflight] ✗ ${label} — failed`);
+          throw err;
+        }
+      }
     }
 
-    stepTimes.push(Date.now() - stepStart);
-  }
+    // Final state
+    tui.setStep(total, "done");
+    const totalElapsed = Date.now() - tui.startTime;
+    tui.log(`\n\x1b[1;32m[preflight] All ${total} checks passed in ${formatDuration(totalElapsed)}\x1b[0m\n`);
 
-  // Final 100% progress
-  const totalElapsed = Date.now() - startAll;
-  printProgress(total, total, "done", totalElapsed, 0);
-  console.log(`\n\n[preflight] All ${total} checks passed in ${formatDuration(totalElapsed)}`);
+    // Brief pause so user can see the final state
+    await new Promise((r) => setTimeout(r, 1500));
+    tui.stop();
+  } catch (err) {
+    tui.stop();
+    throw err;
+  }
 }
 
 function todayIsoDate() {
@@ -300,79 +477,130 @@ function bumpChangelogUnreleased(changelogPath, version, date) {
   writeText(changelogPath, updated);
 }
 
-// ── resolve new version ───────────────────────────────────────────────────────
+// ── CLI flags ────────────────────────────────────────────────────────────────
 
-const pkg = JSON.parse(readText("package.json"));
-const currentVersion = pkg.version;
+function parseArgs() {
+  const args = process.argv.slice(2);
+  let dryRun = false;
+  let versionArg = null;
 
-const arg = process.argv[2];
-const newVersion = arg ? validateVersion(arg) : bumpPatch(currentVersion);
+  for (const a of args) {
+    if (a === "--dry-run") {
+      dryRun = true;
+    } else if (a === "--help" || a === "-h") {
+      console.log(
+        [
+          "Usage: npm run bump [-- [options] [version]]",
+          "",
+          "Options:",
+          "  --dry-run   Run all preflight checks but skip version bumping",
+          "  --help, -h  Show this help message",
+          "",
+          "If version is omitted the patch component is incremented automatically.",
+        ].join("\n")
+      );
+      process.exit(0);
+    } else if (!a.startsWith("-")) {
+      versionArg = a;
+    } else {
+      throw new Error(`Unknown flag: ${a}`);
+    }
+  }
 
-console.log(`Bumping  ${currentVersion}  →  ${newVersion}`);
-
-// ── preflight checks (must pass before any file is modified) ────────────────
-
-runPreflightChecks();
-
-// ── package.json ──────────────────────────────────────────────────────────────
-
-pkg.version = newVersion;
-writeText("package.json", JSON.stringify(pkg, null, 2) + "\n");
-console.log("  ✓  package.json");
-
-// ── src-tauri/tauri.conf.json ─────────────────────────────────────────────────
-
-const tauriConfPath = "src-tauri/tauri.conf.json";
-const tauriConf = JSON.parse(readText(tauriConfPath));
-tauriConf.version = newVersion;
-writeText(tauriConfPath, JSON.stringify(tauriConf, null, 2) + "\n");
-console.log("  ✓  src-tauri/tauri.conf.json");
-
-// ── src-tauri/Cargo.toml ──────────────────────────────────────────────────────
-// Only the first `version = "..."` line belongs to the package itself.
-
-const cargoPath = "src-tauri/Cargo.toml";
-let cargo = readText(cargoPath);
-
-// Replace the first occurrence only (the [package] version)
-const versionLine = /^version\s*=\s*"[^"]+"/m;
-if (!versionLine.test(cargo)) {
-  throw new Error("Could not find package version in Cargo.toml");
-}
-cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
-writeText(cargoPath, cargo);
-console.log("  ✓  src-tauri/Cargo.toml");
-
-// ── CHANGELOG.md — compile fragments ─────────────────────────────────────────
-
-const date = todayIsoDate();
-const result = compileChangelog(newVersion, date);
-
-if (result.entryCount > 0) {
-  console.log(
-    `  ✓  CHANGELOG.md — compiled ${result.entryCount} entries (${result.categories.join(", ")})`
-  );
-  console.log(
-    `  ✓  changes/releases/${newVersion}/ — archived ${result.categories.length} fragments`
-  );
-} else {
-  // No fragments — fall back to rotating the [Unreleased] header only
-  bumpChangelogUnreleased("CHANGELOG.md", newVersion, date);
-  console.log("  ✓  CHANGELOG.md (Unreleased → versioned section, no fragments)");
+  return { dryRun, versionArg };
 }
 
-// ── regenerate Cargo.lock ─────────────────────────────────────────────────────
-// The version change in Cargo.toml invalidates the lockfile.  Regenerate it
-// so CI `--locked` builds don't fail.
+// ── main (async) ─────────────────────────────────────────────────────────────
 
-console.log("\nRegenerating Cargo.lock...");
-execSync("cargo generate-lockfile", { stdio: "inherit" });
-console.log("  ✓  Cargo.lock");
+async function main() {
+  const { dryRun, versionArg } = parseArgs();
 
-// ── clean Rust build artifacts ────────────────────────────────────────────────
+  // ── resolve new version ─────────────────────────────────────────────────────
 
-console.log("\nCleaning Rust build artifacts...");
-execSync("npm run clean:rust", { stdio: "inherit" });
-console.log("  ✓  clean:rust");
+  const pkg = JSON.parse(readText("package.json"));
+  const currentVersion = pkg.version;
 
-console.log(`\nDone! Version is now ${newVersion}`);
+  const newVersion = versionArg ? validateVersion(versionArg) : bumpPatch(currentVersion);
+
+  if (dryRun) {
+    console.log(`[dry-run] Would bump  ${currentVersion}  ->  ${newVersion}\n`);
+  } else {
+    console.log(`Bumping  ${currentVersion}  ->  ${newVersion}\n`);
+  }
+
+  // ── preflight checks (must pass before any file is modified) ──────────────
+
+  await runPreflightChecks();
+
+  // ── In dry-run mode stop here — no files are modified ─────────────────────
+
+  if (dryRun) {
+    console.log(`\n[dry-run] All preflight checks passed. No files were modified.`);
+    return;
+  }
+
+  // ── package.json ────────────────────────────────────────────────────────────
+
+  // Re-read in case something changed
+  const pkgFresh = JSON.parse(readText("package.json"));
+  pkgFresh.version = newVersion;
+  writeText("package.json", JSON.stringify(pkgFresh, null, 2) + "\n");
+  console.log("  ✓  package.json");
+
+  // ── src-tauri/tauri.conf.json ───────────────────────────────────────────────
+
+  const tauriConfPath = "src-tauri/tauri.conf.json";
+  const tauriConf = JSON.parse(readText(tauriConfPath));
+  tauriConf.version = newVersion;
+  writeText(tauriConfPath, JSON.stringify(tauriConf, null, 2) + "\n");
+  console.log("  ✓  src-tauri/tauri.conf.json");
+
+  // ── src-tauri/Cargo.toml ────────────────────────────────────────────────────
+
+  const cargoPath = "src-tauri/Cargo.toml";
+  let cargo = readText(cargoPath);
+
+  const versionLine = /^version\s*=\s*"[^"]+"/m;
+  if (!versionLine.test(cargo)) {
+    throw new Error("Could not find package version in Cargo.toml");
+  }
+  cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
+  writeText(cargoPath, cargo);
+  console.log("  ✓  src-tauri/Cargo.toml");
+
+  // ── CHANGELOG.md — compile fragments ───────────────────────────────────────
+
+  const date = todayIsoDate();
+  const result = compileChangelog(newVersion, date);
+
+  if (result.entryCount > 0) {
+    console.log(
+      `  ✓  CHANGELOG.md — compiled ${result.entryCount} entries (${result.categories.join(", ")})`
+    );
+    console.log(
+      `  ✓  changes/releases/${newVersion}/ — archived ${result.categories.length} fragments`
+    );
+  } else {
+    bumpChangelogUnreleased("CHANGELOG.md", newVersion, date);
+    console.log("  ✓  CHANGELOG.md (Unreleased -> versioned section, no fragments)");
+  }
+
+  // ── regenerate Cargo.lock ───────────────────────────────────────────────────
+
+  console.log("\nRegenerating Cargo.lock...");
+  execSync("cargo generate-lockfile", { stdio: "inherit" });
+  console.log("  ✓  Cargo.lock");
+
+  // ── clean Rust build artifacts ──────────────────────────────────────────────
+
+  console.log("\nCleaning Rust build artifacts...");
+  execSync("npm run clean:rust", { stdio: "inherit" });
+  console.log("  ✓  clean:rust");
+
+  console.log(`\nDone! Version is now ${newVersion}`);
+}
+
+main().catch((err) => {
+  console.error(err.message || err);
+  process.exit(1);
+});
