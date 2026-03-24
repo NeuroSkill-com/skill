@@ -1,3 +1,3 @@
 ### Bugfixes
 
-- **skill-skills submodule test**: `discover_real_skills_submodule` now skips correctly in CI where the git submodule directory exists but is not populated, by checking for `skills/SKILL.md` instead of just directory existence.
+- **skill-skills submodule test**: Added `submodules: true` to the `rust-check` CI checkout step so the `skills/` git submodule is fully populated and `discover_real_skills_submodule` runs (and passes) in CI instead of seeing an empty directory.

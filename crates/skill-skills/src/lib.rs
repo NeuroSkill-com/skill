@@ -727,9 +727,8 @@ description: A helpful skill
             .parent()
             .unwrap() // project root
             .join("skills");
-        // Skip if submodule not checked out (directory absent or empty).
-        if !skills_dir.join("SKILL.md").exists() {
-            return;
+        if !skills_dir.exists() {
+            return; // skip if submodule not checked out
         }
         let result = load_skills_from_dir(&skills_dir, "bundled", true);
         assert!(
