@@ -576,6 +576,7 @@ impl Default for AppState {
             ws_port: default_ws_port(),
             api_token: String::new(),
             update_check_interval_secs: default_update_check_interval(),
+            update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),

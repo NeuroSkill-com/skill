@@ -9,15 +9,23 @@ use crate::AppStateExt;
 use skill_data::util::MutexExt;
 
 /// Show a quit confirmation dialog on a background thread.
-/// If the user confirms, the app exits.
+/// If the user confirms and an update is staged, relaunch to apply it;
+/// otherwise exit normally.
 pub(crate) fn confirm_and_quit(app: AppHandle) {
-    let lang = {
+    let (lang, update_ready) = {
         let s = app.app_state();
         let g = s.lock_or_recover();
-        g.ui.language.clone()
+        (g.ui.language.clone(), g.update_ready_to_install)
     };
     std::thread::spawn(move || {
-        if quit_confirmed(&lang, &app) { app.exit(0); }
+        if quit_confirmed(&lang, &app) {
+            if update_ready {
+                eprintln!("[updater] update staged — relaunching to apply");
+                app.request_restart();
+            } else {
+                app.exit(0);
+            }
+        }
     });
 }
 

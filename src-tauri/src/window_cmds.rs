@@ -658,7 +658,19 @@ pub fn emit_calibration_event(event: String, payload: serde_json::Value, app: Ap
 }
 
 #[tauri::command]
-pub fn quit_app(app: AppHandle) { app.exit(0); }
+pub fn quit_app(app: AppHandle) {
+    let update_ready = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let g = r.lock_or_recover();
+        g.update_ready_to_install
+    };
+    if update_ready {
+        eprintln!("[updater] update staged — relaunching to apply on quit");
+        app.request_restart();
+    } else {
+        app.exit(0);
+    }
+}
 
 #[tauri::command]
 pub fn get_app_version(app: AppHandle) -> String {
@@ -671,6 +683,16 @@ pub fn is_session_live(app: AppHandle) -> bool {
     let r = app.state::<Mutex<Box<AppState>>>();
     let g = r.lock_or_recover();
     g.session_start_utc.is_some()
+}
+
+/// Called by the frontend once an update has been downloaded and staged.
+/// The flag is checked at quit time so we can relaunch (apply the update)
+/// instead of a plain exit.
+#[tauri::command]
+pub fn set_update_ready(app: AppHandle, ready: bool) {
+    let r = app.state::<Mutex<Box<AppState>>>();
+    let mut g = r.lock_or_recover();
+    g.update_ready_to_install = ready;
 }
 
 #[tauri::command]

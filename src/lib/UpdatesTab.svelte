@@ -30,7 +30,6 @@ the Free Software Foundation, version 3 only. -->
   let phase       = $state<Phase>("idle");
   let progress    = $state(0);        // 0–100 during download
   let error       = $state("");       // non-empty only on error phase
-  let countdown   = $state(0);        // seconds until auto-relaunch
   let available   = $state<{ version: string; date?: string; body?: string } | null>(null);
   let lastCheckedUtc = $state(0);
   /** True while an EEG session is being recorded — blocks restart. */
@@ -144,6 +143,7 @@ the Free Software Foundation, version 3 only. -->
 
       // Install complete — wait for user to confirm restart.
       phase = "ready";
+      await invoke("set_update_ready", { ready: true });
       startSessionPoll();
 
     } catch (e) {
@@ -333,7 +333,7 @@ the Free Software Foundation, version 3 only. -->
             <div class="flex items-center gap-2 shrink-0">
               <Button size="sm" variant="outline"
                       class="text-[0.72rem] h-8 px-3"
-                      onclick={() => { stopSessionPoll(); phase = "idle"; available = null; sessionBlockWarning = false; }}>
+                      onclick={() => { stopSessionPoll(); phase = "idle"; available = null; sessionBlockWarning = false; invoke("set_update_ready", { ready: false }); }}>
                 {t("common.cancel")}
               </Button>
               <Button size="sm" class="text-[0.72rem] h-8 px-4"

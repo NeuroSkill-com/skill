@@ -219,7 +219,7 @@ use window_cmds::{
     set_active_calibration, create_calibration_profile, update_calibration_profile,
     delete_calibration_profile, record_calibration_completed,
     get_calibration_config, set_calibration_config,
-    emit_calibration_event, quit_app, get_app_version, get_app_name, is_session_live,
+    emit_calibration_event, quit_app, get_app_version, get_app_name, is_session_live, set_update_ready,
     get_data_dir, set_data_dir, open_skill_dir, get_ws_clients, get_ws_request_log, get_ws_port,
 };
 
@@ -1326,7 +1326,7 @@ pub fn run() {
             delete_calibration_profile, record_calibration_completed,
             get_calibration_config, set_calibration_config,
             emit_calibration_event,
-            get_app_version, get_app_name, is_session_live,
+            get_app_version, get_app_name, is_session_live, set_update_ready,
             get_data_dir, set_data_dir, open_skill_dir,
             get_ws_clients, get_ws_request_log, get_ws_port,
             get_ws_config, set_ws_config,
