@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{SecondsFormat, Utc, Local};
 
 use super::helpers::format_utc_offset;
-use super::safety::{check_bash_safety, request_tool_approval};
+use super::safety::{check_bash_safety, request_tool_approval, request_bash_edit};
 use super::truncate::truncate_text;
 use super::status::format_status_as_text;
 use crate::types::LlmToolConfig;
@@ -67,12 +67,29 @@ pub(crate) async fn exec_location() -> Value {
 
 // ── bash ──────────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path) -> Value {
-    let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path, require_edit: bool) -> Value {
+    let mut command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if command.is_empty() {
         return json!({ "ok": false, "tool": "bash", "error": "missing command" });
     }
     let timeout_secs = args.get("timeout").and_then(serde_json::Value::as_f64).map(|t| t as u64);
+
+    // User review/edit: when enabled, present every command for editing first.
+    if require_edit {
+        crate::tool_log!("tool:bash", "[edit] presenting command for review");
+        match request_bash_edit(&command).await {
+            Some(edited) => {
+                if edited != command {
+                    crate::tool_log!("tool:bash", "[edit] command was modified by user");
+                }
+                command = edited;
+            }
+            None => {
+                crate::tool_log!("tool:bash", "[edit] user cancelled bash command");
+                return json!({ "ok": false, "tool": "bash", "error": "command cancelled by user" });
+            }
+        }
+    }
 
     // Safety check: require user approval for dangerous commands
     if let Some(reason) = check_bash_safety(&command) {
