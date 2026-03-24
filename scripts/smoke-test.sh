@@ -23,14 +23,24 @@ tmux new-session -d -s "$SESSION" -c "$DIR" \
   "echo '═══ Starting Skill app ═══'; npm run tauri dev; echo '═══ App exited ═══'; read" \; \
   split-window -h -c "$DIR" "\
     echo '═══ Waiting for _skill._tcp mDNS (up to ${MDNS_TIMEOUT}s) ═══'
+    MDNS_OUT=\$(mktemp)
+    dns-sd -B _skill._tcp local > \"\$MDNS_OUT\" 2>&1 &
+    DNS_PID=\$!
     FOUND=0
-    for i in \$(seq 1 $((MDNS_TIMEOUT / 3))); do
-      if dns-sd -B _skill._tcp local 2>&1 | perl -e 'alarm 3; while(<STDIN>){exit 0 if /skill/}; exit 1'; then
+    ELAPSED=0
+    while [ \$ELAPSED -lt $MDNS_TIMEOUT ]; do
+      if grep -q 'Add.*_skill._tcp' \"\$MDNS_OUT\" 2>/dev/null; then
         FOUND=1
         break
       fi
-      printf '  %3ds …\n' \$((i * 3))
+      sleep 1
+      ELAPSED=\$((ELAPSED + 1))
+      if [ \$((ELAPSED % 5)) -eq 0 ]; then
+        printf '  %3ds …\n' \$ELAPSED
+      fi
     done
+    kill \$DNS_PID 2>/dev/null || true
+    rm -f \"\$MDNS_OUT\"
 
     if [ \$FOUND -eq 0 ]; then
       echo '✗ Timed out waiting for Skill mDNS service.'
