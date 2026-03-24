@@ -323,6 +323,8 @@ const llm: Record<string, string> = {
   "chat.tools.web_fetchDesc":           "Fetch and read a web page",
   "chat.tools.bash":                    "Bash",
   "chat.tools.bashDesc":                "Execute shell commands",
+  "chat.tools.requireBashEdit":         "Review bash commands",
+  "chat.tools.requireBashEditDesc":     "Show every command for approval before running",
   "chat.tools.read_file":               "Read file",
   "chat.tools.read_fileDesc":           "Read text file contents",
   "chat.tools.write_file":              "Write file",

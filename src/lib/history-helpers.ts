@@ -20,6 +20,8 @@ export interface SessionEntry {
   battery_pct: number | null; total_samples: number | null;
   sample_rate_hz: number | null; labels: LabelRow[];
   file_size_bytes: number;
+  /** Average signal-to-noise ratio (dB) for the session. `null` for very old sessions. */
+  avg_snr_db: number | null;
 }
 
 export interface HistoryStatsData {

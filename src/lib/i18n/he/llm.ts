@@ -233,6 +233,8 @@ const llm: Record<string, string> = {
   "chat.tools.web_fetchDesc":           "שליפה וקריאה של דף אינטרנט",
   "chat.tools.bash":                    "Bash",
   "chat.tools.bashDesc":                "הרצת פקודות מעטפת",
+  "chat.tools.requireBashEdit":         "בדיקת פקודות bash",
+  "chat.tools.requireBashEditDesc":     "הצג כל פקודה לאישור לפני הרצה",
   "chat.tools.read_file":               "קריאת קובץ",
   "chat.tools.read_fileDesc":           "קריאת תוכן קובץ טקסט",
   "chat.tools.write_file":              "כתיבת קובץ",

@@ -1534,6 +1534,12 @@ the Free Software Foundation, version 3 only. -->
                           <span class="text-[0.65rem] text-foreground">{session.battery_pct.toFixed(0)}%</span>
                         </div>
                       {/if}
+                      {#if session.avg_snr_db != null}
+                        <div class="flex flex-col gap-0.5">
+                          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.snr")}</span>
+                          <span class="text-[0.65rem] text-foreground {session.avg_snr_db >= 10 ? 'text-emerald-500' : session.avg_snr_db >= 0 ? 'text-amber-500' : 'text-red-400'}">{session.avg_snr_db.toFixed(1)} dB</span>
+                        </div>
+                      {/if}
                     </div>
 
                     <!-- Metrics & Charts -->
