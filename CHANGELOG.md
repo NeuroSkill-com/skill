@@ -8,6 +8,28 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.57] — 2026-03-24
+
+### Bugfixes
+
+- **Fix skill-headless build with wry 0.54**: Enable `rwh_06` feature on `tao` so `Window` implements `HasWindowHandle` required by wry 0.54.
+
+- **Fix mDNS discovery in smoke-test.sh**: Keep a single `dns-sd -B` process running continuously and poll its output every second, instead of spawning and killing a new process every 3 seconds (which could miss service announcements).
+
+- **Fix smoke-test false-positive mDNS match**: The `dns-sd -B` header line already contains "skill", so the grep matched immediately before any service was actually discovered. Changed pattern to `Add.*_skill._tcp` which only matches a real service registration event.
+
+- **Smoke test mDNS retry**: Moved mDNS discovery from `smoke-test.sh` (bash `dns-sd`) into `test.ts` (bonjour-service). Discovery now retries indefinitely with a 3-second backoff until the Skill server appears or the user presses Ctrl-C, fixing the "could not resolve port" failure on slow startups.
+
+- **Smoke test port discovery**: Fixed `smoke-test.sh` failing because `test.ts` tried its own 5-second mDNS browse which raced and failed. The script now resolves the port via `dns-sd -L` after the browse succeeds and passes it explicitly to `test.ts`, eliminating the double-discovery race condition.
+
+- **Fix smoke test on macOS**: Replace GNU `timeout` command (not available by default on macOS) with a portable Perl-based timeout in `smoke-test.sh`.
+
+- **Fix smoke-test unbound variable**: `scripts/smoke-test.sh` failed with `unbound variable` when invoked without arguments due to `set -u` and bare `${*}`. Changed to `${*:-}` to default to empty string.
+
+### CLI
+
+- **Move smoke-test to scripts/ and add npm script**: Moved `smoke-test.sh` into `scripts/` and added `npm run test:smoke` shortcut.
+
 ## [0.0.56] — 2026-03-24
 
 ### Features
