@@ -484,11 +484,14 @@ function bumpChangelogUnreleased(changelogPath, version, date) {
 function parseArgs() {
   const args = process.argv.slice(2);
   let dryRun = false;
+  let clean = false;
   let versionArg = null;
 
   for (const a of args) {
     if (a === "--dry-run") {
       dryRun = true;
+    } else if (a === "--clean") {
+      clean = true;
     } else if (a === "--help" || a === "-h") {
       console.log(
         [
@@ -496,6 +499,7 @@ function parseArgs() {
           "",
           "Options:",
           "  --dry-run   Run all preflight checks but skip version bumping",
+          "  --clean     Delete src-tauri/target after bumping to free disk space",
           "  --help, -h  Show this help message",
           "",
           "If version is omitted the patch component is incremented automatically.",
@@ -509,13 +513,13 @@ function parseArgs() {
     }
   }
 
-  return { dryRun, versionArg };
+  return { dryRun, clean, versionArg };
 }
 
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
-  const { dryRun, versionArg } = parseArgs();
+  const { dryRun, clean, versionArg } = parseArgs();
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
@@ -592,6 +596,14 @@ async function main() {
   console.log("\nRegenerating Cargo.lock...");
   execSync("cargo generate-lockfile", { stdio: "inherit" });
   console.log("  ✓  Cargo.lock");
+
+  // ── optionally clean Rust build artifacts to free disk space ────────────────
+
+  if (clean) {
+    console.log("\nCleaning Rust build artifacts (--clean)...");
+    execSync("npm run clean:rust", { stdio: "inherit" });
+    console.log("  ✓  clean:rust");
+  }
 
   console.log(`\nDone! Version is now ${newVersion}`);
 }
