@@ -186,7 +186,7 @@ fn extract_tarball(data: &[u8], dest: &Path) -> Result<(), String> {
 fn find_single_child_dir(parent: &Path) -> Option<PathBuf> {
     let entries: Vec<_> = fs::read_dir(parent)
         .ok()?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         .collect();
     if entries.len() == 1 {

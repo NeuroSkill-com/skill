@@ -124,10 +124,10 @@ pub(crate) fn focus_or_create_with_emit(
 pub fn check_accessibility_permission() -> bool {
     #[cfg(target_os = "macos")]
     {
-        // SAFETY: AXIsProcessTrusted is a plain C function that reads a process
-        // flag; it is safe to call from any thread.
         #[link(name = "ApplicationServices", kind = "framework")]
         extern "C" { fn AXIsProcessTrusted() -> bool; }
+        // SAFETY: AXIsProcessTrusted is a plain C function that reads a process
+        // flag; it is safe to call from any thread.
         unsafe { AXIsProcessTrusted() }
     }
     #[cfg(not(target_os = "macos"))]
@@ -173,6 +173,8 @@ pub fn check_screen_recording_permission() -> bool {
         // kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements
         const OPTIONS: u32 = (1 << 0) | (1 << 4);
 
+        // SAFETY: CGWindowListCopyWindowInfo returns a CFArray (or null).
+        // We only read the count and release it — no dangling pointers.
         unsafe {
             let list = CGWindowListCopyWindowInfo(OPTIONS, 0);
             if list.is_null() { return false; }

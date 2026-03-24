@@ -168,7 +168,7 @@ pub fn init(
     // Discover Agent Skills from all configured locations.
     let exe_dir = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
     let bundled_skills_dir = exe_dir.as_ref()
         .map(|d| d.join(skill_constants::SKILLS_SUBDIR))
         .filter(|d| d.is_dir())

@@ -95,7 +95,7 @@ impl MuseAdapter {
         loop {
             let min_len = self.ch_bufs[..MUSE_EEG_CHANNELS]
                 .iter()
-                .map(|b| b.len())
+                .map(std::collections::VecDeque::len)
                 .min()
                 .unwrap_or(0);
             if min_len == 0 {

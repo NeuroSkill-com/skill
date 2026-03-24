@@ -411,7 +411,7 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
                             for p in peripherals {
                                 if let Ok(Some(props)) = p.properties().await {
                                     let name_lower = props.local_name.as_deref()
-                                        .map(|n| n.to_lowercase());
+                                        .map(str::to_lowercase);
 
                                     let name_match = name_lower.as_deref().map(|n| {
                                         skill_data::device::DeviceKind::from_name(Some(n))

@@ -167,7 +167,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             .find(|d| &d.id == id).map(|d| d.name.clone())
             .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
     });
-    let target_lower = target_name.as_deref().map(|n| n.to_lowercase());
+    let target_lower = target_name.as_deref().map(str::to_lowercase);
     let device_kind = detect_device_kind(target.as_deref(), target_lower.as_deref());
 
     // For Cortex devices without a resolved name, set a user-visible name

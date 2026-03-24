@@ -366,8 +366,8 @@ pub fn list_sessions_for_day(
         let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if !is_session_json(fname) { continue; }
 
-        let json_bytes = match std::fs::read(&jp) { Ok(b) => b, Err(_) => continue };
-        let meta: SessionJsonMeta = match serde_json::from_slice(&json_bytes) { Ok(v) => v, Err(_) => continue };
+        let Ok(json_bytes) = std::fs::read(&jp) else { continue };
+        let Ok(meta) = serde_json::from_slice::<SessionJsonMeta>(&json_bytes) else { continue };
 
         let csv_file = meta.csv_file.unwrap_or_default();
         let csv_full = day_dir.join(&csv_file);
@@ -413,7 +413,7 @@ pub fn list_sessions_for_day(
         if !is_session_csv(cfname) { continue; }
         if cp.with_extension("json").exists() { continue; }
         let meta_fs = std::fs::metadata(&cp);
-        let csv_size = meta_fs.as_ref().map(|m| m.len()).unwrap_or(0);
+        let csv_size = meta_fs.as_ref().map(std::fs::Metadata::len).unwrap_or(0);
         let ts: Option<u64> = extract_timestamp(cfname);
         let end_ts: Option<u64> = meta_fs.ok()
             .and_then(|m| m.modified().ok())
@@ -526,16 +526,16 @@ pub fn find_session_csv_for_timestamp(skill_dir: &Path, ts_utc: u64) -> Option<S
     let mut nearest: Option<(u64, String)> = None;
 
     let entries = std::fs::read_dir(skill_dir).ok()?;
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
-        let files = match std::fs::read_dir(&path) { Ok(v) => v, Err(_) => continue };
-        for file in files.filter_map(|e| e.ok()) {
+        let Ok(files) = std::fs::read_dir(&path) else { continue };
+        for file in files.filter_map(std::result::Result::ok) {
             let jp = file.path();
             let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if !is_session_json(fname) { continue; }
-            let json = match std::fs::read_to_string(&jp) { Ok(s) => s, Err(_) => continue };
-            let meta: serde_json::Value = match serde_json::from_str(&json) { Ok(v) => v, Err(_) => continue };
+            let Ok(json) = std::fs::read_to_string(&jp) else { continue };
+            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&json) else { continue };
             let start = meta["session_start_utc"].as_u64();
             let end = meta["session_end_utc"].as_u64().or(start);
             let csv_file = meta["csv_file"].as_str().unwrap_or("");
@@ -562,27 +562,25 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
     let mut all_ts: Vec<(u64, usize)> = Vec::new();
     let mut day_names: Vec<String> = Vec::new();
 
-    let entries = match std::fs::read_dir(skill_dir) { Ok(e) => e, Err(_) => return vec![] };
-    for entry in entries.filter_map(|e| e.ok()) {
+    let Ok(entries) = std::fs::read_dir(skill_dir) else { return vec![] };
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let day_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
         if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) { continue; }
         let db_path = path.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let conn = match rusqlite::Connection::open_with_flags(
+        let Ok(conn) = rusqlite::Connection::open_with_flags(
             &db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) { Ok(c) => c, Err(_) => continue };
+        ) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let mut stmt = match conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") {
-            Ok(s) => s, Err(_) => continue,
-        };
+        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") else { continue };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
         let day_idx = day_names.len();
         day_names.push(day_name);
         if let Ok(rows) = rows {
-            for row in rows.filter_map(|r| r.ok()) {
+            for row in rows.filter_map(std::result::Result::ok) {
                 all_ts.push((ts_to_unix(row), day_idx));
             }
         }
@@ -627,7 +625,7 @@ fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
     let mut first: Option<u64> = None;
     let mut last: Option<u64> = None;
     for batch in reader {
-        let batch = match batch { Ok(b) => b, Err(_) => continue };
+        let Ok(batch) = batch else { continue };
         let ts_col = batch.column(0)
             .as_any().downcast_ref::<arrow_array::Float64Array>()?;
         for i in 0..ts_col.len() {
@@ -722,7 +720,7 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
             continue;
         }
         let mp = find_metrics_path(Path::new(&session.csv_path));
-        let mp = match mp { Some(p) => p, None => continue };
+        let Some(mp) = mp else { continue };
         if let Some((first_ts, last_ts)) = read_metrics_time_range(&mp) {
             *start                     = Some(first_ts);
             *end                       = Some(last_ts);
@@ -744,12 +742,9 @@ fn sigmoid100(x: f32, k: f32, mid: f32) -> f32 {
 
 /// Read a `_metrics` file (CSV or Parquet) and return aggregated summary + time-series.
 pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
-    let metrics_path = match find_metrics_path(csv_path) {
-        Some(p) => p,
-        None => {
-            eprintln!("[metrics] no metrics file for: {}", csv_path.display());
-            return None;
-        }
+    let Some(metrics_path) = find_metrics_path(csv_path) else {
+        eprintln!("[metrics] no metrics file for: {}", csv_path.display());
+        return None;
     };
 
     // Parquet path: convert to CSV-style records and process identically.
@@ -779,7 +774,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     let mut count = 0usize;
 
     for result in rdr.records() {
-        let rec = match result { Ok(r) => r, Err(_) => continue };
+        let Ok(rec) = result else { continue };
         if rec.len() < x + 23 { continue; } // need at least through laterality_index
 
         let f = |i: usize| -> f64 {
@@ -922,7 +917,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     let mut count = 0usize;
 
     for batch in reader {
-        let batch = match batch { Ok(b) => b, Err(_) => continue };
+        let Ok(batch) = batch else { continue };
         let n_cols = batch.num_columns();
         let n_rows = batch.num_rows();
 

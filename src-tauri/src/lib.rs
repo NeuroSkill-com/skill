@@ -864,7 +864,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .spawn(move || {
                 let ctx: std::sync::Arc<dyn skill_screenshots::ScreenshotContext> =
                     std::sync::Arc::new(screenshot::TauriScreenshotContext { app: app_ss });
-                screenshot::run_screenshot_worker(ctx, sd, ss_store, ss_metrics)
+                screenshot::run_screenshot_worker(ctx, sd, ss_store, ss_metrics);
             })
             .expect("[screenshot] failed to spawn worker thread");
     }

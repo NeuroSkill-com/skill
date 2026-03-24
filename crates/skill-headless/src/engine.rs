@@ -220,7 +220,7 @@ impl Browser {
         std::thread::Builder::new()
             .name("skill-headless-evloop".into())
             .spawn(move || {
-                if let Err(e) = run_event_loop(config, proxy_tx, closed2) {
+                if let Err(e) = run_event_loop(&config, &proxy_tx, closed2) {
                     eprintln!("[skill-headless] event loop error: {e}");
                 }
             })
@@ -288,8 +288,8 @@ impl Browser {
 // ── Event loop (runs on dedicated thread) ────────────────────────────────────
 
 fn run_event_loop(
-    config: BrowserConfig,
-    proxy_tx: Sender<Result<EventLoopProxy<UserEvent>, String>>,
+    config: &BrowserConfig,
+    proxy_tx: &Sender<Result<EventLoopProxy<UserEvent>, String>>,
     closed: Arc<AtomicBool>,
 ) -> Result<(), HeadlessError> {
     let mut builder = EventLoopBuilder::<UserEvent>::with_user_event();
@@ -353,6 +353,8 @@ fn run_event_loop(
     // The `skill` protocol serves a blank page and gives us a valid origin
     // for localStorage/sessionStorage/cookies.
     wv_builder = wv_builder.with_custom_protocol("skill".into(), |_id, _req| {
+        // Builder with valid static args is infallible in practice.
+        #[allow(clippy::expect_used)]
         http::Response::builder()
             .header("Content-Type", "text/html; charset=utf-8")
             .body(std::borrow::Cow::Borrowed(
@@ -398,7 +400,7 @@ fn run_event_loop(
         .with_devtools(config.devtools)
         .with_navigation_handler({
             move |url: String| {
-                let patterns = blocked_urls_nav.lock().expect("lock poisoned");
+                let patterns = blocked_urls_nav.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 let blocked = patterns.iter().any(|p| url.contains(p.as_str()));
                 let ts = js_timestamp();
                 intercept_store_nav.push_navigation(NavigationEvent {
@@ -429,7 +431,7 @@ fn run_event_loop(
             // ── Async IPC replies (existing) ─────────────────────────
             // Expected format: "ipc_id:result_text"
             if let Some((id, result)) = body.split_once(':') {
-                let mut pending = pending_ipc_clone.lock().expect("lock poisoned");
+                let mut pending = pending_ipc_clone.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 if let Some(reply) = pending.remove(id) {
                     let _ = reply.send(Response::Text(result.to_string()));
                 }
@@ -480,7 +482,7 @@ fn run_event_loop(
             Event::UserEvent(UserEvent::Command(envelope)) => {
                 let Envelope { command, reply } = envelope;
 
-                let wv_guard = webview.lock().expect("lock poisoned");
+                let wv_guard = webview.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 if let Some(ref wv) = *wv_guard {
                     execute_command(
                         wv, &window, &command, reply.clone(), &pending_ipc,
@@ -562,18 +564,18 @@ fn execute_command(
             } else {
                 "location.reload()"
             };
-            eval_fire(wv, script, reply);
+            eval_fire(wv, script, &reply);
         }
 
-        Command::GoBack => eval_fire(wv, "history.back()", reply),
-        Command::GoForward => eval_fire(wv, "history.forward()", reply),
-        Command::StopLoading => eval_fire(wv, "window.stop()", reply),
+        Command::GoBack => eval_fire(wv, "history.back()", &reply),
+        Command::GoForward => eval_fire(wv, "history.forward()", &reply),
+        Command::StopLoading => eval_fire(wv, "window.stop()", &reply),
 
         Command::GetUrl => eval_with_cb(wv, "location.href", reply),
         Command::GetTitle => eval_with_cb(wv, "document.title", reply),
 
         Command::GetContent => {
-            eval_with_cb(wv, "document.documentElement.outerHTML", reply)
+            eval_with_cb(wv, "document.documentElement.outerHTML", reply);
         }
 
         Command::Screenshot => {
@@ -585,7 +587,7 @@ fn execute_command(
             // common cases (solid backgrounds, text, images, borders).
             // For pixel-perfect fidelity, inject the full html2canvas library
             // and use EvalJs instead.
-            eval_async_ipc(wv, pending_ipc, reply, r#"
+            eval_async_ipc(wv, pending_ipc, &reply, r#"
                 (async () => {
                     const W = window.innerWidth  || document.documentElement.clientWidth  || 800;
                     const H = window.innerHeight || document.documentElement.clientHeight || 600;
@@ -674,7 +676,7 @@ fn execute_command(
         // ── Runtime ──────────────────────────────────────────────────────
         Command::EvalJs { script } => eval_with_cb(wv, script, reply),
 
-        Command::EvalJsNoReturn { script } => eval_fire(wv, script, reply),
+        Command::EvalJsNoReturn { script } => eval_fire(wv, script, &reply),
 
         Command::CallFunction { function, args } => {
             let args_str = args.join(", ");
@@ -688,7 +690,7 @@ fn execute_command(
             let script = format!(
                 r#"(() => {{ const s = document.createElement('style'); s.textContent = `{escaped}`; document.head.appendChild(s); }})()"#
             );
-            eval_fire(wv, &script, reply);
+            eval_fire(wv, &script, &reply);
         }
 
         Command::InjectScriptUrl { url } => {
@@ -696,7 +698,7 @@ fn execute_command(
             let script = format!(
                 r#"(() => {{ const s = document.createElement('script'); s.src = '{escaped}'; document.head.appendChild(s); }})()"#
             );
-            eval_fire(wv, &script, reply);
+            eval_fire(wv, &script, &reply);
         }
 
         Command::InjectScriptContent { content } => {
@@ -704,7 +706,7 @@ fn execute_command(
             let script = format!(
                 r#"(() => {{ const s = document.createElement('script'); s.textContent = `{escaped}`; document.head.appendChild(s); }})()"#
             );
-            eval_fire(wv, &script, reply);
+            eval_fire(wv, &script, &reply);
         }
 
         Command::QuerySelector { selector } => {
@@ -753,7 +755,7 @@ fn execute_command(
             } else {
                 format!(r#"document.execCommand('insertText', false, '{txt}')"#)
             };
-            eval_fire(wv, &script, reply);
+            eval_fire(wv, &script, &reply);
         }
 
         Command::SetValue { selector, value } => {
@@ -769,15 +771,15 @@ fn execute_command(
                     }}
                 }})()"#
             );
-            eval_fire(wv, &script, reply);
+            eval_fire(wv, &script, &reply);
         }
 
         Command::ScrollBy { x, y } => {
-            eval_fire(wv, &format!("window.scrollBy({x}, {y})"), reply)
+            eval_fire(wv, &format!("window.scrollBy({x}, {y})"), &reply);
         }
 
         Command::ScrollTo { x, y } => {
-            eval_fire(wv, &format!("window.scrollTo({x}, {y})"), reply)
+            eval_fire(wv, &format!("window.scrollTo({x}, {y})"), &reply);
         }
 
         // ── Cookies ──────────────────────────────────────────────────────
@@ -809,7 +811,7 @@ fn execute_command(
             }
             parts.push(format!("samesite={}", same_site.as_str()));
             let cookie_str = parts.join("; ");
-            eval_fire(wv, &format!("document.cookie = '{cookie_str}'"), reply);
+            eval_fire(wv, &format!("document.cookie = '{cookie_str}'"), &reply);
         }
 
         Command::GetCookies { domain: _ } => {
@@ -829,7 +831,7 @@ fn execute_command(
                 &format!(
                     "document.cookie = '{n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/{domain_part}'"
                 ),
-                reply,
+                &reply,
             );
         }
 
@@ -840,7 +842,7 @@ fn execute_command(
                     document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
                 })
             "#;
-            eval_fire(wv, script, reply);
+            eval_fire(wv, script, &reply);
         }
 
         // ── localStorage ─────────────────────────────────────────────────
@@ -852,15 +854,15 @@ fn execute_command(
         Command::SetLocalStorage { key, value } => {
             let k = js_escape(key);
             let v = js_escape(value);
-            eval_fire(wv, &format!("localStorage.setItem('{k}', '{v}')"), reply);
+            eval_fire(wv, &format!("localStorage.setItem('{k}', '{v}')"), &reply);
         }
 
         Command::RemoveLocalStorage { key } => {
             let k = js_escape(key);
-            eval_fire(wv, &format!("localStorage.removeItem('{k}')"), reply);
+            eval_fire(wv, &format!("localStorage.removeItem('{k}')"), &reply);
         }
 
-        Command::ClearLocalStorage => eval_fire(wv, "localStorage.clear()", reply),
+        Command::ClearLocalStorage => eval_fire(wv, "localStorage.clear()", &reply),
 
         // ── sessionStorage ───────────────────────────────────────────────
         Command::GetSessionStorage { key } => {
@@ -874,7 +876,7 @@ fn execute_command(
             eval_fire(
                 wv,
                 &format!("sessionStorage.setItem('{k}', '{v}')"),
-                reply,
+                &reply,
             );
         }
 
@@ -905,7 +907,7 @@ fn execute_command(
 
         // ── Cache ────────────────────────────────────────────────────────
         Command::ClearCache => {
-            eval_async_ipc(wv, pending_ipc, reply, r#"
+            eval_async_ipc(wv, pending_ipc, &reply, r#"
                 (async () => {
                     if ('caches' in window) {
                         const names = await caches.keys();
@@ -917,7 +919,7 @@ fn execute_command(
         }
 
         Command::ClearBrowsingData => {
-            eval_async_ipc(wv, pending_ipc, reply, r#"
+            eval_async_ipc(wv, pending_ipc, &reply, r#"
                 (async () => {
                     localStorage.clear();
                     sessionStorage.clear();
@@ -940,7 +942,7 @@ fn execute_command(
             timeout_ms,
         } => {
             let sel = js_escape(selector);
-            eval_async_ipc(wv, pending_ipc, reply, &format!(
+            eval_async_ipc(wv, pending_ipc, &reply, &format!(
                 r#"
                 (async () => {{
                     const deadline = Date.now() + {timeout_ms};
@@ -955,7 +957,7 @@ fn execute_command(
         }
 
         Command::WaitForNavigation { timeout_ms } => {
-            eval_async_ipc(wv, pending_ipc, reply, &format!(
+            eval_async_ipc(wv, pending_ipc, &reply, &format!(
                 r#"
                 new Promise((resolve) => {{
                     const timer = setTimeout(() => resolve('timeout'), {timeout_ms});
@@ -992,12 +994,12 @@ fn execute_command(
         }
 
         Command::SetBlockedUrls { patterns } => {
-            *blocked_urls.lock().expect("lock poisoned") = patterns.clone();
+            *blocked_urls.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = patterns.clone();
             let _ = reply.send(Response::Ok);
         }
 
         Command::ClearBlockedUrls => {
-            blocked_urls.lock().expect("lock poisoned").clear();
+            blocked_urls.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
             let _ = reply.send(Response::Ok);
         }
 
@@ -1020,14 +1022,14 @@ static IPC_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 fn eval_async_ipc(
     wv: &WebView,
     pending_ipc: &Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>>,
-    reply: Sender<Response>,
+    reply: &Sender<Response>,
     script: &str,
 ) {
     let id = IPC_COUNTER.fetch_add(1, Ordering::Relaxed);
     let id_str = format!("__ipc_{id}");
 
     // Register the pending reply.
-    pending_ipc.lock().expect("lock poisoned").insert(id_str.clone(), reply.clone());
+    pending_ipc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id_str.clone(), reply.clone());
 
     let wrapped = format!(
         r#"
@@ -1041,7 +1043,7 @@ fn eval_async_ipc(
 
     if let Err(e) = wv.evaluate_script(&wrapped) {
         // Remove pending entry and send error immediately.
-        pending_ipc.lock().expect("lock poisoned").remove(&id_str);
+        pending_ipc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&id_str);
         let _ = reply.send(Response::Error(format!("eval failed: {e}")));
     }
 }
@@ -1066,7 +1068,7 @@ fn eval_with_cb(wv: &WebView, script: &str, reply: Sender<Response>) {
 }
 
 /// Evaluate JS fire-and-forget (no callback, immediate response).
-fn eval_fire(wv: &WebView, script: &str, reply: Sender<Response>) {
+fn eval_fire(wv: &WebView, script: &str, reply: &Sender<Response>) {
     let resp = match wv.evaluate_script(script) {
         Ok(_) => Response::Ok,
         Err(e) => Response::Error(format!("eval failed: {e}")),

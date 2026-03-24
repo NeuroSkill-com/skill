@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
-// The headless engine uses `.expect("lock poisoned")` on Mutex locks and
-// passes channel Senders by value throughout.  These are intentional patterns
-// for event-loop code where poison recovery is not meaningful.
-#![allow(clippy::expect_used, clippy::needless_pass_by_value, clippy::semicolon_if_nothing_returned)]
-//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.

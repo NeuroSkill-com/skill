@@ -573,18 +573,16 @@ struct EmbedJob {
 ///
 /// This ensures the capture cadence is never delayed by slow embedding work
 /// and screenshots are always persisted immediately.
+#[allow(clippy::needless_pass_by_value)] // thread entry point — takes ownership of Arcs and PathBuf
 pub fn run_screenshot_worker(
     ctx: Arc<dyn crate::context::ScreenshotContext>,
     skill_dir: PathBuf,
     shared_store: Option<Arc<ScreenshotStore>>,
     metrics: Arc<ScreenshotMetrics>,
 ) {
-    let store = match shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) {
-        Some(s) => s,
-        None => {
-            eprintln!("[screenshot] failed to open store — worker exiting");
-            return;
-        }
+    let Some(store) = shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) else {
+        eprintln!("[screenshot] failed to open store — worker exiting");
+        return;
     };
 
     // Read initial config
@@ -606,7 +604,10 @@ pub fn run_screenshot_worker(
         .spawn(move || {
             run_embed_thread(embed_ctx, embed_dir, embed_store, embed_rx, embed_config, embed_metrics);
         })
-        .expect("[screenshot] failed to spawn embed thread");
+        .unwrap_or_else(|e| {
+            eprintln!("[screenshot] failed to spawn embed thread: {e}");
+            std::process::abort();
+        });
 
     // ── Capture loop ──
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
@@ -651,21 +652,15 @@ pub fn run_screenshot_worker(
 
         // ── Capture active window ──
         let t0 = Instant::now();
-        let captured = match capture_active_window() {
-            Some(c) => c,
-            None => {
-                metrics.capture_errors.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
+        let Some(captured) = capture_active_window() else {
+            metrics.capture_errors.fetch_add(1, Ordering::Relaxed);
+            continue;
         };
         metrics.capture_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── Resize + pad (no PNG encoding — just pixel ops) ──
         let t0 = Instant::now();
-        let resized_img = match resize_fit_pad_captured(&captured, config.image_size) {
-            Some(r) => r,
-            None => continue,
-        };
+        let Some(resized_img) = resize_fit_pad_captured(&captured, config.image_size) else { continue };
         let (w, h) = (config.image_size, config.image_size);
         metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
@@ -696,10 +691,7 @@ pub fn run_screenshot_worker(
         let _ = std::fs::create_dir_all(&date_dir);
         let webp_name = format!("{date_str}/{ts_str}.webp");
         let webp_path = screenshots_dir.join(&webp_name);
-        let file_size = match encode_webp(&resized_img, config.quality, &webp_path) {
-            Some(s) => s,
-            None => continue,
-        };
+        let Some(file_size) = encode_webp(&resized_img, config.quality, &webp_path) else { continue };
 
         let aw = ctx.active_window();
         let (app_name, window_title) = (aw.app_name, aw.window_title);
@@ -802,6 +794,7 @@ pub fn run_screenshot_worker(
 /// Embedding thread — processes jobs from the capture thread.
 /// Runs vision embedding + OCR text embedding on GPU (when available)
 /// and backfills results into SQLite + HNSW.
+#[allow(clippy::needless_pass_by_value)] // thread entry point — takes ownership of Arcs, PathBuf, config
 fn run_embed_thread(
     ctx: Arc<dyn crate::context::ScreenshotContext>,
     skill_dir: PathBuf,
@@ -860,10 +853,8 @@ fn run_embed_thread(
             for row in &unembedded {
                 let webp_path = screenshots_dir.join(&row.filename);
                 if !webp_path.exists() { continue; }
-                let raw = match std::fs::read(&webp_path) { Ok(b) => b, Err(_) => continue };
-                let resized = match resize_fit_pad(&raw, initial_config.image_size) {
-                    Some((png, _, _)) => png, None => continue,
-                };
+                let Ok(raw) = std::fs::read(&webp_path) else { continue };
+                let Some((resized, _, _)) = resize_fit_pad(&raw, initial_config.image_size) else { continue };
                 if let Some(ref mut fe) = fe_encoder {
                     if let Some(emb) = fastembed_embed(fe, &resized) {
                         let ts = store.get_timestamp(row.id).unwrap_or(0);
@@ -893,7 +884,7 @@ fn run_embed_thread(
             for row in &no_ocr {
                 let webp_path = screenshots_dir.join(&row.filename);
                 if !webp_path.exists() { continue; }
-                let raw = match std::fs::read(&webp_path) { Ok(b) => b, Err(_) => continue };
+                let Ok(raw) = std::fs::read(&webp_path) else { continue };
                 // OCR on the saved WebP image
                 let ocr_text = if let Some(ref engine) = ocr_engine {
                     run_ocr(engine, &raw).unwrap_or_default()
@@ -1169,17 +1160,11 @@ pub fn search_by_ocr_text_embedding(
 ) -> Vec<ScreenshotResult> {
     // Embed the query text via the shared embedder
     let query_emb = embed_ocr_text(query, embed_fn);
-    let query_emb = match query_emb {
-        Some(v) => v,
-        None => return vec![],
-    };
+    let Some(query_emb) = query_emb else { return vec![] };
 
     // Load OCR HNSW
     let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
-    let hnsw = match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
-        Ok(idx) => idx,
-        Err(_) => return vec![],
-    };
+    let Ok(hnsw) = LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) else { return vec![] };
 
     search_by_vector(&hnsw, store, &query_emb, k)
 }
@@ -1262,14 +1247,8 @@ pub fn rebuild_embeddings(
         }
 
         // Read + resize
-        let raw = match std::fs::read(&webp_path) {
-            Ok(b) => b,
-            Err(_) => { skipped += 1; continue; }
-        };
-        let resized = match resize_fit_pad(&raw, config.image_size) {
-            Some((png, _, _)) => png,
-            None => { skipped += 1; continue; }
-        };
+        let Ok(raw) = std::fs::read(&webp_path) else { skipped += 1; continue; };
+        let Some((resized, _, _)) = resize_fit_pad(&raw, config.image_size) else { skipped += 1; continue; };
 
         // Embed
         let emb = if let Some(ref mut fe) = encoder {

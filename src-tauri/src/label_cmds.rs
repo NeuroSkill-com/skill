@@ -45,7 +45,7 @@ pub async fn query_annotations(
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let (Some(s), Some(e)) = (start_utc, end_utc) {
             vec![Box::new(s as i64), Box::new(e as i64)]
         } else { vec![] };
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|b| b.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(std::convert::AsRef::as_ref).collect();
         stmt.query_map(param_refs.as_slice(), |row| {
             Ok(serde_json::json!({
                 "id":          row.get::<_, i64>(0)?,

@@ -59,8 +59,8 @@ pub(super) fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, Strin
         return Err("\"query\" must not be empty".into());
     }
 
-    let k    = msg.get("k") .and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(10).clamp(1, 100);
-    let ef   = msg.get("ef").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or_else(|| (k * 4).max(64));
+    let k    = msg.get("k") .and_then(serde_json::Value::as_u64).map(|v| v as usize).unwrap_or(10).clamp(1, 100);
+    let ef   = msg.get("ef").and_then(serde_json::Value::as_u64).map(|v| v as usize).unwrap_or_else(|| (k * 4).max(64));
     let mode = msg.get("mode").and_then(|v| v.as_str()).unwrap_or("text");
 
     match mode {
@@ -134,19 +134,19 @@ pub(super) fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, Strin
 
 pub(super) fn search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let start_utc = msg.get("start_utc")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| "missing required field: \"start_utc\" (u64, unix seconds)".to_string())?;
 
     let end_utc = msg.get("end_utc")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| "missing required field: \"end_utc\" (u64, unix seconds)".to_string())?;
 
     if end_utc < start_utc {
         return Err("\"end_utc\" must be >= \"start_utc\"".into());
     }
 
-    let k  = msg.get("k").and_then(|v| v.as_u64()).map(|v| v as usize);
-    let ef = msg.get("ef").and_then(|v| v.as_u64()).map(|v| v as usize);
+    let k  = msg.get("k").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+    let ef = msg.get("ef").and_then(serde_json::Value::as_u64).map(|v| v as usize);
 
     let skill_dir = skill_dir(&app.app_state());
 
@@ -186,9 +186,9 @@ pub(super) fn search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 /// Returns `{ "metrics": SessionMetrics, "first": SessionMetrics,
 ///            "second": SessionMetrics, "trends": { metric: "up"|"down"|"flat" } }`.
 pub(super) fn session_metrics(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start = msg.get("start_utc").and_then(|v| v.as_u64())
+    let start = msg.get("start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"start_utc\" (u64)")?;
-    let end = msg.get("end_utc").and_then(|v| v.as_u64())
+    let end = msg.get("end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"end_utc\" (u64)")?;
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
@@ -214,7 +214,7 @@ pub(super) fn session_metrics(app: &AppHandle, msg: &Value) -> Result<Value, Str
     if let (Some(fo), Some(so)) = (first_json.as_object(), second_json.as_object()) {
         for (key, fv) in fo {
             if key == "n_epochs" { continue; }
-            if let (Some(f), Some(s)) = (fv.as_f64(), so.get(key).and_then(|v| v.as_f64())) {
+            if let (Some(f), Some(s)) = (fv.as_f64(), so.get(key).and_then(serde_json::Value::as_f64)) {
                 trends.insert(key.clone(), serde_json::json!(dir(f, s)));
             }
         }
@@ -237,13 +237,13 @@ pub(super) fn session_metrics(app: &AppHandle, msg: &Value) -> Result<Value, Str
 ///
 /// Returns `{ "a": SessionMetrics, "b": SessionMetrics }`.
 pub(super) fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let a_start = msg.get("a_start_utc").and_then(|v| v.as_u64())
+    let a_start = msg.get("a_start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"a_start_utc\" (u64)")?;
-    let a_end = msg.get("a_end_utc").and_then(|v| v.as_u64())
+    let a_end = msg.get("a_end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"a_end_utc\" (u64)")?;
-    let b_start = msg.get("b_start_utc").and_then(|v| v.as_u64())
+    let b_start = msg.get("b_start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"b_start_utc\" (u64)")?;
-    let b_end = msg.get("b_end_utc").and_then(|v| v.as_u64())
+    let b_end = msg.get("b_end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"b_end_utc\" (u64)")?;
 
     if a_end < a_start { return Err("\"a_end_utc\" must be >= \"a_start_utc\"".into()); }
@@ -341,10 +341,10 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
         .ok_or_else(|| "missing required field: \"query\" (string)".to_string())?
         .to_owned();
 
-    let k_text        = msg.get("k_text")       .and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).clamp(1, 20);
-    let k_eeg         = msg.get("k_eeg")        .and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).clamp(1, 20);
-    let k_labels      = msg.get("k_labels")     .and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(3).clamp(1, 10);
-    let reach_minutes = msg.get("reach_minutes").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 60);
+    let k_text        = msg.get("k_text")       .and_then(serde_json::Value::as_u64).map(|v| v as usize).unwrap_or(5).clamp(1, 20);
+    let k_eeg         = msg.get("k_eeg")        .and_then(serde_json::Value::as_u64).map(|v| v as usize).unwrap_or(5).clamp(1, 20);
+    let k_labels      = msg.get("k_labels")     .and_then(serde_json::Value::as_u64).map(|v| v as usize).unwrap_or(3).clamp(1, 10);
+    let reach_minutes = msg.get("reach_minutes").and_then(serde_json::Value::as_u64).unwrap_or(10).clamp(1, 60);
     let reach_seconds = reach_minutes * 60;
 
     let (skill_dir, model_code, eeg_model_backend, screenshot_store) = crate::read_state(

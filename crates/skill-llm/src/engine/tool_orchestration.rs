@@ -159,7 +159,7 @@ where
             .and_then(|m| m.get("role"))
             .and_then(|r| r.as_str()) == Some("system");
         if has_system {
-            if let Some(content) = messages[0].get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+            if let Some(content) = messages[0].get("content").and_then(|c| c.as_str()).map(std::string::ToString::to_string) {
                 messages[0]["content"] = serde_json::Value::String(format!("{content}{skills_block}"));
             }
         } else {
@@ -447,7 +447,7 @@ fn summarize_tool_result(content: &str) -> String {
     };
 
     let tool = v.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
-    let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false);
+    let ok = v.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
     if !ok {
         let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("failed");
@@ -473,23 +473,23 @@ fn summarize_tool_result(content: &str) -> String {
                 let n = compact.lines().filter(|l| l.starts_with(|c: char| c.is_ascii_digit())).count();
                 return format!("[web_search: {n} results for \"{query}\"]");
             }
-            let n = v.get("results").and_then(|r| r.as_array()).map(|a| a.len()).unwrap_or(0);
+            let n = v.get("results").and_then(|r| r.as_array()).map(std::vec::Vec::len).unwrap_or(0);
             format!("[web_search: {n} results for \"{query}\"]")
         }
         "web_fetch" => {
             let url = v.get("url").and_then(|u| u.as_str()).unwrap_or("?");
-            let chars = v.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0);
+            let chars = v.get("content").and_then(|c| c.as_str()).map(str::len).unwrap_or(0);
             let short_url = if url.len() > 60 { &url[..60] } else { url };
             format!("[web_fetch: {short_url}… ({chars} chars)]")
         }
         "bash" => {
             let cmd = v.get("command").and_then(|c| c.as_str()).unwrap_or("?");
-            let exit = v.get("exit_code").and_then(|c| c.as_i64()).unwrap_or(-1);
+            let exit = v.get("exit_code").and_then(serde_json::Value::as_i64).unwrap_or(-1);
             let short_cmd = if cmd.len() > 60 { &cmd[..60] } else { cmd };
             format!("[bash: `{short_cmd}` exit={exit}]")
         }
         "read_file" => {
-            let lines = v.get("total_lines").and_then(|l| l.as_u64()).unwrap_or(0);
+            let lines = v.get("total_lines").and_then(serde_json::Value::as_u64).unwrap_or(0);
             format!("[read_file: {lines} lines]")
         }
         "skill" => {
@@ -626,7 +626,7 @@ where
                 Err(err_val) => (err_val, true),
                 Ok(_) => {
                     let result = execute_builtin_tool_call(tc, allowed_tools, scripts_dir).await;
-                    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
                     (result, !ok)
                 }
             }
@@ -636,7 +636,7 @@ where
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: if is_error { "error" } else { "done" }.into(),
-            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None },
+            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(std::string::ToString::to_string) } else { None },
         });
         on_tool_event(ToolEvent::ExecutionEnd {
             tool_call_id: tc.id.clone(),
@@ -742,7 +742,7 @@ where
                     return (tc.clone(), json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true);
                 }
                 let result = execute_builtin_tool_call(&tc, &allowed, &sdir).await;
-                let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
                 (tc, result, !ok)
             }));
         } else {
@@ -763,7 +763,7 @@ where
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: if is_error { "error" } else { "done" }.into(),
-            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None },
+            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(std::string::ToString::to_string) } else { None },
         });
         on_tool_event(ToolEvent::ExecutionEnd {
             tool_call_id: tc.id.clone(),

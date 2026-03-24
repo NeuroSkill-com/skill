@@ -229,7 +229,7 @@ pub fn rebuild_from_scratch_for(skill_dir: &Path, model_backend: &str) -> Labele
 /// Kept for backward compatibility — new code should use [`save_index_for`].
 #[allow(dead_code)]
 pub fn save_index(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
-    save_index_for(idx, skill_dir, "zuna")
+    save_index_for(idx, skill_dir, "zuna");
 }
 
 /// Persist `idx` to the model-specific global HNSW file.
@@ -270,7 +270,7 @@ pub fn get_global_index_stats(
     let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     let guard     = global.0.lock_or_recover();
     GlobalIndexStats {
-        total_embeddings: guard.as_ref().map(|i| i.len()).unwrap_or(0),
+        total_embeddings: guard.as_ref().map(fast_hnsw::LabeledIndex::len).unwrap_or(0),
         file_size_bytes:  file_size,
         path:             path.display().to_string(),
         ready:            guard.is_some(),

@@ -51,7 +51,7 @@ pub(super) fn run_sampling_loop(
             stop_strings.push(s.to_string());
         }
     }
-    let max_stop_len = stop_strings.iter().map(|s| s.len()).max().unwrap_or(0);
+    let max_stop_len = stop_strings.iter().map(std::string::String::len).max().unwrap_or(0);
     let hold_back    = max_stop_len.saturating_sub(1);
 
     // Think-budget tracker (budget=0 is handled before this call; None = unlimited)

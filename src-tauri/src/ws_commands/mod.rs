@@ -123,8 +123,8 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let skill_dir = guard.skill_dir.clone();
 
     // Label count, recent labels, and most frequent label texts from the database.
-    let label_count  = guard.label_store.as_ref().map(|ls| ls.count()).unwrap_or(0);
-    let label_embedded_count = guard.label_store.as_ref().map(|ls| ls.count_embedded()).unwrap_or(0);
+    let label_count  = guard.label_store.as_ref().map(skill_data::label_store::LabelStore::count).unwrap_or(0);
+    let label_embedded_count = guard.label_store.as_ref().map(skill_data::label_store::LabelStore::count_embedded).unwrap_or(0);
     let recent_labels: Vec<serde_json::Value> = guard.label_store.as_ref()
         .map(|ls| ls.recent(5).into_iter().map(|r| serde_json::json!({
             "id":         r.id,
@@ -401,7 +401,7 @@ pub fn label(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     // label_start_utc: optional — defaults to "now".
     let label_start_utc = msg.get("label_start_utc")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or_else(unix_secs);
 
     let context = msg.get("context")
@@ -446,7 +446,7 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
         Ok(e) => e,
         Err(_) => return Ok(serde_json::json!({ "sessions": [] })),
     };
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let day_name = path.file_name()
@@ -464,7 +464,7 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
         };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
         if let Ok(rows) = rows {
-            for row in rows.filter_map(|r| r.ok()) {
+            for row in rows.filter_map(std::result::Result::ok) {
                 let utc = crate::commands::ts_to_unix(row);
                 all_ts.push((utc, day_name.clone()));
             }
@@ -509,9 +509,9 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
 ///
 /// Required: `start_utc`, `end_utc` (u64).
 pub fn sleep(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start = msg.get("start_utc").and_then(|v| v.as_u64())
+    let start = msg.get("start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"start_utc\" (u64)")?;
-    let end = msg.get("end_utc").and_then(|v| v.as_u64())
+    let end = msg.get("end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"end_utc\" (u64)")?;
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
@@ -537,13 +537,13 @@ pub fn sleep(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 /// The `"umap"` WS command now uses the job queue so it never blocks the
 /// WebSocket handler thread.  Clients should poll with `"umap_poll"`.
 pub fn umap(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let a_start = msg.get("a_start_utc").and_then(|v| v.as_u64())
+    let a_start = msg.get("a_start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"a_start_utc\" (u64)")?;
-    let a_end = msg.get("a_end_utc").and_then(|v| v.as_u64())
+    let a_end = msg.get("a_end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"a_end_utc\" (u64)")?;
-    let b_start = msg.get("b_start_utc").and_then(|v| v.as_u64())
+    let b_start = msg.get("b_start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"b_start_utc\" (u64)")?;
-    let b_end = msg.get("b_end_utc").and_then(|v| v.as_u64())
+    let b_end = msg.get("b_end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"b_end_utc\" (u64)")?;
 
     if a_end < a_start { return Err("\"a_end_utc\" must be >= \"a_start_utc\"".into()); }
@@ -598,7 +598,7 @@ pub fn umap(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 ///
 /// Required: `job_id` (u64).
 pub fn umap_poll(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let job_id = msg.get("job_id").and_then(|v| v.as_u64())
+    let job_id = msg.get("job_id").and_then(serde_json::Value::as_u64)
         .ok_or("missing required field: \"job_id\" (u64)")?;
 
     let queue = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();

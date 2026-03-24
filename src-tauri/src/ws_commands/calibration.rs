@@ -32,9 +32,9 @@ pub fn create_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
         .filter(|v: &Vec<_>| !v.is_empty())
         .ok_or_else(|| "\"actions\" must be a non-empty array of {label, duration_secs}".to_string())?;
 
-    let break_secs  = msg.get("break_duration_secs").and_then(|v| v.as_u64()).unwrap_or(5) as u32;
-    let loop_count  = msg.get("loop_count").and_then(|v| v.as_u64()).unwrap_or(3) as u32;
-    let auto_start  = msg.get("auto_start").and_then(|v| v.as_bool()).unwrap_or(false);
+    let break_secs  = msg.get("break_duration_secs").and_then(serde_json::Value::as_u64).unwrap_or(5) as u32;
+    let loop_count  = msg.get("loop_count").and_then(serde_json::Value::as_u64).unwrap_or(3) as u32;
+    let auto_start  = msg.get("auto_start").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
     let profile = crate::CalibrationProfile {
         id:                   String::new(),
@@ -64,13 +64,13 @@ pub fn update_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
     if let Some(actions) = msg.get("actions").and_then(|v| serde_json::from_value::<Vec<crate::CalibrationAction>>(v.clone()).ok()) {
         if !actions.is_empty() { profile.actions = actions; }
     }
-    if let Some(b) = msg.get("break_duration_secs").and_then(|v| v.as_u64()) {
+    if let Some(b) = msg.get("break_duration_secs").and_then(serde_json::Value::as_u64) {
         profile.break_duration_secs = b as u32;
     }
-    if let Some(n) = msg.get("loop_count").and_then(|v| v.as_u64()) {
+    if let Some(n) = msg.get("loop_count").and_then(serde_json::Value::as_u64) {
         profile.loop_count = n as u32;
     }
-    if let Some(a) = msg.get("auto_start").and_then(|v| v.as_bool()) {
+    if let Some(a) = msg.get("auto_start").and_then(serde_json::Value::as_bool) {
         profile.auto_start = a;
     }
 

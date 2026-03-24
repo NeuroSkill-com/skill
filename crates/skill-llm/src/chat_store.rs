@@ -188,7 +188,7 @@ impl ChatStore {
 
     /// Return all non-archived sessions newest-first, with preview text and message count.
     pub fn list_sessions(&mut self) -> Vec<SessionSummary> {
-        let mut stmt = match self.conn.prepare(
+        let Ok(mut stmt) = self.conn.prepare(
             "SELECT
                  s.id,
                  COALESCE(s.title, '') AS title,
@@ -207,10 +207,7 @@ impl ChatStore {
              WHERE COALESCE(s.archived, 0) = 0
              ORDER BY s.id DESC
              LIMIT 300",
-        ) {
-            Ok(s)  => s,
-            Err(_) => return Vec::new(),
-        };
+        ) else { return Vec::new() };
         stmt.query_map([], |row| {
             Ok(SessionSummary {
                 id:            row.get(0)?,
@@ -220,7 +217,7 @@ impl ChatStore {
                 message_count: row.get(4)?,
             })
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -277,7 +274,7 @@ impl ChatStore {
 
     /// Return all archived sessions newest-first.
     pub fn list_archived_sessions(&mut self) -> Vec<SessionSummary> {
-        let mut stmt = match self.conn.prepare(
+        let Ok(mut stmt) = self.conn.prepare(
             "SELECT
                  s.id,
                  COALESCE(s.title, '') AS title,
@@ -296,10 +293,7 @@ impl ChatStore {
              WHERE s.archived = 1
              ORDER BY s.id DESC
              LIMIT 300",
-        ) {
-            Ok(s)  => s,
-            Err(_) => return Vec::new(),
-        };
+        ) else { return Vec::new() };
         stmt.query_map([], |row| {
             Ok(SessionSummary {
                 id:            row.get(0)?,
@@ -309,7 +303,7 @@ impl ChatStore {
                 message_count: row.get(4)?,
             })
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
@@ -383,8 +377,8 @@ impl ChatStore {
 
         // Persist associated tool calls.
         for tc in tool_calls {
-            let args_json   = tc.args.as_ref().map(|v| v.to_string());
-            let result_json = tc.result.as_ref().map(|v| v.to_string());
+            let args_json   = tc.args.as_ref().map(std::string::ToString::to_string);
+            let result_json = tc.result.as_ref().map(std::string::ToString::to_string);
             if let Err(e) = self.conn.execute(
                 "INSERT INTO chat_tool_calls \
                  (message_id, tool, status, detail, tool_call_id, args, result, created_at) \
@@ -404,8 +398,8 @@ impl ChatStore {
     pub fn save_tool_calls(&mut self, message_id: i64, tool_calls: &[StoredToolCall]) {
         let now = unix_ms();
         for tc in tool_calls {
-            let args_json   = tc.args.as_ref().map(|v| v.to_string());
-            let result_json = tc.result.as_ref().map(|v| v.to_string());
+            let args_json   = tc.args.as_ref().map(std::string::ToString::to_string);
+            let result_json = tc.result.as_ref().map(std::string::ToString::to_string);
             if let Err(e) = self.conn.execute(
                 "INSERT INTO chat_tool_calls \
                  (message_id, tool, status, detail, tool_call_id, args, result, created_at) \
@@ -428,13 +422,10 @@ impl ChatStore {
 
     /// Load all messages for a session in insertion order, including tool calls.
     pub fn load_session(&mut self, session_id: i64) -> Vec<StoredMessage> {
-        let mut stmt = match self.conn.prepare(
+        let Ok(mut stmt) = self.conn.prepare(
             "SELECT id, session_id, role, content, thinking, created_at \
              FROM chat_messages WHERE session_id = ?1 ORDER BY id ASC",
-        ) {
-            Ok(s)  => s,
-            Err(_) => return Vec::new(),
-        };
+        ) else { return Vec::new() };
         let mut messages: Vec<StoredMessage> = stmt.query_map(params![session_id], |row| {
             Ok(StoredMessage {
                 id:         row.get(0)?,
@@ -446,7 +437,7 @@ impl ChatStore {
                 tool_calls: Vec::new(),
             })
         })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default();
 
         // Load tool calls for all messages in this session in one query.
@@ -480,7 +471,7 @@ impl ChatStore {
                     // Build a map from message_id → Vec<StoredToolCall>
                     let mut tc_map: std::collections::HashMap<i64, Vec<StoredToolCall>> =
                         std::collections::HashMap::new();
-                    for tc in rows.filter_map(|r| r.ok()) {
+                    for tc in rows.filter_map(std::result::Result::ok) {
                         tc_map.entry(tc.message_id).or_default().push(tc);
                     }
                     for msg in &mut messages {

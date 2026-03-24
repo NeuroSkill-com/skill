@@ -748,7 +748,7 @@ async fn llm_chat_post(
     };
 
     // ── Persist: resolve or create a chat session ─────────────────────────────
-    let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let req_sid = msg.get("session_id").and_then(serde_json::Value::as_i64).unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
         let s = app_state.lock_or_recover();
@@ -941,7 +941,7 @@ async fn handle_llm_chat_ws(
     // ── Persist: resolve or create a chat session ─────────────────────────────
     // Callers may pass `"session_id": <i64>` to continue an existing session;
     // otherwise a new session is created automatically.
-    let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let req_sid = msg.get("session_id").and_then(serde_json::Value::as_i64).unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
         let s = app_state.lock_or_recover();

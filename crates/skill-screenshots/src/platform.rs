@@ -255,9 +255,11 @@ fn macos_frontmost_window_id() -> Option<u64> {
         let mut v: i64 = 0;
         // SAFETY: `n` is a non-null CFNumber; `v` is properly sized for both
         // the 64-bit and 32-bit read attempts.
+        // SAFETY: `n` is a non-null CFNumberRef; CFNumberGetValue writes into `v` only on success.
         if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v) } {
             Some(v)
         } else {
+            // SAFETY: fallback to 32-bit numeric type; same safety rationale.
             if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) } {
                 Some(v)
             } else { None }
@@ -280,11 +282,15 @@ fn macos_frontmost_window_id() -> Option<u64> {
             msg_send![&workspace, frontmostApplication]
         };
         let front_app = front_app?;
+        // SAFETY: `front_app` is a valid NSRunningApplication; processIdentifier returns pid_t.
         let pid: i32 = unsafe { msg_send![front_app, processIdentifier] };
         if pid <= 0 { return None; }
         pid
     };
 
+    // SAFETY: CoreGraphics C APIs for window enumeration — all pointer
+    // arguments are valid CFStringRefs and the returned CFArrayRef is
+    // non-null-checked before use. Memory is managed via CFRelease below.
     unsafe {
         let key_pid    = cfstr(b"kCGWindowOwnerPID\0");
         let key_layer  = cfstr(b"kCGWindowLayer\0");

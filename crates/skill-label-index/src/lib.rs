@@ -154,19 +154,16 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
         if !db_path.exists() { continue; }
         let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
 
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT eeg_embedding FROM embeddings \
              WHERE timestamp >= ?1 AND timestamp <= ?2"
-        ) {
-            Ok(s)  => s,
-            Err(_) => continue,
-        };
+        ) else { continue };
 
         let rows: Vec<Vec<u8>> = stmt.query_map(
             params![ts_start, ts_end],
             |row| row.get::<_, Vec<u8>>(0),
         ).ok()?
-         .filter_map(|r| r.ok())
+         .filter_map(std::result::Result::ok)
          .collect();
 
         for blob in rows {
@@ -206,7 +203,7 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
         if !db_path.exists() { continue; }
         let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
 
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT json_extract(metrics_json, '$.relaxation_score'),
                     json_extract(metrics_json, '$.engagement_score'),
                     json_extract(metrics_json, '$.faa'),
@@ -221,7 +218,7 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
                     json_extract(metrics_json, '$.rel_beta'),
                     json_extract(metrics_json, '$.rel_theta')
              FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2"
-        ) { Ok(s) => s, Err(_) => continue };
+        ) else { continue };
 
         let _ = stmt.query_map(params![ts_start, ts_end], |row| {
             let g = |i: usize| row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0);
@@ -296,7 +293,7 @@ fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
             context_embedding: row.get::<_, Option<Vec<u8>>>(8)?.map(|b| blob_to_f32(&b)),
         })
     })
-    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .map(|rows| rows.filter_map(std::result::Result::ok).collect())
     .unwrap_or_default()
 }
 
