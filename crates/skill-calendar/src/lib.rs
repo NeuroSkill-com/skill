@@ -37,10 +37,8 @@
 //! }
 //! ```
 
+mod ical; // compiled on all platforms; used by linux/windows and for tests
 mod types;
-
-#[cfg(not(target_os = "macos"))]
-mod ical;
 
 #[cfg(target_os = "macos")]
 mod macos;

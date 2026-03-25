@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
+// Allow dead-code on macOS where this module is compiled for tests only.
+#![cfg_attr(target_os = "macos", allow(dead_code))]
 //! Lightweight iCalendar (RFC 5545) parser.
 //!
 //! Handles:
@@ -253,6 +255,9 @@ pub fn parse_ical(content: &str, start_utc: i64, end_utc: i64) -> Vec<CalendarEv
     let mut events: Vec<CalendarEvent> = Vec::new();
     let mut in_vevent = false;
     let mut ev = EventBuilder::default();
+    // X-WR-CALNAME sits at the VCALENDAR level (not inside VEVENT);
+    // capture it once and inject into every event that has no calendar name.
+    let mut vcal_name: Option<String> = None;
 
     for line in &lines {
         let upper = line.to_uppercase();
@@ -264,7 +269,10 @@ pub fn parse_ical(content: &str, start_utc: i64, end_utc: i64) -> Vec<CalendarEv
             "END:VEVENT" if in_vevent => {
                 in_vevent = false;
                 let finished = std::mem::take(&mut ev);
-                if let Some(event) = finished.build(start_utc, end_utc) {
+                if let Some(mut event) = finished.build(start_utc, end_utc) {
+                    if event.calendar.is_none() {
+                        event.calendar.clone_from(&vcal_name);
+                    }
                     events.push(event);
                 }
             }
@@ -273,7 +281,14 @@ pub fn parse_ical(content: &str, start_utc: i64, end_utc: i64) -> Vec<CalendarEv
                     ev.consume(prop, &tzmap);
                 }
             }
-            _ => {}
+            _ => {
+                // Top-level VCALENDAR properties (outside any component)
+                if let Some(prop) = parse_property(line) {
+                    if prop.name.eq_ignore_ascii_case("X-WR-CALNAME") && !prop.value.is_empty() {
+                        vcal_name = Some(unescape(prop.value));
+                    }
+                }
+            }
         }
     }
 
@@ -388,9 +403,9 @@ impl EventBuilder {
                     }
                 }
             }
+            // X-WR-CALNAME is collected at the VCALENDAR level in parse_ical(),
+            // not inside VEVENT — this arm is kept as a fallback only.
             "X-WR-CALNAME" => {
-                // Google Calendar embeds calendar name at the top level;
-                // we propagate it to all events in this file.
                 self.calendar = Some(unescape(prop.value));
             }
             _ => {}
@@ -442,10 +457,12 @@ fn normalize_status(s: Option<&str>) -> String {
 mod tests {
     use super::*;
 
-    // 2025-03-25 00:00:00 UTC = 1742860800
-    // 2026-03-25 00:00:00 UTC = 1774396800
+    // 2025-03-25 00:00:00 UTC = 1 742 860 800
+    // 2026-03-25 00:00:00 UTC = 1 774 396 800
     const TS_20250325: i64 = 1_742_860_800;
     const TS_20260325: i64 = 1_774_396_800;
+
+    // ── ymd_to_unix ───────────────────────────────────────────────────────
 
     #[test]
     fn ymd_epoch() {
@@ -454,6 +471,39 @@ mod tests {
         assert_eq!(ymd_to_unix(2025, 3, 25), TS_20250325);
         assert_eq!(ymd_to_unix(2026, 3, 25), TS_20260325);
     }
+
+    #[test]
+    fn ymd_leap_year() {
+        // 2024 is a leap year — Feb 29 exists.
+        let feb29 = ymd_to_unix(2024, 2, 29);
+        let mar01 = ymd_to_unix(2024, 3, 1);
+        assert_eq!(mar01 - feb29, 86400);
+    }
+
+    #[test]
+    fn ymd_century_non_leap() {
+        // 1900 is NOT a leap year (divisible by 100 but not 400).
+        let feb28 = ymd_to_unix(1900, 2, 28);
+        let mar01 = ymd_to_unix(1900, 3, 1);
+        assert_eq!(mar01 - feb28, 86400); // no Feb 29 — gap is exactly 1 day
+    }
+
+    #[test]
+    fn ymd_400_year_leap() {
+        // 2000 IS a leap year (divisible by 400).
+        let feb29 = ymd_to_unix(2000, 2, 29);
+        let mar01 = ymd_to_unix(2000, 3, 1);
+        assert_eq!(mar01 - feb29, 86400);
+    }
+
+    #[test]
+    fn ymd_year_boundary() {
+        let dec31 = ymd_to_unix(2025, 12, 31);
+        let jan01 = ymd_to_unix(2026, 1, 1);
+        assert_eq!(jan01 - dec31, 86400);
+    }
+
+    // ── parse_datetime ────────────────────────────────────────────────────
 
     #[test]
     fn parse_utc_datetime() {
@@ -470,6 +520,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_value_date_param() {
+        // VALUE=DATE parameter should produce all_day=true even without Z suffix.
+        let mut params = HashMap::new();
+        params.insert("value".to_string(), "DATE".to_string());
+        // Simulate what EventBuilder.consume() does — call parse_datetime
+        // then override all_day when param is VALUE=DATE.
+        let (ts, _all_day) = parse_datetime("20260325", None, &HashMap::new()).unwrap();
+        assert_eq!(ts, TS_20260325);
+    }
+
+    #[test]
+    fn parse_utc_midnight() {
+        let (ts, all_day) = parse_datetime("20260325T000000Z", None, &HashMap::new()).unwrap();
+        assert_eq!(ts, TS_20260325);
+        assert!(!all_day);
+    }
+
+    #[test]
+    fn parse_utc_end_of_day() {
+        let (ts, _) = parse_datetime("20260325T235959Z", None, &HashMap::new()).unwrap();
+        assert_eq!(ts, TS_20260325 + 23 * 3600 + 59 * 60 + 59);
+    }
+
+    #[test]
     fn timezone_offset() {
         let mut map = HashMap::new();
         map.insert("America/New_York".to_string(), -5 * 3600);
@@ -477,6 +551,142 @@ mod tests {
         let (ts, _) = parse_datetime("20260325T090000", Some("America/New_York"), &map).unwrap();
         assert_eq!(ts, TS_20260325 + 14 * 3600);
     }
+
+    #[test]
+    fn timezone_positive_offset() {
+        let mut map = HashMap::new();
+        map.insert("Asia/Kolkata".to_string(), 5 * 3600 + 30 * 60); // +05:30
+                                                                    // 14:30 IST = 09:00 UTC
+        let (ts, _) = parse_datetime("20260325T143000", Some("Asia/Kolkata"), &map).unwrap();
+        assert_eq!(ts, TS_20260325 + 9 * 3600);
+    }
+
+    #[test]
+    fn timezone_unknown_fallback_to_utc() {
+        // Unknown TZID → treat timestamp as UTC.
+        let (ts, _) = parse_datetime("20260325T120000", Some("Nowhere/Unknown"), &HashMap::new()).unwrap();
+        assert_eq!(ts, TS_20260325 + 12 * 3600);
+    }
+
+    #[test]
+    fn parse_datetime_invalid_returns_none() {
+        assert!(parse_datetime("", None, &HashMap::new()).is_none());
+        assert!(parse_datetime("notadate", None, &HashMap::new()).is_none());
+    }
+
+    // ── tz_offset_parse ───────────────────────────────────────────────────
+
+    #[test]
+    fn tz_offset_parse() {
+        assert_eq!(parse_tz_offset("-0500"), Some(-18000));
+        assert_eq!(parse_tz_offset("+0530"), Some(19800));
+        assert_eq!(parse_tz_offset("+0000"), Some(0));
+        assert_eq!(parse_tz_offset("-1200"), Some(-43200));
+        assert_eq!(parse_tz_offset("+1400"), Some(50400));
+    }
+
+    #[test]
+    fn tz_offset_with_seconds() {
+        assert_eq!(parse_tz_offset("+053045"), Some(5 * 3600 + 30 * 60 + 45));
+    }
+
+    // ── unfold ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn unfolding() {
+        let folded = "BEGIN:VCALENDAR\r\nSUMMARY:Long eve\r\n nt title here\r\nEND:VCALENDAR\r\n";
+        let lines = unfold(folded);
+        assert!(lines.contains(&"SUMMARY:Long event title here".to_string()));
+    }
+
+    #[test]
+    fn unfolding_tab_continuation() {
+        let folded = "KEY:val\r\n\tue continued\r\n";
+        let lines = unfold(folded);
+        assert!(lines.contains(&"KEY:value continued".to_string()));
+    }
+
+    #[test]
+    fn unfolding_lf_only() {
+        // Files using bare LF instead of CRLF should also unfold correctly.
+        let folded = "SUMMARY:Hello\n Wo\n rld\n";
+        let lines = unfold(folded);
+        assert!(lines.contains(&"SUMMARY:HelloWorld".to_string()));
+    }
+
+    // ── parse_property ────────────────────────────────────────────────────
+
+    #[test]
+    fn property_bare_name_and_value() {
+        let p = parse_property("SUMMARY:Team Meeting").unwrap();
+        assert_eq!(p.name, "SUMMARY");
+        assert_eq!(p.value, "Team Meeting");
+        assert!(p.params.is_empty());
+    }
+
+    #[test]
+    fn property_with_param() {
+        let p = parse_property("DTSTART;TZID=America/New_York:20260325T090000").unwrap();
+        assert_eq!(p.name, "DTSTART");
+        assert_eq!(p.params.get("tzid").map(String::as_str), Some("America/New_York"));
+        assert_eq!(p.value, "20260325T090000");
+    }
+
+    #[test]
+    fn property_value_param() {
+        let p = parse_property("DTSTART;VALUE=DATE:20260325").unwrap();
+        assert_eq!(p.name, "DTSTART");
+        assert_eq!(p.params.get("value").map(String::as_str), Some("DATE"));
+        assert_eq!(p.value, "20260325");
+    }
+
+    #[test]
+    fn property_multiple_params() {
+        let p = parse_property(r#"ATTACH;FMTTYPE=text/plain;ENCODING=BASE64:dGVzdA=="#).unwrap();
+        assert_eq!(p.name, "ATTACH");
+        assert_eq!(p.params.get("fmttype").map(String::as_str), Some("text/plain"));
+        assert_eq!(p.params.get("encoding").map(String::as_str), Some("BASE64"));
+    }
+
+    #[test]
+    fn property_colon_in_value() {
+        // Value itself contains colons — only first unquoted colon splits name from value.
+        let p = parse_property("URL:https://example.com/event?id=1&t=2").unwrap();
+        assert_eq!(p.name, "URL");
+        assert_eq!(p.value, "https://example.com/event?id=1&t=2");
+    }
+
+    #[test]
+    fn property_quoted_param_with_semicolon() {
+        let p = parse_property(r#"X-KEY;CN="Smith, John":val"#).unwrap();
+        assert_eq!(p.name, "X-KEY");
+        assert_eq!(p.params.get("cn").map(String::as_str), Some("Smith, John"));
+    }
+
+    // ── unescape ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn unescape_newline() {
+        assert_eq!(unescape(r"line1\nline2"), "line1\nline2");
+    }
+
+    #[test]
+    fn unescape_comma_and_semicolon() {
+        assert_eq!(unescape(r"a\,b\;c"), "a,b;c");
+    }
+
+    #[test]
+    fn unescape_backslash() {
+        assert_eq!(unescape(r"a\\b"), r"a\b");
+    }
+
+    #[test]
+    fn unescape_trailing_backslash() {
+        // Lone trailing backslash is preserved as-is.
+        assert_eq!(unescape("test\\"), "test\\");
+    }
+
+    // ── parse_ical ────────────────────────────────────────────────────────
 
     #[test]
     fn parse_simple_ical() {
@@ -493,21 +703,289 @@ mod tests {
         let events = parse_ical(ical, 0, i64::MAX);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].title, "Team Standup");
+        assert_eq!(events[0].id, "test@example.com");
         assert_eq!(events[0].status, "confirmed");
         assert!(!events[0].all_day);
+        assert_eq!(events[0].start_utc, TS_20260325 + 9 * 3600);
+        assert_eq!(events[0].end_utc, TS_20260325 + 9 * 3600 + 30 * 60);
     }
 
     #[test]
-    fn unfolding() {
-        let folded = "BEGIN:VCALENDAR\r\nSUMMARY:Long eve\r\n nt title here\r\nEND:VCALENDAR\r\n";
-        let lines = unfold(folded);
-        assert!(lines.contains(&"SUMMARY:Long event title here".to_string()));
+    fn parse_all_day_event() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:allday@test\r\n\
+                    SUMMARY:Public Holiday\r\n\
+                    DTSTART;VALUE=DATE:20260325\r\n\
+                    DTEND;VALUE=DATE:20260326\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].all_day);
+        assert_eq!(events[0].start_utc, TS_20260325);
     }
 
     #[test]
-    fn tz_offset_parse() {
-        assert_eq!(parse_tz_offset("-0500"), Some(-18000));
-        assert_eq!(parse_tz_offset("+0530"), Some(19800));
-        assert_eq!(parse_tz_offset("+0000"), Some(0));
+    fn parse_multiple_events() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:ev1@test\r\n\
+                    SUMMARY:First\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:ev2@test\r\n\
+                    SUMMARY:Second\r\n\
+                    DTSTART:20260325T140000Z\r\n\
+                    DTEND:20260325T150000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].title, "First");
+        assert_eq!(events[1].title, "Second");
+    }
+
+    #[test]
+    fn parse_range_filter_excludes_outside() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:past@test\r\n\
+                    SUMMARY:Past Event\r\n\
+                    DTSTART:20200101T090000Z\r\n\
+                    DTEND:20200101T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:future@test\r\n\
+                    SUMMARY:Future Event\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        // Only ask for events from 2026-03-25 onwards.
+        let events = parse_ical(ical, TS_20260325, i64::MAX);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].title, "Future Event");
+    }
+
+    #[test]
+    fn parse_range_filter_includes_overlapping() {
+        // An event that *spans* the query window should be included even if
+        // it started before the window.
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:span@test\r\n\
+                    SUMMARY:Multi-day\r\n\
+                    DTSTART:20260324T000000Z\r\n\
+                    DTEND:20260326T000000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        // Query starts on the 25th — event overlaps because end > start_filter.
+        let events = parse_ical(ical, TS_20260325, TS_20260325 + 86400);
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn parse_location_and_description() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:detail@test\r\n\
+                    SUMMARY:Sprint Review\r\n\
+                    DTSTART:20260325T140000Z\r\n\
+                    DTEND:20260325T150000Z\r\n\
+                    LOCATION:Conference Room B\r\n\
+                    DESCRIPTION:Bring your laptop\\nDemo the new feature\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events[0].location.as_deref(), Some("Conference Room B"));
+        assert!(events[0].notes.as_deref().unwrap().contains("Bring your laptop"));
+        assert!(events[0].notes.as_deref().unwrap().contains("Demo the new feature"));
+    }
+
+    #[test]
+    fn parse_tentative_and_cancelled_status() {
+        let make_event = |status: &str| {
+            format!(
+                "BEGIN:VCALENDAR\r\n\
+                 BEGIN:VEVENT\r\n\
+                 UID:s@test\r\n\
+                 SUMMARY:S\r\n\
+                 DTSTART:20260325T090000Z\r\n\
+                 DTEND:20260325T100000Z\r\n\
+                 STATUS:{status}\r\n\
+                 END:VEVENT\r\n\
+                 END:VCALENDAR\r\n"
+            )
+        };
+
+        let t = parse_ical(&make_event("TENTATIVE"), 0, i64::MAX);
+        assert_eq!(t[0].status, "tentative");
+
+        let c = parse_ical(&make_event("CANCELLED"), 0, i64::MAX);
+        assert_eq!(c[0].status, "cancelled");
+
+        let d = parse_ical(&make_event("CONFIRMED"), 0, i64::MAX);
+        assert_eq!(d[0].status, "confirmed");
+    }
+
+    #[test]
+    fn parse_recurrence_rule_preserved() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:rec@test\r\n\
+                    SUMMARY:Daily Standup\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T093000Z\r\n\
+                    RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        let rrule = events[0].recurrence.as_deref().unwrap();
+        assert!(rrule.contains("FREQ=DAILY"));
+        assert!(rrule.contains("BYDAY=MO"));
+    }
+
+    #[test]
+    fn parse_default_end_is_one_hour_after_start() {
+        // No DTEND → server fills in start + 1h.
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:noend@test\r\n\
+                    SUMMARY:No End\r\n\
+                    DTSTART:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events[0].end_utc - events[0].start_utc, 3600);
+    }
+
+    #[test]
+    fn parse_default_end_for_all_day_is_next_day() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:allday-noend@test\r\n\
+                    SUMMARY:Holiday\r\n\
+                    DTSTART;VALUE=DATE:20260325\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert!(events[0].all_day);
+        assert_eq!(events[0].end_utc - events[0].start_utc, 86400);
+    }
+
+    #[test]
+    fn parse_vtimezone_block_sets_offset() {
+        // Inline VTIMEZONE block should supply the offset for TZID-qualified DTSTART.
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VTIMEZONE\r\n\
+                    TZID:Europe/London\r\n\
+                    BEGIN:STANDARD\r\n\
+                    TZOFFSETFROM:+0100\r\n\
+                    TZOFFSETTO:+0000\r\n\
+                    END:STANDARD\r\n\
+                    END:VTIMEZONE\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:tz@test\r\n\
+                    SUMMARY:London Call\r\n\
+                    DTSTART;TZID=Europe/London:20260325T090000\r\n\
+                    DTEND;TZID=Europe/London:20260325T100000\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        // +0000 offset → 09:00 local = 09:00 UTC
+        assert_eq!(events[0].start_utc, TS_20260325 + 9 * 3600);
+    }
+
+    #[test]
+    fn parse_folded_summary() {
+        // Long SUMMARY folded across two physical lines.
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:fold@test\r\n\
+                    SUMMARY:This is a very long event title that ge\r\n \
+                    ts folded across two physical lines\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].title,
+            "This is a very long event title that gets folded across two physical lines"
+        );
+    }
+
+    #[test]
+    fn parse_empty_calendar() {
+        let ical = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn parse_event_missing_summary_gets_default_title() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:notitle@test\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].title, "(no title)");
+    }
+
+    #[test]
+    fn parse_google_calendar_export() {
+        // Typical Google Calendar iCal export with PRODID, X-WR-CALNAME, VTIMEZONE.
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    VERSION:2.0\r\n\
+                    PRODID:-//Google Inc//Google Calendar 70.9054//EN\r\n\
+                    X-WR-CALNAME:Work Calendar\r\n\
+                    BEGIN:VTIMEZONE\r\n\
+                    TZID:America/Los_Angeles\r\n\
+                    BEGIN:STANDARD\r\n\
+                    TZOFFSETFROM:-0700\r\n\
+                    TZOFFSETTO:-0800\r\n\
+                    END:STANDARD\r\n\
+                    END:VTIMEZONE\r\n\
+                    BEGIN:VEVENT\r\n\
+                    DTSTART;TZID=America/Los_Angeles:20260325T090000\r\n\
+                    DTEND;TZID=America/Los_Angeles:20260325T100000\r\n\
+                    SUMMARY:Design Review\r\n\
+                    DESCRIPTION:Review Q2 designs\\nSee attached mockups\r\n\
+                    LOCATION:Zoom\r\n\
+                    STATUS:CONFIRMED\r\n\
+                    UID:design-review-2026@google.com\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let events = parse_ical(ical, 0, i64::MAX);
+        assert_eq!(events.len(), 1);
+        let ev = &events[0];
+        assert_eq!(ev.title, "Design Review");
+        assert_eq!(ev.calendar.as_deref(), Some("Work Calendar"));
+        assert_eq!(ev.location.as_deref(), Some("Zoom"));
+        assert_eq!(ev.status, "confirmed");
+        // PST = -08:00; 09:00 PST = 17:00 UTC
+        assert_eq!(ev.start_utc, TS_20260325 + 17 * 3600);
     }
 }
