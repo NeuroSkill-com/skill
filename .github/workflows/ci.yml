@@ -212,7 +212,7 @@ jobs:
 
           # Filter for crates that have integration tests (tests/*.rs).
           # skill-llm E2E is excluded — it's gated by manual dispatch.
-          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots"
+          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots skill-history skill-settings"
           INT_FLAGS=""
           for c in $INT_CRATES; do
             if echo "$CRATE_FLAGS" | grep -qw "\-p $c"; then
@@ -276,6 +276,9 @@ jobs:
       # before the slower svelte-check.
       - name: i18n sync check
         run: npm run sync:i18n:check
+
+      - name: i18n audit check
+        run: npm run audit:i18n:check
 
       # Biome — format check (fast, ~100ms; lint is advisory via warnings)
       - name: Biome format check

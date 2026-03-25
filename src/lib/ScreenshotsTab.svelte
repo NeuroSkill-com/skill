@@ -12,6 +12,7 @@ import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
+import ScreenshotToggleCard from "$lib/screenshots/ScreenshotToggleCard.svelte";
 import {
   EMBEDDING_EPOCH_SECS,
   SCREENSHOT_INTERVAL_MAX_SECS,
@@ -338,113 +339,16 @@ onDestroy(() => {
   {/if}
 
   <!-- ── Enable + Session-only toggles ───────────────────────────────────── -->
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="py-0 px-0">
-
-      <!-- Enable toggle -->
-      <button
-        onclick={toggleEnabled}
-        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
-               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
-        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.enabled ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
-          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
-                      {config.enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
-        </div>
-        <div class="flex flex-col gap-0.5 min-w-0">
-          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            {t("screenshots.enableToggle")}
-          </span>
-          <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            {t("screenshots.enableDesc")}
-          </span>
-        </div>
-        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.enabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
-          {config.enabled ? t("common.on") : t("common.off")}
-        </span>
-      </button>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- Session-only toggle -->
-      <button
-        onclick={toggleSessionOnly}
-        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
-               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
-        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.session_only ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
-          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
-                      {config.session_only ? 'translate-x-4' : 'translate-x-0.5'}"></div>
-        </div>
-        <div class="flex flex-col gap-0.5 min-w-0">
-          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            {t("screenshots.sessionOnlyToggle")}
-          </span>
-          <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            {t("screenshots.sessionOnlyDesc")}
-          </span>
-        </div>
-        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.session_only ? 'text-violet-500' : 'text-muted-foreground/50'}">
-          {config.session_only ? t("common.on") : t("common.off")}
-        </span>
-      </button>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- OCR toggle -->
-      <button
-        onclick={toggleOcr}
-        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
-               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
-        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.ocr_enabled ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
-          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
-                      {config.ocr_enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
-        </div>
-        <div class="flex flex-col gap-0.5 min-w-0">
-          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            {t("screenshots.ocrToggle")}
-          </span>
-          <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            {t("screenshots.ocrToggleDesc")}
-          </span>
-        </div>
-        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.ocr_enabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
-          {config.ocr_enabled ? t("common.on") : t("common.off")}
-        </span>
-      </button>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- GPU toggle -->
-      <button
-        onclick={toggleGpu}
-        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
-               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
-        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.use_gpu ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
-          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
-                      {config.use_gpu ? 'translate-x-4' : 'translate-x-0.5'}"></div>
-        </div>
-        <div class="flex flex-col gap-0.5 min-w-0">
-          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            {t("screenshots.gpuToggle")}
-          </span>
-          <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            {t("screenshots.gpuToggleDesc")}
-          </span>
-        </div>
-        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.use_gpu ? 'text-violet-500' : 'text-muted-foreground/50'}">
-          {config.use_gpu ? 'GPU' : 'CPU'}
-        </span>
-      </button>
-
-    </CardContent>
-  </Card>
+  <ScreenshotToggleCard
+    enabled={config.enabled}
+    sessionOnly={config.session_only}
+    ocrEnabled={config.ocr_enabled}
+    useGpu={config.use_gpu}
+    onToggleEnabled={toggleEnabled}
+    onToggleSessionOnly={toggleSessionOnly}
+    onToggleOcr={toggleOcr}
+    onToggleGpu={toggleGpu}
+  />
 
   <!-- ── Capture settings ────────────────────────────────────────────────── -->
   {#if config.enabled}
