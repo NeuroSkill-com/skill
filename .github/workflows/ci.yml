@@ -303,6 +303,10 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Validate Windows app manifest
+        shell: bash
+        run: python scripts/check_windows_manifest.py src-tauri/manifest.xml
+
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
       # the Vulkan SDK CMake integration used by the llm-vulkan feature.
