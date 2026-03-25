@@ -212,7 +212,7 @@ jobs:
 
           # Filter for crates that have integration tests (tests/*.rs).
           # skill-llm E2E is excluded — it's gated by manual dispatch.
-          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots skill-history skill-settings skill-router skill-label-index"
+          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots skill-history skill-settings skill-router skill-label-index skill-skills"
           INT_FLAGS=""
           for c in $INT_CRATES; do
             if echo "$CRATE_FLAGS" | grep -qw "\-p $c"; then
