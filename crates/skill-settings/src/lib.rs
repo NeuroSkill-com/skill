@@ -678,6 +678,9 @@ pub struct UserSettings {
     /// Track the last keyboard and mouse input timestamps.
     #[serde(default = "default_track_input_activity")]
     pub track_input_activity: bool,
+    /// Auto-fit the main dashboard window height to content.
+    #[serde(default = "default_main_window_auto_fit")]
+    pub main_window_auto_fit: bool,
     /// Automatic Do Not Disturb when focus is sustained.
     #[serde(default)]
     pub do_not_disturb: DoNotDisturbConfig,
@@ -712,6 +715,10 @@ pub fn default_track_active_window() -> bool {
     true
 }
 pub fn default_track_input_activity() -> bool {
+    true
+}
+
+pub fn default_main_window_auto_fit() -> bool {
     true
 }
 
@@ -824,6 +831,7 @@ impl Default for UserSettings {
             tts_preload: default_tts_preload(),
             track_active_window: default_track_active_window(),
             track_input_activity: default_track_input_activity(),
+            main_window_auto_fit: default_main_window_auto_fit(),
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),
             llm: LlmConfig::default(),

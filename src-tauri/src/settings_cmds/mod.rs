@@ -404,6 +404,21 @@ pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 }
 
 #[tauri::command]
+pub fn get_main_window_auto_fit(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
+    state.lock_or_recover().ui.main_window_auto_fit
+}
+
+#[tauri::command]
+pub fn set_main_window_auto_fit(
+    enabled: bool,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    mutate_and_save(&app, |s| s.ui.main_window_auto_fit = enabled);
+    let _ = app.emit("main-window-auto-fit-changed", enabled);
+}
+
+#[tauri::command]
 pub fn set_goal_notified_date(
     date: String,
     app: AppHandle,

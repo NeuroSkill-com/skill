@@ -231,6 +231,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         tts_preload: s.tts_preload,
         track_active_window: s.input.track_active_window,
         track_input_activity: s.input.track_input_activity,
+        main_window_auto_fit: s.ui.main_window_auto_fit,
         do_not_disturb: s.dnd.lock_or_recover().config.clone(),
         llm: {
             let __a = s.llm.clone();

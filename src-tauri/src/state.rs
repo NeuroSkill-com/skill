@@ -310,6 +310,7 @@ pub struct UiPrefsState {
     pub onboarding_complete: bool,
     pub last_seen_whats_new_version: String,
     pub text_embedding_model: String,
+    pub main_window_auto_fit: bool,
 }
 
 impl Default for UiPrefsState {
@@ -323,6 +324,7 @@ impl Default for UiPrefsState {
             onboarding_complete: false,
             last_seen_whats_new_version: String::new(),
             text_embedding_model: default_embedding_model(),
+            main_window_auto_fit: true,
         }
     }
 }

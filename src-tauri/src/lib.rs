@@ -192,19 +192,21 @@ mod calibration_service;
 mod window_cmds;
 pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{
-    check_accessibility_permission, check_screen_recording_permission, close_calibration_window,
-    close_label_window, complete_onboarding, create_calibration_profile,
+    autosize_main_window, check_accessibility_permission, check_screen_recording_permission,
+    close_calibration_window, close_label_window, complete_onboarding, create_calibration_profile,
     delete_calibration_profile, dismiss_whats_new, emit_calibration_event, get_active_calibration,
-    get_app_name, get_app_version, get_calibration_config, get_calibration_profile, get_data_dir,
-    get_onboarding_complete, get_onboarding_model_download_order, get_whats_new_seen_version,
-    get_ws_clients, get_ws_port, get_ws_request_log, is_session_live, list_calibration_profiles,
-    open_accessibility_settings, open_and_start_calibration, open_api_window, open_bt_settings,
-    open_calibration_window, open_focus_timer_window, open_help_window, open_label_window,
-    open_labels_window, open_model_tab, open_notifications_settings, open_onboarding_window,
+    get_app_name, get_app_version, get_calendar_permission_status, get_calibration_config,
+    get_calibration_profile, get_data_dir, get_onboarding_complete,
+    get_onboarding_model_download_order, get_whats_new_seen_version, get_ws_clients, get_ws_port,
+    get_ws_request_log, is_session_live, list_calibration_profiles, open_accessibility_settings,
+    open_and_start_calibration, open_api_window, open_bt_settings, open_calibration_window,
+    open_focus_timer_window, open_help_window, open_label_window, open_labels_window,
+    open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
     open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
-    record_calibration_completed, set_active_calibration, set_calibration_config, set_data_dir,
-    set_update_ready, show_main_window, update_calibration_profile,
+    record_calibration_completed, request_calendar_permission, set_active_calibration,
+    set_calibration_config, set_data_dir, set_update_ready, show_main_window,
+    update_calibration_profile,
 };
 
 mod label_cmds;
@@ -226,26 +228,26 @@ use settings_cmds::{
     get_embedding_overlap, get_filter_config, get_goal_notified_date, get_gpu_stats, get_hook_log,
     get_hook_log_count, get_hook_statuses, get_hooks, get_input_activity_tracking,
     get_input_buckets, get_last_input_activity, get_latest_bands, get_llm_config, get_log_config,
-    get_neutts_config, get_openbci_config, get_recent_active_windows, get_recent_input_activity,
-    get_scanner_config, get_screenshot_config, get_screenshot_metrics, get_screenshots_around,
-    get_screenshots_dir, get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
-    get_skills_sync_on_launch, get_sleep_config, get_status, get_storage_format,
-    get_supported_companies, get_theme_and_language, get_tts_preload, get_umap_config,
-    get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports, list_skills,
-    open_session_for_timestamp, pair_device, pick_gguf_file, pick_ref_wav_file,
+    get_main_window_auto_fit, get_neutts_config, get_openbci_config, get_recent_active_windows,
+    get_recent_input_activity, get_scanner_config, get_screenshot_config, get_screenshot_metrics,
+    get_screenshots_around, get_screenshots_dir, get_skills_last_sync, get_skills_license,
+    get_skills_refresh_interval, get_skills_sync_on_launch, get_sleep_config, get_status,
+    get_storage_format, get_supported_companies, get_theme_and_language, get_tts_preload,
+    get_umap_config, get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports,
+    list_skills, open_session_for_timestamp, pair_device, pick_gguf_file, pick_ref_wav_file,
     rebuild_screenshot_embeddings, retry_connect, search_screenshots_by_image,
     search_screenshots_by_text, search_screenshots_by_vector, set_accent_color,
     set_active_window_tracking, set_api_token, set_autostart_enabled, set_daily_goal,
     set_device_api_config, set_disabled_skills, set_dnd_config, set_eeg_model_config,
     set_embedding_overlap, set_filter_config, set_goal_notified_date, set_hooks,
-    set_input_activity_tracking, set_language, set_llm_config, set_log_config, set_neutts_config,
-    set_notch_preset, set_openbci_config, set_preferred_device, set_scanner_config,
-    set_screenshot_config, set_skills_refresh_interval, set_skills_sync_on_launch,
-    set_sleep_config, set_storage_format, set_theme, set_tts_preload, set_umap_config,
-    set_update_check_interval, set_ws_config, subscribe_eeg, subscribe_imu, subscribe_ppg,
-    suggest_hook_distances, suggest_hook_keywords, sync_skills_now, test_dnd, trigger_reembed,
-    trigger_weights_download, web_cache_clear, web_cache_list, web_cache_remove_domain,
-    web_cache_remove_entry, web_cache_stats,
+    set_input_activity_tracking, set_language, set_llm_config, set_log_config,
+    set_main_window_auto_fit, set_neutts_config, set_notch_preset, set_openbci_config,
+    set_preferred_device, set_scanner_config, set_screenshot_config, set_skills_refresh_interval,
+    set_skills_sync_on_launch, set_sleep_config, set_storage_format, set_theme, set_tts_preload,
+    set_umap_config, set_update_check_interval, set_ws_config, subscribe_eeg, subscribe_imu,
+    subscribe_ppg, suggest_hook_distances, suggest_hook_keywords, sync_skills_now, test_dnd,
+    trigger_reembed, trigger_weights_download, web_cache_clear, web_cache_list,
+    web_cache_remove_domain, web_cache_remove_entry, web_cache_stats,
 };
 
 // LLM catalog commands (feature-gated)
@@ -363,7 +365,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let _ = win.set_resizable(true);
             let _ = win.set_closable(true);
             let _ = win.set_minimizable(true);
-            let min_size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
+            let min_size = tauri::LogicalSize::new(480.0_f64, 560.0_f64);
             let _ = win.set_min_size(Some(tauri::Size::Logical(min_size)));
             let _ = win.set_max_size(Option::<tauri::Size>::None);
         }
@@ -922,6 +924,7 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.tts_preload = data.tts_preload;
         s.input.track_active_window = data.track_active_window;
         s.input.track_input_activity = data.track_input_activity;
+        s.ui.main_window_auto_fit = data.main_window_auto_fit;
         s.input.input_activity_enabled.store(
             data.track_input_activity,
             std::sync::atomic::Ordering::Relaxed,
@@ -1326,6 +1329,8 @@ pub fn run() {
             open_notifications_settings,
             check_screen_recording_permission,
             open_screen_recording_settings,
+            get_calendar_permission_status,
+            request_calendar_permission,
             get_filter_config,
             set_filter_config,
             set_notch_preset,
@@ -1355,6 +1360,8 @@ pub fn run() {
             set_daily_goal,
             get_goal_notified_date,
             set_goal_notified_date,
+            get_main_window_auto_fit,
+            set_main_window_auto_fit,
             get_daily_recording_mins,
             get_hooks,
             set_hooks,
@@ -1621,6 +1628,7 @@ pub fn run() {
             get_about_info,
             open_about_window,
             show_main_window,
+            autosize_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
