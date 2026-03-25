@@ -19,7 +19,7 @@ serde_json  = "1"
 chrono      = { version = "0.4", default-features = false, features = ["clock", "std"] }
 jsonschema  = "0.45"
 regex       = "1"
-ureq        = { version = "2", features = ["native-tls", "json"] }
+ureq        = { version = "3", features = ["native-tls", "json"] }
 urlencoding = "2"
 dirs        = "6"
 rfd         = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }

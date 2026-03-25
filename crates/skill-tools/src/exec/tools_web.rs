@@ -49,10 +49,10 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
         // from network errors).  The internal fallback (e.g. brave→ddg) still
         // runs on each attempt.
         let mut results = retry_with_backoff(max_retries, base_delay, || {
-            let agent = ureq::AgentBuilder::new()
-                .timeout_connect(std::time::Duration::from_secs(5))
-                .timeout_read(std::time::Duration::from_secs(10))
-                .build();
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_connect(Some(std::time::Duration::from_secs(5)))
+                .timeout_recv_body(Some(std::time::Duration::from_secs(10)))
+                .build().into();
 
             let r = match provider.backend.as_str() {
                 "brave" if !provider.brave_api_key.is_empty() => {
@@ -328,8 +328,8 @@ async fn exec_web_fetch_render(
             let agent = search::browser_agent();
             match search::set_browser_headers(agent.get(&url_fallback)).call() {
                 Ok(r) => {
-                    let status = r.status();
-                    let body = r.into_string().unwrap_or_default();
+                    let status = r.status().as_u16();
+                    let body = r.into_body().read_to_string().unwrap_or_default();
                     let text = search::strip_html_tags(&body);
                     let cleaned: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
                     json!({
@@ -376,14 +376,18 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
             let resp = search::set_browser_headers(agent.get(&url_for_fetch)).call();
             match resp {
                 Ok(r) => {
-                    let status = r.status();
+                    let status = r.status().as_u16();
                     // Retry on server errors (5xx) and rate limits (429)
                     if status == 429 || (500..600).contains(&status) {
-                        let body = r.into_string().unwrap_or_default();
+                        let body = r.into_body().read_to_string().unwrap_or_default();
                         return Err(format!("HTTP {}: {}", status, body));
                     }
-                    let content_type = r.header("Content-Type").unwrap_or("").to_string();
-                    let body = r.into_string().unwrap_or_default();
+                    let content_type = r.headers()
+                        .get("Content-Type")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    let body = r.into_body().read_to_string().unwrap_or_default();
                     Ok(json!({
                         "ok": true,
                         "tool": "web_fetch",
@@ -394,9 +398,8 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
                         "truncated": body.chars().count() > max_content,
                     }))
                 }
-                Err(ureq::Error::Status(code, resp)) if code == 429 || (500..600).contains(&code) => {
-                    let body = resp.into_string().unwrap_or_default();
-                    Err(format!("HTTP {}: {}", code, body))
+                Err(ureq::Error::StatusCode(code)) if code == 429 || (500..600).contains(&code) => {
+                    Err(format!("HTTP {}", code))
                 }
                 Err(e) => Err(e.to_string()),
             }

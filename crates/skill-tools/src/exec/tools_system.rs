@@ -45,14 +45,14 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
         use super::helpers::retry_with_backoff;
 
         let result = retry_with_backoff(max_retries, base_delay, || {
-            let agent = ureq::AgentBuilder::new()
-                .timeout_connect(std::time::Duration::from_secs(2))
-                .timeout_read(std::time::Duration::from_secs(3))
-                .build();
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_connect(Some(std::time::Duration::from_secs(2)))
+                .timeout_recv_body(Some(std::time::Duration::from_secs(3)))
+                .build().into();
             let resp = agent.get("https://ipwho.is/").call();
             match resp {
                 Ok(r) => {
-                    let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+                    let v: Value = r.into_body().read_json::<Value>().unwrap_or_else(|_| json!({}));
                     Ok(json!({
                         "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
                         "tool": "location",
@@ -65,7 +65,7 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
                         "ip": v.get("ip").cloned().unwrap_or(Value::Null),
                     }))
                 }
-                Err(ureq::Error::Status(code, _)) if code == 429 || (500..600).contains(&code) => {
+                Err(ureq::Error::StatusCode(code)) if code == 429 || (500..600).contains(&code) => {
                     Err(format!("HTTP {}", code))
                 }
                 Err(e) => Err(e.to_string()),
@@ -318,18 +318,18 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
     let payload_str = payload.to_string();
 
     tokio::task::spawn_blocking(move || {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(3))
-            .timeout_read(std::time::Duration::from_secs(30))
-            .build();
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_connect(Some(std::time::Duration::from_secs(3)))
+            .timeout_recv_body(Some(std::time::Duration::from_secs(30)))
+            .build().into();
 
         match agent
             .post(&url)
-            .set("Content-Type", "application/json")
-            .send_string(&payload_str)
+            .header("Content-Type", "application/json")
+            .send(&payload_str)
         {
             Ok(resp) => {
-                match resp.into_json::<Value>() {
+                match resp.into_body().read_json::<Value>() {
                     Ok(mut v) => {
                         // Ensure the response always has "tool" so the
                         // model can identify where the data came from.

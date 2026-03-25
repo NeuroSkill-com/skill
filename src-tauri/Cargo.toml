@@ -265,7 +265,7 @@ hf-hub    = "0.5"
 # HTTP client used by the resumable LLM model downloader.
 # ureq 2.12.1 is already compiled transitively (hf-hub 0.4, openbci), so
 # adding it here costs zero extra compile time.
-ureq      = { version = "2", features = ["native-tls"] }
+ureq      = { version = "3", features = ["native-tls"] }
 
 # ndarray Array2<f32> is required by zuna_rs::load_from_named_tensor.
 ndarray   = "0.17"
