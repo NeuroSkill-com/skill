@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Standard pre-commit hook:
+# Standard pre-commit hook (changed-files scoped):
 # - i18n sync/audit for locale changes
-# - frontend checks for frontend changes
+# - frontend lint/tests only for changed frontend files
 # - targeted Rust clippy/tests for touched crates
 #
 # Full-repo heavy checks run in .githooks/pre-push.
@@ -28,11 +28,23 @@ if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/'; then
   npm run -s check:i18n:locales || ERRORS=1
 fi
 
-# ── Frontend checks ───────────────────────────────────────────────────────────
-if echo "$STAGED_FILES" | grep -Eq '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)'; then
-  echo "🧪 Running frontend checks…"
-  npm run -s check || ERRORS=1
-  npm test || ERRORS=1
+# ── Frontend checks (changed-files scoped) ───────────────────────────────────
+FRONTEND_STAGED="$(echo "$STAGED_FILES" | grep -E '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)' || true)"
+
+if [ -n "$FRONTEND_STAGED" ]; then
+  echo "🧪 Running frontend checks on changed files…"
+
+  FRONTEND_BIOME_FILES="$(echo "$FRONTEND_STAGED" | grep -E '\.(ts|js|svelte|json)$' || true)"
+  if [ -n "$FRONTEND_BIOME_FILES" ]; then
+    # shellcheck disable=SC2086
+    npx biome check --no-errors-on-unmatched $FRONTEND_BIOME_FILES || ERRORS=1
+  fi
+
+  VITEST_RELATED_FILES="$(echo "$FRONTEND_STAGED" | grep -E '^src/.*\.(ts|js|svelte)$' || true)"
+  if [ -n "$VITEST_RELATED_FILES" ]; then
+    # shellcheck disable=SC2086
+    npx vitest related --run $VITEST_RELATED_FILES || ERRORS=1
+  fi
 fi
 
 # ── Rust checks (targeted by touched crate) ───────────────────────────────────
