@@ -70,7 +70,7 @@ describe("buildNeighborLabelMap", () => {
           ],
         },
       ],
-    } as SearchResult;
+    } as unknown as SearchResult;
 
     const map = buildNeighborLabelMap(result);
     expect(map.size).toBe(1);
@@ -79,14 +79,14 @@ describe("buildNeighborLabelMap", () => {
 });
 
 describe("enrichUmapLabels", () => {
-  function makeUmapResult(points: UmapPoint[]): UmapResult {
-    return { points, n_a: 0, n_b: 0, dim: 3 };
+  function makeUmapResult(points: Array<Omit<UmapPoint, "session"> & { session?: number }>): UmapResult {
+    return { points: points.map((p) => ({ session: 0, ...p, label: p.label ?? undefined })), n_a: 0, n_b: 0, dim: 3 };
   }
 
   it("injects labels from map", () => {
     const raw = makeUmapResult([
-      { x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" },
-      { x: 1, y: 1, z: 1, utc: 1300, label: "existing", set: "b" },
+      { x: 0, y: 0, z: 0, utc: 1200 },
+      { x: 1, y: 1, z: 1, utc: 1300, label: "existing" },
     ]);
     const labelMap = new Map([[1200, "injected"]]);
     const enriched = enrichUmapLabels(raw, labelMap);
@@ -95,7 +95,7 @@ describe("enrichUmapLabels", () => {
   });
 
   it("returns raw when label map is empty", () => {
-    const raw = makeUmapResult([{ x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" }]);
+    const raw = makeUmapResult([{ x: 0, y: 0, z: 0, utc: 1200 }]);
     const result = enrichUmapLabels(raw, new Map());
     expect(result).toBe(raw);
   });

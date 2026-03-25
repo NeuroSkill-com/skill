@@ -1035,7 +1035,10 @@ fn read_eeg_parquet(
         let n_cols = batch.num_columns();
 
         // Column 0 = timestamp_s.
-        if let Some(ts_col) = batch.column(0).as_any().downcast_ref::<arrow_array::Float64Array>()
+        if let Some(ts_col) = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<arrow_array::Float64Array>()
         {
             for i in 0..n_rows {
                 timestamps.push(ts_col.value(i));

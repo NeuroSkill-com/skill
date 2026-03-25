@@ -5,7 +5,7 @@
 import { tick } from "svelte";
 import type { Attachment, ServerStatus } from "$lib/chat-types";
 import { t } from "$lib/i18n/index.svelte";
-import type PromptLibrary from "$lib/PromptLibrary.svelte";
+import PromptLibrary from "$lib/PromptLibrary.svelte";
 
 interface Props {
   input: string;
