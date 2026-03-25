@@ -96,7 +96,10 @@ function main() {
       if (!locKeys.has(key)) missing.set(key, val);
     }
     for (const key of locKeys.keys()) {
-      if (!enKeys.has(key)) extra.set(key, locKeys.get(key)!);
+      if (!enKeys.has(key)) {
+        const v = locKeys.get(key);
+        if (v !== undefined) extra.set(key, v);
+      }
     }
 
     const _status = missing.size === 0 ? "✅" : "❌";
