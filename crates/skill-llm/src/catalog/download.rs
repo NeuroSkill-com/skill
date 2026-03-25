@@ -105,16 +105,16 @@ pub fn download_file(
     // Both follow up to 10 redirects — HF Hub redirects to a CDN for LFS blobs.
     let meta_agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(std::time::Duration::from_secs(30)))
-        .build().into();
+        .build()
+        .into();
 
     let dl_agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(std::time::Duration::from_secs(30)))
         // Per-read-call timeout: generous for slow connections (128 KB / slow
         // connection ≈ a few seconds; 300 s handles ~430 bytes/s).
         .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
-        .build().into();
-
-
+        .build()
+        .into();
 
     // ── 4. Fetch file metadata from the Hub API ───────────────────────────────
     //
@@ -133,7 +133,11 @@ pub fn download_file(
 
     let api_url = format!("{endpoint}/api/models/{repo_id}?blobs=1");
     let meta_req = meta_agent.get(&api_url);
-    let meta_req = if let Some(tok) = &hf_token { meta_req.header("Authorization", format!("Bearer {tok}")) } else { meta_req };
+    let meta_req = if let Some(tok) = &hf_token {
+        meta_req.header("Authorization", format!("Bearer {tok}"))
+    } else {
+        meta_req
+    };
     let api_resp = meta_req
         .header("User-Agent", "skill-app/1.0")
         .call()
@@ -203,7 +207,11 @@ pub fn download_file(
     // ── 7. Issue GET (with Range header when resuming) ────────────────────────
     let file_url = format!("{endpoint}/{repo_id}/resolve/main/{filename}");
     let dl_req = dl_agent.get(&file_url);
-    let dl_req = if let Some(tok) = &hf_token { dl_req.header("Authorization", format!("Bearer {tok}")) } else { dl_req };
+    let dl_req = if let Some(tok) = &hf_token {
+        dl_req.header("Authorization", format!("Bearer {tok}"))
+    } else {
+        dl_req
+    };
     let mut get = dl_req.header("User-Agent", "skill-app/1.0");
     if resume_from > 0 {
         get = get.header("Range", format!("bytes={resume_from}-"));

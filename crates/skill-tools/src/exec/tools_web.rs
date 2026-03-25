@@ -382,7 +382,8 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
                         let body = r.into_body().read_to_string().unwrap_or_default();
                         return Err(format!("HTTP {}: {}", status, body));
                     }
-                    let content_type = r.headers()
+                    let content_type = r
+                        .headers()
                         .get("Content-Type")
                         .and_then(|v| v.to_str().ok())
                         .unwrap_or("")

@@ -298,17 +298,21 @@ pub fn download_hf_weights_files(
 
     let meta_agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(std::time::Duration::from_secs(30)))
-        .build().into();
+        .build()
+        .into();
     let dl_agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(std::time::Duration::from_secs(30)))
         .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
-        .build().into();
-
-
+        .build()
+        .into();
 
     let api_url = format!("{ENDPOINT}/api/models/{hf_repo}?blobs=1");
     let meta_req = meta_agent.get(&api_url);
-    let meta_req = if let Some(tok) = &hf_token { meta_req.header("Authorization", format!("Bearer {tok}")) } else { meta_req };
+    let meta_req = if let Some(tok) = &hf_token {
+        meta_req.header("Authorization", format!("Bearer {tok}"))
+    } else {
+        meta_req
+    };
     let api_resp = match meta_req.header("User-Agent", "skill-app/1.0").call() {
         Ok(r) => r,
         Err(e) => {
@@ -429,7 +433,11 @@ pub fn download_hf_weights_files(
 
     let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{weights_file}");
     let dl_req = dl_agent.get(&file_url);
-    let dl_req = if let Some(tok) = &hf_token { dl_req.header("Authorization", format!("Bearer {tok}")) } else { dl_req };
+    let dl_req = if let Some(tok) = &hf_token {
+        dl_req.header("Authorization", format!("Bearer {tok}"))
+    } else {
+        dl_req
+    };
     let mut get = dl_req.header("User-Agent", "skill-app/1.0");
     if resume_from > 0 {
         get = get.header("Range", format!("bytes={resume_from}-"));

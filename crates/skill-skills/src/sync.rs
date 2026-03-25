@@ -158,7 +158,8 @@ fn save_meta(path: &Path, meta: &SyncMeta) {
 fn download(url: &str) -> anyhow::Result<Vec<u8>> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(std::time::Duration::from_secs(60)))
-        .build().into();
+        .build()
+        .into();
     let resp = agent.get(url).call()?;
 
     let mut buf = Vec::new();

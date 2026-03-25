@@ -193,7 +193,8 @@ pub(crate) fn browser_agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_connect(Some(std::time::Duration::from_secs(3)))
         .timeout_recv_body(Some(std::time::Duration::from_secs(10)))
-        .build().into()
+        .build()
+        .into()
 }
 
 /// Apply standard browser headers to a ureq request.
@@ -819,7 +820,8 @@ mod web_search_tests {
         ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(10)))
             .timeout_recv_body(Some(std::time::Duration::from_secs(15)))
-            .build().into()
+            .build()
+            .into()
     }
 
     /// Dump raw DDG HTML response for debugging.

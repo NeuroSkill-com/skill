@@ -48,7 +48,8 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
             let agent: ureq::Agent = ureq::Agent::config_builder()
                 .timeout_connect(Some(std::time::Duration::from_secs(2)))
                 .timeout_recv_body(Some(std::time::Duration::from_secs(3)))
-                .build().into();
+                .build()
+                .into();
             let resp = agent.get("https://ipwho.is/").call();
             match resp {
                 Ok(r) => {
@@ -321,7 +322,8 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(3)))
             .timeout_recv_body(Some(std::time::Duration::from_secs(30)))
-            .build().into();
+            .build()
+            .into();
 
         match agent
             .post(&url)
