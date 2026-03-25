@@ -11,7 +11,7 @@
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { onDestroy, onMount, tick } from "svelte";
+import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
@@ -33,6 +33,7 @@ import {
   vendorLabel,
 } from "$lib/llm-helpers";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
+import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -160,20 +161,6 @@ let selectedFamilyId = $state<string>("");
 let previousFamilyId = $state<string>("");
 
 let logs = $state<LlmLogEntry[]>([]);
-let logAutoScroll = $state(true);
-let logEl = $state<HTMLElement | null>(null);
-let logFilter = $state<"all" | "info" | "warn" | "error">("all");
-let logSearch = $state("");
-
-const filteredLogs = $derived.by(() => {
-  let filtered = logs;
-  if (logFilter !== "all") filtered = filtered.filter((e) => e.level === logFilter);
-  if (logSearch.trim()) {
-    const q = logSearch.trim().toLowerCase();
-    filtered = filtered.filter((e) => e.message.toLowerCase().includes(q));
-  }
-  return filtered;
-});
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenLog: (() => void) | undefined;
@@ -390,12 +377,10 @@ onMount(async () => {
   } catch (e) {}
   try {
     logs = await invoke<LlmLogEntry[]>("get_llm_logs");
-    await scrollToBottom();
   } catch (e) {}
   try {
     unlistenLog = await listen<LlmLogEntry>("llm:log", async (ev) => {
       logs = [...logs.slice(-499), ev.payload];
-      if (logAutoScroll) await scrollToBottom();
     });
   } catch (e) {}
   // Poll catalog + server status every second.  The catalog call is a cheap
@@ -423,15 +408,6 @@ onDestroy(() => {
   unlistenStatus?.();
 });
 
-async function scrollToBottom() {
-  await tick();
-  if (logEl) logEl.scrollTop = logEl.scrollHeight;
-}
-
-function handleLogScroll() {
-  if (!logEl) return;
-  logAutoScroll = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-}
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
@@ -835,81 +811,7 @@ function handleLogScroll() {
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Server log                                                                  -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<section class="flex flex-col gap-2">
-  <!-- Header: title + filter tabs + search + controls -->
-  <div class="flex items-center gap-2 px-0.5 flex-wrap">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      Server log
-    </span>
-    <span class="flex items-center gap-1 text-[0.52rem] text-muted-foreground/50">
-      <span class="w-1 h-1 rounded-full {logs.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
-      {filteredLogs.length}{filteredLogs.length !== logs.length ? `/${logs.length}` : ""}
-    </span>
-
-    <!-- Level filter tabs -->
-    <div class="flex rounded-md overflow-hidden border border-border/50 text-[0.5rem] font-medium ml-1">
-      {#each [
-        { key: "all"   as const, label: t("chat.logFilter.all"),   color: "" },
-        { key: "info"  as const, label: t("chat.logFilter.info"),  color: "text-emerald-500" },
-        { key: "warn"  as const, label: t("chat.logFilter.warn"),  color: "text-amber-500" },
-        { key: "error" as const, label: t("chat.logFilter.error"), color: "text-red-500" },
-      ] as tab}
-        <button onclick={() => logFilter = tab.key}
-          class="px-2 py-0.5 transition-colors cursor-pointer
-                 {logFilter === tab.key
-                   ? `bg-foreground/10 ${tab.color || 'text-foreground'} font-bold`
-                   : 'bg-transparent text-muted-foreground/50 hover:text-muted-foreground'}">
-          {tab.label}
-        </button>
-      {/each}
-    </div>
-
-    <!-- Search -->
-    <input
-      type="text"
-      bind:value={logSearch}
-      placeholder={t("chat.logFilter.search")}
-      class="ml-auto h-5 w-28 text-[0.52rem] px-2 rounded-md border border-border/50
-             bg-transparent text-muted-foreground placeholder:text-muted-foreground/30
-             focus:outline-none focus:border-violet-500/50" />
-
-    <button
-      onclick={() => { logAutoScroll = !logAutoScroll; if (logAutoScroll) scrollToBottom(); }}
-      class="text-[0.52rem] cursor-pointer select-none transition-colors
-             {logAutoScroll ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50 hover:text-foreground'}">
-      auto-scroll {logAutoScroll ? "on" : "off"}
-    </button>
-    <button onclick={() => { logs = []; }}
-      class="text-[0.52rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer select-none">
-      clear
-    </button>
-  </div>
-
-  <div bind:this={logEl} onscroll={handleLogScroll}
-       class="h-64 overflow-y-auto rounded-xl border border-border dark:border-white/[0.06]
-              bg-[#0d0d14] font-mono text-[0.62rem] leading-5
-              scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-    {#if filteredLogs.length === 0}
-      <div class="flex items-center justify-center h-full text-muted-foreground/30 text-[0.65rem]">
-        {logs.length === 0 ? "No log output yet." : "No matching lines."}
-      </div>
-    {:else}
-      <div class="px-3 py-2 flex flex-col gap-0">
-        {#each filteredLogs as entry (entry.ts + entry.message)}
-          {@const ts  = new Date(entry.ts).toISOString().slice(11, 23)}
-          {@const col = entry.level === "error" ? "text-red-400" : entry.level === "warn" ? "text-amber-400" : "text-emerald-300/80"}
-          <div class="flex items-start gap-2 min-w-0">
-            <span class="shrink-0 text-white/20 tabular-nums">{ts}</span>
-            <span class="shrink-0 w-8 text-center rounded text-[0.5rem] px-0.5
-                          {entry.level === 'error' ? 'bg-red-500/20 text-red-400'
-                          : entry.level === 'warn' ? 'bg-amber-500/20 text-amber-400'
-                          :                         'bg-emerald-500/10 text-emerald-400'}">
-              {entry.level}
-            </span>
-            <span class="break-all {col}">{entry.message}</span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</section>
+<LlmServerLogSection
+  {logs}
+  onClear={() => { logs = []; }}
+/>
