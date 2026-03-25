@@ -10477,8 +10477,8 @@ name = "skill-data"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "arrow-array 54.3.1",
- "arrow-schema 54.3.1",
+ "arrow-array 58.1.0",
+ "arrow-schema 58.1.0",
  "csv",
  "libc",
  "llmfit-core",
