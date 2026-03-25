@@ -7,7 +7,7 @@ description = "Headless browser engine — CDP-like API over wry/tao for navigat
 
 [dependencies]
 # Windowing — hidden window hosts the webview; provides event loop + proxy.
-tao = { version = "0.34", default-features = false, features = ["rwh_06"] }
+tao = { version = "0.35", default-features = false, features = ["rwh_06"] }
 
 # WebView — system webview with full JS, DOM, network stack.
 wry = { version = "0.54" }
