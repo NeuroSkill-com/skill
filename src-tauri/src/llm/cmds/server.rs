@@ -157,6 +157,22 @@ pub fn start_llm_server(
         return Ok("no_model_available".to_string());
     };
 
+    let mem_fit = super::hardware_fit::model_autostart_memory_fit(target);
+    if !mem_fit.enough_for_autostart() {
+        let msg = format!(
+            "Not enough RAM/VRAM to auto-launch default model {} (required: {:.1} GB, available: {:.1} GB).",
+            target.filename, mem_fit.memory_required_gb, mem_fit.memory_available_gb
+        );
+        *start_error.lock_or_recover() = Some(msg.clone());
+        let emitter = crate::llm::TauriEmitter(app.clone());
+        push_log(&emitter, &log_buf, "warn", &msg);
+        emitter.emit_event(
+            "llm:status",
+            serde_json::json!({"status":"stopped","error":msg}),
+        );
+        return Ok("insufficient_memory".to_string());
+    }
+
     catalog.active_model = target.filename.clone();
     config.model_path = target.local_path.clone();
     config.enabled = true;
