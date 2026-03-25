@@ -774,9 +774,9 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "screenshots_for_eeg" => screenshots::screenshots_for_eeg(app, msg),
         "eeg_for_screenshots" => screenshots::eeg_for_screenshots(app, msg),
         // ── Calendar ──────────────────────────────────────────────────────
-        "calendar_events" => calendar::calendar_events(app, msg),
+        "calendar_events" => calendar::calendar_events(app, msg).await,
         "calendar_status" => calendar::calendar_status(app),
-        "calendar_request_permission" => calendar::calendar_request_permission(app),
+        "calendar_request_permission" => calendar::calendar_request_permission(app).await,
         // ── HealthKit ─────────────────────────────────────────────────────
         "health_sync" => health::health_sync(app, msg),
         "health_query" => health::health_query(app, msg),

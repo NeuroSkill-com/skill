@@ -32,7 +32,7 @@ pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, 
         None => return Ok(Vec::new()),
     };
 
-    let search_roots: Vec<PathBuf> = vec![
+    let mut search_roots: Vec<PathBuf> = vec![
         home.join(".local/share/gnome-calendar"),
         home.join(".local/share/evolution/calendar"),
         home.join(".local/share/korganizer"),
@@ -42,10 +42,21 @@ pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, 
         home.join("Calendars"),
         home.join(".calendars"),
         home.join("Calendar"),
-        // Thunderbird profile calendars (deep search handled by walk)
-        home.join(".thunderbird"),
-        home.join(".mozilla-thunderbird"),
     ];
+
+    // Thunderbird / Lightning: only scan the known calendar-data subdirectory
+    // inside each profile — NOT the whole profile tree (which contains
+    // potentially gigabytes of mail data and hundreds of thousands of files).
+    for tb_root in [home.join(".thunderbird"), home.join(".mozilla-thunderbird")] {
+        if let Ok(profiles) = std::fs::read_dir(&tb_root) {
+            for profile in profiles.filter_map(std::result::Result::ok) {
+                let cal = profile.path().join("calendar-data");
+                if cal.is_dir() {
+                    search_roots.push(cal);
+                }
+            }
+        }
+    }
 
     let mut events: Vec<CalendarEvent> = Vec::new();
     let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();

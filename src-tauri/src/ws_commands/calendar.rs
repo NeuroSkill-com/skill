@@ -30,6 +30,8 @@
 //!
 //! ### `calendar_request_permission`
 //! Prompt the user to grant calendar access (macOS only, no-op elsewhere).
+//! Blocks until the system dialog is resolved (up to 30 s) — runs on a
+//! dedicated blocking thread so the async executor is not stalled.
 //!
 //! ```json
 //! { "command": "calendar_request_permission" }
@@ -45,7 +47,11 @@ use tauri::AppHandle;
 // ── calendar_events ───────────────────────────────────────────────────────────
 
 /// Fetch calendar events overlapping `[start_utc, end_utc]`.
-pub fn calendar_events(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
+///
+/// On macOS, if permission has not been determined yet, EventKit will show
+/// the system dialog before returning — this runs on a blocking thread to
+/// avoid stalling the async executor.
+pub async fn calendar_events(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let start_utc = msg
         .get("start_utc")
         .and_then(serde_json::Value::as_i64)
@@ -59,8 +65,10 @@ pub fn calendar_events(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
         return Err("\"end_utc\" must be >= \"start_utc\"".into());
     }
 
-    let events = skill_calendar::fetch_events(start_utc, end_utc)
-        .map_err(|e| format!("calendar fetch error: {e}"))?;
+    let events =
+        tokio::task::spawn_blocking(move || skill_calendar::fetch_events(start_utc, end_utc))
+            .await
+            .map_err(|e| format!("calendar task error: {e}"))??;
 
     let json_events = serde_json::to_value(&events).map_err(|e| e.to_string())?;
 
@@ -73,6 +81,8 @@ pub fn calendar_events(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
 // ── calendar_status ───────────────────────────────────────────────────────────
 
 /// Return the current calendar access authorisation status and platform name.
+///
+/// This is a cheap read of an enum value on all platforms — no blocking I/O.
 pub fn calendar_status(_app: &AppHandle) -> Result<Value, String> {
     let status = skill_calendar::auth_status();
     let status_str = auth_status_str(status);
@@ -96,12 +106,28 @@ pub fn calendar_status(_app: &AppHandle) -> Result<Value, String> {
 // ── calendar_request_permission ───────────────────────────────────────────────
 
 /// Request calendar access (macOS: shows system dialog; other platforms: no-op).
-pub fn calendar_request_permission(_app: &AppHandle) -> Result<Value, String> {
-    let granted = skill_calendar::request_access();
-    let status = skill_calendar::auth_status();
+///
+/// Runs on a `spawn_blocking` thread because on macOS the underlying
+/// `requestFullAccessToEventsWithCompletion:` call blocks for up to 30 s
+/// while the user responds to the permission dialog.
+pub async fn calendar_request_permission(_app: &AppHandle) -> Result<Value, String> {
+    let (granted, status_str) = tokio::task::spawn_blocking(|| {
+        let granted = skill_calendar::request_access();
+        let status = skill_calendar::auth_status();
+        let status_str = match status {
+            skill_calendar::AuthStatus::Authorized => "authorized",
+            skill_calendar::AuthStatus::Denied => "denied",
+            skill_calendar::AuthStatus::Restricted => "restricted",
+            skill_calendar::AuthStatus::NotDetermined => "not_determined",
+        };
+        (granted, status_str)
+    })
+    .await
+    .map_err(|e| format!("calendar permission task error: {e}"))?;
+
     Ok(serde_json::json!({
         "granted": granted,
-        "status":  auth_status_str(status),
+        "status":  status_str,
     }))
 }
 
