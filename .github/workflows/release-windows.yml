@@ -34,6 +34,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate Windows app manifest
+        shell: bash
+        run: python scripts/check_windows_manifest.py src-tauri/manifest.xml
+
       # ── Resolve version ─────────────────────────────────────────────────────
       # Tag push: verify tag matches tauri.conf.json.
       # workflow_dispatch: read version from tauri.conf.json directly.
