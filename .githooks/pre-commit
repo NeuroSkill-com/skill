@@ -13,10 +13,24 @@ set -euo pipefail
 
 ERRORS=0
 
+# Speed up local Rust builds if sccache is available.
+if command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+  export CMAKE_C_COMPILER_LAUNCHER=sccache
+  export CMAKE_CXX_COMPILER_LAUNCHER=sccache
+fi
+
 STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
 STAGED_RS="$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' 2>/dev/null || true)"
 
 if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+# Skip expensive checks for docs/changelog-only commits.
+NON_DOC_STAGED="$(echo "$STAGED_FILES" | grep -Ev '^(README\.md|CHANGELOG\.md|CONTRIBUTING\.md|AGENTS\.md|TODO\.md|changes/|docs/|\.github/)' || true)"
+if [ -z "$NON_DOC_STAGED" ]; then
+  echo "✅ Pre-commit checks passed (docs/changelog-only changes)."
   exit 0
 fi
 
@@ -30,7 +44,6 @@ fi
 
 # ── Frontend checks (changed-files scoped) ───────────────────────────────────
 FRONTEND_STAGED="$(echo "$STAGED_FILES" | grep -E '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)' || true)"
-
 if [ -n "$FRONTEND_STAGED" ]; then
   echo "🧪 Running frontend checks on changed files…"
 
@@ -69,7 +82,6 @@ if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lo
         NEED_SKILL=1
         ;;
       Cargo.toml|Cargo.lock)
-        # workspace-wide dependency/layout changes: broaden checks
         NEED_SKILL=1
         ;;
     esac
@@ -82,9 +94,9 @@ if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lo
     while IFS= read -r pair; do
       [ -z "$pair" ] && continue
       CRATES+=("${pair%% *}" "${pair#* }")
-    done <<EOF
+    done <<EOP
 $uniq_pairs
-EOF
+EOP
   fi
 
   if [ "${#CRATES[@]}" -gt 0 ]; then

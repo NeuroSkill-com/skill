@@ -2,14 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Pre-push gate:
-# - default: changed-files scoped checks (fast)
-# - full mode: PREPUSH_FULL=1 git push ...
+# Pre-push gate: scoped by default, full mode with PREPUSH_FULL=1.
 
 set -euo pipefail
 
 FULL_MODE="${PREPUSH_FULL:-0}"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+# Speed up local Rust builds if sccache is available.
+if command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+  export CMAKE_C_COMPILER_LAUNCHER=sccache
+  export CMAKE_CXX_COMPILER_LAUNCHER=sccache
+fi
 
 if [ "$FULL_MODE" = "1" ]; then
   echo "🔎 Pre-push: full mode enabled (PREPUSH_FULL=1)"
@@ -29,8 +34,6 @@ if [ "$FULL_MODE" = "1" ]; then
   exit 0
 fi
 
-# ── Changed-files scoped mode ────────────────────────────────────────────────
-# Prefer upstream tracking branch diff; fall back to previous commit.
 BASE_REF=""
 if git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" >/dev/null 2>&1; then
   BASE_REF="$(git merge-base HEAD "@{upstream}")"
@@ -47,11 +50,15 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-echo "🔎 Pre-push: scoped mode on branch '$CURRENT_BRANCH'"
+NON_DOC_CHANGED="$(echo "$CHANGED_FILES" | grep -Ev '^(README\.md|CHANGELOG\.md|CONTRIBUTING\.md|AGENTS\.md|TODO\.md|changes/|docs/|\.github/)' || true)"
+if [ -z "$NON_DOC_CHANGED" ]; then
+  echo "✅ Pre-push checks passed (docs/changelog-only changes)."
+  exit 0
+fi
 
+echo "🔎 Pre-push: scoped mode on branch '$CURRENT_BRANCH'"
 echo "Changed files baseline: $BASE_REF"
 
-# ── Frontend scoped checks ───────────────────────────────────────────────────
 FRONTEND_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)' || true)"
 if [ -n "$FRONTEND_CHANGED" ]; then
   echo "🔎 Pre-push: frontend checks (changed files)"
@@ -69,7 +76,6 @@ if [ -n "$FRONTEND_CHANGED" ]; then
   fi
 fi
 
-# ── Rust scoped checks ───────────────────────────────────────────────────────
 RUST_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.rs$|^Cargo.toml$|^Cargo.lock$|^src-tauri/Cargo.toml$|^crates/.*/Cargo.toml$' || true)"
 if [ -n "$RUST_CHANGED" ]; then
   echo "🔎 Pre-push: Rust checks (changed crates)"
@@ -104,9 +110,9 @@ if [ -n "$RUST_CHANGED" ]; then
     while IFS= read -r pair; do
       [ -z "$pair" ] && continue
       CRATES+=("${pair%% *}" "${pair#* }")
-    done <<EOF
+    done <<EOP
 $uniq_pairs
-EOF
+EOP
   fi
 
   if [ "${#CRATES[@]}" -gt 0 ]; then
