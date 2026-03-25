@@ -126,17 +126,14 @@ fn parse_ics_file(
         .and_then(|n| n.to_str())
         .map(|s| s.replace('-', " ").replace('_', " "));
 
-    let mut parsed = parse_ical(&content, start_utc, end_utc);
+    let parsed = parse_ical(&content, start_utc, end_utc);
 
-    for ev in &mut parsed {
+    for mut ev in parsed {
         if ev.calendar.is_none() {
             ev.calendar.clone_from(&cal_name);
         }
-    }
-
-    for ev in parsed {
         let key = if ev.id.is_empty() {
-            format!("{}{}", ev.start_utc, ev.title)
+            format!("{}\x00{}", ev.start_utc, ev.title)
         } else {
             ev.id.clone()
         };

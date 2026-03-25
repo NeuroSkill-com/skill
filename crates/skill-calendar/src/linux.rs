@@ -103,28 +103,23 @@ fn parse_ics_file(
         .and_then(|n| n.to_str())
         .map(|s| s.replace('-', " ").replace('_', " "));
 
-    let mut parsed = parse_ical(&content, start_utc, end_utc);
+    let parsed = parse_ical(&content, start_utc, end_utc);
 
-    for ev in &mut parsed {
+    for mut ev in parsed {
         if ev.calendar.is_none() {
             ev.calendar.clone_from(&cal_name);
         }
-        if seen.insert(ev.id.clone()) {
-            // will be pushed below
+        // De-duplicate: use UID when present, otherwise fall back to
+        // start_utc+title so anonymous events still deduplicate correctly.
+        let key = if ev.id.is_empty() {
+            format!("{}\x00{}", ev.start_utc, ev.title)
+        } else {
+            ev.id.clone()
+        };
+        if seen.insert(key) {
+            events.push(ev);
         }
     }
-    // Push only unseen events
-    let mut deduped: Vec<CalendarEvent> = Vec::new();
-    let mut local_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for ev in parsed {
-        if !ev.id.is_empty() && !seen.contains(&ev.id) {
-            seen.insert(ev.id.clone());
-            deduped.push(ev);
-        } else if ev.id.is_empty() && local_seen.insert(format!("{}{}", ev.start_utc, ev.title)) {
-            deduped.push(ev);
-        }
-    }
-    events.extend(deduped);
 }
 
 fn dirs_home() -> Option<PathBuf> {
