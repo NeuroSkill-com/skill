@@ -141,6 +141,25 @@ In the catalog, mmproj files are marked with `"is_mmproj": true` and tagged `["v
 4. Actor: init backend → load model → create context → warmup → load mmproj → set `ready` flag
 5. Emits `llm:status` events for frontend progress tracking
 
+### Default Bootstrap Model + Minimum Memory
+
+When no local model is ready, the app now defaults to:
+
+- **`LFM2.5 1.2B Instruct`** (prefers `Q4_K_M`, then `Q4_0`)
+
+Approximate requirements for this default model:
+
+- **GGUF file size**: `~0.73 GB` (`Q4_K_M`)
+- **Estimated runtime memory @ 4K context**: `~1.2–1.3 GB` (weights + KV cache + runtime overhead)
+- **Practical minimum (Windows)**: at least **4 GB free RAM/VRAM**
+- **Recommended for stable use**: **8 GB+ free memory**
+
+Autolaunch safety guard:
+
+- Before auto-launch, the backend computes a hardware-fit estimate.
+- Auto-launch is blocked when fit is `too_tight` or available memory is below required memory.
+- In that case, startup returns a descriptive `start_error` with required vs available memory.
+
 ### Config Knobs (`LlmConfig` in `src-tauri/src/settings.rs`)
 
 | Setting | Description | Default |
