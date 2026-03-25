@@ -10,7 +10,7 @@ description = "Headless browser engine — CDP-like API over wry/tao for navigat
 tao = { version = "0.35", default-features = false, features = ["rwh_06"] }
 
 # WebView — system webview with full JS, DOM, network stack.
-wry = { version = "0.54" }
+wry = { version = "0.55" }
 
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
