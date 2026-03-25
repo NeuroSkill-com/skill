@@ -24,7 +24,6 @@ base64 = { workspace = true }
 
 # Platform-specific tao features
 [target.'cfg(target_os = "linux")'.dependencies]
-tao = { version = "0.34", features = ["x11", "rwh_06"] }
 gtk = "0.18"
 
 [lints]

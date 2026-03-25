@@ -10566,7 +10566,6 @@ dependencies = [
  "http",
  "serde",
  "serde_json",
- "tao 0.34.8",
  "tao 0.35.0",
  "wry 0.55.0",
 ]
