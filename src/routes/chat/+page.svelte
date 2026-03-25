@@ -479,10 +479,83 @@ function startStatusPoll() {
   }, 1500);
 }
 
+type LlmCatalogEntryLite = {
+  filename: string;
+  family_id: string;
+  family_name: string;
+  quant: string;
+  size_gb: number;
+  is_mmproj: boolean;
+  recommended?: boolean;
+  state: string;
+};
+
+type LlmCatalogLite = {
+  entries: LlmCatalogEntryLite[];
+};
+
+function pickBootstrapModel(entries: LlmCatalogEntryLite[]): LlmCatalogEntryLite | null {
+  const textModels = entries.filter((e) => !e.is_mmproj);
+  if (textModels.length === 0) return null;
+
+  const lfm = textModels
+    .filter((e) => e.family_id === "lfm25-vl-1.6b" || /lfm2\.5.*1\.6b/i.test(e.family_name))
+    .sort((a, b) => a.size_gb - b.size_gb)[0];
+  if (lfm) return lfm;
+
+  return (
+    textModels.filter((e) => !!e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
+    textModels.sort((a, b) => a.size_gb - b.size_gb)[0] ??
+    null
+  );
+}
+
+async function waitForModelDownload(filename: string, timeoutMs = 1000 * 60 * 60): Promise<string> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+      const e = catalog.entries.find((item) => item.filename === filename);
+      const state = e?.state ?? "not_found";
+      if (state === "downloaded" || state === "failed" || state === "cancelled") return state;
+    } catch (e) {
+      return "failed";
+    }
+  }
+  return "timeout";
+}
+
 async function startServer() {
   status = "loading";
   startError = "";
+
   try {
+    const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+    const hasDownloaded = catalog.entries.some((e) => !e.is_mmproj && e.state === "downloaded");
+
+    if (!hasDownloaded) {
+      const target = pickBootstrapModel(catalog.entries);
+      if (!target) {
+        startError = "No downloadable LLM model found in catalog.";
+        status = "stopped";
+        return;
+      }
+
+      if (target.state !== "downloading") {
+        await invoke("download_llm_model", { filename: target.filename });
+      }
+
+      startError = `Downloading default model first: ${target.filename}`;
+      const dlState = await waitForModelDownload(target.filename);
+      if (dlState !== "downloaded") {
+        startError = `Default model download ${dlState}. Open Settings → LLM to retry.`;
+        status = "stopped";
+        return;
+      }
+      startError = "";
+    }
+
     await invoke("start_llm_server");
   } catch (e) {
     status = "stopped";
