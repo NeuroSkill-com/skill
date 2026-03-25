@@ -142,7 +142,6 @@ jobs:
           # Don't cache final compiled artifacts — registry + incremental
           # data is enough; target/ artifacts recompile quickly from it.
           cache-targets: false
-          cache-targets: false
           cache-on-failure: false
 
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
