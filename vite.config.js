@@ -79,9 +79,10 @@ function patchTailwindForSvelte() {
 export default defineConfig(({ mode }) => ({
   // Strip console.log / console.debug in production builds.
   // console.warn and console.error are preserved for diagnostics.
-  esbuild: {
-    drop: mode === "production" ? ["debugger"] : [],
-    pure: mode === "production" ? ["console.log", "console.debug"] : [],
+  build: {
+    // In production, drop debugger statements and strip console.log/debug.
+    // Uses oxc (vite 8 default) if available; esbuild handles drop/pure transforms.
+    minify: mode === "production" ? "esbuild" : false,
   },
 
   plugins: [
