@@ -257,6 +257,27 @@ pub fn open_notifications_settings() {
     }
 }
 
+/// Return calendar permission status as one of:
+/// `authorized`, `denied`, `restricted`, `not_determined`.
+#[tauri::command]
+pub fn get_calendar_permission_status() -> String {
+    match skill_calendar::auth_status() {
+        skill_calendar::AuthStatus::Authorized => "authorized",
+        skill_calendar::AuthStatus::Denied => "denied",
+        skill_calendar::AuthStatus::Restricted => "restricted",
+        skill_calendar::AuthStatus::NotDetermined => "not_determined",
+    }
+    .to_string()
+}
+
+/// Request calendar access (macOS shows the native dialog; other platforms are no-op).
+#[tauri::command]
+pub async fn request_calendar_permission() -> Result<bool, String> {
+    tokio::task::spawn_blocking(skill_calendar::request_access)
+        .await
+        .map_err(|e| format!("calendar permission task error: {e}"))
+}
+
 // ── First-launch window reveal ────────────────────────────────────────────────
 
 /// Called from `+layout.svelte` `onMount` to reveal the main window only
@@ -805,6 +826,43 @@ pub fn set_calibration_config(_config: CalibrationConfig, _app: AppHandle) {
 }
 
 // ── Misc app-level commands ────────────────────────────────────────────────────
+
+/// Auto-fit the main window height to dashboard content while clamping to the
+/// current monitor's usable height.
+#[tauri::command]
+pub fn autosize_main_window(app: AppHandle, desired_height: f64) -> Result<(), String> {
+    let Some(win) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+
+    // Keep a sensible lower bound so controls never get cramped.
+    let min_h = 560.0_f64;
+    let mut target_h = desired_height.max(min_h);
+
+    // Clamp to current monitor height (logical px), leaving a tiny safety gap.
+    if let Ok(Some(mon)) = win.current_monitor() {
+        let scale = mon.scale_factor();
+        if scale > 0.0 {
+            let max_h = (mon.size().height as f64 / scale - 20.0).max(min_h);
+            target_h = target_h.min(max_h);
+        }
+    }
+
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let cur = win.inner_size().map_err(|e| e.to_string())?;
+    let cur_w = cur.width as f64 / scale;
+    let cur_h = cur.height as f64 / scale;
+
+    // Ignore tiny deltas to avoid resize jitter loops.
+    if (cur_h - target_h).abs() < 6.0 {
+        return Ok(());
+    }
+
+    win.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+        cur_w, target_h,
+    )))
+    .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub fn emit_calibration_event(event: String, payload: serde_json::Value, app: AppHandle) {

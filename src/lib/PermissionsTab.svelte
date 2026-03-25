@@ -20,6 +20,7 @@ const isLinux = typeof navigator !== "undefined" && /Linux/i.test(navigator.plat
 // ── Permission status ───────────────────────────────────────────────────────
 let accessibilityGranted = $state<boolean | null>(null);
 let screenRecordingGranted = $state<boolean | null>(null);
+let calendarPermissionStatus = $state<"authorized" | "denied" | "restricted" | "not_determined" | "unknown">("unknown");
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshAccessibility() {
@@ -38,13 +39,28 @@ async function refreshScreenRecording() {
   }
 }
 
+async function refreshCalendarPermission() {
+  try {
+    const s = await invoke<string>("get_calendar_permission_status");
+    if (s === "authorized" || s === "denied" || s === "restricted" || s === "not_determined") {
+      calendarPermissionStatus = s;
+    } else {
+      calendarPermissionStatus = "unknown";
+    }
+  } catch {
+    calendarPermissionStatus = "unknown";
+  }
+}
+
 onMount(() => {
   refreshAccessibility();
   refreshScreenRecording();
+  refreshCalendarPermission();
   // Poll every 3 s so the status updates after the user grants it in System Settings
   pollTimer = setInterval(() => {
     refreshAccessibility();
     refreshScreenRecording();
+    refreshCalendarPermission();
   }, 3000);
 });
 onDestroy(() => {
@@ -62,6 +78,10 @@ async function openNotificationsSettings() {
 }
 async function openScreenRecordingSettings() {
   await invoke("open_screen_recording_settings");
+}
+async function requestCalendarPermission() {
+  await invoke("request_calendar_permission").catch(() => false);
+  await refreshCalendarPermission();
 }
 
 // ── Status badge helper ─────────────────────────────────────────────────────
@@ -98,6 +118,14 @@ const accessStatus = $derived<Status>(
 
 const screenRecordingStatus = $derived<Status>(
   screenRecordingGranted === null ? "unknown" : screenRecordingGranted ? "granted" : "denied",
+);
+
+const calendarStatus = $derived<Status>(
+  calendarPermissionStatus === "authorized"
+    ? "granted"
+    : calendarPermissionStatus === "denied" || calendarPermissionStatus === "restricted"
+      ? "denied"
+      : "unknown",
 );
 
 // Bluetooth: we don't have a live API to check it — always show "system-managed"
@@ -258,6 +286,49 @@ const notifStatus: Status = "unknown";
     </Card>
   </section>
   {/if}
+
+  <!-- ── Calendar ─────────────────────────────────────────────────────────── -->
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      Calendar
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🗓️</span>
+            <span class="text-[0.8rem] font-semibold text-foreground">Calendar access</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold
+                         {statusClass(calendarStatus)}">
+              <span class="w-1.5 h-1.5 rounded-full {statusDot(calendarStatus)}"></span>
+              {statusLabel(calendarStatus)}
+            </span>
+            <Button size="sm" variant="outline"
+                    class="h-6 px-2 text-[0.65rem]"
+                    onclick={refreshCalendarPermission}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        </div>
+
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          Calendar tools can read events for scheduling context. Permission is requested by macOS when needed.
+        </p>
+
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline"
+                  class="text-[0.7rem] h-7"
+                  onclick={requestCalendarPermission}>
+            Request Calendar Permission
+          </Button>
+        </div>
+
+      </CardContent>
+    </Card>
+  </section>
 
   <!-- ── Bluetooth ─────────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">

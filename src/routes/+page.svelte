@@ -705,6 +705,46 @@ function handleScroll(e: Event) {
   if (!compact) compact = (e.currentTarget as HTMLElement).scrollTop > 56;
 }
 
+let mainEl: HTMLElement | null = null;
+let dashboardContentEl: HTMLDivElement | null = null;
+let autoHeightRo: ResizeObserver | null = null;
+let autoHeightTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAutoHeight = -1;
+let mainWindowAutoFit = $state(true);
+
+function scheduleAutoHeightFit() {
+  if (!mainWindowAutoFit) return;
+  if (autoHeightTimer) clearTimeout(autoHeightTimer);
+  autoHeightTimer = setTimeout(() => {
+    void fitMainWindowHeight();
+  }, 120);
+}
+
+async function fitMainWindowHeight() {
+  if (!mainWindowAutoFit) return;
+  if (!dashboardContentEl) return;
+  const host = document.getElementById("main-content");
+  const hostCs = host ? getComputedStyle(host) : null;
+  const hostPad = hostCs
+    ? (Number.parseFloat(hostCs.paddingTop) || 0) + (Number.parseFloat(hostCs.paddingBottom) || 0)
+    : 0;
+  const mainCs = mainEl ? getComputedStyle(mainEl) : null;
+  const mainPad = mainCs
+    ? (Number.parseFloat(mainCs.paddingTop) || 0) + (Number.parseFloat(mainCs.paddingBottom) || 0)
+    : 0;
+
+  const desiredHeight = Math.ceil(dashboardContentEl.scrollHeight + hostPad + mainPad);
+  if (!Number.isFinite(desiredHeight)) return;
+  if (Math.abs(desiredHeight - lastAutoHeight) < 8) return;
+  lastAutoHeight = desiredHeight;
+
+  try {
+    await invoke("autosize_main_window", { desiredHeight });
+  } catch {
+    // non-fatal on unsupported runtimes
+  }
+}
+
 const unlisteners: UnlistenFn[] = [];
 async function refreshStatus() {
   const prev = status.state;
@@ -761,6 +801,15 @@ onMount(async () => {
 
   await refreshStatus();
   appVersion = await invoke<string>("get_app_version");
+  mainWindowAutoFit = await invoke<boolean>("get_main_window_auto_fit").catch(() => true);
+
+  // Auto-fit window height to dashboard content as cards expand/collapse.
+  autoHeightRo = new ResizeObserver(() => scheduleAutoHeightFit());
+  if (dashboardContentEl) autoHeightRo.observe(dashboardContentEl);
+  if (mainEl) autoHeightRo.observe(mainEl);
+  window.addEventListener("resize", scheduleAutoHeightFit);
+  unlisteners.push(() => window.removeEventListener("resize", scheduleAutoHeightFit));
+  scheduleAutoHeightFit();
 
   // Poll model download status every 2 s until the encoder is loaded.
   await refreshModelDl();
@@ -779,6 +828,13 @@ onMount(async () => {
   unlisteners.push(
     await listen<number>("daily-goal-changed", (ev) => {
       dailyGoalMin = ev.payload;
+    }),
+  );
+
+  unlisteners.push(
+    await listen<boolean>("main-window-auto-fit-changed", (ev) => {
+      mainWindowAutoFit = ev.payload;
+      if (mainWindowAutoFit) scheduleAutoHeightFit();
     }),
   );
 
@@ -916,6 +972,12 @@ onDestroy(() => {
     clearInterval(modelDlTimer);
     modelDlTimer = null;
   }
+  autoHeightRo?.disconnect();
+  autoHeightRo = null;
+  if (autoHeightTimer) {
+    clearTimeout(autoHeightTimer);
+    autoHeightTimer = null;
+  }
 });
 
 // Keep onboarding state up-to-date as status/times change.
@@ -933,8 +995,9 @@ $effect(() => {
 useWindowTitle("window.title.main");
 </script>
 
-<main class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
+<main bind:this={mainEl} class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
       aria-label="Dashboard">
+  <div bind:this={dashboardContentEl} class="w-full flex flex-col items-center">
   <!-- GPU utilisation chart — always visible when GPU stats are available -->
   <div class="w-full max-w-[460px]">
     <GpuChart />
@@ -1761,6 +1824,7 @@ useWindowTitle("window.title.main");
   </Card>
 
   <DisclaimerFooter />
+  </div>
 </main>
 
 <style>

@@ -17,7 +17,6 @@ export interface ImuPacket {
   import { t } from "$lib/i18n/index.svelte";
   import { animatedCanvas } from "$lib/use-canvas";
 
-  const CANVAS_W  = 400;
   const CANVAS_H  = 160;       // two stacked sub-charts (accel + gyro)
   const VISIBLE   = 512;       // ~10 s at ~52 Hz (3 samples/packet × ~17 packets/s)
   const AXES      = 3;         // X, Y, Z
@@ -60,9 +59,6 @@ export interface ImuPacket {
     if (!needsRedraw) return;
     needsRedraw = false;
 
-    const dpr = w / CANVAS_W; // effectively getDpr() since w = CANVAS_W * dpr / dpr
-    const pw = CANVAS_W * (w / CANVAS_W);  // just w
-    const ph = CANVAS_H * (h / CANVAS_H);  // just h
     const halfH = h / 2;
 
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -173,7 +169,7 @@ export interface ImuPacket {
 
   <!-- Canvas — lifecycle managed by animatedCanvas action -->
   <canvas
-    use:animatedCanvas={{ draw, heightPx: CANVAS_H, widthPx: CANVAS_W }}
+    use:animatedCanvas={{ draw, heightPx: CANVAS_H }}
     class="w-full rounded-lg bg-black/[0.03] dark:bg-white/[0.03]"
     style="height:{CANVAS_H}px; image-rendering:pixelated"
   ></canvas>

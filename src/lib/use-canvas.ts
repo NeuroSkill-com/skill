@@ -26,8 +26,7 @@ export interface AnimatedCanvasOpts {
 
   /**
    * Fixed CSS width (logical px).  When set, the canvas is sized to this
-   * constant instead of tracking the container's width.  Used by ImuChart
-   * and PpgChart which render at a fixed resolution.
+   * constant instead of tracking the container's width.
    */
   widthPx?: number;
 

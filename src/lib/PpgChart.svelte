@@ -28,7 +28,6 @@ export interface PpgMarker {
   const CH = ["Ambient", "IR", "Red"] as const;
   const COLORS = ["#64748b", "#a78bfa", "#ef4444"];   // slate, violet, red
 
-  const CANVAS_W = 400;
   const CANVAS_H = 120;
   const VISIBLE_SAMPLES = 512;    // ~8 s at 64 Hz
   const CH_COUNT = 3;
@@ -40,6 +39,7 @@ export interface PpgMarker {
 
   let needsRedraw = false;
   let latestValues = $state<number[]>([0, 0, 0]);
+  let canvasCssW = $state(0);
 
   // ── Event markers ──────────────────────────────────────────────────────────
   const MAX_MARKERS = 64;
@@ -78,6 +78,7 @@ export interface PpgMarker {
   }
 
   function draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    canvasCssW = w;
     if (!needsRedraw) return;
     needsRedraw = false;
 
@@ -245,7 +246,7 @@ export interface PpgMarker {
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="relative">
     <canvas
-      use:animatedCanvas={{ draw, heightPx: CANVAS_H, widthPx: CANVAS_W }}
+      use:animatedCanvas={{ draw, heightPx: CANVAS_H }}
       class="w-full rounded-lg bg-black/[0.03] dark:bg-white/[0.03]"
       style="height:{CANVAS_H}px; image-rendering:pixelated"
       onclick={onPpgClick}
@@ -259,7 +260,7 @@ export interface PpgMarker {
                shadow-lg border border-white/10 backdrop-blur-sm
                text-[0.68rem] font-semibold leading-snug max-w-[220px] break-words
                bg-[#1a1a2e]/90"
-        style="left:{Math.min(ppgTooltip.x, CANVAS_W - 120)}px; top:{ppgTooltip.y}px; color:{ppgTooltip.color}"
+        style="left:{Math.min(ppgTooltip.x, Math.max(0, canvasCssW - 120))}px; top:{ppgTooltip.y}px; color:{ppgTooltip.color}"
         onclick={() => { ppgTooltip = null; }}
       >
         {ppgTooltip.text}
