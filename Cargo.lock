@@ -10499,7 +10499,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 name = "skill"
 version = "0.0.71"
 dependencies = [
- "arrow-array 54.3.1",
+ "arrow-array 58.1.0",
  "async-stream",
  "axum",
  "base64 0.22.1",
@@ -10723,7 +10723,7 @@ name = "skill-history"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "arrow-array 54.3.1",
+ "arrow-array 58.1.0",
  "csv",
  "parquet 54.3.1",
  "rusqlite",
