@@ -30,6 +30,9 @@ use std::{path::Path, sync::RwLock};
 static WINDOWS_LOG_FILE: std::sync::OnceLock<std::sync::Mutex<std::fs::File>> =
     std::sync::OnceLock::new();
 #[cfg(target_os = "windows")]
+static WINDOWS_LATEST_LOG_FILE: std::sync::OnceLock<std::sync::Mutex<std::fs::File>> =
+    std::sync::OnceLock::new();
+#[cfg(target_os = "windows")]
 static WINDOWS_STDERR_REDIRECTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
@@ -138,7 +141,7 @@ impl SkillLogger {
             use std::sync::atomic::Ordering;
 
             // If stderr redirection succeeded, `eprint!` already lands in the
-            // log file; avoid writing the same line twice.
+            // session log file; avoid writing the same line there twice.
             if !WINDOWS_STDERR_REDIRECTED.load(Ordering::Relaxed) {
                 if let Some(file) = WINDOWS_LOG_FILE.get() {
                     let mut guard = file
@@ -146,6 +149,14 @@ impl SkillLogger {
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
                     let _ = guard.write_all(line.as_bytes());
                 }
+            }
+
+            // Always mirror app-tagged logs to latest.log for a stable path.
+            if let Some(file) = WINDOWS_LATEST_LOG_FILE.get() {
+                let mut guard = file
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let _ = guard.write_all(line.as_bytes());
             }
         }
     }
@@ -282,31 +293,46 @@ pub fn tee_stderr_to_file(log_path: &Path) {
         let _ = std::fs::create_dir_all(dir);
     }
 
-    let log_file = match OpenOptions::new().create(true).append(true).open(log_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("[logger] cannot open log file {}: {e}", log_path.display());
-            return;
-        }
-    };
+    // Stable mirror path: %LOCALAPPDATA%\NeuroSkill\latest.log
+    let latest_path = log_path
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or_else(|| log_path.parent().unwrap_or_else(|| Path::new(".")))
+        .join("latest.log");
+    if let Some(dir) = latest_path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(latest) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&latest_path)
+    {
+        let _ = WINDOWS_LATEST_LOG_FILE.set(std::sync::Mutex::new(latest));
+    }
 
-    // Keep the file handle alive globally for explicit fallback writes.
-    let _ = WINDOWS_LOG_FILE.set(std::sync::Mutex::new(log_file));
+    // Session log (date-based).
+    if let Ok(session) = OpenOptions::new().create(true).append(true).open(log_path) {
+        let _ = WINDOWS_LOG_FILE.set(std::sync::Mutex::new(session));
+    } else {
+        eprintln!("[logger] cannot open log file {}", log_path.display());
+    }
 
-    // Try to route process stderr to the session log file so *all* `eprint!` /
-    // `eprintln!` output (including dependencies) lands in the same file.
+    // Route process stderr to session log; if unavailable, fall back to latest.log.
     #[link(name = "kernel32")]
     extern "system" {
         fn SetStdHandle(n_std_handle: u32, h_handle: *mut core::ffi::c_void) -> i32;
     }
     const STD_ERROR_HANDLE: u32 = (-12i32) as u32;
 
-    let redirected = if let Some(file) = WINDOWS_LOG_FILE.get() {
+    let redirect_to = WINDOWS_LOG_FILE
+        .get()
+        .or_else(|| WINDOWS_LATEST_LOG_FILE.get());
+    let redirected = if let Some(file) = redirect_to {
         let guard = file
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        // SAFETY: `SetStdHandle` is called with a valid process-owned handle;
-        // the underlying file remains alive via `WINDOWS_LOG_FILE`.
+        // SAFETY: `SetStdHandle` receives a valid handle owned by this process;
+        // the file stays alive via OnceLock globals.
         unsafe {
             SetStdHandle(
                 STD_ERROR_HANDLE,
