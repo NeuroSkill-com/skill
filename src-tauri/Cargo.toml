@@ -183,7 +183,7 @@ image = { version = "0.25", default-features = false, features = ["png", "webp",
 
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-jsonschema = "0.28"
+jsonschema = "0.45"
 skill-jobs  = { path = "../crates/skill-jobs" }
 skill-settings = { path = "../crates/skill-settings" }
 skill-llm   = { path = "../crates/skill-llm" }

@@ -34,7 +34,7 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Valid
     let errors: Vec<String> = compiled
         .iter_errors(&coerced)
         .map(|err| {
-            let path_str = err.instance_path.to_string();
+            let path_str = err.instance_path().to_string();
             let path = if path_str.is_empty() {
                 "root".to_string()
             } else {
