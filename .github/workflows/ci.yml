@@ -80,6 +80,8 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          cache-targets: false
+          cache-on-failure: false
 
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
       # Avoid ort-sys download flakiness from cdn.pyke.io in CI by installing
@@ -429,6 +431,8 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          cache-targets: false
+          cache-on-failure: false
 
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
       # Avoid ort-sys download flakiness from cdn.pyke.io in CI.
@@ -610,6 +614,8 @@ jobs:
         with:
           workspaces: ". -> src-tauri/target"
           save-if: false
+          cache-targets: false
+          cache-on-failure: false
 
       - name: Setup ONNX Runtime (Linux x64)
         uses: ./.github/actions/setup-onnxruntime-linux

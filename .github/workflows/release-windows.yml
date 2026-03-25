@@ -139,6 +139,11 @@ jobs:
           # 57-min compile output is discarded and the next run starts
           # from scratch — a vicious cycle.
           save-if: "always()"
+          # Don't cache final compiled artifacts — registry + incremental
+          # data is enough; target/ artifacts recompile quickly from it.
+          cache-targets: false
+          cache-targets: false
+          cache-on-failure: false
 
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
       # Use the official Microsoft release archive instead of relying on

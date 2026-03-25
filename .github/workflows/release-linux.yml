@@ -85,6 +85,8 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          cache-targets: false
+          cache-on-failure: false
 
       # ── ONNX Runtime binary cache ──────────────────────────────────────────
       # ort-sys downloads ~200 MB static libs from cdn.pyke.io during build.
