@@ -24,6 +24,48 @@ $ErrorActionPreference = "Stop"
 function Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Blue }
 function Die($msg)  { Write-Host "`nERROR: $msg" -ForegroundColor Red; exit 1 }
 
+function Get-VsWherePath {
+    $paths = @(
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
+function Import-MsvcDevEnv {
+    $vswhere = Get-VsWherePath
+    if (-not $vswhere) { return $false }
+
+    $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+    if (-not $vsInstallPath) { return $false }
+
+    $devCmd = Join-Path $vsInstallPath "Common7\Tools\VsDevCmd.bat"
+    $devArgs = "-arch=x64 -host_arch=x64"
+
+    if (-not (Test-Path $devCmd)) {
+        $devCmd = Join-Path $vsInstallPath "VC\Auxiliary\Build\vcvars64.bat"
+        $devArgs = ""
+    }
+    if (-not (Test-Path $devCmd)) { return $false }
+
+    Write-Host "  Importing MSVC environment from: $devCmd"
+    $setOutput = if ($devArgs) {
+        & cmd.exe /s /c "`"$devCmd`" $devArgs >nul && set"
+    } else {
+        & cmd.exe /s /c "`"$devCmd`" >nul && set"
+    }
+
+    foreach ($line in $setOutput) {
+        if ($line -match "^([^=]+)=(.*)$") {
+            [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
+        }
+    }
+    return $true
+}
+
 # Paths
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
@@ -63,9 +105,9 @@ if ($LibExeCmd) {
 }
 
 if (-not $LibExe) {
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path $vswhere) {
-        $vsInstallPath = & $vswhere -latest -property installationPath 2>$null
+    $vswhere = Get-VsWherePath
+    if ($vswhere) {
+        $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
         if ($vsInstallPath) {
             $candidate = Get-ChildItem -Path $vsInstallPath -Recurse -Filter "lib.exe" -ErrorAction SilentlyContinue |
                 Where-Object { $_.FullName -match "MSVC" -and $_.FullName -match "x64" } |
@@ -78,10 +120,21 @@ if (-not $LibExe) {
     }
 }
 
+if (-not $LibExe) {
+    # Regular PowerShell/CMD shells often do not have VC tools on PATH.
+    # Importing VsDevCmd env makes cl.exe/link.exe/lib.exe available.
+    if (Import-MsvcDevEnv) {
+        $LibExeCmd = Get-Command "lib.exe" -ErrorAction SilentlyContinue
+        if ($LibExeCmd) {
+            $LibExe = $LibExeCmd.Source
+        }
+    }
+}
+
 if ($LibExe) {
     Write-Host "  lib.exe: $LibExe"
 } else {
-    Write-Host "  lib.exe: not found - companion libs will NOT be merged (run from a Developer Command Prompt for best results)"
+    Die "lib.exe not found. Install Visual Studio Build Tools (Desktop development with C++) or run from Developer PowerShell for VS."
 }
 
 # Version
@@ -157,7 +210,7 @@ try {
     } elseif ($companions.Count -eq 0) {
         Write-Host "  (no companion libraries found - espeak-ng.lib is already self-contained)"
     } else {
-        Write-Host "  (lib.exe unavailable - skipping merge; run from a Developer Command Prompt)"
+        Die "companion libs found but lib.exe is unavailable; cannot produce a self-contained espeak-ng.lib"
     }
 
     # Copy espeak-ng-data if cmake did not install it.
