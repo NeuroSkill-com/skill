@@ -938,6 +938,75 @@ mod tests {
         assert!(events.is_empty());
     }
 
+    /// Simulate the fixed linux/windows de-duplication: if the same iCal
+    /// content is parsed twice (e.g. two overlapping calendar files both
+    /// contain the same event), the shared `seen` set must prevent duplicates.
+    #[test]
+    fn dedup_across_files_via_seen_set() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    UID:shared-uid@test\r\n\
+                    SUMMARY:Shared Event\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut all: Vec<crate::types::CalendarEvent> = Vec::new();
+
+        // Parse the same content twice (simulating two files with the same event)
+        for parsed in [parse_ical(ical, 0, i64::MAX), parse_ical(ical, 0, i64::MAX)] {
+            for ev in parsed {
+                let key = if ev.id.is_empty() {
+                    format!("{}\x00{}", ev.start_utc, ev.title)
+                } else {
+                    ev.id.clone()
+                };
+                if seen.insert(key) {
+                    all.push(ev);
+                }
+            }
+        }
+
+        assert_eq!(all.len(), 1, "duplicate UID must be deduplicated");
+        assert_eq!(all[0].title, "Shared Event");
+    }
+
+    /// Anonymous events (empty UID) deduplicate by start_utc + title.
+    #[test]
+    fn dedup_anonymous_events() {
+        let ical = "BEGIN:VCALENDAR\r\n\
+                    BEGIN:VEVENT\r\n\
+                    SUMMARY:No UID Event\r\n\
+                    DTSTART:20260325T090000Z\r\n\
+                    DTEND:20260325T100000Z\r\n\
+                    END:VEVENT\r\n\
+                    END:VCALENDAR\r\n";
+
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut all: Vec<crate::types::CalendarEvent> = Vec::new();
+
+        for parsed in [parse_ical(ical, 0, i64::MAX), parse_ical(ical, 0, i64::MAX)] {
+            for ev in parsed {
+                let key = if ev.id.is_empty() {
+                    format!("{}\x00{}", ev.start_utc, ev.title)
+                } else {
+                    ev.id.clone()
+                };
+                if seen.insert(key) {
+                    all.push(ev);
+                }
+            }
+        }
+
+        assert_eq!(
+            all.len(),
+            1,
+            "anonymous event parsed from identical content must deduplicate"
+        );
+    }
+
     #[test]
     fn parse_event_missing_summary_gets_default_title() {
         let ical = "BEGIN:VCALENDAR\r\n\
