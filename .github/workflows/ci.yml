@@ -48,6 +48,24 @@ jobs:
     name: Rust — clippy + test
     runs-on: ubuntu-latest
     steps:
+      # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
+      # ubuntu-latest ships Android SDK, .NET, Swift, Haskell, CodeQL, large
+      # Docker layers, and mono — none of which this project needs.
+      # Without this, the Rust build cache restore + compile fills the ~14 GB
+      # runner disk and causes "No space left on device" failures.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af 2>/dev/null || true
+          df -h /
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
