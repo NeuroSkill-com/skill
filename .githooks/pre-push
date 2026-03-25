@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 NeuroSkill.com
+#
+# Heavy gate before push: mirrors core CI quality checks locally.
+
+set -euo pipefail
+
+echo "🔎 Pre-push: frontend checks"
+npm run -s check
+npm test
+
+echo "🔎 Pre-push: Rust clippy"
+cargo clippy --locked --workspace --exclude skill -- -D warnings
+cargo clippy -p skill --locked --features llm-vulkan,screenshots -- -D warnings
+
+echo "🔎 Pre-push: Rust tests"
+cargo test --locked --workspace --lib
+
+echo "✅ Pre-push checks passed."

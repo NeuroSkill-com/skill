@@ -2,62 +2,95 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Pre-commit hook — enforces i18n sync, formatting, and lint checks.
+# Standard pre-commit hook:
+# - i18n sync/audit for locale changes
+# - frontend checks for frontend changes
+# - targeted Rust clippy/tests for touched crates
 #
-# Setup (run once per clone):
-#   git config core.hooksPath .githooks
+# Full-repo heavy checks run in .githooks/pre-push.
 
 set -euo pipefail
 
 ERRORS=0
 
-# ── i18n key synchronisation ──────────────────────────────────────────────────
-STAGED_I18N=$(git diff --cached --name-only --diff-filter=ACMR -- 'src/lib/i18n/' 2>/dev/null || true)
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
+STAGED_RS="$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' 2>/dev/null || true)"
 
-if [ -n "$STAGED_I18N" ]; then
-    echo "🌐 i18n files changed — checking key synchronisation…"
-    if ! npm run sync:i18n:check --silent 2>&1; then
-        echo ""
-        echo "❌ i18n keys are out of sync."
-        echo "   Run:  npm run sync:i18n:fix"
-        ERRORS=1
-    else
-        echo "✅ i18n keys in sync."
-    fi
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
 fi
 
-# ── Frontend formatting (Biome — .ts/.js only; Svelte parsing is partial) ────
-STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.js' 2>/dev/null | grep -v node_modules || true)
-
-if [ -n "$STAGED_TS" ]; then
-    echo "🎨 Checking frontend formatting…"
-    if ! npx biome format --no-errors-on-unmatched $STAGED_TS 2>&1; then
-        echo ""
-        echo "❌ Frontend formatting issues found."
-        echo "   Run:  npm run format"
-        ERRORS=1
-    else
-        echo "✅ Frontend formatting OK."
-    fi
+# ── i18n checks ───────────────────────────────────────────────────────────────
+if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/'; then
+  echo "🌐 i18n files changed — running sync/audit checks…"
+  npm run -s sync:i18n:check || ERRORS=1
+  npm run -s audit:i18n:check || ERRORS=1
+  npm run -s check:i18n:locales || ERRORS=1
 fi
 
-# ── Rust formatting ──────────────────────────────────────────────────────────
-STAGED_RS=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' 2>/dev/null || true)
+# ── Frontend checks ───────────────────────────────────────────────────────────
+if echo "$STAGED_FILES" | grep -Eq '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)'; then
+  echo "🧪 Running frontend checks…"
+  npm run -s check || ERRORS=1
+  npm test || ERRORS=1
+fi
 
-if [ -n "$STAGED_RS" ]; then
-    echo "🦀 Checking Rust formatting…"
-    if ! cargo fmt --check 2>&1; then
-        echo ""
-        echo "❌ Rust formatting issues found."
-        echo "   Run:  cargo fmt"
-        ERRORS=1
-    else
-        echo "✅ Rust formatting OK."
-    fi
+# ── Rust checks (targeted by touched crate) ───────────────────────────────────
+if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lock|src-tauri/Cargo.toml|crates/.*/Cargo.toml)'; then
+  echo "🦀 Running Rust format/clippy/tests…"
+  cargo fmt --check || ERRORS=1
+
+  declare -a CRATES=()
+  NEED_SKILL=0
+
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      crates/*)
+        crate_dir="${f#crates/}"
+        crate_name="${crate_dir%%/*}"
+        if [[ "$crate_name" == skill-* ]]; then
+          CRATES+=("-p" "$crate_name")
+        fi
+        ;;
+      src-tauri/*)
+        NEED_SKILL=1
+        ;;
+      Cargo.toml|Cargo.lock)
+        # workspace-wide dependency/layout changes: broaden checks
+        NEED_SKILL=1
+        ;;
+    esac
+  done <<< "$STAGED_FILES"
+
+  # Deduplicate crate flags
+  if [ "${#CRATES[@]}" -gt 0 ]; then
+    mapfile -t uniq_crates < <(printf '%s\n' "${CRATES[@]}" | awk 'NR%2{p=$0;next}{print p" "$0}' | sort -u)
+    CRATES=()
+    for pair in "${uniq_crates[@]}"; do
+      CRATES+=("${pair%% *}" "${pair#* }")
+    done
+  fi
+
+  if [ "${#CRATES[@]}" -gt 0 ]; then
+    cargo clippy --locked "${CRATES[@]}" -- -D warnings || ERRORS=1
+    cargo test --locked "${CRATES[@]}" --lib || ERRORS=1
+  else
+    cargo clippy --locked --workspace --exclude skill -- -D warnings || ERRORS=1
+    cargo test --locked --workspace --exclude skill --lib || ERRORS=1
+  fi
+
+  if [ "$NEED_SKILL" -eq 1 ]; then
+    cargo clippy -p skill --locked -- -D warnings || ERRORS=1
+    cargo test -p skill --locked --lib || ERRORS=1
+  fi
 fi
 
 if [ "$ERRORS" -ne 0 ]; then
-    echo ""
-    echo "❌ Pre-commit checks failed. Fix the issues above and try again."
-    exit 1
+  echo
+  echo "❌ Pre-commit checks failed."
+  echo "   Tip: full heavy checks also run on pre-push and CI."
+  exit 1
 fi
+
+echo "✅ Pre-commit checks passed."
