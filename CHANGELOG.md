@@ -8,6 +8,142 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.71] — 2026-03-25
+
+### Bugfixes
+
+- **Latest CI failures resolved locally**: fixed frontend Biome formatting drift and removed a Windows-only unnecessary raw-pointer cast in `src-tauri/src/skill_log.rs`.
+- **Hook shell compatibility**: replaced `mapfile` usage in `.githooks/pre-commit` with a bash-3-compatible dedupe loop so commits work on macOS default bash.
+
+- **Auto-bootstrap chat LLM on first start**: when starting the chat server with no downloaded text model, the app now downloads the smallest `LFM2.5-VL 1.6B` variant first and then starts the server once download completes.
+- **Onboarding LLM priority aligned to bootstrap**: first-run model targeting now prefers the smallest `LFM2.5-VL 1.6B` option before other recommendations.
+
+- **CI frontend format failures**: formatted Svelte files flagged by Biome in the `frontend-check` job (`LlmTab`, `ScreenshotsTab`, `LlmInferenceSection`, `ScreenshotPerformanceSection`).
+- **Windows clippy failure**: removed an unnecessary raw-pointer cast in `src-tauri/src/skill_log.rs` when calling `SetStdHandle`, fixing `clippy::unnecessary_cast` under `-D warnings`.
+
+- **Default LLM switched to LFM2.5 1.2B Instruct**: first-run chat/bootstrap now prefers `LFM2.5 1.2B Instruct` (Q4_K_M first) instead of `LFM2.5-VL 1.6B`.
+- **Default activation on bootstrap**: when no local text model exists, the selected default is set as active immediately and downloaded automatically before server start.
+
+- **Hard-default LLM activation**: starting the LLM server now always prefers `LFM2.5 1.2B Instruct` as the active text model.
+- **Default model enforcement with existing downloads**: even if other models are already present, the app ensures the default `LFM2.5 1.2B Instruct` is selected and downloaded before starting.
+
+- **LLM autolaunch memory guard**: before auto-downloading/auto-launching the default `LFM2.5 1.2B Instruct` model, the backend now checks hardware memory fit and blocks autolaunch when RAM/VRAM is insufficient.
+- **Clear startup feedback for low-memory systems**: when memory is too tight, startup now returns a descriptive stopped-state error with required vs available memory.
+
+- **`skill-eeg` test build with GPU feature**: gated CPU-FFT property tests behind `not(feature = "gpu")` so workspace library test runs do not fail when `gpu` is enabled.
+
+- **Hide Windows DND helper console windows**: run `reg query` / `reg add` with `CREATE_NO_WINDOW` so background DND polling no longer flashes a terminal window every 5 seconds on Windows.
+
+- **Add stable Windows log mirror**: create and append to `%LOCALAPPDATA%\NeuroSkill\latest.log` as a fallback mirror. If date-based session log creation fails, stderr is redirected to `latest.log` so logs are still captured.
+
+- **Create Windows session logs reliably**: write an explicit startup log line after logger initialization so `log_<unix>.txt` is created immediately in `%LOCALAPPDATA%\NeuroSkill\YYYYMMDD`.
+- **Improve Windows quit confirmation ownership**: show the quit dialog on the caller thread (instead of a detached worker) with a parent window, improving native ownership/icon behavior.
+
+- **Capture all stderr logs on Windows**: route process `stderr` to the session log file during startup (`SetStdHandle`) and keep a file-handle fallback sink so both `skill_log!` output and generic `eprintln!` logs are written to `%LOCALAPPDATA%\NeuroSkill\YYYYMMDD\log_<unix>.txt`.
+
+- **Added integration tests for settings/history contracts**: introduced new integration tests for `skill-settings` defaults/path behavior and `skill-history` metrics/PPG sidecar resolution (`exg_` and legacy `muse_` paths).
+
+- **Added `skill-history` session-prefix integration coverage**: new integration tests verify that session day listing and per-day session loading accept both modern `exg_` and legacy `muse_` prefixes for JSON sidecars and orphan CSV files.
+
+- **Added router integration tests**: new `skill-router` integration tests cover UMAP cache path/store/load round-trips and inclusive epoch-label matching behavior.
+- **Added label-index integration tests**: new `skill-label-index` integration tests verify empty-window EEG mean behavior and startup index initialization via `LabelIndexState::load()`.
+
+- **Added `skill-skills` integration tests**: new tests cover explicit-path skill loading, required-description validation diagnostics, and system-prompt formatting that omits `disable-model-invocation` skills.
+
+### Refactor
+
+- **Parse module test split**: moved large inline tests from `crates/skill-tools/src/parse/mod.rs` into dedicated `crates/skill-tools/src/parse/tests.rs` and kept `mod.rs` focused on module exports.
+
+- **Simplified `LlmTab` state surface**: removed local `showAdvanced`, `apiKeyVisible`, and `ctxSizeInput` ownership from `LlmTab` and delegated these UI concerns to `LlmInferenceSection`, while keeping config persistence centralized via `saveConfig()`.
+
+- **Slimmed down `LlmTab` orchestration layer**: `LlmTab` now delegates server, model picker, inference, and log rendering to focused child components and keeps only shared state/event wiring.
+
+- **Reduced `LlmTab` UI state surface**: removed log-view-local state (`logFilter`, `logSearch`, `logAutoScroll`, scroll element management) from `LlmTab` and delegated it to `LlmServerLogSection` while keeping event-driven log ingestion in the parent.
+
+- **Simplified capture-setting updates in `ScreenshotsTab`**: centralized capture field patching via a small `onUpdate` bridge passed to `ScreenshotCaptureSettingsSection`, including recommended-size adoption on backend/model changes.
+
+- **Further slimmed `ScreenshotsTab` composition**: `ScreenshotsTab` now delegates toggle, OCR, and performance rendering to focused child components while keeping shared state and persistence logic in one place.
+
+- **Reduced `ScreenshotsTab` template complexity**: removed in-file chart formatting/render helpers from `ScreenshotsTab` and delegated rendering to `ScreenshotPerformanceSection`, keeping tab state/update logic focused.
+
+- **Further streamlined `ScreenshotsTab` composition**: `ScreenshotsTab` now delegates permission and privacy presentation to focused child components, keeping the tab file centered on state orchestration.
+
+- **Further reduced `ScreenshotsTab` orchestration scope**: removed local ETA formatting/render logic from `ScreenshotsTab` and delegated re-embed presentation details to `ScreenshotReembedSection`.
+
+- **Simplified ToolsTab composition**: `ToolsTab` now composes `SuggestSkillCta`, `AgentSkillsSection`, and `SkillsRefreshSection`, reducing in-file template complexity and local state surface.
+
+- **Reduced `ToolsTab` to orchestration composition**: `ToolsTab` now delegates chat-tools rendering to `ChatToolsSection` and keeps only state loading/saving plus skill-refresh/skills orchestration.
+
+- **Split `skill-settings` internal tests into a dedicated module file**: moved in-file tests from `src/lib.rs` into `src/tests.rs` to keep the primary module focused.
+
+### Build
+
+- **CI lint gate enabled**: made Biome lint blocking in CI by removing advisory `continue-on-error` behavior.
+- **Pinned apt-cache action version**: replaced floating `awalsh128/cache-apt-pkgs-action@latest` with `@v1` in CI/release workflows.
+- **Reduced CI duplication for ONNX setup**: extracted Linux ONNX Runtime installation/export logic into `scripts/install-onnxruntime-linux.sh` and wrapped it in reusable action `.github/actions/setup-onnxruntime-linux`, now used by both Linux CI jobs.
+- **Reduced CI duplication for Vulkan setup**: added reusable action `.github/actions/setup-vulkan-linux` (cache + install) and adopted it in Linux CI and release workflows.
+- **Reduced CI duplication for Rust bootstrap**: added reusable action `.github/actions/setup-rust-bootstrap-linux` and adopted it in Linux CI/release jobs for Rust toolchain + sccache setup.
+- **Engineering health metrics in CI/release**: added per-job metrics artifacts and step summaries for Rust/frontend test durations, sccache stats, cargo compile timings upload, and Linux release binary/package sizes.
+- **Automated dependency updates**: added `.github/dependabot.yml` to schedule weekly npm and Cargo dependency update PRs.
+- **Repository ownership map**: added `.github/CODEOWNERS` assigning crates, frontend, CI workflows, and release scripts to `@eugenehp`.
+- **Rust lint hardening (phase 1)**: promoted critical clippy lints in workspace config (`unwrap_used`, `panic`, `undocumented_unsafe_blocks`) from `warn` to `deny`.
+
+- **Added i18n guard steps to PR build workflow**: `pr-build.yml` now runs `sync:i18n:check`, `audit:i18n:check`, and `check:i18n:critical` (de/he) after dependency install so translation drift is caught before expensive packaging/signing steps.
+
+- **Standardized local quality gates**: expanded `.githooks/pre-commit` to run i18n checks, frontend checks (`svelte-check` + unit tests), and targeted Rust clippy/tests for touched crates.
+- **Added heavy pre-push gate**: new `.githooks/pre-push` runs full frontend checks, full Rust clippy (workspace + app features), and workspace Rust library tests before push.
+
+- **Updated CI workflows to check all locales**: both `ci.yml` and `pr-build.yml` now run `check:i18n:locales` (all non-`en` locales) instead of a de/he-only check.
+
+- **Wired critical-locale i18n guard into CI**: frontend CI now runs `check:i18n:critical` after sync/audit checks to catch untranslated fallback markers early.
+
+- **Expanded integration-test crate detection**: CI now includes `skill-history` and `skill-settings` in integration-test crate selection.
+
+- **Broadened integration-test targeting in CI**: added `skill-router` and `skill-label-index` to the integration-test crate detection list.
+
+- **Expanded integration-test crate detection in CI**: added `skill-skills` to the integration-test crate selection list in `ci.yml`.
+
+### UI
+
+- **Extracted LLM advanced inference settings into a dedicated component**: moved the collapsible inference/settings panel from `src/lib/LlmTab.svelte` into `src/lib/llm/LlmInferenceSection.svelte`.
+
+- **Extracted LLM model picker into a dedicated component**: moved family selection, quant list rendering, hardware-fit badges, and vision-projector controls from `src/lib/LlmTab.svelte` into `src/lib/llm/LlmModelPickerSection.svelte`.
+
+- **Extracted LLM server log viewer into a dedicated component**: moved filtering/search/auto-scroll log UI from `src/lib/LlmTab.svelte` into `src/lib/llm/LlmServerLogSection.svelte`.
+
+- **Extracted screenshots capture settings panel into a dedicated component**: moved interval/image-size/quality controls and embedding backend/model selectors from `src/lib/ScreenshotsTab.svelte` into `src/lib/screenshots/ScreenshotCaptureSettingsSection.svelte`.
+
+- **Extracted screenshots OCR panel into a dedicated component**: moved OCR engine selection, model info, and search-hint UI from `src/lib/ScreenshotsTab.svelte` into `src/lib/screenshots/ScreenshotOcrSection.svelte`.
+
+- **Extracted screenshot pipeline performance UI into a dedicated component**: moved the large performance charts and breakdown panel from `src/lib/ScreenshotsTab.svelte` into `src/lib/screenshots/ScreenshotPerformanceSection.svelte`.
+
+- **Extracted screenshots permission notice into a dedicated component**: moved macOS screen-recording warning/success UI into `src/lib/screenshots/ScreenshotPermissionNotice.svelte`.
+- **Extracted screenshots privacy note into a dedicated component**: moved the storage/privacy footer block into `src/lib/screenshots/ScreenshotPrivacyNote.svelte`.
+
+- **Extracted screenshots re-embed/status block into a dedicated component**: moved model-change warning, re-embed controls, progress bar, and stats from `src/lib/ScreenshotsTab.svelte` into `src/lib/screenshots/ScreenshotReembedSection.svelte`.
+
+- **Extracted Agent Skills UI into a dedicated component**: moved the large Agent Skills block out of `src/lib/ToolsTab.svelte` into `src/lib/tools/AgentSkillsSection.svelte`, including markdown skill description rendering and license panel behavior.
+
+- **Extracted Chat Tools settings panel into a dedicated component**: moved the large tools configuration UI from `src/lib/ToolsTab.svelte` into `src/lib/tools/ChatToolsSection.svelte`, including tool toggles, provider settings, web-cache controls, execution limits, compression, and retry settings.
+
+- **Split large settings tabs into sub-components**: extracted reusable sections from `LlmTab`, `ToolsTab`, and `ScreenshotsTab` into `LlmServerSection`, `SkillsRefreshSection`, `SuggestSkillCta`, and `ScreenshotToggleCard` to reduce template size and improve maintainability.
+
+### i18n
+
+- **All-locale i18n checks**: updated `scripts/sync-i18n.ts` and `scripts/audit-i18n.ts` to discover non-English locales dynamically from `src/lib/i18n`, so CI checks automatically cover every locale instead of a hardcoded subset.
+
+- **Replaced de/he-only fallback-marker guard with all-locale guard**: `scripts/check-critical-i18n-locales.js` now validates every discovered non-English locale directory (currently `de`, `fr`, `he`, `uk`) for `TODO: translate` fallback markers.
+
+- **Added critical-locale translation guard for German/Hebrew**: introduced `scripts/check-critical-i18n-locales.js` and `npm run check:i18n:critical` to fail when de/he locale files contain auto-sync TODO fallback markers.
+
+- **Stronger translation drift guard in CI**: added `npm run audit:i18n:check` to frontend CI so missing locale coverage is caught alongside sync checks.
+
+### Docs
+
+- **LLM bootstrap requirements documented**: added a new section to `docs/LLM.md` describing the default bootstrap model (`LFM2.5 1.2B Instruct`), approximate memory needs, and the backend autolaunch memory guard behavior.
+
+- **Updated `TODO.md`**: removed completed item for decomposing `LlmTab`, `ToolsTab`, and `ScreenshotsTab` templates into sub-components.
+
 ## [0.0.70] — 2026-03-25
 
 ### Bugfixes
