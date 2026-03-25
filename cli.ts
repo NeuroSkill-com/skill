@@ -57,6 +57,9 @@ const CLI_VERSION = "1.2.0";
  *   health metrics --metric-type <t> [--start --end] Query scalar health metrics
  *   health metric-types            List all stored metric types
  *   health sync <json>             Push HealthKit data (iOS companion format)
+ *   calendar [--start --end]       List calendar events in a time range (default: next 7 days)
+ *   calendar status                Show calendar access status + platform
+ *   calendar permission            Request calendar access (macOS — shows system dialog)
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
  *   dnd on                         Force-enable DND immediately (bypass EEG threshold)
  *   dnd off                        Force-disable DND immediately
@@ -704,6 +707,8 @@ interface Args {
   healthType?: string;
   /** Metric type for `health metrics` queries (e.g. restingHeartRate, hrv, vo2Max). */
   metricType?: string;
+  /** Calendar subcommand: `status` | `permission` | undefined (events). */
+  calendarSub?: string;
   /** Bedtime for `sleep-schedule set --bedtime HH:MM` (24-h format). */
   bedtime?: string;
   /** Wake time for `sleep-schedule set --wake HH:MM` (24-h format). */
@@ -939,6 +944,9 @@ function parseArgs(): Args {
     else if (args.command === "health" && args.subAction === "sync" && !args.rawJson) {
       args.rawJson = a; // JSON payload
     }
+    else if (args.command === "calendar" && !args.calendarSub) {
+      args.calendarSub = a.toLowerCase(); // "status" | "permission"
+    }
     else if (args.command === "calibrations"  && !args.subAction) {
       // calibrations [list|get|create|update|delete] [<id-or-name>]
       args.subAction = a.toLowerCase();
@@ -1029,6 +1037,9 @@ ${m("health steps [--start --end] [--limit N]",         "query step counts")}
 ${m("health metrics --metric-type <t> [--start --end]", "query scalar health metrics (restingHeartRate, hrv, vo2Max, …)")}
 ${m("health metric-types",                              "list all stored metric types")}
 ${m('health sync \'{"sleep":[...]}\'',                  "push HealthKit data from iOS companion (JSON payload)")}
+${m("calendar [--start --end]",                         "list calendar events in a range (default: now → +7 days)")}
+${m("calendar status",                                  "show calendar access status and platform (macos/linux/windows)")}
+${m("calendar permission",                              "request calendar access — macOS only, shows system dialog")}
 ${m("dnd [on|off]",                                    "show DND automation status; 'on'/'off' force-overrides immediately")}
 ${m("llm status",                                      "LLM server status (stopped/loading/running)")}
 ${m("llm start",                                     "load active model and start LLM inference server")}
@@ -1433,6 +1444,24 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#   { "status": "complete", "result": {${RESET}
   ${DIM}#     "points": [{ "x": 1.23, "y": -0.45, "z": 2.01, "session": "A", "utc": 1740380105 }, ...],${RESET}
   ${DIM}#     "n_a": 513, "n_b": 541, "dim": 3, "elapsed_ms": 8432 } }${RESET}
+
+  ${BOLD}calendar${RESET} — calendar events from OS calendar (macOS EventKit, Linux/Windows iCal files)
+  ${DIM}$${RESET} npx tsx cli.ts calendar                            ${DIM}# events for the next 7 days${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts calendar --start 1774396800 --end 1774483200  ${DIM}# custom range${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts calendar --json                     ${DIM}# raw JSON${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts calendar --json | jq '.events[] | {title,start_utc,calendar}'
+  ${DIM}$${RESET} npx tsx cli.ts calendar status                     ${DIM}# auth status + platform${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts calendar permission                  ${DIM}# macOS: request system dialog${RESET}
+  ${DIM}# Output (events):${RESET}
+  ${DIM}#   ⚡ calendar  3/25/2026 → 4/1/2026${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   3 events${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   Team Standup  [Work]  ↻${RESET}
+  ${DIM}#     3/25/2026  09:00 → 09:30${RESET}
+  ${DIM}#   Sprint Review  [Work]${RESET}
+  ${DIM}#     3/27/2026  14:00 → 15:00${RESET}
+  ${DIM}#     📍 Conference Room B${RESET}
 
   ${BOLD}dnd${RESET} — Do Not Disturb automation status and control
   ${DIM}$${RESET} npx tsx cli.ts dnd                                 ${DIM}# show config + live eligibility state${RESET}
@@ -4070,6 +4099,124 @@ async function cmdHealth(args: Args): Promise<void> {
 }
 
 /**
+ * `calendar [status|permission] [--start --end]`
+ *
+ * Subcommands:
+ * - (none)        — fetch calendar events overlapping the range (default: now → +7 days)
+ * - `status`      — show calendar access status and platform
+ * - `permission`  — request calendar access (macOS: shows system dialog; no-op elsewhere)
+ *
+ * @param args - Parsed CLI args; `calendarSub` is `"status"` | `"permission"` | undefined.
+ */
+async function cmdCalendar(args: Args): Promise<void> {
+  const sub = (args.calendarSub ?? "").toLowerCase();
+
+  // ── status ───────────────────────────────────────────────────────────────
+  if (sub === "status") {
+    print(`${BOLD}⚡ calendar status${RESET}`);
+    const r = await send({ command: "calendar_status" });
+    if (jsonMode) { printResult(r); return; }
+    print("");
+    print(`  platform  ${BOLD}${r.platform ?? "unknown"}${RESET}`);
+    const statusColors: Record<string, string> = {
+      authorized:    GREEN,
+      denied:        RED,
+      restricted:    YELLOW,
+      not_determined: DIM,
+    };
+    const sc = statusColors[r.status] ?? DIM;
+    print(`  access    ${sc}${r.status ?? "unknown"}${RESET}`);
+    if (r.status === "not_determined") {
+      print("");
+      print(`  ${DIM}Run ${RESET}${BOLD}calendar permission${RESET}${DIM} to request access.${RESET}`);
+    }
+    print("");
+    printResult(r);
+    return;
+  }
+
+  // ── permission ───────────────────────────────────────────────────────────
+  if (sub === "permission") {
+    print(`${BOLD}⚡ calendar permission${RESET}`);
+    // 60 s timeout: the macOS permission dialog can take up to 30 s
+    // server-side; give extra headroom for slow responses.
+    const r = await send({ command: "calendar_request_permission" }, 60000);
+    if (jsonMode) { printResult(r); return; }
+    print("");
+    if (r.granted) {
+      print(`  ${GREEN}access granted${RESET}  status=${r.status}`);
+    } else {
+      print(`  ${RED}access denied${RESET}  status=${r.status}`);
+      print(`  ${DIM}Open System Settings → Privacy & Security → Calendars to grant access.${RESET}`);
+    }
+    print("");
+    printResult(r);
+    return;
+  }
+
+  // ── events (default) ─────────────────────────────────────────────────────
+  const now = Math.floor(Date.now() / 1000);
+  const startUtc = args.start ?? now;
+  const endUtc   = args.end   ?? (now + 7 * 86400);
+
+  const startLabel = new Date(startUtc * 1000).toLocaleDateString();
+  const endLabel   = new Date(endUtc   * 1000).toLocaleDateString();
+  print(`${BOLD}⚡ calendar${RESET}  ${DIM}${startLabel} → ${endLabel}${RESET}`);
+
+  const r = await send({ command: "calendar_events", start_utc: startUtc, end_utc: endUtc });
+
+  if (r.error) {
+    if (!jsonMode) {
+      print("");
+      print(`  ${RED}${r.error}${RESET}`);
+      if (r.error.includes("access_denied")) {
+        print(`  ${DIM}Run ${RESET}${BOLD}calendar permission${RESET}${DIM} to request access.${RESET}`);
+      }
+      print("");
+    }
+    printResult(r);
+    return;
+  }
+
+  if (jsonMode) { printResult(r); return; }
+
+  const events: any[] = r.events ?? [];
+  print("");
+  if (events.length === 0) {
+    print(`  ${DIM}No events in this range.${RESET}`);
+    print("");
+    printResult(r);
+    return;
+  }
+
+  print(`  ${CYAN}${events.length}${RESET} event${events.length === 1 ? "" : "s"}`);
+  print("");
+
+  for (const ev of events) {
+    const start = new Date(ev.start_utc * 1000);
+    const end   = new Date(ev.end_utc   * 1000);
+
+    const dateStr = ev.all_day
+      ? start.toLocaleDateString()
+      : `${start.toLocaleDateString()}  ${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} → ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+    const statusStr =
+      ev.status === "tentative"  ? ` ${YELLOW}(tentative)${RESET}` :
+      ev.status === "cancelled"  ? ` ${DIM}(cancelled)${RESET}` : "";
+    const calStr = ev.calendar ? `  ${DIM}[${ev.calendar}]${RESET}` : "";
+    const recurStr = ev.recurrence ? `  ${DIM}↻${RESET}` : "";
+
+    print(`  ${BOLD}${ev.title}${RESET}${statusStr}${calStr}${recurStr}`);
+    print(`    ${DIM}${dateStr}${RESET}`);
+    if (ev.location) print(`    ${DIM}📍 ${ev.location}${RESET}`);
+    if (ev.notes)    print(`    ${DIM}${ev.notes.split("\n")[0]}${RESET}`);
+    print("");
+  }
+
+  printResult(r);
+}
+
+/**
  * `sleep-schedule [set]` — Show or update the sleep schedule configuration.
  *
  * Without a subaction, prints the current schedule (bedtime, wake time,
@@ -5453,6 +5600,9 @@ async function main(): Promise<void> {
         break;
       case "health":
         await cmdHealth(args);
+        break;
+      case "calendar":
+        await cmdCalendar(args);
         break;
       case "dnd":
         await cmdDnd(args);
