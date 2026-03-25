@@ -279,6 +279,43 @@ impl Browser {
 
 // ── Event loop (runs on dedicated thread) ────────────────────────────────────
 
+#[cfg(target_os = "windows")]
+fn resolve_windows_data_dir(config: &BrowserConfig) -> Option<std::path::PathBuf> {
+    // Prefer explicit user config, but validate/create it first.
+    if let Some(dir) = &config.data_dir {
+        if std::fs::create_dir_all(dir).is_ok() {
+            return Some(dir.clone());
+        }
+        eprintln!(
+            "[skill-headless] warning: data_dir '{}' is not writable; falling back to a temp profile dir",
+            dir.display()
+        );
+    }
+
+    // WebView2 may fail with E_ACCESSDENIED when no user data dir is provided
+    // and the process directory is not writable (e.g. Program Files). Use a
+    // guaranteed user-writable location instead.
+    let mut candidates = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(std::path::PathBuf::from(local));
+    }
+    candidates.push(std::env::temp_dir());
+
+    for base in candidates {
+        let dir = base.join("pi").join("skill-headless").join("webview2");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            return Some(dir);
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_windows_data_dir(config: &BrowserConfig) -> Option<std::path::PathBuf> {
+    config.data_dir.clone()
+}
+
 fn run_event_loop(
     config: &BrowserConfig,
     proxy_tx: &Sender<Result<EventLoopProxy<UserEvent>, String>>,
@@ -315,7 +352,10 @@ fn run_event_loop(
         .map_err(|e: tao::error::OsError| HeadlessError::InitFailed(e.to_string()))?;
 
     // Optional persistent web context for data directory / cache.
-    let mut web_context = config.data_dir.as_ref().map(|dir| WebContext::new(Some(dir.clone())));
+    // On Windows, we proactively choose a writable profile directory to avoid
+    // WebView2 E_ACCESSDENIED when the default location is not writable.
+    let resolved_data_dir = resolve_windows_data_dir(config);
+    let mut web_context = resolved_data_dir.as_ref().map(|dir| WebContext::new(Some(dir.clone())));
 
     // IPC handler: used by async JS operations that need to return results
     // after Promises resolve.  The JS side calls `window.ipc.postMessage(id:result)`.
