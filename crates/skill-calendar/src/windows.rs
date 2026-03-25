@@ -22,6 +22,7 @@ pub fn auth_status() -> AuthStatus {
 }
 
 /// No-op on Windows.
+#[allow(dead_code)]
 pub fn request_access() -> bool {
     true
 }
@@ -124,7 +125,7 @@ fn parse_ics_file(
     let cal_name: Option<String> = path
         .file_stem()
         .and_then(|n| n.to_str())
-        .map(|s| s.replace('-', " ").replace('_', " "));
+        .map(|s| s.replace(['-', '_'], " "));
 
     let parsed = parse_ical(&content, start_utc, end_utc);
 
