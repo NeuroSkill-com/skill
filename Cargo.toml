@@ -16,6 +16,7 @@ resolver = "2"
 members = [
     "src-tauri",
     "crates/skill-autostart",
+    "crates/skill-calendar",
     "crates/skill-commands",
     "crates/skill-constants",
     "crates/skill-data",

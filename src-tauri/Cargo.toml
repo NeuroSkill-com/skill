@@ -203,6 +203,7 @@ skill-tray      = { path = "../crates/skill-tray" }
 skill-exg       = { path = "../crates/skill-exg" }
 skill-devices   = { path = "../crates/skill-devices" }
 skill-autostart     = { path = "../crates/skill-autostart" }
+skill-calendar      = { path = "../crates/skill-calendar" }
 skill-constants     = { path = "../crates/skill-constants" }
 skill-label-index   = { path = "../crates/skill-label-index" }
 skill-screenshots   = { path = "../crates/skill-screenshots", default-features = false }

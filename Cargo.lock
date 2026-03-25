@@ -10412,6 +10412,7 @@ dependencies = [
  "serialport",
  "sha2",
  "skill-autostart",
+ "skill-calendar",
  "skill-commands",
  "skill-constants",
  "skill-data",
@@ -10456,6 +10457,16 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "skill-constants",
+]
+
+[[package]]
+name = "skill-calendar"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

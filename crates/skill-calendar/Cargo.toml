@@ -1,0 +1,17 @@
+[package]
+name = "skill-calendar"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Cross-platform calendar event fetching — EventKit (macOS), iCal files (Linux/Windows)"
+
+[dependencies]
+serde      = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+anyhow     = { workspace = true }
+
+[build-dependencies]
+cc = "1"
+
+[lints]
+workspace = true
