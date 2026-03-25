@@ -170,6 +170,34 @@ Generated installer output:
 
 - `src-tauri\target\...\release\bundle\nsis\`
 
+### Installer walkthrough (Windows)
+
+After running `npm run tauri:build:win:nsis`, open the generated installer and follow this flow:
+
+1. Open installer executable
+
+![Open installer (Windows 11)](<./screenshots/windows 11 open installer.png>)
+
+2. Choose install components
+
+![Choose components (Windows 11)](<./screenshots/windows 11 choose components.png>)
+
+3. If SmartScreen appears, click **More info** then **Run anyway**
+
+![Permission prompt (Windows 11)](<./screenshots/windows 11 permission.png>)
+
+![Permission prompt — more info (Windows 11)](<./screenshots/windows 11 permission more info.png>)
+
+![Permission prompt (legacy)](<./screenshots/windows permission.png>)
+
+4. Finish installation
+
+![Installer finished (Windows 11)](<./screenshots/windows 11 finished installer.png>)
+
+5. (Optional) Open Windows Bluetooth settings to pair devices
+
+![Windows Bluetooth settings (Windows 11)](<./screenshots/windows 11 - system settings - bluetooth.png>)
+
 ### Building espeak-ng manually
 
 If you need to rebuild espeak-ng from scratch (e.g. after deleting
