@@ -4138,7 +4138,9 @@ async function cmdCalendar(args: Args): Promise<void> {
   // ── permission ───────────────────────────────────────────────────────────
   if (sub === "permission") {
     print(`${BOLD}⚡ calendar permission${RESET}`);
-    const r = await send({ command: "calendar_request_permission" });
+    // 60 s timeout: the macOS permission dialog can take up to 30 s
+    // server-side; give extra headroom for slow responses.
+    const r = await send({ command: "calendar_request_permission" }, 60000);
     if (jsonMode) { printResult(r); return; }
     print("");
     if (r.granted) {
