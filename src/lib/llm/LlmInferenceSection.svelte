@@ -57,8 +57,16 @@ let apiKeyVisible = $state(false);
 
 const ctxOptions = $derived.by(() =>
   ([[null, "auto"]] as [number | null, string][]).concat(
-    ([[4096, "4K"], [8192, "8K"], [16384, "16K"], [32768, "32K"], [65536, "64K"], [131072, "128K"]] as [number, string][])
-      .filter(([val]) => activeMaxCtx === 0 || (val as number) <= activeMaxCtx),
+    (
+      [
+        [4096, "4K"],
+        [8192, "8K"],
+        [16384, "16K"],
+        [32768, "32K"],
+        [65536, "64K"],
+        [131072, "128K"],
+      ] as [number, string][]
+    ).filter(([val]) => activeMaxCtx === 0 || (val as number) <= activeMaxCtx),
   ),
 );
 

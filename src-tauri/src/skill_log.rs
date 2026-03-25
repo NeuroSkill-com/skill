@@ -333,12 +333,7 @@ pub fn tee_stderr_to_file(log_path: &Path) {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         // SAFETY: `SetStdHandle` receives a valid handle owned by this process;
         // the file stays alive via OnceLock globals.
-        unsafe {
-            SetStdHandle(
-                STD_ERROR_HANDLE,
-                guard.as_raw_handle() as *mut core::ffi::c_void,
-            ) != 0
-        }
+        unsafe { SetStdHandle(STD_ERROR_HANDLE, guard.as_raw_handle()) != 0 }
     } else {
         false
     };

@@ -36,7 +36,16 @@ interface Props {
   onRefresh: () => void | Promise<void>;
 }
 
-let { enabled, metrics, captureHistory, embedHistory, queueHistory, captureBreakdown, embedBreakdown, onRefresh }: Props = $props();
+let {
+  enabled,
+  metrics,
+  captureHistory,
+  embedHistory,
+  queueHistory,
+  captureBreakdown,
+  embedBreakdown,
+  onRefresh,
+}: Props = $props();
 
 function fmtUs(us: number): string {
   if (us < 1000) return `${us}µs`;
