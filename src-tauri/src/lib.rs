@@ -363,9 +363,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let _ = win.set_resizable(true);
             let _ = win.set_closable(true);
             let _ = win.set_minimizable(true);
-            let size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
-            let _ = win.set_min_size(Some(tauri::Size::Logical(size)));
-            let _ = win.set_max_size(Some(tauri::Size::Logical(size)));
+            let min_size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
+            let _ = win.set_min_size(Some(tauri::Size::Logical(min_size)));
+            let _ = win.set_max_size(Option::<tauri::Size>::None);
         }
     }
 

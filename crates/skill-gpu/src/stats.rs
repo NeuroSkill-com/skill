@@ -636,7 +636,7 @@ mod non_macos {
             //
             // Trade-off: we return no static GPU topology here, so callers get
             // `None` instead of potentially noisy/expensive detection.
-            return None;
+            None
         }
 
         #[cfg(not(target_os = "windows"))]
