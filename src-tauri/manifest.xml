@@ -1,27 +1,19 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
-    version="0.0.53.0"
-    name="com.neuroskill.skill"
     type="win32"
+    name="com.neuroskill.skill"
+    version="0.0.53.0"
+    processorArchitecture="*"
   />
 
-  <!-- ── Windows version compatibility ──────────────────────────────────────
-       Declaring supportedOS + maxVersionTested tells Windows we are aware of
-       modern APIs (WinRT Bluetooth, etc.) and opts us in to full functionality
-       rather than running under a compatibility shim.
-  -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
-      <!-- Windows 10 / 11 -->
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
       <maxversiontested Id="10.0.22621.0"/>
     </application>
   </compatibility>
 
-  <!-- ── Common Controls v6 ─────────────────────────────────────────────────
-       Required for modern themed Windows UI controls.
-  -->
   <dependency>
     <dependentAssembly>
       <assemblyIdentity
@@ -35,13 +27,10 @@
     </dependentAssembly>
   </dependency>
 
-  <!-- ── DPI awareness ──────────────────────────────────────────────────────
-       Per-monitor DPI awareness v2 for crisp rendering on mixed-DPI setups.
-  -->
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
     </windowsSettings>
   </application>
 </assembly>
