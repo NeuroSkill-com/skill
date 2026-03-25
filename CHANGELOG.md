@@ -8,6 +8,18 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.69] — 2026-03-25
+
+### Bugfixes
+
+- **Windows startup side-by-side fix**: simplified and normalized the embedded `src-tauri/manifest.xml` to a schema-safe structure (compatibility, common controls, DPI settings) to avoid side-by-side startup failures after manifest embedding.
+
+### Build
+
+- **Validate Windows manifest in CI**: added `scripts/check_windows_manifest.py` and wired it into `ci.yml` and `release-windows.yml` so malformed `src-tauri/manifest.xml` fails fast before Windows build/release.
+
+- **Native manifest lint on Windows CI**: added `mt.exe -validate_manifest` checks in Windows CI and release workflows to catch side-by-side manifest issues with the native Microsoft validator.
+
 ## [0.0.68] — 2026-03-24
 
 ### Performance
