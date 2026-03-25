@@ -1,0 +1,69 @@
+name: Setup ONNX Runtime (Windows x64)
+description: Cache and install ONNX Runtime official Windows x64 binaries and export ORT env vars
+
+inputs:
+  version:
+    description: ONNX Runtime version
+    required: false
+    default: "1.23.2"
+  cache-key-prefix:
+    description: Cache key prefix
+    required: false
+    default: "windows-onnxruntime"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ONNX Runtime (Windows x64)
+      uses: actions/cache@v5
+      with:
+        path: ${{ runner.temp }}\..\runneradmin\.cache\onnxruntime
+        key: ${{ inputs.cache-key-prefix }}-${{ inputs.version }}-x64
+
+    - name: Install ONNX Runtime (Windows x64) + export ORT env
+      shell: powershell
+      run: |
+        $OrtVersion = "${{ inputs.version }}"
+        $OrtBase = Join-Path $env:USERPROFILE ".cache\onnxruntime"
+        $OrtRoot = Join-Path $OrtBase ("onnxruntime-win-x64-" + $OrtVersion)
+        $OrtDll = Join-Path $OrtRoot "lib\onnxruntime.dll"
+        $OrtLib = Join-Path $OrtRoot "lib\onnxruntime.lib"
+
+        if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
+          New-Item -ItemType Directory -Force -Path $OrtBase | Out-Null
+          $ZipPath = Join-Path $env:RUNNER_TEMP "onnxruntime-win-x64.zip"
+          $Url = "https://github.com/microsoft/onnxruntime/releases/download/v$OrtVersion/onnxruntime-win-x64-$OrtVersion.zip"
+
+          $ok = $false
+          for ($i = 1; $i -le 8; $i++) {
+            try {
+              Invoke-WebRequest -Uri $Url -OutFile $ZipPath
+              $ok = $true
+              break
+            } catch {
+              if ($i -eq 8) { throw }
+              Start-Sleep -Seconds 2
+            }
+          }
+          if (-not $ok) {
+            Write-Error "Failed to download ONNX Runtime after retries"
+            exit 1
+          }
+
+          Remove-Item -Recurse -Force $OrtRoot -ErrorAction SilentlyContinue
+          Expand-Archive -Path $ZipPath -DestinationPath $OrtBase -Force
+        }
+
+        if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
+          Write-Error "ONNX Runtime files missing: $OrtDll / $OrtLib"
+          exit 1
+        }
+
+        "ORT_LIB_LOCATION=$OrtRoot\lib" |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "ORT_PREFER_DYNAMIC_LINK=1" |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "PATH=$OrtRoot\lib;$OrtRoot\bin;$env:PATH" |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+        Write-Host "[ok] ORT_LIB_LOCATION=$OrtRoot\lib"

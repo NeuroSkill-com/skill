@@ -52,7 +52,7 @@ jobs:
       # Linux compile + system package flow requires WebKit2GTK and supporting
       # libraries for tauri/wry compilation. We intentionally do not run Tauri
       # bundling in this workflow.
-      - name: Cache + install system dependencies
+      - name: Cache + install system dependencies (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -70,7 +70,9 @@ jobs:
             cmake
             binutils
             rpm
-          version: tauri-release-linux-v3
+            mold
+            clang
+          version: tauri-release-linux-v4
 
       # ── Rust toolchain + build cache bootstrap ───────────────────────────────
       - name: Setup Rust bootstrap (Linux)
@@ -94,9 +96,6 @@ jobs:
           key: linux-ort-${{ hashFiles('Cargo.lock') }}
           restore-keys: linux-ort-
 
-      # ── Build cache (mold + clang) ───────────────────────────────────────────
-      - name: Install mold + clang
-        run: sudo apt-get update -qq && sudo apt-get install -y mold clang
 
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js

@@ -69,7 +69,7 @@ jobs:
       - name: Setup ONNX Runtime (Linux x64)
         uses: ./.github/actions/setup-onnxruntime-linux
 
-      - name: Cache + install Tauri system deps
+      - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -78,13 +78,8 @@ jobs:
             libudev-dev libdbus-1-dev pkg-config
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev libgbm-dev
-            cmake binutils
-          version: tauri-rust-check-v3
-
-      # ── Fast linker (mold + clang) ──────────────────────────────────────────
-      # Matches release-linux.yml — saves 30-60 s on link-heavy operations.
-      - name: Install mold + clang
-        run: sudo apt-get update -qq && sudo apt-get install -y mold clang
+            cmake binutils mold clang
+          version: tauri-rust-check-v4
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
       # Cached via reusable action to avoid repeated ~200 MB downloads.
@@ -418,61 +413,9 @@ jobs:
           workspaces: ". -> src-tauri/target"
 
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Avoid ort-sys download flakiness from cdn.pyke.io in CI by installing
-      # the official Microsoft release and pointing ORT_LIB_LOCATION at it.
-      - name: Cache ONNX Runtime (Windows x64)
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.USERPROFILE }}\.cache\onnxruntime
-          key: windows-onnxruntime-1.23.2-x64
-
-      - name: Install ONNX Runtime (Windows x64) + export ORT env
-        shell: powershell
-        run: |
-          $OrtVersion = "1.23.2"
-          $OrtBase = Join-Path $env:USERPROFILE ".cache\onnxruntime"
-          $OrtRoot = Join-Path $OrtBase ("onnxruntime-win-x64-" + $OrtVersion)
-          $OrtDll = Join-Path $OrtRoot "lib\onnxruntime.dll"
-          $OrtLib = Join-Path $OrtRoot "lib\onnxruntime.lib"
-
-          if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
-            New-Item -ItemType Directory -Force -Path $OrtBase | Out-Null
-            $ZipPath = Join-Path $env:RUNNER_TEMP "onnxruntime-win-x64.zip"
-            $Url = "https://github.com/microsoft/onnxruntime/releases/download/v$OrtVersion/onnxruntime-win-x64-$OrtVersion.zip"
-
-            $ok = $false
-            for ($i = 1; $i -le 8; $i++) {
-              try {
-                Invoke-WebRequest -Uri $Url -OutFile $ZipPath
-                $ok = $true
-                break
-              } catch {
-                if ($i -eq 8) { throw }
-                Start-Sleep -Seconds 2
-              }
-            }
-            if (-not $ok) {
-              Write-Error "Failed to download ONNX Runtime after retries"
-              exit 1
-            }
-
-            Remove-Item -Recurse -Force $OrtRoot -ErrorAction SilentlyContinue
-            Expand-Archive -Path $ZipPath -DestinationPath $OrtBase -Force
-          }
-
-          if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
-            Write-Error "ONNX Runtime files missing: $OrtDll / $OrtLib"
-            exit 1
-          }
-
-          "ORT_LIB_LOCATION=$OrtRoot\lib" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "ORT_PREFER_DYNAMIC_LINK=1" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PATH=$OrtRoot\lib;$OrtRoot\bin;$env:PATH" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          Write-Host "[ok] ORT_LIB_LOCATION=$OrtRoot\lib"
+      # Avoid ort-sys download flakiness from cdn.pyke.io in CI.
+      - name: Setup ONNX Runtime (Windows x64)
+        uses: ./.github/actions/setup-onnxruntime-windows
 
       # ── Build cache (sccache) ───────────────────────────────────────────────
       - name: Setup sccache
