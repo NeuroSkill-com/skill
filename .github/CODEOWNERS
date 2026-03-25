@@ -1,0 +1,22 @@
+# Global default owner
+* @eugenehp
+
+# Rust workspace crates
+/crates/ @eugenehp
+/src-tauri/ @eugenehp
+
+# Frontend
+/src/ @eugenehp
+/static/ @eugenehp
+
+# CI and release automation
+/.github/workflows/ @eugenehp
+/scripts/ @eugenehp
+/release.sh @eugenehp
+
+# Project docs and process
+/README.md @eugenehp
+/CONTRIBUTING.md @eugenehp
+/AGENTS.md @eugenehp
+/TODO.md @eugenehp
+/changes/ @eugenehp

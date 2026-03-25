@@ -53,12 +53,8 @@ jobs:
           fetch-depth: 1
           submodules: true
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      # ── Build cache (sccache) ───────────────────────────────────────────────
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
+      - name: Setup Rust bootstrap (Linux)
+        uses: ./.github/actions/setup-rust-bootstrap-linux
 
       # Swatinem/rust-cache gives smarter per-crate invalidation and automatic
       # pruning vs manual actions/cache — matches the release workflows.
@@ -70,42 +66,11 @@ jobs:
       # ── ONNX Runtime (official binaries) ───────────────────────────────────
       # Avoid ort-sys download flakiness from cdn.pyke.io in CI by installing
       # the official Microsoft release and pointing ORT_LIB_LOCATION at it.
-      - name: Cache ONNX Runtime (Linux x64)
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/onnxruntime
-          key: linux-onnxruntime-1.23.2-x64
-
-      - name: Install ONNX Runtime (Linux x64) + export ORT env
-        run: |
-          set -euo pipefail
-          ORT_VERSION="1.23.2"
-          ORT_ROOT="$HOME/.cache/onnxruntime/onnxruntime-linux-x64-$ORT_VERSION"
-
-          if [[ ! -f "$ORT_ROOT/lib/libonnxruntime.so" ]]; then
-            TMP_DIR="$(mktemp -d)"
-            curl -fL --retry 8 --retry-delay 2 --retry-all-errors \
-              "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz" \
-              -o "$TMP_DIR/onnxruntime.tgz"
-            tar -xzf "$TMP_DIR/onnxruntime.tgz" -C "$TMP_DIR"
-            EXTRACTED_DIR="$(find "$TMP_DIR" -maxdepth 1 -type d -name 'onnxruntime-linux-x64-*' | head -1)"
-            if [[ -z "$EXTRACTED_DIR" ]]; then
-              echo "Failed to find extracted ONNX Runtime directory" >&2
-              exit 1
-            fi
-            mkdir -p "$HOME/.cache/onnxruntime"
-            rm -rf "$ORT_ROOT"
-            mv "$EXTRACTED_DIR" "$ORT_ROOT"
-            rm -rf "$TMP_DIR"
-          fi
-
-          test -f "$ORT_ROOT/lib/libonnxruntime.so"
-          echo "ORT_LIB_LOCATION=$ORT_ROOT/lib" >> "$GITHUB_ENV"
-          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$ORT_ROOT/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - name: Setup ONNX Runtime (Linux x64)
+        uses: ./.github/actions/setup-onnxruntime-linux
 
       - name: Cache + install Tauri system deps
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
             libwebkit2gtk-4.1-dev libappindicator3-dev
@@ -122,21 +87,9 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y mold clang
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
-      # Cache the install so the ~200 MB download only happens on script changes.
-      - name: Cache Vulkan SDK
-        id: cache-vulkan
-        uses: actions/cache@v5
-        with:
-          path: |
-            /etc/apt/sources.list.d/lunarg-vulkan-*
-            /usr/lib/x86_64-linux-gnu/libvulkan*
-            /usr/include/vulkan
-            /usr/share/vulkan
-          key: linux-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.sh') }}
-
-      - name: Install Vulkan SDK
-        if: steps.cache-vulkan.outputs.cache-hit != 'true'
-        run: bash scripts/install-vulkan-sdk.sh
+      # Cached via reusable action to avoid repeated ~200 MB downloads.
+      - name: Setup Vulkan SDK
+        uses: ./.github/actions/setup-vulkan-linux
 
       - name: Cache espeak-ng static lib
         id: cache-espeak
@@ -232,26 +185,76 @@ jobs:
           fi
 
       - name: cargo test (affected crates — unit)
+        id: rust_unit_tests
         if: steps.changed.outputs.skip != 'true'
         env:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-        run: >
-          cargo test --locked --target x86_64-unknown-linux-gnu
-          ${{ steps.changed.outputs.crate_flags }}
-          --lib
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_ts="$(date +%s)"
+          cargo test --locked --target x86_64-unknown-linux-gnu \
+            ${{ steps.changed.outputs.crate_flags }} \
+            --lib
+          end_ts="$(date +%s)"
+          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
       - name: cargo test (affected crates — integration)
+        id: rust_integration_tests
         if: steps.changed.outputs.skip_int != 'true'
         env:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-        run: >
-          cargo test --locked --target x86_64-unknown-linux-gnu
-          ${{ steps.changed.outputs.int_flags }}
-          --test '*'
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_ts="$(date +%s)"
+          cargo test --locked --target x86_64-unknown-linux-gnu \
+            ${{ steps.changed.outputs.int_flags }} \
+            --test '*'
+          end_ts="$(date +%s)"
+          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
+
+      - name: Collect Rust health metrics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-metrics
+          UNIT_SEC="${{ steps.rust_unit_tests.outputs.duration_sec || '0' }}"
+          INT_SEC="${{ steps.rust_integration_tests.outputs.duration_sec || '0' }}"
+
+          {
+            echo '{'
+            echo '  "job": "rust-check",'
+            echo '  "unit_test_duration_sec":' "$UNIT_SEC" ','
+            echo '  "integration_test_duration_sec":' "$INT_SEC"
+            echo '}'
+          } > ci-metrics/rust-check.json
+
+          {
+            echo "## Rust health metrics"
+            echo "- Unit test duration: ${UNIT_SEC}s"
+            echo "- Integration test duration: ${INT_SEC}s"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture sccache stats
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-metrics
+          sccache --show-stats > ci-metrics/rust-sccache-stats.txt || true
+
+      - name: Upload Rust health metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-health-rust-check
+          path: ci-metrics/
+          retention-days: 30
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
@@ -287,15 +290,59 @@ jobs:
       - name: Biome format check
         run: npx biome format src/ scripts/
 
-      - name: Biome lint (advisory)
+      - name: Biome lint
         run: npx biome lint src/ scripts/
-        continue-on-error: true
 
       - name: svelte-check
-        run: npm run check
+        id: frontend_svelte_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_ts="$(date +%s)"
+          npm run check
+          end_ts="$(date +%s)"
+          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
       - name: Unit tests
-        run: npm test
+        id: frontend_unit_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_ts="$(date +%s)"
+          npm test
+          end_ts="$(date +%s)"
+          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
+
+      - name: Collect Frontend health metrics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-metrics
+          CHECK_SEC="${{ steps.frontend_svelte_check.outputs.duration_sec || '0' }}"
+          TEST_SEC="${{ steps.frontend_unit_tests.outputs.duration_sec || '0' }}"
+
+          {
+            echo '{'
+            echo '  "job": "frontend-check",'
+            echo '  "svelte_check_duration_sec":' "$CHECK_SEC" ','
+            echo '  "unit_test_duration_sec":' "$TEST_SEC"
+            echo '}'
+          } > ci-metrics/frontend-check.json
+
+          {
+            echo "## Frontend health metrics"
+            echo "- svelte-check duration: ${CHECK_SEC}s"
+            echo "- Unit test duration: ${TEST_SEC}s"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Frontend health metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-health-frontend-check
+          path: ci-metrics/
+          retention-days: 30
 
   # ── Windows Rust backend ─────────────────────────────────────────────────────
   #
@@ -591,11 +638,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
+      - name: Setup Rust bootstrap (Linux)
+        uses: ./.github/actions/setup-rust-bootstrap-linux
 
       # Reuse the same cache bucket as rust-check (default shared-key)
       # so the E2E job picks up clippy's already-compiled artifacts.
@@ -606,44 +650,13 @@ jobs:
           workspaces: ". -> src-tauri/target"
           save-if: false
 
-      - name: Cache ONNX Runtime (Linux x64)
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/onnxruntime
-          key: linux-onnxruntime-1.23.2-x64
-
-      - name: Install ONNX Runtime (Linux x64) + export ORT env
-        run: |
-          set -euo pipefail
-          ORT_VERSION="1.23.2"
-          ORT_ROOT="$HOME/.cache/onnxruntime/onnxruntime-linux-x64-$ORT_VERSION"
-
-          if [[ ! -f "$ORT_ROOT/lib/libonnxruntime.so" ]]; then
-            TMP_DIR="$(mktemp -d)"
-            curl -fL --retry 8 --retry-delay 2 --retry-all-errors \
-              "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz" \
-              -o "$TMP_DIR/onnxruntime.tgz"
-            tar -xzf "$TMP_DIR/onnxruntime.tgz" -C "$TMP_DIR"
-            EXTRACTED_DIR="$(find "$TMP_DIR" -maxdepth 1 -type d -name 'onnxruntime-linux-x64-*' | head -1)"
-            if [[ -z "$EXTRACTED_DIR" ]]; then
-              echo "Failed to find extracted ONNX Runtime directory" >&2
-              exit 1
-            fi
-            mkdir -p "$HOME/.cache/onnxruntime"
-            rm -rf "$ORT_ROOT"
-            mv "$EXTRACTED_DIR" "$ORT_ROOT"
-            rm -rf "$TMP_DIR"
-          fi
-
-          test -f "$ORT_ROOT/lib/libonnxruntime.so"
-          echo "ORT_LIB_LOCATION=$ORT_ROOT/lib" >> "$GITHUB_ENV"
-          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$ORT_ROOT/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+      - name: Setup ONNX Runtime (Linux x64)
+        uses: ./.github/actions/setup-onnxruntime-linux
 
       # Install all system deps in one cached step (includes mold + clang
       # to match rust-check's linker and reuse its build artifacts).
       - name: Cache + install system deps
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
             libssl-dev pkg-config cmake binutils
@@ -651,22 +664,9 @@ jobs:
             libpipewire-0.3-dev mold clang
           version: llm-e2e-v2
 
-      # Reuse the same Vulkan SDK cache as rust-check — avoids a ~200 MB
-      # re-download on every run.
-      - name: Cache Vulkan SDK
-        id: cache-vulkan
-        uses: actions/cache@v5
-        with:
-          path: |
-            /etc/apt/sources.list.d/lunarg-vulkan-*
-            /usr/lib/x86_64-linux-gnu/libvulkan*
-            /usr/include/vulkan
-            /usr/share/vulkan
-          key: linux-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.sh') }}
-
-      - name: Install Vulkan SDK
-        if: steps.cache-vulkan.outputs.cache-hit != 'true'
-        run: bash scripts/install-vulkan-sdk.sh
+      # Reuse the same Vulkan SDK cache as rust-check via reusable setup action.
+      - name: Setup Vulkan SDK
+        uses: ./.github/actions/setup-vulkan-linux
 
       - name: Cache HuggingFace model
         uses: actions/cache@v5

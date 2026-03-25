@@ -22,13 +22,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractKeys, extractKeysFromDir, NS_FILES } from "../src/lib/i18n/i18n-utils";
+import { discoverLocales, extractKeys, extractKeysFromDir, NS_FILES } from "../src/lib/i18n/i18n-utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const I18N_DIR = path.resolve(__dirname, "../src/lib/i18n");
-const LOCALES = ["de", "fr", "he", "uk"];
 
 // ── Fix: append missing keys to a namespace file ──────────────────────────────
 
@@ -68,6 +67,13 @@ function main() {
 
   const enDir = path.join(I18N_DIR, "en");
   if (!fs.existsSync(enDir)) {
+    console.error("[sync-i18n] Missing source locale directory: src/lib/i18n/en");
+    process.exit(1);
+  }
+
+  const locales = discoverLocales(I18N_DIR, "en");
+  if (locales.length === 0) {
+    console.error("[sync-i18n] No non-source locales found under src/lib/i18n");
     process.exit(1);
   }
 
@@ -76,7 +82,7 @@ function main() {
   let totalMissing = 0;
   let exitCode = 0;
 
-  for (const locale of LOCALES) {
+  for (const locale of locales) {
     const locDir = path.join(I18N_DIR, locale);
     if (!fs.existsSync(locDir)) {
       continue;

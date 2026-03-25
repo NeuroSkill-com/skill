@@ -1,0 +1,25 @@
+name: Setup ONNX Runtime (Linux x64)
+description: Cache and install ONNX Runtime official Linux x64 binaries and export ORT env vars
+
+inputs:
+  version:
+    description: ONNX Runtime version
+    required: false
+    default: "1.23.2"
+  cache-key-prefix:
+    description: Cache key prefix
+    required: false
+    default: "linux-onnxruntime"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ONNX Runtime (Linux x64)
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/onnxruntime
+        key: ${{ inputs.cache-key-prefix }}-${{ inputs.version }}-x64
+
+    - name: Install ONNX Runtime (Linux x64) + export ORT env
+      shell: bash
+      run: ORT_VERSION="${{ inputs.version }}" bash scripts/install-onnxruntime-linux.sh

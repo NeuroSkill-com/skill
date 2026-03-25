@@ -53,7 +53,7 @@ jobs:
       # libraries for tauri/wry compilation. We intentionally do not run Tauri
       # bundling in this workflow.
       - name: Cache + install system dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
             libwebkit2gtk-4.1-dev
@@ -72,9 +72,9 @@ jobs:
             rpm
           version: tauri-release-linux-v3
 
-      # ── Rust toolchain ────────────────────────────────────────────────────────
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # ── Rust toolchain + build cache bootstrap ───────────────────────────────
+      - name: Setup Rust bootstrap (Linux)
+        uses: ./.github/actions/setup-rust-bootstrap-linux
         with:
           targets: x86_64-unknown-linux-gnu
 
@@ -94,10 +94,7 @@ jobs:
           key: linux-ort-${{ hashFiles('Cargo.lock') }}
           restore-keys: linux-ort-
 
-      # ── Build cache (sccache + mold) ──────────────────────────────────────────
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
-
+      # ── Build cache (mold + clang) ───────────────────────────────────────────
       - name: Install mold + clang
         run: sudo apt-get update -qq && sudo apt-get install -y mold clang
 
@@ -127,9 +124,9 @@ jobs:
 
       # ── Vulkan SDK ────────────────────────────────────────────────────────────
       # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
-      # Installed from the LunarG apt repository.
-      - name: Install Vulkan SDK
-        run: bash scripts/install-vulkan-sdk.sh
+      # Cached and installed via reusable setup action.
+      - name: Setup Vulkan SDK
+        uses: ./.github/actions/setup-vulkan-linux
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # Cache keyed on the build script; a script change busts the cache.
@@ -263,6 +260,49 @@ jobs:
           echo "  DEB : $DEB  ($(du -sh "$DEB" | cut -f1))"
           echo "  RPM : $RPM  ($(du -sh "$RPM" | cut -f1))"
           echo "  TAR : $TAR  ($(du -sh "$TAR" | cut -f1))"
+
+      - name: Write Linux release health metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-metrics
+
+          DEB="${{ steps.artifacts.outputs.deb }}"
+          RPM="${{ steps.artifacts.outputs.rpm }}"
+          TAR="${{ steps.artifacts.outputs.portable_tar }}"
+          BIN="src-tauri/target/x86_64-unknown-linux-gnu/release/skill"
+
+          DEB_BYTES="$(stat -c %s "$DEB")"
+          RPM_BYTES="$(stat -c %s "$RPM")"
+          TAR_BYTES="$(stat -c %s "$TAR")"
+          BIN_BYTES="$(stat -c %s "$BIN")"
+
+          {
+            echo '{'
+            echo '  "job": "release-linux",'
+            echo '  "target": "x86_64-unknown-linux-gnu",'
+            echo '  "binary_bytes":' "$BIN_BYTES" ','
+            echo '  "deb_bytes":' "$DEB_BYTES" ','
+            echo '  "rpm_bytes":' "$RPM_BYTES" ','
+            echo '  "portable_tar_bytes":' "$TAR_BYTES"
+            echo '}'
+          } > ci-metrics/release-linux.json
+
+          {
+            echo "## Linux release health metrics"
+            echo "- skill binary size: ${BIN_BYTES} bytes"
+            echo "- .deb size: ${DEB_BYTES} bytes"
+            echo "- .rpm size: ${RPM_BYTES} bytes"
+            echo "- portable tarball size: ${TAR_BYTES} bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Linux release health metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-health-release-linux
+          path: ci-metrics/release-linux.json
+          retention-days: 30
 
       - name: Generate checksums + detached signatures
         id: integrity

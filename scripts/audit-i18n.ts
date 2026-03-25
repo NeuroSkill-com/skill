@@ -23,13 +23,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractKeysFromDir, isExempt } from "../src/lib/i18n/i18n-utils";
+import { discoverLocales, extractKeysFromDir, isExempt } from "../src/lib/i18n/i18n-utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const I18N_DIR = path.resolve(__dirname, "../src/lib/i18n");
-const LOCALES = ["de", "fr", "he", "uk"];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -39,13 +38,25 @@ function main() {
   const verbose = args.includes("--verbose");
   const localeIdx = args.indexOf("--locale");
   const filterLocale = localeIdx !== -1 ? args[localeIdx + 1] : null;
-  const locales = filterLocale ? [filterLocale] : LOCALES;
 
   const enDir = path.join(I18N_DIR, "en");
   if (!fs.existsSync(enDir)) {
+    console.error("[audit-i18n] Missing source locale directory: src/lib/i18n/en");
     process.exit(1);
   }
 
+  const discovered = discoverLocales(I18N_DIR, "en");
+  if (discovered.length === 0) {
+    console.error("[audit-i18n] No non-source locales found under src/lib/i18n");
+    process.exit(1);
+  }
+
+  if (filterLocale && !discovered.includes(filterLocale)) {
+    console.error(`[audit-i18n] Unknown locale '${filterLocale}'. Available: ${discovered.join(", ")}`);
+    process.exit(1);
+  }
+
+  const locales = filterLocale ? [filterLocale] : discovered;
   const enKeys = extractKeysFromDir(enDir);
 
   let totalUntranslated = 0;

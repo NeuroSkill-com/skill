@@ -1,0 +1,29 @@
+name: Setup Rust bootstrap (Linux)
+description: Install Rust toolchain and configure sccache for Linux jobs
+
+inputs:
+  targets:
+    description: Optional rustup targets (comma-separated or single target)
+    required: false
+    default: ""
+  use-sccache:
+    description: Whether to install/configure sccache action
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust stable (default target)
+      if: inputs.targets == ''
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install Rust stable (custom targets)
+      if: inputs.targets != ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.targets }}
+
+    - name: Setup sccache
+      if: inputs.use-sccache == 'true'
+      uses: Mozilla-Actions/sccache-action@v0.0.9

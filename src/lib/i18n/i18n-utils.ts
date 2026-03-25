@@ -10,6 +10,18 @@
 import fs from "node:fs";
 import path from "node:path";
 
+/** Discover locale directories under i18n root (excluding source locale). */
+export function discoverLocales(i18nDir: string, sourceLocale = "en"): string[] {
+  if (!fs.existsSync(i18nDir)) return [];
+  return fs
+    .readdirSync(i18nDir, { withFileTypes: true })
+    .filter((ent) => ent.isDirectory())
+    .map((ent) => ent.name)
+    .filter((name) => name !== sourceLocale)
+    .filter((name) => fs.existsSync(path.join(i18nDir, name, "index.ts")))
+    .sort();
+}
+
 /**
  * Extract {key → value} map from a .ts locale file (namespace or flat).
  * Handles both:  "key.name":   "value"

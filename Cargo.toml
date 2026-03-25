@@ -85,13 +85,14 @@ serde_json = "1"
 unsafe_op_in_unsafe_fn = "warn"
 
 [workspace.lints.clippy]
-unwrap_used            = "warn"
+# Phase 1 hardening: make critical runtime-safety lints hard errors.
+unwrap_used            = "deny"
 # expect_used — downgraded: thread::spawn().expect(), NonZero::new(1).expect(),
 # and Tauri app builder .expect() are idiomatic and unrecoverable. The lint
 # catches ~50 legitimate uses vs ~0 bugs.  Use `lock_or_recover()` for Mutex.
 # expect_used          = "warn"
-panic                  = "warn"
-undocumented_unsafe_blocks = "warn"
+panic                  = "deny"
+undocumented_unsafe_blocks = "deny"
 # needless_pass_by_value — disabled: Tauri #[command] handlers and actor-thread
 # spawn sites require owned types; the lint produces ~280 false positives.
 # needless_pass_by_value = "warn"
