@@ -195,7 +195,7 @@ skill-data      = { path = "../crates/skill-data" }
 
 # Arrow / Parquet — used for reading EEG session files during re-embed.
 parquet     = { version = "54", default-features = false, features = ["arrow"] }
-arrow-array = "54"
+arrow-array = "58"
 skill-commands  = { path = "../crates/skill-commands" }
 skill-history   = { path = "../crates/skill-history" }
 skill-router    = { path = "../crates/skill-router" }
