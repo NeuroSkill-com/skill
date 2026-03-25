@@ -656,6 +656,7 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
                 dnd.active = enable;
                 dnd.below_ticks = 0;
                 dnd.snr_low_ticks = 0;
+                dnd.last_error = None;
             }
             let _ = app.emit("dnd-state-changed", enable);
             app.state::<WsBroadcaster>()
@@ -663,6 +664,15 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
             if !enable && d.send_exit_notification {
                 send_toast(app, ToastLevel::Info, "Focus mode exited", d.exit_body);
             }
+        } else {
+            let msg = if enable {
+                "Couldn’t enable Focus mode. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction)."
+            } else {
+                "Couldn’t disable Focus mode. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction)."
+            };
+            dnd_arc.lock_or_recover().last_error = Some(msg.to_owned());
+            let _ = app.emit("dnd-error", msg);
+            app.state::<WsBroadcaster>().send("dnd-error", &msg);
         }
     }
 

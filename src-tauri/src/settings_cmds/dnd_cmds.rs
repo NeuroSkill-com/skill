@@ -45,10 +45,22 @@ pub fn test_dnd(
 
     let ok = skill_data::dnd::set_dnd(false, "");
     if ok {
-        state.lock_or_recover().dnd.lock_or_recover().active = false;
+        let app_state = state.lock_or_recover();
+        let mut dnd = app_state.dnd.lock_or_recover();
+        dnd.active = false;
+        dnd.last_error = None;
         let _ = app.emit("dnd-state-changed", false);
         app.state::<crate::ws_server::WsBroadcaster>()
             .send("dnd-state-changed", &false);
+    } else {
+        let msg = "Couldn’t change Focus mode. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction).";
+        {
+            let app_state = state.lock_or_recover();
+            app_state.dnd.lock_or_recover().last_error = Some(msg.to_owned());
+        }
+        let _ = app.emit("dnd-error", msg);
+        app.state::<crate::ws_server::WsBroadcaster>()
+            .send("dnd-error", &msg);
     }
     ok
 }
@@ -98,6 +110,17 @@ pub fn set_dnd_config(
         let _ = app.emit("dnd-state-changed", payload);
         app.state::<crate::ws_server::WsBroadcaster>()
             .send("dnd-state-changed", &payload);
+
+        if ok {
+            state.lock_or_recover().dnd.lock_or_recover().last_error = None;
+        } else {
+            let msg = "Couldn’t clear Focus mode after disabling automation. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction).";
+            state.lock_or_recover().dnd.lock_or_recover().last_error = Some(msg.to_owned());
+            let _ = app.emit("dnd-error", msg);
+            app.state::<crate::ws_server::WsBroadcaster>()
+                .send("dnd-error", &msg);
+        }
+
         if ok && config.exit_notification {
             crate::send_toast(
                 &app,
@@ -134,6 +157,8 @@ pub struct DndStatus {
     pub dnd_active: bool,
     /// Whether the OS reports DND / Focus as active right now (`null` on non-macOS).
     pub os_active: Option<bool>,
+    /// Last human-readable error from a failed OS DND operation.
+    pub last_error: Option<String>,
     /// Seconds the score must remain below the threshold before DND clears.
     pub exit_duration_secs: u32,
     /// Consecutive ticks for which the score has been below threshold while
@@ -174,6 +199,7 @@ pub fn get_dnd_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DndStatu
     let exit_held_by_lookback =
         dnd_active && avg_score < threshold && dnd.score_history.iter().any(|&v| v >= threshold);
     let os_active = dnd.os_active;
+    let last_error = dnd.last_error.clone();
     drop(dnd);
     drop(s);
 
@@ -193,6 +219,7 @@ pub fn get_dnd_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DndStatu
         duration_secs,
         dnd_active,
         os_active,
+        last_error,
         exit_duration_secs,
         below_ticks,
         exit_window_size,

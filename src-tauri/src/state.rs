@@ -475,6 +475,7 @@ pub struct DndRuntimeState {
     pub config: DoNotDisturbConfig,
     pub active: bool,
     pub os_active: Option<bool>,
+    pub last_error: Option<String>,
     pub focus_samples: std::collections::VecDeque<f64>,
     pub below_ticks: u32,
     pub score_history: std::collections::VecDeque<f64>,

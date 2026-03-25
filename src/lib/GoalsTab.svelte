@@ -83,6 +83,7 @@ let dndWindowSize = $state(0);
 let dndThresholdLive = $state(60); // mirrors dndConfig.focus_threshold
 let dndSaving = $state(false);
 let dndTesting = $state(false);
+let dndError = $state<string | null>(null);
 let focusModes = $state<FocusModeOption[]>([]);
 let focusModesLoaded = $state(false);
 
@@ -175,6 +176,7 @@ async function refreshDndState() {
       invoke<{
         dnd_active: boolean;
         os_active: boolean | null;
+        last_error?: string | null;
         avg_score: number;
         sample_count: number;
         window_size: number;
@@ -183,6 +185,7 @@ async function refreshDndState() {
     ]);
     dndActive = appActive;
     dndOsActive = status.os_active ?? null;
+    dndError = status.last_error ?? null;
     dndAvgScore = status.avg_score ?? 0;
     dndSampleCount = status.sample_count ?? 0;
     dndWindowSize = status.window_size ?? 0;
@@ -219,6 +222,7 @@ onMount(async () => {
   // Listen for live DND state changes (from the EEG band monitor)
   const stateUnlisten = await listen<boolean>("dnd-state-changed", (ev) => {
     dndActive = ev.payload;
+    dndError = null;
     if (!ev.payload) {
       dndExitSecsRemain = 0;
       dndExitHeldByLookback = false;
@@ -256,11 +260,16 @@ onMount(async () => {
     // reconciles dnd_active and emits dnd-state-changed — no extra action needed here.
   });
 
+  const errorUnlisten = await listen<string>("dnd-error", (ev) => {
+    dndError = ev.payload;
+  });
+
   dndUnlisten = () => {
     document.removeEventListener("visibilitychange", onVisible);
     stateUnlisten();
     eligibilityUnlisten();
     osChangedUnlisten();
+    errorUnlisten();
   };
 });
 
@@ -573,6 +582,13 @@ const streak = $derived.by(() => {
         <span class="text-[0.52rem] text-muted-foreground">saving…</span>
       {/if}
     </div>
+
+    {#if dndConfig.enabled && dndError}
+      <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.6rem] text-amber-700 dark:text-amber-300 leading-relaxed">
+        <span class="font-semibold">Focus mode didn’t change.</span>
+        <span class="ml-1">{dndError}</span>
+      </div>
+    {/if}
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
       <div class="flex flex-col divide-y divide-border dark:divide-white/[0.05]">

@@ -32,6 +32,65 @@ use skill_constants::DND_WINDOWS_MODE_ID as WINDOWS_MODE_ID;
 #[cfg(target_os = "linux")]
 static PORTAL_INHIBIT_HANDLE: std::sync::OnceLock<std::sync::Mutex<Option<String>>> = std::sync::OnceLock::new();
 
+#[cfg(target_os = "macos")]
+fn run_cmd_macos(program: &str, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new(program).args(args).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+}
+
+#[cfg(target_os = "macos")]
+fn run_cmd_macos_ok(program: &str, args: &[&str]) -> bool {
+    std::process::Command::new(program)
+        .args(args)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn parse_defaults_bool(output: &str) -> Option<bool> {
+    match output.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" => Some(true),
+        "0" | "false" | "no" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn query_macos_legacy_dnd() -> Option<bool> {
+    let output = run_cmd_macos(
+        "defaults",
+        &["-currentHost", "read", "com.apple.notificationcenterui", "doNotDisturb"],
+    )?;
+    parse_defaults_bool(&output)
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_legacy_dnd(enabled: bool) -> bool {
+    let value = if enabled { "true" } else { "false" };
+    if !run_cmd_macos_ok(
+        "defaults",
+        &[
+            "-currentHost",
+            "write",
+            "com.apple.notificationcenterui",
+            "doNotDisturb",
+            "-boolean",
+            value,
+        ],
+    ) {
+        return false;
+    }
+
+    // Best-effort refresh of notification UI.
+    let _ = run_cmd_macos_ok("killall", &["NotificationCenter"]);
+    let _ = run_cmd_macos_ok("killall", &["ControlCenter"]);
+    true
+}
+
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 /// A Focus mode entry returned by [`list_focus_modes`].
@@ -69,13 +128,17 @@ pub fn query_os_active() -> Option<bool> {
             Ok(mgr) => match mgr.is_active() {
                 Ok(v) => Some(v),
                 Err(e) => {
-                    eprintln!("[dnd] query_os_active failed: {e}");
-                    None
+                    eprintln!("[dnd] query_os_active failed via Focus DB: {e}");
+                    let legacy = query_macos_legacy_dnd();
+                    if legacy.is_some() {
+                        eprintln!("[dnd] query_os_active recovered via legacy defaults read");
+                    }
+                    legacy
                 }
             },
             Err(e) => {
                 eprintln!("[dnd] query_os_active init failed: {e}");
-                None
+                query_macos_legacy_dnd()
             }
         }
     }
@@ -100,13 +163,20 @@ pub fn query_os_active() -> Option<bool> {
 pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
-        use macos_focus::{FocusManager, FocusMode};
+        use macos_focus::{FocusError, FocusManager, FocusMode};
 
         let mgr = match FocusManager::new() {
             Ok(m) => m.with_client_id(CLIENT_ID),
             Err(e) => {
-                eprintln!("[dnd] init failed: {e}");
-                return false;
+                eprintln!("[dnd] init failed: {e}; trying legacy fallback");
+                let ok = set_macos_legacy_dnd(enabled);
+                if ok {
+                    eprintln!(
+                        "[dnd] {} OK via legacy fallback",
+                        if enabled { "enable" } else { "disable" }
+                    );
+                }
+                return ok;
             }
         };
 
@@ -124,8 +194,37 @@ pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
                 true
             }
             Err(e) => {
-                eprintln!("[dnd] {} failed: {e}", if enabled { "enable" } else { "disable" });
-                false
+                eprintln!(
+                    "[dnd] {} failed via Focus DB: {e}",
+                    if enabled { "enable" } else { "disable" }
+                );
+
+                let should_try_legacy = match &e {
+                    FocusError::DatabaseIo { source, .. } => {
+                        matches!(
+                            source.kind(),
+                            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::NotFound
+                        )
+                    }
+                    FocusError::DatabaseParse { .. } => true,
+                    _ => false,
+                };
+
+                if should_try_legacy {
+                    eprintln!("[dnd] trying legacy defaults fallback");
+                    let ok = set_macos_legacy_dnd(enabled);
+                    if ok {
+                        eprintln!(
+                            "[dnd] {} OK via legacy fallback",
+                            if enabled { "enable" } else { "disable" }
+                        );
+                    } else {
+                        eprintln!("[dnd] legacy fallback failed");
+                    }
+                    ok
+                } else {
+                    false
+                }
             }
         }
     }

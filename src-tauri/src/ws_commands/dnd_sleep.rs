@@ -28,6 +28,7 @@ pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
         0.0
     };
     let os_active = dnd.os_active;
+    let last_error = dnd.last_error.clone();
     drop(dnd);
     drop(guard);
 
@@ -41,6 +42,7 @@ pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
         "mode_identifier":  mode_id,
         "dnd_active":       dnd_active,
         "os_active":        os_active,
+        "last_error":       last_error,
     }))
 }
 
@@ -67,12 +69,24 @@ pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         let g = s.lock_or_recover();
         let mut dnd = g.dnd.lock_or_recover();
         dnd.active = enabled;
+        dnd.last_error = None;
         if !enabled {
             dnd.focus_samples.clear();
         }
         drop(dnd);
         drop(g);
         let _ = app.emit("dnd-state-changed", enabled);
+    } else {
+        let msg = if enabled {
+            "Couldn’t enable Focus mode. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction)."
+        } else {
+            "Couldn’t disable Focus mode. macOS blocked access to Do Not Disturb settings (permission or sandbox restriction)."
+        };
+        let s = app.app_state();
+        let g = s.lock_or_recover();
+        g.dnd.lock_or_recover().last_error = Some(msg.to_owned());
+        drop(g);
+        let _ = app.emit("dnd-error", msg);
     }
 
     Ok(serde_json::json!({ "enabled": enabled, "ok": ok }))
