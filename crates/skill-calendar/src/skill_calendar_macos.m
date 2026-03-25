@@ -109,19 +109,22 @@ char *skill_calendar_fetch_events(int64_t start_utc, int64_t end_utc,
             status = [EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent];
         }
 
-        // denied / restricted → return error object
-        if ((NSInteger)status != 3 && (NSInteger)status != 4) {
-            // 3 = authorized/fullAccess   4 = writeOnly (still readable? no)
-            // For status == 2 (denied) or 1 (restricted) → error
-            if ((NSInteger)status == 2 || (NSInteger)status == 1) {
-                const char *err = "{\"error\":\"calendar_access_denied\"}";
-                size_t n = strlen(err);
-                char *out = (char *)malloc(n + 1);
-                if (!out) return NULL;
-                memcpy(out, err, n + 1);
-                if (out_len) *out_len = (uint32_t)n;
-                return out;
+        // Only status 3 (authorized / fullAccess) allows reading events.
+        // status 2 (denied), 1 (restricted), and 4 (writeOnly — add-events
+        // only, no read access) all require returning an error.
+        if ((NSInteger)status != 3) {
+            const char *err;
+            if ((NSInteger)status == 4) {
+                err = "{\"error\":\"calendar_write_only_access\"}";
+            } else {
+                err = "{\"error\":\"calendar_access_denied\"}";
             }
+            size_t n = strlen(err);
+            char *out = (char *)malloc(n + 1);
+            if (!out) return NULL;
+            memcpy(out, err, n + 1);
+            if (out_len) *out_len = (uint32_t)n;
+            return out;
         }
 
         // ── Build predicate ──────────────────────────────────────────────────

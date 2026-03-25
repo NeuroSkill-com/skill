@@ -86,6 +86,15 @@
 //! | `compare`         | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` (u64) | Compare band-power metrics of two time ranges |
 //! | `sessions`        | _(none)_                                                | List all embedding sessions (contiguous recording ranges) |
 //! | `sleep`           | `start_utc`, `end_utc` (u64)                            | Classify sleep stages and return a hypnogram |
+//! | `umap`            | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` (u64) | Enqueue a 3D UMAP projection job; returns `job_id` |
+//! | `umap_poll`       | `job_id` (u64)                                          | Poll a queued UMAP job for results |
+//! | `health_sync`     | HealthKit sync payload (`sleep?`, `workouts?`, …)       | Upsert Apple HealthKit data from the iOS companion app |
+//! | `health_query`    | `type`, `start_utc?`, `end_utc?`, `limit?`              | Query stored HealthKit samples by type |
+//! | `health_summary`  | `start_utc?`, `end_utc?`                                | Aggregate HealthKit counts for a time range |
+//! | `health_metric_types` | _(none)_                                            | List all distinct HealthKit metric types stored |
+//! | `calendar_events` | `start_utc`, `end_utc` (i64)                           | Fetch OS calendar events overlapping the range (EventKit / iCal) |
+//! | `calendar_status` | _(none)_                                                | Return calendar access status (`authorized`/`denied`/…) and platform |
+//! | `calendar_request_permission` | _(none)_                               | Request calendar access (macOS: shows system dialog; no-op elsewhere) |
 //!
 //! ## Examples
 //!
