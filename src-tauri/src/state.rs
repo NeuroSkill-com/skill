@@ -548,6 +548,7 @@ impl Default for AppState {
         let log_path = today_dir.join(format!("log_{}.txt", unix_secs()));
         crate::skill_log::tee_stderr_to_file(&log_path);
         let logger = std::sync::Arc::new(SkillLogger::new(log_config));
+        logger.write("logger", &format!("session log: {}", log_path.display()));
 
         let input = InputTrackingState {
             activity_store: ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
