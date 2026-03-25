@@ -16,6 +16,7 @@
     "check:markdown-renderer": "node scripts/check-markdown-renderer.js",
     "verify:tauri:frontend": "node scripts/verify-tauri-frontend-structure.js",
     "check:i18n": "npx tsx scripts/audit-i18n.ts --check",
+    "check:i18n:critical": "node scripts/check-critical-i18n-locales.js",
     "check": "npm run -s check:markdown-renderer && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "npm run -s dev:guard && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --ignore src-tauri --watch",
     "tauri": "node scripts/tauri-build.js",

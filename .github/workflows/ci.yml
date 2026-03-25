@@ -280,6 +280,9 @@ jobs:
       - name: i18n audit check
         run: npm run audit:i18n:check
 
+      - name: i18n critical locales check (de/he)
+        run: npm run check:i18n:critical
+
       # Biome — format check (fast, ~100ms; lint is advisory via warnings)
       - name: Biome format check
         run: npx biome format src/ scripts/
