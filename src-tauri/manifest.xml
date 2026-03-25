@@ -4,7 +4,7 @@
     type="win32"
     name="com.neuroskill.skill"
     version="0.0.53.0"
-    processorArchitecture="*"
+    processorArchitecture="amd64"
   />
 
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
