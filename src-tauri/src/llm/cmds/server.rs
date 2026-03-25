@@ -157,20 +157,38 @@ pub fn start_llm_server(
         return Ok("no_model_available".to_string());
     };
 
-    let mem_fit = super::hardware_fit::model_autostart_memory_fit(target);
-    if !mem_fit.enough_for_autostart() {
-        let msg = format!(
-            "Not enough RAM/VRAM to auto-launch default model {} (required: {:.1} GB, available: {:.1} GB).",
-            target.filename, mem_fit.memory_required_gb, mem_fit.memory_available_gb
-        );
-        *start_error.lock_or_recover() = Some(msg.clone());
+    // On Windows, llmfit-core hardware probing may spawn short-lived helper
+    // processes (PowerShell / wmic / vendor tools), which can cause console
+    // flicker in GUI launches. Skip this preflight by default there.
+    let skip_mem_preflight = cfg!(target_os = "windows")
+        && std::env::var("SKILL_WINDOWS_MEM_PREFLIGHT")
+            .map(|v| v != "1")
+            .unwrap_or(true);
+
+    if !skip_mem_preflight {
+        let mem_fit = super::hardware_fit::model_autostart_memory_fit(target);
+        if !mem_fit.enough_for_autostart() {
+            let msg = format!(
+                "Not enough RAM/VRAM to auto-launch default model {} (required: {:.1} GB, available: {:.1} GB).",
+                target.filename, mem_fit.memory_required_gb, mem_fit.memory_available_gb
+            );
+            *start_error.lock_or_recover() = Some(msg.clone());
+            let emitter = crate::llm::TauriEmitter(app.clone());
+            push_log(&emitter, &log_buf, "warn", &msg);
+            emitter.emit_event(
+                "llm:status",
+                serde_json::json!({"status":"stopped","error":msg}),
+            );
+            return Ok("insufficient_memory".to_string());
+        }
+    } else {
         let emitter = crate::llm::TauriEmitter(app.clone());
-        push_log(&emitter, &log_buf, "warn", &msg);
-        emitter.emit_event(
-            "llm:status",
-            serde_json::json!({"status":"stopped","error":msg}),
+        push_log(
+            &emitter,
+            &log_buf,
+            "info",
+            "Windows: skipping autostart memory preflight (set SKILL_WINDOWS_MEM_PREFLIGHT=1 to enable)",
         );
-        return Ok("insufficient_memory".to_string());
     }
 
     catalog.active_model = target.filename.clone();

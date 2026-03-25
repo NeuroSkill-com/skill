@@ -628,17 +628,31 @@ mod non_macos {
     static GPU_STATIC: OnceLock<Option<StaticGpuInfo>> = OnceLock::new();
 
     fn detect_static() -> Option<StaticGpuInfo> {
-        let specs = llmfit_core::hardware::SystemSpecs::detect();
-        if !specs.has_gpu {
+        #[cfg(target_os = "windows")]
+        {
+            // Avoid spawning short-lived probe processes (PowerShell / wmic /
+            // vendor CLIs) from a GUI app. On some Windows setups this causes
+            // visible console flicker during app launch.
+            //
+            // Trade-off: we return no static GPU topology here, so callers get
+            // `None` instead of potentially noisy/expensive detection.
             return None;
         }
-        let gib: f64 = 1024.0 * 1024.0 * 1024.0;
-        let total_bytes = specs.total_gpu_vram_gb.map(|gb| (gb * gib) as u64).filter(|&b| b > 0);
 
-        Some(StaticGpuInfo {
-            total_bytes,
-            unified_memory: specs.unified_memory,
-        })
+        #[cfg(not(target_os = "windows"))]
+        {
+            let specs = llmfit_core::hardware::SystemSpecs::detect();
+            if !specs.has_gpu {
+                return None;
+            }
+            let gib: f64 = 1024.0 * 1024.0 * 1024.0;
+            let total_bytes = specs.total_gpu_vram_gb.map(|gb| (gb * gib) as u64).filter(|&b| b > 0);
+
+            Some(StaticGpuInfo {
+                total_bytes,
+                unified_memory: specs.unified_memory,
+            })
+        }
     }
 
     // ── Dynamic free-RAM cache for unified-memory platforms ───────────────
