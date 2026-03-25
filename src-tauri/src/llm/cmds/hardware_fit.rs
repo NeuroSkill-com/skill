@@ -146,6 +146,43 @@ fn catalog_entry_to_llm_model(
     }
 }
 
+/// Lightweight fit verdict used by backend auto-launch guardrails.
+#[derive(Debug, Clone)]
+pub struct AutostartMemoryFit {
+    pub fit_level: String,
+    pub memory_required_gb: f64,
+    pub memory_available_gb: f64,
+}
+
+impl AutostartMemoryFit {
+    /// True when memory headroom is sufficient for automatic launch.
+    pub fn enough_for_autostart(&self) -> bool {
+        self.fit_level != "too_tight" && self.memory_available_gb >= self.memory_required_gb
+    }
+}
+
+/// Analyze hardware fit for a single model entry.
+pub fn model_autostart_memory_fit(
+    entry: &crate::llm::catalog::LlmModelEntry,
+) -> AutostartMemoryFit {
+    let specs = cached_system_specs();
+    let model = catalog_entry_to_llm_model(entry);
+    let fit = llmfit_core::fit::ModelFit::analyze(&model, specs);
+
+    let fit_level = match fit.fit_level {
+        llmfit_core::fit::FitLevel::Perfect => "perfect",
+        llmfit_core::fit::FitLevel::Good => "good",
+        llmfit_core::fit::FitLevel::Marginal => "marginal",
+        llmfit_core::fit::FitLevel::TooTight => "too_tight",
+    };
+
+    AutostartMemoryFit {
+        fit_level: fit_level.to_string(),
+        memory_required_gb: (fit.memory_required_gb * 10.0).round() / 10.0,
+        memory_available_gb: (fit.memory_available_gb * 10.0).round() / 10.0,
+    }
+}
+
 /// Predict hardware fit for all non-mmproj catalog entries.
 ///
 /// Returns a list of `ModelHardwareFit` objects, one per model file, containing
