@@ -258,6 +258,7 @@ pub fn skill_api_tool() -> Tool {
                  DND: dnd | dnd_set(enabled)\n\
                  SLEEP SCHEDULE: sleep_schedule | sleep_schedule_set(bedtime?,wake_time?,preset?)\n\
                  HEALTH: health_summary(start_utc?,end_utc?) | health_query(type,start_utc?,end_utc?,limit?) | health_metric_types | health_sync\n\
+                 CALENDAR: calendar_events(start_utc,end_utc) | calendar_status | calendar_request_permission\n\
                  ADVANCED: umap(a_start_utc,a_end_utc,b_start_utc,b_end_utc) | umap_poll(job_id) | llm_status | llm_catalog\n\n\
                  Cross-modal query guide — pick the right command by direction:\n\
                  • What apps/screen content? → status (has apps.top_24h) or search_screenshots(query)\n\
@@ -265,7 +266,9 @@ pub fn skill_api_tool() -> Tool {
                  • What was my brain doing when I saw X? → eeg_for_screenshots(query) (Screenshots→EEG)\n\
                  • Find past brain states like current/described → search_labels(query) or search(start,end)\n\
                  • What was on screen at a specific moment? → screenshots_around(timestamp)\n\
-                 • Full cross-modal graph (text→labels→EEG→labels) → interactive_search(query)".into()
+                 • Full cross-modal graph (text→labels→EEG→labels) → interactive_search(query)\n\
+                 • What meetings/events do I have? → calendar_events(start_utc,end_utc)\n\
+                 • Do I have calendar access? → calendar_status".into()
             ),
             parameters: Some(json!({
                 "type": "object",
@@ -287,7 +290,8 @@ pub fn skill_api_tool() -> Tool {
                             "screenshots_for_eeg", "eeg_for_screenshots",
                             "search_screenshots_vision", "search_screenshots_by_image_b64",
                             "sleep_schedule", "sleep_schedule_set",
-                            "health_summary", "health_query", "health_metric_types", "health_sync"
+                            "health_summary", "health_query", "health_metric_types", "health_sync",
+                            "calendar_events", "calendar_status", "calendar_request_permission"
                         ]
                     },
                     "args": {
@@ -371,6 +375,9 @@ pub fn is_skill_api_command(name: &str) -> bool {
             | "health_query"
             | "health_metric_types"
             | "health_sync"
+            | "calendar_events"
+            | "calendar_status"
+            | "calendar_request_permission"
     )
 }
 
@@ -433,6 +440,7 @@ pub fn resolve_skill_alias(name: &str) -> Option<String> {
             "labels" => return Some("search_labels".to_string()),
             "search" => return Some("interactive_search".to_string()),
             "dnd" => return Some("dnd".to_string()),
+            "calendar" => return Some("calendar_events".to_string()),
             "llm" => return Some("llm_status".to_string()),
             "protocols" => return Some("list_calibrations".to_string()),
             "screenshots" => return Some("search_screenshots".to_string()),
@@ -716,6 +724,8 @@ mod tests {
             Some("interactive_search".into())
         );
         assert_eq!(resolve_skill_alias("health-summary"), Some("health_summary".into()));
+        assert_eq!(resolve_skill_alias("calendar-events"), Some("calendar_events".into()));
+        assert_eq!(resolve_skill_alias("calendar-status"), Some("calendar_status".into()));
     }
 
     #[test]

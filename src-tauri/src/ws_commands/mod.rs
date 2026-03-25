@@ -10,6 +10,7 @@
 //! WebSocket client can send.  The dispatcher in [`super::ws_server`] calls
 //! into this module and forwards the `Result` back to the client.
 
+mod calendar;
 mod calibration;
 mod dnd_sleep;
 mod health;
@@ -772,6 +773,10 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "search_screenshots_by_image_b64" => screenshots::search_screenshots_by_image_b64(app, msg),
         "screenshots_for_eeg" => screenshots::screenshots_for_eeg(app, msg),
         "eeg_for_screenshots" => screenshots::eeg_for_screenshots(app, msg),
+        // ── Calendar ──────────────────────────────────────────────────────
+        "calendar_events" => calendar::calendar_events(app, msg).await,
+        "calendar_status" => calendar::calendar_status(app),
+        "calendar_request_permission" => calendar::calendar_request_permission(app).await,
         // ── HealthKit ─────────────────────────────────────────────────────
         "health_sync" => health::health_sync(app, msg),
         "health_query" => health::health_query(app, msg),

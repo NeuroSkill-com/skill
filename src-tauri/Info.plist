@@ -47,5 +47,23 @@
   <key>NSUserNotificationsUsageDescription</key>
   <string>Skill sends notifications for important events such as device connection changes, low battery warnings, and calibration completion.</string>
 
+  <!-- ── Calendar ───────────────────────────────────────────────────────── -->
+
+  <!--
+    Required for EventKit access on macOS 10.14+.  Without this key the
+    system silently denies calendar access and no permission dialog is shown.
+  -->
+  <!--
+    NSCalendarsUsageDescription    — required for the legacy API (macOS 10.14–13).
+    NSCalendarsFullAccessUsageDescription — required for requestFullAccessToEventsWithCompletion:
+                                           (macOS 14+).  Without this key the full-access request
+                                           silently fails on Sonoma and later.
+  -->
+  <key>NSCalendarsUsageDescription</key>
+  <string>Skill reads your calendar events to correlate scheduled activities with your EEG focus and wellbeing data.</string>
+
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Skill reads your calendar events to correlate scheduled activities with your EEG focus and wellbeing data.</string>
+
 </dict>
 </plist>

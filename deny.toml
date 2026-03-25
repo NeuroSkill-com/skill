@@ -1,6 +1,12 @@
 # ── cargo-deny configuration ──────────────────────────────────────────────────
 # Run: cargo deny check
 # CI:  cargo deny --workspace check
+#
+# Updated for cargo-deny v0.19+:
+#   - [advisories]: `vulnerability`, `notice` removed; `unmaintained` now takes
+#     a scope ("workspace", "all", etc.), not a lint level.
+#   - [licenses]: `unlicensed`, `copyleft` removed.
+# See https://github.com/EmbarkStudios/cargo-deny/pull/611
 
 [graph]
 targets = []
@@ -8,19 +14,21 @@ all-features = false
 
 # ── Advisories ────────────────────────────────────────────────────────────────
 [advisories]
-vulnerability = "deny"
-unmaintained  = "warn"
-yanked        = "warn"
-notice        = "warn"
-ignore = []
+unmaintained = "workspace"
+yanked       = "warn"
+ignore = [
+    # gtk-rs GTK3 bindings — pulled transitively by tauri/webkit2gtk on Linux.
+    # No replacement available until Tauri migrates to GTK4.
+    "RUSTSEC-2024-0415",
+]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
 [licenses]
-unlicensed    = "deny"
-copyleft      = "warn"
 allow = [
     "MIT",
+    "MIT-0",
     "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
@@ -32,38 +40,61 @@ allow = [
     "BSL-1.0",
     "CC0-1.0",
     "MPL-2.0",
+    "Unlicense",
+    "NCSA",
+    "CDLA-Permissive-2.0",
+    "LicenseRef-AI100",
 ]
 exceptions = [
     # Our own crates are GPL-3.0-only
-    { allow = ["GPL-3.0"], crate = "neuroskill" },
-    { allow = ["GPL-3.0"], crate = "skill-autostart" },
-    { allow = ["GPL-3.0"], crate = "skill-commands" },
-    { allow = ["GPL-3.0"], crate = "skill-constants" },
-    { allow = ["GPL-3.0"], crate = "skill-data" },
-    { allow = ["GPL-3.0"], crate = "skill-devices" },
-    { allow = ["GPL-3.0"], crate = "skill-eeg" },
-    { allow = ["GPL-3.0"], crate = "skill-exg" },
-    { allow = ["GPL-3.0"], crate = "skill-gpu" },
-    { allow = ["GPL-3.0"], crate = "skill-headless" },
-    { allow = ["GPL-3.0"], crate = "skill-health" },
-    { allow = ["GPL-3.0"], crate = "skill-history" },
-    { allow = ["GPL-3.0"], crate = "skill-jobs" },
-    { allow = ["GPL-3.0"], crate = "skill-label-index" },
-    { allow = ["GPL-3.0"], crate = "skill-llm" },
-    { allow = ["GPL-3.0"], crate = "skill-router" },
-    { allow = ["GPL-3.0"], crate = "skill-screenshots" },
-    { allow = ["GPL-3.0"], crate = "skill-settings" },
-    { allow = ["GPL-3.0"], crate = "skill-skills" },
-    { allow = ["GPL-3.0"], crate = "skill-tools" },
-    { allow = ["GPL-3.0"], crate = "skill-tray" },
-    { allow = ["GPL-3.0"], crate = "skill-tts" },
-    { allow = ["GPL-3.0"], crate = "skill-vision" },
+    { allow = ["GPL-3.0-only"], crate = "skill" },
+    { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
+    { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
+    { allow = ["GPL-3.0-only"], crate = "skill-commands" },
+    { allow = ["GPL-3.0-only"], crate = "skill-constants" },
+    { allow = ["GPL-3.0-only"], crate = "skill-data" },
+    { allow = ["GPL-3.0-only"], crate = "skill-devices" },
+    { allow = ["GPL-3.0-only"], crate = "skill-eeg" },
+    { allow = ["GPL-3.0-only"], crate = "skill-exg" },
+    { allow = ["GPL-3.0-only"], crate = "skill-gpu" },
+    { allow = ["GPL-3.0-only"], crate = "skill-headless" },
+    { allow = ["GPL-3.0-only"], crate = "skill-health" },
+    { allow = ["GPL-3.0-only"], crate = "skill-history" },
+    { allow = ["GPL-3.0-only"], crate = "skill-jobs" },
+    { allow = ["GPL-3.0-only"], crate = "skill-label-index" },
+    { allow = ["GPL-3.0-only"], crate = "skill-llm" },
+    { allow = ["GPL-3.0-only"], crate = "skill-router" },
+    { allow = ["GPL-3.0-only"], crate = "skill-screenshots" },
+    { allow = ["GPL-3.0-only"], crate = "skill-settings" },
+    { allow = ["GPL-3.0-only"], crate = "skill-skills" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tools" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tray" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tts" },
+    { allow = ["GPL-3.0-only"], crate = "skill-vision" },
+    # Third-party GPL dependencies
+    { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
+    { allow = ["GPL-3.0"],          crate = "mw75" },
 ]
 
 [[licenses.clarify]]
 crate = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# exg / exg-luna use a custom "AI100 License v1.0" (permissive, public-domain-like).
+# The crate authors did not set a `license` field in Cargo.toml.
+[[licenses.clarify]]
+crate = "exg"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
+
+[[licenses.clarify]]
+crate = "exg-luna"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
+
+[licenses.private]
+ignore = true
 
 # ── Bans ──────────────────────────────────────────────────────────────────────
 [bans]

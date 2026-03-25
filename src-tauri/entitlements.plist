@@ -20,6 +20,12 @@
   <key>com.apple.security.device.bluetooth</key>
   <true/>
 
+  <!-- ── Calendar ───────────────────────────────────────────────────────── -->
+
+  <!-- Read calendar events via EventKit (requires NSCalendarsUsageDescription in Info.plist) -->
+  <key>com.apple.security.personal-information.calendars</key>
+  <true/>
+
   <!-- ── Hardened runtime ────────────────────────────────────────────────── -->
 
   <!-- Allow JIT compilation — required by wgpu/Metal shader compilation -->

@@ -75,6 +75,7 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 | **Text-to-Speech** | KittenTTS and NeuTTS backends for voice feedback during sessions |
 | **Proactive Hooks** | Background monitoring that triggers actions when brain-state matches configured labels |
 | **DND Focus Mode** | Automatic Do Not Disturb toggling driven by real-time focus scores |
+| **Calendar Integration** | Reads OS calendar events — EventKit on macOS, `.ics` files on Linux/Windows. Exposes events via WS, HTTP, CLI, and LLM tools |
 | **WebSocket API** | JSON-based LAN API with mDNS discovery (`_skill._tcp`) |
 | **Keyboard Shortcuts** | Fully configurable global and in-app shortcuts. Press `?` for cheat sheet |
 | **i18n** | English, German, French, Hebrew, Ukrainian |
@@ -210,6 +211,7 @@ The Rust backend is split into focused, zero-Tauri-dependency crates under [`cra
 | [`skill-tts`](crates/skill-tts/) | Text-to-speech — KittenTTS and NeuTTS backends, voice management, audio playback |
 | [`skill-tray`](crates/skill-tray/) | System tray helpers — progress-ring overlay, shortcut formatting, dedup (pure `std`) |
 | [`skill-autostart`](crates/skill-autostart/) | Platform-specific launch-at-login registration (macOS/Linux/Windows) |
+| [`skill-calendar`](crates/skill-calendar/) | Cross-platform calendar event fetching — EventKit (macOS), iCal files (Linux/Windows) |
 | [`skill-vision`](crates/skill-vision/) | Apple Vision framework OCR via compiled Objective-C FFI (macOS only) |
 
 ### Vendored crates
@@ -312,6 +314,9 @@ avahi-browse _skill._tcp
 | `llm_download` / `llm_cancel_download` / `llm_delete` | Model lifecycle |
 | `llm_chat` | Streaming chat completion |
 | `llm_logs` | Last 500 LLM server log lines |
+| `calendar_events` | OS calendar events in a UTC range (EventKit / iCal) |
+| `calendar_status` | Calendar access status and platform |
+| `calendar_request_permission` | Request calendar access (macOS: system dialog) |
 
 ### REST shortcuts
 
@@ -330,6 +335,9 @@ Every command is also available as an HTTP endpoint at `http://localhost:<port>`
 | `GET` | `/llm/status` | LLM server status |
 | `POST` | `/llm/start` / `/llm/stop` | Start/stop inference server |
 | `GET` | `/dnd` | DND config + live eligibility |
+| `POST` | `/v1/calendar/events` | Calendar events in range: `{ start_utc, end_utc }` |
+| `GET` | `/v1/calendar/status` | Calendar access status + platform |
+| `POST` | `/v1/calendar/permission` | Request calendar access (macOS dialog) |
 
 ### Testing
 

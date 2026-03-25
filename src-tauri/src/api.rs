@@ -262,6 +262,14 @@ pub fn router(state: SharedState) -> Router {
         .route("/v1/health/summary",      get(health_summary_get).post(health_summary_post))
         .route("/v1/health/metric_types", get(health_metric_types_get))
 
+        // ── Calendar endpoints ──────────────────────────────────────────
+        .route("/calendar/events",     post(calendar_events_post))
+        .route("/calendar/status",     get(calendar_status_get))
+        .route("/calendar/permission", post(calendar_permission_post))
+        .route("/v1/calendar/events",     post(calendar_events_post))
+        .route("/v1/calendar/status",     get(calendar_status_get))
+        .route("/v1/calendar/permission", post(calendar_permission_post))
+
         // ── CORS: allow all origins so browsers / notebooks can call freely
         // ── Static file serving for screenshot images ────────────────
         .route("/screenshots/{*path}", get(screenshot_file_get))
@@ -393,6 +401,9 @@ async fn root_get(
                 "GET  /v1/health/summary":          "aggregate health counts (last 24h default)",
                 "POST /v1/health/summary":          "aggregate health counts: { start_utc, end_utc }",
                 "GET  /v1/health/metric_types":     "list all stored metric types",
+                "POST /v1/calendar/events":         "calendar events in range: { start_utc, end_utc }",
+                "GET  /v1/calendar/status":         "calendar access status + platform",
+                "POST /v1/calendar/permission":     "request calendar access (macOS: system dialog)",
                 "note":                             "/v1/models /v1/chat/completions /v1/completions /v1/embeddings are served by the LLM sub-router"
             },
             "rest_legacy": {
@@ -1433,6 +1444,49 @@ async fn health_metric_types_get(
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "health_metric_types", json!({})).await
+}
+
+// ── Calendar HTTP handlers ────────────────────────────────────────────────────
+
+/// `POST /v1/calendar/events` — fetch calendar events in a time range.
+///
+/// ```json
+/// { "start_utc": 1774396800, "end_utc": 1774483200 }
+/// ```
+async fn calendar_events_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "calendar_events",
+        merge(json!({}), body),
+    )
+    .await
+}
+
+/// `GET /v1/calendar/status` — return calendar access status and platform.
+async fn calendar_status_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "calendar_status", json!({})).await
+}
+
+/// `POST /v1/calendar/permission` — request calendar access (macOS: system dialog).
+async fn calendar_permission_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "calendar_request_permission",
+        json!({}),
+    )
+    .await
 }
 
 // ── Screenshot static file serving ───────────────────────────────────────────

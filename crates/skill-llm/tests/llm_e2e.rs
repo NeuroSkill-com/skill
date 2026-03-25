@@ -573,6 +573,18 @@ async fn run_tool_chat(
                     is_error: false,
                 });
             }
+            skill_llm::ToolEvent::RoundComplete {
+                round,
+                prompt_tokens,
+                completion_tokens,
+                tool_calls_count,
+            } => {
+                eprintln!(
+                    "[step {step_num}]   ✓ round {round} complete \
+                     (prompt={prompt_tokens} completion={completion_tokens} \
+                     calls={tool_calls_count})"
+                );
+            }
         },
     )
     .await;
