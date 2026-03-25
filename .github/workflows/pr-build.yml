@@ -234,6 +234,15 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: i18n sync check
+        run: npm run -s sync:i18n:check
+
+      - name: i18n audit check
+        run: npm run -s audit:i18n:check
+
+      - name: i18n critical locales check (de/he)
+        run: npm run -s check:i18n:critical
+
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
