@@ -29,6 +29,9 @@ use std::{path::Path, sync::RwLock};
 #[cfg(target_os = "windows")]
 static WINDOWS_LOG_FILE: std::sync::OnceLock<std::sync::Mutex<std::fs::File>> =
     std::sync::OnceLock::new();
+#[cfg(target_os = "windows")]
+static WINDOWS_STDERR_REDIRECTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -132,11 +135,17 @@ impl SkillLogger {
         #[cfg(target_os = "windows")]
         {
             use std::io::Write;
-            if let Some(file) = WINDOWS_LOG_FILE.get() {
-                let mut guard = file
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let _ = guard.write_all(line.as_bytes());
+            use std::sync::atomic::Ordering;
+
+            // If stderr redirection succeeded, `eprint!` already lands in the
+            // log file; avoid writing the same line twice.
+            if !WINDOWS_STDERR_REDIRECTED.load(Ordering::Relaxed) {
+                if let Some(file) = WINDOWS_LOG_FILE.get() {
+                    let mut guard = file
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let _ = guard.write_all(line.as_bytes());
+                }
             }
         }
     }
@@ -261,6 +270,7 @@ pub fn tee_stderr_to_file(log_path: &Path) {
 #[cfg(target_os = "windows")]
 pub fn tee_stderr_to_file(log_path: &Path) {
     use std::fs::OpenOptions;
+    use std::os::windows::io::AsRawHandle;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static INSTALLED: AtomicBool = AtomicBool::new(false);
@@ -280,7 +290,33 @@ pub fn tee_stderr_to_file(log_path: &Path) {
         }
     };
 
+    // Keep the file handle alive globally for explicit fallback writes.
     let _ = WINDOWS_LOG_FILE.set(std::sync::Mutex::new(log_file));
+
+    // Try to route process stderr to the session log file so *all* `eprint!` /
+    // `eprintln!` output (including dependencies) lands in the same file.
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn SetStdHandle(n_std_handle: u32, h_handle: *mut core::ffi::c_void) -> i32;
+    }
+    const STD_ERROR_HANDLE: u32 = (-12i32) as u32;
+
+    let redirected = if let Some(file) = WINDOWS_LOG_FILE.get() {
+        let guard = file
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // SAFETY: `SetStdHandle` is called with a valid process-owned handle;
+        // the underlying file remains alive via `WINDOWS_LOG_FILE`.
+        unsafe {
+            SetStdHandle(
+                STD_ERROR_HANDLE,
+                guard.as_raw_handle() as *mut core::ffi::c_void,
+            ) != 0
+        }
+    } else {
+        false
+    };
+    WINDOWS_STDERR_REDIRECTED.store(redirected, Ordering::Relaxed);
 }
 
 #[cfg(all(not(unix), not(target_os = "windows")))]
