@@ -18,7 +18,7 @@ crossbeam-channel  = "0.5"
 ocrs            = "0.12.1"
 rten            = "0.24.0"
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std"] }
-ureq            = { version = "2", features = ["native-tls"] }
+ureq            = { version = "3", features = ["native-tls"] }
 
 [[bin]]
 name = "image_encode_bench"
