@@ -1,0 +1,3 @@
+### Bugfixes
+
+- **Windows manifest root architecture**: set `src-tauri/manifest.xml` root `assemblyIdentity.processorArchitecture` to `amd64` (instead of wildcard) so `mt.exe -validate_manifest` passes and Windows CI proceeds to Rust compilation.
