@@ -82,6 +82,21 @@ jobs:
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Validate Windows app manifest with mt.exe
+        shell: powershell
+        run: |
+          $mt = Get-Command mt.exe -ErrorAction SilentlyContinue
+          if (-not $mt) {
+            Write-Error "mt.exe not found in PATH"
+            exit 1
+          }
+          & $mt.Source -nologo -manifest src-tauri/manifest.xml -validate_manifest
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "mt.exe manifest validation failed"
+            exit $LASTEXITCODE
+          }
+          Write-Host "[ok] mt.exe manifest validation passed"
+
       # ── Remove Git's link.exe and tar.exe ────────────────────────────────────
       # Git for Windows prepends C:\Program Files\Git\usr\bin to PATH at every
       # step via $GITHUB_PATH (re-applied each step, so runtime PATH changes
