@@ -15,11 +15,11 @@
 //! # Quick start
 //!
 //! ```rust,ignore
-//! use skill_calendar::{auth_status, fetch_events, AuthStatus};
+//! use skill_calendar::{auth_status, fetch_events, request_access, AuthStatus};
 //!
 //! // Check / request permission first (macOS only; always granted elsewhere)
 //! if auth_status() == AuthStatus::NotDetermined {
-//!     skill_calendar::request_access();
+//!     request_access();
 //! }
 //!
 //! // Fetch events for today
