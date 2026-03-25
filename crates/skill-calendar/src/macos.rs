@@ -49,10 +49,23 @@ pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, 
         s
     };
 
-    // The ObjC layer may return an error object instead of an array.
-    if json_str.contains("\"error\"") {
-        return Err(json_str);
+    // The ObjC layer returns either a JSON array (success) or a JSON object
+    // with an "error" key (access denied / allocation failure).
+    // Parse the value first to distinguish the two cases robustly — checking
+    // for the substring `"error"` would false-positive on event titles like
+    // "error in production".
+    match serde_json::from_str::<serde_json::Value>(&json_str) {
+        Ok(serde_json::Value::Array(_)) => {
+            serde_json::from_str::<Vec<CalendarEvent>>(&json_str).map_err(|e| format!("JSON parse error: {e}"))
+        }
+        Ok(serde_json::Value::Object(obj)) => {
+            let msg = obj
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown error from EventKit");
+            Err(msg.to_owned())
+        }
+        Ok(_) => Ok(Vec::new()),
+        Err(e) => Err(format!("JSON parse error: {e}")),
     }
-
-    serde_json::from_str::<Vec<CalendarEvent>>(&json_str).map_err(|e| format!("JSON parse error: {e}"))
 }

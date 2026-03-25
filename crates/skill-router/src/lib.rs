@@ -553,6 +553,17 @@ pub const COMMANDS: &[&str] = &[
     "health_query",
     "health_summary",
     "health_metric_types",
+    // Calendar commands
+    "calendar_events",
+    "calendar_status",
+    "calendar_request_permission",
+    // Screenshot commands
+    "search_screenshots",
+    "screenshots_around",
+    "search_screenshots_vision",
+    "search_screenshots_by_image_b64",
+    "screenshots_for_eeg",
+    "eeg_for_screenshots",
     // LLM commands (when the `llm` feature is enabled in the host binary)
     "llm_status",
     "llm_start",
