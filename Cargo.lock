@@ -6449,9 +6449,9 @@ dependencies = [
 
 [[package]]
 name = "llmfit-core"
-version = "0.6.9"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e745d6ad9be667fba425cbdaa98aeec070db134786298d170c14d6af7c456caf"
+checksum = "a3c692f83da0f00b19d8e050d09e190cbfc472b6fe0036893b1dc58a088f892b"
 dependencies = [
  "serde",
  "serde_json",

@@ -95,7 +95,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
 # llmfit-core covers NVIDIA (nvidia-smi + sysfs), AMD (rocm-smi + sysfs),
 # Intel Arc (sysfs), Apple Silicon (system_profiler), and Windows WMI.
-llmfit-core = "0.6.6"
+llmfit-core = "0.8.4"
 # sysinfo is already compiled as an indirect dep via llmfit-core; listing it
 # directly gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
