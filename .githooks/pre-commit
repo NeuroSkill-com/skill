@@ -63,13 +63,16 @@ if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lo
     esac
   done <<< "$STAGED_FILES"
 
-  # Deduplicate crate flags
+  # Deduplicate crate flags (bash 3 compatible)
   if [ "${#CRATES[@]}" -gt 0 ]; then
-    mapfile -t uniq_crates < <(printf '%s\n' "${CRATES[@]}" | awk 'NR%2{p=$0;next}{print p" "$0}' | sort -u)
+    uniq_pairs="$(printf '%s\n' "${CRATES[@]}" | awk 'NR%2{p=$0;next}{print p" "$0}' | sort -u)"
     CRATES=()
-    for pair in "${uniq_crates[@]}"; do
+    while IFS= read -r pair; do
+      [ -z "$pair" ] && continue
       CRATES+=("${pair%% *}" "${pair#* }")
-    done
+    done <<EOF
+$uniq_pairs
+EOF
   fi
 
   if [ "${#CRATES[@]}" -gt 0 ]; then

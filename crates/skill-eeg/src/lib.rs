@@ -21,7 +21,7 @@ pub mod constants {
 /// CPU-based FFT fallback (rustfft) used when the `gpu` feature is disabled.
 #[cfg(not(feature = "gpu"))]
 pub mod cpu_fft;
-#[cfg(test)]
+#[cfg(all(test, not(feature = "gpu")))]
 mod proptest_tests;
 
 pub mod artifact_detection;

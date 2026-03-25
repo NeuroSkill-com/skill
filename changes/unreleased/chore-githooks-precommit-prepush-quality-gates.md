@@ -6,3 +6,4 @@
 ### Bugfixes
 
 - **Latest CI failures resolved locally**: fixed frontend Biome formatting drift and removed a Windows-only unnecessary raw-pointer cast in `src-tauri/src/skill_log.rs`.
+- **Hook shell compatibility**: replaced `mapfile` usage in `.githooks/pre-commit` with a bash-3-compatible dedupe loop so commits work on macOS default bash.

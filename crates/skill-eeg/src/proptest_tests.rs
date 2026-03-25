@@ -2,7 +2,7 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Property-based tests for EEG signal processing primitives.
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "gpu")))]
 mod tests {
     use crate::cpu_fft::{fft_batch, ifft_batch, psd};
     use proptest::prelude::*;
