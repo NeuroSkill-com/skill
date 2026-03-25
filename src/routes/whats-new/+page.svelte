@@ -28,8 +28,8 @@ function extractAllVersions(raw: string): VersionMeta[] {
   // Matches: ## [version]  or  ## [version] — date
   const headerRe = /^## \[([^\]]+)\](?:[^\S\n]*[—–-]+[^\S\n]*(\S+))?[^\n]*/gm;
   const headers: Array<{ hdrStart: number; bodyStart: number; version: string; date: string }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = headerRe.exec(raw)) !== null) {
+  // biome-ignore lint/suspicious/noAssignInExpressions: idiomatic RegExp exec loop
+  for (let m: RegExpExecArray | null; (m = headerRe.exec(raw)) !== null; ) {
     headers.push({
       hdrStart: m.index,
       bodyStart: m.index + m[0].length,
@@ -38,7 +38,7 @@ function extractAllVersions(raw: string): VersionMeta[] {
     });
   }
   return headers
-    .map(({ hdrStart, bodyStart, version, date }, i) => {
+    .map(({ hdrStart: _hdrStart, bodyStart, version, date }, i) => {
       const bodyEnd = i + 1 < headers.length ? headers[i + 1].hdrStart : raw.length;
       return { version, date, body: raw.slice(bodyStart, bodyEnd).trim() };
     })

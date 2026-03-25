@@ -70,6 +70,7 @@ onMount(async () => {
   window.addEventListener("keydown", handleCloseShortcut);
   unlisteners.push(() => window.removeEventListener("keydown", handleCloseShortcut));
 });
+// biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
 onDestroy(() => unlisteners.forEach((u) => u()));
 </script>
 

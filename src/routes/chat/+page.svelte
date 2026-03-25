@@ -24,10 +24,10 @@ import { onDestroy, onMount, tick } from "svelte";
 import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
 import ChatContextViewer from "$lib/ChatContextViewer.svelte";
 import ChatHeader from "$lib/ChatHeader.svelte";
-import ChatInputBar from "$lib/ChatInputBar.svelte";
-import ChatMessageList from "$lib/ChatMessageList.svelte";
+import type ChatInputBar from "$lib/ChatInputBar.svelte";
+import type ChatMessageList from "$lib/ChatMessageList.svelte";
 import ChatSettingsPanel from "$lib/ChatSettingsPanel.svelte";
-import ChatSidebar from "$lib/ChatSidebar.svelte";
+import type ChatSidebar from "$lib/ChatSidebar.svelte";
 import ChatToolsPanel from "$lib/ChatToolsPanel.svelte";
 import { buildEegBlock } from "$lib/chat-eeg";
 import {
@@ -111,6 +111,7 @@ const enabledToolCount = $derived(
 async function updateToolConfig(patch: Partial<ToolConfig>) {
   toolConfig = { ...toolConfig, ...patch };
   try {
+    // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
     const cfg = await invoke<any>("get_llm_config");
     cfg.tools = { ...toolConfig };
     await invoke("set_llm_config", { config: cfg });
@@ -448,10 +449,12 @@ function inputKeydown(e: KeyboardEvent) {
 
 /** (Re)start the status poll timer.  Called on mount and after startServer(). */
 function startStatusPoll() {
+  // biome-ignore lint/style/noNonNullAssertion: pollTimer always set before clearInterval
   clearInterval(pollTimer!);
   let ranAfterRunning = false;
   pollTimer = setInterval(async () => {
     if (status !== "loading" && (status !== "running" || ranAfterRunning)) {
+      // biome-ignore lint/style/noNonNullAssertion: pollTimer always set before clearInterval
       clearInterval(pollTimer!);
       return;
     }
@@ -798,6 +801,7 @@ async function sendMessage() {
       params: { temperature, max_tokens: maxTokens, top_k: topK, top_p: topP, thinking_budget: thinkingBudget },
       channel,
     });
+    // biome-ignore lint/suspicious/noExplicitAny: catch-all error type
   } catch (err: any) {
     messages = messages.map((m) =>
       m.id === assistantMsg.id ? { ...m, pending: false, content: `*Error: ${String(err)}*` } : m,
@@ -1079,6 +1083,7 @@ onMount(async () => {
 
   // Load tool config
   try {
+    // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
     const cfg = await invoke<any>("get_llm_config");
     if (cfg?.tools) {
       toolConfig = {
@@ -1110,12 +1115,17 @@ onMount(async () => {
   try {
     unlistenStatus = await listen<ServerStatusPayload>("llm:status", (ev) => {
       status = ev.payload.status ?? status;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
       modelName = (ev.payload as any).model ?? ev.payload.model_name ?? modelName;
       if (ev.payload.supports_vision !== undefined) supportsVision = ev.payload.supports_vision;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
       if ((ev.payload as any).supports_tools !== undefined) supportsTools = (ev.payload as any).supports_tools;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
       if ((ev.payload as any).n_ctx !== undefined) nCtx = (ev.payload as any).n_ctx;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
       if ((ev.payload as any).error) startError = (ev.payload as any).error;
       if (status === "running") {
+        // biome-ignore lint/style/noNonNullAssertion: pollTimer always set before clearInterval
         clearInterval(pollTimer!);
         startError = "";
       }

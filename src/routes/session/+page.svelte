@@ -25,6 +25,7 @@ let metrics = $state<SessionMetrics | null>(null);
 let timeseries = $state<EpochRow[] | null>(null);
 let loading = $state(true);
 let error = $state("");
+// biome-ignore lint/suspicious/noExplicitAny: session metadata is an opaque backend JSON object
 let sessionMeta = $state<Record<string, any> | null>(null);
 let sleepData = $state<SleepStages | null>(null);
 let sleepAnalysisResult = $state<SleepAnalysis | null>(null);

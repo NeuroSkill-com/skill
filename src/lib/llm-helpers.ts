@@ -216,6 +216,7 @@ export function buildFamilies(entries: LlmModelEntry[]): ModelFamily[] {
         downloaded: [],
       });
     }
+    // biome-ignore lint/style/noNonNullAssertion: family always set in the loop above
     const f = map.get(e.family_id)!;
     for (const tag of e.tags) {
       if (!f.tags.includes(tag)) f.tags.push(tag);

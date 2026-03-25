@@ -155,6 +155,7 @@ onMount(async () => {
   );
 });
 onDestroy(() => {
+  // biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
   unlisteners.forEach((u) => u());
   clearInterval(nowTimer);
 });

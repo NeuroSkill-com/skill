@@ -265,6 +265,7 @@ function buildNeighborLabelMap(): Map<number, string> {
 function enrichUmapLabels(raw: UmapResult, labelMap: Map<number, string>): UmapResult {
   if (labelMap.size === 0) return raw;
   const points = raw.points.map((pt) =>
+    // biome-ignore lint/style/noNonNullAssertion: labelMap.has() guard above ensures get() returns a value
     !pt.label && labelMap.has(pt.utc) ? { ...pt, label: labelMap.get(pt.utc)! } : pt,
   );
   return { ...raw, points };
@@ -287,6 +288,7 @@ async function pollUmap(jobId: number) {
         finishUmap();
         return;
       }
+      // biome-ignore lint/style/noNonNullAssertion: queue_position present when status === pending
       umapEta = r.queue_position! > 0 ? t("search.queued", { n: r.queue_position! + 1 }) : t("search.computing3d");
     } catch {
       finishUmap();
@@ -592,6 +594,7 @@ async function fetchIxScreenshots() {
       (async () => {
         try {
           const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
+            // biome-ignore lint/style/noNonNullAssertion: text always set on label nodes
             query: tl.text!,
             k: 2,
             mode: "semantic",
@@ -611,12 +614,14 @@ async function fetchIxScreenshots() {
       (async () => {
         try {
           const around = await invoke<SsResult[]>("get_screenshots_around", {
+            // biome-ignore lint/style/noNonNullAssertion: timestamp_unix always set on eeg nodes
             timestamp: Math.floor(node.timestamp_unix!),
             windowSecs: 1800,
           });
           if (around.length > 0) {
             // Pick the closest screenshot to the node timestamp
             const sorted = [...around].sort(
+              // biome-ignore lint/style/noNonNullAssertion: timestamp_unix always set on eeg nodes
               (a, b) => Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!),
             );
             addResult(node.id, { ...sorted[0], similarity: 0 });

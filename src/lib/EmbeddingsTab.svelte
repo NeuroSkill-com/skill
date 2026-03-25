@@ -34,6 +34,7 @@ const grouped = $derived.by(() => {
   const families: Record<string, ModelInfo[]> = {};
   for (const m of models) {
     const family = m.code.split("/")[0];
+    // biome-ignore lint/suspicious/noAssignInExpressions: idiomatic grouped-push pattern
     (families[family] ??= []).push(m);
   }
   return families;

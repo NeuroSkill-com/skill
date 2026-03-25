@@ -316,17 +316,20 @@ export function computeIxTimeHeatmap(nodes: GraphNode[]) {
   if (eeg.length === 0) return null;
 
   const daySet = new Set<string>();
+  // biome-ignore lint/style/noNonNullAssertion: filtered by != null above
   for (const n of eeg) daySet.add(dateToCompactKey(fromUnix(n.timestamp_unix!)));
   const days = [...daySet].sort();
 
   const grid: number[][] = days.map(() => new Array(24).fill(0));
   for (const n of eeg) {
+    // biome-ignore lint/style/noNonNullAssertion: filtered by != null above
     const d = fromUnix(n.timestamp_unix!);
     const key = dateToCompactKey(d);
     const di = days.indexOf(key);
     if (di >= 0) grid[di][d.getHours()]++;
   }
 
+  // biome-ignore lint/style/noNonNullAssertion: filtered by != null above
   const allTs = eeg.map((n) => n.timestamp_unix!);
   const tMin = Math.min(...allTs);
   const tMax = Math.max(...allTs);

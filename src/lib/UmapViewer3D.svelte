@@ -204,6 +204,7 @@ const uniqueLabels = $derived.by((): LabelEntry[] => {
   for (const p of curPoints) {
     if (!p.label) continue;
     if (!map.has(p.label)) map.set(p.label, { inA: false, inB: false, timestamps: [] });
+    // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
     const e = map.get(p.label)!;
     e.timestamps.push({ utc: p.utc, session: p.session });
     if (p.session === 0) e.inA = true;
@@ -501,6 +502,7 @@ function applyHighlight() {
     }
     const best = new Map<string, BestEdge>();
     for (const ptIdx of proxIdx) {
+      // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
       const lbl = curPoints[ptIdx].label!;
       const pVec = new THREE.Vector3(curPositions[ptIdx * 3], curPositions[ptIdx * 3 + 1], curPositions[ptIdx * 3 + 2]);
       let minD = Infinity,
@@ -916,6 +918,7 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
   labelCloudBase = [];
   if (lIdx.length) {
     // Collect unique labels and assign each a bright hue
+    // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
     const uniqueLabels = [...new Set(lIdx.map((i) => pts[i].label!))];
     const labelColorMap = new Map<string, ThreeColor>();
     for (let li = 0; li < uniqueLabels.length; li++) {
@@ -948,6 +951,7 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
           : sess === 0
             ? COLOR_A
             : COLOR_B;
+      // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
       const ringCol = labelColorMap.get(pts[i].label!) ?? new THREE.Color(0xffffff);
       const px = positions[i * 3],
         py = positions[i * 3 + 1],
@@ -1308,6 +1312,7 @@ onMount(async () => {
       }
       if (hitIdx < 0 && mainCloud) {
         const h = raycaster.intersectObject(mainCloud);
+        // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
         if (h.length) hitIdx = h[0].index!;
       }
       if (hitIdx >= 0 && hitIdx < curPoints.length) {
@@ -1352,6 +1357,7 @@ onMount(async () => {
       }
       if (!label && mainCloud) {
         const h = raycaster.intersectObject(mainCloud);
+        // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
         if (h.length) label = curPoints[h[0].index!]?.label;
       }
       if (label) {

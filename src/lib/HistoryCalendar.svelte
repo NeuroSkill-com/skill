@@ -29,13 +29,21 @@ interface Props {
   recordingStreak: number;
   calendarMonth: string;
   weekGridDays: WeekGridDay[];
+  // biome-ignore lint/suspicious/noExplicitAny: opaque session/grid data passed through from parent
   drawDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque session/grid data passed through from parent
   renderDayDots: (canvas: HTMLCanvasElement, sessions: any[], dayKey: string) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque session/grid data passed through from parent
   handleDayDotsHover: (canvas: HTMLCanvasElement, e: MouseEvent, sessions: any[], dayKey: string) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque grid data passed through from parent
   drawDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque grid data passed through from parent
   renderDayGrid: (canvas: HTMLCanvasElement, data: any) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque grid data passed through from parent
   handleGridHover: (canvas: HTMLCanvasElement, e: MouseEvent, data: any) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque grid data returned from parent
   gridDataForDay: (dayKey: string) => any;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque session objects from parent
   daySessionsMap: Map<string, any[]>;
   gridTooltip: {
     visible: boolean;

@@ -376,9 +376,11 @@ const aDayStr = $derived(aAnchorUtc !== null ? localDateFromUtc(aAnchorUtc + 432
 const bDayStr = $derived(bAnchorUtc !== null ? localDateFromUtc(bAnchorUtc + 43200) : null);
 // Sessions visible in the 48h window
 const aDaySessions = $derived(
+  // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
   aAnchorUtc !== null ? sessions.filter((s) => s.end_utc > aAnchorUtc! && s.start_utc < aAnchorUtc! + 172800) : [],
 );
 const bDaySessions = $derived(
+  // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
   bAnchorUtc !== null ? sessions.filter((s) => s.end_utc > bAnchorUtc! && s.start_utc < bAnchorUtc! + 172800) : [],
 );
 
@@ -683,12 +685,15 @@ async function pollUmapJob(jobId: number) {
         finishUmap();
       } else if (r.status === "pending") {
         // Update queue-aware state on every poll so the UI stays current.
+        // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
         umapQueuePosition = r.queue_position!;
         // estimated_secs from poll = (jobs ahead + this job) estimate.
         // Subtract this job's own estimate to get remaining wait time.
         umapWaitSecs = Math.max(0, (r.estimated_secs ?? 0) - umapOwnEstimateSecs);
 
+        // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
         if (r.queue_position! > 0) {
+          // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
           umapEta = `queued #${r.queue_position! + 1}`;
         } else if (r.progress) {
           const p = r.progress as unknown as UmapProgress;
@@ -724,6 +729,7 @@ async function copySummary() {
     `Band Powers (A → B):`,
     ...bandKeys.map(
       (k, i) =>
+        // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
         `  ${bandMeta[i].name}: ${pct(bv(metricsA!, k))}% → ${pct(bv(metricsB!, k))}% (${diff(bv(metricsA!, k), bv(metricsB!, k))})`,
     ),
     ``,

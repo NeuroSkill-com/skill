@@ -9,6 +9,8 @@ import {
   normalizeSearchMode,
   toInputValue,
 } from "$lib/search-logic";
+import type { SearchResult } from "$lib/search-types";
+import type { UmapPoint, UmapResult } from "$lib/types";
 
 describe("normalizeSearchMode", () => {
   it("passes through valid modes", () => {
@@ -68,7 +70,7 @@ describe("buildNeighborLabelMap", () => {
           ],
         },
       ],
-    } as any;
+    } as SearchResult;
 
     const map = buildNeighborLabelMap(result);
     expect(map.size).toBe(1);
@@ -77,13 +79,15 @@ describe("buildNeighborLabelMap", () => {
 });
 
 describe("enrichUmapLabels", () => {
+  function makeUmapResult(points: UmapPoint[]): UmapResult {
+    return { points, n_a: 0, n_b: 0, dim: 3 };
+  }
+
   it("injects labels from map", () => {
-    const raw = {
-      points: [
-        { x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" },
-        { x: 1, y: 1, z: 1, utc: 1300, label: "existing", set: "b" },
-      ],
-    } as any;
+    const raw = makeUmapResult([
+      { x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" },
+      { x: 1, y: 1, z: 1, utc: 1300, label: "existing", set: "b" },
+    ]);
     const labelMap = new Map([[1200, "injected"]]);
     const enriched = enrichUmapLabels(raw, labelMap);
     expect(enriched.points[0].label).toBe("injected");
@@ -91,7 +95,7 @@ describe("enrichUmapLabels", () => {
   });
 
   it("returns raw when label map is empty", () => {
-    const raw = { points: [{ x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" }] } as any;
+    const raw = makeUmapResult([{ x: 0, y: 0, z: 0, utc: 1200, label: null, set: "a" }]);
     const result = enrichUmapLabels(raw, new Map());
     expect(result).toBe(raw);
   });

@@ -43,8 +43,8 @@ function extractKeys(filePath: string): Set<string> {
   const content = readFileSync(filePath, "utf8");
   const keys = new Set<string>();
   const re = /"([a-zA-Z][^"]*)"\s*:/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) keys.add(m[1]);
+  // biome-ignore lint/suspicious/noAssignInExpressions: idiomatic RegExp exec loop
+  for (let m: RegExpExecArray | null; (m = re.exec(content)) !== null; ) keys.add(m[1]);
   return keys;
 }
 
@@ -129,8 +129,8 @@ describe("i18n placeholder consistency", () => {
     for (const ns of NS_FILES) {
       const content = readFileSync(resolve(LOCALES_DIR, "en", `${ns}.ts`), "utf8");
       const valueRe = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
-      let m: RegExpExecArray | null;
-      while ((m = valueRe.exec(content)) !== null) enValues.set(m[1], m[2]);
+      // biome-ignore lint/suspicious/noAssignInExpressions: idiomatic RegExp exec loop
+      for (let m: RegExpExecArray | null; (m = valueRe.exec(content)) !== null; ) enValues.set(m[1], m[2]);
     }
 
     const failures: string[] = [];
@@ -139,8 +139,8 @@ describe("i18n placeholder consistency", () => {
       for (const ns of NS_FILES) {
         const content = readFileSync(resolve(LOCALES_DIR, locale, `${ns}.ts`), "utf8");
         const valueRe = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
-        let m: RegExpExecArray | null;
-        while ((m = valueRe.exec(content)) !== null) {
+        // biome-ignore lint/suspicious/noAssignInExpressions: idiomatic RegExp exec loop
+        for (let m: RegExpExecArray | null; (m = valueRe.exec(content)) !== null; ) {
           const key = m[1];
           const locVal = m[2];
           const enVal = enValues.get(key);

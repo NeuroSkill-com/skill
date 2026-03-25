@@ -55,7 +55,7 @@ export function buildNeighborLabelMap(result: SearchResult | null): Map<number, 
 export function enrichUmapLabels(raw: UmapResult, labelMap: Map<number, string>): UmapResult {
   if (labelMap.size === 0) return raw;
   const points = raw.points.map((pt: UmapPoint) =>
-    !pt.label && labelMap.has(pt.utc) ? { ...pt, label: labelMap.get(pt.utc)! } : pt,
+    !pt.label && labelMap.has(pt.utc) ? { ...pt, label: labelMap.get(pt.utc) ?? "" } : pt,
   );
   return { ...raw, points };
 }

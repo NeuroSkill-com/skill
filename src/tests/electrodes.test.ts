@@ -126,6 +126,7 @@ describe("Muse electrode metadata", () => {
 
   it("each Muse electrode has muse: true", () => {
     for (const name of MUSE_NAMES) {
+      // biome-ignore lint/style/noNonNullAssertion: known Muse electrode always exists in fixture
       const e = electrodes.find((e) => e.name === name)!;
       expect(e.muse, `${name}.muse should be true`).toBe(true);
     }
@@ -133,6 +134,7 @@ describe("Muse electrode metadata", () => {
 
   it("each Muse electrode has a non-empty museRole string", () => {
     for (const name of MUSE_NAMES) {
+      // biome-ignore lint/style/noNonNullAssertion: known Muse electrode always exists in fixture
       const e = electrodes.find((e) => e.name === name)!;
       expect(typeof e.museRole).toBe("string");
       expect(e.museRole?.length).toBeGreaterThan(0);
