@@ -10,18 +10,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { Separator } from "$lib/components/ui/separator";
+import ScreenshotCaptureSettingsSection from "$lib/screenshots/ScreenshotCaptureSettingsSection.svelte";
 import ScreenshotOcrSection from "$lib/screenshots/ScreenshotOcrSection.svelte";
 import ScreenshotPerformanceSection from "$lib/screenshots/ScreenshotPerformanceSection.svelte";
 import ScreenshotReembedSection from "$lib/screenshots/ScreenshotReembedSection.svelte";
 import ScreenshotToggleCard from "$lib/screenshots/ScreenshotToggleCard.svelte";
-import {
-  EMBEDDING_EPOCH_SECS,
-  SCREENSHOT_INTERVAL_MAX_SECS,
-  SCREENSHOT_INTERVAL_MIN_SECS,
-  SCREENSHOT_INTERVAL_STEP_SECS,
-} from "$lib/constants";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -185,11 +178,6 @@ async function toggleGpu() {
   await save();
 }
 
-// ── Model change → auto-update image_size ─────────────────────────────────
-function onModelChange() {
-  config.image_size = recommendedSize;
-}
-
 // ── Re-embed ───────────────────────────────────────────────────────────────
 async function reembed() {
   reembedding = true;
@@ -312,111 +300,16 @@ onDestroy(() => {
   />
 
   <!-- ── Capture settings ────────────────────────────────────────────────── -->
-  {#if config.enabled}
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="py-4 px-4 flex flex-col gap-4">
-
-      <!-- Interval (epoch-aligned: multiples of 5 s) -->
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center justify-between">
-          <label for="ss-interval" class="text-[0.72rem] font-semibold text-foreground">
-            {t("screenshots.interval")}
-          </label>
-          <span class="text-[0.58rem] text-muted-foreground tabular-nums">
-            {config.interval_secs}{t("screenshots.intervalUnit")} ({Math.round(config.interval_secs / EMBEDDING_EPOCH_SECS)}× {t("screenshots.intervalEpoch")})
-          </span>
-        </div>
-        <input id="ss-interval" type="range"
-               min={SCREENSHOT_INTERVAL_MIN_SECS} max={SCREENSHOT_INTERVAL_MAX_SECS}
-               step={SCREENSHOT_INTERVAL_STEP_SECS}
-               bind:value={config.interval_secs}
-               class="w-full accent-violet-500 h-1.5" />
-        <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.intervalDesc")}</span>
-      </div>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- Image size -->
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center justify-between">
-          <label for="ss-size" class="text-[0.72rem] font-semibold text-foreground">
-            {t("screenshots.imageSize")}
-          </label>
-          <span class="text-[0.58rem] text-muted-foreground tabular-nums">
-            {config.image_size} {t("screenshots.imageSizeUnit")}
-          </span>
-        </div>
-        <input id="ss-size" type="range" min="224" max="1536" step="32"
-               bind:value={config.image_size}
-               class="w-full accent-violet-500 h-1.5" />
-        <span class="text-[0.54rem] text-muted-foreground/60">
-          {t("screenshots.imageSizeDesc")}
-          <span class="font-semibold"> {t("screenshots.imageSizeRecommended")} {recommendedSize}{t("screenshots.imageSizeUnit")}</span>
-        </span>
-      </div>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- Quality -->
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center justify-between">
-          <label for="ss-quality" class="text-[0.72rem] font-semibold text-foreground">
-            {t("screenshots.quality")}
-          </label>
-          <span class="text-[0.58rem] text-muted-foreground tabular-nums">{config.quality}</span>
-        </div>
-        <input id="ss-quality" type="range" min="10" max="100" step="5"
-               bind:value={config.quality}
-               class="w-full accent-violet-500 h-1.5" />
-        <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.qualityDesc")}</span>
-      </div>
-
-      <Separator class="bg-border dark:bg-white/[0.05]" />
-
-      <!-- Embedding backend -->
-      <div class="flex flex-col gap-1.5">
-        <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.embeddingModel")}</span>
-        <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.embeddingModelDesc")}</span>
-
-        <div class="flex flex-col gap-1">
-          <!-- Backend select -->
-          <select bind:value={config.embed_backend}
-                  onchange={onModelChange}
-                  class="w-full rounded-lg border border-border dark:border-white/[0.08]
-                         bg-white dark:bg-[#14141e] px-3 py-2
-                         text-[0.72rem] text-foreground
-                         focus:outline-none focus:ring-1 focus:ring-violet-500/50">
-            <option value="fastembed">{t("screenshots.backendFastembed")}</option>
-            <option value="mmproj">{t("screenshots.backendMmproj")}</option>
-            <option value="llm-vlm">{t("screenshots.backendLlmVlm")}</option>
-          </select>
-
-          <!-- fastembed model select (only when fastembed is selected) -->
-          {#if config.embed_backend === "fastembed"}
-            <select bind:value={config.fastembed_model}
-                    onchange={onModelChange}
-                    class="w-full rounded-lg border border-border dark:border-white/[0.08]
-                           bg-white dark:bg-[#14141e] px-3 py-2
-                           text-[0.72rem] text-foreground
-                           focus:outline-none focus:ring-1 focus:ring-violet-500/50">
-              <option value="clip-vit-b-32">{t("screenshots.modelClip")}</option>
-              <option value="nomic-embed-vision-v1.5">{t("screenshots.modelNomic")}</option>
-            </select>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Apply button -->
-      <div class="flex justify-end">
-        <Button size="sm" onclick={save} disabled={saving}
-                class="text-[0.65rem] h-7 px-4">
-          {saving ? t("common.saving") : t("common.apply")}
-        </Button>
-      </div>
-
-    </CardContent>
-  </Card>
-  {/if}
+  <ScreenshotCaptureSettingsSection
+    {config}
+    {saving}
+    {recommendedSize}
+    onUpdate={(patch, adoptRecommended = false) => {
+      config = { ...config, ...patch };
+      if (adoptRecommended) config = { ...config, image_size: recommendedSize };
+    }}
+    onSave={save}
+  />
 
   <!-- ── Model changed banner ────────────────────────────────────────────── -->
   <ScreenshotReembedSection
