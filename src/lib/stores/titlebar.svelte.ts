@@ -39,6 +39,7 @@ export function createTitlebarState<T extends Record<string, unknown>>(initial: 
  * // titlebar calls: hCbs.prev();
  * ```
  */
+// biome-ignore lint/suspicious/noExplicitAny: generic callback map — args are opaque
 export function createTitlebarCallbacks<T extends Record<string, (...args: any[]) => void>>(defaults: T): T {
   // Plain object — intentionally not reactive.  The titlebar calls these
   // synchronously; Svelte reactivity is not needed on the callback bag itself.

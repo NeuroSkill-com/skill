@@ -122,6 +122,7 @@ describe("assignLabelRainbowColors", () => {
     expect(colors.size).toBe(3);
     const vals = [...colors.values()];
     // All should be HSL strings
+    // biome-ignore lint/suspicious/useIterableCallbackReturn: vitest expect returns void in practice
     vals.forEach((c) => expect(c).toMatch(/^hsl\(/));
     // All should be different
     expect(new Set(vals).size).toBe(3);

@@ -433,6 +433,7 @@ async function loadDay(idx: number) {
     // Single IPC call loads all remaining sessions' metrics at once.
     if (needsBatch.length > 0) void loadMetricsBatch(needsBatch);
   } catch (e) {
+    // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
     if (loadSeq === seq) console.error("loadDay error:", e);
   } finally {
     if (loadSeq === seq) dayLoading = false;
@@ -539,12 +540,14 @@ async function loadDayScreenshots(dayStart: number) {
 }
 
 // ── Labels browser ──────────────────────────────────────────────────────
+// biome-ignore lint/suspicious/noExplicitAny: opaque annotation records from backend
 let allLabels = $state<any[]>([]);
 let showLabels = $state(false);
 let labelSearchQuery = $state("");
 
 async function loadLabels() {
   try {
+    // biome-ignore lint/suspicious/noExplicitAny: opaque annotation records from backend
     allLabels = await invoke<any[]>("query_annotations", { startUtc: null, endUtc: null });
   } catch {
     allLabels = [];

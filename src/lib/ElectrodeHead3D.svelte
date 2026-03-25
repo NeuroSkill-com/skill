@@ -95,11 +95,13 @@ let craniumCenter = $state(new Vector3(0, 2, -0.3));
 gltfStore.subscribe((g) => {
   if (!g) return;
   gltfScene = g.scene;
+  // biome-ignore lint/suspicious/noExplicitAny: three.js Object3D child type
   g.scene.traverse((child: any) => {
     if (child.isMesh) {
       headMesh = child;
       child.material = headMat;
       child.geometry.computeBoundingBox();
+      // biome-ignore lint/style/noNonNullAssertion: computeBoundingBox() always sets boundingBox
       const box = child.geometry.boundingBox!;
       headCenter = new Vector3().addVectors(box.min, box.max).multiplyScalar(0.5);
       // Cranium center: midpoint of upper 60% of the head, slightly behind center

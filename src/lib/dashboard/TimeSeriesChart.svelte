@@ -304,7 +304,7 @@ function initWebGL(): boolean {
   gl = canvas.getContext("webgl", { antialias: true, alpha: true, preserveDrawingBuffer: false });
   if (!gl) return false;
 
-  const vs = gl.createShader(gl.VERTEX_SHADER)!;
+  const vs = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
   gl.shaderSource(vs, VERT_SRC);
   gl.compileShader(vs);
   if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
@@ -312,7 +312,7 @@ function initWebGL(): boolean {
     return false;
   }
 
-  const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
+  const fs = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
   gl.shaderSource(fs, FRAG_SRC);
   gl.compileShader(fs);
   if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
@@ -320,7 +320,7 @@ function initWebGL(): boolean {
     return false;
   }
 
-  glProgram = gl.createProgram()!;
+  glProgram = gl.createProgram() as WebGLProgram;
   gl.attachShader(glProgram, vs);
   gl.attachShader(glProgram, fs);
   gl.linkProgram(glProgram);
@@ -378,7 +378,7 @@ function drawWebGL() {
   gl.uniform2f(uOffset, xL, yB);
 
   // Draw grid lines
-  const gridBuf = gl.createBuffer()!;
+  const gridBuf = gl.createBuffer() as WebGLBuffer;
   const [gr, gg, gb, ga] = dark ? [1, 1, 1, 0.06] : [0, 0, 0, 0.08];
   gl.uniform4f(uColor, gr, gg, gb, ga);
   const gridVerts: number[] = [];
@@ -402,7 +402,7 @@ function drawWebGL() {
   gl.scissor(sX, Math.round(H * 0.14 * dprS), sW, sH);
 
   // Draw each series
-  const lineBuf = gl.createBuffer()!;
+  const lineBuf = gl.createBuffer() as WebGLBuffer;
   for (let si = 0; si < series.length; si++) {
     const s = series[si];
     const sData = ds ? ds.seriesData[si] : s.data;
@@ -445,7 +445,7 @@ function drawWebGL() {
       areaVerts[i * 4 + 2] = verts[i * 2];
       areaVerts[i * 4 + 3] = 0;
     }
-    const areaBuf = gl.createBuffer()!;
+    const areaBuf = gl.createBuffer() as WebGLBuffer;
     gl.bindBuffer(gl.ARRAY_BUFFER, areaBuf);
     gl.bufferData(gl.ARRAY_BUFFER, areaVerts, gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);

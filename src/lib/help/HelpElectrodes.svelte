@@ -33,6 +33,7 @@ onMount(async () => {
     }),
   );
 });
+// biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
 onDestroy(() => unsubs.forEach((u) => u()));
 </script>
 

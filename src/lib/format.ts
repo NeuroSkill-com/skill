@@ -242,7 +242,7 @@ export function setupHiDpiCanvas(canvas: HTMLCanvasElement, cssW?: number, cssH?
   const h = cssH ?? canvas.clientHeight;
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return ctx;
 }

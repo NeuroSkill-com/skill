@@ -169,6 +169,7 @@ function randomPositions(pts: UmapPoint[]): Float32Array {
 // ── Label-connection lines ───────────────────────────────────────────────
 function clearLinks() {
   if (!linkGroup) return;
+  // biome-ignore lint/suspicious/noExplicitAny: three.js Object3D child type
   linkGroup.traverse((o: any) => {
     o.geometry?.dispose();
     o.material?.dispose();
@@ -269,6 +270,7 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
   clearLinks();
 
   const ps = Math.max(1.5, Math.min(4, 200 / Math.sqrt(n)));
+  // biome-ignore lint/style/noNonNullAssertion: raycaster.params.Points exists when using PointsMaterial
   raycaster.params.Points!.threshold = ps * 0.3;
 
   // Main cloud
@@ -313,11 +315,13 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
 
 function applyPositions(pos: Float32Array) {
   if (!mainCloud) return;
+  // biome-ignore lint/suspicious/noExplicitAny: three.js BufferAttribute typed as any for direct array access
   const a = mainCloud.geometry.getAttribute("position") as any;
   a.array.set(pos);
   a.needsUpdate = true;
 
   if (labelCloud && labeledIdx.length) {
+    // biome-ignore lint/suspicious/noExplicitAny: three.js BufferAttribute typed as any for direct array access
     const la = labelCloud.geometry.getAttribute("position") as any;
     for (let li = 0; li < labeledIdx.length; li++) {
       const i = labeledIdx[li];
@@ -382,10 +386,12 @@ function raycast(e: PointerEvent): number {
   let hitIdx = -1;
   if (labelCloud) {
     const lh = raycaster.intersectObject(labelCloud);
+    // biome-ignore lint/style/noNonNullAssertion: raycaster intersection always has an index
     if (lh.length) hitIdx = labeledIdx[lh[0].index!];
   }
   if (hitIdx < 0 && mainCloud) {
     const h = raycaster.intersectObject(mainCloud);
+    // biome-ignore lint/style/noNonNullAssertion: raycaster intersection always has an index
     if (h.length) hitIdx = h[0].index!;
   }
   return hitIdx;
@@ -435,6 +441,7 @@ function onPointerLeave() {
 }
 
 // OrbitControls — loaded and attached in onMount
+// biome-ignore lint/suspicious/noExplicitAny: OrbitControls dynamically imported
 let controls: any = null;
 
 // ── DOM event listeners ──────────────────────────────────────────────────

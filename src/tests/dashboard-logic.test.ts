@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  sigmoid100,
   computeRawScores,
   emaSmooth,
-  fmtUptime,
   fmtEeg,
-  redact,
+  fmtUptime,
   goalProgress,
-  isMuseDevice,
   hasBattery,
+  isMuseDevice,
+  redact,
+  sigmoid100,
 } from "$lib/dashboard-logic";
 
 describe("sigmoid100", () => {
@@ -54,6 +54,7 @@ describe("computeRawScores", () => {
       { rel_alpha: 0.5, rel_beta: 0.5, rel_theta: 0.1 },
       { rel_alpha: 0.5, rel_beta: 0.5, rel_theta: 0.1 },
     ]);
+    // biome-ignore lint/style/noNonNullAssertion: test fixture always produces a result
     expect(one!.focus).toBeCloseTo(two!.focus, 5);
   });
 });

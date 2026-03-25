@@ -248,6 +248,7 @@ function tick() {
 }
 
 async function onPhaseComplete() {
+  // biome-ignore lint/style/noNonNullAssertion: intervalId is always set before this call
   clearInterval(intervalId!);
   intervalId = null;
 
@@ -309,6 +310,7 @@ function startPhase(p: Phase) {
   phaseStartUtc = Math.floor(Date.now() / 1000);
   secondsLeft =
     p === "work" ? workMins * 60 : p === "break" ? breakMins * 60 : p === "longBreak" ? longBreakMins * 60 : 0;
+  // biome-ignore lint/style/noNonNullAssertion: intervalId is always set before this call
   clearInterval(intervalId!);
   intervalId = setInterval(tick, 1000);
   speakAsync(phaseAnnouncement(p));
@@ -327,6 +329,7 @@ function handlePause() {
 }
 
 function handleStop() {
+  // biome-ignore lint/style/noNonNullAssertion: intervalId is always set before this call
   clearInterval(intervalId!);
   intervalId = null;
   phase = "idle";
@@ -340,6 +343,7 @@ function handleReset() {
 }
 
 function skipPhase() {
+  // biome-ignore lint/style/noNonNullAssertion: intervalId is always set before this call
   clearInterval(intervalId!);
   intervalId = null;
   onPhaseComplete();

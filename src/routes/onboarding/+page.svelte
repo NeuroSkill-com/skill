@@ -569,6 +569,7 @@ onMount(async () => {
   }, 2000);
 });
 onDestroy(async () => {
+  // biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
   unsubs.forEach((u) => u());
   unlistenTts?.();
   if (calRunning) {

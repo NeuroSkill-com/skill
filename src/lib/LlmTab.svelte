@@ -12,11 +12,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import { type LlmCatalog } from "$lib/llm-helpers";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
+import type { LlmCatalog } from "$lib/llm-helpers";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

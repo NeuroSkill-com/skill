@@ -399,7 +399,9 @@ function buildGraph() {
   const positions = computePositions(nodes, usePca);
 
   // EEG time range
-  const eegTs = nodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null).map((n) => n.timestamp_unix!);
+  const eegTs = nodes
+    .filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null)
+    .map((n) => n.timestamp_unix as number);
   const tMin = eegTs.length ? Math.min(...eegTs) : 0;
   const tMax = eegTs.length ? Math.max(...eegTs) : 1;
   eegTimeMin = tMin;
@@ -495,7 +497,7 @@ function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"])
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
   const r = (hexColor >> 16) & 0xff;
   const g = (hexColor >> 8) & 0xff;
@@ -539,7 +541,7 @@ function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
   // Rounded frame background
   ctx.fillStyle = "rgba(6,182,212,0.08)";
@@ -790,7 +792,9 @@ const EDGE_LEGEND = [
 ];
 
 const eegDots = $derived.by(() => {
-  const pts = nodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null).map((n) => n.timestamp_unix!);
+  const pts = nodes
+    .filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null)
+    .map((n) => n.timestamp_unix as number);
   if (!pts.length) return [] as { unix: number; t: number; css: string }[];
   const mn = Math.min(...pts),
     mx = Math.max(...pts),

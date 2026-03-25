@@ -150,7 +150,9 @@ const electrodes3D = $derived(
 );
 
 let selectedElectrode: Electrode | null = $state(null);
+// biome-ignore lint/suspicious/noExplicitAny: dynamic Svelte component import
 let Head3D: any = $state(null);
+// biome-ignore lint/suspicious/noExplicitAny: dynamic ref to 3D component instance
 let head3DRef: any = $state(null);
 let isDragging = $state(false);
 let pointerDownPos = $state({ x: 0, y: 0 });
