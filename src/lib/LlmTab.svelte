@@ -32,6 +32,7 @@ import {
   tagLabel,
   vendorLabel,
 } from "$lib/llm-helpers";
+import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -150,11 +151,8 @@ let config = $state<LlmConfig>({
 
 let configSaving = $state(false);
 let wsPort = $state(8375);
-let apiKeyVisible = $state(false);
-let ctxSizeInput = $state("");
 let serverStatus = $state<"stopped" | "loading" | "running">("stopped");
 let startError = $state("");
-let showAdvanced = $state(false);
 let showAllQuants = $state(false);
 
 /** The family currently shown in the detail panel. */
@@ -288,7 +286,6 @@ async function loadHardwareFit() {
 async function loadConfig() {
   try {
     config = await invoke<LlmConfig>("get_llm_config");
-    ctxSizeInput = config.ctx_size !== null ? String(config.ctx_size) : "";
   } catch (e) {}
   try {
     const [, port] = await invoke<[string, number]>("get_ws_config");
@@ -298,8 +295,6 @@ async function loadConfig() {
 
 async function saveConfig() {
   configSaving = true;
-  const ctx = ctxSizeInput.trim() === "" ? null : parseInt(ctxSizeInput, 10) || null;
-  config = { ...config, ctx_size: ctx };
   try {
     await invoke("set_llm_config", { config });
   } finally {
@@ -819,243 +814,23 @@ function handleLogScroll() {
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Advanced inference settings (collapsible)                                  -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<section class="flex flex-col gap-2">
-  <button
-    onclick={() => showAdvanced = !showAdvanced}
-    class="flex items-center gap-2 px-0.5 cursor-pointer select-none group">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground
-                  group-hover:text-foreground transition-colors">
-      {t("llm.section.inference")}
-    </span>
-    <svg viewBox="0 0 16 16" fill="currentColor"
-         class="w-2.5 h-2.5 text-muted-foreground/50 transition-transform
-                {showAdvanced ? 'rotate-180' : ''}">
-      <path d="M3 6l5 5 5-5H3z"/>
-    </svg>
-    {#if configSaving}<span class="text-[0.56rem] text-muted-foreground">saving…</span>{/if}
-  </button>
-
-  {#if showAdvanced}
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
-
-      <!-- GPU layers -->
-      <div class="flex flex-col gap-2 px-4 py-3.5">
-        <div class="flex items-baseline justify-between">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>
-          <span class="text-[0.68rem] text-muted-foreground tabular-nums">
-            {config.n_gpu_layers === 0 ? "CPU only" : config.n_gpu_layers >= 4294967295 ? "All layers" : config.n_gpu_layers}
-          </span>
-        </div>
-        <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.gpuLayersDesc")}</p>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          {#each [[0,"CPU"],[8,"8"],[16,"16"],[32,"32"],[4294967295,"All"]] as [val, label]}
-            <button
-              onclick={async () => { config = { ...config, n_gpu_layers: val as number }; await saveConfig(); }}
-              class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
-                     {config.n_gpu_layers === val
-                       ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                       : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-              {label}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Context size -->
-      {@const maxCtx = activeEntry?.max_context_length || 0}
-      {@const ctxOptions = ([[null,"auto"]] as [number|null, string][]).concat(
-        ([[4096,"4K"],[8192,"8K"],[16384,"16K"],[32768,"32K"],[65536,"64K"],[131072,"128K"]] as [number, string][])
-          .filter(([val]) => maxCtx === 0 || (val as number) <= maxCtx)
-      )}
-      <div class="flex flex-col gap-2 px-4 py-3.5">
-        <div class="flex items-baseline justify-between">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.ctxSize")}</span>
-          <span class="text-[0.68rem] text-muted-foreground tabular-nums">
-            {config.ctx_size !== null ? config.ctx_size + " tokens" : "auto"}
-          </span>
-        </div>
-        <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.ctxSizeDesc")}</p>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          {#each ctxOptions as [val, label]}
-            <button
-              onclick={async () => { ctxSizeInput = val !== null ? String(val) : ""; config = { ...config, ctx_size: val as number|null }; await saveConfig(); }}
-              class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
-                     {config.ctx_size === val
-                       ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                       : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-              {label}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Parallel -->
-      <div class="flex items-center justify-between gap-4 px-4 py-3.5">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.parallel")}</span>
-          <span class="text-[0.65rem] text-muted-foreground">{t("llm.inference.parallelDesc")}</span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          {#each [1,2,4] as val}
-            <button
-              onclick={async () => { config = { ...config, parallel: val }; await saveConfig(); }}
-              class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
-                     {config.parallel === val
-                       ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                       : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-              {val}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- API key -->
-      <div class="flex flex-col gap-2 px-4 py-3.5">
-        <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.apiKey")}</span>
-        <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.apiKeyDesc")}</p>
-        <div class="flex items-center gap-2">
-          <input type={apiKeyVisible ? "text" : "password"}
-            placeholder={t("llm.inference.apiKeyPlaceholder")}
-            bind:value={config.api_key}
-            onblur={saveConfig}
-            class="flex-1 min-w-0 text-[0.73rem] font-mono px-2 py-1 rounded-md
-                   border border-border bg-background text-foreground placeholder:text-muted-foreground/40" />
-          <button onclick={() => apiKeyVisible = !apiKeyVisible}
-            class="shrink-0 text-[0.62rem] text-muted-foreground hover:text-foreground cursor-pointer">
-            {apiKeyVisible ? "hide" : "show"}
-          </button>
-          {#if config.api_key}
-            <button onclick={async () => { config = { ...config, api_key: null }; await saveConfig(); }}
-              class="shrink-0 text-[0.62rem] text-muted-foreground hover:text-red-500 cursor-pointer">
-              clear
-            </button>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Multimodal -->
-      {#if catalog.entries.some(e => e.is_mmproj)}
-        <!-- Auto-load vision encoder -->
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5
-                    border-t border-border/40 dark:border-white/[0.04]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.autoload")}</span>
-            <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.autoloadDesc")}</span>
-          </div>
-          <button role="switch" aria-checked={config.autoload_mmproj} aria-label={t("llm.mmproj.autoload")}
-            onclick={async () => { config = { ...config, autoload_mmproj: !config.autoload_mmproj }; await saveConfig(); }}
-            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
-                   border-transparent transition-colors duration-200
-                   {config.autoload_mmproj ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
-                          transform transition-transform duration-200
-                          {config.autoload_mmproj ? 'translate-x-4' : 'translate-x-0'}"></span>
-          </button>
-        </div>
-
-        <!-- No-GPU for mmproj (only relevant when a projector is downloaded) -->
-        {#if catalog.entries.some(e => e.is_mmproj && e.state === "downloaded")}
-          <div class="flex items-center justify-between gap-4 px-4 py-3.5">
-            <div class="flex flex-col gap-0.5">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.noGpu")}</span>
-              <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.noGpuDesc")}</span>
-            </div>
-            <button role="switch" aria-checked={config.no_mmproj_gpu} aria-label={t("llm.mmproj.noGpu")}
-              onclick={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
-              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
-                     border-transparent transition-colors duration-200
-                     {config.no_mmproj_gpu ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-              <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
-                            transform transition-transform duration-200
-                            {config.no_mmproj_gpu ? 'translate-x-4' : 'translate-x-0'}"></span>
-            </button>
-          </div>
-        {/if}
-      {/if}
-
-      <!-- Verbose LLM logging -->
-      <div class="flex items-center justify-between gap-4 px-4 py-3.5
-                  border-t border-border/40 dark:border-white/[0.04]">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.verbose")}</span>
-          <span class="text-[0.65rem] text-muted-foreground">{t("llm.verboseDesc")}</span>
-        </div>
-        <button role="switch" aria-checked={config.verbose} aria-label={t("llm.verbose")}
-          onclick={async () => { config = { ...config, verbose: !config.verbose }; await saveConfig(); }}
-          class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
-                 border-transparent transition-colors duration-200
-                 {config.verbose ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-          <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
-                        transform transition-transform duration-200
-                        {config.verbose ? 'translate-x-4' : 'translate-x-0'}"></span>
-        </button>
-      </div>
-
-      <!-- GPU memory safety thresholds -->
-      <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuMemThreshold")}</span>
-          <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.gpuMemThresholdDesc")}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex flex-col gap-1 flex-1">
-            <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemDecode")}</span>
-            <div class="flex items-center gap-1.5 flex-wrap">
-              {#each [0, 0.25, 0.5, 0.75, 1.0] as val}
-                <button
-                  onclick={async () => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
-                  class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
-                         {config.gpu_memory_threshold === val
-                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-                  {val === 0 ? "Off" : `${val} GB`}
-                </button>
-              {/each}
-            </div>
-          </div>
-          <div class="flex flex-col gap-1 flex-1">
-            <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemGen")}</span>
-            <div class="flex items-center gap-1.5 flex-wrap">
-              {#each [0, 0.15, 0.3, 0.5, 0.75] as val}
-                <button
-                  onclick={async () => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
-                  class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
-                         {config.gpu_memory_gen_threshold === val
-                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-                  {val === 0 ? "Off" : `${val} GB`}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- curl quick test -->
-      {@const curlSnippet = `curl http://localhost:${wsPort}/v1/chat/completions \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'`}
-      <div class="flex flex-col gap-1.5 px-4 py-3 bg-slate-50 dark:bg-[#111118]">
-        <div class="flex items-center justify-between">
-          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Quick test</span>
-          <button
-            onclick={async (e) => {
-              await navigator.clipboard.writeText(curlSnippet);
-              const btn = e.currentTarget;
-              btn.textContent = "Copied!";
-              setTimeout(() => { btn.textContent = "Copy"; }, 1500);
-            }}
-            class="text-[0.54rem] text-muted-foreground/60 hover:text-foreground
-                   transition-colors cursor-pointer select-none">
-            Copy
-          </button>
-        </div>
-        <pre class="text-[0.58rem] font-mono text-muted-foreground/80 whitespace-pre-wrap break-all leading-relaxed select-text cursor-text">{curlSnippet}</pre>
-      </div>
-
-    </CardContent>
-  </Card>
-  {/if}
-</section>
+<LlmInferenceSection
+  config={config}
+  {configSaving}
+  {wsPort}
+  activeMaxCtx={activeEntry?.max_context_length || 0}
+  hasAnyMmproj={catalog.entries.some((e) => e.is_mmproj)}
+  hasDownloadedMmproj={catalog.entries.some((e) => e.is_mmproj && e.state === "downloaded")}
+  onSetGpuLayers={async (val) => { config = { ...config, n_gpu_layers: val }; await saveConfig(); }}
+  onSetCtxSize={async (val) => { config = { ...config, ctx_size: val }; await saveConfig(); }}
+  onSetParallel={async (val) => { config = { ...config, parallel: val }; await saveConfig(); }}
+  onSetApiKey={async (val) => { config = { ...config, api_key: val }; await saveConfig(); }}
+  onToggleAutoloadMmproj={async () => { config = { ...config, autoload_mmproj: !config.autoload_mmproj }; await saveConfig(); }}
+  onToggleNoMmprojGpu={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
+  onToggleVerbose={async () => { config = { ...config, verbose: !config.verbose }; await saveConfig(); }}
+  onSetGpuMemoryThreshold={async (val) => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
+  onSetGpuMemoryGenThreshold={async (val) => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
+/>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Server log                                                                  -->
