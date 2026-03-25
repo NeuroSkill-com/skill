@@ -41,18 +41,16 @@ export function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, fam
  *
  * Priority:
  *  1. Already-downloaded model (any family) — skip download.
- *  2. LFM2.5-VL 1.6B — smallest default family for first-run bootstrap.
+ *  2. LFM2.5 1.2B Instruct — default bootstrap family.
  *  3. Any recommended model, smallest first.
  */
 export function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
   const downloaded = entries.find((e) => !e.is_mmproj && e.state === "downloaded");
   if (downloaded) return downloaded;
 
-  const lfmSmallest = entries
-    .filter((e) => !e.is_mmproj && (e.family_id === "lfm25-vl-1.6b" || /lfm2\.5.*1\.6b/i.test(e.family_name)))
-    .sort((a, b) => a.size_gb - b.size_gb)[0];
-
   return (
-    lfmSmallest ?? entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ?? null
+    pickFamilyTarget(entries, "lfm25-1.2b-instruct", /lfm2\.5\s*1\.2b.*instruct/i) ??
+    entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
+    null
   );
 }
