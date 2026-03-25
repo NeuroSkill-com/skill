@@ -8,7 +8,6 @@ description = "Cross-platform calendar event fetching — EventKit (macOS), iCal
 [dependencies]
 serde      = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-anyhow     = { workspace = true }
 
 [build-dependencies]
 cc = "1"
