@@ -540,16 +540,14 @@ async function startServer() {
 
   try {
     const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
-    const hasDownloaded = catalog.entries.some((e) => !e.is_mmproj && e.state === "downloaded");
+    const target = pickBootstrapModel(catalog.entries);
+    if (!target) {
+      startError = "No downloadable LLM model found in catalog.";
+      status = "stopped";
+      return;
+    }
 
-    if (!hasDownloaded) {
-      const target = pickBootstrapModel(catalog.entries);
-      if (!target) {
-        startError = "No downloadable LLM model found in catalog.";
-        status = "stopped";
-        return;
-      }
-
+    if (target.state !== "downloaded") {
       if (target.state !== "downloading") {
         await invoke("download_llm_model", { filename: target.filename });
       }

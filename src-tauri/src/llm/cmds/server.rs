@@ -41,7 +41,7 @@ pub fn start_llm_server(
 ) -> Result<String, String> {
     use std::sync::atomic::Ordering;
 
-    let (mut config, catalog, log_buf, cell, skill_dir, loading, start_error) = {
+    let (mut config, mut catalog, log_buf, cell, skill_dir, loading, start_error) = {
         let s = state.lock_or_recover();
         let __llm_arc = s.llm.clone();
         let mut llm = __llm_arc.lock_or_recover();
@@ -103,88 +103,49 @@ pub fn start_llm_server(
         return Ok("already_loading".to_string());
     }
 
-    // If no text model is downloaded yet, bootstrap by downloading
-    // LFM2.5 1.2B Instruct first and set it as the default active model.
-    let has_downloaded_text_model = catalog.entries.iter().any(|e| {
-        !e.is_mmproj
-            && e.state == DownloadState::Downloaded
-            && e.local_path.as_ref().is_some_and(|p| p.exists())
-    });
-    if !has_downloaded_text_model {
-        let family: Vec<_> = catalog
-            .entries
+    // Hard default: always prefer LFM2.5 1.2B Instruct as active model.
+    let family: Vec<_> = catalog
+        .entries
+        .iter()
+        .filter(|e| {
+            !e.is_mmproj
+                && (e.family_id == "lfm25-1.2b-instruct" || {
+                    let name = e.family_name.to_lowercase();
+                    name.contains("lfm2.5") && name.contains("1.2b") && name.contains("instruct")
+                })
+        })
+        .collect();
+
+    let by_quant = |q: &str| {
+        family
             .iter()
-            .filter(|e| {
-                !e.is_mmproj
-                    && (e.family_id == "lfm25-1.2b-instruct" || {
-                        let name = e.family_name.to_lowercase();
-                        name.contains("lfm2.5")
-                            && name.contains("1.2b")
-                            && name.contains("instruct")
-                    })
+            .copied()
+            .find(|e| e.quant.eq_ignore_ascii_case(q))
+    };
+
+    let default_target = by_quant("Q4_K_M")
+        .or_else(|| by_quant("Q4_0"))
+        .or_else(|| family.iter().copied().find(|e| e.recommended))
+        .or_else(|| {
+            family.iter().copied().min_by(|a, b| {
+                a.size_gb
+                    .total_cmp(&b.size_gb)
+                    .then_with(|| a.filename.cmp(&b.filename))
             })
-            .collect();
-
-        let by_quant = |q: &str| {
-            family
+        })
+        .or_else(|| {
+            catalog
+                .entries
                 .iter()
-                .copied()
-                .find(|e| e.quant.eq_ignore_ascii_case(q))
-        };
-
-        let default_target = by_quant("Q4_K_M")
-            .or_else(|| by_quant("Q4_0"))
-            .or_else(|| family.iter().copied().find(|e| e.recommended))
-            .or_else(|| {
-                family.iter().copied().min_by(|a, b| {
+                .filter(|e| !e.is_mmproj && e.recommended)
+                .min_by(|a, b| {
                     a.size_gb
                         .total_cmp(&b.size_gb)
                         .then_with(|| a.filename.cmp(&b.filename))
                 })
-            })
-            .or_else(|| {
-                catalog
-                    .entries
-                    .iter()
-                    .filter(|e| !e.is_mmproj && e.recommended)
-                    .min_by(|a, b| {
-                        a.size_gb
-                            .total_cmp(&b.size_gb)
-                            .then_with(|| a.filename.cmp(&b.filename))
-                    })
-            });
+        });
 
-        if let Some(target) = default_target {
-            {
-                let s = state.lock_or_recover();
-                let __llm_arc = s.llm.clone();
-                let mut llm = __llm_arc.lock_or_recover();
-                llm.catalog.active_model = target.filename.clone();
-                llm.config.model_path = None;
-                llm.config.enabled = true;
-                drop(llm);
-                save_catalog(&app, &s);
-            }
-
-            super::downloads::download_llm_model(
-                target.filename.clone(),
-                app.clone(),
-                state.clone(),
-            );
-            let msg = format!(
-                "No local LLM model found. Downloading default model first: {}",
-                target.filename
-            );
-            *start_error.lock_or_recover() = Some(msg.clone());
-            let emitter = crate::llm::TauriEmitter(app.clone());
-            push_log(&emitter, &log_buf, "warn", &msg);
-            emitter.emit_event(
-                "llm:status",
-                serde_json::json!({"status":"stopped","error":msg}),
-            );
-            return Ok("downloading_default_model".to_string());
-        }
-
+    let Some(target) = default_target else {
         let msg = "No downloadable LLM model found in catalog.".to_string();
         *start_error.lock_or_recover() = Some(msg.clone());
         let emitter = crate::llm::TauriEmitter(app.clone());
@@ -194,6 +155,44 @@ pub fn start_llm_server(
             serde_json::json!({"status":"stopped","error":msg}),
         );
         return Ok("no_model_available".to_string());
+    };
+
+    catalog.active_model = target.filename.clone();
+    config.model_path = target.local_path.clone();
+    config.enabled = true;
+
+    {
+        let s = state.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
+        if llm.catalog.active_model != target.filename {
+            llm.catalog.active_model = target.filename.clone();
+            llm.config.model_path = target.local_path.clone();
+            llm.config.enabled = true;
+            drop(llm);
+            save_catalog(&app, &s);
+        }
+    }
+
+    let target_is_downloaded = target.state == DownloadState::Downloaded
+        && target.local_path.as_ref().is_some_and(|p| p.exists());
+    if !target_is_downloaded {
+        if target.state != DownloadState::Downloading {
+            super::downloads::download_llm_model(
+                target.filename.clone(),
+                app.clone(),
+                state.clone(),
+            );
+        }
+        let msg = format!("Downloading default model first: {}", target.filename);
+        *start_error.lock_or_recover() = Some(msg.clone());
+        let emitter = crate::llm::TauriEmitter(app.clone());
+        push_log(&emitter, &log_buf, "warn", &msg);
+        emitter.emit_event(
+            "llm:status",
+            serde_json::json!({"status":"stopped","error":msg}),
+        );
+        return Ok("downloading_default_model".to_string());
     }
 
     // Clear any previous error and mark loading.
