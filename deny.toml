@@ -7,63 +7,109 @@ targets = []
 all-features = false
 
 # ── Advisories ────────────────────────────────────────────────────────────────
+# cargo-deny 0.16+ schema (PR#611):
+#   - vulnerability: removed — vulnerabilities are always denied unless ignored
+#   - unmaintained: scope filter ("all" | "workspace" | "transitive" | "none")
+#   - yanked: still a lint level ("deny" | "warn" | "allow")
+#   - notice: removed
 [advisories]
-vulnerability = "deny"
-unmaintained  = "warn"
-yanked        = "warn"
-notice        = "warn"
-ignore = []
+# "workspace" = error only if OUR OWN crates have unmaintained advisories;
+# transitive dependency advisories are reported but don't fail CI.
+# Equivalent to the old (removed) unmaintained = "warn".
+unmaintained = "workspace"
+yanked       = "warn"
+ignore = [
+    # gtk 0.18.2 — pulled transitively by tauri → tray-icon → libappindicator.
+    # We cannot upgrade this ourselves; tracked for resolution when Tauri
+    # drops the GTK3 dependency.
+    { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
+]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
+# cargo-deny 0.16+ removed `unlicensed` and `copyleft` (PR#611).
+# Crates not matching an `allow`ed license are denied by default.
 [licenses]
-unlicensed    = "deny"
-copyleft      = "warn"
 allow = [
     "MIT",
     "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
+    "MIT-0",
     "Zlib",
     "0BSD",
+    "Unlicense",
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "OpenSSL",
     "BSL-1.0",
     "CC0-1.0",
     "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    "NCSA",
+    "LicenseRef-AI100",
 ]
 exceptions = [
-    # Our own crates are GPL-3.0-only
-    { allow = ["GPL-3.0"], crate = "neuroskill" },
-    { allow = ["GPL-3.0"], crate = "skill-autostart" },
-    { allow = ["GPL-3.0"], crate = "skill-commands" },
-    { allow = ["GPL-3.0"], crate = "skill-constants" },
-    { allow = ["GPL-3.0"], crate = "skill-data" },
-    { allow = ["GPL-3.0"], crate = "skill-devices" },
-    { allow = ["GPL-3.0"], crate = "skill-eeg" },
-    { allow = ["GPL-3.0"], crate = "skill-exg" },
-    { allow = ["GPL-3.0"], crate = "skill-gpu" },
-    { allow = ["GPL-3.0"], crate = "skill-headless" },
-    { allow = ["GPL-3.0"], crate = "skill-health" },
-    { allow = ["GPL-3.0"], crate = "skill-history" },
-    { allow = ["GPL-3.0"], crate = "skill-jobs" },
-    { allow = ["GPL-3.0"], crate = "skill-label-index" },
-    { allow = ["GPL-3.0"], crate = "skill-llm" },
-    { allow = ["GPL-3.0"], crate = "skill-router" },
-    { allow = ["GPL-3.0"], crate = "skill-screenshots" },
-    { allow = ["GPL-3.0"], crate = "skill-settings" },
-    { allow = ["GPL-3.0"], crate = "skill-skills" },
-    { allow = ["GPL-3.0"], crate = "skill-tools" },
-    { allow = ["GPL-3.0"], crate = "skill-tray" },
-    { allow = ["GPL-3.0"], crate = "skill-tts" },
-    { allow = ["GPL-3.0"], crate = "skill-vision" },
+    # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
+    { allow = ["GPL-3.0-only"], crate = "skill" },
+    { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
+    { allow = ["GPL-3.0-only"], crate = "skill-commands" },
+    { allow = ["GPL-3.0-only"], crate = "skill-constants" },
+    { allow = ["GPL-3.0-only"], crate = "skill-data" },
+    { allow = ["GPL-3.0-only"], crate = "skill-devices" },
+    { allow = ["GPL-3.0-only"], crate = "skill-eeg" },
+    { allow = ["GPL-3.0-only"], crate = "skill-exg" },
+    { allow = ["GPL-3.0-only"], crate = "skill-gpu" },
+    { allow = ["GPL-3.0-only"], crate = "skill-headless" },
+    { allow = ["GPL-3.0-only"], crate = "skill-health" },
+    { allow = ["GPL-3.0-only"], crate = "skill-history" },
+    { allow = ["GPL-3.0-only"], crate = "skill-jobs" },
+    { allow = ["GPL-3.0-only"], crate = "skill-label-index" },
+    { allow = ["GPL-3.0-only"], crate = "skill-llm" },
+    { allow = ["GPL-3.0-only"], crate = "skill-router" },
+    { allow = ["GPL-3.0-only"], crate = "skill-screenshots" },
+    { allow = ["GPL-3.0-only"], crate = "skill-settings" },
+    { allow = ["GPL-3.0-only"], crate = "skill-skills" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tools" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tray" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tts" },
+    { allow = ["GPL-3.0-only"], crate = "skill-vision" },
+    # Third-party GPL crates pulled in by device drivers.
+    # mw75 uses the deprecated "GPL-3.0" SPDX identifier (no license file),
+    # so we allow both the deprecated alias and the canonical form.
+    { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "mw75" },
+    { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
 ]
 
 [[licenses.clarify]]
 crate = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# unescaper uses the non-SPDX "GPL-3.0/MIT" shorthand; clarify as a proper
+# dual-license expression.  Hashes verified against unescaper 0.1.8.
+[[licenses.clarify]]
+crate = "unescaper"
+expression = "GPL-3.0-only OR MIT"
+license-files = [
+    { path = "LICENSE-GPL3", hash = 0xec4c468e },
+    { path = "LICENSE-MIT",  hash = 0x54e8f03d },
+]
+
+# exg and exg-luna ship a custom "AI100 License" (copyright waiver) via
+# license-file = "LICENSE".  Map the known file hash to LicenseRef-AI100 so
+# cargo-deny can evaluate and allow it explicitly.  Hash verified against
+# exg 0.0.1, exg 0.0.3, and exg-luna 0.0.3 (all share the same file).
+[[licenses.clarify]]
+crate = "exg"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
+
+[[licenses.clarify]]
+crate = "exg-luna"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
 
 # ── Bans ──────────────────────────────────────────────────────────────────────
 [bans]
