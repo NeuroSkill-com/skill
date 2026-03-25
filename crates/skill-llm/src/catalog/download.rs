@@ -103,26 +103,18 @@ pub fn download_file(
     // ── 3. Build HTTP agents ──────────────────────────────────────────────────
     // Separate agents for metadata (short timeout) and download (long timeout).
     // Both follow up to 10 redirects — HF Hub redirects to a CDN for LFS blobs.
-    let meta_agent = ureq::AgentBuilder::new()
-        .redirects(10)
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
+    let meta_agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build().into();
 
-    let dl_agent = ureq::AgentBuilder::new()
-        .redirects(10)
-        .timeout_connect(std::time::Duration::from_secs(30))
+    let dl_agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
         // Per-read-call timeout: generous for slow connections (128 KB / slow
         // connection ≈ a few seconds; 300 s handles ~430 bytes/s).
-        .timeout_read(std::time::Duration::from_secs(300))
-        .build();
+        .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
+        .build().into();
 
-    // Convenience: attach Bearer token if one is configured.
-    let auth = |req: ureq::Request| -> ureq::Request {
-        match &hf_token {
-            Some(tok) => req.set("Authorization", &format!("Bearer {tok}")),
-            None => req,
-        }
-    };
+
 
     // ── 4. Fetch file metadata from the Hub API ───────────────────────────────
     //
@@ -140,12 +132,14 @@ pub fn download_file(
     }
 
     let api_url = format!("{endpoint}/api/models/{repo_id}?blobs=1");
-    let api_resp = auth(meta_agent.get(&api_url))
-        .set("User-Agent", "skill-app/1.0")
+    let meta_req = meta_agent.get(&api_url);
+    let meta_req = if let Some(tok) = &hf_token { meta_req.header("Authorization", format!("Bearer {tok}")) } else { meta_req };
+    let api_resp = meta_req
+        .header("User-Agent", "skill-app/1.0")
         .call()
         .context("HF metadata API error")?;
 
-    let info: serde_json::Value = api_resp.into_json().context("HF metadata JSON parse")?;
+    let info: serde_json::Value = api_resp.into_body().read_json().context("HF metadata JSON parse")?;
 
     let commit_sha: String = info["sha"].as_str().unwrap_or("main").to_string();
 
@@ -208,20 +202,21 @@ pub fn download_file(
 
     // ── 7. Issue GET (with Range header when resuming) ────────────────────────
     let file_url = format!("{endpoint}/{repo_id}/resolve/main/{filename}");
-    let mut get = auth(dl_agent.get(&file_url)).set("User-Agent", "skill-app/1.0");
+    let dl_req = dl_agent.get(&file_url);
+    let dl_req = if let Some(tok) = &hf_token { dl_req.header("Authorization", format!("Bearer {tok}")) } else { dl_req };
+    let mut get = dl_req.header("User-Agent", "skill-app/1.0");
     if resume_from > 0 {
-        get = get.set("Range", &format!("bytes={resume_from}-"));
+        get = get.header("Range", format!("bytes={resume_from}-"));
     }
 
     let resp = get.call().map_err(|e| match e {
-        ureq::Error::Status(code, r) => {
-            let body = r.into_string().unwrap_or_default();
-            anyhow::anyhow!("HTTP {code} for {filename}: {body}")
+        ureq::Error::StatusCode(code) => {
+            anyhow::anyhow!("HTTP {code} for {filename}")
         }
         other => anyhow::anyhow!("download error: {other}"),
     })?;
 
-    let http_status = resp.status();
+    let http_status = resp.status().as_u16();
     // 200 = server ignored Range and sent full content → restart from byte 0.
     // 206 = server honoured Range → append to existing .incomplete file.
     if http_status != 200 && http_status != 206 {
@@ -239,7 +234,7 @@ pub fn download_file(
         .context("open .incomplete file")?;
 
     // ── 9. Stream response bytes to disk ──────────────────────────────────────
-    let mut reader = resp.into_reader();
+    let mut reader = resp.into_body().into_reader();
     let mut buf = vec![0u8; 128 * 1024]; // 128 KB chunks — balance between
                                          // syscall overhead and lock contention
     let mut written = writing_from;

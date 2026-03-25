@@ -153,21 +153,31 @@ fn strip_json_ld_blocks(s: &str) -> String {
 /// fingerprinting and bot-detection risk.
 const BROWSER_USER_AGENTS: &[&str] = &[
     // Chrome on Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
     // Chrome on macOS
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    // Chrome on Linux
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
     // Firefox on Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
+    // Firefox on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:136.0) Gecko/20100101 Firefox/136.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:135.0) Gecko/20100101 Firefox/135.0",
     // Firefox on Linux
-    "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
+    // Firefox ESR
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
     // Safari on macOS
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_7_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
     // Edge on Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0",
 ];
 
 /// Pick a random browser User-Agent from the pool.
@@ -180,11 +190,10 @@ pub(crate) fn random_ua() -> &'static str {
 
 /// Build a ureq agent with browser-like defaults (redirects, timeouts).
 pub(crate) fn browser_agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(3))
-        .timeout_read(std::time::Duration::from_secs(10))
-        .redirects(5)
-        .build()
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(3)))
+        .timeout_recv_body(Some(std::time::Duration::from_secs(10)))
+        .build().into()
 }
 
 /// Apply standard browser headers to a ureq request.
@@ -192,17 +201,17 @@ pub(crate) fn browser_agent() -> ureq::Agent {
 /// Many sites (AccuWeather, weather.com, etc.) return 403 if the request
 /// is missing `Accept`, `Accept-Language`, or other headers that real
 /// browsers send.
-pub(crate) fn set_browser_headers(req: ureq::Request) -> ureq::Request {
-    req.set("User-Agent", random_ua())
-        .set(
+pub(crate) fn set_browser_headers<B>(req: ureq::RequestBuilder<B>) -> ureq::RequestBuilder<B> {
+    req.header("User-Agent", random_ua())
+        .header(
             "Accept",
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         )
-        .set("Accept-Language", "en-US,en;q=0.5")
-        .set("Accept-Encoding", "identity")
-        .set("DNT", "1")
-        .set("Connection", "keep-alive")
-        .set("Upgrade-Insecure-Requests", "1")
+        .header("Accept-Language", "en-US,en;q=0.5")
+        .header("Accept-Encoding", "identity")
+        .header("DNT", "1")
+        .header("Connection", "keep-alive")
+        .header("Upgrade-Insecure-Requests", "1")
 }
 
 /// Fallback search: scrape DuckDuckGo HTML lite page.
@@ -214,21 +223,21 @@ pub(crate) fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
     let ua = random_ua();
     let resp = agent
         .post("https://html.duckduckgo.com/html/")
-        .set("User-Agent", ua)
-        .set(
+        .header("User-Agent", ua)
+        .header(
             "Accept",
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         )
-        .set("Accept-Language", "en-US,en;q=0.5")
-        .set("Origin", "https://html.duckduckgo.com")
-        .set("Referer", "https://html.duckduckgo.com/html/")
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&format!("q={}&b=", urlencoding::encode(query)));
+        .header("Accept-Language", "en-US,en;q=0.5")
+        .header("Origin", "https://html.duckduckgo.com")
+        .header("Referer", "https://html.duckduckgo.com/html/")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .send(&format!("q={}&b=", urlencoding::encode(query)));
 
     let Ok(r) = resp else {
         return Vec::new();
     };
-    let Ok(body) = r.into_string() else {
+    let Ok(body) = r.into_body().read_to_string() else {
         return Vec::new();
     };
 
@@ -321,13 +330,13 @@ pub(crate) fn brave_search(agent: &ureq::Agent, api_key: &str, query: &str) -> V
         .get("https://api.search.brave.com/res/v1/web/search")
         .query("q", query)
         .query("count", "10")
-        .set("Accept", "application/json")
-        .set("Accept-Encoding", "gzip")
-        .set("X-Subscription-Token", api_key)
+        .header("Accept", "application/json")
+        .header("Accept-Encoding", "gzip")
+        .header("X-Subscription-Token", api_key)
         .call();
 
     let Ok(r) = resp else { return Vec::new() };
-    let body: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+    let body: Value = r.into_body().read_json::<Value>().unwrap_or_else(|_| json!({}));
 
     let Some(items) = body.pointer("/web/results").and_then(|v| v.as_array()) else {
         return Vec::new();
@@ -366,11 +375,11 @@ pub(crate) fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -
         .query("q", query)
         .query("format", "json")
         .query("categories", "general")
-        .set("Accept", "application/json")
+        .header("Accept", "application/json")
         .call();
 
     let Ok(r) = resp else { return Vec::new() };
-    let body: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+    let body: Value = r.into_body().read_json::<Value>().unwrap_or_else(|_| json!({}));
 
     let Some(items) = body.get("results").and_then(|v| v.as_array()) else {
         return Vec::new();
@@ -457,7 +466,7 @@ pub(crate) fn fetch_page_content_http(url: &str, max_chars: usize) -> String {
     let agent = browser_agent();
     match set_browser_headers(agent.get(url)).call() {
         Ok(resp) => {
-            let body = resp.into_string().unwrap_or_default();
+            let body = resp.into_body().read_to_string().unwrap_or_default();
             let stripped = strip_html_tags(&body);
             let cleaned: String = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
             truncate_text(&cleaned, max_chars)
@@ -807,10 +816,10 @@ mod web_search_tests {
     use super::*;
 
     fn make_agent() -> ureq::Agent {
-        ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(10))
-            .timeout_read(std::time::Duration::from_secs(15))
-            .build()
+        ureq::Agent::config_builder()
+            .timeout_connect(Some(std::time::Duration::from_secs(10)))
+            .timeout_recv_body(Some(std::time::Duration::from_secs(15)))
+            .build().into()
     }
 
     /// Dump raw DDG HTML response for debugging.
@@ -825,21 +834,21 @@ mod web_search_tests {
         // Current approach: POST to /html/
         let resp = agent
             .post("https://html.duckduckgo.com/html/")
-            .set("User-Agent", ua)
-            .set(
+            .header("User-Agent", ua)
+            .header(
                 "Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             )
-            .set("Accept-Language", "en-US,en;q=0.5")
-            .set("Origin", "https://html.duckduckgo.com")
-            .set("Referer", "https://html.duckduckgo.com/html/")
-            .set("Content-Type", "application/x-www-form-urlencoded")
-            .send_string(&format!("q={}&b=", urlencoding::encode(query)));
+            .header("Accept-Language", "en-US,en;q=0.5")
+            .header("Origin", "https://html.duckduckgo.com")
+            .header("Referer", "https://html.duckduckgo.com/html/")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .send(&format!("q={}&b=", urlencoding::encode(query)));
 
         match resp {
             Ok(r) => {
                 let status = r.status();
-                let body = r.into_string().unwrap_or_default();
+                let body = r.into_body().read_to_string().unwrap_or_default();
                 let result_count = body.matches("result__body").count();
                 let has_captcha = body.contains("bot") || body.contains("anomaly");
                 println!(
@@ -876,21 +885,21 @@ mod web_search_tests {
         println!("\n--- lite endpoint ---");
         let resp = agent
             .post("https://lite.duckduckgo.com/lite/")
-            .set("User-Agent", ua)
-            .set(
+            .header("User-Agent", ua)
+            .header(
                 "Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             )
-            .set("Accept-Language", "en-US,en;q=0.5")
-            .set("Origin", "https://lite.duckduckgo.com")
-            .set("Referer", "https://lite.duckduckgo.com/lite/")
-            .set("Content-Type", "application/x-www-form-urlencoded")
-            .send_string(&format!("q={}", urlencoding::encode(query)));
+            .header("Accept-Language", "en-US,en;q=0.5")
+            .header("Origin", "https://lite.duckduckgo.com")
+            .header("Referer", "https://lite.duckduckgo.com/lite/")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .send(&format!("q={}", urlencoding::encode(query)));
 
         match resp {
             Ok(r) => {
                 let status = r.status();
-                let body = r.into_string().unwrap_or_default();
+                let body = r.into_body().read_to_string().unwrap_or_default();
                 let has_captcha = body.contains("bot") || body.contains("anomaly");
 
                 // Count lite-style results (table rows with result-link class)

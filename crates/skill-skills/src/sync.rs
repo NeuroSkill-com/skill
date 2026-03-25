@@ -156,15 +156,13 @@ fn save_meta(path: &Path, meta: &SyncMeta) {
 }
 
 fn download(url: &str) -> anyhow::Result<Vec<u8>> {
-    let resp = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(60))
-        .redirects(5)
-        .build()
-        .get(url)
-        .call()?;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(60)))
+        .build().into();
+    let resp = agent.get(url).call()?;
 
     let mut buf = Vec::new();
-    resp.into_reader().read_to_end(&mut buf)?;
+    resp.into_body().into_reader().read_to_end(&mut buf)?;
     Ok(buf)
 }
 

@@ -299,7 +299,7 @@ fn download_ocr_model(url: &str, dest: &Path) -> bool {
     match ureq::get(url).call() {
         Ok(resp) => {
             let mut body = Vec::new();
-            if resp.into_reader().read_to_end(&mut body).is_ok() && !body.is_empty() {
+            if resp.into_body().into_reader().read_to_end(&mut body).is_ok() && !body.is_empty() {
                 if let Some(parent) = dest.parent() {
                     let _ = std::fs::create_dir_all(parent);
                 }

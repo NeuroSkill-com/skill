@@ -12,7 +12,7 @@ skill-eeg       = { path = "../skill-eeg" }
 skill-data      = { path = "../skill-data" }
 serde_json      = "1"
 hf-hub          = "0.5"
-ureq            = { version = "2.12", features = ["native-tls", "json"] }
+ureq            = { version = "3.3", features = ["native-tls", "json"] }
 cubecl-runtime  = "0.9.0"
 
 [lints]

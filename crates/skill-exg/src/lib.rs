@@ -296,25 +296,20 @@ pub fn download_hf_weights_files(
         .ok()
         .or_else(|| std::env::var("HUGGING_FACE_HUB_TOKEN").ok());
 
-    let meta_agent = ureq::AgentBuilder::new()
-        .redirects(10)
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
-    let dl_agent = ureq::AgentBuilder::new()
-        .redirects(10)
-        .timeout_connect(std::time::Duration::from_secs(30))
-        .timeout_read(std::time::Duration::from_secs(300))
-        .build();
+    let meta_agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build().into();
+    let dl_agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
+        .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
+        .build().into();
 
-    let auth = |req: ureq::Request| -> ureq::Request {
-        match &hf_token {
-            Some(tok) => req.set("Authorization", &format!("Bearer {tok}")),
-            None => req,
-        }
-    };
+
 
     let api_url = format!("{ENDPOINT}/api/models/{hf_repo}?blobs=1");
-    let api_resp = match auth(meta_agent.get(&api_url)).set("User-Agent", "skill-app/1.0").call() {
+    let meta_req = meta_agent.get(&api_url);
+    let meta_req = if let Some(tok) = &hf_token { meta_req.header("Authorization", format!("Bearer {tok}")) } else { meta_req };
+    let api_resp = match meta_req.header("User-Agent", "skill-app/1.0").call() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[embedder] HF metadata API error: {e}");
@@ -326,7 +321,7 @@ pub fn download_hf_weights_files(
         }
     };
 
-    let info: serde_json::Value = match api_resp.into_json() {
+    let info: serde_json::Value = match api_resp.into_body().read_json() {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[embedder] HF metadata JSON parse error: {e}");
@@ -433,9 +428,11 @@ pub fn download_hf_weights_files(
     }
 
     let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{weights_file}");
-    let mut get = auth(dl_agent.get(&file_url)).set("User-Agent", "skill-app/1.0");
+    let dl_req = dl_agent.get(&file_url);
+    let dl_req = if let Some(tok) = &hf_token { dl_req.header("Authorization", format!("Bearer {tok}")) } else { dl_req };
+    let mut get = dl_req.header("User-Agent", "skill-app/1.0");
     if resume_from > 0 {
-        get = get.set("Range", &format!("bytes={resume_from}-"));
+        get = get.header("Range", format!("bytes={resume_from}-"));
     }
 
     let resp = match get.call() {
@@ -470,7 +467,7 @@ pub fn download_hf_weights_files(
         }
     };
 
-    let mut reader = resp.into_reader();
+    let mut reader = resp.into_body().into_reader();
     let mut buf = vec![0u8; 128 * 1024];
     let mut written = writing_from;
     let total = remote_size.max(1);
