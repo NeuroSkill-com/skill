@@ -10463,7 +10463,6 @@ dependencies = [
 name = "skill-calendar"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "cc",
  "serde",
  "serde_json",
