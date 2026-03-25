@@ -80,7 +80,7 @@ const help: Record<string, string> = {
   "helpSettings.globalShortcutsBody": "Системні комбінації клавіш для відкриття вікон.",
   "helpSettings.debugLogging": "Журналювання налагодження",
   "helpSettings.debugLoggingBody":
-    "Увімкніть/вимкніть журналювання за підсистемою до файлу журналу в {dataDir}/logs/. Підсистеми: embedder, bluetooth, websocket, csv, filter, bands.",
+    "Увімкніть/вимкніть журналювання за підсистемою до файлу журналу в {dataDir}/logs/. Підсистеми: embedder, devices, websocket, csv, filter, bands.",
   "helpSettings.updates": "Оновлення",
   "helpSettings.updatesBody": "Перевіряйте та встановлюйте оновлення програми.",
   "helpSettings.appearanceTab": "Вигляд",

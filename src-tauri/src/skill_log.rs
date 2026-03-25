@@ -20,7 +20,7 @@
 //!
 //! ## Usage
 //! ```ignore
-//! skill_log!(logger, "bluetooth", "connected: {name}");
+//! skill_log!(logger, "devices", "connected: {name}");
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ static WINDOWS_STDERR_REDIRECTED: std::sync::atomic::AtomicBool =
 pub struct LogConfig {
     /// ZUNA embedding worker (epoch dispatch, encoder, HNSW inserts).
     pub embedder: bool,
-    /// Bluetooth scanner and Muse session events.
+    /// Device connection/session events (legacy key name: `bluetooth`).
     pub bluetooth: bool,
     /// Multi-transport device scanner (BLE, USB, Cortex, WiFi).
     pub scanner: bool,
@@ -114,7 +114,7 @@ impl SkillLogger {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match tag {
             "embedder" => cfg.embedder,
-            "bluetooth" => cfg.bluetooth,
+            "devices" | "bluetooth" => cfg.bluetooth,
             "scanner" => cfg.scanner,
             "websocket" => cfg.websocket,
             "csv" => cfg.csv,

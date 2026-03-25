@@ -29,7 +29,7 @@ use skill_log::SkillLogger;
 /// (done once in `run()` → `setup`).
 ///
 /// ```ignore
-/// app_log!(app, "bluetooth", "connected: {name}");
+/// app_log!(app, "devices", "connected: {name}");
 /// ```
 macro_rules! app_log {
     ($app:expr, $tag:literal, $($arg:tt)*) => {{

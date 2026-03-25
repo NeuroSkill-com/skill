@@ -124,7 +124,7 @@ pub(crate) async fn run_device_session(
                 let watchdog_msg = format!(
                     "[{kind}] Data watchdog: no events for {:.1}s — treating as disconnected",
                     elapsed.as_secs_f64());
-                app_log!(app, "bluetooth", "{watchdog_msg}");
+                app_log!(app, "devices", "{watchdog_msg}");
                 crate::device_scanner::device_log("session", &watchdog_msg);
                 on_disconnected(&app, kind);
                 adapter.disconnect().await;
@@ -132,7 +132,7 @@ pub(crate) async fn run_device_session(
             }
             ev = adapter.next_event() => {
                 let Some(ev) = ev else {
-                    app_log!(app, "bluetooth", "[{kind}] event channel closed");
+                    app_log!(app, "devices", "[{kind}] event channel closed");
                     on_disconnected(&app, kind);
                     adapter.disconnect().await;
                     break;
@@ -153,7 +153,7 @@ pub(crate) async fn run_device_session(
                             let n = frame.channels.len();
                             let preview: Vec<String> = frame.channels.iter()
                                 .take(4).map(|v| format!("{v:.1}")).collect();
-                            app_log!(app, "bluetooth",
+                            app_log!(app, "devices",
                                 "[{kind}] first EEG frame: {n} channels, preview={preview:?}, \
                                  pipeline_ch={pipeline_ch}");
                         }
@@ -163,7 +163,7 @@ pub(crate) async fn run_device_session(
                             let fresh = adapter.descriptor();
                             if fresh.pipeline_channels != pipeline_ch {
                                 pipeline_ch = fresh.pipeline_channels;
-                                app_log!(app, "bluetooth",
+                                app_log!(app, "devices",
                                     "[{kind}] updated to {} pipeline channels", pipeline_ch);
                                 // Reset quality, bands, and artifact detector for
                                 // the new channel count — old samples from the
@@ -282,7 +282,7 @@ pub(crate) async fn run_device_session(
         // reconnect logic can fire.
         app_log!(
             app,
-            "bluetooth",
+            "devices",
             "[{kind}] session ended before any EEG data was recorded"
         );
         crate::device_scanner::device_log(
@@ -354,7 +354,7 @@ fn on_connected(
         .update_device(Some(dev_id.clone()), Some(info.name.clone()));
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[{kind}] connected: {} (id={dev_id})",
         info.name
     );
@@ -383,7 +383,7 @@ fn on_connected(
             upsert_paired(app, &dev_id, &info.name);
         } else if first_time {
             // First-time onboarding: auto-pair the first device.
-            app_log!(app, "bluetooth", "[{kind}] first-time auto-pair: {dev_id}");
+            app_log!(app, "devices", "[{kind}] first-time auto-pair: {dev_id}");
             upsert_paired(app, &dev_id, &info.name);
         }
         // else: device not paired and not first-time → don't auto-pair.
@@ -397,7 +397,7 @@ fn on_connected(
         if real_id != dev_id {
             app_log!(
                 app,
-                "bluetooth",
+                "devices",
                 "[{kind}] migrating paired ID: {dev_id} → {real_id}"
             );
             upsert_paired(app, &real_id, &info.name);
@@ -448,7 +448,7 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
             g.status.device_id.clone(),
         )
     };
-    app_log!(app, "bluetooth", "[{kind}] disconnected: {name}");
+    app_log!(app, "devices", "[{kind}] disconnected: {name}");
     crate::device_scanner::device_log("session", &format!("[{kind}] Disconnected: {name}"));
     let payload = serde_json::json!({
         "device_name": name,

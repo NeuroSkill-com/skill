@@ -121,7 +121,7 @@ pub(crate) async fn connect_muse(
         }
         r = handle.start(false, false) => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[muse] start: {e}");
+                app_log!(app, "devices", "[muse] start: {e}");
             }
         }
     }
@@ -152,7 +152,7 @@ pub(crate) async fn connect_mw75(
     let client = Mw75Client::new(config);
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[mw75] connecting (preferred={preferred_id:?})…"
     );
 
@@ -179,7 +179,7 @@ pub(crate) async fn connect_mw75(
     let (mut rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
-            app_log!(app, "bluetooth", "[mw75] connect failed: {msg}");
+            app_log!(app, "devices", "[mw75] connect failed: {msg}");
             let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(format!(
                 "{m}\n\nTo pair MW75: hold the power button for 4+ seconds,\n\
@@ -188,11 +188,7 @@ pub(crate) async fn connect_mw75(
         }
     };
 
-    app_log!(
-        app,
-        "bluetooth",
-        "[mw75] BLE connected, starting activation…"
-    );
+    app_log!(app, "devices", "[mw75] BLE connected, starting activation…");
 
     // BLE activation
     tokio::select! {
@@ -203,23 +199,23 @@ pub(crate) async fn connect_mw75(
         }
         r = handle.start() => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[mw75] BLE activation failed: {e}");
+                app_log!(app, "devices", "[mw75] BLE activation failed: {e}");
                 let _ = handle.disconnect().await;
                 return Err(ConnectError::Other(format!("MW75 activation failed: {e}")));
             }
         }
     }
-    app_log!(app, "bluetooth", "[mw75] activation complete");
+    app_log!(app, "devices", "[mw75] activation complete");
 
     // Disconnect BLE before RFCOMM (required on macOS).
     let bt_address = handle.peripheral_id();
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[mw75] disconnecting BLE (addr={bt_address})…"
     );
     if let Err(e) = handle.disconnect_ble().await {
-        app_log!(app, "bluetooth", "[mw75] BLE disconnect warning: {e}");
+        app_log!(app, "devices", "[mw75] BLE disconnect warning: {e}");
     }
 
     let handle = Arc::new(handle);
@@ -227,13 +223,13 @@ pub(crate) async fn connect_mw75(
     // RFCOMM transport (if feature enabled).
     #[cfg(feature = "mw75-rfcomm")]
     {
-        app_log!(app, "bluetooth", "[mw75] starting RFCOMM stream…");
+        app_log!(app, "devices", "[mw75] starting RFCOMM stream…");
         let rfcomm = tokio::select! {
             biased;
             _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
             r = skill_devices::mw75::rfcomm::start_rfcomm_stream(handle.clone(), &bt_address) => match r {
                 Err(e) => {
-                    app_log!(app, "bluetooth", "[mw75] RFCOMM failed: {e}");
+                    app_log!(app, "devices", "[mw75] RFCOMM failed: {e}");
                     return Err(ConnectError::Other(format!(
                         "MW75 RFCOMM failed: {e}\n\n\
                          Make sure the headphones are paired in System Bluetooth Settings.\n\
@@ -245,7 +241,7 @@ pub(crate) async fn connect_mw75(
         };
         app_log!(
             app,
-            "bluetooth",
+            "devices",
             "[mw75] RFCOMM connected — streaming EEG at {} Hz",
             skill_constants::MW75_SAMPLE_RATE
         );
@@ -256,11 +252,7 @@ pub(crate) async fn connect_mw75(
             drained += 1;
         }
         if drained > 0 {
-            app_log!(
-                app,
-                "bluetooth",
-                "[mw75] drained {drained} stale BLE events"
-            );
+            app_log!(app, "devices", "[mw75] drained {drained} stale BLE events");
         }
 
         // Inject synthetic Connected + attach RFCOMM guard.
@@ -278,7 +270,7 @@ pub(crate) async fn connect_mw75(
     {
         app_log!(
             app,
-            "bluetooth",
+            "devices",
             "[mw75] RFCOMM feature disabled — receiving EEG via BLE notifications"
         );
         let adapter = Mw75Adapter::new(rx, handle.clone(), None);
@@ -308,7 +300,7 @@ pub(crate) async fn connect_hermes(
     let client = HermesClient::new(config);
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[hermes] connecting (preferred={preferred_id:?})…"
     );
 
@@ -335,7 +327,7 @@ pub(crate) async fn connect_hermes(
     let (rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
-            app_log!(app, "bluetooth", "[hermes] connect failed: {msg}");
+            app_log!(app, "devices", "[hermes] connect failed: {msg}");
             let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(m));
         }
@@ -343,7 +335,7 @@ pub(crate) async fn connect_hermes(
 
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[hermes] BLE connected, starting streaming…"
     );
 
@@ -356,7 +348,7 @@ pub(crate) async fn connect_hermes(
         }
         r = handle.start() => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[hermes] start failed: {e}");
+                app_log!(app, "devices", "[hermes] start failed: {e}");
                 let _ = handle.disconnect().await;
                 return Err(ConnectError::Other(format!("Hermes start failed: {e}")));
             }
@@ -364,7 +356,7 @@ pub(crate) async fn connect_hermes(
     }
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[hermes] streaming started — 8ch EEG at {} Hz",
         skill_constants::HERMES_SAMPLE_RATE
     );
@@ -647,7 +639,7 @@ pub(crate) async fn connect_emotiv(
 
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[emotiv] connecting via Cortex API (headset={})…",
         if headset_id.is_empty() {
             "auto"
@@ -702,7 +694,7 @@ pub(crate) async fn connect_emotiv(
     let (mut rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
-            app_log!(app, "bluetooth", "[emotiv] connect failed: {msg}");
+            app_log!(app, "devices", "[emotiv] connect failed: {msg}");
             return Err(ConnectError::Other(format!(
                 "Emotiv Cortex connection failed: {msg}\n\n\
                  Make sure the EMOTIV Launcher is running and a headset is connected."
@@ -715,7 +707,7 @@ pub(crate) async fn connect_emotiv(
     // WebSocket — the token and session ID are populated asynchronously.
     // We MUST wait for SessionCreated before calling subscribe, otherwise
     // subscribe sends an empty cortexToken and fails with -32014.
-    app_log!(app, "bluetooth", "[emotiv] waiting for Cortex session…");
+    app_log!(app, "devices", "[emotiv] waiting for Cortex session…");
     let session_ok = tokio::select! {
         biased;
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
@@ -727,12 +719,12 @@ pub(crate) async fn connect_emotiv(
             while tokio::time::Instant::now() < deadline {
                 match tokio::time::timeout_at(deadline, rx.recv()).await {
                     Ok(Some(CortexEvent::SessionCreated(sid))) => {
-                        app_log!(app, "bluetooth",
+                        app_log!(app, "devices",
                             "[emotiv] session created: {sid}");
                         return Ok(());
                     }
                     Ok(Some(CortexEvent::Error(e))) => {
-                        app_log!(app, "bluetooth", "[emotiv] Cortex error: {e}");
+                        app_log!(app, "devices", "[emotiv] Cortex error: {e}");
                         return Err(format!("Cortex error during auth: {e}"));
                     }
                     Ok(Some(other)) => {
@@ -746,20 +738,20 @@ pub(crate) async fn connect_emotiv(
                                 } else if *code == 11 {
                                     warn_11 += 1;
                                 }
-                                app_log!(app, "bluetooth",
+                                app_log!(app, "devices",
                                     "[emotiv] warning (code={code}) while waiting for session");
                                 "Warning"
                             }
                             CortexEvent::HeadsetsQueried(list) => {
                                 let ids: Vec<&str> = list.iter().map(|h| h.id.as_str()).collect();
-                                app_log!(app, "bluetooth",
+                                app_log!(app, "devices",
                                     "[emotiv] headsets queried: {ids:?}");
                                 "HeadsetsQueried"
                             }
                             _ => "other",
                         };
                         if tag != "Warning" && tag != "HeadsetsQueried" {
-                            app_log!(app, "bluetooth",
+                            app_log!(app, "devices",
                                 "[emotiv] event while waiting for session: {tag}");
                         }
                         continue;
@@ -787,7 +779,7 @@ pub(crate) async fn connect_emotiv(
         } => result,
     };
     if let Err(e) = session_ok {
-        app_log!(app, "bluetooth", "[emotiv] session wait failed: {e}");
+        app_log!(app, "devices", "[emotiv] session wait failed: {e}");
         return Err(ConnectError::Other(format!(
             "Emotiv session creation failed: {e}\n\n\
              Make sure a headset is connected in the EMOTIV Launcher."
@@ -800,7 +792,7 @@ pub(crate) async fn connect_emotiv(
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
         r = handle.subscribe(&[STREAM_EEG, STREAM_MOT, STREAM_DEV]) => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[emotiv] subscribe failed: {e}");
+                app_log!(app, "devices", "[emotiv] subscribe failed: {e}");
                 return Err(ConnectError::Other(format!("Emotiv subscribe failed: {e}")));
             }
         }
@@ -825,7 +817,7 @@ pub(crate) async fn connect_emotiv(
                         CortexEvent::DataLabels(labels) => {
                             app_log!(
                                 app,
-                                "bluetooth",
+                                "devices",
                                 "[emotiv] DataLabels: stream={}, cols={:?}",
                                 labels.stream_name,
                                 labels.labels
@@ -835,7 +827,7 @@ pub(crate) async fn connect_emotiv(
                             }
                         }
                         CortexEvent::Error(e) => {
-                            app_log!(app, "bluetooth", "[emotiv] subscribe error: {e}");
+                            app_log!(app, "devices", "[emotiv] subscribe error: {e}");
                             sub_errors.push(e.clone());
                         }
                         _ => {}
@@ -850,7 +842,7 @@ pub(crate) async fn connect_emotiv(
         }
         if !eeg_confirmed && !sub_errors.is_empty() {
             let msg = sub_errors.join("; ");
-            app_log!(app, "bluetooth", "[emotiv] EEG subscription failed: {msg}");
+            app_log!(app, "devices", "[emotiv] EEG subscription failed: {msg}");
             // Close the session before returning — don't leave it dangling.
             let _ = handle.close_session().await;
             // Disable auto-reconnect — this is a configuration/license issue,
@@ -869,7 +861,7 @@ pub(crate) async fn connect_emotiv(
         } else if !eeg_confirmed {
             app_log!(
                 app,
-                "bluetooth",
+                "devices",
                 "[emotiv] WARNING: EEG DataLabels not received within 3s — \
                  EEG data may not stream. Check Emotiv license."
             );
@@ -882,7 +874,7 @@ pub(crate) async fn connect_emotiv(
     let sample_rate = skill_constants::emotiv_sample_rate_from_id(&headset_id);
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[emotiv] connected — {headset_id} streaming EEG at {sample_rate} Hz"
     );
 
@@ -947,7 +939,7 @@ pub(crate) async fn connect_idun(
         ..GuardianClientConfig::default()
     };
     let client = GuardianClient::new(config);
-    app_log!(app, "bluetooth", "[idun] connecting…");
+    app_log!(app, "devices", "[idun] connecting…");
 
     let connect_result = tokio::select! {
         biased;
@@ -958,17 +950,13 @@ pub(crate) async fn connect_idun(
     let (rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
-            app_log!(app, "bluetooth", "[idun] connect failed: {msg}");
+            app_log!(app, "devices", "[idun] connect failed: {msg}");
             let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(m));
         }
     };
 
-    app_log!(
-        app,
-        "bluetooth",
-        "[idun] BLE connected, starting recording…"
-    );
+    app_log!(app, "devices", "[idun] BLE connected, starting recording…");
 
     // Start EEG + IMU streaming.
     tokio::select! {
@@ -979,7 +967,7 @@ pub(crate) async fn connect_idun(
         }
         r = handle.start_recording() => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[idun] start_recording failed: {e}");
+                app_log!(app, "devices", "[idun] start_recording failed: {e}");
                 let _ = handle.disconnect().await;
                 return Err(ConnectError::Other(format!("IDUN start_recording failed: {e}")));
             }
@@ -988,7 +976,7 @@ pub(crate) async fn connect_idun(
 
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[idun] streaming started — 1ch EEG at {} Hz",
         skill_constants::IDUN_SAMPLE_RATE
     );

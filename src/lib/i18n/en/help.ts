@@ -85,7 +85,7 @@ const help: Record<string, string> = {
     "Set system-wide keyboard shortcuts to open the Label, Search, Settings, and Calibration windows from any application. Uses the standard accelerator format (e.g. CmdOrCtrl+Shift+L).",
   "helpSettings.debugLogging": "Debug Logging",
   "helpSettings.debugLoggingBody":
-    "Toggle per-subsystem logging to the daily log file at {dataDir}/logs/. Subsystems include embedder, bluetooth, websocket, csv, filter, and bands.",
+    "Toggle per-subsystem logging to the daily log file at {dataDir}/logs/. Subsystems include embedder, devices, websocket, csv, filter, and bands.",
   "helpSettings.updates": "Updates",
   "helpSettings.updatesBody":
     "Check for and install app updates. Uses Tauri's built-in updater with Ed25519 signature verification.",

@@ -522,7 +522,7 @@ const help: Record<string, string> = {
     "הגדרת קיצורי מקלדת מערכתיים לפתיחת חלונות תווית, חיפוש, הגדרות וכיול מכל אפליקציה. משתמש בפורמט מאיץ סטנדרטי (למשל CmdOrCtrl+Shift+L).",
   "helpSettings.debugLogging": "רישום ניפוי",
   "helpSettings.debugLoggingBody":
-    "הפעלת/כיבוי רישום לפי תת-מערכת לקובץ היומן היומי ב-{dataDir}/logs/. תת-מערכות כוללות embedder, bluetooth, websocket, csv, filter ו-bands.",
+    "הפעלת/כיבוי רישום לפי תת-מערכת לקובץ היומן היומי ב-{dataDir}/logs/. תת-מערכות כוללות embedder, devices, websocket, csv, filter ו-bands.",
   "helpSettings.updates": "עדכונים",
   "helpSettings.updatesBody": "בדיקה והתקנה של עדכוני אפליקציה. משתמש במעדכן המובנה של Tauri עם אימות חתימה Ed25519.",
   "helpSettings.appearanceTab": "מראה",

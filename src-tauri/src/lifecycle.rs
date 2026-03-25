@@ -76,7 +76,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
     if retry && attempt >= MAX_RETRY_ATTEMPTS {
         app_log!(
             app,
-            "bluetooth",
+            "devices",
             "[reconnect] giving up after {attempt} consecutive attempts"
         );
         crate::send_toast(
@@ -137,7 +137,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         tauri::async_runtime::spawn(async move {
             app_log!(
                 app,
-                "bluetooth",
+                "devices",
                 "[reconnect] scheduling attempt #{} in {}s (backoff schedule: 1→2→3→5s)",
                 attempt + 1,
                 delay
@@ -170,7 +170,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
             };
             app_log!(
                 app,
-                "bluetooth",
+                "devices",
                 "[reconnect] attempt #{} — waited {delay}s — target={preferred:?}",
                 attempt + 1
             );
@@ -234,7 +234,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 
     app_log!(
         app,
-        "bluetooth",
+        "devices",
         "[session] routing: target={target:?} name={target_name:?} kind={device_kind}"
     );
 
