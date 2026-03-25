@@ -17,7 +17,23 @@ pub(crate) fn confirm_and_quit(app: AppHandle) {
         let g = s.lock_or_recover();
         (g.ui.language.clone(), g.update_ready_to_install)
     };
-    std::thread::spawn(move || {
+
+    #[cfg(target_os = "macos")]
+    {
+        std::thread::spawn(move || {
+            if quit_confirmed(&lang, &app) {
+                if update_ready {
+                    eprintln!("[updater] update staged — relaunching to apply");
+                    app.request_restart();
+                } else {
+                    app.exit(0);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
         if quit_confirmed(&lang, &app) {
             if update_ready {
                 eprintln!("[updater] update staged — relaunching to apply");
@@ -26,7 +42,7 @@ pub(crate) fn confirm_and_quit(app: AppHandle) {
                 app.exit(0);
             }
         }
-    });
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -36,6 +52,7 @@ fn quit_confirmed(lang: &str, app: &AppHandle) -> bool {
     let mut dialog = rfd::MessageDialog::new()
         .set_title(title)
         .set_description(description)
+        .set_level(rfd::MessageLevel::Info)
         .set_buttons(rfd::MessageButtons::YesNo);
     // Set the parent window so the dialog appears focused / modal
     if let Some(win) = app.get_webview_window("main") {
