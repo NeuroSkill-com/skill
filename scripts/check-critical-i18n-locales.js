@@ -7,7 +7,7 @@ import path from "node:path";
 
 const ROOT = process.cwd();
 const I18N_DIR = path.join(ROOT, "src", "lib", "i18n");
-const CRITICAL_LOCALES = ["de", "he"];
+const SOURCE_LOCALE = "en";
 const TODO_MARKER = "TODO: translate";
 
 function listTsFiles(dir) {
@@ -23,17 +23,29 @@ function listTsFiles(dir) {
   return out;
 }
 
+function discoverLocales() {
+  if (!fs.existsSync(I18N_DIR)) return [];
+  return fs
+    .readdirSync(I18N_DIR, { withFileTypes: true })
+    .filter((ent) => ent.isDirectory())
+    .map((ent) => ent.name)
+    .filter((name) => name !== SOURCE_LOCALE)
+    .filter((name) => fs.existsSync(path.join(I18N_DIR, name, "index.ts")))
+    .sort();
+}
+
+const locales = discoverLocales();
 let failed = false;
 
-for (const locale of CRITICAL_LOCALES) {
-  const dir = path.join(I18N_DIR, locale);
-  if (!fs.existsSync(dir)) {
-    console.error(`[i18n-critical] Missing locale directory: ${dir}`);
-    failed = true;
-    continue;
-  }
+if (locales.length === 0) {
+  console.error("[i18n-locales] No non-source locales found under src/lib/i18n");
+  process.exit(1);
+}
 
+for (const locale of locales) {
+  const dir = path.join(I18N_DIR, locale);
   const offenders = [];
+
   for (const file of listTsFiles(dir)) {
     const src = fs.readFileSync(file, "utf8");
     if (src.includes(TODO_MARKER)) offenders.push(file);
@@ -41,11 +53,11 @@ for (const locale of CRITICAL_LOCALES) {
 
   if (offenders.length > 0) {
     failed = true;
-    console.error(`[i18n-critical] ${locale} has untranslated fallback markers:`);
+    console.error(`[i18n-locales] ${locale} has untranslated fallback markers:`);
     for (const f of offenders) console.error(`  - ${path.relative(ROOT, f)}`);
   }
 }
 
 if (failed) process.exit(1);
 
-console.log("[i18n-critical] OK (de/he contain no TODO fallback markers)");
+console.log(`[i18n-locales] OK (${locales.join(", ")}) contain no TODO fallback markers`);
