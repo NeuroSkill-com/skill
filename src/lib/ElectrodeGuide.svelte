@@ -33,9 +33,11 @@ interface Props {
   device?: string;
   /** Actual channel names from the connected device (e.g. ["AF3","T7","Pz","T8","AF4"] for Insight). */
   channelNames?: string[];
+  /** Optional device name (e.g. "INSIGHT-xxxx") used for better Emotiv fallback mapping. */
+  deviceName?: string;
 }
 
-let { quality = null, qualityLabels = null, device = "muse", channelNames = [] }: Props = $props();
+let { quality = null, qualityLabels = null, device = "muse", channelNames = [], deviceName = "" }: Props = $props();
 
 /** Convert string quality labels to numeric values. */
 function labelToNum(label: string): number {
@@ -120,10 +122,22 @@ $effect(() => {
 const museElectrodes = allElectrodes.filter((e) => e.muse);
 const MW75_LABELS = ["FT7", "T7", "TP7", "CP5", "P7", "C5", "FT8", "T8", "TP8", "CP6", "P8", "C6"];
 const mw75Electrodes = allElectrodes.filter((e) => MW75_LABELS.includes(e.name));
-// Emotiv electrodes — use actual device channels when available,
-// fall back to the full EPOC 14-channel set for the reference view.
+// Emotiv electrodes — prefer runtime DataLabels from Cortex. When unavailable,
+// pick a better fallback by headset family instead of always assuming EPOC.
 const EMOTIV_EPOC_LABELS = ["AF3", "F7", "F3", "FC5", "T7", "P7", "O1", "O2", "P8", "T8", "FC6", "F4", "F8", "AF4"];
-const emotivActiveLabels = $derived(device === "emotiv" && channelNames.length > 0 ? channelNames : EMOTIV_EPOC_LABELS);
+const EMOTIV_INSIGHT_LABELS = ["AF3", "T7", "Pz", "T8", "AF4"];
+
+function emotivFallbackLabels(name: string): string[] {
+  const n = name.toUpperCase();
+  if (n.includes("INSIGHT")) return EMOTIV_INSIGHT_LABELS;
+  if (n.includes("EPOC") || n.includes("EPOCX")) return EMOTIV_EPOC_LABELS;
+  // FLEX and custom montages can vary widely; keep the generic reference set.
+  return EMOTIV_EPOC_LABELS;
+}
+
+const emotivActiveLabels = $derived(
+  device === "emotiv" && channelNames.length > 0 ? channelNames : emotivFallbackLabels(deviceName),
+);
 const emotivElectrodes = $derived(allElectrodes.filter((e) => emotivActiveLabels.includes(e.name)));
 const IDUN_LABELS = ["A1"]; // Single-channel in-ear reference
 const idunElectrodes = allElectrodes.filter((e) => IDUN_LABELS.includes(e.name));

@@ -1492,7 +1492,7 @@ useWindowTitle("window.title.main");
 
         {#if showElectrodes}
           <div id="electrode-guide" class="-mt-0.5">
-            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} />
+            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} deviceName={status.device_name ?? ""} />
           </div>
         {/if}
 

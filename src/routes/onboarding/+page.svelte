@@ -736,7 +736,7 @@ useWindowTitle("window.title.onboarding");
           {t("onboarding.fitBody")}
         </p>
 
-        <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} />
+        <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} deviceName={status.device_name ?? ""} />
 
         {#if !isConnected}
           <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.fitNeedsBt")}</p>

@@ -722,6 +722,8 @@ pub(crate) async fn connect_emotiv(
         result = async {
             let deadline = tokio::time::Instant::now()
                 + std::time::Duration::from_secs(30);
+            let mut warn_142 = 0usize;
+            let mut warn_11 = 0usize;
             while tokio::time::Instant::now() < deadline {
                 match tokio::time::timeout_at(deadline, rx.recv()).await {
                     Ok(Some(CortexEvent::SessionCreated(sid))) => {
@@ -739,6 +741,11 @@ pub(crate) async fn connect_emotiv(
                             CortexEvent::Authorized   => "Authorized",
                             CortexEvent::Disconnected => "Disconnected",
                             CortexEvent::Warning { code, .. } => {
+                                if *code == 142 {
+                                    warn_142 += 1;
+                                } else if *code == 11 {
+                                    warn_11 += 1;
+                                }
                                 app_log!(app, "bluetooth",
                                     "[emotiv] warning (code={code}) while waiting for session");
                                 "Warning"
@@ -758,10 +765,25 @@ pub(crate) async fn connect_emotiv(
                         continue;
                     }
                     Ok(None) => return Err("Cortex channel closed".into()),
-                    Err(_) => return Err("Timed out waiting for session".into()),
+                    Err(_) => {
+                        if warn_142 >= 2 {
+                            return Err(format!(
+                                "Timed out waiting for Cortex session (warnings: code142={warn_142}, code11={warn_11}). \
+                                 The Cortex service is reachable but did not create a session. Try restarting EMOTIV Launcher."
+                            ));
+                        }
+                        return Err("Timed out waiting for session".into());
+                    }
                 }
             }
-            Err("Timed out waiting for Cortex session".into())
+            if warn_142 >= 2 {
+                Err(format!(
+                    "Timed out waiting for Cortex session (warnings: code142={warn_142}, code11={warn_11}). \
+                     The Cortex service is reachable but did not create a session. Try restarting EMOTIV Launcher."
+                ))
+            } else {
+                Err("Timed out waiting for Cortex session".into())
+            }
         } => result,
     };
     if let Err(e) = session_ok {
