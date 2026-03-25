@@ -23,6 +23,9 @@ ignore = [
     # We cannot upgrade this ourselves; tracked for resolution when Tauri
     # drops the GTK3 dependency.
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
+    # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
+    # Pulled transitively; not directly used by workspace code paths that call IterMut.
+    { id = "RUSTSEC-2026-0002", reason = "transitive dep, IterMut not exercised by our code; upgrade tracked" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────

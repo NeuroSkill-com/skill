@@ -715,6 +715,9 @@ jobs:
     name: Security audit
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      checks: write   # required by rustsec/audit-check to post Check Run results
     steps:
       - uses: actions/checkout@v6
         with:
