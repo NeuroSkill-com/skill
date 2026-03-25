@@ -103,6 +103,71 @@ pub fn start_llm_server(
         return Ok("already_loading".to_string());
     }
 
+    // If no text model is downloaded yet, bootstrap by downloading the
+    // smallest LFM2.5-VL 1.6B variant first.
+    let has_downloaded_text_model = catalog.entries.iter().any(|e| {
+        !e.is_mmproj
+            && e.state == DownloadState::Downloaded
+            && e.local_path.as_ref().is_some_and(|p| p.exists())
+    });
+    if !has_downloaded_text_model {
+        let default_target = catalog
+            .entries
+            .iter()
+            .filter(|e| {
+                !e.is_mmproj
+                    && (e.family_id == "lfm25-vl-1.6b"
+                        || e.family_name.to_lowercase().contains("lfm2.5")
+                            && e.family_name.to_lowercase().contains("1.6b"))
+            })
+            .min_by(|a, b| {
+                a.size_gb
+                    .total_cmp(&b.size_gb)
+                    .then_with(|| a.filename.cmp(&b.filename))
+            })
+            .or_else(|| {
+                catalog
+                    .entries
+                    .iter()
+                    .filter(|e| !e.is_mmproj && e.recommended)
+                    .min_by(|a, b| {
+                        a.size_gb
+                            .total_cmp(&b.size_gb)
+                            .then_with(|| a.filename.cmp(&b.filename))
+                    })
+            });
+
+        if let Some(target) = default_target {
+            super::downloads::download_llm_model(
+                target.filename.clone(),
+                app.clone(),
+                state.clone(),
+            );
+            let msg = format!(
+                "No local LLM model found. Downloading default model first: {}",
+                target.filename
+            );
+            *start_error.lock_or_recover() = Some(msg.clone());
+            let emitter = crate::llm::TauriEmitter(app.clone());
+            push_log(&emitter, &log_buf, "warn", &msg);
+            emitter.emit_event(
+                "llm:status",
+                serde_json::json!({"status":"stopped","error":msg}),
+            );
+            return Ok("downloading_default_model".to_string());
+        }
+
+        let msg = "No downloadable LLM model found in catalog.".to_string();
+        *start_error.lock_or_recover() = Some(msg.clone());
+        let emitter = crate::llm::TauriEmitter(app.clone());
+        push_log(&emitter, &log_buf, "error", &msg);
+        emitter.emit_event(
+            "llm:status",
+            serde_json::json!({"status":"stopped","error":msg}),
+        );
+        return Ok("no_model_available".to_string());
+    }
+
     // Clear any previous error and mark loading.
     *start_error.lock_or_recover() = None;
     loading.store(true, Ordering::Relaxed);
