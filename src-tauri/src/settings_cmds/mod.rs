@@ -1017,7 +1017,6 @@ fn read_eeg_parquet(
     path: &std::path::Path,
     n_ch: usize,
 ) -> Result<(Vec<f64>, Vec<Vec<f32>>), String> {
-    use arrow_array::cast::AsArray;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
     let file = std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
@@ -1036,9 +1035,7 @@ fn read_eeg_parquet(
         let n_cols = batch.num_columns();
 
         // Column 0 = timestamp_s.
-        if let Some(ts_col) = batch
-            .column(0)
-            .as_primitive_opt::<arrow_array::types::Float64Type>()
+        if let Some(ts_col) = batch.column(0).as_any().downcast_ref::<arrow_array::Float64Array>()
         {
             for i in 0..n_rows {
                 timestamps.push(ts_col.value(i));
@@ -1053,7 +1050,8 @@ fn read_eeg_parquet(
             }
             if let Some(col) = batch
                 .column(col_idx)
-                .as_primitive_opt::<arrow_array::types::Float64Type>()
+                .as_any()
+                .downcast_ref::<arrow_array::Float64Array>()
             {
                 for i in 0..n_rows {
                     buf.push(col.value(i) as f32);
