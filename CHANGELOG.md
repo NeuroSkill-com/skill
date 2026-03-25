@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.70] — 2026-03-25
+
+### Bugfixes
+
+- **Windows manifest root architecture**: set `src-tauri/manifest.xml` root `assemblyIdentity.processorArchitecture` to `amd64` (instead of wildcard) so `mt.exe -validate_manifest` passes and Windows CI proceeds to Rust compilation.
+
 ## [0.0.69] — 2026-03-25
 
 ### Bugfixes
