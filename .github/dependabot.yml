@@ -21,3 +21,8 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(cargo)"
+    ignore:
+      # wgpu cannot be upgraded independently: burn-wgpu, gpu-fft, zuna-rs,
+      # and luna-rs all require wgpu 26.x. Upgrade the whole Burn/GPU stack together.
+      - dependency-name: "wgpu"
+        versions: [">=27"]
