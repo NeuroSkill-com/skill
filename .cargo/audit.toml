@@ -1,0 +1,36 @@
+# cargo-audit ignore list — all transitive deps we cannot directly upgrade.
+# These are informational-only advisories (unmaintained / unsound);
+# no actual vulnerabilities are present.
+
+[advisories]
+ignore = [
+    # ── gtk-rs GTK3 family — unmaintained, no GTK4 upgrade path until Tauri migrates ──
+    "RUSTSEC-2024-0411", # gdkwayland-sys
+    "RUSTSEC-2024-0412", # gdk
+    "RUSTSEC-2024-0413", # atk
+    "RUSTSEC-2024-0414", # gdkx11-sys
+    "RUSTSEC-2024-0415", # gtk
+    "RUSTSEC-2024-0416", # atk-sys
+    "RUSTSEC-2024-0417", # gdkx11
+    "RUSTSEC-2024-0418", # gdk-sys
+    "RUSTSEC-2024-0419", # gtk3-macros
+    "RUSTSEC-2024-0420", # gtk-sys
+
+    # ── glib — unsound VariantStrIter, patched in >=0.20.0; blocked by gtk3 above ──
+    "RUSTSEC-2024-0429", # glib
+
+    # ── Other unmaintained transitive deps ────────────────────────────────────
+    "RUSTSEC-2024-0370", # proc-macro-error (via gtk3-macros)
+    "RUSTSEC-2024-0436", # paste
+    "RUSTSEC-2025-0057", # fxhash
+    "RUSTSEC-2025-0075", # unic-char-range
+    "RUSTSEC-2025-0080", # unic-common
+    "RUSTSEC-2025-0081", # unic-char-property
+    "RUSTSEC-2025-0098", # unic-ucd-version
+    "RUSTSEC-2025-0100", # unic-ucd-ident
+    "RUSTSEC-2025-0119", # number_prefix
+    "RUSTSEC-2025-0141", # bincode
+
+    # ── lru — unsound IterMut, patched in >=0.16.3; transitive dep ───────────
+    "RUSTSEC-2026-0002", # lru
+]

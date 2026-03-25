@@ -8,6 +8,85 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.72] — 2026-03-25
+
+### Features
+
+- **Calendar event fetching**: New `skill-calendar` crate adds cross-platform OS calendar support.
+  - **macOS**: Reads all calendars via Apple EventKit (`EKEventStore`) using Objective-C FFI — covers iCloud, Google, Exchange, and local calendars synced to Calendar.app. Handles the macOS 14+ `requestFullAccessToEventsWithCompletion:` API (requires `NSCalendarsFullAccessUsageDescription`) with fallback to the legacy API on macOS 10.15–13.
+  - **Linux**: Scans XDG locations for `.ics` files: GNOME Calendar, Evolution, KOrganizer, Thunderbird Lightning (targeted `calendar-data/` subdir only — not the full mail profile), and `~/Calendars/`.
+  - **Windows**: Scans Outlook / Windows Calendar paths under `%APPDATA%`, `%LOCALAPPDATA%`, and UWP package directories for `.ics` files.
+  - Shared RFC 5545 iCal parser: line folding (CRLF/LF/tab), `VTIMEZONE` UTC-offset extraction, `VALUE=DATE` all-day events, UTC (`Z`) timestamps, iCal escape sequences (`\n`, `\,`, `\;`, `\\`), `X-WR-CALNAME` (Google Calendar name at VCALENDAR level), recurrence rule passthrough. 46 unit tests.
+  - **WS commands**: `calendar_events` (fetch by range), `calendar_status` (auth state + platform), `calendar_request_permission` (macOS system dialog). Both potentially-blocking commands run via `spawn_blocking`.
+  - **HTTP REST**: `POST /v1/calendar/events`, `GET /v1/calendar/status`, `POST /v1/calendar/permission` (+ unversioned aliases).
+  - **CLI**: `calendar [--start --end]`, `calendar status`, `calendar permission`.
+  - **LLM tools**: `calendar_events`, `calendar_status`, `calendar_request_permission` in the `skill` tool enum and `is_skill_api_command` registry. `"calendar"` alias in `resolve_skill_alias`.
+  - **Skill markdown**: `skills/skills/neuroskill-calendar/SKILL.md` with LLM tool examples, timestamp arithmetic, common query patterns, and access troubleshooting.
+  - **macOS entitlements**: `com.apple.security.personal-information.calendars` added to `entitlements.plist`; `NSCalendarsUsageDescription` and `NSCalendarsFullAccessUsageDescription` added to `Info.plist`.
+  - `calendar_events`, `calendar_status`, `calendar_request_permission` added to `skill-router::COMMANDS` public registry.
+
+### Bugfixes
+
+- **Calendar Linux dedup (critical)**: `linux.rs` two-pass deduplication silently dropped every event with a non-empty UID — the first loop pre-inserted all UIDs into `seen`, causing the second loop's `!seen.contains` check to always be false. Both `linux.rs` and `windows.rs` now use single-pass atomic check-and-insert. Anonymous-event keys use NUL separator (`"\0"`) to prevent hash collisions.
+- **Calendar `X-WR-CALNAME` scope**: Google Calendar exports place the calendar name at the `VCALENDAR` level, not inside `VEVENT`. The property was only scanned inside `VEVENT` and therefore never populated. Fixed with a top-level pass in `parse_ical()`.
+- **Calendar async blocking**: `calendar_events` and `calendar_request_permission` called blocking ObjC EventKit code directly on the tokio async executor thread (up to 30 s for the macOS permission dialog). Both are now `async` and dispatch to `spawn_blocking`.
+- **Calendar macOS 14 privacy key**: `NSCalendarsFullAccessUsageDescription` was missing; without it `requestFullAccessToEventsWithCompletion:` silently fails on Sonoma/macOS 14+.
+- **Calendar Thunderbird scan**: `~/.thunderbird` root was searched to depth 6, walking the entire mail profile (potentially GB of data). Now only `~/.thunderbird/<profile>/calendar-data/` is scanned.
+- **Calendar EventKit error detection**: `macos.rs` used `json_str.contains("\"error\"")` to detect access-denied responses — a false positive for any event whose title or description contains the word `"error"`. Replaced with proper JSON type-based dispatch: `Array` → success, `Object` with `"error"` key → propagate error string.
+- **Calendar EventKit write-only access**: When the user chose "Add Events Only" (`EKAuthorizationStatusWriteOnly`, status 4), the fetch proceeded and returned an empty array instead of an error. Now returns `{"error":"calendar_write_only_access"}` so clients can prompt the user to grant full read access.
+- **LLM e2e test non-exhaustive match**: `llm_e2e.rs` match on `ToolEvent` was non-exhaustive after `RoundComplete { .. }` was added to the enum; added the missing arm.
+- **`skill-calendar` unused dependency**: `anyhow` was declared in `Cargo.toml` but never used in the crate; removed.
+
+- **Cleared all Biome lint errors** across `src/` and `scripts/`: fixed `noNonNullAssertion`, `noExplicitAny`, `useIterableCallbackReturn`, `noAssignInExpressions`, `useImportType`, and `noUnusedFunctionParameters` in ~50 files using safe rewrites or targeted `biome-ignore` suppressions with justification comments.
+- **Restored blocking Biome lint in CI**: `Biome lint` step in `.github/workflows/ci.yml` is now a hard failure again (0 errors, 0 warnings).
+- **Suppressed false-positive `useImportType` warnings for `.svelte` files**: added a `biome.json` override so Biome no longer flags Svelte component runtime imports as type-only — converting them to `import type` breaks `svelte-check`.
+- **Fixed incorrect auto-conversion of Svelte component imports**: reverted `import type` from bits-ui and Svelte component imports that must remain runtime imports (`PromptLibrary`, `ChatInputBar`, `ChatMessageList`, `ChatSidebar`, `DialogPrimitive`, `ProgressPrimitive`, `SeparatorPrimitive`, `DialogPortal`).
+
+- **Security audit CI**: Fixed `cargo deny` failing due to breaking schema changes in cargo-deny 0.16+ (used by `EmbarkStudios/cargo-deny-action@v2`). Removed deprecated `[advisories]` fields (`vulnerability`, `notice`), updated `unmaintained` from a lint level to the new scope value (`"workspace"`), removed deprecated `[licenses]` fields (`unlicensed`, `copyleft`), added missing allowed licenses (`Apache-2.0 WITH LLVM-exception`, `MIT-0`, `Unlicense`, `CDLA-Permissive-2.0`, `NCSA`, `LicenseRef-AI100`), fixed workspace crate exception name (`neuroskill` → `skill`) and SPDX identifier (`GPL-3.0` → `GPL-3.0-only`), added `clarify` entries for `exg`/`exg-luna` (AI100 license), `unescaper` (non-SPDX `GPL-3.0/MIT`), and ignored RUSTSEC-2024-0415 (gtk via Tauri, not directly upgradeable).
+
+- **Fix cargo-deny CI failure**: Updated `deny.toml` for cargo-deny v0.19+ breaking schema changes — removed deprecated fields (`vulnerability`, `notice`, `unlicensed`, `copyleft`), fixed `unmaintained` scope value, corrected `GPL-3.0` → `GPL-3.0-only` in license exceptions, added missing allowed licenses (`MIT-0`, `Apache-2.0 WITH LLVM-exception`, `Unlicense`, `NCSA`, `CDLA-Permissive-2.0`, `LicenseRef-AI100`), added clarification entries for `exg`/`exg-luna` custom-licensed crates, added exceptions for new crates (`skill-calendar`, `hermes-ble`, `mw75`), and ignored the gtk-rs GTK3 unmaintained advisory (RUSTSEC-2024-0415).
+
+- **jsonschema 0.45 compatibility in tool argument validation**: updated `skill-tools` validation error path extraction to use `ValidationError::instance_path()` so the workspace compiles and validation errors still report schema paths correctly after the dependency upgrade.
+
+### Build
+
+- **Faster local hooks**: enabled automatic `sccache` usage in `.githooks/pre-commit` and `.githooks/pre-push` when available, including C/C++ launcher integration for cmake-based crates.
+- **Docs-only fast path**: both local hooks now skip expensive frontend/Rust checks for docs/changelog-only changes.
+
+- **Faster pre-commit checks**: updated `.githooks/pre-commit` to run frontend checks only on changed files (`biome check` + `vitest related`) instead of full project-wide frontend checks on every commit.
+
+- **Faster pre-push checks**: updated `.githooks/pre-push` to run changed-files scoped frontend and Rust checks by default.
+- **Optional full gate**: full pre-push validation can still be forced with `PREPUSH_FULL=1 git push`.
+
+- **CI frontend lint stability**: switched `Biome lint` in `.github/workflows/ci.yml` back to advisory (`continue-on-error: true`) so existing lint debt no longer hard-fails the frontend job while cleanup is ongoing.
+
+### UI
+
+- **Mixed browser User-Agent pool**: replaced the outdated and browser-mixed UA list in `skill-tools` with current-version strings spanning Chrome 133–134, Firefox 128 ESR / 135–136, Safari 17–18, and Edge 133–134 across Windows, macOS, and Linux.
+
+### i18n
+
+- **sync-i18n lint fix**: removed a non-null assertion in `scripts/sync-i18n.ts` when collecting extra locale keys, using an explicit `undefined` guard instead.
+
+### Dependencies
+
+- **Align Arrow stack in `skill-data`**: upgraded `parquet` and `arrow-array` to `58` alongside `arrow-schema` so Parquet writer schemas and `RecordBatch` types use a consistent Arrow version and compile cleanly.
+
+- **Align Arrow stack to v58**: bumped `parquet`, `arrow-array`, and `arrow-schema` in `skill-data` all to version 58, and updated Parquet EEG column casting in `src-tauri` to use `downcast_ref::<Float64Array>()` (replacing the removed `as_primitive_opt`).
+
+- **Block wgpu Dependabot upgrades**: added `ignore` rule in `.github/dependabot.yml` for `wgpu >= 27`. The workspace pins wgpu to 26.x via `burn-wgpu`, `gpu-fft`, `zuna-rs`, and `luna-rs`; bumping wgpu independently causes type mismatches in the `WgpuSetup` pipeline. The whole Burn/GPU stack must be upgraded together.
+
+- **ureq 3 migration**: updated all ureq usages across `skill-tools`, `skill-llm`, `skill-exg`, `skill-screenshots`, and `skill-skills` for the ureq 2→3 breaking API changes:
+  - `AgentBuilder::new()...build()` → `Agent::config_builder()...build().into()`
+  - `.timeout(d)` → `.timeout_global(Some(d))`, `.timeout_read(d)` → `.timeout_recv_body(Some(d))`
+  - `.set("K", v)` → `.header("K", v)`, `.send_string(s)` → `.send(s)`
+  - `resp.into_string()` → `resp.into_body().read_to_string()`
+  - `resp.into_json()` → `resp.into_body().read_json()`
+  - `resp.into_reader()` → `resp.into_body().into_reader()`
+  - `resp.status()` → `resp.status().as_u16()` (now returns `StatusCode`)
+  - `resp.header("K")` → `resp.headers().get("K").and_then(|v| v.to_str().ok())`
+  - `Error::Status(code, _)` → `Error::StatusCode(code)`
+
 ## [0.0.71] — 2026-03-25
 
 ### Bugfixes
