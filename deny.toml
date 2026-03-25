@@ -43,10 +43,11 @@ allow = [
     "Unlicense",
     "NCSA",
     "CDLA-Permissive-2.0",
+    "LicenseRef-AI100",
 ]
 exceptions = [
     # Our own crates are GPL-3.0-only
-    { allow = ["GPL-3.0-only"], crate = "neuroskill" },
+    { allow = ["GPL-3.0-only"], crate = "skill" },
     { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
     { allow = ["GPL-3.0-only"], crate = "skill-commands" },
@@ -79,6 +80,18 @@ exceptions = [
 crate = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# exg / exg-luna use a custom "AI100 License v1.0" (permissive, public-domain-like).
+# The crate authors did not set a `license` field in Cargo.toml.
+[[licenses.clarify]]
+crate = "exg"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
+
+[[licenses.clarify]]
+crate = "exg-luna"
+expression = "LicenseRef-AI100"
+license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
 
 [licenses.private]
 ignore = true

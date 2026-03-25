@@ -1,0 +1,3 @@
+### Bugfixes
+
+- **Fix cargo-deny CI failure**: Updated `deny.toml` for cargo-deny v0.19+ breaking schema changes — removed deprecated fields (`vulnerability`, `notice`, `unlicensed`, `copyleft`), fixed `unmaintained` scope value, corrected `GPL-3.0` → `GPL-3.0-only` in license exceptions, added missing allowed licenses (`MIT-0`, `Apache-2.0 WITH LLVM-exception`, `Unlicense`, `NCSA`, `CDLA-Permissive-2.0`, `LicenseRef-AI100`), added clarification entries for `exg`/`exg-luna` custom-licensed crates, added exceptions for new crates (`skill-calendar`, `hermes-ble`, `mw75`), and ignored the gtk-rs GTK3 unmaintained advisory (RUSTSEC-2024-0415).
