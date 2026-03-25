@@ -999,13 +999,13 @@ useWindowTitle("window.title.main");
       aria-label="Dashboard">
   <div bind:this={dashboardContentEl} class="w-full flex flex-col items-center">
   <!-- GPU utilisation chart — always visible when GPU stats are available -->
-  <div class="w-full max-w-[460px]">
+  <div class="w-full max-w-[1200px]">
     <GpuChart />
   </div>
 
   <!-- ── ZUNA model download / retry progress banner ─────────────────────── -->
   {#if modelDlVisible}
-    <div class="w-full max-w-[460px] mb-1">
+    <div class="w-full max-w-[1200px] mb-1">
       {#if modelDl.downloading_weights}
         <!-- Downloading -->
         <div class="flex items-center gap-2.5 rounded-xl
@@ -1059,7 +1059,7 @@ useWindowTitle("window.title.main");
     </div>
   {/if}
 
-  <Card class="w-full max-w-[460px] gap-0 py-0
+  <Card class="w-full max-w-[1200px] gap-0 py-0
                border-border dark:border-white/[0.06]
                bg-white dark:bg-[#14141e]">
 
@@ -1397,6 +1397,8 @@ useWindowTitle("window.title.main");
       <!-- ════ CONNECTED ════════════════════════════════════════════════════ -->
       {:else if status.state === "connected"}
 
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 auto-rows-min">
+
         <!-- Battery (devices with battery reporting) -->
         {#if hasBattery}
         <div class="flex items-center gap-2.5" role="meter" aria-label={t("dashboard.battery")}
@@ -1491,7 +1493,7 @@ useWindowTitle("window.title.main");
         </button>
 
         {#if showElectrodes}
-          <div id="electrode-guide" class="-mt-0.5">
+          <div id="electrode-guide" class="-mt-0.5 xl:col-span-2">
             <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} deviceName={status.device_name ?? ""} />
           </div>
         {/if}
@@ -1499,7 +1501,7 @@ useWindowTitle("window.title.main");
         <!-- EXG electrode-placement disclaimer -->
         <div class="rounded-lg border border-blue-500/20 dark:border-blue-400/15
                     bg-blue-50/60 dark:bg-blue-500/[0.07]
-                    px-3 py-2 flex gap-2 items-start">
+                    px-3 py-2 flex gap-2 items-start xl:col-span-2">
           <span class="text-blue-500 dark:text-blue-400 shrink-0 text-[0.7rem] leading-none mt-px">ℹ</span>
           <p class="text-[0.58rem] leading-relaxed text-blue-900/70 dark:text-blue-200/55">
             {t("disclaimer.exgPlacement")}
@@ -1513,12 +1515,14 @@ useWindowTitle("window.title.main");
         <FaaGauge faa={faaScore} />
 
         <!-- Advanced EEG Indices grid -->
-        <EegIndices tar={tarScore} bar={barScore} dtr={dtrScore} pse={pseScore} apf={apfScore}
-          mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
-          tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
-          pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
-          headache={headacheScore} migraine={migraineScore}
-          showMu={status.has_central_electrodes} />
+        <div class="xl:col-span-2">
+          <EegIndices tar={tarScore} bar={barScore} dtr={dtrScore} pse={pseScore} apf={apfScore}
+            mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
+            tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
+            pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
+            headache={headacheScore} migraine={migraineScore}
+            showMu={status.has_central_electrodes} />
+        </div>
 
         <!-- Composite Scores -->
         <CompositeScores meditation={meditationScore} cognitiveLoad={cogLoadScore} drowsiness={drowsinessScore} />
@@ -1727,11 +1731,15 @@ useWindowTitle("window.title.main");
 
         <!-- ── Onboarding checklist (hides once all steps done) ─────────── -->
         {#if !onboardComplete}
-          <OnboardingChecklist
-            steps={onboardSteps}
-            onDismiss={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
-          />
+          <div class="xl:col-span-2">
+            <OnboardingChecklist
+              steps={onboardSteps}
+              onDismiss={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
+            />
+          </div>
         {/if}
+
+        </div>
 
       <!-- ════ DISCONNECTED ══════════════════════════════════════════════════ -->
       {:else}
