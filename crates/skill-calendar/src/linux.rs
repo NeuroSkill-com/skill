@@ -22,14 +22,14 @@ pub fn auth_status() -> AuthStatus {
 }
 
 /// No-op on Linux — access is always granted.
+#[allow(dead_code)]
 pub fn request_access() -> bool {
     true
 }
 
 pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, String> {
-    let home = match dirs_home() {
-        Some(h) => h,
-        None => return Ok(Vec::new()),
+    let Some(home) = dirs_home() else {
+        return Ok(Vec::new());
     };
 
     let mut search_roots: Vec<PathBuf> = vec![
@@ -112,7 +112,7 @@ fn parse_ics_file(
         .parent()
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str())
-        .map(|s| s.replace('-', " ").replace('_', " "));
+        .map(|s| s.replace(['-', '_'], " "));
 
     let parsed = parse_ical(&content, start_utc, end_utc);
 
