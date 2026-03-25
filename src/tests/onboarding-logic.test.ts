@@ -55,15 +55,20 @@ describe("pickLlmTarget", () => {
     expect(pickLlmTarget(entries)?.state).toBe("downloaded");
   });
 
-  it("picks LFM2.5-VL 1.6B smallest quant when nothing is downloaded", () => {
+  it("picks LFM2.5 1.2B Instruct by default when nothing is downloaded", () => {
     const entries = [
       mkEntry({ family_id: "qwen35-4b", family_name: "Qwen3.5 4B", quant: "Q4_K_M", size_gb: 2.6 }),
-      mkEntry({ family_id: "lfm25-vl-1.6b", family_name: "LFM2.5-VL 1.6B", quant: "Q8_0", size_gb: 1.16 }),
-      mkEntry({ family_id: "lfm25-vl-1.6b", family_name: "LFM2.5-VL 1.6B", quant: "Q4_0", size_gb: 0.65 }),
+      mkEntry({ family_id: "lfm25-1.2b-instruct", family_name: "LFM2.5 1.2B Instruct", quant: "Q8_0", size_gb: 1.1 }),
+      mkEntry({
+        family_id: "lfm25-1.2b-instruct",
+        family_name: "LFM2.5 1.2B Instruct",
+        quant: "Q4_K_M",
+        size_gb: 0.73,
+      }),
     ];
     const picked = pickLlmTarget(entries);
-    expect(picked?.family_id).toBe("lfm25-vl-1.6b");
-    expect(picked?.quant).toBe("Q4_0");
+    expect(picked?.family_id).toBe("lfm25-1.2b-instruct");
+    expect(picked?.quant).toBe("Q4_K_M");
   });
 
   it("falls back to recommended smallest model", () => {

@@ -26,6 +26,10 @@
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::RwLock};
 
+#[cfg(target_os = "windows")]
+static WINDOWS_LOG_FILE: std::sync::OnceLock<std::sync::Mutex<std::fs::File>> =
+    std::sync::OnceLock::new();
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 /// Per-subsystem logging switches persisted in `~/.skill/log_config.json`.
@@ -122,7 +126,19 @@ impl SkillLogger {
 
     /// Write one log line to stderr (the fd tee copies it to the log file).
     pub fn write(&self, tag: &str, msg: &str) {
-        eprintln!("[{tag}] {msg}");
+        let line = format!("[{tag}] {msg}\n");
+        eprint!("{line}");
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::io::Write;
+            if let Some(file) = WINDOWS_LOG_FILE.get() {
+                let mut guard = file
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let _ = guard.write_all(line.as_bytes());
+            }
+        }
     }
 
     /// Replace the live config and persist to `config_path`.
@@ -165,7 +181,8 @@ macro_rules! skill_log {
 /// file cannot be created the function returns silently and stderr is
 /// unchanged.
 ///
-/// Not available on non-Unix targets (Windows stub below).
+/// Unix: full stderr pipe tee (captures all `eprintln!`).
+/// Windows: create/hold the log file so [`SkillLogger::write`] can append.
 #[cfg(unix)]
 pub fn tee_stderr_to_file(log_path: &Path) {
     use std::fs::OpenOptions;
@@ -241,9 +258,34 @@ pub fn tee_stderr_to_file(log_path: &Path) {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
+pub fn tee_stderr_to_file(log_path: &Path) {
+    use std::fs::OpenOptions;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
+    if INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    if let Some(dir) = log_path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+
+    let log_file = match OpenOptions::new().create(true).append(true).open(log_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[logger] cannot open log file {}: {e}", log_path.display());
+            return;
+        }
+    };
+
+    let _ = WINDOWS_LOG_FILE.set(std::sync::Mutex::new(log_file));
+}
+
+#[cfg(all(not(unix), not(target_os = "windows")))]
 pub fn tee_stderr_to_file(_log_path: &Path) {
-    // Windows: no-op for now.  Consider using SetStdHandle + a named pipe.
+    // Non-Unix/non-Windows targets: no-op.
 }
 
 // ── Config file helpers ───────────────────────────────────────────────────────

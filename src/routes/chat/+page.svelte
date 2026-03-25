@@ -498,10 +498,18 @@ function pickBootstrapModel(entries: LlmCatalogEntryLite[]): LlmCatalogEntryLite
   const textModels = entries.filter((e) => !e.is_mmproj);
   if (textModels.length === 0) return null;
 
-  const lfm = textModels
-    .filter((e) => e.family_id === "lfm25-vl-1.6b" || /lfm2\.5.*1\.6b/i.test(e.family_name))
-    .sort((a, b) => a.size_gb - b.size_gb)[0];
-  if (lfm) return lfm;
+  const family = textModels.filter(
+    (e) => e.family_id === "lfm25-1.2b-instruct" || /lfm2\.5\s*1\.2b.*instruct/i.test(e.family_name),
+  );
+  if (family.length > 0) {
+    const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
+    return (
+      byQuant("Q4_K_M") ??
+      byQuant("Q4_0") ??
+      family.find((e) => !!e.recommended) ??
+      family.sort((a, b) => a.size_gb - b.size_gb)[0]
+    );
+  }
 
   return (
     textModels.filter((e) => !!e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??

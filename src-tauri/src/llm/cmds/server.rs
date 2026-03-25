@@ -103,27 +103,44 @@ pub fn start_llm_server(
         return Ok("already_loading".to_string());
     }
 
-    // If no text model is downloaded yet, bootstrap by downloading the
-    // smallest LFM2.5-VL 1.6B variant first.
+    // If no text model is downloaded yet, bootstrap by downloading
+    // LFM2.5 1.2B Instruct first and set it as the default active model.
     let has_downloaded_text_model = catalog.entries.iter().any(|e| {
         !e.is_mmproj
             && e.state == DownloadState::Downloaded
             && e.local_path.as_ref().is_some_and(|p| p.exists())
     });
     if !has_downloaded_text_model {
-        let default_target = catalog
+        let family: Vec<_> = catalog
             .entries
             .iter()
             .filter(|e| {
                 !e.is_mmproj
-                    && (e.family_id == "lfm25-vl-1.6b"
-                        || e.family_name.to_lowercase().contains("lfm2.5")
-                            && e.family_name.to_lowercase().contains("1.6b"))
+                    && (e.family_id == "lfm25-1.2b-instruct" || {
+                        let name = e.family_name.to_lowercase();
+                        name.contains("lfm2.5")
+                            && name.contains("1.2b")
+                            && name.contains("instruct")
+                    })
             })
-            .min_by(|a, b| {
-                a.size_gb
-                    .total_cmp(&b.size_gb)
-                    .then_with(|| a.filename.cmp(&b.filename))
+            .collect();
+
+        let by_quant = |q: &str| {
+            family
+                .iter()
+                .copied()
+                .find(|e| e.quant.eq_ignore_ascii_case(q))
+        };
+
+        let default_target = by_quant("Q4_K_M")
+            .or_else(|| by_quant("Q4_0"))
+            .or_else(|| family.iter().copied().find(|e| e.recommended))
+            .or_else(|| {
+                family.iter().copied().min_by(|a, b| {
+                    a.size_gb
+                        .total_cmp(&b.size_gb)
+                        .then_with(|| a.filename.cmp(&b.filename))
+                })
             })
             .or_else(|| {
                 catalog
@@ -138,6 +155,17 @@ pub fn start_llm_server(
             });
 
         if let Some(target) = default_target {
+            {
+                let s = state.lock_or_recover();
+                let __llm_arc = s.llm.clone();
+                let mut llm = __llm_arc.lock_or_recover();
+                llm.catalog.active_model = target.filename.clone();
+                llm.config.model_path = None;
+                llm.config.enabled = true;
+                drop(llm);
+                save_catalog(&app, &s);
+            }
+
             super::downloads::download_llm_model(
                 target.filename.clone(),
                 app.clone(),
