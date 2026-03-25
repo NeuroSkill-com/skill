@@ -312,7 +312,7 @@ fn run_event_loop(
         .with_inner_size(LogicalSize::new(config.width, config.height))
         .with_visible(config.mode == Mode::Headful)
         .build(&event_loop)
-        .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
+        .map_err(|e: tao::error::OsError| HeadlessError::InitFailed(e.to_string()))?;
 
     // Optional persistent web context for data directory / cache.
     let mut web_context = config.data_dir.as_ref().map(|dir| WebContext::new(Some(dir.clone())));
@@ -445,7 +445,7 @@ fn run_event_loop(
             .children()
             .into_iter()
             .next()
-            .and_then(|w| w.downcast::<gtk::Box>().ok())
+            .and_then(|w: gtk::Widget| w.downcast::<gtk::Box>().ok())
             .expect("tao window should contain a GtkBox");
         wv_builder
             .build_gtk(&vbox)
