@@ -7,9 +7,13 @@ updates:
       day: monday
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(npm)"
+    groups:
+      npm-all:
+        patterns:
+          - "*"
 
   - package-ecosystem: cargo
     directory: "/"
@@ -18,9 +22,13 @@ updates:
       day: monday
       time: "06:15"
       timezone: "UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(cargo)"
+    groups:
+      cargo-all:
+        patterns:
+          - "*"
     ignore:
       # wgpu cannot be upgraded independently: burn-wgpu, gpu-fft, zuna-rs,
       # and luna-rs all require wgpu 26.x. Upgrade the whole Burn/GPU stack together.
