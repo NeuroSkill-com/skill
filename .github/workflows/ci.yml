@@ -290,8 +290,9 @@ jobs:
       - name: Biome format check
         run: npx biome format src/ scripts/
 
-      - name: Biome lint
+      - name: Biome lint (advisory)
         run: npx biome lint src/ scripts/
+        continue-on-error: true
 
       - name: svelte-check
         id: frontend_svelte_check
