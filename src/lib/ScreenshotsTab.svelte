@@ -114,7 +114,6 @@ function pushHistory(arr: number[], val: number): number[] {
   return next.length > HISTORY_LEN ? next.slice(next.length - HISTORY_LEN) : next;
 }
 
-
 // ── Recommended image size for current model ──────────────────────────────
 const recommendedSize = $derived.by(() => {
   if (config.embed_backend === "mmproj" || config.embed_backend === "llm-vlm") return 768;
