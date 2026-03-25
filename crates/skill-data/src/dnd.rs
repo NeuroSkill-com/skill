@@ -422,7 +422,16 @@ fn parse_gdbus_object_path(output: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn run_cmd_windows(program: &str, args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new(program).args(args).output().ok()?;
+    use std::os::windows::process::CommandExt;
+
+    // CREATE_NO_WINDOW — prevent console-window flicker when running from a GUI app.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let out = std::process::Command::new(program)
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(args)
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -431,7 +440,13 @@ fn run_cmd_windows(program: &str, args: &[&str]) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn run_cmd_windows_ok(program: &str, args: &[&str]) -> bool {
+    use std::os::windows::process::CommandExt;
+
+    // CREATE_NO_WINDOW — prevent console-window flicker when running from a GUI app.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
     std::process::Command::new(program)
+        .creation_flags(CREATE_NO_WINDOW)
         .args(args)
         .status()
         .map(|status| status.success())
