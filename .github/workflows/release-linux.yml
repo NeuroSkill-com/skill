@@ -18,6 +18,20 @@ jobs:
     environment: Release
 
     steps:
+      # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af 2>/dev/null || true
+          df -h /
+
       # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v6

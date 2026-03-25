@@ -286,8 +286,16 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       # Retry handles transient ETXTBSY from esbuild postinstall on Linux.
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci || npm ci
 
       # Run i18n sync first — it's cheap and catches missing translation keys
@@ -722,28 +730,16 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo-audit + cargo-deny binaries
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/cargo-audit
-            ~/.cargo/bin/cargo-deny
-          key: cargo-audit-deny-bin-v1
-
       - name: cargo audit
-        run: |
-          cargo install cargo-audit --locked 2>/dev/null || true
-          cargo audit
-        continue-on-error: true
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: cargo deny
-        run: |
-          cargo install cargo-deny --locked 2>/dev/null || true
-          cargo deny check
-        continue-on-error: true
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --workspace
 
   # ── Discord notification ──────────────────────────────────────────────────
   notify:
