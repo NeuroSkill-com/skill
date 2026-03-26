@@ -78,6 +78,17 @@ interface LlmConfig {
   verbose: boolean;
 }
 
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start_utc: number;
+  end_utc: number;
+  all_day: boolean;
+  location?: string | null;
+  calendar?: string | null;
+  status: string;
+}
+
 type LlmToolKey =
   | "date"
   | "location"
@@ -126,6 +137,12 @@ let config = $state<LlmConfig>({
 });
 
 let configSaving = $state(false);
+
+// ── Calendar tool diagnostics ─────────────────────────────────────────────
+let calendarStatus = $state<"authorized" | "denied" | "restricted" | "not_determined" | "unknown">("unknown");
+let calendarTesting = $state(false);
+let calendarEvents = $state<CalendarEvent[]>([]);
+let calendarTestError = $state("");
 
 // ── Web cache state ────────────────────────────────────────────────────────
 interface CacheEntryInfo {
@@ -295,6 +312,34 @@ async function loadSkillsLicense() {
   }
 }
 
+async function loadCalendarStatus() {
+  try {
+    const s = await invoke<string>("get_calendar_permission_status");
+    if (s === "authorized" || s === "denied" || s === "restricted" || s === "not_determined") {
+      calendarStatus = s;
+    } else {
+      calendarStatus = "unknown";
+    }
+  } catch {
+    calendarStatus = "unknown";
+  }
+}
+
+async function testCalendarFetch() {
+  calendarTesting = true;
+  calendarTestError = "";
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const end = now + 24 * 60 * 60;
+    calendarEvents = await invoke<CalendarEvent[]>("get_calendar_events", { startUtc: now, endUtc: end });
+  } catch (e) {
+    calendarTestError = e instanceof Error ? e.message : String(e ?? "Calendar fetch failed");
+    calendarEvents = [];
+  } finally {
+    calendarTesting = false;
+  }
+}
+
 async function toggleSkill(name: string, enabled: boolean) {
   // Update local state immediately for responsiveness.
   skills = skills.map((s) => (s.name === name ? { ...s, enabled } : s));
@@ -316,6 +361,7 @@ onMount(async () => {
   await loadSkillsMeta();
   await loadSkills();
   await loadSkillsLicense();
+  await loadCalendarStatus();
 });
 </script>
 
@@ -334,6 +380,65 @@ onMount(async () => {
   onRemoveDomain={removeDomain}
   onRemoveEntry={removeEntry}
 />
+
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Calendar</span>
+    <span class="text-[0.52rem] text-muted-foreground/50">tools diagnostics</span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-2.5 px-4 py-3.5">
+      <div class="flex items-center gap-2 text-[0.64rem]">
+        <span class="text-muted-foreground">Permission:</span>
+        <span class="rounded-full border px-2 py-0.5 text-[0.58rem] font-semibold
+                     {calendarStatus === 'authorized' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : calendarStatus === 'denied' || calendarStatus === 'restricted' ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400' : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'}">
+          {calendarStatus}
+        </span>
+        <button
+          class="ml-auto rounded-md border border-border px-2 py-1 text-[0.58rem] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          onclick={loadCalendarStatus}>
+          Refresh
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          class="rounded-md border border-border px-2.5 py-1 text-[0.6rem] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          onclick={async () => {
+            await invoke("request_calendar_permission").catch(() => false);
+            await loadCalendarStatus();
+          }}>
+          Request permission
+        </button>
+        <button
+          class="rounded-md border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[0.6rem] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 transition-colors disabled:opacity-50"
+          onclick={testCalendarFetch}
+          disabled={calendarTesting}>
+          {calendarTesting ? "Testing…" : "Test fetch next 24h"}
+        </button>
+      </div>
+
+      {#if calendarTestError}
+        <p class="text-[0.58rem] text-red-600 dark:text-red-400 leading-relaxed">{calendarTestError}</p>
+      {/if}
+
+      {#if calendarEvents.length > 0}
+        <div class="rounded-lg border border-border/60 dark:border-white/[0.08] bg-muted/40 dark:bg-[#111118] px-2.5 py-2 max-h-44 overflow-y-auto">
+          <p class="text-[0.54rem] uppercase tracking-wider text-muted-foreground/70 mb-1.5">Upcoming ({calendarEvents.length})</p>
+          <div class="flex flex-col gap-1">
+            {#each calendarEvents.slice(0, 20) as ev}
+              <div class="text-[0.58rem] leading-relaxed">
+                <span class="font-semibold text-foreground/85">{ev.title}</span>
+                <span class="text-muted-foreground/70"> · {new Date(ev.start_utc * 1000).toLocaleString()}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </CardContent>
+  </Card>
+</section>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Suggest a skill CTA                                                         -->

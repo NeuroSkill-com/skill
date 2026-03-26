@@ -278,6 +278,20 @@ pub async fn request_calendar_permission() -> Result<bool, String> {
         .map_err(|e| format!("calendar permission task error: {e}"))
 }
 
+/// Fetch calendar events overlapping the `[start_utc, end_utc]` window.
+#[tauri::command]
+pub async fn get_calendar_events(
+    start_utc: i64,
+    end_utc: i64,
+) -> Result<Vec<skill_calendar::CalendarEvent>, String> {
+    if end_utc < start_utc {
+        return Err("end_utc must be >= start_utc".into());
+    }
+    tokio::task::spawn_blocking(move || skill_calendar::fetch_events(start_utc, end_utc))
+        .await
+        .map_err(|e| format!("calendar events task error: {e}"))?
+}
+
 // ── First-launch window reveal ────────────────────────────────────────────────
 
 /// Called from `+layout.svelte` `onMount` to reveal the main window only
