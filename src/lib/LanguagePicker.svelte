@@ -8,7 +8,14 @@ the Free Software Foundation, version 3 only. -->
      The menu is teleported to <body> so it escapes all overflow/stacking ancestors. -->
 <script lang="ts">
 import { onDestroy, onMount, tick } from "svelte";
-import { getLocale, SUPPORTED_LOCALES, setLocale, t } from "$lib/i18n/index.svelte";
+import {
+  getLocale,
+  isUsingSystemLocale,
+  SUPPORTED_LOCALES,
+  setLocale,
+  t,
+  useSystemLocale,
+} from "$lib/i18n/index.svelte";
 
 let open = $state(false);
 let btnEl = $state<HTMLButtonElement>();
@@ -38,7 +45,7 @@ async function toggle() {
   if (left + menuW > window.innerWidth - 4) left = window.innerWidth - menuW - 4;
   let top = r.bottom + 4;
   // If it would overflow below, show above
-  const menuH = SUPPORTED_LOCALES.length * 32 + 8;
+  const menuH = (SUPPORTED_LOCALES.length + 1) * 32 + 8;
   if (top + menuH > window.innerHeight - 4) {
     top = r.top - menuH - 4;
   }
@@ -48,9 +55,14 @@ async function toggle() {
   renderMenu();
 }
 
-function pick(code: string) {
-  setLocale(code);
+async function pick(code: string) {
+  await setLocale(code);
   // Keep dropdown open so user sees the updated checkmark; it closes on outside click
+  renderMenu();
+}
+
+async function pickSystem() {
+  await useSystemLocale();
   renderMenu();
 }
 
@@ -58,6 +70,16 @@ function close() {
   if (open) {
     open = false;
     renderMenu();
+  }
+}
+
+function languageDisplayName(code: string, fallback: string): string {
+  try {
+    // Use each language's own locale so names appear natively (e.g. Français, Deutsch, Español).
+    const dn = new Intl.DisplayNames([code], { type: "language" });
+    return dn.of(code) ?? fallback;
+  } catch {
+    return fallback;
   }
 }
 
@@ -70,6 +92,8 @@ function renderMenu() {
   }
 
   const locale = getLocale();
+  const usingSystem = isUsingSystemLocale();
+  const systemLabel = t("appearance.themeSystem");
   const menu = document.createElement("div");
   menu.style.cssText = menuStyle;
   menu.className =
@@ -78,9 +102,27 @@ function renderMenu() {
   // Prevent closing when clicking/pressing inside menu
   menu.addEventListener("pointerdown", (e) => e.stopPropagation());
 
+  const systemBtn = document.createElement("button");
+  systemBtn.className =
+    "flex items-center gap-2 w-full px-3 py-1.5 text-[0.72rem] font-medium transition-colors " +
+    (usingSystem
+      ? "bg-primary/10 text-primary"
+      : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5");
+  systemBtn.innerHTML =
+    `<span class="text-[0.9rem] leading-none">🌐</span>` +
+    `<span>${systemLabel}</span>` +
+    (usingSystem ? `<span class="ml-auto text-[0.6rem] text-primary">✓</span>` : "");
+  systemBtn.addEventListener("click", () => void pickSystem());
+  menu.appendChild(systemBtn);
+
+  const divider = document.createElement("div");
+  divider.className = "my-1 h-px bg-neutral-200 dark:bg-white/10";
+  menu.appendChild(divider);
+
   for (const loc of SUPPORTED_LOCALES) {
     const btn = document.createElement("button");
-    const isActive = locale === loc.code;
+    const isActive = !usingSystem && locale === loc.code;
+    const localizedName = languageDisplayName(loc.code, loc.name);
     btn.className =
       "flex items-center gap-2 w-full px-3 py-1.5 text-[0.72rem] font-medium transition-colors " +
       (isActive
@@ -88,9 +130,9 @@ function renderMenu() {
         : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5");
     btn.innerHTML =
       `<span class="text-[0.9rem] leading-none">${loc.flag}</span>` +
-      `<span>${loc.name}</span>` +
+      `<span>${localizedName}</span>` +
       (isActive ? `<span class="ml-auto text-[0.6rem] text-primary">✓</span>` : "");
-    btn.addEventListener("click", () => pick(loc.code));
+    btn.addEventListener("click", () => void pick(loc.code));
     menu.appendChild(btn);
   }
 

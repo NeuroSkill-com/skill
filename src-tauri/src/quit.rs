@@ -93,6 +93,10 @@ fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
             "Quitter NeuroSkill™",
             "Voulez-vous vraiment quitter NeuroSkill™ ?",
         ),
+        "es" => (
+            "Salir de NeuroSkill™",
+            "¿Seguro que quieres salir de NeuroSkill™?",
+        ),
         "he" => (
             "לצאת מ-NeuroSkill™",
             "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?",

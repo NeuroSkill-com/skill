@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { extractKeysFromDir as extractKeysWithValues, isExempt } from "../lib/i18n/i18n-utils";
 
 const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
-const LOCALES = ["de", "fr", "he", "uk"] as const;
+const LOCALES = ["de", "es", "fr", "he", "uk"] as const;
 const NS_FILES = [
   "common",
   "dashboard",
