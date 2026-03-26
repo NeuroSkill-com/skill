@@ -36,6 +36,9 @@ emotiv = { version = "0.0.9", default-features = false }
 # IDUN Guardian in-ear EEG earbud (BLE)
 idun = { version = "0.0.3", default-features = false }
 
+# Mendi fNIRS headband (BLE)
+mendi = { version = "0.0.1", default-features = false }
+
 [features]
 default = []
 # Enable RFCOMM transport for MW75 (links IOBluetooth.framework on macOS,

@@ -11,6 +11,7 @@ pub mod session;
 pub use emotiv;
 pub use hermes_ble;
 pub use idun;
+pub use mendi;
 pub use muse_rs;
 pub use mw75;
 pub use openbci;

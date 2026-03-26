@@ -35,6 +35,9 @@ fn descriptor_pipeline_channels_capped() {
         eeg_sample_rate: 250.0,
         channel_names: (0..24).map(|i| format!("Ch{i}")).collect(),
         pipeline_channels: 24_usize.min(skill_constants::EEG_CHANNELS),
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
     };
     assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
 }
@@ -48,6 +51,9 @@ fn descriptor_small_channel_count_not_capped() {
         eeg_sample_rate: 256.0,
         channel_names: vec!["A".into(), "B".into(), "C".into(), "D".into()],
         pipeline_channels: 4_usize.min(skill_constants::EEG_CHANNELS),
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
     };
     assert_eq!(desc.pipeline_channels, 4);
 }

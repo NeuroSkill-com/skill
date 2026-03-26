@@ -234,6 +234,9 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Install protoc (macOS)
+        run: brew install protobuf
+
       - name: i18n sync check
         run: npm run -s sync:i18n:check
 

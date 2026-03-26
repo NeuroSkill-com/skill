@@ -61,6 +61,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
   "settings.supportedDevices.device.museS": "Muse S",
@@ -76,6 +77,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.mn8": "MN8",
   "settings.supportedDevices.device.guardian": "Guardián",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermes",
+  "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
   "settings.supportedDevices.instruction.muse1": "Encienda sus auriculares y manténgalos cerca de esta computadora.",
   "settings.supportedDevices.instruction.muse2":
     "Utilice escanear + emparejar en la lista de Dispositivos a continuación, luego configúrelo como predeterminado si es necesario.",
@@ -96,11 +98,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Encienda Nucleus-Hermès y manténgalo cerca de esta computadora.",
   "settings.supportedDevices.instruction.reak2":
     "Escanéelo y emparéjelo en la lista de Dispositivos, luego conéctese desde el flujo de dispositivo preferido.",
+  "settings.supportedDevices.instruction.mendi1": "Enciende Mendi y mantenlo cerca de esta computadora.",
+  "settings.supportedDevices.instruction.mendi2":
+    "Escanéalo y emparejalo desde la lista de dispositivos, luego conéctalo.",
   "settings.scanner.title": "Backends de escaneo",
   "settings.scanner.desc":
     "Alterna qué transportes de descubrimiento se ejecutan en segundo plano. Los cambios entran en vigor en el próximo reinicio de la aplicación.",
   "settings.scanner.ble": "Bluetooth LE",
-  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglión, IDUN",
+  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglión, IDUN, Mendi",
   "settings.scanner.usbSerial": "Serie USB",
   "settings.scanner.usbSerialDesc": "Llave OpenBCI Cyton / CytonDaisy",
   "settings.scanner.cortex": "Emotiv Cortex",

@@ -984,6 +984,84 @@ pub(crate) async fn connect_idun(
     Ok(Box::new(IdunAdapter::new(rx, handle)))
 }
 
+// ── Mendi (BLE) ───────────────────────────────────────────────────────────────
+
+pub(crate) async fn connect_mendi(
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
+    preferred_id: Option<String>,
+) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
+    use skill_devices::mendi::prelude::*;
+    use skill_devices::session::mendi::MendiAdapter;
+
+    // BT check
+    if let Err((msg, _)) = bluetooth_ok().await {
+        return Err(ConnectError::Bluetooth(msg));
+    }
+
+    let client = MendiClient::new(MendiClientConfig::default());
+
+    let all_devices = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = client.scan() => match r {
+            Err(e) => {
+                let (m, _) = classify_device_error(&e.to_string());
+                return Err(ConnectError::Bluetooth(m));
+            }
+            Ok(d) => d,
+        }
+    };
+
+    let paired_ids: Vec<String> = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.status
+            .paired_devices
+            .iter()
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    let first_time = paired_ids.is_empty();
+
+    let device = if first_time {
+        all_devices.into_iter().next()
+    } else {
+        match &preferred_id {
+            Some(id) => all_devices.iter().find(|d| &d.id == id).cloned(),
+            None => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
+        }
+    };
+    let Some(device) = device else {
+        return Err(ConnectError::Other("NO_MENDI_NEARBY".into()));
+    };
+
+    {
+        let sr = app.app_state();
+        let mut g = sr.lock_or_recover();
+        g.status.device_id = Some(device.id.clone());
+        g.retry_attempt = 0;
+    }
+
+    let (rx, handle) = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = client.connect_to(device) => match r {
+            Err(e) => {
+                let (m, _) = classify_device_error(&e.to_string());
+                return Err(ConnectError::Bluetooth(m));
+            }
+            Ok(v) => v,
+        }
+    };
+
+    if let Err(e) = handle.enable_sensor().await {
+        app_log!(app, "devices", "[mendi] enable_sensor warning: {e}");
+    }
+
+    Ok(Box::new(MendiAdapter::new(rx, handle)))
+}
+
 // ── Tauri command: connect_openbci ────────────────────────────────────────────
 
 /// Connect to any non-BLE OpenBCI board using the current `openbci_config`

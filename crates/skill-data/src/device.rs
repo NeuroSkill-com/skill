@@ -51,6 +51,8 @@ pub enum DeviceKind {
     Emotiv,
     /// IDUN Guardian — single-channel bipolar in-ear EEG earbud (1 ch @ 250 Hz, IMU).
     Idun,
+    /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
+    Mendi,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -123,6 +125,9 @@ impl DeviceKind {
         }
         if n.starts_with("idun") || n.starts_with("ige") || n.starts_with("guardian") {
             return Self::Idun;
+        }
+        if n.starts_with("mendi") {
+            return Self::Mendi;
         }
 
         Self::Unknown
@@ -205,6 +210,16 @@ impl DeviceKind {
                 sample_rate_hz: 250.0,
                 electrode_names: sv(&["EEG"]),
             },
+            Self::Mendi => DeviceCapabilities {
+                kind: Self::Mendi,
+                channel_count: 0, // fNIRS optical channels (not EEG electrodes)
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
+            },
             Self::Unknown => DeviceCapabilities {
                 kind: Self::Unknown,
                 channel_count: 0,
@@ -234,6 +249,7 @@ impl DeviceKind {
             Self::Hermes => "hermes",
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
+            Self::Mendi => "mendi",
             Self::Unknown => "unknown",
         }
     }
@@ -253,6 +269,7 @@ impl DeviceKind {
             "hermes" => Self::Hermes,
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
+            "mendi" => Self::Mendi,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -423,6 +440,19 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.reak2".into(),
             ],
         },
+        SupportedCompany {
+            id: "mendi".into(),
+            name_key: "settings.supportedDevices.company.mendi".into(),
+            logo: "/logos/mendi.png".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.mendiHeadband".into(),
+                image: "/devices/mendi-headband.png".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.mendi1".into(),
+                "settings.supportedDevices.instruction.mendi2".into(),
+            ],
+        },
     ]
 }
 
@@ -482,6 +512,12 @@ mod tests {
     }
 
     #[test]
+    fn from_name_mendi() {
+        assert_eq!(DeviceKind::from_name(Some("Mendi")), DeviceKind::Mendi);
+        assert_eq!(DeviceKind::from_name(Some("mendi-1234")), DeviceKind::Mendi);
+    }
+
+    #[test]
     fn from_kind_str_canonical() {
         assert_eq!(DeviceKind::from_kind_str("muse"), DeviceKind::Muse);
         assert_eq!(DeviceKind::from_kind_str("ganglion"), DeviceKind::Ganglion);
@@ -490,6 +526,7 @@ mod tests {
         assert_eq!(DeviceKind::from_kind_str("hermes"), DeviceKind::Hermes);
         assert_eq!(DeviceKind::from_kind_str("emotiv"), DeviceKind::Emotiv);
         assert_eq!(DeviceKind::from_kind_str("idun"), DeviceKind::Idun);
+        assert_eq!(DeviceKind::from_kind_str("mendi"), DeviceKind::Mendi);
         assert_eq!(DeviceKind::from_kind_str("unknown"), DeviceKind::Unknown);
     }
 

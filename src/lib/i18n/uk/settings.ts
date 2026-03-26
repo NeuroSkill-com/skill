@@ -331,6 +331,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
   "settings.supportedDevices.device.museS": "Muse S",
@@ -346,6 +347,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.mn8": "MN8",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
+  "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
   "settings.supportedDevices.instruction.muse1": "Увімкніть гарнітуру та тримайте її поруч з цим комп'ютером.",
   "settings.supportedDevices.instruction.muse2":
     "Використовуйте сканування + з'єднання у списку пристроїв нижче, потім встановіть за замовчуванням за потреби.",
@@ -363,11 +365,13 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Увімкніть Nucleus-Hermès та тримайте його поруч з цим комп'ютером.",
   "settings.supportedDevices.instruction.reak2":
     "Скануйте та з'єднайте його у списку пристроїв, потім підключіть через бажаний процес.",
+  "settings.supportedDevices.instruction.mendi1": "Увімкніть Mendi і тримайте його поруч із цим комп’ютером.",
+  "settings.supportedDevices.instruction.mendi2": "Проскануйте та спаруйте його зі списку пристроїв, потім підключіть.",
   "settings.scanner.title": "Бекенди сканера",
   "settings.scanner.desc":
     "Оберіть, які транспорти виявлення працюють у фоновому режимі. Зміни набудуть чинності після перезапуску додатку.",
   "settings.scanner.ble": "Bluetooth LE",
-  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi",
   "settings.scanner.usbSerial": "USB послідовний",
   "settings.scanner.usbSerialDesc": "Донгл OpenBCI Cyton / CytonDaisy",
   "settings.scanner.cortex": "Emotiv Cortex",

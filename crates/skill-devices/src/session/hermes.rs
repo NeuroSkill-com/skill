@@ -40,6 +40,16 @@ impl HermesAdapter {
                 eeg_sample_rate: HERMES_SAMPLE_RATE,
                 channel_names,
                 pipeline_channels: HERMES_EEG_CHANNELS.min(EEG_CHANNELS),
+                ppg_channel_names: Vec::new(),
+                imu_channel_names: vec![
+                    "AccelX".into(),
+                    "AccelY".into(),
+                    "AccelZ".into(),
+                    "GyroX".into(),
+                    "GyroY".into(),
+                    "GyroZ".into(),
+                ],
+                fnirs_channel_names: Vec::new(),
             },
             pending: VecDeque::new(),
         }
@@ -60,6 +70,16 @@ impl HermesAdapter {
                 eeg_sample_rate: HERMES_SAMPLE_RATE,
                 channel_names,
                 pipeline_channels: HERMES_EEG_CHANNELS.min(skill_constants::EEG_CHANNELS),
+                ppg_channel_names: Vec::new(),
+                imu_channel_names: vec![
+                    "AccelX".into(),
+                    "AccelY".into(),
+                    "AccelZ".into(),
+                    "GyroX".into(),
+                    "GyroY".into(),
+                    "GyroZ".into(),
+                ],
+                fnirs_channel_names: Vec::new(),
             },
             pending: std::collections::VecDeque::new(),
         }

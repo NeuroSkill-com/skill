@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
-import { fuzzyMatch, museImage, deviceImage, openbciChannelLabel, fmtLastSeen } from "$lib/devices-logic";
+import { describe, expect, it } from "vitest";
+import { deviceImage, fmtLastSeen, fuzzyMatch, museImage, openbciChannelLabel } from "$lib/devices-logic";
 
 describe("fuzzyMatch", () => {
   it("matches empty needle", () => {
@@ -50,6 +50,9 @@ describe("deviceImage", () => {
   });
   it("detects OpenBCI Ganglion", () => {
     expect(deviceImage("OpenBCI Ganglion")).toContain("ganglion");
+  });
+  it("detects Mendi", () => {
+    expect(deviceImage("Mendi")).toContain("mendi-headband");
   });
   it("returns null for unknown", () => {
     expect(deviceImage("Unknown Device XYZ")).toBeNull();

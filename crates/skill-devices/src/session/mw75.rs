@@ -62,6 +62,9 @@ impl Mw75Adapter {
                 eeg_sample_rate: MW75_SAMPLE_RATE,
                 channel_names,
                 pipeline_channels: MW75_EEG_CHANNELS.min(EEG_CHANNELS),
+                ppg_channel_names: Vec::new(),
+                imu_channel_names: Vec::new(),
+                fnirs_channel_names: Vec::new(),
             },
             pending,
             #[cfg(feature = "mw75-rfcomm")]
@@ -96,6 +99,9 @@ impl Mw75Adapter {
                 eeg_sample_rate: MW75_SAMPLE_RATE,
                 channel_names,
                 pipeline_channels: MW75_EEG_CHANNELS.min(skill_constants::EEG_CHANNELS),
+                ppg_channel_names: Vec::new(),
+                imu_channel_names: Vec::new(),
+                fnirs_channel_names: Vec::new(),
             },
             pending,
             #[cfg(feature = "mw75-rfcomm")]

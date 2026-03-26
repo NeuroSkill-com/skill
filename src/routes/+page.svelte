@@ -45,6 +45,7 @@ import {
 } from "$lib/dashboard";
 import EegChart, { type EventMarker, type SpectrogramColumn } from "$lib/EegChart.svelte";
 import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
+import FnirsChart from "$lib/FnirsChart.svelte";
 import GpuChart from "$lib/GpuChart.svelte";
 import ImuChart, { type ImuPacket } from "$lib/ImuChart.svelte";
 import { t } from "$lib/i18n/index.svelte";
@@ -120,6 +121,12 @@ let ppgChartEl = $state<
 let imuChartEl = $state<
   | {
       pushPacket(pkt: ImuPacket): void;
+    }
+  | undefined
+>();
+let fnirsChartEl = $state<
+  | {
+      pushMetrics(m: { hbo: number; hbr: number; hbt: number; workload: number; oxygenation: number }): void;
     }
   | undefined
 >();
@@ -341,6 +348,19 @@ let status = $state<DeviceStatus>({
   device_kind: "unknown",
   hardware_version: null,
   channel_names: [],
+  ppg_channel_names: [],
+  imu_channel_names: [],
+  fnirs_channel_names: [],
+  fnirs_oxygenation_pct: 0,
+  fnirs_workload: 0,
+  fnirs_lateralization: 0,
+  fnirs_hbo_left: 0,
+  fnirs_hbo_right: 0,
+  fnirs_hbr_left: 0,
+  fnirs_hbr_right: 0,
+  fnirs_hbt_left: 0,
+  fnirs_hbt_right: 0,
+  fnirs_connectivity: 0,
   eeg_channel_count: 0,
   eeg_sample_rate_hz: 0,
   has_ppg: false,
@@ -440,9 +460,12 @@ const isMw75 = $derived(status.device_kind === "mw75");
 const isHermes = $derived(status.device_kind === "hermes");
 const isEmotiv = $derived(status.device_kind === "emotiv");
 const isIdun = $derived(status.device_kind === "idun");
+const isMendi = $derived(status.device_kind === "mendi");
 const hasPpg = $derived(status.has_ppg);
 const hasImuCap = $derived(status.has_imu);
-const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun);
+const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
+const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
+const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi);
 
 // Channel labels and colours — dynamic based on connected device.
 // Use dynamic channel names from the device when available (handles
@@ -456,6 +479,7 @@ const chLabels = $derived(
     if (isHermes) return [...HERMES_CH];
     if (isEmotiv) return [...EMOTIV_CH];
     if (isIdun) return [...IDUN_CH];
+    if (isMendi) return [];
     if (isGanglion) return [...GANGLION_CH];
     return [...EEG_CH];
   })(),
@@ -482,6 +506,16 @@ const chColors = $derived(
     return out;
   })(),
 );
+
+const ppgLabels = $derived(
+  (status.ppg_channel_names?.length
+    ? status.ppg_channel_names
+    : hasPpg
+      ? ["Ambient", "Infrared", "Red"]
+      : []) as string[],
+);
+const imuLabels = $derived((status.imu_channel_names ?? []) as string[]);
+const fnirsLabels = $derived((status.fnirs_channel_names ?? []) as string[]);
 /**
  * Athena = Muse S gen 2.
  * Detected by hardware_version "p50" (arrives a few seconds after connect)
@@ -529,6 +563,7 @@ const deviceImage = $derived(
     if (isHermes) return "/devices/re-ak-nucleus-hermes.png";
     if (isEmotiv) return "/devices/emotiv-epoc-x.webp";
     if (isIdun) return "/devices/idun-guardian.png";
+    if (isMendi) return "/devices/mendi-headband.png";
     return null;
   })(),
 );
@@ -543,6 +578,7 @@ const deviceImageAlt = $derived(
     if (isHermes) return "Nucleus Hermes";
     if (isEmotiv) return "Emotiv";
     if (isIdun) return "IDUN Guardian";
+    if (isMendi) return "Mendi";
     return status.device_name ?? "";
   })(),
 );
@@ -842,6 +878,24 @@ onMount(async () => {
     await listen<DeviceStatus>("status", (ev) => {
       const prev = status.state;
       status = ev.payload;
+      if ((status.fnirs_channel_names?.length ?? 0) > 0) {
+        fnirsChartEl?.pushMetrics({
+          hbo:
+            (((status.fnirs_hbo_left as number | undefined) ?? 0) +
+              ((status.fnirs_hbo_right as number | undefined) ?? 0)) /
+            2,
+          hbr:
+            (((status.fnirs_hbr_left as number | undefined) ?? 0) +
+              ((status.fnirs_hbr_right as number | undefined) ?? 0)) /
+            2,
+          hbt:
+            (((status.fnirs_hbt_left as number | undefined) ?? 0) +
+              ((status.fnirs_hbt_right as number | undefined) ?? 0)) /
+            2,
+          workload: (status.fnirs_workload as number | undefined) ?? 0,
+          oxygenation: (status.fnirs_oxygenation_pct as number | undefined) ?? 0,
+        });
+      }
       if (prev !== "connected" && status.state === "connected") startUptime();
       if (prev === "connected" && status.state !== "connected") {
         stopUptime();
@@ -1361,7 +1415,7 @@ useWindowTitle("window.title.main");
             <!-- Normal scanning spinner -->
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
             <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
-              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : t("dashboard.lookingForMuse")}
+              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : t("dashboard.lookingForMuse")}
             </p>
             <Button size="sm" variant="outline" onclick={cancelRetry}>{t("common.cancel")}</Button>
 
@@ -1444,6 +1498,13 @@ useWindowTitle("window.title.main");
               IDUN Guardian · {chLabels.length}ch · {sr} Hz
             </span>
           </div>
+        {:else if isMendi}
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      bg-fuchsia-500/10 border border-fuchsia-500/20 w-fit">
+            <span class="text-[0.55rem] font-semibold text-fuchsia-600 dark:text-fuchsia-400 tracking-wide">
+              Mendi · fNIRS + IMU
+            </span>
+          </div>
         {:else if isHermes}
           {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 250}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
@@ -1454,87 +1515,136 @@ useWindowTitle("window.title.main");
           </div>
         {/if}
 
-        <!-- Signal quality row -->
-        <div class="rounded-xl border border-border dark:border-white/[0.04]
-                    bg-muted dark:bg-[#1a1a28] px-3 py-2.5"
-             role="group" aria-label={t("dashboard.signal")}>
-          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground block mb-1.5">
-            {t("dashboard.signal")}
-          </span>
-          <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 6} class:grid-cols-4={chLabels.length > 6}>
-            {#each chLabels as ch, i}
-              {@const q = status.channel_quality[i] ?? 'no_signal'}
-              <div class="flex items-center gap-1.5">
-                <svg width="8" height="8" viewBox="0 0 8 8" class="shrink-0">
-                  <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
-                    {#if q === 'fair' || q === 'poor'}
-                      <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
-                    {/if}
-                  </circle>
-                </svg>
-                <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
-                <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
-                      style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
+        {#if hasEeg}
+          <!-- Signal quality row -->
+          <div class="rounded-xl border border-border dark:border-white/[0.04]
+                      bg-muted dark:bg-[#1a1a28] px-3 py-2.5"
+              role="group" aria-label={t("dashboard.signal")}>
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground block mb-1.5">
+              {t("dashboard.signal")}
+            </span>
+            <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 6} class:grid-cols-4={chLabels.length > 6}>
+              {#each chLabels as ch, i}
+                {@const q = status.channel_quality[i] ?? 'no_signal'}
+                <div class="flex items-center gap-1.5">
+                  <svg width="8" height="8" viewBox="0 0 8 8" class="shrink-0">
+                    <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
+                      {#if q === 'fair' || q === 'poor'}
+                        <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
+                      {/if}
+                    </circle>
+                  </svg>
+                  <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
+                  <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
+                        style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Electrode placement toggle -->
+          <button
+            onclick={() => showElectrodes = !showElectrodes}
+            class="flex items-center gap-1.5 text-[0.52rem] font-medium text-muted-foreground/60
+                  hover:text-muted-foreground transition-colors -mt-0.5"
+            aria-expanded={showElectrodes}
+            aria-controls="electrode-guide">
+            <span class="transition-transform {showElectrodes ? 'rotate-90' : ''}"
+                  style="display:inline-block">▸</span>
+            {t("electrode.title")}
+          </button>
+
+          {#if showElectrodes}
+            <div id="electrode-guide" class="-mt-0.5 xl:col-span-2">
+              <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} deviceName={status.device_name ?? ""} />
+            </div>
+          {/if}
+
+          <!-- EXG electrode-placement disclaimer -->
+          <div class="rounded-lg border border-blue-500/20 dark:border-blue-400/15
+                      bg-blue-50/60 dark:bg-blue-500/[0.07]
+                      px-3 py-2 flex gap-2 items-start xl:col-span-2">
+            <span class="text-blue-500 dark:text-blue-400 shrink-0 text-[0.7rem] leading-none mt-px">ℹ</span>
+            <p class="text-[0.58rem] leading-relaxed text-blue-900/70 dark:text-blue-200/55">
+              {t("disclaimer.exgPlacement")}
+            </p>
+          </div>
+        {:else}
+          <div class="rounded-xl border border-border dark:border-white/[0.04]
+                      bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5 xl:col-span-2">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Modalities</span>
+            {#if hasFnirs && fnirsLabels.length > 0}
+              <div class="text-[0.58rem] text-muted-foreground">fNIRS: {fnirsLabels.join(" · ")}</div>
+              <div class="grid grid-cols-3 gap-1.5 mt-1">
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Oxy</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_oxygenation_pct ?? 0).toFixed(1)}%</div>
+                </div>
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Workload</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_workload ?? 0).toFixed(1)}</div>
+                </div>
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Lat</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_lateralization ?? 0).toFixed(1)}</div>
+                </div>
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbO</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{((((status.fnirs_hbo_left ?? 0) + (status.fnirs_hbo_right ?? 0)) / 2)).toFixed(3)}</div>
+                </div>
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbR</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{((((status.fnirs_hbr_left ?? 0) + (status.fnirs_hbr_right ?? 0)) / 2)).toFixed(3)}</div>
+                </div>
+                <div class="rounded-md border border-border/60 px-1.5 py-1">
+                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Conn</div>
+                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_connectivity ?? 0).toFixed(3)}</div>
+                </div>
               </div>
-            {/each}
+            {/if}
+            {#if ppgLabels.length > 0}
+              <div class="text-[0.58rem] text-muted-foreground">PPG: {ppgLabels.join(" · ")}</div>
+            {/if}
+            {#if imuLabels.length > 0}
+              <div class="text-[0.58rem] text-muted-foreground">IMU: {imuLabels.join(" · ")}</div>
+            {/if}
           </div>
-        </div>
-
-        <!-- Electrode placement toggle -->
-        <button
-          onclick={() => showElectrodes = !showElectrodes}
-          class="flex items-center gap-1.5 text-[0.52rem] font-medium text-muted-foreground/60
-                 hover:text-muted-foreground transition-colors -mt-0.5"
-          aria-expanded={showElectrodes}
-          aria-controls="electrode-guide">
-          <span class="transition-transform {showElectrodes ? 'rotate-90' : ''}"
-                style="display:inline-block">▸</span>
-          {t("electrode.title")}
-        </button>
-
-        {#if showElectrodes}
-          <div id="electrode-guide" class="-mt-0.5 xl:col-span-2">
-            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} deviceName={status.device_name ?? ""} />
-          </div>
+          {#if hasFnirs}
+            <div class="xl:col-span-2">
+              <FnirsChart bind:this={fnirsChartEl} />
+            </div>
+          {/if}
         {/if}
 
-        <!-- EXG electrode-placement disclaimer -->
-        <div class="rounded-lg border border-blue-500/20 dark:border-blue-400/15
-                    bg-blue-50/60 dark:bg-blue-500/[0.07]
-                    px-3 py-2 flex gap-2 items-start xl:col-span-2">
-          <span class="text-blue-500 dark:text-blue-400 shrink-0 text-[0.7rem] leading-none mt-px">ℹ</span>
-          <p class="text-[0.58rem] leading-relaxed text-blue-900/70 dark:text-blue-200/55">
-            {t("disclaimer.exgPlacement")}
-          </p>
-        </div>
+        {#if hasEeg}
+          <!-- Focus / Relaxation / Engagement scores -->
+          <BrainStateScores relaxation={relaxScore} engagement={engagementScore} />
 
-        <!-- Focus / Relaxation / Engagement scores -->
-        <BrainStateScores relaxation={relaxScore} engagement={engagementScore} />
+          <!-- Frontal Alpha Asymmetry (FAA) gauge -->
+          <FaaGauge faa={faaScore} />
 
-        <!-- Frontal Alpha Asymmetry (FAA) gauge -->
-        <FaaGauge faa={faaScore} />
+          <!-- Advanced EEG Indices grid -->
+          <div class="xl:col-span-2">
+            <EegIndices tar={tarScore} bar={barScore} dtr={dtrScore} pse={pseScore} apf={apfScore}
+              mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
+              tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
+              pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
+              headache={headacheScore} migraine={migraineScore}
+              showMu={status.has_central_electrodes} />
+          </div>
 
-        <!-- Advanced EEG Indices grid -->
-        <div class="xl:col-span-2">
-          <EegIndices tar={tarScore} bar={barScore} dtr={dtrScore} pse={pseScore} apf={apfScore}
-            mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
-            tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
-            pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
-            headache={headacheScore} migraine={migraineScore}
-            showMu={status.has_central_electrodes} />
-        </div>
+          <!-- Composite Scores -->
+          <CompositeScores meditation={meditationScore} cognitiveLoad={cogLoadScore} drowsiness={drowsinessScore} />
 
-        <!-- Composite Scores -->
-        <CompositeScores meditation={meditationScore} cognitiveLoad={cogLoadScore} drowsiness={drowsinessScore} />
+          <!-- Consciousness Metrics -->
+          <ConsciousnessMetrics
+            lzc={consciousnessLzc}
+            wakefulness={consciousnessWakefulness}
+            integration={consciousnessIntegration} />
 
-        <!-- Consciousness Metrics -->
-        <ConsciousnessMetrics
-          lzc={consciousnessLzc}
-          wakefulness={consciousnessWakefulness}
-          integration={consciousnessIntegration} />
-
-        <!-- Artifact Events -->
-        <ArtifactEvents {blinkCount} {blinkRate} />
+          <!-- Artifact Events -->
+          <ArtifactEvents {blinkCount} {blinkRate} />
+        {/if}
 
         <!-- Head Pose (IMU-equipped devices only) -->
         {#if hasImuCap}
@@ -1608,38 +1718,40 @@ useWindowTitle("window.title.main");
         </div>
         {/if}
 
-        <!-- EEG channel grid -->
-        <div class="rounded-xl border border-border dark:border-white/[0.04]
-                    bg-muted dark:bg-[#1a1a28] px-3 py-2 flex flex-col gap-1.5">
-          <button class="flex items-center gap-1.5 w-full group"
-                  onclick={() => (eegChExpanded = !eegChExpanded)}
-                  aria-expanded={eegChExpanded}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                 stroke-linecap="round" stroke-linejoin="round"
-                 class="w-2.5 h-2.5 text-muted-foreground/40 group-hover:text-muted-foreground/70
-                        transition-transform duration-150 shrink-0
-                        {eegChExpanded ? 'rotate-90' : ''}">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
-            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground
-                         group-hover:text-foreground transition-colors">
-              {t("dashboard.eegChannels")}
-            </span>
-            <span class="text-[0.45rem] text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
-          </button>
-          {#if eegChExpanded}
-            <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
-              {#each chLabels as ch, i}
-                <div class="min-w-0 rounded-lg border border-border dark:border-white/[0.04]
-                            bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5"
-                  style="border-left-color:{chColors[i]}; border-left-width:2px">
-                  <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{ch}</span>
-                  <span class="font-mono text-[0.72rem] font-semibold truncate" style="color:{chColors[i]}">{fmtEeg(status.eeg[i])}</span>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
+        {#if hasEeg}
+          <!-- EEG channel grid -->
+          <div class="rounded-xl border border-border dark:border-white/[0.04]
+                      bg-muted dark:bg-[#1a1a28] px-3 py-2 flex flex-col gap-1.5">
+            <button class="flex items-center gap-1.5 w-full group"
+                    onclick={() => (eegChExpanded = !eegChExpanded)}
+                    aria-expanded={eegChExpanded}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round"
+                   class="w-2.5 h-2.5 text-muted-foreground/40 group-hover:text-muted-foreground/70
+                          transition-transform duration-150 shrink-0
+                          {eegChExpanded ? 'rotate-90' : ''}">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+              <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground
+                           group-hover:text-foreground transition-colors">
+                {t("dashboard.eegChannels")}
+              </span>
+              <span class="text-[0.45rem] text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
+            </button>
+            {#if eegChExpanded}
+              <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
+                {#each chLabels as ch, i}
+                  <div class="min-w-0 rounded-lg border border-border dark:border-white/[0.04]
+                              bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5"
+                    style="border-left-color:{chColors[i]}; border-left-width:2px">
+                    <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{ch}</span>
+                    <span class="font-mono text-[0.72rem] font-semibold truncate" style="color:{chColors[i]}">{fmtEeg(status.eeg[i])}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Daily goal progress -->
         <div class="rounded-lg border border-border dark:border-white/[0.06]
@@ -1780,8 +1892,8 @@ useWindowTitle("window.title.main");
         {/if}
       {/if}
 
-      <!-- ════ Band Powers & EEG Waveforms — only during active session ════ -->
-      {#if status.state === "connected"}
+      <!-- ════ Band Powers & EEG Waveforms — only during active EEG session ════ -->
+      {#if status.state === "connected" && hasEeg}
       <Separator class="bg-border dark:bg-white/[0.06]" />
 
       <div class="flex flex-col gap-2">

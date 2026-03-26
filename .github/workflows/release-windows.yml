@@ -270,6 +270,10 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Install protoc (Windows)
+        shell: powershell
+        run: choco install protoc --no-progress -y
+
       - name: Build frontend
         run: npm run build
 

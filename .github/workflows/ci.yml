@@ -99,6 +99,7 @@ jobs:
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
+            protobuf-compiler
           version: tauri-rust-check-v4
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
@@ -451,6 +452,10 @@ jobs:
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
 
+      - name: Install protoc (Windows)
+        shell: powershell
+        run: choco install protoc --no-progress -y
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -637,7 +642,8 @@ jobs:
             libssl-dev pkg-config cmake binutils
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev mold clang
-          version: llm-e2e-v2
+            protobuf-compiler
+          version: llm-e2e-v3
 
       # Reuse the same Vulkan SDK cache as rust-check via reusable setup action.
       - name: Setup Vulkan SDK

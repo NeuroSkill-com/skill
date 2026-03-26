@@ -94,12 +94,12 @@ export function goalProgress(totalSecs: number, goalMinutes: number): number {
 
 // ── Device classification ─────────────────────────────────────────────────────
 
-export type DeviceKind = "muse" | "ganglion" | "mw75" | "hermes" | "emotiv" | "idun" | "openbci" | "unknown";
+export type DeviceKind = "muse" | "ganglion" | "mw75" | "hermes" | "emotiv" | "idun" | "mendi" | "openbci" | "unknown";
 
 export function isMuseDevice(kind: DeviceKind): boolean {
   return kind === "muse" || kind === "unknown";
 }
 
 export function hasBattery(kind: DeviceKind): boolean {
-  return isMuseDevice(kind) || kind === "mw75" || kind === "emotiv" || kind === "idun";
+  return isMuseDevice(kind) || kind === "mw75" || kind === "emotiv" || kind === "idun" || kind === "mendi";
 }

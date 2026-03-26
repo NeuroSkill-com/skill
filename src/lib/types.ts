@@ -74,8 +74,34 @@ export interface DeviceStatus {
   has_central_electrodes: boolean;
   /** Device supports a full 10-20 montage (or superset). */
   has_full_montage: boolean;
-  /** Channel labels from the connected device (e.g. ["AF3","T7","Pz","T8","AF4"] for Insight). */
+  /** EEG channel labels from the connected device (e.g. ["AF3","T7","Pz","T8","AF4"] for Insight). */
   channel_names?: string[];
+  /** PPG channel labels from the connected device. */
+  ppg_channel_names?: string[];
+  /** IMU channel labels from the connected device. */
+  imu_channel_names?: string[];
+  /** fNIRS channel labels from the connected device. */
+  fnirs_channel_names?: string[];
+  /** fNIRS oxygenation proxy (0–100). */
+  fnirs_oxygenation_pct?: number;
+  /** fNIRS workload proxy (0–100). */
+  fnirs_workload?: number;
+  /** fNIRS left-vs-right lateralization proxy (-100..100). */
+  fnirs_lateralization?: number;
+  /** fNIRS ΔHbO left proxy (a.u.). */
+  fnirs_hbo_left?: number;
+  /** fNIRS ΔHbO right proxy (a.u.). */
+  fnirs_hbo_right?: number;
+  /** fNIRS ΔHbR left proxy (a.u.). */
+  fnirs_hbr_left?: number;
+  /** fNIRS ΔHbR right proxy (a.u.). */
+  fnirs_hbr_right?: number;
+  /** fNIRS ΔHbT left proxy (a.u.). */
+  fnirs_hbt_left?: number;
+  /** fNIRS ΔHbT right proxy (a.u.). */
+  fnirs_hbt_right?: number;
+  /** fNIRS left-right connectivity proxy (Pearson r). */
+  fnirs_connectivity?: number;
   /** Hardware EEG channel count (e.g. 5 for Insight, 14 for EPOC X). */
   eeg_channel_count?: number;
   /** Hardware EEG sample rate in Hz (e.g. 128 for Emotiv). */

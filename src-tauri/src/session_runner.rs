@@ -87,6 +87,9 @@ pub(crate) async fn run_device_session(
         let mut s = r.lock_or_recover();
         s.status.filter_config.sample_rate = sample_rate as f32;
         s.status.channel_names = desc.channel_names.clone();
+        s.status.ppg_channel_names = desc.ppg_channel_names.clone();
+        s.status.imu_channel_names = desc.imu_channel_names.clone();
+        s.status.fnirs_channel_names = desc.fnirs_channel_names.clone();
         s.status.eeg_channel_count = desc.eeg_channels;
         s.status.eeg_sample_rate_hz = sample_rate;
     }
@@ -194,7 +197,10 @@ pub(crate) async fn run_device_session(
                                 {
                                     let r = app.app_state();
                                     let mut s = r.lock_or_recover();
-                                    s.status.channel_names     = fresh.channel_names.clone();
+                                    s.status.channel_names = fresh.channel_names.clone();
+                                    s.status.ppg_channel_names = fresh.ppg_channel_names.clone();
+                                    s.status.imu_channel_names = fresh.imu_channel_names.clone();
+                                    s.status.fnirs_channel_names = fresh.fnirs_channel_names.clone();
                                     s.status.eeg_channel_count = fresh.eeg_channels;
                                     s.status.filter_config.sample_rate = fresh.eeg_sample_rate as f32;
                                 }
@@ -226,7 +232,10 @@ pub(crate) async fn run_device_session(
                             {
                                 let r = app.app_state();
                                 let mut s = r.lock_or_recover();
-                                s.status.channel_names     = fresh.channel_names.clone();
+                                s.status.channel_names = fresh.channel_names.clone();
+                                s.status.ppg_channel_names = fresh.ppg_channel_names.clone();
+                                s.status.imu_channel_names = fresh.imu_channel_names.clone();
+                                s.status.fnirs_channel_names = fresh.fnirs_channel_names.clone();
                                 s.status.eeg_channel_count = fresh.eeg_channels;
                             }
                             write_session_meta(&app, &csv_path);
@@ -903,6 +912,146 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
     // Supports both Muse Control short keys (sn, ma, fw, hw, bl, tp) and
     // long-form keys used by other adapters (serial_number, mac_address, …).
     let Some(obj) = val.as_object() else { return };
+
+    // Mendi fNIRS frame-derived proxies.
+    if obj.get("source").and_then(|v| v.as_str()) == Some("mendi_frame") {
+        let num = |k: &str| -> Option<f64> { obj.get(k).and_then(serde_json::Value::as_f64) };
+        let optical = obj.get("optical").and_then(|v| v.as_object());
+        if let Some(opt) = optical {
+            let gn = |k: &str| -> f64 {
+                opt.get(k)
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0)
+            };
+
+            let ir_left = gn("ir_left").max(1.0);
+            let ir_right = gn("ir_right").max(1.0);
+            let red_left = gn("red_left").max(1.0);
+            let red_right = gn("red_right").max(1.0);
+
+            // Modified Beer–Lambert proxy (2 wavelengths: red + IR).
+            // Nature Scientific Reports 2021 (s41598-021-02076-7) discusses
+            // workload-related prefrontal hemodynamics; here we derive robust
+            // real-time proxies (not absolute concentrations) from Mendi counts.
+            const EPS_HBO_RED: f64 = 0.095;
+            const EPS_HBR_RED: f64 = 1.486;
+            const EPS_HBO_IR: f64 = 1.431;
+            const EPS_HBR_IR: f64 = 0.781;
+
+            let det = EPS_HBO_RED * EPS_HBR_IR - EPS_HBO_IR * EPS_HBR_RED;
+
+            let mut emit = false;
+            {
+                let r = app.app_state();
+                let mut s = r.lock_or_recover();
+                if s.status.device_kind == "mendi" {
+                    let rt = &mut s.fnirs_runtime;
+
+                    // Slow baseline adaptation for raw optical intensity.
+                    let ema = |base: &mut Option<f64>, x: f64| -> f64 {
+                        let b = base.unwrap_or(x);
+                        let next = 0.995 * b + 0.005 * x;
+                        *base = Some(next);
+                        next
+                    };
+
+                    let ir0_l = ema(&mut rt.baseline_ir_left, ir_left).max(1.0);
+                    let red0_l = ema(&mut rt.baseline_red_left, red_left).max(1.0);
+                    let ir0_r = ema(&mut rt.baseline_ir_right, ir_right).max(1.0);
+                    let red0_r = ema(&mut rt.baseline_red_right, red_right).max(1.0);
+
+                    // Optical density deltas.
+                    let da_red_l = (red0_l / red_left).ln();
+                    let da_ir_l = (ir0_l / ir_left).ln();
+                    let da_red_r = (red0_r / red_right).ln();
+                    let da_ir_r = (ir0_r / ir_right).ln();
+
+                    // Solve 2x2 linear system for ΔHbO / ΔHbR proxies.
+                    let solve = |da_red: f64, da_ir: f64| -> (f64, f64) {
+                        if det.abs() < 1e-9 {
+                            return (0.0, 0.0);
+                        }
+                        let dhbo = (da_red * EPS_HBR_IR - da_ir * EPS_HBR_RED) / det;
+                        let dhbr = (EPS_HBO_RED * da_ir - EPS_HBO_IR * da_red) / det;
+                        (dhbo, dhbr)
+                    };
+
+                    let (hbo_l, hbr_l) = solve(da_red_l, da_ir_l);
+                    let (hbo_r, hbr_r) = solve(da_red_r, da_ir_r);
+                    let hbt_l = hbo_l + hbr_l;
+                    let hbt_r = hbo_r + hbr_r;
+
+                    // Oxygenation proxy from relative HbO share.
+                    let oxy_l = hbo_l / (hbt_l.abs() + 1e-6);
+                    let oxy_r = hbo_r / (hbt_r.abs() + 1e-6);
+                    let oxygenation = ((0.5 + 0.25 * (oxy_l + oxy_r)).clamp(0.0, 1.0)) * 100.0;
+
+                    // Workload proxy: bilateral |ΔHbO| magnitude.
+                    let workload = ((hbo_l.abs() + hbo_r.abs()) * 35.0).clamp(0.0, 100.0);
+
+                    // Lateralization proxy: left-right ΔHbO balance.
+                    let lateralization = ((hbo_l - hbo_r) * 60.0).clamp(-100.0, 100.0);
+
+                    // Rolling connectivity proxy on ΔHbO (Pearson r).
+                    const MAX_WIN: usize = 250;
+                    rt.hbo_left_hist.push_back(hbo_l);
+                    rt.hbo_right_hist.push_back(hbo_r);
+                    while rt.hbo_left_hist.len() > MAX_WIN {
+                        rt.hbo_left_hist.pop_front();
+                    }
+                    while rt.hbo_right_hist.len() > MAX_WIN {
+                        rt.hbo_right_hist.pop_front();
+                    }
+
+                    let connectivity = if rt.hbo_left_hist.len() >= 16
+                        && rt.hbo_left_hist.len() == rt.hbo_right_hist.len()
+                    {
+                        let n = rt.hbo_left_hist.len() as f64;
+                        let mean_l = rt.hbo_left_hist.iter().sum::<f64>() / n;
+                        let mean_r = rt.hbo_right_hist.iter().sum::<f64>() / n;
+                        let mut cov = 0.0;
+                        let mut vl = 0.0;
+                        let mut vr = 0.0;
+                        for (l, rr) in rt.hbo_left_hist.iter().zip(rt.hbo_right_hist.iter()) {
+                            let dl = *l - mean_l;
+                            let dr = *rr - mean_r;
+                            cov += dl * dr;
+                            vl += dl * dl;
+                            vr += dr * dr;
+                        }
+                        let den = (vl * vr).sqrt();
+                        if den > 1e-9 {
+                            (cov / den).clamp(-1.0, 1.0)
+                        } else {
+                            0.0
+                        }
+                    } else {
+                        0.0
+                    };
+
+                    s.status.fnirs_hbo_left = hbo_l;
+                    s.status.fnirs_hbo_right = hbo_r;
+                    s.status.fnirs_hbr_left = hbr_l;
+                    s.status.fnirs_hbr_right = hbr_r;
+                    s.status.fnirs_hbt_left = hbt_l;
+                    s.status.fnirs_hbt_right = hbt_r;
+                    s.status.fnirs_oxygenation_pct = oxygenation;
+                    s.status.fnirs_workload = workload;
+                    s.status.fnirs_lateralization = lateralization;
+                    s.status.fnirs_connectivity = connectivity;
+
+                    if let Some(t) = num("temperature_c") {
+                        s.status.temperature_raw = t.round().clamp(0.0, u16::MAX as f64) as u16;
+                    }
+                    emit = true;
+                }
+            }
+            if emit {
+                emit_status(app);
+                write_session_meta(app, csv_path);
+            }
+        }
+    }
 
     let str_key = |short: &str, long: &str| -> Option<String> {
         obj.get(short)

@@ -121,6 +121,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         s.stream = None;
         s.battery_ema = None;
         s.latest_bands = None;
+        s.fnirs_runtime = crate::state::FnirsRuntime::default();
         // Reset session timestamp so screenshot "sessions only" gate works.
         // Even during auto-reconnect the device is not streaming data,
         // so this is not an active session.
@@ -279,6 +280,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             "hermes" => crate::session_connect::connect_hermes(&app2, &cancel, target).await,
             "emotiv" => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
             "idun" => crate::session_connect::connect_idun(&app2, &cancel).await,
+            "mendi" => crate::session_connect::connect_mendi(&app2, &cancel, target).await,
             _ => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };
 
@@ -367,6 +369,12 @@ mod tests {
         assert_eq!(detect_device_kind(None, Some("idun-guardian")), "idun");
         assert_eq!(detect_device_kind(None, Some("guardian-001")), "idun");
         assert_eq!(detect_device_kind(None, Some("ige-1234")), "idun");
+    }
+
+    #[test]
+    fn detect_device_kind_mendi() {
+        assert_eq!(detect_device_kind(None, Some("mendi")), "mendi");
+        assert_eq!(detect_device_kind(None, Some("mendi-1234")), "mendi");
     }
 
     #[test]

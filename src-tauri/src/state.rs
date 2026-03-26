@@ -32,6 +32,7 @@ use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_filter::FilterConfig;
 use skill_eeg::eeg_model_config::{load_model_config, EegModelConfig, EegModelStatus};
 use skill_eeg::eeg_quality::SignalQuality;
+use std::collections::VecDeque;
 
 #[cfg(feature = "llm")]
 use crate::settings::default_chat_shortcut;
@@ -120,9 +121,38 @@ pub struct DeviceStatus {
     pub fuel_gauge_mv: f32,
     pub temperature_raw: u16,
     pub device_kind: String,
-    /// Channel labels for the connected device (set at session start).
+    /// EEG channel labels for the connected device (set at session start).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub channel_names: Vec<String>,
+    /// PPG channel labels for the connected device.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ppg_channel_names: Vec<String>,
+    /// IMU channel labels for the connected device.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub imu_channel_names: Vec<String>,
+    /// fNIRS channel labels for the connected device.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fnirs_channel_names: Vec<String>,
+    /// fNIRS oxygenation proxy (0–100), derived from red/IR channel ratios.
+    pub fnirs_oxygenation_pct: f64,
+    /// fNIRS workload proxy (0–100), derived from bilateral activation magnitude.
+    pub fnirs_workload: f64,
+    /// fNIRS lateralisation proxy (-100..100), left-vs-right activation balance.
+    pub fnirs_lateralization: f64,
+    /// fNIRS ΔHbO proxy (left channel, arbitrary units).
+    pub fnirs_hbo_left: f64,
+    /// fNIRS ΔHbO proxy (right channel, arbitrary units).
+    pub fnirs_hbo_right: f64,
+    /// fNIRS ΔHbR proxy (left channel, arbitrary units).
+    pub fnirs_hbr_left: f64,
+    /// fNIRS ΔHbR proxy (right channel, arbitrary units).
+    pub fnirs_hbr_right: f64,
+    /// fNIRS ΔHbT proxy (left channel, arbitrary units).
+    pub fnirs_hbt_left: f64,
+    /// fNIRS ΔHbT proxy (right channel, arbitrary units).
+    pub fnirs_hbt_right: f64,
+    /// Rolling left/right ΔHbO connectivity proxy (Pearson r, -1..1).
+    pub fnirs_connectivity: f64,
     /// Hardware EEG channel count of the connected device.
     pub eeg_channel_count: usize,
     /// Hardware EEG sample rate of the connected device (Hz).
@@ -169,6 +199,19 @@ impl Default for DeviceStatus {
             temperature_raw: 0,
             device_kind: "unknown".into(),
             channel_names: Vec::new(),
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+            fnirs_oxygenation_pct: 0.0,
+            fnirs_workload: 0.0,
+            fnirs_lateralization: 0.0,
+            fnirs_hbo_left: 0.0,
+            fnirs_hbo_right: 0.0,
+            fnirs_hbr_left: 0.0,
+            fnirs_hbr_right: 0.0,
+            fnirs_hbt_left: 0.0,
+            fnirs_hbt_right: 0.0,
+            fnirs_connectivity: 0.0,
             eeg_channel_count: 0,
             eeg_sample_rate_hz: 0.0,
             has_ppg: false,
@@ -206,6 +249,19 @@ impl DeviceStatus {
         self.retry_countdown_secs = 0;
         self.channel_quality = Vec::new();
         self.channel_names = Vec::new();
+        self.ppg_channel_names = Vec::new();
+        self.imu_channel_names = Vec::new();
+        self.fnirs_channel_names = Vec::new();
+        self.fnirs_oxygenation_pct = 0.0;
+        self.fnirs_workload = 0.0;
+        self.fnirs_lateralization = 0.0;
+        self.fnirs_hbo_left = 0.0;
+        self.fnirs_hbo_right = 0.0;
+        self.fnirs_hbr_left = 0.0;
+        self.fnirs_hbr_right = 0.0;
+        self.fnirs_hbt_left = 0.0;
+        self.fnirs_hbt_right = 0.0;
+        self.fnirs_connectivity = 0.0;
         self.eeg_channel_count = 0;
         self.eeg_sample_rate_hz = 0.0;
         self.has_ppg = false;
@@ -236,6 +292,22 @@ impl DeviceStatus {
         self.battery = 0.0;
         self.eeg = vec![f64::NAN; EEG_CHANNELS];
         self.sample_count = 0;
+        self.channel_names = Vec::new();
+        self.ppg_channel_names = Vec::new();
+        self.imu_channel_names = Vec::new();
+        self.fnirs_channel_names = Vec::new();
+        self.fnirs_oxygenation_pct = 0.0;
+        self.fnirs_workload = 0.0;
+        self.fnirs_lateralization = 0.0;
+        self.fnirs_hbo_left = 0.0;
+        self.fnirs_hbo_right = 0.0;
+        self.fnirs_hbr_left = 0.0;
+        self.fnirs_hbr_right = 0.0;
+        self.fnirs_hbt_left = 0.0;
+        self.fnirs_hbt_right = 0.0;
+        self.fnirs_connectivity = 0.0;
+        self.eeg_channel_count = 0;
+        self.eeg_sample_rate_hz = 0.0;
         self.ppg = vec![0.0; 3];
         self.ppg_sample_count = 0;
         self.target_name = preferred_id.and_then(|id| {
@@ -390,6 +462,16 @@ impl EmbeddingModelState {
 
 // ── Full app state (Mutex-managed) ────────────────────────────────────────────
 
+#[derive(Default)]
+pub struct FnirsRuntime {
+    pub baseline_ir_left: Option<f64>,
+    pub baseline_red_left: Option<f64>,
+    pub baseline_ir_right: Option<f64>,
+    pub baseline_red_right: Option<f64>,
+    pub hbo_left_hist: VecDeque<f64>,
+    pub hbo_right_hist: VecDeque<f64>,
+}
+
 pub struct AppState {
     // ── Device session ────────────────────────────────────────────────────
     pub status: DeviceStatus,
@@ -402,6 +484,7 @@ pub struct AppState {
     pub imu_channel: Option<Channel<ImuPacket>>,
     pub battery_ema: Option<f32>,
     pub latest_bands: Option<BandSnapshot>,
+    pub fnirs_runtime: FnirsRuntime,
     pub pending_reconnect: bool,
     pub retry_attempt: u32,
     pub session_start_utc: Option<u64>,
@@ -569,6 +652,7 @@ impl Default for AppState {
             imu_channel: None,
             battery_ema: None,
             latest_bands: None,
+            fnirs_runtime: FnirsRuntime::default(),
             pending_reconnect: false,
             retry_attempt: 0,
             session_start_utc: None,

@@ -25,6 +25,7 @@
 pub mod emotiv;
 pub mod hermes;
 pub mod idun;
+pub mod mendi;
 pub mod muse;
 pub mod mw75;
 pub mod openbci;
@@ -74,11 +75,17 @@ pub struct DeviceDescriptor {
     pub eeg_channels: usize,
     /// Hardware EEG sample rate in Hz.
     pub eeg_sample_rate: f64,
-    /// Human-readable channel labels (length == `eeg_channels`).
+    /// Human-readable EEG channel labels (length == `eeg_channels`).
     pub channel_names: Vec<String>,
     /// Number of channels routed through the DSP pipeline
     /// (`min(eeg_channels, EEG_CHANNELS)`).
     pub pipeline_channels: usize,
+    /// Human-readable PPG channel labels (if available).
+    pub ppg_channel_names: Vec<String>,
+    /// Human-readable IMU channel labels (if available).
+    pub imu_channel_names: Vec<String>,
+    /// Human-readable fNIRS channel labels (if available).
+    pub fnirs_channel_names: Vec<String>,
 }
 
 // ── Unified event types ───────────────────────────────────────────────────────

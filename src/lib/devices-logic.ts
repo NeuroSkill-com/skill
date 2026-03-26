@@ -51,6 +51,7 @@ export function deviceImage(name: string, hw?: string | null): string | null {
   if (n.includes("ganglion")) return "/devices/openbci-ganglion.jpg";
   if (n.includes("cyton")) return "/devices/openbci-cyton.jpg";
   if (n.includes("hermes")) return "/devices/hermes.jpg";
+  if (n.includes("mendi")) return "/devices/mendi-headband.png";
   return null;
 }
 

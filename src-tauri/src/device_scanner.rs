@@ -5,7 +5,7 @@
 //!
 //! Runs multiple transport-specific scan tasks in parallel:
 //!
-//! * **BLE** — discovers Muse, MW75, Hermes, Ganglion, IDUN devices
+//! * **BLE** — discovers Muse, MW75, Hermes, Ganglion, IDUN, Mendi devices
 //! * **USB serial** — detects OpenBCI Cyton / CytonDaisy dongles
 //! * **Cortex WebSocket** — checks for Emotiv headsets via the local Launcher
 //!
@@ -114,7 +114,7 @@ use skill_devices::mw75::protocol::MW75_SERVICE_UUID;
 #[serde(rename_all = "snake_case")]
 #[allow(dead_code)]
 pub(crate) enum Transport {
-    /// Bluetooth Low Energy (Muse, MW75, Hermes, Ganglion, IDUN).
+    /// Bluetooth Low Energy (Muse, MW75, Hermes, Ganglion, IDUN, Mendi).
     Ble,
     /// USB serial port (OpenBCI Cyton / CytonDaisy dongle).
     UsbSerial,

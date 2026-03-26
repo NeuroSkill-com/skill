@@ -154,7 +154,7 @@ impl Default for OpenBciConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScannerConfig {
-    /// Bluetooth Low Energy scanner (Muse, MW75, Hermes, Ganglion, IDUN).
+    /// Bluetooth Low Energy scanner (Muse, MW75, Hermes, Ganglion, IDUN, Mendi).
     pub ble: bool,
     /// USB serial port scanner (OpenBCI Cyton / CytonDaisy dongle).
     pub usb_serial: bool,

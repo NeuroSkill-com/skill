@@ -86,7 +86,8 @@ jobs:
             rpm
             mold
             clang
-          version: tauri-release-linux-v4
+            protobuf-compiler
+          version: tauri-release-linux-v5
 
       # ── Rust toolchain + build cache bootstrap ───────────────────────────────
       - name: Setup Rust bootstrap (Linux)

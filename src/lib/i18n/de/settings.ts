@@ -332,6 +332,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
   "settings.supportedDevices.device.museS": "Muse S",
@@ -347,6 +348,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.mn8": "MN8",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
+  "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
   "settings.supportedDevices.instruction.muse1":
     "Schalten Sie Ihr Headset ein und halten Sie es in der Nähe dieses Computers.",
   "settings.supportedDevices.instruction.muse2":
@@ -367,11 +369,15 @@ const settings: Record<string, string> = {
     "Schalten Sie Nucleus-Hermès ein und halten Sie es in der Nähe dieses Computers.",
   "settings.supportedDevices.instruction.reak2":
     "Scannen und koppeln Sie es in der Geräteliste, dann über den bevorzugten Gerätefluss verbinden.",
+  "settings.supportedDevices.instruction.mendi1":
+    "Schalten Sie Mendi ein und halten Sie es in der Nähe dieses Computers.",
+  "settings.supportedDevices.instruction.mendi2":
+    "Scannen und koppeln Sie es in der Geräteliste und verbinden Sie es dann.",
   "settings.scanner.title": "Scanner-Backends",
   "settings.scanner.desc":
     "Wählen Sie, welche Erkennungstransporte im Hintergrund laufen. Änderungen werden beim nächsten App-Neustart wirksam.",
   "settings.scanner.ble": "Bluetooth LE",
-  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi",
   "settings.scanner.usbSerial": "USB Seriell",
   "settings.scanner.usbSerialDesc": "OpenBCI Cyton / CytonDaisy Dongle",
   "settings.scanner.cortex": "Emotiv Cortex",

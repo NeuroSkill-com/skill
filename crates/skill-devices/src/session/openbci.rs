@@ -86,6 +86,9 @@ impl OpenBciAdapter {
             eeg_sample_rate,
             channel_names,
             pipeline_channels: eeg_channels.min(skill_constants::EEG_CHANNELS),
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: vec!["AccelX".into(), "AccelY".into(), "AccelZ".into()],
+            fnirs_channel_names: Vec::new(),
         }
     }
 }

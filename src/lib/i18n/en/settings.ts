@@ -57,6 +57,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
   "settings.supportedDevices.device.museS": "Muse S",
@@ -72,6 +73,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.mn8": "MN8",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
+  "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
   "settings.supportedDevices.instruction.muse1": "Power on your headset and keep it near this computer.",
   "settings.supportedDevices.instruction.muse2":
     "Use scan + pair in the Devices list below, then set as default if needed.",
@@ -87,11 +89,13 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Power on Nucleus-Hermès and keep it near this computer.",
   "settings.supportedDevices.instruction.reak2":
     "Scan and pair it in the Devices list, then connect from the preferred device flow.",
+  "settings.supportedDevices.instruction.mendi1": "Power on Mendi and keep it near this computer.",
+  "settings.supportedDevices.instruction.mendi2": "Scan and pair it from the Devices list, then connect.",
   "settings.scanner.title": "Scanner Backends",
   "settings.scanner.desc":
     "Toggle which discovery transports run in the background. Changes take effect on next app restart.",
   "settings.scanner.ble": "Bluetooth LE",
-  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi",
   "settings.scanner.usbSerial": "USB Serial",
   "settings.scanner.usbSerialDesc": "OpenBCI Cyton / CytonDaisy dongle",
   "settings.scanner.cortex": "Emotiv Cortex",

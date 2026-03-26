@@ -336,6 +336,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
   "settings.supportedDevices.device.museS": "Muse S",
@@ -351,6 +352,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.mn8": "MN8",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
+  "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
   "settings.supportedDevices.instruction.muse1": "Allumez votre casque et gardez-le près de cet ordinateur.",
   "settings.supportedDevices.instruction.muse2":
     "Utilisez scanner + appairer dans la liste des appareils ci-dessous, puis définir comme défaut si nécessaire.",
@@ -371,11 +373,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Allumez Nucleus-Hermès et gardez-le près de cet ordinateur.",
   "settings.supportedDevices.instruction.reak2":
     "Scannez et appairez-le dans la liste des appareils, puis connectez via le flux d'appareil préféré.",
+  "settings.supportedDevices.instruction.mendi1": "Allumez Mendi et gardez-le près de cet ordinateur.",
+  "settings.supportedDevices.instruction.mendi2":
+    "Scannez-le et appairez-le depuis la liste des appareils, puis connectez-le.",
   "settings.scanner.title": "Backends du scanner",
   "settings.scanner.desc":
     "Activez ou désactivez les transports de découverte en arrière-plan. Les modifications prennent effet au prochain redémarrage de l'application.",
   "settings.scanner.ble": "Bluetooth LE",
-  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi",
   "settings.scanner.usbSerial": "USB Série",
   "settings.scanner.usbSerialDesc": "Dongle OpenBCI Cyton / CytonDaisy",
   "settings.scanner.cortex": "Emotiv Cortex",
