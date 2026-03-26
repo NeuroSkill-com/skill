@@ -28,11 +28,19 @@ export interface DotTimelineData {
   labels: LabelRow[];
 }
 
+export interface CalendarOverlayEvent {
+  id: string;
+  title: string;
+  start_utc: number;
+  end_utc: number;
+}
+
 export interface GridData {
   sessions: SessionEntry[];
   dayStart: number;
   labels: LabelRow[];
   screenshotTs: Set<number>;
+  calendarEvents?: CalendarOverlayEvent[];
 }
 
 /** Callback to look up timeseries data for a session's CSV path. */
@@ -148,6 +156,7 @@ export function renderDayGrid(canvas: HTMLCanvasElement, data: GridData, getTs: 
   const { sessions, dayStart, labels } = data;
   const colW = w / GRID_COLS;
   const rowH = h / GRID_ROWS;
+  const dayEnd = dayStart + 86400;
 
   // ① Background — detect dark mode via the document class or media query
   const isDark =
@@ -155,7 +164,23 @@ export function renderDayGrid(canvas: HTMLCanvasElement, data: GridData, getTs: 
   ctx.fillStyle = isDark ? "#0a0a14" : "#f8f8fa";
   ctx.fillRect(0, 0, w, h);
 
-  // ② Build a lookup: for each grid cell, store the best epoch data.
+  // ② Calendar overlay bands (before epoch cells so data stays visible on top).
+  if (data.calendarEvents && data.calendarEvents.length > 0) {
+    ctx.save();
+    ctx.globalAlpha = isDark ? 0.14 : 0.1;
+    ctx.fillStyle = isDark ? "#60a5fa" : "#3b82f6";
+    for (const ev of data.calendarEvents) {
+      const s = Math.max(dayStart, ev.start_utc);
+      const e = Math.min(dayEnd, ev.end_utc);
+      if (e <= s) continue;
+      const x0 = ((s - dayStart) / 86400) * w;
+      const x1 = ((e - dayStart) / 86400) * w;
+      ctx.fillRect(x0, 0, Math.max(1, x1 - x0), h);
+    }
+    ctx.restore();
+  }
+
+  // ③ Build a lookup: for each grid cell, store the best epoch data.
   const cellData = new Map<number, { relaxation: number; engagement: number; sIdx: number }>();
 
   for (let sIdx = 0; sIdx < sessions.length; sIdx++) {

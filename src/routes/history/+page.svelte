@@ -33,6 +33,7 @@ import HistoryCalendar from "$lib/HistoryCalendar.svelte";
 import HistoryStatsBar from "$lib/HistoryStatsBar.svelte";
 import Hypnogram from "$lib/Hypnogram.svelte";
 import {
+  type CalendarOverlayEvent,
   type GridData,
   heatColor,
   renderDayDots as renderDayDotsCanvas,
@@ -77,8 +78,20 @@ let currentDayIdx = $state(0);
 let dayLoading = $state(false);
 let daysLoading = $state(true);
 
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start_utc: number;
+  end_utc: number;
+  all_day: boolean;
+  location?: string | null;
+  calendar?: string | null;
+  status: string;
+}
+
 /** Sessions for the currently displayed day. */
 let sessions = $state<SessionEntry[]>([]);
+let dayCalendarEvents = $state<CalendarEvent[]>([]);
 
 /** Aggregate stats loaded lazily in the background. */
 let historyStats = $state<HistoryStatsData | null>(null);
@@ -439,9 +452,10 @@ async function loadDay(idx: number) {
     if (loadSeq === seq) dayLoading = false;
   }
 
-  // ③ Load screenshots for the day.
+  // ③ Load screenshots + calendar events for the day.
   const { startSec } = localDayBounds(localKey);
   void loadDayScreenshots(startSec);
+  void loadDayCalendarEvents(startSec);
 
   // ④ Speculatively warm adjacent days so the next navigation is instant.
   setTimeout(() => {
@@ -536,6 +550,18 @@ async function loadDayScreenshots(dayStart: number) {
     dayScreenshots = results;
   } catch {
     dayScreenshots = [];
+  }
+}
+
+/** Load calendar events overlapping the current local day. */
+async function loadDayCalendarEvents(dayStart: number) {
+  try {
+    dayCalendarEvents = await invoke<CalendarEvent[]>("get_calendar_events", {
+      startUtc: dayStart,
+      endUtc: dayStart + 86400,
+    });
+  } catch {
+    dayCalendarEvents = [];
   }
 }
 
@@ -942,6 +968,13 @@ function handleGridHover(canvas: HTMLCanvasElement, e: MouseEvent, data: GridDat
     }
   }
   if (!foundScreenshot) screenshotPreview = null;
+
+  // Check for calendar events overlapping this grid cell
+  for (const ev of dayCalendarEvents) {
+    if (ev.start_utc < cellEnd && ev.end_utc >= cellT) {
+      values.push({ label: "cal", val: ev.title, color: "#60a5fa" });
+    }
+  }
 
   // Determine which session owns the hovered cell (for cross-highlighting)
   let hovSIdx: number | null = null;
@@ -1438,6 +1471,22 @@ useWindowTitle("window.title.history");
             <Separator class="flex-1 bg-border dark:bg-white/[0.06]" />
           </div>
 
+          {#if dayCalendarEvents.length > 0}
+            <div class="rounded-md border border-blue-500/20 bg-blue-500/5 px-2.5 py-2">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[0.52rem] uppercase tracking-wider text-blue-700/80 dark:text-blue-300/80">Calendar overlay</span>
+                <span class="text-[0.5rem] text-muted-foreground/70">{dayCalendarEvents.length} event{dayCalendarEvents.length === 1 ? "" : "s"}</span>
+              </div>
+              <div class="mt-1 flex flex-wrap gap-1.5">
+                {#each dayCalendarEvents.slice(0, 6) as ev (ev.id + ev.start_utc)}
+                  <span class="rounded-full border border-blue-500/20 bg-background/70 px-2 py-0.5 text-[0.53rem] text-foreground/80">
+                    {new Date(ev.start_utc * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} {ev.title}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
           <!-- Day grid heatmap (24 hour-columns × 720 five-second rows) -->
           {#if sessions.length > 0}
             {@const dayLbls = sessions.flatMap(s => s.labels)}
@@ -1460,7 +1509,7 @@ useWindowTitle("window.title.history");
                 {#if anyTs}
                   {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",") + ":" + dayScreenshots.length}
                     <canvas class="w-full cursor-crosshair" style="height:720px;"
-                            use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls, screenshotTs: screenshotTsSet }}>
+                            use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls, screenshotTs: screenshotTsSet, calendarEvents: dayCalendarEvents as CalendarOverlayEvent[] }}>
                     </canvas>
                   {/key}
                 {:else}
