@@ -377,22 +377,32 @@ impl ServeHandle {
     /// Start the combined HTTP + WebSocket + (optional) LLM server.
     /// Spawn this with `tauri::async_runtime::spawn`.  Never returns.
     pub async fn serve(self, app: AppHandle) {
+        self.serve_with_mode(app, false).await;
+    }
+
+    /// Start server in regular (`readonly=false`) or restricted read-only mode.
+    pub async fn serve_with_mode(self, app: AppHandle, readonly: bool) {
         let listener =
             TcpListener::from_std(self.listener).expect("[ws] TcpListener::from_std failed");
         let state = crate::api::SharedState {
             app,
             tx: self.tx,
             tracker: self.tracker,
+            readonly,
         };
 
-        // Build the main WS/REST router, then always merge the LLM router if
-        // the `llm` feature is enabled (routes return 503 when no model is loaded).
+        // Build the main WS/REST router, then merge the LLM router only for
+        // non-readonly servers.
         #[cfg(feature = "llm")]
         let router = {
             let base = crate::api::router(state);
-            let cell = self.llm_cell.unwrap_or_else(crate::llm::new_state_cell);
-            eprintln!("[llm] mounting /v1/* and /llm/* routes on the shared HTTP port");
-            base.merge(crate::llm::router(cell))
+            if readonly {
+                base
+            } else {
+                let cell = self.llm_cell.unwrap_or_else(crate::llm::new_state_cell);
+                eprintln!("[llm] mounting /v1/* and /llm/* routes on the shared HTTP port");
+                base.merge(crate::llm::router(cell))
+            }
         };
 
         #[cfg(not(feature = "llm"))]

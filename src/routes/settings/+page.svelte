@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import AppearanceTab from "$lib/AppearanceTab.svelte";
 import CalibrationTab from "$lib/CalibrationTab.svelte";
+import ClientsTab from "$lib/ClientsTab.svelte";
 import DevicesTab from "$lib/DevicesTab.svelte";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import EmbeddingsTab from "$lib/EmbeddingsTab.svelte";
@@ -45,6 +46,7 @@ type Tab =
   | "permissions"
   | "llm"
   | "tools"
+  | "clients"
   | "screenshots";
 let tab = $state<Tab>("goals");
 
@@ -57,6 +59,7 @@ const TAB_IDS: Tab[] = [
   "tts",
   "llm",
   "tools",
+  "clients",
   "embeddings",
   "screenshots",
   "hooks",
@@ -76,6 +79,7 @@ const TAB_LABELS: Record<Tab, () => string> = {
   tts: () => t("settingsTabs.tts"),
   llm: () => t("settingsTabs.llm"),
   tools: () => t("settingsTabs.tools"),
+  clients: () => "Clients",
   embeddings: () => t("settingsTabs.embeddings"),
   hooks: () => t("settingsTabs.hooks"),
   appearance: () => t("settingsTabs.appearance"),
@@ -98,6 +102,7 @@ const TAB_ICONS: Record<Tab, string> = {
   tts: `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
   llm: `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
   tools: `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`,
+  clients: `<path d="M17 11V7a5 5 0 0 0-10 0v4"/><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="16" r="1.5"/>`,
   embeddings: `<circle cx="12" cy="12" r="2"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="m6 6.5 4 4.5M14 6.5l-2 4M18 7l-4 4.5M6 17l4-4.5M14 17.5l2-4M18 17l-4-4.5"/>`,
   hooks: `<path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 1 1-7-7L7 11"/>`,
   appearance: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
@@ -310,6 +315,8 @@ $effect(() => {
         <ToolsTab />
       {:else if tab === "umap"}
         <UmapTab />
+      {:else if tab === "clients"}
+        <ClientsTab />
       {:else if tab === "updates"}
         <UpdatesTab />
       {:else if tab === "screenshots"}

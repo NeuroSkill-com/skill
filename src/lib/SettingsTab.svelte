@@ -1,3 +1,42 @@
+// ── Geo Provider ───────────────────────────────────────────────────────────
+type GeoProvider = "off" | "local" | "remote";
+let geoProvider = $state<GeoProvider>("remote");
+
+// Persist geoProvider in localStorage (or use invoke for backend persistence if needed)
+onMount(() => {
+  const stored = localStorage.getItem("geoProvider");
+  if (stored === "off" || stored === "local" || stored === "remote") geoProvider = stored;
+});
+$effect(() => {
+  localStorage.setItem("geoProvider", geoProvider);
+});
+<!-- ── Geo Provider Toggle ────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("settings.geoProvider")}
+  </span>
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-3 p-4">
+      <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+        {t("settings.geoProviderDesc")}
+      </p>
+      <div class="flex gap-2">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="off" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderOff")}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="local" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderLocal")}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="remote" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderRemote")}</span>
+        </label>
+      </div>
+    </CardContent>
+  </Card>
+</section>
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com
 

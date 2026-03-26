@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Unit tests for ScreenshotMetrics and MetricsSnapshot.
 
-use skill_screenshots::capture::{MetricsSnapshot, ScreenshotMetrics};
+use skill_screenshots::capture::ScreenshotMetrics;
 use std::sync::atomic::Ordering;
 
 #[test]

@@ -1,0 +1,21 @@
+[package]
+name = "skill-iroh"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "iroh tunnel + TOTP access control for Skill"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+iroh = "0.97"
+rand = "0.9"
+tokio = { version = "1", features = ["full"] }
+totp-rs = { version = "5.7", features = ["gen_secret", "otpauth", "qr"] }
+ureq = { version = "3", features = ["native-tls", "json"] }
+base64 = "0.22"
+qrcodegen = "1.8"
+image = "0.24"
+
+[dev-dependencies]
+tempfile = "3"

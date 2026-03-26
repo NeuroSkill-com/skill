@@ -4,8 +4,9 @@
 //!
 //! Run: `cargo bench -p skill-eeg`
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use skill_eeg::cpu_fft::{fft_batch, ifft_batch, psd};
+use std::hint::black_box;
 use skill_eeg::eeg_bands::BandAnalyzer;
 use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
 

@@ -755,6 +755,44 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "hooks_suggest" => hooks::hooks_suggest(app, msg),
         "hooks_log" => hooks::hooks_log(app, msg),
         "umap_poll" => umap_poll(app, msg),
+        // ── iroh NAT-traversing API tunnel auth ─────────────────────────
+        "iroh_info" => {
+            let rt = app.state::<skill_iroh::SharedIrohRuntime>();
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_info(&auth, &rt)
+        }
+        "iroh_totp_list" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_list(&auth)
+        }
+        "iroh_totp_create" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_create(&auth, msg)
+        }
+        "iroh_totp_qr" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_qr(&auth, msg)
+        }
+        "iroh_totp_revoke" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_revoke(&auth, msg)
+        }
+        "iroh_clients_list" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_clients_list(&auth)
+        }
+        "iroh_client_register" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_register(&auth, msg)
+        }
+        "iroh_client_revoke" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_revoke(&auth, msg)
+        }
+        "iroh_client_set_scope" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_set_scope(&auth, msg)
+        }
         "list_calibrations" => calibration::list_calibrations(app),
         "get_calibration" => calibration::get_calibration(app, msg),
         "create_calibration" => calibration::create_calibration(app, msg),

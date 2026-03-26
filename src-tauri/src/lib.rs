@@ -372,10 +372,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let app_name = app.package_info().name.to_lowercase();
-    let ws_cfg = {
+    let (ws_cfg, skill_dir_for_iroh) = {
         let dir = app.app_state().lock_or_recover().skill_dir.clone();
         let s = load_settings(&dir);
-        (s.ws_host, s.ws_port)
+        ((s.ws_host, s.ws_port), dir)
     };
 
     // ── LLM server (optional, same port) ──────────────────────────────
@@ -440,9 +440,36 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    let ws_port = serve_handle.port;
     tauri::async_runtime::spawn(async move {
         serve_handle.serve(ws_app).await;
     });
+
+    // Local read-only API server for iroh clients with `read` scope.
+    let (_ro_broadcaster, ro_serve_handle) = ws_server::bind_with("127.0.0.1", 0);
+    let ro_port = ro_serve_handle.port;
+    let ro_app = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        ro_serve_handle.serve_with_mode(ro_app, true).await;
+    });
+
+    // NAT-traversing P2P bridge for the same local HTTP/WS API ports.
+    let iroh_auth = std::sync::Arc::new(std::sync::Mutex::new(skill_iroh::IrohAuthStore::open(
+        &skill_dir_for_iroh,
+    )));
+    let iroh_runtime = std::sync::Arc::new(std::sync::Mutex::new(
+        skill_iroh::IrohRuntimeState::default(),
+    ));
+    skill_iroh::spawn(
+        skill_dir_for_iroh.clone(),
+        ws_port,
+        ro_port,
+        iroh_auth.clone(),
+        iroh_runtime.clone(),
+    );
+
+    app.manage(iroh_auth);
+    app.manage(iroh_runtime);
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {

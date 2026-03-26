@@ -180,6 +180,8 @@ pub struct SharedState {
     pub tx: broadcast::Sender<String>,
     /// Connected-client list and request log — shared with the Tauri UI.
     pub tracker: SharedTracker,
+    /// If true, restricts API commands to read-only basics.
+    pub readonly: bool,
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -217,6 +219,16 @@ pub fn router(state: SharedState) -> Router {
             .delete(delete_calibration_delete))
         .route("/dnd",            get(dnd_get).post(dnd_post))
 
+        // ── iroh tunnel auth endpoints ───────────────────────────────────
+        .route("/iroh/info",            get(iroh_info_get))
+        .route("/iroh/totp",            get(iroh_totp_list_get).post(iroh_totp_create_post))
+        .route("/iroh/totp/qr",         post(iroh_totp_qr_post))
+        .route("/iroh/totp/revoke",     post(iroh_totp_revoke_post))
+        .route("/iroh/clients",         get(iroh_clients_list_get))
+        .route("/iroh/clients/register",post(iroh_client_register_post))
+        .route("/iroh/clients/revoke",  post(iroh_client_revoke_post))
+        .route("/iroh/clients/scope",   post(iroh_client_set_scope_post))
+
         // ── Versioned /v1/ REST endpoints (stateless, one-shot) ──────────
         // Mirrors every unversioned shortcut above.  Shares the /v1/ namespace
         // with the LLM sub-router (/v1/models, /v1/chat/completions, …) —
@@ -241,6 +253,16 @@ pub fn router(state: SharedState) -> Router {
             .patch(update_calibration_patch)
             .delete(delete_calibration_delete))
         .route("/v1/dnd",            get(dnd_get).post(dnd_post))
+
+        // ── Versioned iroh tunnel auth endpoints ─────────────────────────
+        .route("/v1/iroh/info",             get(iroh_info_get))
+        .route("/v1/iroh/totp",             get(iroh_totp_list_get).post(iroh_totp_create_post))
+        .route("/v1/iroh/totp/qr",          post(iroh_totp_qr_post))
+        .route("/v1/iroh/totp/revoke",      post(iroh_totp_revoke_post))
+        .route("/v1/iroh/clients",          get(iroh_clients_list_get))
+        .route("/v1/iroh/clients/register", post(iroh_client_register_post))
+        .route("/v1/iroh/clients/revoke",   post(iroh_client_revoke_post))
+        .route("/v1/iroh/clients/scope",    post(iroh_client_set_scope_post))
 
         // ── LLM REST shortcuts (non-/v1/ — /v1/ routes are in llm::router)
         .route("/llm/start",            post(llm_start_post))
@@ -286,8 +308,54 @@ pub fn router(state: SharedState) -> Router {
 
 /// Run one command via [`crate::ws_commands::dispatch`], log it in the tracker,
 /// and return an HTTP [`Response`] with the standard envelope JSON.
+fn readonly_allows(command: &str) -> bool {
+    matches!(
+        command,
+        "status"
+            | "sessions"
+            | "sleep"
+            | "search"
+            | "search_labels"
+            | "search_screenshots"
+            | "screenshots_around"
+            | "search_screenshots_vision"
+            | "search_screenshots_by_image_b64"
+            | "screenshots_for_eeg"
+            | "eeg_for_screenshots"
+            | "health_query"
+            | "health_summary"
+            | "health_metric_types"
+            | "calendar_events"
+            | "calendar_status"
+            | "iroh_info"
+            | "iroh_totp_list"
+            | "iroh_clients_list"
+    )
+}
+
+#[cfg(test)]
+mod readonly_tests {
+    #[test]
+    fn read_only_allows_basic_commands_only() {
+        assert!(super::readonly_allows("status"));
+        assert!(super::readonly_allows("search"));
+        assert!(super::readonly_allows("iroh_info"));
+        assert!(!super::readonly_allows("label"));
+        assert!(!super::readonly_allows("notify"));
+        assert!(!super::readonly_allows("iroh_client_set_scope"));
+    }
+}
+
 async fn cmd(state: &SharedState, peer: &str, command: &str, msg: Value) -> Response {
     eprintln!("[http] {peer} → {command}");
+    if state.readonly && !readonly_allows(command) {
+        let body = json!({
+            "command": command,
+            "ok": false,
+            "error": "forbidden: this iroh client is read-only. Request 'full' scope to run this command."
+        });
+        return (StatusCode::FORBIDDEN, Json(body)).into_response();
+    }
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();
     state
@@ -626,6 +694,104 @@ async fn delete_calibration_delete(
         &peer_str(addr),
         "delete_calibration",
         json!({ "id": id }),
+    )
+    .await
+}
+
+// ── iroh REST handlers ───────────────────────────────────────────────────────
+
+async fn iroh_info_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
+    cmd(&s, &peer_str(addr), "iroh_info", json!({})).await
+}
+
+async fn iroh_totp_list_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "iroh_totp_list", json!({})).await
+}
+
+async fn iroh_totp_create_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_create",
+        merge(json!({}), body),
+    )
+    .await
+}
+
+async fn iroh_totp_qr_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "iroh_totp_qr", merge(json!({}), body)).await
+}
+
+async fn iroh_totp_revoke_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_revoke",
+        merge(json!({}), body),
+    )
+    .await
+}
+
+async fn iroh_clients_list_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "iroh_clients_list", json!({})).await
+}
+
+async fn iroh_client_register_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "iroh_client_register",
+        merge(json!({}), body),
+    )
+    .await
+}
+
+async fn iroh_client_revoke_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "iroh_client_revoke",
+        merge(json!({}), body),
+    )
+    .await
+}
+
+async fn iroh_client_set_scope_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(
+        &s,
+        &peer_str(addr),
+        "iroh_client_set_scope",
+        merge(json!({}), body),
     )
     .await
 }
@@ -1350,6 +1516,15 @@ async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<S
     let msg: Value = serde_json::from_str(text).ok()?;
     let command = msg.get("command")?.as_str()?;
     eprintln!("[ws] {peer} → {command}");
+
+    if state.readonly && !readonly_allows(command) {
+        let response = json!({
+            "command": command,
+            "ok": false,
+            "error": "forbidden: this iroh client is read-only. Request 'full' scope to run this command."
+        });
+        return serde_json::to_string(&response).ok();
+    }
 
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();

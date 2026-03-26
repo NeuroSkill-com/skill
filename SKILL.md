@@ -4130,3 +4130,38 @@ for s in sessions["sessions"][:3]:
 sleep = skill("sleep", start_utc=sessions["sessions"][0]["start_utc"],
                        end_utc=sessions["sessions"][0]["end_utc"])
 print
+
+---
+
+## iroh Clients, TOTP, and Scopes
+
+NeuroSkill now supports iroh client authorization with TOTP and per-client scopes.
+
+### Commands
+
+- `iroh info`
+- `iroh totp list`
+- `iroh totp create <name>`
+- `iroh totp qr <totp_id>`
+- `iroh totp revoke <totp_id>`
+- `iroh clients list`
+- `iroh clients register <endpoint_id> --otp <code> [--totp-id <id>] [--scope read|full]`
+- `iroh clients scope <client_id> <read|full>`
+- `iroh clients revoke <client_id>`
+
+### Scope model
+
+- `read` (default): read-only access to basic metrics/status endpoints.
+- `full`: full API control, including mutating commands.
+
+> ⚠️ **Warning**: granting `full` scope gives remote control over the full local API.
+
+### Settings UI
+
+A **Clients** tab is available in Settings for:
+
+- creating and revoking TOTP credentials,
+- viewing enrollment QR codes,
+- registering/revoking iroh clients,
+- changing scopes (`read` / `full`),
+- viewing last connection metadata (time, IP, geo fields when available).
