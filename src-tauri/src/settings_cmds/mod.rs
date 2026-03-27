@@ -537,17 +537,17 @@ pub fn get_ws_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, 
     (s.ws_host.clone(), s.ws_port)
 }
 
-/// Persist a new WebSocket host/port.
+/// Persist a new WebSocket host/port and hot-restart the server.
 ///
-/// `host` must be `"127.0.0.1"` or `"0.0.0.0"`.  Changes take effect after
-/// the next app restart (the server binds once at startup).
+/// `host` must be `"127.0.0.1"` or `"0.0.0.0"`.  The server rebinds
+/// immediately — no app restart required.
 #[tauri::command]
-pub fn set_ws_config(
+pub async fn set_ws_config(
     host: String,
     port: u16,
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<(), String> {
+) -> Result<u16, String> {
     if host != "127.0.0.1" && host != "0.0.0.0" {
         return Err(format!(
             "invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'"
@@ -556,13 +556,33 @@ pub fn set_ws_config(
     if port < 1024 {
         return Err(format!("port {port} is reserved; use 1024–65535"));
     }
+
+    // Persist the new config
     {
         let mut s = state.lock_or_recover();
-        s.ws_host = host;
+        s.ws_host = host.clone();
         s.ws_port = port;
     }
     crate::save_settings(&app);
-    Ok(())
+
+    // Hot-restart the server
+    #[cfg(feature = "llm")]
+    let llm_cell = {
+        let llm_arc = state.lock_or_recover().llm_arc();
+        let llm_guard = llm_arc.lock_or_recover();
+        Some(llm_guard.state_cell.clone())
+    };
+
+    let new_port = crate::ws_server::restart_server(
+        &app,
+        &host,
+        port,
+        #[cfg(feature = "llm")]
+        llm_cell,
+    )
+    .await?;
+
+    Ok(new_port)
 }
 
 // ── API token ──────────────────────────────────────────────────────────────────

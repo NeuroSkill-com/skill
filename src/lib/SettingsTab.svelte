@@ -694,11 +694,11 @@ onDestroy(() => {
         </div>
       </div>
 
-      <!-- Save / restart banner -->
+      <!-- Save banner -->
       {#if wsChanged && !wsPortError}
-        <div class="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-          <span class="text-[0.58rem] text-amber-600 dark:text-amber-400 flex-1">
-            {t("settings.wsRestart")}
+        <div class="flex items-center gap-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-3 py-2">
+          <span class="text-[0.58rem] text-cyan-600 dark:text-cyan-400 flex-1">
+            Apply changes to the server.
           </span>
           <Button variant="outline" size="sm"
                   class="h-7 text-[0.58rem] px-3"
@@ -708,18 +708,18 @@ onDestroy(() => {
                     if (isNaN(port) || port < 1024 || port > 65535) return;
                     wsSaving = true;
                     try {
-                      await invoke("set_ws_config", { host: wsHost, port });
-                      wsPort = port;
+                      const newPort = await invoke<number>("set_ws_config", { host: wsHost, port });
+                      wsPort = newPort;
+                      wsPortInput = String(newPort);
                       wsHostChanged = false;
                       wsPortChanged = false;
-                      try { await relaunch(); } catch { /* user can restart manually */ }
                     } catch (e: unknown) {
                       console.error("set_ws_config error:", e);
                     } finally {
                       wsSaving = false;
                     }
                   }}>
-            {wsSaving ? "…" : t("settings.dataDirRestartNow")}
+            {wsSaving ? "Applying…" : "Apply"}
           </Button>
         </div>
       {/if}

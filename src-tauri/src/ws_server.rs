@@ -320,6 +320,24 @@ impl WsTracker {
 /// Type alias for the managed tracker state.
 pub type SharedTracker = Arc<StdMutex<WsTracker>>;
 
+/// Handle for gracefully stopping and restarting the WS server without
+/// restarting the entire app.  Stored as Tauri managed state.
+pub struct WsServerControl {
+    /// Sending on this triggers graceful shutdown of the running server.
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    /// The JoinHandle of the serve task so we can await completion.
+    task: tauri::async_runtime::JoinHandle<()>,
+}
+
+impl WsServerControl {
+    pub fn new(shutdown_tx: tokio::sync::watch::Sender<bool>, task: tauri::async_runtime::JoinHandle<()>) -> Self {
+        Self { shutdown_tx, task }
+    }
+}
+
+/// Thread-safe wrapper for [`WsServerControl`].
+pub type SharedWsControl = Arc<StdMutex<Option<WsServerControl>>>;
+
 // ── WsBroadcaster ─────────────────────────────────────────────────────────────
 
 /// A `Send + Sync` handle for broadcasting JSON messages to every connected
@@ -377,11 +395,18 @@ impl ServeHandle {
     /// Start the combined HTTP + WebSocket + (optional) LLM server.
     /// Spawn this with `tauri::async_runtime::spawn`.  Never returns.
     pub async fn serve(self, app: AppHandle) {
-        self.serve_with_mode(app, false).await;
+        self.serve_with_mode(app, false, None).await;
     }
 
     /// Start server in regular (`readonly=false`) or restricted read-only mode.
-    pub async fn serve_with_mode(self, app: AppHandle, readonly: bool) {
+    /// If `shutdown_rx` is provided, the server will stop gracefully when the
+    /// channel receives `true`.
+    pub async fn serve_with_mode(
+        self,
+        app: AppHandle,
+        readonly: bool,
+        shutdown_rx: Option<tokio::sync::watch::Receiver<bool>>,
+    ) {
         let listener =
             TcpListener::from_std(self.listener).expect("[ws] TcpListener::from_std failed");
         let state = crate::api::SharedState {
@@ -435,17 +460,100 @@ impl ServeHandle {
 
         let router = router.layer(cors);
 
-        eprintln!(
-            "[http/ws] listening on :{}",
-            listener.local_addr().map_or(0, |a| a.port())
-        );
-        axum::serve(
+        let port = listener.local_addr().map_or(0, |a| a.port());
+        eprintln!("[http/ws] listening on :{port}");
+
+        let server = axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-        )
-        .await
-        .expect("[http/ws] server error");
+        );
+
+        if let Some(mut rx) = shutdown_rx {
+            server
+                .with_graceful_shutdown(async move {
+                    // Wait until the watch channel sends `true`.
+                    while !*rx.borrow() {
+                        if rx.changed().await.is_err() {
+                            break;
+                        }
+                    }
+                    eprintln!("[http/ws] graceful shutdown on :{port}");
+                })
+                .await
+                .expect("[http/ws] server error");
+        } else {
+            server.await.expect("[http/ws] server error");
+        }
     }
+}
+
+/// Restart the WS server on a new host/port without restarting the app.
+/// Returns the new port.
+pub async fn restart_server(
+    app: &AppHandle,
+    host: &str,
+    port: u16,
+    #[cfg(feature = "llm")] llm_cell: Option<LlmStateCell>,
+) -> Result<u16, String> {
+    use skill_constants::MutexExt;
+    use tauri::Manager;
+
+    // 1. Stop the old server
+    let control = app.state::<SharedWsControl>();
+    let old_ctl = {
+        let mut guard = control.lock_or_recover();
+        guard.take()
+    };
+    if let Some(ctl) = old_ctl {
+        let _ = ctl.shutdown_tx.send(true);
+        // Wait briefly for graceful shutdown
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            ctl.task,
+        )
+        .await;
+    }
+
+    // 2. Bind new server
+    let (_broadcaster, mut serve_handle) = bind_with(host, port);
+    let new_port = serve_handle.port;
+
+    #[cfg(feature = "llm")]
+    if let Some(cell) = llm_cell {
+        serve_handle.set_llm(cell);
+    }
+
+    // 3. Update managed state
+    {
+        let old_broadcaster = app.state::<WsBroadcaster>();
+        old_broadcaster.tracker.lock_or_recover().port = new_port;
+    }
+
+    // 4. Re-register mDNS
+    let app_name = app
+        .config()
+        .product_name
+        .clone()
+        .unwrap_or_else(|| "skill".to_string());
+    register_mdns(&app_name, new_port);
+
+    // 5. Start the new server with a shutdown channel
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let ws_app = app.clone();
+    let task = tauri::async_runtime::spawn(async move {
+        serve_handle
+            .serve_with_mode(ws_app, false, Some(shutdown_rx))
+            .await;
+    });
+
+    // 6. Store the control handle
+    {
+        let mut guard = control.lock_or_recover();
+        *guard = Some(WsServerControl::new(shutdown_tx, task));
+    }
+
+    eprintln!("[ws] server restarted on {host}:{new_port}");
+    Ok(new_port)
 }
 
 /// Bind synchronously with an explicit host and preferred port.

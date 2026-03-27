@@ -441,9 +441,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let ws_port = serve_handle.port;
-    tauri::async_runtime::spawn(async move {
-        serve_handle.serve(ws_app).await;
+    let (ws_shutdown_tx, ws_shutdown_rx) = tokio::sync::watch::channel(false);
+    let ws_task = tauri::async_runtime::spawn(async move {
+        serve_handle.serve_with_mode(ws_app, false, Some(ws_shutdown_rx)).await;
     });
+    let ws_control: ws_server::SharedWsControl = std::sync::Arc::new(std::sync::Mutex::new(Some(
+        ws_server::WsServerControl::new(ws_shutdown_tx, ws_task),
+    )));
+    app.manage(ws_control);
 
     // NAT-traversing P2P bridge — proxies iroh peers to the single API port.
     // The peer map lets the axum server identify which iroh client is on each
