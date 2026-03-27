@@ -156,18 +156,23 @@ async fn run(
         let peer = conn.remote_id().to_string().to_lowercase();
         let remote_s = format!("{:?}", remote);
 
-        {
+        let is_authorized = {
             let auth_g = lock_or_recover(&auth);
-            if !auth_g.is_endpoint_allowed(&peer) {
-                eprintln!("[iroh] rejecting unauthorized endpoint: {peer}");
-                continue;
-            }
+            auth_g.is_endpoint_allowed(&peer)
+        };
+
+        if is_authorized {
+            let geo = geo_from_remote_addr(&remote);
+            let _ = lock_or_recover(&auth).mark_client_connected(&peer, &remote_s, geo);
+            eprintln!("[iroh] peer connected (authorized): {peer}");
+        } else {
+            // Allow unregistered peers through — they can only hit the
+            // registration endpoint.  The API server enforces per-command
+            // permissions; unregistered peers that try anything else get
+            // a 403.  This lets phones register their iroh endpoint ID
+            // via the tunnel itself (no local network needed).
+            eprintln!("[iroh] peer connected (unregistered, can register): {peer}");
         }
-
-        let geo = geo_from_remote_addr(&remote);
-        let _ = lock_or_recover(&auth).mark_client_connected(&peer, &remote_s, geo);
-
-        eprintln!("[iroh] peer connected: {peer}");
         let auth2 = auth.clone();
         let peer2 = peer.clone();
         let peer_map2 = peer_map.clone();
@@ -188,12 +193,19 @@ async fn handle_connection(
     peer_id: String,
     peer_map: IrohPeerMap,
 ) -> Result<(), String> {
+    // Track whether this peer has ever been authorized.
+    // Unregistered peers get a grace window to send a registration request.
+    let mut was_ever_authorized = {
+        lock_or_recover(&auth).is_endpoint_allowed(&peer_id)
+    };
+
     loop {
-        // Re-check authorization before accepting each new bi-stream.
-        // If the client was revoked while connected, close the connection.
-        {
+        // If the peer was previously authorized, check if they've been revoked.
+        // Don't block unregistered peers — they need to register first.
+        if was_ever_authorized {
             let auth_g = lock_or_recover(&auth);
             if !auth_g.is_endpoint_allowed(&peer_id) {
+                drop(auth_g);
                 conn.close(1u32.into(), b"revoked");
                 return Err(format!("client {peer_id} was revoked, closing connection"));
             }
@@ -204,13 +216,19 @@ async fn handle_connection(
             Err(e) => return Err(format!("accept_bi failed: {e}")),
         };
 
-        // Also check right after accept (may have been revoked while waiting)
-        {
+        // Re-check after accept
+        if was_ever_authorized {
             let auth_g = lock_or_recover(&auth);
             if !auth_g.is_endpoint_allowed(&peer_id) {
+                drop(auth_g);
                 conn.close(1u32.into(), b"revoked");
                 return Err(format!("client {peer_id} was revoked, closing connection"));
             }
+        }
+
+        // After each stream, check if the peer became authorized (registered)
+        if !was_ever_authorized {
+            was_ever_authorized = lock_or_recover(&auth).is_endpoint_allowed(&peer_id);
         }
 
         let target = SocketAddr::from(([127, 0, 0, 1], local_port));
