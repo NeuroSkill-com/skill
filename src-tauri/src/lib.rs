@@ -199,7 +199,7 @@ use window_cmds::{
     get_calibration_config, get_calibration_profile, get_data_dir, get_onboarding_complete,
     get_onboarding_model_download_order, get_whats_new_seen_version, get_ws_clients, get_ws_port,
     get_ws_request_log, is_session_live, list_calibration_profiles, open_accessibility_settings,
-    open_and_start_calibration, open_api_window, open_bt_settings, open_calibration_window,
+    open_and_start_calibration, open_api_window, open_bt_settings, check_bluetooth_power, open_calibration_window,
     open_focus_timer_window, open_help_window, open_label_window, open_labels_window,
     open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
@@ -445,31 +445,27 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         serve_handle.serve(ws_app).await;
     });
 
-    // Local read-only API server for iroh clients with `read` scope.
-    let (_ro_broadcaster, ro_serve_handle) = ws_server::bind_with("127.0.0.1", 0);
-    let ro_port = ro_serve_handle.port;
-    let ro_app = app.handle().clone();
-    tauri::async_runtime::spawn(async move {
-        ro_serve_handle.serve_with_mode(ro_app, true).await;
-    });
-
-    // NAT-traversing P2P bridge for the same local HTTP/WS API ports.
+    // NAT-traversing P2P bridge — proxies iroh peers to the single API port.
+    // The peer map lets the axum server identify which iroh client is on each
+    // TCP connection so it can enforce per-command permissions.
     let iroh_auth = std::sync::Arc::new(std::sync::Mutex::new(skill_iroh::IrohAuthStore::open(
         &skill_dir_for_iroh,
     )));
     let iroh_runtime = std::sync::Arc::new(std::sync::Mutex::new(
         skill_iroh::IrohRuntimeState::default(),
     ));
+    let iroh_peer_map = skill_iroh::new_peer_map();
     skill_iroh::spawn(
         skill_dir_for_iroh.clone(),
         ws_port,
-        ro_port,
         iroh_auth.clone(),
         iroh_runtime.clone(),
+        iroh_peer_map.clone(),
     );
 
     app.manage(iroh_auth);
     app.manage(iroh_runtime);
+    app.manage(iroh_peer_map);
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {
@@ -1347,6 +1343,7 @@ pub fn run() {
             retry_connect,
             cancel_retry,
             open_bt_settings,
+            check_bluetooth_power,
             open_settings_window,
             open_updates_window,
             open_model_tab,

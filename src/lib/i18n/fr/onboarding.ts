@@ -13,6 +13,7 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Calibration",
   "onboarding.step.models": "Modèles",
   "onboarding.step.tray": "Icône",
+  "onboarding.step.enable_bluetooth": "Activer Bluetooth",
   "onboarding.step.done": "Terminé",
   "onboarding.welcomeTitle": "Bienvenue dans {app}",
   "onboarding.welcomeBody":
@@ -60,6 +61,11 @@ const onboarding: Record<string, string> = {
   "onboarding.calibrationNeedsBt": "Connectez d'abord votre casque pour lancer la calibration.",
   "onboarding.calibrationSkip":
     "Vous pouvez sauter cette étape et calibrer plus tard depuis le menu ou les paramètres.",
+  "onboarding.enableBluetoothTitle": "Activez le Bluetooth sur votre Mac",
+  "onboarding.enableBluetoothBody": "{app} a besoin que l'adaptateur Bluetooth de votre Mac soit activé pour trouver et connecter votre appareil BCI. Veuillez activer Bluetooth dans les Réglages si il est désactivé.",
+  "onboarding.enableBluetoothStatus": "Adaptateur Bluetooth",
+  "onboarding.enableBluetoothHint": "Ouvrez Réglages → Bluetooth et activez Bluetooth. Si vous exécutez en développement via le Terminal, assurez-vous que l'adaptateur système est activé.",
+  "onboarding.enableBluetoothOpen": "Ouvrir les réglages Bluetooth",
   "onboarding.modelsTitle": "Télécharger les modèles recommandés",
   "onboarding.modelsBody":
     "Pour la meilleure expérience locale, téléchargez maintenant ces modèles par défaut : Qwen3.5 4B (Q4_K_M), encodeur ZUNA, NeuTTS et Kitten TTS.",

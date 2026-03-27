@@ -2,14 +2,25 @@
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { Separator } from "$lib/components/ui/separator";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
+type Permissions = {
+  scope: string;
+  groups: string[];
+  allow: string[];
+  deny: string[];
+};
 type Client = {
   id: string;
   name: string;
   endpoint_id: string;
   totp_id: string;
-  scope: "read" | "full" | string;
+  scope: string;
+  permissions: Permissions;
   created_at: number;
   revoked_at?: number | null;
   last_connected_at?: number | null;
@@ -18,26 +29,59 @@ type Client = {
   last_city?: string | null;
   last_locale?: string | null;
 };
+type CommandGroup = {
+  id: string;
+  label: string;
+  description: string;
+  dangerous: boolean;
+  commands: string[];
+};
 
 let port = 0;
 let token = "";
 let totp: Totp[] = [];
 let clients: Client[] = [];
-let endpointId = "";
 let irohInfo: any = null;
 let err = "";
+let loading = true;
 
 let newTotpName = "";
-let registerEndpoint = "";
-let registerOtp = "";
-let registerName = "";
-let registerScope: "read" | "full" = "read";
 let qr: string | null = null;
+let creating = false;
+let showSuccess = false;
+
+// Permissions editor state
+let editingClientId: string | null = null;
+let scopeGroups: CommandGroup[] = [];
+let editScope: string = "read";
+let editGroups: Set<string> = new Set();
+let editAllow: string[] = [];
+let editDeny: string[] = [];
+let saving = false;
 
 function fmt(ts?: number | null) {
   if (!ts) return "—";
   return new Date(ts * 1000).toLocaleString();
 }
+
+function ago(ts?: number | null) {
+  if (!ts) return "";
+  const s = Math.floor(Date.now() / 1000 - ts);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+$: online = !!irohInfo?.online;
+$: activeTotp = totp.filter(t => !t.revoked_at);
+$: revokedTotp = totp.filter(t => t.revoked_at);
+$: activeClients = clients.filter(c => !c.revoked_at);
+$: revokedClients = clients.filter(c => c.revoked_at);
+
+// Split groups into safe and dangerous
+$: safeGroups = scopeGroups.filter(g => !g.dangerous);
+$: dangerousGroups = scopeGroups.filter(g => g.dangerous);
 
 async function api(path: string, method = "GET", body?: any) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -61,113 +105,498 @@ async function refresh() {
       api("/v1/iroh/clients"),
     ]);
     irohInfo = info;
-    endpointId = info.endpoint_id || "";
     totp = t.totp || [];
     clients = c.clients || [];
   } catch (e: any) {
     err = String(e?.message || e);
+  } finally {
+    loading = false;
   }
 }
 
-async function createTotp() {
-  const r = await api("/v1/iroh/totp", "POST", { name: newTotpName || "Mobile" });
-  qr = r.qr_png_base64;
-  newTotpName = "";
+async function loadScopeGroups() {
+  try {
+    const r = await api("/v1/iroh/scope-groups");
+    scopeGroups = r.groups || [];
+  } catch (e: any) {
+    console.error("Failed to load scope groups:", e);
+  }
+}
+
+let clientCountBeforeQr = 0;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+async function createInvite() {
+  err = "";
+  creating = true;
+  showSuccess = false;
+  try {
+    clientCountBeforeQr = activeClients.length;
+    const r = await api("/v1/iroh/phone-invite", "POST", { name: newTotpName || "Mobile" });
+    qr = r.qr_png_base64;
+    newTotpName = "";
+    await refresh();
+    startPolling();
+  } catch (e: any) {
+    err = String(e?.message || e);
+  } finally {
+    creating = false;
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    await refresh();
+    if (activeClients.length > clientCountBeforeQr) {
+      showSuccess = true;
+      qr = null;
+      stopPolling();
+      setTimeout(() => { showSuccess = false; }, 4000);
+    }
+  }, 2000);
+  setTimeout(() => stopPolling(), 5 * 60 * 1000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function revokeTotp(id: string) {
+  try { await api("/v1/iroh/totp/revoke", "POST", { id }); } catch (e: any) { err = String(e?.message || e); }
   await refresh();
 }
-async function revokeTotp(id: string) { await api("/v1/iroh/totp/revoke", "POST", { id }); await refresh(); }
-async function registerClient() {
-  await api("/v1/iroh/clients/register", "POST", {
-    endpoint_id: registerEndpoint,
-    otp: registerOtp,
-    name: registerName || undefined,
-    scope: registerScope,
-  });
-  registerEndpoint = registerOtp = registerName = "";
-  registerScope = "read";
+async function revokeClient(id: string) {
+  try { await api("/v1/iroh/clients/revoke", "POST", { id }); } catch (e: any) { err = String(e?.message || e); }
+  editingClientId = null;
   await refresh();
 }
-async function revokeClient(id: string) { await api("/v1/iroh/clients/revoke", "POST", { id }); await refresh(); }
-async function setScope(id: string, scope: "read" | "full") { await api("/v1/iroh/clients/scope", "POST", { id, scope }); await refresh(); }
+
+function openPermissions(c: Client) {
+  editingClientId = c.id;
+  editScope = c.permissions?.scope || c.scope || "read";
+  editGroups = new Set(c.permissions?.groups || []);
+  editAllow = [...(c.permissions?.allow || [])];
+  editDeny = [...(c.permissions?.deny || [])];
+}
+
+function closePermissions() {
+  editingClientId = null;
+}
+
+function toggleGroup(gid: string) {
+  if (editGroups.has(gid)) {
+    editGroups.delete(gid);
+  } else {
+    editGroups.add(gid);
+  }
+  editGroups = editGroups; // trigger reactivity
+}
+
+function setPresetScope(scope: "read" | "full" | "custom") {
+  editScope = scope;
+  if (scope !== "custom") {
+    editGroups = new Set();
+    editAllow = [];
+    editDeny = [];
+  }
+}
+
+async function savePermissions() {
+  if (!editingClientId) return;
+  saving = true;
+  err = "";
+  try {
+    await api("/v1/iroh/clients/scope", "POST", {
+      id: editingClientId,
+      scope: editScope,
+      groups: editScope === "custom" ? [...editGroups] : undefined,
+      allow: editScope === "custom" && editAllow.length ? editAllow : undefined,
+      deny: editScope === "custom" && editDeny.length ? editDeny : undefined,
+    });
+    editingClientId = null;
+    await refresh();
+  } catch (e: any) {
+    err = String(e?.message || e);
+  } finally {
+    saving = false;
+  }
+}
+
+$: editingClient = editingClientId ? activeClients.find(c => c.id === editingClientId) : null;
+$: editHasDangerous = editScope === "full" || (editScope === "custom" && dangerousGroups.some(g => editGroups.has(g.id)));
 
 onMount(async () => {
   [port, token] = await Promise.all([
     invoke<number>("get_ws_port"),
     invoke<string>("get_api_token").catch(() => ""),
   ]);
-  await refresh();
+  await Promise.all([refresh(), loadScopeGroups()]);
 });
 </script>
 
-<div class="space-y-4">
-  <div class="rounded-lg border p-3 text-xs">
-    <div class="font-semibold mb-1">iroh Server</div>
-    <div>Endpoint: <code class="break-all">{endpointId || "—"}</code></div>
-    <div>Relay: <code class="break-all">{irohInfo?.relay_url || "—"}</code></div>
-  </div>
-
-  <div class="rounded-lg border p-3 text-xs space-y-2">
-    <div class="font-semibold">Create TOTP (QR for phone)</div>
-    <div class="flex gap-2">
-      <input class="border rounded px-2 py-1 flex-1" bind:value={newTotpName} placeholder="Credential name" />
-      <button class="border rounded px-2 py-1" onclick={createTotp}>Create</button>
-    </div>
-    {#if qr}
-      <img src={qr} alt="TOTP QR" class="w-44 h-44 border rounded" />
-    {/if}
-  </div>
-
-  <div class="rounded-lg border p-3 text-xs space-y-2">
-    <div class="font-semibold">Authorize Client</div>
-    <input class="border rounded px-2 py-1 w-full" bind:value={registerEndpoint} placeholder="Client iroh endpoint id" />
-    <input class="border rounded px-2 py-1 w-full" bind:value={registerOtp} placeholder="Current OTP" />
-    <input class="border rounded px-2 py-1 w-full" bind:value={registerName} placeholder="Client display name (optional)" />
-    <div class="flex items-center gap-2">
-      <label for="clients-register-scope">Scope</label>
-      <select id="clients-register-scope" class="border rounded px-2 py-1" bind:value={registerScope}>
-        <option value="read">read (default)</option>
-        <option value="full">full ⚠️</option>
-      </select>
-      {#if registerScope === "full"}
-        <span class="text-red-600 font-semibold">Warning: full grants complete control.</span>
-      {/if}
-    </div>
-    <button class="border rounded px-2 py-1" onclick={registerClient}>Authorize</button>
-  </div>
-
-  <div class="rounded-lg border p-3 text-xs">
-    <div class="font-semibold mb-2">TOTP Credentials</div>
-    <div class="space-y-1">
-      {#each totp as t}
-        <div class="flex items-center gap-2 justify-between border rounded px-2 py-1">
-          <div>{t.name} · created {fmt(t.created_at)} · revoked {fmt(t.revoked_at)} · last used {fmt(t.last_used_at)}</div>
-          <button class="border rounded px-2 py-1" onclick={() => revokeTotp(t.id)}>Revoke</button>
+<!-- ── Permissions Editor Modal ─────────────────────────────────────────────── -->
+{#if editingClient}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-8 overflow-y-auto"
+       onclick={(e) => { if (e.target === e.currentTarget) closePermissions(); }}>
+    <div class="bg-white dark:bg-[#14141e] rounded-xl border border-border dark:border-white/[0.06] shadow-2xl w-full max-w-lg mx-4 mb-8">
+      <!-- Header -->
+      <div class="p-4 border-b border-border dark:border-white/[0.05]">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-semibold">Permissions for {editingClient.name}</h3>
+            <p class="text-[0.56rem] text-muted-foreground font-mono mt-0.5">{editingClient.endpoint_id}</p>
+          </div>
+          <Button variant="ghost" size="sm" class="h-7 w-7 p-0" onclick={closePermissions}>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </Button>
         </div>
-      {/each}
-    </div>
-  </div>
+      </div>
 
-  <div class="rounded-lg border p-3 text-xs">
-    <div class="font-semibold mb-2">Clients</div>
-    <div class="space-y-1">
-      {#each clients as c}
-        <div class="border rounded px-2 py-1 space-y-1">
-          <div class="flex justify-between items-center gap-2">
-            <div>
-              <div><b>{c.name}</b> · {c.scope}</div>
-              <div class="break-all">{c.endpoint_id}</div>
-              <div>last connect: {fmt(c.last_connected_at)} · {c.last_ip || "—"} {c.last_country || ""} {c.last_city || ""} {c.last_locale || ""}</div>
-            </div>
-            <div class="flex gap-1">
-              <button class="border rounded px-2 py-1" onclick={() => setScope(c.id, "read")}>read</button>
-              <button class="border rounded px-2 py-1 text-red-700" onclick={() => setScope(c.id, "full")}>full ⚠️</button>
-              <button class="border rounded px-2 py-1" onclick={() => revokeClient(c.id)}>revoke</button>
-            </div>
+      <div class="p-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+        <!-- Scope Presets -->
+        <div>
+          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Scope</span>
+          <div class="flex gap-2 mt-1.5">
+            <button
+              class="px-3 py-1.5 text-xs rounded-md border transition-colors
+                     {editScope === 'read' ? 'bg-primary text-primary-foreground border-primary' : 'border-border dark:border-white/[0.1] hover:bg-muted'}"
+              onclick={() => setPresetScope("read")}>
+              Read Only
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs rounded-md border transition-colors
+                     {editScope === 'custom' ? 'bg-primary text-primary-foreground border-primary' : 'border-border dark:border-white/[0.1] hover:bg-muted'}"
+              onclick={() => setPresetScope("custom")}>
+              Custom
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs rounded-md border transition-colors
+                     {editScope === 'full' ? 'bg-red-600 text-white border-red-600' : 'border-border dark:border-white/[0.1] hover:bg-muted text-red-600'}"
+              onclick={() => setPresetScope("full")}>
+              Full Access
+            </button>
           </div>
         </div>
-      {/each}
+
+        <!-- Full Access Warning -->
+        {#if editScope === "full"}
+          <div class="rounded-lg border-2 border-red-300 dark:border-red-700/60 bg-red-50 dark:bg-red-900/15 p-3">
+            <div class="flex items-center gap-2 mb-1.5">
+              <svg class="h-4 w-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+              </svg>
+              <span class="text-xs font-bold text-red-700 dark:text-red-300">Full Access Warning</span>
+            </div>
+            <p class="text-[0.6rem] text-red-600 dark:text-red-400 leading-relaxed">
+              This client will have <strong>complete control</strong> over your Skill device:
+              manage automation hooks, start/stop the LLM, create and revoke credentials,
+              change other clients' permissions, and control system settings.
+            </p>
+          </div>
+        {/if}
+
+        <!-- Custom Groups -->
+        {#if editScope === "custom"}
+          <!-- Safe Groups -->
+          <div>
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              Command Groups
+            </span>
+            <div class="flex flex-col gap-1 mt-1.5">
+              {#each safeGroups as g}
+                <label class="flex items-start gap-2.5 px-2.5 py-2 rounded-lg border border-border dark:border-white/[0.06]
+                              hover:bg-muted/50 cursor-pointer transition-colors">
+                  <input type="checkbox" checked={editGroups.has(g.id)}
+                         onchange={() => toggleGroup(g.id)}
+                         class="mt-0.5 rounded accent-primary" />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs font-medium">{g.label}</div>
+                    <div class="text-[0.56rem] text-muted-foreground leading-relaxed">{g.description}</div>
+                    <div class="text-[0.5rem] text-muted-foreground/70 mt-0.5 font-mono">
+                      {g.commands.join(", ")}
+                    </div>
+                  </div>
+                </label>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Dangerous Groups -->
+          {#if dangerousGroups.length > 0}
+            <div>
+              <div class="flex items-center gap-2 mb-1.5">
+                <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                </svg>
+                <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-red-600 dark:text-red-400">
+                  Dangerous — Can Impact Other Services
+                </span>
+              </div>
+
+              {#if editHasDangerous}
+                <div class="rounded-lg border-2 border-red-300 dark:border-red-700/60 bg-red-50 dark:bg-red-900/15 p-2.5 mb-2">
+                  <p class="text-[0.56rem] text-red-600 dark:text-red-400 leading-relaxed">
+                    Enabling these groups grants this remote client the ability to modify
+                    system settings, manage other clients' access, control automation,
+                    or make irreversible changes. Only enable if you trust this device fully.
+                  </p>
+                </div>
+              {/if}
+
+              <div class="flex flex-col gap-1">
+                {#each dangerousGroups as g}
+                  <label class="flex items-start gap-2.5 px-2.5 py-2 rounded-lg border-2 transition-colors cursor-pointer
+                                {editGroups.has(g.id)
+                                  ? 'border-red-300 dark:border-red-700/60 bg-red-50/50 dark:bg-red-900/10'
+                                  : 'border-border dark:border-white/[0.06] hover:bg-muted/50'}">
+                    <input type="checkbox" checked={editGroups.has(g.id)}
+                           onchange={() => toggleGroup(g.id)}
+                           class="mt-0.5 rounded accent-red-500" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-medium">{g.label}</span>
+                        <Badge variant="destructive" class="text-[0.45rem] px-1 py-0">dangerous</Badge>
+                      </div>
+                      <div class="text-[0.56rem] text-muted-foreground leading-relaxed">{g.description}</div>
+                      <div class="text-[0.5rem] text-muted-foreground/70 mt-0.5 font-mono">
+                        {g.commands.join(", ")}
+                      </div>
+                    </div>
+                  </label>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- Read-only info -->
+        {#if editScope === "read"}
+          <div class="text-[0.6rem] text-muted-foreground bg-muted/40 rounded-lg p-3 leading-relaxed">
+            <strong>Read-only</strong> — This client can view status, search data, browse screenshots,
+            check calendar and health data, and view LLM status. It cannot create labels,
+            control the device, manage credentials, or modify any settings.
+          </div>
+        {/if}
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 border-t border-border dark:border-white/[0.05] flex items-center justify-between">
+        <Button variant="outline" size="sm" class="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                onclick={() => revokeClient(editingClient!.id)}>
+          Revoke Client
+        </Button>
+        <div class="flex gap-2">
+          <Button variant="outline" size="sm" class="text-xs" onclick={closePermissions}>Cancel</Button>
+          <Button size="sm" class="text-xs" disabled={saving} onclick={savePermissions}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
     </div>
   </div>
+{/if}
 
-  {#if err}<div class="text-red-600 text-xs">{err}</div>{/if}
-</div>
+<!-- ── Status ──────────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    Remote Access
+  </span>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="p-4">
+      {#if loading}
+        <p class="text-xs text-muted-foreground">Loading…</p>
+      {:else if !online}
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-red-400 animate-pulse"></span>
+          <span class="text-xs text-muted-foreground">iroh tunnel is offline</span>
+        </div>
+      {:else}
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span class="text-xs font-medium">Online</span>
+          <Badge variant="secondary" class="text-[0.5rem]">{activeClients.length} client{activeClients.length !== 1 ? 's' : ''}</Badge>
+          <Badge variant="secondary" class="text-[0.5rem]">{activeTotp.length} credential{activeTotp.length !== 1 ? 's' : ''}</Badge>
+        </div>
+        <div class="mt-2 text-[0.6rem] text-muted-foreground break-all leading-relaxed">
+          <span class="font-medium text-foreground/70">Endpoint</span> {irohInfo.endpoint_id}<br/>
+          <span class="font-medium text-foreground/70">Relay</span> {irohInfo.relay_url}
+        </div>
+      {/if}
+    </CardContent>
+  </Card>
+</section>
+
+{#if online}
+  <!-- ── Pair a Phone ───────────────────────────────────────────────────── -->
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      Pair a Phone
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="p-4 flex flex-col gap-3">
+        {#if showSuccess}
+          <div class="flex flex-col items-center gap-2 py-4 animate-in fade-in duration-500">
+            <div class="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <svg class="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Phone connected</p>
+          </div>
+        {:else if qr}
+          <div class="flex flex-col items-center gap-2">
+            <img src={qr} alt="Invite QR" class="w-48 h-48 rounded-lg border" />
+            <p class="text-[0.6rem] text-muted-foreground text-center max-w-56">
+              Scan with the Skill mobile app to connect automatically.
+            </p>
+            <Button variant="outline" size="sm" class="text-xs" onclick={() => { qr = null; stopPolling(); }}>
+              Done
+            </Button>
+          </div>
+        {:else}
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            Generate a QR code that your phone scans to connect. The code contains the
+            server address, relay, and a one-time credential — everything the phone needs.
+          </p>
+          <div class="flex gap-2 items-center">
+            <input
+              class="border border-border dark:border-white/[0.1] rounded-md px-2.5 py-1.5 text-xs bg-transparent flex-1
+                     focus:outline-none focus:ring-1 focus:ring-primary/40"
+              bind:value={newTotpName}
+              placeholder="Credential name (e.g. My iPhone)"
+            />
+            <Button size="sm" class="text-xs" disabled={creating} onclick={createInvite}>
+              {creating ? "Generating…" : "Generate QR"}
+            </Button>
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
+  </section>
+
+  <!-- ── Connected Clients ──────────────────────────────────────────────── -->
+  {#if activeClients.length > 0}
+    <section class="flex flex-col gap-2">
+      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+        Connected Clients
+      </span>
+      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+          {#each activeClients as c}
+            <div class="flex items-start justify-between gap-3 px-4 py-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-semibold truncate">{c.name}</span>
+                  <Badge variant={c.scope === "full" ? "destructive" : c.scope === "custom" ? "default" : "secondary"}
+                         class="text-[0.5rem]">
+                    {c.scope}
+                  </Badge>
+                  {#if c.scope === "custom" && c.permissions?.groups?.length}
+                    <span class="text-[0.5rem] text-muted-foreground">
+                      {c.permissions.groups.length} group{c.permissions.groups.length !== 1 ? 's' : ''}
+                    </span>
+                  {/if}
+                  {#if c.last_connected_at}
+                    <span class="text-[0.5rem] text-muted-foreground">{ago(c.last_connected_at)}</span>
+                  {/if}
+                </div>
+                <div class="text-[0.56rem] text-muted-foreground mt-0.5 font-mono truncate">{c.endpoint_id}</div>
+                {#if c.last_ip || c.last_country || c.last_city}
+                  <div class="text-[0.52rem] text-muted-foreground mt-0.5">
+                    {[c.last_ip, c.last_city, c.last_country].filter(Boolean).join(" · ")}
+                  </div>
+                {/if}
+              </div>
+              <div class="flex gap-1 shrink-0 pt-0.5">
+                <Button variant="outline" size="sm" class="text-[0.56rem] h-6 px-2"
+                        onclick={() => openPermissions(c)}>
+                  Permissions
+                </Button>
+                <Button variant="outline" size="sm"
+                        class="text-[0.56rem] h-6 px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onclick={() => revokeClient(c.id)}>
+                  Revoke
+                </Button>
+              </div>
+            </div>
+          {/each}
+        </CardContent>
+      </Card>
+    </section>
+  {/if}
+
+  <!-- ── Credentials ────────────────────────────────────────────────────── -->
+  {#if activeTotp.length > 0}
+    <section class="flex flex-col gap-2">
+      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+        Credentials
+      </span>
+      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+          {#each activeTotp as t}
+            <div class="flex items-center justify-between px-4 py-2.5">
+              <div class="flex-1 min-w-0">
+                <span class="text-xs font-medium">{t.name}</span>
+                <div class="text-[0.52rem] text-muted-foreground">
+                  Created {fmt(t.created_at)}{t.last_used_at ? ` · used ${ago(t.last_used_at)}` : ""}
+                </div>
+              </div>
+              <Button variant="outline" size="sm" class="text-[0.56rem] h-6 px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onclick={() => revokeTotp(t.id)}>
+                Revoke
+              </Button>
+            </div>
+          {/each}
+        </CardContent>
+      </Card>
+    </section>
+  {/if}
+
+  <!-- ── Revoked (collapsed) ────────────────────────────────────────────── -->
+  {#if revokedClients.length > 0 || revokedTotp.length > 0}
+    <section class="flex flex-col gap-2">
+      <details class="group">
+        <summary class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5 cursor-pointer select-none
+                        list-none flex items-center gap-1">
+          <svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M9 5l7 7-7 7"/>
+          </svg>
+          Revoked ({revokedClients.length + revokedTotp.length})
+        </summary>
+        <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden mt-2 opacity-60">
+          <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+            {#each revokedClients as c}
+              <div class="px-4 py-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[0.6rem] line-through">{c.name}</span>
+                  <Badge variant="outline" class="text-[0.5rem]">client</Badge>
+                  <span class="text-[0.5rem] text-muted-foreground">revoked {fmt(c.revoked_at)}</span>
+                </div>
+              </div>
+            {/each}
+            {#each revokedTotp as t}
+              <div class="px-4 py-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[0.6rem] line-through">{t.name}</span>
+                  <Badge variant="outline" class="text-[0.5rem]">credential</Badge>
+                  <span class="text-[0.5rem] text-muted-foreground">revoked {fmt(t.revoked_at)}</span>
+                </div>
+              </div>
+            {/each}
+          </CardContent>
+        </Card>
+      </details>
+    </section>
+  {/if}
+{/if}
+
+{#if err}
+  <div class="rounded-lg border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-900/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+    {err}
+  </div>
+{/if}

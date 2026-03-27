@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
+    collections::HashMap,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -24,6 +25,18 @@ const IROH_SECRET_FILE: &str = "iroh_secret_key.bin";
 pub type SharedIrohAuth = Arc<Mutex<IrohAuthStore>>;
 pub type SharedIrohRuntime = Arc<Mutex<IrohRuntimeState>>;
 
+/// Maps `local_tcp_source_port → iroh_peer_endpoint_id`.
+///
+/// Populated by the tunnel just before connecting to the local API server,
+/// read by axum middleware to identify the iroh peer.  Entries are removed
+/// when the TCP connection closes.
+pub type IrohPeerMap = Arc<Mutex<HashMap<u16, String>>>;
+
+/// Create a new empty peer map.
+pub fn new_peer_map() -> IrohPeerMap {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct IrohRuntimeState {
     pub endpoint_id: String,
@@ -37,25 +50,38 @@ pub struct IrohRuntimeState {
 
 pub fn spawn(
     skill_dir: PathBuf,
-    full_port: u16,
-    read_only_port: u16,
+    api_port: u16,
     auth: SharedIrohAuth,
     runtime: SharedIrohRuntime,
+    peer_map: IrohPeerMap,
 ) {
-    tokio::spawn(async move {
-        if let Err(e) = run(&skill_dir, full_port, read_only_port, auth, runtime.clone()).await {
-            lock_or_recover(&runtime).last_error = Some(e.clone());
-            eprintln!("[iroh] tunnel stopped: {e}");
-        }
-    });
+    // Run the iroh tunnel on its own dedicated Tokio runtime in a background thread.
+    // Calling tokio::spawn here would panic if no Tokio reactor is running in the
+    // caller's context (e.g. Tauri's async runtime). Spawning a thread with a
+    // fresh runtime avoids that dependency.
+    std::thread::Builder::new()
+        .name("iroh-tunnel".into())
+        .spawn(move || {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .expect("failed to create tokio runtime for iroh tunnel");
+
+            if let Err(e) = rt.block_on(run(&skill_dir, api_port, auth, runtime.clone(), peer_map)) {
+                lock_or_recover(&runtime).last_error = Some(e.clone());
+                eprintln!("[iroh] tunnel stopped: {e}");
+            }
+        })
+        .expect("failed to spawn iroh tunnel thread");
 }
 
 async fn run(
     skill_dir: &Path,
-    full_port: u16,
-    read_only_port: u16,
+    api_port: u16,
     auth: SharedIrohAuth,
     runtime: SharedIrohRuntime,
+    peer_map: IrohPeerMap,
 ) -> Result<(), String> {
     let secret_key = load_or_create_secret_key(skill_dir)?;
 
@@ -82,14 +108,14 @@ async fn run(
         r.endpoint_id = endpoint_id.clone();
         r.relay_url = relay.clone();
         r.direct_addrs = direct_addrs.clone();
-        r.local_port = full_port;
+        r.local_port = api_port;
         r.started_at = unix_secs();
         r.online = true;
         r.last_error = None;
     }
 
     eprintln!(
-        "[iroh] API tunnel online: endpoint_id={endpoint_id} relay={relay} addrs=[{}] alpn={} full=127.0.0.1:{full_port} read=127.0.0.1:{read_only_port}",
+        "[iroh] API tunnel online: endpoint_id={endpoint_id} relay={relay} addrs=[{}] alpn={} api=127.0.0.1:{api_port}",
         direct_addrs.join(", "),
         String::from_utf8_lossy(IROH_API_ALPN)
     );
@@ -130,23 +156,24 @@ async fn run(
         let peer = conn.remote_id().to_string().to_lowercase();
         let remote_s = format!("{:?}", remote);
 
-        let scope = {
+        {
             let auth_g = lock_or_recover(&auth);
             if !auth_g.is_endpoint_allowed(&peer) {
                 eprintln!("[iroh] rejecting unauthorized endpoint: {peer}");
                 continue;
             }
-            auth_g.scope_for_endpoint(&peer).unwrap_or_else(|| "read".to_string())
-        };
+        }
 
         let geo = geo_from_remote_addr(&remote);
         let _ = lock_or_recover(&auth).mark_client_connected(&peer, &remote_s, geo);
 
-        let target_port = if scope == "full" { full_port } else { read_only_port };
-        eprintln!("[iroh] peer connected: {peer} (scope={scope}, target_port={target_port})");
+        eprintln!("[iroh] peer connected: {peer}");
+        let auth2 = auth.clone();
+        let peer2 = peer.clone();
+        let peer_map2 = peer_map.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(conn, target_port).await {
-                eprintln!("[iroh] peer {peer} disconnected: {e}");
+            if let Err(e) = handle_connection(conn, api_port, auth2, peer2.clone(), peer_map2).await {
+                eprintln!("[iroh] peer {peer2} disconnected: {e}");
             }
         });
     }
@@ -154,17 +181,53 @@ async fn run(
     Ok(())
 }
 
-async fn handle_connection(conn: Connection, local_port: u16) -> Result<(), String> {
+async fn handle_connection(
+    conn: Connection,
+    local_port: u16,
+    auth: SharedIrohAuth,
+    peer_id: String,
+    peer_map: IrohPeerMap,
+) -> Result<(), String> {
     loop {
+        // Re-check authorization before accepting each new bi-stream.
+        // If the client was revoked while connected, close the connection.
+        {
+            let auth_g = lock_or_recover(&auth);
+            if !auth_g.is_endpoint_allowed(&peer_id) {
+                conn.close(1u32.into(), b"revoked");
+                return Err(format!("client {peer_id} was revoked, closing connection"));
+            }
+        }
+
         let (mut send, mut recv) = match conn.accept_bi().await {
             Ok(s) => s,
             Err(e) => return Err(format!("accept_bi failed: {e}")),
         };
 
+        // Also check right after accept (may have been revoked while waiting)
+        {
+            let auth_g = lock_or_recover(&auth);
+            if !auth_g.is_endpoint_allowed(&peer_id) {
+                conn.close(1u32.into(), b"revoked");
+                return Err(format!("client {peer_id} was revoked, closing connection"));
+            }
+        }
+
         let target = SocketAddr::from(([127, 0, 0, 1], local_port));
         let tcp = TcpStream::connect(target)
             .await
             .map_err(|e| format!("tcp connect {target} failed: {e}"))?;
+
+        // Register the local TCP source port → peer mapping so the axum
+        // server can look up which iroh peer this connection belongs to.
+        let local_src_port = tcp
+            .local_addr()
+            .map(|a| a.port())
+            .unwrap_or(0);
+        if local_src_port != 0 {
+            lock_or_recover(&peer_map).insert(local_src_port, peer_id.clone());
+        }
+
         let (mut tcp_read, mut tcp_write) = tcp.into_split();
 
         let uplink = async {
@@ -204,7 +267,14 @@ async fn handle_connection(conn: Connection, local_port: u16) -> Result<(), Stri
             }
         };
 
-        let _ = tokio::try_join!(uplink, downlink)?;
+        let result = tokio::try_join!(uplink, downlink);
+
+        // Clean up peer map entry
+        if local_src_port != 0 {
+            lock_or_recover(&peer_map).remove(&local_src_port);
+        }
+
+        result?;
     }
 }
 
@@ -240,6 +310,65 @@ fn geo_from_remote_addr(remote: &IncomingAddr) -> Option<IrohGeo> {
     })
 }
 
+const IROH_KEY_HISTORY_FILE: &str = "iroh_key_history.json";
+
+/// Rotate the iroh secret key.  The old key is archived in `iroh_key_history.json`.
+/// Returns `(old_endpoint_id, new_endpoint_id)`.
+///
+/// **Breaking**: all existing iroh connections will drop.  Clients need to
+/// re-scan an updated invite QR (TOTP secrets remain valid — only the
+/// endpoint_id changes).
+pub fn rotate_secret_key(skill_dir: &Path) -> Result<(String, String), String> {
+    let key_path = skill_dir.join(IROH_SECRET_FILE);
+    let history_path = skill_dir.join(IROH_KEY_HISTORY_FILE);
+
+    // Load old key (if any)
+    let old_key = load_or_create_secret_key(skill_dir)?;
+    let old_id = old_key.public().to_string();
+
+    // Archive old key
+    let mut history: Vec<serde_json::Value> = std::fs::read_to_string(&history_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    history.push(serde_json::json!({
+        "endpoint_id": old_id,
+        "rotated_at": crate::unix_secs(),
+    }));
+    let hist_json = serde_json::to_string_pretty(&history)
+        .map_err(|e| format!("serialize history: {e}"))?;
+    std::fs::write(&history_path, hist_json)
+        .map_err(|e| format!("write history: {e}"))?;
+
+    // Generate new key
+    let new_key = {
+        let mut rng = rand::rng();
+        SecretKey::generate(&mut rng)
+    };
+    std::fs::write(&key_path, new_key.to_bytes())
+        .map_err(|e| format!("write new key: {e}"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    let new_id = new_key.public().to_string();
+    eprintln!("[iroh] key rotated: {old_id} → {new_id}");
+
+    Ok((old_id, new_id))
+}
+
+/// Return the key rotation history.
+pub fn key_history(skill_dir: &Path) -> Vec<serde_json::Value> {
+    let path = skill_dir.join(IROH_KEY_HISTORY_FILE);
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
     let path = skill_dir.join(IROH_SECRET_FILE);
 
@@ -272,4 +401,96 @@ fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
     }
 
     Ok(secret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_or_create_secret_key_creates_new_key() {
+        let td = tempfile::tempdir().expect("td");
+        let key1 = load_or_create_secret_key(td.path()).expect("create");
+        let path = td.path().join(IROH_SECRET_FILE);
+        assert!(path.exists());
+        let bytes = std::fs::read(&path).expect("read");
+        assert_eq!(bytes.len(), 32);
+
+        // Loading again returns the same key
+        let key2 = load_or_create_secret_key(td.path()).expect("load");
+        assert_eq!(key1.to_bytes(), key2.to_bytes());
+    }
+
+    #[test]
+    fn load_or_create_secret_key_rejects_bad_file() {
+        let td = tempfile::tempdir().expect("td");
+        let path = td.path().join(IROH_SECRET_FILE);
+        std::fs::write(&path, b"too_short").expect("write");
+        let result = load_or_create_secret_key(td.path());
+        assert!(result.is_err());
+        assert!(result.expect_err("err").contains("expected 32 bytes"));
+    }
+
+    #[test]
+    fn load_or_create_secret_key_deterministic_from_file() {
+        let td = tempfile::tempdir().expect("td");
+        let path = td.path().join(IROH_SECRET_FILE);
+        let raw = [42u8; 32];
+        std::fs::write(&path, raw).expect("write");
+        let key = load_or_create_secret_key(td.path()).expect("load");
+        assert_eq!(key.to_bytes(), raw);
+    }
+
+    #[test]
+    fn iroh_runtime_state_default() {
+        let state = IrohRuntimeState::default();
+        assert!(!state.online);
+        assert!(state.endpoint_id.is_empty());
+        assert!(state.relay_url.is_empty());
+        assert_eq!(state.local_port, 0);
+        assert!(state.last_error.is_none());
+    }
+
+    #[test]
+    fn rotate_secret_key_changes_endpoint_id() {
+        let td = tempfile::tempdir().expect("td");
+        // Create initial key
+        let _k = load_or_create_secret_key(td.path()).expect("create");
+
+        let (old_id, new_id) = super::rotate_secret_key(td.path()).expect("rotate");
+        assert_ne!(old_id, new_id, "rotation should produce a different endpoint_id");
+
+        // Loading key should return the new one
+        let loaded = load_or_create_secret_key(td.path()).expect("load after rotate");
+        let loaded_id = iroh::PublicKey::from(loaded.public()).to_string();
+        assert_eq!(loaded_id, new_id);
+
+        // History should have one entry
+        let hist = super::key_history(td.path());
+        assert_eq!(hist.len(), 1);
+        assert_eq!(hist[0]["endpoint_id"].as_str().unwrap(), &old_id);
+    }
+
+    #[test]
+    fn rotate_twice_builds_history() {
+        let td = tempfile::tempdir().expect("td");
+        let _k = load_or_create_secret_key(td.path()).expect("create");
+
+        super::rotate_secret_key(td.path()).expect("rotate 1");
+        super::rotate_secret_key(td.path()).expect("rotate 2");
+
+        let hist = super::key_history(td.path());
+        assert_eq!(hist.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_key_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let td = tempfile::tempdir().expect("td");
+        load_or_create_secret_key(td.path()).expect("create");
+        let path = td.path().join(IROH_SECRET_FILE);
+        let perms = std::fs::metadata(&path).expect("meta").permissions();
+        assert_eq!(perms.mode() & 0o777, 0o600, "secret key file should be owner-only");
+    }
 }

@@ -413,6 +413,35 @@ pub fn open_bt_settings() {
     }
 }
 
+/// Check whether the OS Bluetooth adapter is powered on. Returns `true` on
+/// non-macOS platforms (no special check required there).
+#[tauri::command]
+pub fn check_bluetooth_power() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        // Use system_profiler to read the Bluetooth power state. This is a
+        // best-effort check — system_profiler can be slow but is available
+        // on macOS by default.
+        match Command::new("sh")
+            .arg("-c")
+            .arg("system_profiler SPBluetoothDataType -detailLevel mini | grep 'Bluetooth Power' || true")
+            .output()
+        {
+            Ok(out) => {
+                let s = String::from_utf8_lossy(&out.stdout).to_lowercase();
+                // Some macOS versions print "Bluetooth Power: On" while others use "State: On".
+                s.contains("bluetooth power: on") || s.contains("state: on")
+            }
+            Err(_) => true,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 window_cmd!(open_settings_window, "settings", "settings",
     "NeuroSkill™ – Settings",
     size: (760.0, 720.0), min: (580.0, 560.0));

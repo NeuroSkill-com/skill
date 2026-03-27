@@ -793,6 +793,19 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
             let auth = app.state::<skill_iroh::SharedIrohAuth>();
             skill_iroh::commands::iroh_client_set_scope(&auth, msg)
         }
+        "iroh_phone_invite" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            let rt = app.state::<skill_iroh::SharedIrohRuntime>();
+            skill_iroh::commands::iroh_phone_invite(&auth, &rt, msg)
+        }
+        "iroh_scope_groups" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_scope_groups(&auth)
+        }
+        "iroh_client_permissions" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_permissions(&auth, msg)
+        }
         "list_calibrations" => calibration::list_calibrations(app),
         "get_calibration" => calibration::get_calibration(app, msg),
         "create_calibration" => calibration::create_calibration(app, msg),

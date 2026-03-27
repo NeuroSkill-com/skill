@@ -13,6 +13,7 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Kalibrierung",
   "onboarding.step.models": "Modelle",
   "onboarding.step.tray": "Tray",
+  "onboarding.step.enable_bluetooth": "Bluetooth aktivieren",
   "onboarding.step.done": "Fertig",
   "onboarding.welcomeTitle": "Willkommen bei {app}",
   "onboarding.welcomeBody": "{app} zeichnet EEG-Daten deines BCI-Geräts auf, analysiert und indexiert sie.",
@@ -57,6 +58,11 @@ const onboarding: Record<string, string> = {
   "onboarding.calibrationNeedsBt": "Verbinde zuerst dein Headset, um die Kalibrierung zu starten.",
   "onboarding.calibrationSkip":
     "Du kannst dies überspringen und später über das Tray-Menü oder die Einstellungen kalibrieren.",
+  "onboarding.enableBluetoothTitle": "Bluetooth auf Ihrem Mac aktivieren",
+  "onboarding.enableBluetoothBody": "{app} benötigt, dass der Bluetooth-Adapter Ihres Mac eingeschaltet ist, um Ihr BCI-Gerät zu finden und zu verbinden. Bitte aktivieren Sie Bluetooth in den Systemeinstellungen, falls es ausgeschaltet ist.",
+  "onboarding.enableBluetoothStatus": "Bluetooth-Adapter",
+  "onboarding.enableBluetoothHint": "Öffnen Sie die Systemeinstellungen → Bluetooth und schalten Sie Bluetooth ein. Wenn Sie in Entwicklung über Terminal ausführen, stellen Sie sicher, dass der Systemadapter aktiviert ist.",
+  "onboarding.enableBluetoothOpen": "Bluetooth-Einstellungen öffnen",
   "onboarding.modelsTitle": "Empfohlene Modelle herunterladen",
   "onboarding.modelsBody":
     "Für die beste lokale Erfahrung lade jetzt diese Standardmodelle herunter: Qwen3.5 4B (Q4_K_M), ZUNA-Encoder, NeuTTS und Kitten TTS.",
