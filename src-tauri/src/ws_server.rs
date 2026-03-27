@@ -394,6 +394,7 @@ impl ServeHandle {
 
     /// Start the combined HTTP + WebSocket + (optional) LLM server.
     /// Spawn this with `tauri::async_runtime::spawn`.  Never returns.
+    #[allow(dead_code)]
     pub async fn serve(self, app: AppHandle) {
         self.serve_with_mode(app, false, None).await;
     }
