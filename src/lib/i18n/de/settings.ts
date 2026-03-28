@@ -198,6 +198,11 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Kalibrierung",
   "settingsTabs.updates": "Aktualisierungen",
 
+  "settings.mainWindow": "Hauptfenster",
+  "settings.autoFitToggle": "Dashboard-Höhe automatisch anpassen",
+  "settings.autoFitToggleDesc":
+    "Vergrößert oder verkleinert das Hauptfenster passend zum Dashboard-Inhalt, begrenzt auf die Bildschirmhöhe.",
+
   "settings.activityTracking": "Aktivitätsverfolgung",
   "settings.activeWindowToggle": "Aktives Fenster verfolgen",
   "settings.activeWindowToggleDesc":

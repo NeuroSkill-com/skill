@@ -314,6 +314,11 @@ const settings: Record<string, string> = {
 
   "settingsTabs.tts": "Voice",
 
+  "settings.mainWindow": "Main Window",
+  "settings.autoFitToggle": "Auto-fit dashboard height",
+  "settings.autoFitToggleDesc":
+    "Expands or contracts the main window to match dashboard content, clamped to screen height.",
+
   "settings.activityTracking": "Activity Tracking",
   "settings.activeWindowToggle": "Track Active Window",
   "settings.activeWindowToggleDesc":

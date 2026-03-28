@@ -1875,7 +1875,7 @@ useWindowTitle("window.title.history");
                         />
                       {:else}
                         <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
-                                onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_label_window_at", { ts: session.start_utc }); }}>
+                                onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_label_window_at", { ts: session.session_start_utc ?? 0 }); }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                                class="w-3 h-3 mr-1">

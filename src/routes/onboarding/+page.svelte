@@ -80,7 +80,7 @@ const STEPS: Step[] = ["welcome", "enable_bluetooth", "bluetooth", "fit", "calib
 let step = $state<Step>("welcome");
 
 // ── Bluetooth adapter check (OS-level)
-let btEnabled: boolean | null = null;
+let btEnabled = $state<boolean | null>(null);
 let stepIdx = $derived(STEPS.indexOf(step));
 
 // ── Reactive status ────────────────────────────────────────────────────────

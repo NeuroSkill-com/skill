@@ -612,18 +612,31 @@ fn process_eeg(
         let engage_raw = skill_devices::compute_engagement_raw(&snap);
         let focus = skill_devices::focus_score(engage_raw);
         let nch = snap.channels.len().max(1) as f64;
-        let avg_alpha = snap.channels.iter().map(|c| c.rel_alpha as f64).sum::<f64>() / nch;
-        let avg_beta  = snap.channels.iter().map(|c| c.rel_beta  as f64).sum::<f64>() / nch;
+        let avg_alpha = snap
+            .channels
+            .iter()
+            .map(|c| c.rel_alpha as f64)
+            .sum::<f64>()
+            / nch;
+        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
         let relaxation = if (avg_alpha + avg_beta) > 0.0 {
             (avg_alpha / (avg_alpha + avg_beta)) * 100.0
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
 
         let mut enriched = serde_json::to_value(&snap).unwrap_or_default();
         if let Some(obj) = enriched.as_object_mut() {
             obj.insert("focus".into(), serde_json::json!(skill_router::r1d(focus)));
-            obj.insert("relaxation".into(), serde_json::json!(skill_router::r1d(relaxation)));
-            obj.insert("engagement".into(), serde_json::json!(skill_router::r1d(engagement)));
+            obj.insert(
+                "relaxation".into(),
+                serde_json::json!(skill_router::r1d(relaxation)),
+            );
+            obj.insert(
+                "engagement".into(),
+                serde_json::json!(skill_router::r1d(engagement)),
+            );
         }
         let _ = app.emit("eeg-bands", &enriched);
         app.state::<WsBroadcaster>().send("eeg-bands", &enriched);

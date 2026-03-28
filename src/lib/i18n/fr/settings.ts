@@ -200,6 +200,11 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Calibration",
   "settingsTabs.updates": "Mises à jour",
 
+  "settings.mainWindow": "Fenêtre principale",
+  "settings.autoFitToggle": "Ajuster automatiquement la hauteur du tableau de bord",
+  "settings.autoFitToggleDesc":
+    "Agrandit ou réduit la fenêtre principale pour correspondre au contenu du tableau de bord, limité à la hauteur de l'écran.",
+
   "settings.activityTracking": "Suivi d'activité",
   "settings.activeWindowToggle": "Suivre la fenêtre active",
   "settings.activeWindowToggleDesc":

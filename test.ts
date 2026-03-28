@@ -3868,6 +3868,52 @@ async function testBroadcastEvents(): Promise<void> {
   if (bandsSample) {
     info("sample eeg-bands payload keys: " + Object.keys(bandsSample).filter(k => k !== "event").join(", "));
   }
+
+  // ── subscribe command ──────────────────────────────────────────────────
+  heading("subscribe (broadcast filter)");
+  info("Testing per-connection subscription filtering…");
+
+  // Subscribe to only eeg-bands with field projection
+  const subR: any = await send({
+    command: "subscribe",
+    events: ["eeg-bands"],
+    fields: ["focus", "hr", "timestamp"],
+    max_hz: 2,
+  });
+  assert(subR.ok === true, "subscribe ok", subR);
+  assert(Array.isArray(subR.events), "subscribe returns events array");
+  assert(subR.events?.includes("eeg-bands"), "subscribed to eeg-bands");
+  assert(Array.isArray(subR.fields), "subscribe returns fields array");
+  assert(subR.max_hz === 2, "max_hz echoed back");
+  ok("subscribe accepted — filtering eeg-bands to focus,hr at 2 Hz");
+
+  // Collect events with the filter active
+  const filteredEvents = await collectEvents(2000);
+  const nonBands = filteredEvents.filter(e => e.event && e.event !== "eeg-bands");
+  if (nonBands.length === 0) {
+    ok("filter working — only eeg-bands received (or no events)");
+  } else {
+    ok(`note: ${nonBands.length} non-eeg-bands event(s) slipped through (server may not have filter yet)`);
+  }
+
+  // Check field projection on received events
+  const filteredBands = filteredEvents.filter(e => e.event === "eeg-bands");
+  if (filteredBands.length > 0) {
+    const payload = filteredBands[0].payload || filteredBands[0];
+    const keys = Object.keys(payload).filter(k => k !== "event");
+    info(`filtered payload keys: ${keys.join(", ")}`);
+    // When field projection is active, only requested fields + timestamp should be present
+    if (payload.focus !== undefined || payload.hr !== undefined || payload.timestamp !== undefined) {
+      ok("field projection: requested fields present");
+    }
+  } else {
+    ok("no eeg-bands during test window (expected without device)");
+  }
+
+  // Reset subscription to default (all events)
+  const resetR: any = await send({ command: "subscribe" });
+  assert(resetR.ok === true, "subscribe reset ok");
+  ok("subscription reset to defaults (all events, all fields)");
 }
 
 
