@@ -45,6 +45,18 @@ interface LslConfig {
   paired_streams: LslPairedStream[];
 }
 
+interface SecondarySession {
+  id: string;
+  device_name: string;
+  device_kind: string;
+  channels: number;
+  sample_rate: number;
+  sample_count: number;
+  csv_path: string;
+  started_at: number;
+  battery: number;
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let streams = $state<LslStream[]>([]);
 let scanning = $state(false);
@@ -60,6 +72,8 @@ let sessionState = $state<string>("disconnected");
 let sessionDeviceKind = $state<string>("");
 let sessionDeviceName = $state<string | null>(null);
 let sessionSampleCount = $state(0);
+
+let secondarySessions = $state<SecondarySession[]>([]);
 
 let irohStatus = $state<LslIrohStatus>({ running: false, endpoint_id: null });
 let irohStarting = $state(false);
@@ -128,6 +142,21 @@ async function switchToStream(stream: LslStream) {
   } finally {
     connecting = null;
   }
+}
+
+async function startSecondary(stream: LslStream) {
+  connecting = stream.name;
+  try {
+    await invoke("lsl_start_secondary", { name: stream.name });
+  } catch (e: unknown) {
+    scanError = String(e);
+  } finally {
+    connecting = null;
+  }
+}
+
+async function cancelSecondary(sessionId: string) {
+  await invoke("lsl_cancel_secondary", { sessionId });
 }
 
 async function connectOrSwitch(stream: LslStream) {
@@ -299,6 +328,13 @@ onMount(async () => {
   await refreshIrohStatus();
   await scanStreams();
 
+  // Load initial secondary sessions
+  try {
+    secondarySessions = await invoke<SecondarySession[]>("list_secondary_sessions");
+  } catch {
+    /* ignore */
+  }
+
   pollTimer = setInterval(refreshIrohStatus, 5000);
   manageAutoScanTimer();
 
@@ -311,6 +347,9 @@ onMount(async () => {
       sessionDeviceKind = ev.payload.device_kind;
       sessionDeviceName = ev.payload.device_name;
       sessionSampleCount = ev.payload.sample_count;
+    }),
+    await listen<SecondarySession[]>("secondary-sessions", (ev) => {
+      secondarySessions = ev.payload;
     }),
   );
 });
@@ -377,6 +416,53 @@ onDestroy(() => {
       </span>
     </CardContent>
   </Card>
+{/if}
+
+<!-- ── Secondary Sessions Strip ────────────────────────────────────────── -->
+{#if secondarySessions.length > 0}
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("lsl.backgroundSessions")} ({secondarySessions.length})
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="py-0 px-0">
+        {#each secondarySessions as sess (sess.id)}
+          <div
+            class="flex items-center gap-3 px-4 py-2.5 border-b last:border-b-0
+                   border-border dark:border-white/[0.05]"
+          >
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span
+                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"
+              ></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+            </span>
+            <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+              <span class="text-[0.68rem] font-semibold text-foreground truncate">
+                {sess.device_name}
+              </span>
+              <span class="text-[0.54rem] text-muted-foreground">
+                {sess.channels}ch · {fmtRate(sess.sample_rate)} Hz · {sess.sample_count.toLocaleString()} samples
+              </span>
+            </div>
+            <span
+              class="text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
+                     bg-violet-500/10 text-violet-600 dark:text-violet-400"
+            >
+              {t("lsl.recording")}
+            </span>
+            <button
+              class="text-muted-foreground/40 hover:text-red-500 cursor-pointer text-[0.7rem] shrink-0"
+              onclick={() => cancelSecondary(sess.id)}
+              title={t("lsl.stopRecording")}
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </CardContent>
+    </Card>
+  </section>
 {/if}
 
 <!-- ── Auto-Connect Toggle ────────────────────────────────────────────────── -->
@@ -570,25 +656,44 @@ onDestroy(() => {
                     {t("lsl.pair")}
                   </Button>
                 {/if}
-                <Button
-                  variant={stream.paired ? "default" : "outline"}
-                  size="sm"
-                  class="h-7 text-[0.58rem] px-3"
-                  disabled={connecting !== null}
-                  onclick={() => connectOrSwitch(stream)}
-                >
-                  {#if connecting === stream.name}
-                    {t("lsl.connecting")}
-                  {:else if isOtherSessionActive}
-                    {t("lsl.switchTo")}
-                  {:else if isLslSessionActive}
-                    {t("lsl.connect")}
-                  {:else if stream.paired}
-                    {t("lsl.connect")}
-                  {:else}
-                    {t("lsl.pairAndConnect")}
-                  {/if}
-                </Button>
+                {#if isSessionActive}
+                  <!-- When a session is active, offer both Switch and Background -->
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 text-[0.54rem] px-2 text-muted-foreground"
+                    disabled={connecting !== null}
+                    onclick={() => startSecondary(stream)}
+                    title={t("lsl.backgroundHint")}
+                  >
+                    {connecting === stream.name ? "…" : t("lsl.background")}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    class="h-7 text-[0.58rem] px-3"
+                    disabled={connecting !== null}
+                    onclick={() => connectOrSwitch(stream)}
+                  >
+                    {connecting === stream.name ? t("lsl.connecting") : t("lsl.switchTo")}
+                  </Button>
+                {:else}
+                  <Button
+                    variant={stream.paired ? "default" : "outline"}
+                    size="sm"
+                    class="h-7 text-[0.58rem] px-3"
+                    disabled={connecting !== null}
+                    onclick={() => connectOrSwitch(stream)}
+                  >
+                    {#if connecting === stream.name}
+                      {t("lsl.connecting")}
+                    {:else if stream.paired}
+                      {t("lsl.connect")}
+                    {:else}
+                      {t("lsl.pairAndConnect")}
+                    {/if}
+                  </Button>
+                {/if}
               </div>
             </div>
           {/each}

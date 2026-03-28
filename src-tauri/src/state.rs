@@ -89,6 +89,29 @@ pub struct ScannerHandle {
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 
+// ── Secondary (concurrent) sessions ──────────────────────────────────────────
+
+/// A lightweight concurrent session that records to its own CSV while
+/// the primary session owns the dashboard and embedding pipeline.
+#[derive(Clone, Serialize)]
+pub struct SecondarySessionInfo {
+    pub id: String,
+    pub device_name: String,
+    pub device_kind: String,
+    pub channels: usize,
+    pub sample_rate: f64,
+    pub sample_count: u64,
+    pub csv_path: String,
+    pub started_at: u64,
+    pub battery: f32,
+}
+
+/// Cancel handle for a secondary session (not serialisable).
+pub struct SecondarySessionHandle {
+    pub cancel: tokio_util::sync::CancellationToken,
+    pub info: SecondarySessionInfo,
+}
+
 // ── Shared frontend-visible status ────────────────────────────────────────────
 
 #[derive(Clone, Serialize)]
@@ -500,6 +523,10 @@ pub struct AppState {
     pub snr_sum: f64,
     pub snr_count: u64,
 
+    /// Concurrent secondary sessions recording in the background.
+    /// Key is the session id (e.g. "lsl:OpenBCI", "ble:Muse-1234").
+    pub secondary_sessions: std::collections::HashMap<String, SecondarySessionHandle>,
+
     // ── Infrastructure ────────────────────────────────────────────────────
     pub skill_dir: std::path::PathBuf,
     pub logger: std::sync::Arc<SkillLogger>,
@@ -679,6 +706,7 @@ impl Default for AppState {
             session_start_utc: None,
             snr_sum: 0.0,
             snr_count: 0,
+            secondary_sessions: std::collections::HashMap::new(),
             label_store: label_store::LabelStore::open(&skill_dir),
 
             shortcuts: ShortcutState::default(),

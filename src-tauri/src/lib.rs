@@ -79,6 +79,7 @@ mod device_scanner;
 pub(crate) use device_scanner::start_background_scanner;
 
 /// Generic device session runner (replaces per-device session modules).
+mod secondary_session;
 mod session_runner;
 
 /// Per-device scan / connect factories → `Box<dyn DeviceAdapter>`.
@@ -1661,6 +1662,9 @@ pub fn run() {
             settings_cmds::lsl_cmds::lsl_get_config,
             settings_cmds::lsl_cmds::lsl_set_auto_connect,
             settings_cmds::lsl_cmds::lsl_switch_session,
+            settings_cmds::lsl_cmds::lsl_start_secondary,
+            settings_cmds::lsl_cmds::lsl_cancel_secondary,
+            settings_cmds::lsl_cmds::list_secondary_sessions,
             settings_cmds::lsl_cmds::lsl_iroh_start,
             settings_cmds::lsl_cmds::lsl_iroh_status,
             settings_cmds::lsl_cmds::lsl_iroh_stop,

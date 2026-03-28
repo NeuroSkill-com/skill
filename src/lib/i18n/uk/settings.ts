@@ -459,6 +459,13 @@ const settings: Record<string, string> = {
   "lsl.switchTo": "Switch to this",
   "lsl.switchHint": "CLICK CONNECT TO SWITCH",
   "lsl.otherSessionActive": "Another device is streaming",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.background": "Background",
+  "lsl.backgroundHint": "Record this stream in the background while the primary session continues",
+  "lsl.backgroundSessions": "Background Recordings",
+  "lsl.recording": "RECORDING",
+  "lsl.stopRecording": "Stop recording",
 };
 
 export default settings;
