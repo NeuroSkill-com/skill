@@ -5,6 +5,7 @@
 
 ### Bugfixes
 
+- **Fixed iroh LSL sink hardcoded descriptor**: `IrohLslAdapter` was hardcoding 4 channels at 256 Hz regardless of the actual remote stream. The DSP pipeline, CSV writer, and embedding encoder now use the correct channel count, sample rate, and channel labels discovered from the connected source. Added 120-second timeout on stream resolution (was infinite loop) and two-phase start API so the endpoint ID is available immediately.
 - **Fixed `skill-data` screenshot_store tests**: added missing `source`, `chat_session_id`, and `caption` fields to test helper after struct update.
 - **Fixed `skill-jobs` queue test**: captured second `submit()` return value and used correct closure variable in `sequential_execution` test.
 - **Fixed `skill-llm` E2E test model selection**: `best_test_model()` now filters out mmproj filenames, preventing selection of a vision projector (0.54 GB) instead of the actual language model (1.16 GB).
