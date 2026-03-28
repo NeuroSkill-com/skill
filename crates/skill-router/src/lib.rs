@@ -582,6 +582,12 @@ pub const COMMANDS: &[&str] = &[
     "llm_set_autoload_mmproj",
     "llm_add_model",
     "llm_hardware_fit",
+    // LSL stream commands
+    "lsl_discover",
+    "lsl_connect",
+    "lsl_iroh_start",
+    "lsl_iroh_stop",
+    "lsl_iroh_status",
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

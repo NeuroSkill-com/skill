@@ -908,136 +908,56 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
 }
 
 // ── LSL stream commands ───────────────────────────────────────────────────────
+// Delegates to shared helpers in settings_cmds::lsl_cmds to avoid duplication
+// between WS and Tauri command layers.
 
 /// `lsl_discover` — scan for LSL streams on the local network.
-fn lsl_discover(_app: &AppHandle) -> Result<Value, String> {
-    // Run discovery on a blocking thread to avoid blocking the WS handler.
-    let streams = tokio::task::block_in_place(|| skill_lsl::discover_streams(3.0));
-
-    let list: Vec<Value> = streams
-        .iter()
-        .map(|s| {
-            serde_json::json!({
-                "name": s.name,
-                "type": s.stream_type,
-                "channels": s.channel_count,
-                "sample_rate": s.sample_rate,
-                "source_id": s.source_id,
-                "hostname": s.hostname,
-            })
-        })
-        .collect();
-
+fn lsl_discover(app: &AppHandle) -> Result<Value, String> {
+    let paired: Vec<String> = app.app_state().lock_or_recover().lsl_paired_streams.clone();
+    let streams = tokio::task::block_in_place(|| {
+        crate::settings_cmds::lsl_cmds::discover_streams_with_paired(&paired)
+    });
     Ok(serde_json::json!({
         "ok": true,
         "command": "lsl_discover",
-        "streams": list,
-        "count": list.len(),
+        "streams": streams,
+        "count": streams.len(),
     }))
 }
 
-/// `lsl_connect` — connect to a specific LSL stream by name and start a recording session.
+/// `lsl_connect` — connect to a specific LSL stream by name.
 fn lsl_connect(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let name = msg
-        .get("name")
-        .and_then(|v| v.as_str())
-        .map(std::string::ToString::to_string);
-
-    // Start session with "lsl" device kind and the stream name as target
-    let target = name.unwrap_or_default();
-    let app2 = app.clone();
-    tauri::async_runtime::spawn(async move {
-        crate::lifecycle::start_session(&app2, Some(format!("lsl:{target}")));
-    });
-
+    let name = msg.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+    crate::settings_cmds::lsl_cmds::connect_lsl_by_name(app, name);
     Ok(serde_json::json!({ "ok": true, "command": "lsl_connect" }))
 }
 
-/// `lsl_iroh_start` — start the rlsl-iroh sink to accept remote LSL streams.
-///
-/// Returns immediately with the iroh endpoint ID.  The adapter waits in the
-/// background for a remote source to connect (up to 120 s), then starts the
-/// recording session automatically.
+/// `lsl_iroh_start` — start the rlsl-iroh sink.
 async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
-    // Check if already running
-    {
-        let r = app.app_state();
-        let s = r.lock_or_recover();
-        if s.lsl_iroh_endpoint_id.is_some() {
-            return Ok(serde_json::json!({
-                "ok": true,
-                "command": "lsl_iroh_start",
-                "endpoint_id": s.lsl_iroh_endpoint_id,
-                "already_running": true,
-            }));
-        }
-    }
-
-    // Two-phase start: bind iroh endpoint (fast) → return endpoint ID
-    // immediately.  The adapter future resolves once a remote connects.
-    let (endpoint_id, adapter_fut) = skill_lsl::IrohLslAdapter::start_sink_two_phase()
-        .await
-        .map_err(|e| format!("rlsl-iroh bind failed: {e}"))?;
-
-    // Store endpoint ID
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.lsl_iroh_endpoint_id = Some(endpoint_id.clone());
-    }
-
-    // Spawn background: wait for remote source → start session → cleanup
-    let app2 = app.clone();
-    tauri::async_runtime::spawn(async move {
-        match adapter_fut.await {
-            Ok(Ok(adapter)) => {
-                eprintln!("[lsl-iroh] source connected, starting session");
-                let csv = crate::session_csv::new_csv_path(&app2);
-                let cancel = tokio_util::sync::CancellationToken::new();
-                let app3 = app2.clone();
-                crate::session_runner::run_device_session(app3, cancel, csv, Box::new(adapter))
-                    .await;
-            }
-            Ok(Err(e)) => eprintln!("[lsl-iroh] sink resolve failed: {e}"),
-            Err(e) => eprintln!("[lsl-iroh] task panicked: {e}"),
-        }
-        // Clear endpoint ID when done
-        let r = app2.app_state();
-        let mut s = r.lock_or_recover();
-        s.lsl_iroh_endpoint_id = None;
-    });
-
+    let (endpoint_id, already_running) =
+        crate::settings_cmds::lsl_cmds::start_iroh_sink(app).await?;
     Ok(serde_json::json!({
         "ok": true,
         "command": "lsl_iroh_start",
         "endpoint_id": endpoint_id,
+        "already_running": already_running,
     }))
 }
 
 /// `lsl_iroh_status` — return the rlsl-iroh sink endpoint ID.
 fn lsl_iroh_status(app: &AppHandle) -> Result<Value, String> {
-    let r = app.app_state();
-    let s = r.lock_or_recover();
+    let s = crate::settings_cmds::lsl_cmds::get_iroh_status(app);
     Ok(serde_json::json!({
         "ok": true,
         "command": "lsl_iroh_status",
-        "endpoint_id": s.lsl_iroh_endpoint_id,
-        "running": s.lsl_iroh_endpoint_id.is_some(),
+        "endpoint_id": s.endpoint_id,
+        "running": s.running,
     }))
 }
 
 /// `lsl_iroh_stop` — cancel a pending or active rlsl-iroh sink session.
 fn lsl_iroh_stop(app: &AppHandle) -> Result<Value, String> {
-    // Cancel the running session (if any), which will trigger the cleanup
-    // callback in lsl_iroh_start that clears the endpoint ID.
-    crate::lifecycle::cancel_session(app);
-    // Also clear the endpoint ID immediately in case the session hasn't
-    // started yet (still waiting for a remote source to connect).
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.lsl_iroh_endpoint_id = None;
-    }
+    crate::settings_cmds::lsl_cmds::stop_iroh_sink(app);
     Ok(serde_json::json!({
         "ok": true,
         "command": "lsl_iroh_stop",

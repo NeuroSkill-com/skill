@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- LSL tab — discover local LSL streams, pair for auto-connect, and manage rlsl-iroh remote sink. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 
 import { Button } from "$lib/components/ui/button";
@@ -51,6 +52,7 @@ let irohCopied = $state(false);
 
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let unlisteners: UnlistenFn[] = [];
 
 // ── Actions ────────────────────────────────────────────────────────────────
 async function scanStreams() {
@@ -160,11 +162,20 @@ onMount(async () => {
   pollTimer = setInterval(refreshIrohStatus, 5000);
   // Start auto-scan timer if auto-connect is on
   manageAutoScanTimer();
+
+  // Listen for backend auto-connect events (updates UI immediately)
+  unlisteners.push(
+    await listen("lsl-auto-connect", () => {
+      // Re-scan to refresh the stream list after auto-connect
+      scanStreams();
+    }),
+  );
 });
 
 onDestroy(() => {
   if (pollTimer) clearInterval(pollTimer);
   if (scanTimer) clearInterval(scanTimer);
+  for (const u of unlisteners) u();
 });
 </script>
 
