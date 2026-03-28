@@ -192,14 +192,15 @@ mod calibration_service;
 mod window_cmds;
 pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{
-    autosize_main_window, check_accessibility_permission, check_screen_recording_permission,
-    close_calibration_window, close_label_window, complete_onboarding, create_calibration_profile,
-    delete_calibration_profile, dismiss_whats_new, emit_calibration_event, get_active_calibration,
-    get_app_name, get_app_version, get_calendar_events, get_calendar_permission_status,
-    get_calibration_config, get_calibration_profile, get_data_dir, get_onboarding_complete,
+    autosize_main_window, check_accessibility_permission, check_bluetooth_power,
+    check_screen_recording_permission, close_calibration_window, close_label_window,
+    complete_onboarding, create_calibration_profile, delete_calibration_profile, dismiss_whats_new,
+    emit_calibration_event, get_active_calibration, get_app_name, get_app_version,
+    get_calendar_events, get_calendar_permission_status, get_calibration_config,
+    get_calibration_profile, get_data_dir, get_onboarding_complete,
     get_onboarding_model_download_order, get_whats_new_seen_version, get_ws_clients, get_ws_port,
     get_ws_request_log, is_session_live, list_calibration_profiles, open_accessibility_settings,
-    open_and_start_calibration, open_api_window, open_bt_settings, check_bluetooth_power, open_calibration_window,
+    open_and_start_calibration, open_api_window, open_bt_settings, open_calibration_window,
     open_focus_timer_window, open_help_window, open_label_window, open_labels_window,
     open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
@@ -443,7 +444,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let ws_port = serve_handle.port;
     let (ws_shutdown_tx, ws_shutdown_rx) = tokio::sync::watch::channel(false);
     let ws_task = tauri::async_runtime::spawn(async move {
-        serve_handle.serve_with_mode(ws_app, false, Some(ws_shutdown_rx)).await;
+        serve_handle
+            .serve_with_mode(ws_app, false, Some(ws_shutdown_rx))
+            .await;
     });
     let ws_control: ws_server::SharedWsControl = std::sync::Arc::new(std::sync::Mutex::new(Some(
         ws_server::WsServerControl::new(ws_shutdown_tx, ws_task),
@@ -476,7 +479,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(iroh_runtime);
     app.manage(iroh_peer_map);
     app.manage(shared_device_tx);
-    app.manage(std::sync::Arc::new(tokio::sync::Mutex::new(Some(iroh_eeg_rx))));
+    app.manage(std::sync::Arc::new(tokio::sync::Mutex::new(Some(
+        iroh_eeg_rx,
+    ))));
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {

@@ -53,10 +53,9 @@ fn sequential_execution() {
     });
 
     // Job 2: should see counter == 1 (job 1 completed first)
-    q.submit(100, move || {
-        c1.store(1, Ordering::SeqCst);
-        std::thread::sleep(Duration::from_millis(100));
-        Ok(serde_json::json!(1))
+    let t2 = q.submit(100, move || {
+        let val = c2.load(Ordering::SeqCst);
+        Ok(serde_json::json!(val))
     });
     // Wait for both
     let mut r2 = None;

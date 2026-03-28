@@ -4,8 +4,16 @@ mod device_proto_tests {
 
     #[test]
     fn header_all_msg_types() {
-        for msg_type in [MSG_SENSOR_CHUNK, MSG_DEVICE_CONNECTED, MSG_DEVICE_DISCONNECTED,
-                          MSG_BATTERY, MSG_LOCATION, MSG_META, MSG_PHONE_IMU, MSG_PHONE_INFO] {
+        for msg_type in [
+            MSG_SENSOR_CHUNK,
+            MSG_DEVICE_CONNECTED,
+            MSG_DEVICE_DISCONNECTED,
+            MSG_BATTERY,
+            MSG_LOCATION,
+            MSG_META,
+            MSG_PHONE_IMU,
+            MSG_PHONE_INFO,
+        ] {
             let hdr = encode_header(msg_type, 42, 20260315120000, 0, 100);
             let dec = decode_header(&hdr).unwrap();
             assert_eq!(dec.msg_type, msg_type);
@@ -81,8 +89,12 @@ mod device_proto_tests {
     #[test]
     fn location_extreme_values() {
         let loc = Location {
-            latitude: -90.0, longitude: 180.0, altitude: -430.0,
-            accuracy: 0.5, speed: -1.0, heading: -1.0,
+            latitude: -90.0,
+            longitude: 180.0,
+            altitude: -430.0,
+            accuracy: 0.5,
+            speed: -1.0,
+            heading: -1.0,
         };
         let raw = encode_location(&loc);
         let dec = decode_location(&raw).unwrap();
@@ -100,19 +112,21 @@ mod device_proto_tests {
 
     #[test]
     fn phone_imu_large_batch() {
-        let samples: Vec<PhoneImuSample> = (0..500).map(|i| PhoneImuSample {
-            dt: i as f32 * 0.02,
-            raw_accel: [0.0, 0.0, -1.0],
-            user_accel: [0.0; 3],
-            gravity: [0.0, 0.0, -1.0],
-            gyro: [0.0; 3],
-            mag: [25.0, -10.0, 42.0],
-            attitude: [0.0; 3],
-            pressure: 101.3,
-            rel_altitude: 0.0,
-            ambient_light: 0.5,
-            proximity: 0.0,
-        }).collect();
+        let samples: Vec<PhoneImuSample> = (0..500)
+            .map(|i| PhoneImuSample {
+                dt: i as f32 * 0.02,
+                raw_accel: [0.0, 0.0, -1.0],
+                user_accel: [0.0; 3],
+                gravity: [0.0, 0.0, -1.0],
+                gyro: [0.0; 3],
+                mag: [25.0, -10.0, 42.0],
+                attitude: [0.0; 3],
+                pressure: 101.3,
+                rel_altitude: 0.0,
+                ambient_light: 0.5,
+                proximity: 0.0,
+            })
+            .collect();
         let raw = encode_phone_imu(&samples);
         let dec = decode_phone_imu(&raw).unwrap();
         assert_eq!(dec.len(), 500);
@@ -143,12 +157,19 @@ mod receiver_tests {
         // Should be able to send up to capacity without blocking
         for i in 0..16 {
             tx.try_send(RemoteDeviceEvent::Battery {
-                seq: i, timestamp: 0, level_pct: 50.0,
-            }).expect("should not be full");
+                seq: i,
+                timestamp: 0,
+                level_pct: 50.0,
+            })
+            .expect("should not be full");
         }
         // 17th should fail (capacity=16)
-        assert!(tx.try_send(RemoteDeviceEvent::Battery {
-            seq: 17, timestamp: 0, level_pct: 50.0,
-        }).is_err());
+        assert!(tx
+            .try_send(RemoteDeviceEvent::Battery {
+                seq: 17,
+                timestamp: 0,
+                level_pct: 50.0,
+            })
+            .is_err());
     }
 }

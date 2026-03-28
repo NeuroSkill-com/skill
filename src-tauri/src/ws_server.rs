@@ -330,7 +330,10 @@ pub struct WsServerControl {
 }
 
 impl WsServerControl {
-    pub fn new(shutdown_tx: tokio::sync::watch::Sender<bool>, task: tauri::async_runtime::JoinHandle<()>) -> Self {
+    pub fn new(
+        shutdown_tx: tokio::sync::watch::Sender<bool>,
+        task: tauri::async_runtime::JoinHandle<()>,
+    ) -> Self {
         Self { shutdown_tx, task }
     }
 }
@@ -508,11 +511,7 @@ pub async fn restart_server(
     if let Some(ctl) = old_ctl {
         let _ = ctl.shutdown_tx.send(true);
         // Wait briefly for graceful shutdown
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            ctl.task,
-        )
-        .await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ctl.task).await;
     }
 
     // 2. Bind new server

@@ -77,6 +77,14 @@ base64 = "0.22"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# ── TLS crypto provider ──────────────────────────────────────────────────────
+#
+# rustls defaults to aws-lc-rs whose C build (aws-lc-sys) takes ~45 s on a
+# clean compile — the single biggest bottleneck.  ring is already in the dep
+# tree (via iroh/noq-proto) and builds in <2 s, so we force all workspace
+# consumers onto ring instead.  Crates that depend on rustls (directly or
+# transitively) should use this workspace dep.
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #

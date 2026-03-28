@@ -25,10 +25,10 @@ if [ "$FULL_MODE" = "1" ]; then
 
   echo "🔎 Pre-push: Rust clippy"
   cargo clippy --locked --workspace --exclude skill -- -D warnings
-  cargo clippy -p skill --locked --features llm-vulkan,screenshots -- -D warnings
+  cargo clippy -p skill --locked -- -D warnings
 
-  echo "🔎 Pre-push: Rust tests"
-  cargo test --locked --workspace --lib
+  echo "🔎 Pre-push: Rust tests (all tiers)"
+  bash scripts/test-fast.sh --all
 
   echo "✅ Pre-push checks passed (full mode)."
   exit 0

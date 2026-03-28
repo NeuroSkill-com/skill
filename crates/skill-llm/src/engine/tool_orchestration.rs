@@ -889,3 +889,137 @@ async fn execute_tool_calls_parallel<G>(
         }));
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn sanitizer_passes_plain_text() {
+        let mut s = ToolCallStreamSanitizer::new();
+        assert_eq!(s.push("Hello"), "Hello");
+        assert_eq!(s.push(" world"), " world");
+    }
+
+    #[test]
+    fn sanitizer_strips_tool_call_blocks() {
+        let mut s = ToolCallStreamSanitizer::new();
+        assert_eq!(s.push("Before "), "Before ");
+        let _ = s.push("[TOOL_CALL]");
+        let _ = s.push(r#"{"name":"date"}"#);
+        let _ = s.push("[/TOOL_CALL]");
+        let after = s.push(" After");
+        assert!(after.contains("After"));
+    }
+
+    #[test]
+    fn sanitizer_incremental() {
+        let mut s = ToolCallStreamSanitizer::new();
+        let mut full = String::new();
+        for piece in &["He", "llo", " wo", "rld"] {
+            full.push_str(&s.push(piece));
+        }
+        assert_eq!(full, "Hello world");
+    }
+
+    #[test]
+    fn sanitizer_empty() {
+        let mut s = ToolCallStreamSanitizer::new();
+        assert_eq!(s.push(""), "");
+    }
+
+    #[test]
+    fn summarize_date() {
+        let r = json!({"ok":true,"tool":"date","iso_local":"2026-03-28T12:00:00-07:00"});
+        let s = summarize_tool_result(&r.to_string());
+        assert!(s.contains("date") && s.contains("2026-03-28"));
+    }
+
+    #[test]
+    fn summarize_bash() {
+        let r = json!({"ok":true,"tool":"bash","command":"ls -la","exit_code":0});
+        let s = summarize_tool_result(&r.to_string());
+        assert!(s.contains("bash") && s.contains("ls -la") && s.contains("exit=0"));
+    }
+
+    #[test]
+    fn summarize_web_search() {
+        let r = json!({"ok":true,"tool":"web_search","query":"rust","results":[{"t":"a"},{"t":"b"}]});
+        assert!(summarize_tool_result(&r.to_string()).contains("2 results"));
+    }
+
+    #[test]
+    fn summarize_error() {
+        let r = json!({"ok":false,"tool":"bash","error":"not found"});
+        assert!(summarize_tool_result(&r.to_string()).contains("not found"));
+    }
+
+    #[test]
+    fn summarize_skill() {
+        let r = json!({"ok":true,"tool":"skill","command":"status"});
+        assert!(summarize_tool_result(&r.to_string()).contains("status"));
+    }
+
+    #[test]
+    fn summarize_unknown() {
+        let r = json!({"ok":true,"tool":"custom"});
+        assert!(summarize_tool_result(&r.to_string()).contains("custom"));
+    }
+
+    #[test]
+    fn summarize_long_text_truncates() {
+        assert!(summarize_tool_result(&"x".repeat(500)).len() < 200);
+    }
+
+    #[test]
+    fn summarize_read_file() {
+        let r = json!({"ok":true,"tool":"read_file","total_lines":42});
+        assert!(summarize_tool_result(&r.to_string()).contains("42"));
+    }
+
+    #[test]
+    fn summarize_web_fetch() {
+        let r = json!({"ok":true,"tool":"web_fetch","url":"https://example.com","content":"hi"});
+        assert!(summarize_tool_result(&r.to_string()).contains("example.com"));
+    }
+
+    #[test]
+    fn summarize_location() {
+        let r = json!({"ok":true,"tool":"location","city":"SF","region":"CA","country":"US","timezone":"PST"});
+        assert!(summarize_tool_result(&r.to_string()).contains("SF"));
+    }
+
+    #[test]
+    fn condense_skips_current_round() {
+        let long = "x".repeat(500);
+        let mut msgs = vec![
+            json!({"role":"user","content":"hi"}),
+            json!({"role":"tool","tool_call_id":"old","content":long}),
+            json!({"role":"tool","tool_call_id":"new","content":long}),
+        ];
+        condense_prior_tool_results(&mut msgs, 2);
+        assert!(msgs[1]["content"].as_str().unwrap().len() < 200);
+        assert_eq!(msgs[2]["content"].as_str().unwrap().len(), 500);
+    }
+
+    #[test]
+    fn condense_skips_short() {
+        let mut msgs = vec![json!({"role":"tool","tool_call_id":"t","content":"ok"})];
+        condense_prior_tool_results(&mut msgs, 1);
+        assert_eq!(msgs[0]["content"].as_str().unwrap(), "ok");
+    }
+
+    #[test]
+    fn condense_skips_non_tool() {
+        let long = "x".repeat(500);
+        let mut msgs = vec![
+            json!({"role":"user","content":long}),
+            json!({"role":"assistant","content":long}),
+        ];
+        condense_prior_tool_results(&mut msgs, 2);
+        assert_eq!(msgs[0]["content"].as_str().unwrap().len(), 500);
+    }
+}

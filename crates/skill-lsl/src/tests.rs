@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use skill_devices::session::{DeviceAdapter, DeviceCaps, DeviceEvent};
+    use skill_devices::session::{DeviceAdapter, DeviceCaps};
 
     // ── LslAdapter unit tests ─────────────────────────────────────────────
 
@@ -60,8 +60,12 @@ mod tests {
             source_id: "test-001".into(),
             hostname: "lab-pc".into(),
             info: rlsl::stream_info::StreamInfo::new(
-                "TestEEG", "EEG", 32, 500.0,
-                rlsl::types::ChannelFormat::Float32, "test-001",
+                "TestEEG",
+                "EEG",
+                32,
+                500.0,
+                rlsl::types::ChannelFormat::Float32,
+                "test-001",
             ),
         };
         assert_eq!(info.name, "TestEEG");
@@ -98,76 +102,77 @@ mod tests {
     fn e2e_lsl_outlet_to_adapter() {
         // rlsl internally creates a tokio runtime — run everything on a clean thread.
         std::thread::spawn(|| {
-        use rlsl::prelude::*;
-        use rlsl::types::ChannelFormat;
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
 
-        // Create a local outlet
-        let info = StreamInfo::new(
-            "SkillTest", "EEG", 4, 256.0,
-            ChannelFormat::Float32, "test-e2e-001",
-        );
-        let desc = info.desc();
-        let channels = desc.append_child("channels");
-        for label in &["Fp1", "Fp2", "O1", "O2"] {
-            let ch = channels.append_child("channel");
-            ch.append_child_value("label", label);
-        }
-        let outlet = StreamOutlet::new(&info, 0, 360);
+            // Create a local outlet
+            let info = StreamInfo::new("SkillTest", "EEG", 4, 256.0, ChannelFormat::Float32, "test-e2e-001");
+            let desc = info.desc();
+            let channels = desc.append_child("channels");
+            for label in &["Fp1", "Fp2", "O1", "O2"] {
+                let ch = channels.append_child("channel");
+                ch.append_child_value("label", label);
+            }
+            let outlet = StreamOutlet::new(&info, 0, 360);
 
-        // Push some samples
-        for i in 0..100 {
-            let sample = [i as f32 * 0.1, i as f32 * 0.2, i as f32 * 0.3, i as f32 * 0.4];
-            outlet.push_sample_f(&sample, 0.0, true);
-        }
+            // Push some samples
+            for i in 0..100 {
+                let sample = [i as f32 * 0.1, i as f32 * 0.2, i as f32 * 0.3, i as f32 * 0.4];
+                outlet.push_sample_f(&sample, 0.0, true);
+            }
 
-        // Create adapter from the same info
-        let mut adapter = crate::LslAdapter::new(&info);
+            // Create adapter from the same info
+            let adapter = crate::LslAdapter::new(&info);
 
-        let adapter = crate::LslAdapter::new(&info);
-
-        // Descriptor should have 4 channels at 256 Hz with labels
-        let desc = adapter.descriptor();
-        assert_eq!(desc.eeg_channels, 4);
-        assert_eq!(desc.eeg_sample_rate, 256.0);
-        assert_eq!(desc.kind, "lsl");
-        assert!(desc.caps.contains(DeviceCaps::EEG));
-        assert_eq!(desc.channel_names, vec!["Fp1", "Fp2", "O1", "O2"]);
-        assert_eq!(desc.pipeline_channels, 4);
-        }).join().unwrap();
+            // Descriptor should have 4 channels at 256 Hz with labels
+            let desc = adapter.descriptor();
+            assert_eq!(desc.eeg_channels, 4);
+            assert_eq!(desc.eeg_sample_rate, 256.0);
+            assert_eq!(desc.kind, "lsl");
+            assert!(desc.caps.contains(DeviceCaps::EEG));
+            assert_eq!(desc.channel_names, vec!["Fp1", "Fp2", "O1", "O2"]);
+            assert_eq!(desc.pipeline_channels, 4);
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]
     fn e2e_lsl_high_channel_count() {
         std::thread::spawn(|| {
-        use rlsl::prelude::*;
-        use rlsl::types::ChannelFormat;
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
 
-        let ch_count = 64;
-        let info = StreamInfo::new(
-            "HighDensity", "EEG", ch_count, 1000.0,
-            ChannelFormat::Double64, "test-hd-001",
-        );
-        let outlet = StreamOutlet::new(&info, 0, 360);
+            let ch_count = 64;
+            let info = StreamInfo::new(
+                "HighDensity",
+                "EEG",
+                ch_count,
+                1000.0,
+                ChannelFormat::Double64,
+                "test-hd-001",
+            );
+            let outlet = StreamOutlet::new(&info, 0, 360);
 
-        // Push samples
-        let sample: Vec<f32> = (0..ch_count).map(|i| i as f32).collect();
-        for _ in 0..50 {
-            outlet.push_sample_f(&sample, 0.0, true);
-        }
+            // Push samples
+            let sample: Vec<f32> = (0..ch_count).map(|i| i as f32).collect();
+            for _ in 0..50 {
+                outlet.push_sample_f(&sample, 0.0, true);
+            }
 
-        let mut adapter = crate::LslAdapter::new(&info);
+            let adapter = crate::LslAdapter::new(&info);
 
-        let adapter = crate::LslAdapter::new(&info);
-
-        // Descriptor should cap pipeline at EEG_CHANNELS but store all 64
-        let desc = adapter.descriptor();
-        assert_eq!(desc.eeg_channels, ch_count as usize);
-        assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
-        assert_eq!(desc.eeg_sample_rate, 1000.0);
-        assert_eq!(desc.channel_names.len(), 64);
-        assert_eq!(desc.channel_names[0], "Ch1");
-        assert_eq!(desc.channel_names[63], "Ch64");
-        }).join().unwrap();
+            // Descriptor should cap pipeline at EEG_CHANNELS but store all 64
+            let desc = adapter.descriptor();
+            assert_eq!(desc.eeg_channels, ch_count as usize);
+            assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
+            assert_eq!(desc.eeg_sample_rate, 1000.0);
+            assert_eq!(desc.channel_names.len(), 64);
+            assert_eq!(desc.channel_names[0], "Ch1");
+            assert_eq!(desc.channel_names[63], "Ch64");
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]
@@ -177,8 +182,12 @@ mod tests {
 
         for srate in [125.0, 256.0, 500.0, 1000.0, 2048.0] {
             let info = StreamInfo::new(
-                &format!("Rate{}", srate as u32), "EEG", 4, srate,
-                ChannelFormat::Float32, &format!("test-rate-{}", srate as u32),
+                &format!("Rate{}", srate as u32),
+                "EEG",
+                4,
+                srate,
+                ChannelFormat::Float32,
+                &format!("test-rate-{}", srate as u32),
             );
             // Don't create outlet/adapter — just verify the info construction
             assert_eq!(info.nominal_srate(), srate);
@@ -189,49 +198,53 @@ mod tests {
     #[test]
     fn e2e_lsl_channel_labels_from_xml() {
         std::thread::spawn(|| {
-        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-        rt.block_on(async {
-        use rlsl::prelude::*;
-        use rlsl::types::ChannelFormat;
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                use rlsl::prelude::*;
+                use rlsl::types::ChannelFormat;
 
-        let info = StreamInfo::new(
-            "LabelTest", "EEG", 4, 256.0,
-            ChannelFormat::Float32, "test-labels",
-        );
-        let desc = info.desc();
-        let channels = desc.append_child("channels");
-        for label in &["TP9", "AF7", "AF8", "TP10"] {
-            let ch = channels.append_child("channel");
-            ch.append_child_value("label", label);
-        }
+                let info = StreamInfo::new("LabelTest", "EEG", 4, 256.0, ChannelFormat::Float32, "test-labels");
+                let desc = info.desc();
+                let channels = desc.append_child("channels");
+                for label in &["TP9", "AF7", "AF8", "TP10"] {
+                    let ch = channels.append_child("channel");
+                    ch.append_child_value("label", label);
+                }
 
-        let adapter = crate::LslAdapter::new(&info);
-        let d = adapter.descriptor();
-        assert_eq!(d.channel_names, vec!["TP9", "AF7", "AF8", "TP10"]);
-        });
-        }).join().unwrap();
+                let adapter = crate::LslAdapter::new(&info);
+                let d = adapter.descriptor();
+                assert_eq!(d.channel_names, vec!["TP9", "AF7", "AF8", "TP10"]);
+            });
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]
     fn e2e_lsl_missing_labels_fallback() {
         std::thread::spawn(|| {
-        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
-        rt.block_on(async {
-        use rlsl::prelude::*;
-        use rlsl::types::ChannelFormat;
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                use rlsl::prelude::*;
+                use rlsl::types::ChannelFormat;
 
-        let info = StreamInfo::new(
-            "NoLabels", "EEG", 8, 500.0,
-            ChannelFormat::Float32, "test-nolabels",
-        );
-        // Don't add any channel labels in desc
+                let info = StreamInfo::new("NoLabels", "EEG", 8, 500.0, ChannelFormat::Float32, "test-nolabels");
+                // Don't add any channel labels in desc
 
-        let adapter = crate::LslAdapter::new(&info);
-        let d = adapter.descriptor();
-        assert_eq!(d.channel_names.len(), 8);
-        assert_eq!(d.channel_names[0], "Ch1");
-        assert_eq!(d.channel_names[7], "Ch8");
-        });
-        }).join().unwrap();
+                let adapter = crate::LslAdapter::new(&info);
+                let d = adapter.descriptor();
+                assert_eq!(d.channel_names.len(), 8);
+                assert_eq!(d.channel_names[0], "Ch1");
+                assert_eq!(d.channel_names[7], "Ch8");
+            });
+        })
+        .join()
+        .unwrap();
     }
 }

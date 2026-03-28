@@ -127,11 +127,7 @@ impl IrohAuthStore {
     }
 
     pub fn list_clients(&self) -> Vec<IrohClientView> {
-        self.db
-            .clients
-            .iter()
-            .map(client_view)
-            .collect()
+        self.db.clients.iter().map(client_view).collect()
     }
 
     pub fn create_totp(&mut self, name: &str) -> Result<(IrohTotpView, String, String), String> {
@@ -677,7 +673,9 @@ mod tests {
         let (tview, _, _) = s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let _c = s.register_client("ep1", &otp, Some(&tview.id), Some("dev"), None).expect("reg");
+        let _c = s
+            .register_client("ep1", &otp, Some(&tview.id), Some("dev"), None)
+            .expect("reg");
         assert!(s.is_endpoint_allowed("ep1"));
 
         s.revoke_totp(&tview.id).expect("revoke totp");
@@ -751,14 +749,22 @@ mod tests {
         s.db.totp[1].secret_b32 = s0.clone();
         s.save().expect("save");
 
-        let otp = totp_from_entry(&s.db.totp[0]).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&s.db.totp[0])
+            .expect("totp")
+            .generate_current()
+            .expect("otp");
         let result = s.register_client("ep1", &otp, None, None, None);
         assert!(result.is_err());
         assert!(result.expect_err("err").contains("multiple"));
 
         // With hint -> should succeed
-        let otp2 = totp_from_entry(&s.db.totp[0]).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("ep1", &otp2, Some(&t1.id), None, None).expect("reg with hint");
+        let otp2 = totp_from_entry(&s.db.totp[0])
+            .expect("totp")
+            .generate_current()
+            .expect("otp");
+        let c = s
+            .register_client("ep1", &otp2, Some(&t1.id), None, None)
+            .expect("reg with hint");
         assert_eq!(c.totp_id, t1.id);
     }
 
@@ -796,7 +802,9 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("abcdef1234567890", &otp, Some(&tentry.id), None, None).expect("reg");
+        let c = s
+            .register_client("abcdef1234567890", &otp, Some(&tentry.id), None, None)
+            .expect("reg");
         assert!(c.name.starts_with("client-"));
     }
 
@@ -818,10 +826,13 @@ mod tests {
         let tentry = s.db.totp.first().expect("exists").clone();
 
         let otp1 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        s.register_client("ep1", &otp1, Some(&tentry.id), Some("first"), None).expect("first reg");
+        s.register_client("ep1", &otp1, Some(&tentry.id), Some("first"), None)
+            .expect("first reg");
 
         let otp2 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c2 = s.register_client("ep2", &otp2, Some(&tentry.id), Some("second"), None).expect("second reg");
+        let c2 = s
+            .register_client("ep2", &otp2, Some(&tentry.id), Some("second"), None)
+            .expect("second reg");
         assert_eq!(c2.name, "second");
         assert_eq!(s.list_clients().len(), 2);
     }
@@ -833,13 +844,17 @@ mod tests {
         let tentry = s.db.totp.first().expect("exists").clone();
 
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c1 = s.register_client("ep1", &otp, Some(&tentry.id), Some("old-name"), Some("read")).expect("first");
+        let c1 = s
+            .register_client("ep1", &otp, Some(&tentry.id), Some("old-name"), Some("read"))
+            .expect("first");
         assert_eq!(c1.name, "old-name");
         assert_eq!(c1.scope, "read");
 
         // Same endpoint_id with new name/scope should update in-place
         let otp2 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c2 = s.register_client("ep1", &otp2, Some(&tentry.id), Some("new-name"), Some("full")).expect("update");
+        let c2 = s
+            .register_client("ep1", &otp2, Some(&tentry.id), Some("new-name"), Some("full"))
+            .expect("update");
         assert_eq!(c2.id, c1.id); // same client entry
         assert_eq!(c2.name, "new-name");
         assert_eq!(c2.scope, "full");
@@ -855,14 +870,20 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None).expect("reg");
+        s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None)
+            .expect("reg");
 
-        s.mark_client_connected("ep1", "1.2.3.4:5678", Some(IrohGeo {
-            ip: "1.2.3.4".into(),
-            country: Some("Germany".into()),
-            city: Some("Berlin".into()),
-            locale: Some("en_US".into()),
-        })).expect("mark");
+        s.mark_client_connected(
+            "ep1",
+            "1.2.3.4:5678",
+            Some(IrohGeo {
+                ip: "1.2.3.4".into(),
+                country: Some("Germany".into()),
+                city: Some("Berlin".into()),
+                locale: Some("en_US".into()),
+            }),
+        )
+        .expect("mark");
 
         let clients = s.list_clients();
         let c = &clients[0];
@@ -880,7 +901,8 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None).expect("reg");
+        s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None)
+            .expect("reg");
 
         s.mark_client_connected("ep1", "relay://xyz", None).expect("mark");
         let clients = s.list_clients();
@@ -895,7 +917,9 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("ep1", &otp, Some(&tentry.id), None, None).expect("reg");
+        let c = s
+            .register_client("ep1", &otp, Some(&tentry.id), None, None)
+            .expect("reg");
         s.revoke_client(&c.id).expect("revoke");
         assert!(s.mark_client_connected("ep1", "addr", None).is_err());
     }
@@ -914,7 +938,9 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("ep1", &otp, Some(&tentry.id), None, Some("read")).expect("reg");
+        let c = s
+            .register_client("ep1", &otp, Some(&tentry.id), None, Some("read"))
+            .expect("reg");
 
         s.set_client_scope(&c.id, "full").expect("set full");
         assert_eq!(s.scope_for_endpoint("ep1").as_deref(), Some("full"));
@@ -929,7 +955,9 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("ep1", &otp, Some(&tentry.id), None, None).expect("reg");
+        let c = s
+            .register_client("ep1", &otp, Some(&tentry.id), None, None)
+            .expect("reg");
         assert!(s.set_client_scope(&c.id, "admin").is_err());
     }
 
@@ -947,7 +975,8 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        s.register_client("ABCDEF", &otp, Some(&tentry.id), None, None).expect("reg");
+        s.register_client("ABCDEF", &otp, Some(&tentry.id), None, None)
+            .expect("reg");
         assert!(s.is_endpoint_allowed("abcdef"));
         assert!(s.is_endpoint_allowed("ABCDEF"));
         assert!(s.is_endpoint_allowed(" abcdef "));
@@ -967,7 +996,9 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let c = s.register_client("ep1", &otp, Some(&tentry.id), None, None).expect("reg");
+        let c = s
+            .register_client("ep1", &otp, Some(&tentry.id), None, None)
+            .expect("reg");
         assert!(s.is_endpoint_allowed("ep1"));
         s.revoke_client(&c.id).expect("revoke");
         assert!(!s.is_endpoint_allowed("ep1"));
@@ -991,7 +1022,8 @@ mod tests {
             s.create_totp("phone").expect("create");
             let tentry = s.db.totp.first().expect("exists").clone();
             let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-            s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), Some("full")).expect("reg");
+            s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), Some("full"))
+                .expect("reg");
         }
 
         // Reopen from disk
@@ -1019,7 +1051,8 @@ mod tests {
     fn build_invite_payload_includes_all_fields() {
         let (_td, mut s) = tmp_store();
         let (view, _, _) = s.create_totp("phone").expect("create");
-        let invite = s.build_invite_payload(&view.id, "endpoint123", "https://relay.example.com/")
+        let invite = s
+            .build_invite_payload(&view.id, "endpoint123", "https://relay.example.com/")
             .expect("invite");
         assert_eq!(invite.endpoint_id, "endpoint123");
         assert_eq!(invite.relay_url, "https://relay.example.com/");
@@ -1071,11 +1104,18 @@ mod tests {
     fn otp_verification_updates_last_used_at() {
         let (_td, mut s) = tmp_store();
         let (tview, _, _) = s.create_totp("phone").expect("create");
-        assert!(s.list_totp().iter().find(|t| t.id == tview.id).expect("find").last_used_at.is_none());
+        assert!(s
+            .list_totp()
+            .iter()
+            .find(|t| t.id == tview.id)
+            .expect("find")
+            .last_used_at
+            .is_none());
 
         let tentry = s.db.totp.first().expect("exists").clone();
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        s.register_client("ep1", &otp, Some(&tview.id), None, None).expect("reg");
+        s.register_client("ep1", &otp, Some(&tview.id), None, None)
+            .expect("reg");
 
         let totp_view = s.list_totp().into_iter().find(|t| t.id == tview.id).expect("find");
         assert!(totp_view.last_used_at.is_some());

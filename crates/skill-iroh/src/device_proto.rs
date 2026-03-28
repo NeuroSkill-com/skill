@@ -143,13 +143,7 @@ pub const HEADER_SIZE: usize = 24;
 
 /// Encode a message header into a 24-byte buffer.
 #[inline]
-pub fn encode_header(
-    msg_type: u8,
-    seq: u64,
-    timestamp: i64,
-    flags: u8,
-    payload_len: u32,
-) -> [u8; HEADER_SIZE] {
+pub fn encode_header(msg_type: u8, seq: u64, timestamp: i64, flags: u8, payload_len: u32) -> [u8; HEADER_SIZE] {
     let mut h = [0u8; HEADER_SIZE];
     h[0] = PROTO_VERSION;
     h[1] = msg_type;
@@ -216,8 +210,8 @@ pub fn decode_ack(buf: &[u8; 10]) -> Option<(u64, u8)> {
 /// Layout: eeg header + eeg data + ppg header + ppg data + imu header + imu data
 pub fn encode_sensor_chunk(
     sample_rate: f32,
-    eeg_data: &[Vec<f32>],           // [channels][samples]
-    ppg_data: &[Vec<f64>],           // [ppg_channels][samples]
+    eeg_data: &[Vec<f32>],                       // [channels][samples]
+    ppg_data: &[Vec<f64>],                       // [ppg_channels][samples]
     imu_data: &[(f32, f32, f32, f32, f32, f32)], // [(ax,ay,az,gx,gy,gz)]
 ) -> Vec<u8> {
     let eeg_ch = eeg_data.len() as u16;
@@ -273,8 +267,8 @@ pub fn encode_sensor_chunk(
 #[derive(Debug, Clone)]
 pub struct SensorChunk {
     pub sample_rate: f32,
-    pub eeg_data: Vec<Vec<f32>>,   // [channels][samples]
-    pub ppg_data: Vec<Vec<f64>>,   // [ppg_channels][samples]
+    pub eeg_data: Vec<Vec<f32>>,                       // [channels][samples]
+    pub ppg_data: Vec<Vec<f64>>,                       // [ppg_channels][samples]
     pub imu_data: Vec<(f32, f32, f32, f32, f32, f32)>, // [(ax,ay,az,gx,gy,gz)]
 }
 
@@ -295,7 +289,11 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
 
     let eeg_bytes = eeg_ch * eeg_spc * 4;
     if off + eeg_bytes > raw.len() {
-        return Err(format!("eeg data truncated: need {} have {}", off + eeg_bytes, raw.len()));
+        return Err(format!(
+            "eeg data truncated: need {} have {}",
+            off + eeg_bytes,
+            raw.len()
+        ));
     }
     let mut eeg_data = Vec::with_capacity(eeg_ch);
     for _ in 0..eeg_ch {
@@ -317,7 +315,11 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
 
     let ppg_bytes = ppg_ch * ppg_spc * 8;
     if off + ppg_bytes > raw.len() {
-        return Err(format!("ppg data truncated: need {} have {}", off + ppg_bytes, raw.len()));
+        return Err(format!(
+            "ppg data truncated: need {} have {}",
+            off + ppg_bytes,
+            raw.len()
+        ));
     }
     let mut ppg_data = Vec::with_capacity(ppg_ch);
     for _ in 0..ppg_ch {
@@ -336,20 +338,35 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
     off += 2;
     let imu_bytes = imu_n * 24;
     if off + imu_bytes > raw.len() {
-        return Err(format!("imu data truncated: need {} have {}", off + imu_bytes, raw.len()));
+        return Err(format!(
+            "imu data truncated: need {} have {}",
+            off + imu_bytes,
+            raw.len()
+        ));
     }
     let mut imu_data = Vec::with_capacity(imu_n);
     for _ in 0..imu_n {
-        let ax = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
-        let ay = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
-        let az = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
-        let gx = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
-        let gy = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
-        let gz = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap()); off += 4;
+        let ax = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
+        let ay = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
+        let az = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
+        let gx = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
+        let gy = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
+        let gz = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        off += 4;
         imu_data.push((ax, ay, az, gx, gy, gz));
     }
 
-    Ok(SensorChunk { sample_rate, eeg_data, ppg_data, imu_data })
+    Ok(SensorChunk {
+        sample_rate,
+        eeg_data,
+        ppg_data,
+        imu_data,
+    })
 }
 
 // ── Location encoding ─────────────────────────────────────────────────────────
@@ -463,12 +480,24 @@ pub fn encode_phone_imu(samples: &[PhoneImuSample]) -> Vec<u8> {
     buf.extend_from_slice(&(samples.len() as u16).to_le_bytes());
     for s in samples {
         buf.extend_from_slice(&s.dt.to_le_bytes());
-        for &v in &s.raw_accel { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &s.user_accel { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &s.gravity { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &s.gyro { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &s.mag { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &s.attitude { buf.extend_from_slice(&v.to_le_bytes()); }
+        for &v in &s.raw_accel {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &s.user_accel {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &s.gravity {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &s.gyro {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &s.mag {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &s.attitude {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
         buf.extend_from_slice(&s.pressure.to_le_bytes());
         buf.extend_from_slice(&s.rel_altitude.to_le_bytes());
         buf.extend_from_slice(&s.ambient_light.to_le_bytes());
@@ -479,7 +508,9 @@ pub fn encode_phone_imu(samples: &[PhoneImuSample]) -> Vec<u8> {
 
 /// Decode a batch of phone sensor samples.
 pub fn decode_phone_imu(raw: &[u8]) -> Result<Vec<PhoneImuSample>, String> {
-    if raw.len() < 2 { return Err("phone sensor too short".into()); }
+    if raw.len() < 2 {
+        return Err("phone sensor too short".into());
+    }
     let count = u16::from_le_bytes(raw[0..2].try_into().unwrap()) as usize;
     let expected = 2 + count * PHONE_SENSOR_SAMPLE_SIZE;
     if raw.len() < expected {
@@ -490,7 +521,8 @@ pub fn decode_phone_imu(raw: &[u8]) -> Result<Vec<PhoneImuSample>, String> {
     for _ in 0..count {
         let f = |o: &mut usize| -> f32 {
             let v = f32::from_le_bytes(raw[*o..*o + 4].try_into().unwrap());
-            *o += 4; v
+            *o += 4;
+            v
         };
         let dt = f(&mut off);
         let raw_accel = [f(&mut off), f(&mut off), f(&mut off)];
@@ -503,8 +535,19 @@ pub fn decode_phone_imu(raw: &[u8]) -> Result<Vec<PhoneImuSample>, String> {
         let rel_altitude = f(&mut off);
         let ambient_light = f(&mut off);
         let proximity = f(&mut off);
-        out.push(PhoneImuSample { dt, raw_accel, user_accel, gravity, gyro, mag, attitude,
-                                   pressure, rel_altitude, ambient_light, proximity });
+        out.push(PhoneImuSample {
+            dt,
+            raw_accel,
+            user_accel,
+            gravity,
+            gyro,
+            mag,
+            attitude,
+            pressure,
+            rel_altitude,
+            ambient_light,
+            proximity,
+        });
     }
     Ok(out)
 }
@@ -567,16 +610,30 @@ mod tests {
     fn phone_sensor_roundtrip() {
         let samples = vec![
             PhoneImuSample {
-                dt: 0.01, raw_accel: [0.1, 0.2, -0.7], user_accel: [0.1, 0.2, 0.3],
-                gyro: [0.01, 0.02, 0.03], gravity: [0.0, 0.0, -1.0],
-                mag: [25.0, -10.0, 42.0], attitude: [0.1, 0.2, 0.3],
-                pressure: 101.3, rel_altitude: 2.5, ambient_light: 0.7, proximity: 0.0,
+                dt: 0.01,
+                raw_accel: [0.1, 0.2, -0.7],
+                user_accel: [0.1, 0.2, 0.3],
+                gyro: [0.01, 0.02, 0.03],
+                gravity: [0.0, 0.0, -1.0],
+                mag: [25.0, -10.0, 42.0],
+                attitude: [0.1, 0.2, 0.3],
+                pressure: 101.3,
+                rel_altitude: 2.5,
+                ambient_light: 0.7,
+                proximity: 0.0,
             },
             PhoneImuSample {
-                dt: 0.02, raw_accel: [0.4, 0.5, -0.4], user_accel: [0.4, 0.5, 0.6],
-                gyro: [0.04, 0.05, 0.06], gravity: [0.0, 0.0, -1.0],
-                mag: [25.1, -10.1, 42.1], attitude: [0.4, 0.5, 0.6],
-                pressure: 101.2, rel_altitude: 2.7, ambient_light: 0.3, proximity: 1.0,
+                dt: 0.02,
+                raw_accel: [0.4, 0.5, -0.4],
+                user_accel: [0.4, 0.5, 0.6],
+                gyro: [0.04, 0.05, 0.06],
+                gravity: [0.0, 0.0, -1.0],
+                mag: [25.1, -10.1, 42.1],
+                attitude: [0.4, 0.5, 0.6],
+                pressure: 101.2,
+                rel_altitude: 2.7,
+                ambient_light: 0.3,
+                proximity: 1.0,
             },
         ];
         let raw = encode_phone_imu(&samples);

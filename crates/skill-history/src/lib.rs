@@ -978,6 +978,98 @@ pub(crate) fn parse_ts_from_line(line: &[u8]) -> Option<u64> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_session_json_accepts_valid() {
+        assert!(is_session_json("exg_1700000000.json"));
+        assert!(is_session_json("muse_1700000000.json"));
+    }
+
+    #[test]
+    fn is_session_json_rejects_invalid() {
+        assert!(!is_session_json("notes.json"));
+        assert!(!is_session_json("exg_1700000000.csv"));
+        assert!(!is_session_json("config.json"));
+        assert!(!is_session_json("random_file.json"));
+    }
+
+    #[test]
+    fn is_session_data_accepts_csv_and_parquet() {
+        assert!(is_session_data("exg_1700000000.csv"));
+        assert!(is_session_data("exg_1700000000.parquet"));
+        assert!(is_session_data("muse_1700000000.csv"));
+    }
+
+    #[test]
+    fn is_session_data_rejects_metrics_and_ppg() {
+        assert!(!is_session_data("exg_1700000000_metrics.csv"));
+        assert!(!is_session_data("exg_1700000000_ppg.csv"));
+        assert!(!is_session_data("exg_1700000000_imu.csv"));
+        assert!(!is_session_data("exg_1700000000_metrics.parquet"));
+        assert!(!is_session_data("exg_1700000000_ppg.parquet"));
+        assert!(!is_session_data("exg_1700000000_imu.parquet"));
+    }
+
+    #[test]
+    fn extract_timestamp_valid() {
+        assert_eq!(extract_timestamp("exg_1700000000.csv"), Some(1700000000));
+        assert_eq!(extract_timestamp("muse_1700000000.json"), Some(1700000000));
+        assert_eq!(extract_timestamp("exg_1700000000.parquet"), Some(1700000000));
+    }
+
+    #[test]
+    fn extract_timestamp_invalid() {
+        assert_eq!(extract_timestamp("notes.csv"), None);
+        assert_eq!(extract_timestamp("exg_abc.csv"), None);
+    }
+
+    #[test]
+    fn parse_ts_from_line_valid() {
+        assert_eq!(parse_ts_from_line(b"1700000000.123,0.5,0.6"), Some(1700000000));
+    }
+
+    #[test]
+    fn parse_ts_from_line_small_rejected() {
+        assert_eq!(parse_ts_from_line(b"999999999,0.1"), None);
+    }
+
+    #[test]
+    fn parse_ts_from_line_empty() {
+        assert_eq!(parse_ts_from_line(b""), None);
+    }
+
+    #[test]
+    fn parse_ts_from_line_header() {
+        assert_eq!(parse_ts_from_line(b"timestamp,ch0"), None);
+    }
+
+    #[test]
+    fn parse_ts_from_line_crlf() {
+        assert_eq!(parse_ts_from_line(b"1700000000.0,0.1\r"), Some(1700000000));
+    }
+
+    #[test]
+    fn parse_first_ts_skips_header() {
+        let data = b"timestamp,ch0\n1700000000.0,0.1\n1700000001.0,0.2\n";
+        assert_eq!(parse_first_ts_from_bytes(data), Some(1700000000));
+    }
+
+    #[test]
+    fn parse_last_ts_finds_last() {
+        let data = b"t,ch0\n1700000000.0,0.1\n1700000100.5,0.2\n";
+        assert_eq!(parse_last_ts_from_bytes(data), Some(1700000100));
+    }
+
+    #[test]
+    fn parse_last_ts_trailing_newlines() {
+        let data = b"t,ch0\n1700000000.0,0.1\n1700000999.0,0.2\n\n\n";
+        assert_eq!(parse_last_ts_from_bytes(data), Some(1700000999));
+    }
+}
+
 fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
     for (session, start, end) in raw.iter_mut() {
         // Skip sessions that already have valid timestamps from the JSON sidecar.

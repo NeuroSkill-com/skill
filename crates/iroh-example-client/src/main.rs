@@ -107,8 +107,7 @@ async fn main() -> anyhow::Result<()> {
     let skill_dir_arc = Arc::new(skill_dir.clone());
 
     let mut store = skill_iroh::IrohAuthStore::open(&skill_dir);
-    let (totp_view, otpauth_url, _qr_png_b64) =
-        store.create_totp("example-phone").map_err(|e| anyhow::anyhow!(e))?;
+    let (totp_view, otpauth_url, _qr_png_b64) = store.create_totp("example-phone").map_err(|e| anyhow::anyhow!(e))?;
 
     println!("1. TOTP provisioned");
     println!("   id:          {}", totp_view.id);
@@ -147,9 +146,7 @@ async fn main() -> anyhow::Result<()> {
     println!("   relay URL:   {relay_url}");
     println!();
 
-    let client_ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
-        .bind()
-        .await?;
+    let client_ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0).bind().await?;
     client_ep.online().await;
 
     let client_id = client_ep.id().to_string();
@@ -229,13 +226,22 @@ async fn main() -> anyhow::Result<()> {
     let totps = store2.list_totp();
     println!("   TOTP entries: {}", totps.len());
     for t in &totps {
-        println!("     • {} (id={}, revoked={}, last_used={:?})", t.name, t.id, t.revoked_at.is_some(), t.last_used_at);
+        println!(
+            "     • {} (id={}, revoked={}, last_used={:?})",
+            t.name,
+            t.id,
+            t.revoked_at.is_some(),
+            t.last_used_at
+        );
     }
 
     let clients = store2.list_clients();
     println!("   Client entries: {}", clients.len());
     for c in &clients {
-        println!("     • {} (endpoint={}, scope={}, connected_at={:?})", c.name, c.endpoint_id, c.scope, c.last_connected_at);
+        println!(
+            "     • {} (endpoint={}, scope={}, connected_at={:?})",
+            c.name, c.endpoint_id, c.scope, c.last_connected_at
+        );
     }
 
     assert_eq!(clients.len(), 1);

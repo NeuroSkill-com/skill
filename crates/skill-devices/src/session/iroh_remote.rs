@@ -22,8 +22,7 @@
 use std::collections::VecDeque;
 
 use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent,
-    DeviceInfo, EegFrame, ImuFrame, PpgFrame,
+    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame, PpgFrame,
 };
 
 use skill_iroh::RemoteDeviceEvent;
@@ -57,8 +56,12 @@ impl IrohRemoteAdapter {
                 pipeline_channels: 4,
                 ppg_channel_names: vec!["Ambient".into(), "Infrared".into(), "Red".into()],
                 imu_channel_names: vec![
-                    "AccelX".into(), "AccelY".into(), "AccelZ".into(),
-                    "GyroX".into(), "GyroY".into(), "GyroZ".into(),
+                    "AccelX".into(),
+                    "AccelY".into(),
+                    "AccelZ".into(),
+                    "GyroX".into(),
+                    "GyroY".into(),
+                    "GyroZ".into(),
                 ],
                 fnirs_channel_names: Vec::new(),
             },
@@ -71,9 +74,13 @@ impl IrohRemoteAdapter {
     /// Expand a SensorChunk into individual DeviceEvents.
     fn expand_sensor_chunk(&mut self, timestamp: i64, chunk: skill_iroh::device_proto::SensorChunk) {
         let ch = chunk.eeg_data.len();
-        if ch == 0 { return; }
+        if ch == 0 {
+            return;
+        }
         let spc = chunk.eeg_data[0].len();
-        if spc == 0 { return; }
+        if spc == 0 {
+            return;
+        }
 
         // Update descriptor if parameters changed
         if chunk.sample_rate as f64 != self.desc.eeg_sample_rate || ch != self.desc.eeg_channels {
@@ -100,7 +107,10 @@ impl IrohRemoteAdapter {
             let ts = base_ts + i as f64 * dt;
 
             let channels: Vec<f64> = (0..ch).map(|c| chunk.eeg_data[c][i] as f64).collect();
-            self.pending.push_back(DeviceEvent::Eeg(EegFrame { channels, timestamp_s: ts }));
+            self.pending.push_back(DeviceEvent::Eeg(EegFrame {
+                channels,
+                timestamp_s: ts,
+            }));
 
             // PPG
             if ppg_stride > 0 && ppg_idx < ppg_spc && (i % ppg_stride == 0) {
@@ -141,9 +151,7 @@ impl IrohRemoteAdapter {
                 self.desc.eeg_sample_rate = sr;
             }
             if let Some(chs) = v["eeg_channels"].as_array() {
-                let names: Vec<String> = chs.iter()
-                    .filter_map(|c| c.as_str().map(str::to_owned))
-                    .collect();
+                let names: Vec<String> = chs.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect();
                 if !names.is_empty() {
                     self.desc.eeg_channels = names.len();
                     self.desc.pipeline_channels = names.len().min(skill_constants::EEG_CHANNELS);
@@ -151,17 +159,13 @@ impl IrohRemoteAdapter {
                 }
             }
             if let Some(ppg) = v["ppg_channels"].as_array() {
-                self.desc.ppg_channel_names = ppg.iter()
-                    .filter_map(|c| c.as_str().map(str::to_owned))
-                    .collect();
+                self.desc.ppg_channel_names = ppg.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect();
                 if self.desc.ppg_channel_names.is_empty() {
                     self.desc.caps.remove(DeviceCaps::PPG);
                 }
             }
             if let Some(imu) = v["imu_channels"].as_array() {
-                self.desc.imu_channel_names = imu.iter()
-                    .filter_map(|c| c.as_str().map(str::to_owned))
-                    .collect();
+                self.desc.imu_channel_names = imu.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect();
                 if self.desc.imu_channel_names.is_empty() {
                     self.desc.caps.remove(DeviceCaps::IMU);
                 }
@@ -179,7 +183,9 @@ impl IrohRemoteAdapter {
                         _ => {}
                     }
                 }
-                if !c.is_empty() { self.desc.caps = c; }
+                if !c.is_empty() {
+                    self.desc.caps = c;
+                }
             }
 
             let name = v["name"].as_str().unwrap_or("Remote Device").to_owned();
@@ -250,7 +256,9 @@ impl DeviceAdapter for IrohRemoteAdapter {
                         temperature_raw: None,
                     }));
                 }
-                RemoteDeviceEvent::Location { location, timestamp, .. } => {
+                RemoteDeviceEvent::Location {
+                    location, timestamp, ..
+                } => {
                     // Store GPS as Meta event so it's accessible to the pipeline
                     let json = serde_json::json!({
                         "type": "location",
@@ -268,18 +276,21 @@ impl DeviceAdapter for IrohRemoteAdapter {
                     // Serialize phone sensor data as a JSON Meta event.
                     // This keeps it completely separate from the headset's IMU
                     // which flows through DeviceEvent::Imu → head_pose / CSV.
-                    let phone_samples: Vec<serde_json::Value> = samples.iter().map(|s| {
-                        serde_json::json!({
-                            "dt": s.dt,
-                            "raw_accel": s.raw_accel,
-                            "user_accel": s.user_accel,
-                            "gravity": s.gravity,
-                            "gyro": s.gyro,
-                            "mag": s.mag,
-                            "attitude": s.attitude,
-                            "pressure": s.pressure,
+                    let phone_samples: Vec<serde_json::Value> = samples
+                        .iter()
+                        .map(|s| {
+                            serde_json::json!({
+                                "dt": s.dt,
+                                "raw_accel": s.raw_accel,
+                                "user_accel": s.user_accel,
+                                "gravity": s.gravity,
+                                "gyro": s.gyro,
+                                "mag": s.mag,
+                                "attitude": s.attitude,
+                                "pressure": s.pressure,
+                            })
                         })
-                    }).collect();
+                        .collect();
                     let json = serde_json::json!({
                         "type": "phone_imu",
                         "timestamp": timestamp,
@@ -288,7 +299,9 @@ impl DeviceAdapter for IrohRemoteAdapter {
                     });
                     return Some(DeviceEvent::Meta(json));
                 }
-                RemoteDeviceEvent::PhoneInfo { info_json, timestamp, .. } => {
+                RemoteDeviceEvent::PhoneInfo {
+                    info_json, timestamp, ..
+                } => {
                     // Store phone descriptor as Meta so it's persisted alongside session data.
                     // The desktop can use this to identify which phone sent which data
                     // when multiple phones are connected simultaneously.
@@ -328,7 +341,9 @@ fn ts_to_unix_approx(ts: i64) -> f64 {
     }
     let leap = y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400));
     let month_days: [u64; 12] = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    for &md in month_days.iter().take((mo as usize).saturating_sub(1)) { days += md; }
+    for &md in month_days.iter().take((mo as usize).saturating_sub(1)) {
+        days += md;
+    }
     days += d.saturating_sub(1);
     (days * 86400 + h * 3600 + m * 60 + s) as f64
 }
@@ -356,8 +371,12 @@ mod tests {
             imu_data: vec![],
         };
         tx.send(RemoteDeviceEvent::SensorChunk {
-            seq: 1, timestamp: 20260315120000, chunk,
-        }).await.unwrap();
+            seq: 1,
+            timestamp: 20260315120000,
+            chunk,
+        })
+        .await
+        .unwrap();
 
         // First: auto-synthesized Connected
         let ev = adapter.next_event().await.unwrap();
@@ -383,11 +402,16 @@ mod tests {
             "eeg_channels": ["TP9", "AF7", "AF8", "TP10"],
             "ppg_channels": ["Ambient", "Infrared", "Red"],
             "caps": ["eeg", "ppg", "imu", "battery"]
-        }).to_string();
+        })
+        .to_string();
 
         tx.send(RemoteDeviceEvent::DeviceConnected {
-            seq: 1, timestamp: 20260315120000, descriptor_json: json,
-        }).await.unwrap();
+            seq: 1,
+            timestamp: 20260315120000,
+            descriptor_json: json,
+        })
+        .await
+        .unwrap();
 
         let ev = adapter.next_event().await.unwrap();
         match ev {
@@ -407,12 +431,19 @@ mod tests {
         let mut adapter = IrohRemoteAdapter::new(rx, "test-peer".into());
 
         tx.send(RemoteDeviceEvent::Location {
-            seq: 1, timestamp: 20260315120000,
+            seq: 1,
+            timestamp: 20260315120000,
             location: skill_iroh::IrohLocation {
-                latitude: 37.7749, longitude: -122.4194,
-                altitude: 10.0, accuracy: 5.0, speed: 0.0, heading: 0.0,
+                latitude: 37.7749,
+                longitude: -122.4194,
+                altitude: 10.0,
+                accuracy: 5.0,
+                speed: 0.0,
+                heading: 0.0,
             },
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         let ev = adapter.next_event().await.unwrap();
         match ev {
@@ -436,8 +467,12 @@ mod tests {
             imu_data: vec![(1.0, 2.0, 9.8, 0.1, 0.2, 0.3), (1.1, 2.1, 9.9, 0.0, 0.0, 0.0)],
         };
         tx.send(RemoteDeviceEvent::SensorChunk {
-            seq: 1, timestamp: 20260315120000, chunk,
-        }).await.unwrap();
+            seq: 1,
+            timestamp: 20260315120000,
+            chunk,
+        })
+        .await
+        .unwrap();
 
         // Connected + 8 EEG + 2 IMU = 11 events
         let mut eeg_count = 0;
@@ -446,7 +481,10 @@ mod tests {
         for _ in 0..11 {
             match adapter.next_event().await.unwrap() {
                 DeviceEvent::Eeg(_) => eeg_count += 1,
-                DeviceEvent::Imu(f) => { imu_count += 1; assert!(f.gyro.is_some()); }
+                DeviceEvent::Imu(f) => {
+                    imu_count += 1;
+                    assert!(f.gyro.is_some());
+                }
                 DeviceEvent::Connected(_) => other += 1,
                 _ => {}
             }

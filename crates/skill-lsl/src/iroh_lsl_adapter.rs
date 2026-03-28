@@ -7,14 +7,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use iroh::Endpoint;
 use iroh::protocol::ProtocolHandler;
+use iroh::Endpoint;
 use rlsl_iroh::sink::LslSinkHandler;
 use tokio::sync::mpsc;
 
-use skill_devices::session::{
-    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame,
-};
+use skill_devices::session::{DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame};
 
 pub struct IrohLslAdapter {
     rx: mpsc::Receiver<DeviceEvent>,
@@ -78,9 +76,9 @@ impl IrohLslAdapter {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             loop {
-                let streams = tokio::task::spawn_blocking(|| {
-                    rlsl::resolver::resolve_all(3.0)
-                }).await.unwrap_or_default();
+                let streams = tokio::task::spawn_blocking(|| rlsl::resolver::resolve_all(3.0))
+                    .await
+                    .unwrap_or_default();
 
                 let info = streams.iter().find(|s| {
                     let t = s.type_().to_lowercase();
@@ -96,16 +94,18 @@ impl IrohLslAdapter {
                 let sid = info.source_id().to_string();
                 let stype = info.type_().to_string();
 
-                let _ = tx2.send(DeviceEvent::Connected(DeviceInfo {
-                    name: format!("{name} (rlsl-iroh)"),
-                    id: sid,
-                    serial_number: None,
-                    firmware_version: None,
-                    hardware_version: Some(format!("{stype} via rlsl-iroh")),
-                    bootloader_version: None,
-                    mac_address: None,
-                    headset_preset: None,
-                })).await;
+                let _ = tx2
+                    .send(DeviceEvent::Connected(DeviceInfo {
+                        name: format!("{name} (rlsl-iroh)"),
+                        id: sid,
+                        serial_number: None,
+                        firmware_version: None,
+                        hardware_version: Some(format!("{stype} via rlsl-iroh")),
+                        bootloader_version: None,
+                        mac_address: None,
+                        headset_preset: None,
+                    }))
+                    .await;
 
                 // Pull loop on a dedicated thread (inlet blocks)
                 let tx3 = tx2.clone();
@@ -120,10 +120,13 @@ impl IrohLslAdapter {
                                 Ok(t) if t > 0.0 => t,
                                 _ => continue,
                             };
-                            if tx3.blocking_send(DeviceEvent::Eeg(EegFrame {
-                                channels: buf.to_vec(),
-                                timestamp_s: ts,
-                            })).is_err() {
+                            if tx3
+                                .blocking_send(DeviceEvent::Eeg(EegFrame {
+                                    channels: buf.to_vec(),
+                                    timestamp_s: ts,
+                                }))
+                                .is_err()
+                            {
                                 break;
                             }
                         }
@@ -145,15 +148,29 @@ impl IrohLslAdapter {
             fnirs_channel_names: Vec::new(),
         };
 
-        Ok((Self { rx, desc, endpoint_id: endpoint_id.clone(), _shutdown: shutdown_tx }, endpoint_id))
+        Ok((
+            Self {
+                rx,
+                desc,
+                endpoint_id: endpoint_id.clone(),
+                _shutdown: shutdown_tx,
+            },
+            endpoint_id,
+        ))
     }
 
-    pub fn endpoint_id(&self) -> &str { &self.endpoint_id }
+    pub fn endpoint_id(&self) -> &str {
+        &self.endpoint_id
+    }
 }
 
 #[async_trait]
 impl DeviceAdapter for IrohLslAdapter {
-    fn descriptor(&self) -> &DeviceDescriptor { &self.desc }
-    async fn next_event(&mut self) -> Option<DeviceEvent> { self.rx.recv().await }
+    fn descriptor(&self) -> &DeviceDescriptor {
+        &self.desc
+    }
+    async fn next_event(&mut self) -> Option<DeviceEvent> {
+        self.rx.recv().await
+    }
     async fn disconnect(&mut self) {}
 }

@@ -13,8 +13,8 @@
 //! 11. Phone tries a BRAND-NEW connection → also closed ("revoked")
 //! 12. Verify the auth store state is consistent throughout
 
-use std::sync::{Arc, Mutex};
 use iroh::Watcher;
+use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 use tokio::time::Duration;
 
@@ -23,13 +23,15 @@ const ALPN: &[u8] = b"skill/http-ws/1";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn secret_from_b32(b32: &str) -> Vec<u8> {
-    base32::decode(base32::Alphabet::RFC4648 { padding: false }, b32)
-        .expect("valid base32")
+    base32::decode(base32::Alphabet::RFC4648 { padding: false }, b32).expect("valid base32")
 }
 
 fn generate_totp(secret: &[u8], name: &str) -> String {
     totp_rs::TOTP::new(
-        totp_rs::Algorithm::SHA1, 6, 1, 30,
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
         secret.to_vec(),
         Some("Skill".to_string()),
         name.to_string(),
@@ -43,11 +45,7 @@ fn generate_totp(secret: &[u8], name: &str) -> String {
 /// - Accepts any connection (QUIC layer can't pre-filter)
 /// - First bi-stream may be a registration request (no auth needed for that)
 /// - Subsequent bi-streams require auth; revoked clients get conn.close("revoked")
-async fn skill_server(
-    server_ep: iroh::Endpoint,
-    auth: Arc<Mutex<skill_iroh::IrohAuthStore>>,
-    max_connections: usize,
-) {
+async fn skill_server(server_ep: iroh::Endpoint, auth: Arc<Mutex<skill_iroh::IrohAuthStore>>, max_connections: usize) {
     for _ in 0..max_connections {
         let incoming = match server_ep.accept().await {
             Some(i) => i,
@@ -90,8 +88,7 @@ async fn skill_server(
 
                 let response = if is_register {
                     let body_str = raw_str.split("\r\n\r\n").nth(1).unwrap_or("");
-                    let v: serde_json::Value = serde_json::from_str(body_str)
-                        .unwrap_or_else(|_| serde_json::json!({}));
+                    let v: serde_json::Value = serde_json::from_str(body_str).unwrap_or_else(|_| serde_json::json!({}));
                     let eid = v["endpoint_id"].as_str().unwrap_or("");
                     let otp = v["otp"].as_str().unwrap_or("");
                     let tid = v.get("totp_id").and_then(|v| v.as_str());
@@ -107,7 +104,10 @@ async fn skill_server(
                         }
                         Err(e) => {
                             let body = serde_json::json!({"ok": false, "error": e}).to_string();
-                            format!("HTTP/1.1 400 Bad Request\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+                            format!(
+                                "HTTP/1.1 400 Bad Request\r\nContent-Length: {}\r\n\r\n{body}",
+                                body.len()
+                            )
                         }
                     }
                 } else {
@@ -128,7 +128,9 @@ async fn skill_server(
 async fn request(conn: &iroh::endpoint::Connection, path: &str) -> Result<serde_json::Value, String> {
     let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
     let (mut send, mut recv) = conn.open_bi().await.map_err(|e| format!("open_bi: {e}"))?;
-    send.write_all(req.as_bytes()).await.map_err(|e| format!("write: {e}"))?;
+    send.write_all(req.as_bytes())
+        .await
+        .map_err(|e| format!("write: {e}"))?;
     send.finish().map_err(|e| format!("finish: {e}"))?;
     let resp = recv.read_to_end(16 * 1024).await.map_err(|e| format!("read: {e}"))?;
     let text = String::from_utf8_lossy(&resp);
@@ -148,7 +150,9 @@ async fn register(
         body.len()
     );
     let (mut send, mut recv) = conn.open_bi().await.map_err(|e| format!("open_bi: {e}"))?;
-    send.write_all(req.as_bytes()).await.map_err(|e| format!("write: {e}"))?;
+    send.write_all(req.as_bytes())
+        .await
+        .map_err(|e| format!("write: {e}"))?;
     send.finish().map_err(|e| format!("finish: {e}"))?;
     let resp = recv.read_to_end(16 * 1024).await.map_err(|e| format!("read: {e}"))?;
     let text = String::from_utf8_lossy(&resp);
@@ -164,9 +168,7 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     let skill_dir = td.path();
 
     // Shared auth store (like the real Skill app holds in Arc<Mutex<>>)
-    let auth: Arc<Mutex<skill_iroh::IrohAuthStore>> = Arc::new(Mutex::new(
-        skill_iroh::IrohAuthStore::open(skill_dir),
-    ));
+    let auth: Arc<Mutex<skill_iroh::IrohAuthStore>> = Arc::new(Mutex::new(skill_iroh::IrohAuthStore::open(skill_dir)));
 
     // ══════════════════════════════════════════════════════════════════════
     // Step 1: Skill provisions a TOTP
@@ -191,13 +193,16 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
 
     let server_id = server_ep.id().to_string();
     let server_addr = server_ep.watch_addr().get();
-    let relay_url = server_addr.relay_urls().next()
+    let relay_url = server_addr
+        .relay_urls()
+        .next()
         .map(|u| u.to_string())
         .unwrap_or_default();
 
     let invite = {
         let store = auth.lock().expect("lock");
-        store.build_invite_payload(&totp_view.id, &server_id, &relay_url)
+        store
+            .build_invite_payload(&totp_view.id, &server_id, &relay_url)
             .map_err(|e| anyhow::anyhow!(e))?
     };
     let invite_json = serde_json::to_string(&invite)?;
@@ -220,8 +225,7 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     let decoded: skill_iroh::IrohInvitePayload = serde_json::from_str(&invite_json)?;
     let secret = secret_from_b32(&decoded.secret_base32);
 
-    let phone_ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
-        .bind().await?;
+    let phone_ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0).bind().await?;
     phone_ep.online().await;
     let phone_id = phone_ep.id().to_string();
     eprintln!("    Phone endpoint: {}", &phone_id[..16]);
@@ -240,12 +244,17 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     let conn = phone_ep.connect(server_addr.clone(), ALPN).await?;
     eprintln!("    Connected to: {}", conn.remote_id());
 
-    let reg = register(&conn, &serde_json::json!({
-        "endpoint_id": phone_id,
-        "otp": code,
-        "name": "my-phone",
-        "scope": "read",
-    })).await.map_err(|e| anyhow::anyhow!(e))?;
+    let reg = register(
+        &conn,
+        &serde_json::json!({
+            "endpoint_id": phone_id,
+            "otp": code,
+            "name": "my-phone",
+            "scope": "read",
+        }),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
     assert_eq!(reg["ok"], true, "registration should succeed: {reg}");
     eprintln!("    Registered: {}", reg["client"]["id"]);
     let client_id = reg["client"]["id"].as_str().expect("client id").to_string();
@@ -266,8 +275,7 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     // Step 6: Phone sends a normal request → 200 OK
     // ══════════════════════════════════════════════════════════════════════
     eprintln!("\n═══ Step 6: Phone sends request (pre-revocation)");
-    let resp = request(&conn, "/v1/status").await
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let resp = request(&conn, "/v1/status").await.map_err(|e| anyhow::anyhow!(e))?;
     assert_eq!(resp["ok"], true);
     eprintln!("    ✓ Got 200 OK: {resp}");
 
@@ -277,7 +285,9 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     eprintln!("\n═══ Step 7: Skill changes scope read → full");
     {
         let mut store = auth.lock().expect("lock");
-        store.set_client_scope(&client_id, "full").map_err(|e| anyhow::anyhow!(e))?;
+        store
+            .set_client_scope(&client_id, "full")
+            .map_err(|e| anyhow::anyhow!(e))?;
         assert_eq!(store.scope_for_endpoint(&phone_id).as_deref(), Some("full"));
     }
     eprintln!("    ✓ Scope is now 'full'");
@@ -286,8 +296,7 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
     // Step 8: Phone sends another request → still OK
     // ══════════════════════════════════════════════════════════════════════
     eprintln!("\n═══ Step 8: Phone sends request (after scope change)");
-    let resp2 = request(&conn, "/v1/sessions").await
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let resp2 = request(&conn, "/v1/sessions").await.map_err(|e| anyhow::anyhow!(e))?;
     assert_eq!(resp2["ok"], true);
     eprintln!("    ✓ Got 200 OK (scope change didn't break connection)");
 
@@ -357,7 +366,10 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
         assert_eq!(totps.len(), 1);
         assert!(totps[0].last_used_at.is_some(), "TOTP should have last_used_at");
         assert!(totps[0].revoked_at.is_none(), "TOTP itself was NOT revoked");
-        eprintln!("    TOTP: name={}, last_used={:?}", totps[0].name, totps[0].last_used_at);
+        eprintln!(
+            "    TOTP: name={}, last_used={:?}",
+            totps[0].name, totps[0].last_used_at
+        );
 
         // Client should be revoked
         let clients = store.list_clients();
@@ -365,8 +377,10 @@ async fn full_lifecycle_simulation() -> anyhow::Result<()> {
         assert!(clients[0].revoked_at.is_some(), "client should be revoked");
         assert_eq!(clients[0].scope, "full", "scope should still be 'full' (last set)");
         assert!(!store.is_endpoint_allowed(&phone_id));
-        eprintln!("    Client: name={}, scope={}, revoked_at={:?}",
-            clients[0].name, clients[0].scope, clients[0].revoked_at);
+        eprintln!(
+            "    Client: name={}, scope={}, revoked_at={:?}",
+            clients[0].name, clients[0].scope, clients[0].revoked_at
+        );
 
         // Persistence: reload from disk and verify
         let store2 = skill_iroh::IrohAuthStore::open(td.path());

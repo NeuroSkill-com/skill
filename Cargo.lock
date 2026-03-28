@@ -12032,6 +12032,7 @@ dependencies = [
  "skill-commands",
  "skill-constants",
  "skill-data",
+ "tempfile",
 ]
 
 [[package]]
@@ -12093,6 +12094,7 @@ dependencies = [
  "skill-data",
  "skill-skills",
  "skill-tools",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "ureq 3.3.0",

@@ -351,7 +351,11 @@ pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
                 Some(rx) => rx,
                 None => {
                     eprintln!("[iroh-remote] no EegChunkRx available — another session active?");
-                    crate::go_disconnected(&app2, Some("No remote EEG channel available".into()), false);
+                    crate::go_disconnected(
+                        &app2,
+                        Some("No remote EEG channel available".into()),
+                        false,
+                    );
                     return;
                 }
             }
@@ -379,7 +383,9 @@ pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
         let (new_tx, new_rx) = skill_iroh::event_channel();
         {
             let shared_tx = app2.state::<skill_iroh::SharedDeviceEventTx>();
-            let mut guard = shared_tx.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = shared_tx
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             *guard = Some(new_tx);
         }
         {
@@ -396,7 +402,8 @@ pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
 /// Call once at app startup (after `skill_iroh::spawn`).
 pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
     let app2 = app.clone();
-    let rx_arc = app.state::<std::sync::Arc<tokio::sync::Mutex<Option<skill_iroh::RemoteEventRx>>>>();
+    let rx_arc =
+        app.state::<std::sync::Arc<tokio::sync::Mutex<Option<skill_iroh::RemoteEventRx>>>>();
     let rx_arc2 = rx_arc.inner().clone();
 
     tauri::async_runtime::spawn(async move {
@@ -425,15 +432,14 @@ pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     continue;
                 };
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
-                    rx.recv(),
-                ).await {
+                match tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await {
                     Ok(Some(chunk)) => {
                         // Got a chunk — we need to create a new channel with this
                         // chunk pre-loaded + the remaining rx
-                        let (new_tx, new_rx): (skill_iroh::RemoteEventTx, skill_iroh::RemoteEventRx) =
-                            skill_iroh::event_channel();
+                        let (new_tx, new_rx): (
+                            skill_iroh::RemoteEventTx,
+                            skill_iroh::RemoteEventRx,
+                        ) = skill_iroh::event_channel();
                         let _ = new_tx.send(chunk.clone()).await;
                         // Spawn a forwarder to keep piping the old rx into new_tx
                         tokio::spawn(async move {
@@ -473,7 +479,9 @@ pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
                 }
 
                 let peer_id = match &chunk {
-                    skill_iroh::RemoteDeviceEvent::DeviceConnected { descriptor_json, .. } => {
+                    skill_iroh::RemoteDeviceEvent::DeviceConnected {
+                        descriptor_json, ..
+                    } => {
                         // Extract device ID from the JSON if available
                         serde_json::from_str::<serde_json::Value>(descriptor_json)
                             .ok()
@@ -505,40 +513,58 @@ pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
 }
 
 /// Connect to a local LSL stream.  `target` is an optional stream name filter.
-async fn connect_lsl(target: Option<String>) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
+async fn connect_lsl(
+    target: Option<String>,
+) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
     // Strip "lsl:" prefix if present
-    let query_target = target.as_ref().map(|t| t.strip_prefix("lsl:").unwrap_or(t).to_string())
+    let query_target = target
+        .as_ref()
+        .map(|t| t.strip_prefix("lsl:").unwrap_or(t).to_string())
         .filter(|s| !s.is_empty());
-    let streams = tokio::task::spawn_blocking(move || {
-        skill_lsl::resolve_eeg_streams(5.0)
-    }).await.map_err(|e| crate::session_connect::ConnectError::Other(format!("LSL resolve: {e}")))?;
+    let streams = tokio::task::spawn_blocking(move || skill_lsl::resolve_eeg_streams(5.0))
+        .await
+        .map_err(|e| crate::session_connect::ConnectError::Other(format!("LSL resolve: {e}")))?;
 
     if streams.is_empty() {
         return Err(crate::session_connect::ConnectError::Other(
-            "No LSL EEG streams found on the network".into()
+            "No LSL EEG streams found on the network".into(),
         ));
     }
 
     // If target specified, find matching stream; otherwise use first
     let info = if let Some(ref name) = query_target {
-        streams.iter().find(|s| s.name().contains(name.as_str()))
+        streams
+            .iter()
+            .find(|s| s.name().contains(name.as_str()))
             .or(streams.first())
             .cloned()
-            .ok_or_else(|| crate::session_connect::ConnectError::Other(
-                format!("No LSL stream matching '{name}'")
-            ))?
+            .ok_or_else(|| {
+                crate::session_connect::ConnectError::Other(format!(
+                    "No LSL stream matching '{name}'"
+                ))
+            })?
     } else {
-        streams.into_iter().next().expect("streams verified non-empty above")
+        streams
+            .into_iter()
+            .next()
+            .expect("streams verified non-empty above")
     };
 
-    eprintln!("[lsl] connecting to '{}' ({}ch @ {}Hz)", info.name(), info.channel_count(), info.nominal_srate());
+    eprintln!(
+        "[lsl] connecting to '{}' ({}ch @ {}Hz)",
+        info.name(),
+        info.channel_count(),
+        info.nominal_srate()
+    );
     let adapter = skill_lsl::LslAdapter::new(&info);
     Ok(Box::new(adapter))
 }
 
 /// Start an rlsl-iroh sink and wait for a remote LSL stream.
-async fn connect_lsl_iroh() -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
-    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink().await
+async fn connect_lsl_iroh(
+) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
+    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink()
+        .await
         .map_err(|e| crate::session_connect::ConnectError::Other(format!("rlsl-iroh sink: {e}")))?;
     eprintln!("[lsl-iroh] sink started, endpoint_id={endpoint_id}");
     eprintln!("[lsl-iroh] waiting for remote source to connect...");

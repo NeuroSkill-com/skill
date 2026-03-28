@@ -6,9 +6,7 @@ use rlsl::resolver;
 use rlsl::stream_info::StreamInfo;
 use tokio::sync::mpsc;
 
-use skill_devices::session::{
-    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame,
-};
+use skill_devices::session::{DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame};
 
 /// Discover LSL EEG/EXG streams on the local network.
 pub fn resolve_eeg_streams(timeout_secs: f64) -> Vec<StreamInfo> {
@@ -124,28 +122,45 @@ impl LslAdapter {
 
                 let mut buf = vec![0.0f64; channel_count];
                 loop {
-                    if shutdown_rx.try_recv().is_ok() { break; }
+                    if shutdown_rx.try_recv().is_ok() {
+                        break;
+                    }
 
-                    let Ok(ts) = inlet.pull_sample_d(&mut buf, 0.1) else { continue };
-                    if ts <= 0.0 { continue; }
+                    let Ok(ts) = inlet.pull_sample_d(&mut buf, 0.1) else {
+                        continue;
+                    };
+                    if ts <= 0.0 {
+                        continue;
+                    }
 
-                    if tx.blocking_send(DeviceEvent::Eeg(EegFrame {
-                        channels: buf.to_vec(),
-                        timestamp_s: ts,
-                    })).is_err() {
+                    if tx
+                        .blocking_send(DeviceEvent::Eeg(EegFrame {
+                            channels: buf.to_vec(),
+                            timestamp_s: ts,
+                        }))
+                        .is_err()
+                    {
                         break;
                     }
                 }
             })
             .expect("failed to spawn LSL inlet thread");
 
-        Self { rx, desc, _shutdown: shutdown_tx }
+        Self {
+            rx,
+            desc,
+            _shutdown: shutdown_tx,
+        }
     }
 }
 
 #[async_trait]
 impl DeviceAdapter for LslAdapter {
-    fn descriptor(&self) -> &DeviceDescriptor { &self.desc }
-    async fn next_event(&mut self) -> Option<DeviceEvent> { self.rx.recv().await }
+    fn descriptor(&self) -> &DeviceDescriptor {
+        &self.desc
+    }
+    async fn next_event(&mut self) -> Option<DeviceEvent> {
+        self.rx.recv().await
+    }
     async fn disconnect(&mut self) {}
 }

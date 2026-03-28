@@ -1,8 +1,8 @@
+use iroh::endpoint::Connection;
+use iroh::Watcher;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::time::{timeout, Duration};
-use iroh::Watcher;
-use iroh::endpoint::Connection;
 const ALPN: &[u8] = b"skill/http-ws/1";
 
 /// Minimal server handler: reads raw HTTP from an iroh bi-stream, parses the
@@ -17,13 +17,9 @@ async fn handle_one_request(
     let raw_str = String::from_utf8_lossy(&raw);
 
     // Split HTTP header from body
-    let body_str = raw_str
-        .split("\r\n\r\n")
-        .nth(1)
-        .unwrap_or("");
+    let body_str = raw_str.split("\r\n\r\n").nth(1).unwrap_or("");
 
-    let v: serde_json::Value = serde_json::from_str(body_str)
-        .unwrap_or_else(|_| serde_json::json!({}));
+    let v: serde_json::Value = serde_json::from_str(body_str).unwrap_or_else(|_| serde_json::json!({}));
 
     let endpoint_id = v.get("endpoint_id").and_then(serde_json::Value::as_str).unwrap_or("");
     let otp = v.get("otp").and_then(serde_json::Value::as_str).unwrap_or("");
@@ -99,10 +95,7 @@ fn generate_totp_code(secret: &[u8], account_name: &str) -> anyhow::Result<Strin
 }
 
 /// Helper: send an HTTP POST over iroh and return the parsed JSON body
-async fn send_register_request(
-    conn: &Connection,
-    body_json: &serde_json::Value,
-) -> anyhow::Result<serde_json::Value> {
+async fn send_register_request(conn: &Connection, body_json: &serde_json::Value) -> anyhow::Result<serde_json::Value> {
     let body = body_json.to_string();
     let req = format!(
         "POST /v1/iroh/clients/register HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
@@ -114,10 +107,7 @@ async fn send_register_request(
     send.finish()?;
     let resp = recv.read_to_end(16 * 1024).await?;
     let resp_text = String::from_utf8_lossy(&resp);
-    let body_str = resp_text
-        .split("\r\n\r\n")
-        .nth(1)
-        .unwrap_or("");
+    let body_str = resp_text.split("\r\n\r\n").nth(1).unwrap_or("");
     let v: serde_json::Value = serde_json::from_str(body_str)?;
     Ok(v)
 }
@@ -152,12 +142,15 @@ async fn register_success_and_mark_connected() -> anyhow::Result<()> {
     let code = generate_totp_code(&secret, &tview.name)?;
 
     let conn = client_ep.connect(server_addr, ALPN).await?;
-    let v = send_register_request(&conn, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": code,
-        "name": "cli",
-        "scope": "read"
-    }))
+    let v = send_register_request(
+        &conn,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": code,
+            "name": "cli",
+            "scope": "read"
+        }),
+    )
     .await?;
 
     assert_eq!(v.get("ok").and_then(|b| b.as_bool()), Some(true));
@@ -201,12 +194,15 @@ async fn register_with_full_scope_and_scope_change() -> anyhow::Result<()> {
     let code = generate_totp_code(&secret, &tview.name)?;
 
     let conn = client_ep.connect(server_addr, ALPN).await?;
-    let v = send_register_request(&conn, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": code,
-        "name": "full-client",
-        "scope": "full"
-    }))
+    let v = send_register_request(
+        &conn,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": code,
+            "name": "full-client",
+            "scope": "full"
+        }),
+    )
     .await?;
     assert_eq!(v.get("ok").and_then(|b| b.as_bool()), Some(true));
 
@@ -250,13 +246,20 @@ async fn invalid_otp_rejected() -> anyhow::Result<()> {
 
     let server_addr = server_ep.watch_addr().get();
     let conn = client_ep.connect(server_addr, ALPN).await?;
-    let v = send_register_request(&conn, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": "000000"
-    }))
+    let v = send_register_request(
+        &conn,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": "000000"
+        }),
+    )
     .await?;
     assert_eq!(v.get("ok").and_then(|b| b.as_bool()), Some(false));
-    assert!(v.get("error").and_then(|e| e.as_str()).unwrap_or("").contains("invalid otp"));
+    assert!(v
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or("")
+        .contains("invalid otp"));
 
     let _ = timeout(Duration::from_secs(5), serve_handle).await??;
     Ok(())
@@ -289,14 +292,21 @@ async fn revoked_totp_rejected() -> anyhow::Result<()> {
     let code = generate_totp_code(&secret, &tview.name)?;
 
     let conn = client_ep.connect(server_addr, ALPN).await?;
-    let v = send_register_request(&conn, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": code,
-        "totp_id": tview.id,
-    }))
+    let v = send_register_request(
+        &conn,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": code,
+            "totp_id": tview.id,
+        }),
+    )
     .await?;
     assert_eq!(v.get("ok").and_then(|b| b.as_bool()), Some(false));
-    assert!(v.get("error").and_then(|e| e.as_str()).unwrap_or("").contains("revoked"));
+    assert!(v
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or("")
+        .contains("revoked"));
 
     let _ = timeout(Duration::from_secs(5), serve_handle).await??;
     Ok(())
@@ -316,7 +326,11 @@ async fn ambiguous_totp_requires_hint() -> anyhow::Result<()> {
     let mut db: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&auth_path)?)?;
     if let Some(arr) = db.get_mut("totp").and_then(|v| v.as_array_mut()) {
         if arr.len() >= 2 {
-            let s0 = arr[0].get("secret_b32").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let s0 = arr[0]
+                .get("secret_b32")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
             arr[1]["secret_b32"] = serde_json::Value::String(s0);
             std::fs::write(&auth_path, serde_json::to_string_pretty(&db)?)?;
         }
@@ -342,22 +356,32 @@ async fn ambiguous_totp_requires_hint() -> anyhow::Result<()> {
     // Request 1: ambiguous (no hint) -> should fail
     let code1 = generate_totp_code(&secret, &t1.name)?;
     let conn1 = client_ep.connect(server_addr.clone(), ALPN).await?;
-    let v1 = send_register_request(&conn1, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": code1,
-    }))
+    let v1 = send_register_request(
+        &conn1,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": code1,
+        }),
+    )
     .await?;
     assert_eq!(v1.get("ok").and_then(|b| b.as_bool()), Some(false));
-    assert!(v1.get("error").and_then(|e| e.as_str()).unwrap_or("").contains("multiple"));
+    assert!(v1
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or("")
+        .contains("multiple"));
 
     // Request 2: with totp_id hint -> should succeed
     let code2 = generate_totp_code(&secret, &t1.name)?;
     let conn2 = client_ep.connect(server_addr, ALPN).await?;
-    let v2 = send_register_request(&conn2, &serde_json::json!({
-        "endpoint_id": client_ep.id().to_string(),
-        "otp": code2,
-        "totp_id": t1.id,
-    }))
+    let v2 = send_register_request(
+        &conn2,
+        &serde_json::json!({
+            "endpoint_id": client_ep.id().to_string(),
+            "otp": code2,
+            "totp_id": t1.id,
+        }),
+    )
     .await?;
     assert_eq!(v2.get("ok").and_then(|b| b.as_bool()), Some(true));
 
@@ -373,10 +397,7 @@ async fn serve_with_auth_check(
     auth: std::sync::Arc<std::sync::Mutex<skill_iroh::IrohAuthStore>>,
     expected_streams: usize,
 ) -> anyhow::Result<()> {
-    let incoming = server_ep
-        .accept()
-        .await
-        .ok_or_else(|| anyhow::anyhow!("no incoming"))?;
+    let incoming = server_ep.accept().await.ok_or_else(|| anyhow::anyhow!("no incoming"))?;
     let conn = incoming.await?;
     let peer = conn.remote_id().to_string().to_lowercase();
 
@@ -446,12 +467,16 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
         let serve_handle = tokio::spawn(async move { serve_n_requests(srv, sd, 1).await });
         let code = generate_totp_code(&secret, "phone")?;
         let conn = client_ep.connect(server_addr.clone(), ALPN).await?;
-        let v = send_register_request(&conn, &serde_json::json!({
-            "endpoint_id": client_ep.id().to_string(),
-            "otp": code,
-            "name": "test-client",
-            "scope": "read"
-        })).await?;
+        let v = send_register_request(
+            &conn,
+            &serde_json::json!({
+                "endpoint_id": client_ep.id().to_string(),
+                "otp": code,
+                "name": "test-client",
+                "scope": "read"
+            }),
+        )
+        .await?;
         assert_eq!(v.get("ok").and_then(|b| b.as_bool()), Some(true));
         let _ = timeout(Duration::from_secs(5), serve_handle).await??;
     }
@@ -463,16 +488,12 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
 
     // ── Phase 1: client can communicate (pre-revocation) ─────────────────
     // Shared auth store for the auth-checking server
-    let auth = std::sync::Arc::new(std::sync::Mutex::new(
-        skill_iroh::IrohAuthStore::open(skill_dir),
-    ));
+    let auth = std::sync::Arc::new(std::sync::Mutex::new(skill_iroh::IrohAuthStore::open(skill_dir)));
 
     // Start server that will serve up to 3 streams but checks auth each time
     let srv2 = server_ep.clone();
     let auth2 = auth.clone();
-    let serve_handle = tokio::spawn(async move {
-        serve_with_auth_check(srv2, auth2, 3).await
-    });
+    let serve_handle = tokio::spawn(async move { serve_with_auth_check(srv2, auth2, 3).await });
 
     // Small delay to let server start accepting
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -485,7 +506,10 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
     send1.finish()?;
     let resp1 = recv1.read_to_end(16 * 1024).await?;
     let resp1_str = String::from_utf8_lossy(&resp1);
-    assert!(resp1_str.contains("200 OK"), "pre-revocation request should succeed, got: {resp1_str}");
+    assert!(
+        resp1_str.contains("200 OK"),
+        "pre-revocation request should succeed, got: {resp1_str}"
+    );
 
     // ── Phase 2: revoke the client ───────────────────────────────────────
     {
@@ -494,7 +518,10 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
     }
 
     // Verify revocation took effect
-    assert!(!auth.lock().expect("lock").is_endpoint_allowed(&client_ep.id().to_string()));
+    assert!(!auth
+        .lock()
+        .expect("lock")
+        .is_endpoint_allowed(&client_ep.id().to_string()));
 
     // ── Phase 3: client should be blocked ────────────────────────────────
     // Try to open a new bi-stream on the same connection — the server should
@@ -505,7 +532,8 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
         send2.finish()?;
         let resp2 = recv2.read_to_end(16 * 1024).await?;
         Ok::<Vec<u8>, anyhow::Error>(resp2)
-    }.await;
+    }
+    .await;
 
     match result {
         Err(e) => {
@@ -528,9 +556,7 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
     // Start a fresh auth-checking server
     let srv3 = server_ep.clone();
     let auth3 = auth.clone();
-    let serve_handle2 = tokio::spawn(async move {
-        serve_with_auth_check(srv3, auth3, 1).await
-    });
+    let serve_handle2 = tokio::spawn(async move { serve_with_auth_check(srv3, auth3, 1).await });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -541,7 +567,8 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
         send3.finish()?;
         let resp3 = recv3.read_to_end(16 * 1024).await?;
         Ok::<Vec<u8>, anyhow::Error>(resp3)
-    }.await;
+    }
+    .await;
 
     match new_conn_result {
         Err(e) => {
@@ -565,9 +592,7 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
 #[tokio::test]
 async fn endpoint_info_roundtrip() -> anyhow::Result<()> {
     // Test that we can create an endpoint, get its ID and relay, and use them
-    let ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0)
-        .bind()
-        .await?;
+    let ep = iroh::Endpoint::builder(iroh::endpoint::presets::N0).bind().await?;
     ep.online().await;
 
     let id = ep.id().to_string();

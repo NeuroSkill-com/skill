@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use base64::{engine::general_purpose, Engine as _};
-use qrcodegen::{QrCode, QrCodeEcc};
-use image::ColorType;
 use image::codecs::png::PngEncoder;
+use image::ColorType;
 use image::ImageEncoder;
+use qrcodegen::{QrCode, QrCodeEcc};
 
-use crate::{SharedIrohAuth, SharedIrohRuntime, lock_or_recover};
+use crate::{lock_or_recover, SharedIrohAuth, SharedIrohRuntime};
 use serde_json::{json, Value};
 
 /// Render a JSON string into a QR-code PNG and return it as a data-URI.
 fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
-    let qr = QrCode::encode_text(payload_json, QrCodeEcc::Medium)
-        .map_err(|e| format!("QR encode error: {e}"))?;
+    let qr = QrCode::encode_text(payload_json, QrCodeEcc::Medium).map_err(|e| format!("QR encode error: {e}"))?;
     let size = qr.size();
     let scale = 8; // pixels per module
     let border = 2 * scale;
@@ -55,11 +54,7 @@ fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
 ///   { "payload": { endpoint_id, relay_url, totp_id, secret_base32, name, created_at },
 ///     "otpauth_url": "otpauth://totp/...",
 ///     "qr_png_base64": "data:image/png;base64,..." }
-pub fn iroh_phone_invite(
-    auth: &SharedIrohAuth,
-    runtime: &SharedIrohRuntime,
-    msg: &Value,
-) -> Result<Value, String> {
+pub fn iroh_phone_invite(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime, msg: &Value) -> Result<Value, String> {
     // Grab endpoint info from the running tunnel
     let (endpoint_id, relay_url) = {
         let r = lock_or_recover(runtime);
@@ -299,7 +294,7 @@ pub fn iroh_client_permissions(auth: &SharedIrohAuth, msg: &Value) -> Result<Val
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{IrohAuthStore, totp_from_entry};
+    use crate::auth::{totp_from_entry, IrohAuthStore};
     use crate::IrohRuntimeState;
     use std::sync::{Arc, Mutex};
 
@@ -363,9 +358,9 @@ mod tests {
             drop(a);
             // Re-open to get totp entry with secret (need raw db for secret_b32)
             let _store = IrohAuthStore::open(td.path());
-            let raw: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"),
-            ).expect("parse");
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"))
+                    .expect("parse");
             let b32 = raw["totp"][0]["secret_b32"].as_str().expect("secret").to_string();
             let entry = crate::IrohTotpEntry {
                 id: raw["totp"][0]["id"].as_str().expect("id").to_string(),
@@ -380,7 +375,8 @@ mod tests {
 
         {
             let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
-            auth.lock().expect("lock")
+            auth.lock()
+                .expect("lock")
                 .register_client("ep1", &otp, Some(&totp_id), Some("dev"), None)
                 .expect("register");
         }
@@ -420,7 +416,10 @@ mod tests {
         let msg = json!({"name": "my-phone"});
         let v = iroh_totp_create(&auth, &msg).expect("create");
         assert!(v["otpauth_url"].as_str().expect("url").starts_with("otpauth://"));
-        assert!(v["qr_png_base64"].as_str().expect("qr").starts_with("data:image/png;base64,"));
+        assert!(v["qr_png_base64"]
+            .as_str()
+            .expect("qr")
+            .starts_with("data:image/png;base64,"));
         assert_eq!(v["totp"]["name"], "my-phone");
     }
 
@@ -443,7 +442,10 @@ mod tests {
         let msg = json!({"id": view.id});
         let v = iroh_totp_qr(&auth, &msg).expect("qr");
         assert!(v["otpauth_url"].as_str().expect("url").starts_with("otpauth://"));
-        assert!(v["qr_png_base64"].as_str().expect("qr").starts_with("data:image/png;base64,"));
+        assert!(v["qr_png_base64"]
+            .as_str()
+            .expect("qr")
+            .starts_with("data:image/png;base64,"));
     }
 
     #[test]
@@ -496,14 +498,16 @@ mod tests {
         auth.lock().expect("lock").create_totp("ph").expect("totp");
 
         let otp = {
-            let raw: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"),
-            ).expect("parse");
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"))
+                    .expect("parse");
             let entry = crate::IrohTotpEntry {
                 id: raw["totp"][0]["id"].as_str().expect("id").to_string(),
                 name: "ph".into(),
                 secret_b32: raw["totp"][0]["secret_b32"].as_str().expect("s").to_string(),
-                created_at: 0, revoked_at: None, last_used_at: None,
+                created_at: 0,
+                revoked_at: None,
+                last_used_at: None,
             };
             totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
         };
@@ -539,19 +543,22 @@ mod tests {
         auth.lock().expect("lock").create_totp("ph").expect("totp");
 
         let otp = {
-            let raw: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"),
-            ).expect("parse");
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"))
+                    .expect("parse");
             let entry = crate::IrohTotpEntry {
                 id: raw["totp"][0]["id"].as_str().expect("id").to_string(),
                 name: "ph".into(),
                 secret_b32: raw["totp"][0]["secret_b32"].as_str().expect("s").to_string(),
-                created_at: 0, revoked_at: None, last_used_at: None,
+                created_at: 0,
+                revoked_at: None,
+                last_used_at: None,
             };
             totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
         };
         let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
-        auth.lock().expect("lock")
+        auth.lock()
+            .expect("lock")
             .register_client("ep1", &otp, Some(&totp_id), Some("dev"), None)
             .expect("register");
 
@@ -577,19 +584,22 @@ mod tests {
         auth.lock().expect("lock").create_totp("ph").expect("totp");
 
         let otp = {
-            let raw: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"),
-            ).expect("parse");
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(td.path().join("iroh_auth.json")).expect("read"))
+                    .expect("parse");
             let entry = crate::IrohTotpEntry {
                 id: raw["totp"][0]["id"].as_str().expect("id").to_string(),
                 name: "ph".into(),
                 secret_b32: raw["totp"][0]["secret_b32"].as_str().expect("s").to_string(),
-                created_at: 0, revoked_at: None, last_used_at: None,
+                created_at: 0,
+                revoked_at: None,
+                last_used_at: None,
             };
             totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
         };
         let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
-        auth.lock().expect("lock")
+        auth.lock()
+            .expect("lock")
             .register_client("ep1", &otp, Some(&totp_id), Some("dev"), Some("read"))
             .expect("register");
 
@@ -600,7 +610,10 @@ mod tests {
         assert!(!dangerous.is_empty(), "full scope should flag dangerous groups");
 
         // Verify scope changed
-        assert_eq!(auth.lock().expect("lock").scope_for_endpoint("ep1").as_deref(), Some("full"));
+        assert_eq!(
+            auth.lock().expect("lock").scope_for_endpoint("ep1").as_deref(),
+            Some("full")
+        );
 
         // Set back to read
         let v2 = iroh_client_set_scope(&auth, &json!({"id": client_id, "scope": "read"})).expect("set");
@@ -642,7 +655,10 @@ mod tests {
         let v = iroh_phone_invite(&auth, &rt, &json!({"name": "my-phone"})).expect("invite");
 
         // QR should be a valid PNG data-URI
-        assert!(v["qr_png_base64"].as_str().expect("qr").starts_with("data:image/png;base64,"));
+        assert!(v["qr_png_base64"]
+            .as_str()
+            .expect("qr")
+            .starts_with("data:image/png;base64,"));
         // otpauth URL for authenticator apps
         assert!(v["otpauth_url"].as_str().expect("url").starts_with("otpauth://"));
 
@@ -657,8 +673,7 @@ mod tests {
 
         // Payload JSON should be decode-able back into IrohInvitePayload
         let payload_str = serde_json::to_string(&p).expect("ser");
-        let decoded: crate::IrohInvitePayload =
-            serde_json::from_str(&payload_str).expect("deser");
+        let decoded: crate::IrohInvitePayload = serde_json::from_str(&payload_str).expect("deser");
         assert_eq!(decoded.endpoint_id, "abcdef1234567890");
         assert_eq!(decoded.relay_url, "https://relay.example.com/");
     }

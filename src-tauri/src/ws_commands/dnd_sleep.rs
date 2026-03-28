@@ -139,8 +139,16 @@ pub fn sleep_schedule_set(app: &AppHandle, msg: &Value) -> Result<Value, String>
     // Sync wake_time into the alarm config if one exists
     let (bh, bm) = {
         let parts: Vec<&str> = guard.sleep_config.wake_time.split(':').collect();
-        (parts.first().and_then(|s| s.parse::<i32>().ok()).unwrap_or(7),
-         parts.get(1).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0))
+        (
+            parts
+                .first()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(7),
+            parts
+                .get(1)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0),
+        )
     };
     if let Some(ref mut alarm) = guard.alarm_config {
         alarm.wake_time_minutes = bh * 60 + bm;
@@ -173,14 +181,31 @@ pub fn sleep_schedule_set(app: &AppHandle, msg: &Value) -> Result<Value, String>
 /// to trigger a `smart_wake` broadcast when the user enters light sleep
 /// within the alarm window.
 pub fn alarm_config(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let enabled = msg.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let wake_time_minutes = msg.get("wake_time_minutes").and_then(|v| v.as_i64()).unwrap_or(420) as i32;
-    let smart_window = msg.get("smart_window").and_then(|v| v.as_i64()).unwrap_or(30) as i32;
-    let smart_wake_enabled = msg.get("smart_wake_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-    let next_alarm_utc = msg.get("next_alarm_utc").and_then(|v| v.as_f64());
+    let enabled = msg
+        .get("enabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let wake_time_minutes = msg
+        .get("wake_time_minutes")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(420) as i32;
+    let smart_window = msg
+        .get("smart_window")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(30) as i32;
+    let smart_wake_enabled = msg
+        .get("smart_wake_enabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let next_alarm_utc = msg
+        .get("next_alarm_utc")
+        .and_then(serde_json::Value::as_f64);
 
     // If bedtime is provided, update the sleep schedule too
-    let bedtime = msg.get("bedtime").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let bedtime = msg
+        .get("bedtime")
+        .and_then(|v| v.as_str())
+        .map(std::string::ToString::to_string);
 
     {
         let r = app.app_state();
@@ -287,7 +312,10 @@ pub fn check_smart_wake(
     // Fire on Wake or N1 (light sleep) — best time to wake up
     if stage == 0 || stage == 1 {
         alarm.smart_wake_sent = true;
-        eprintln!("[alarm] smart wake triggered! stage={stage} (within {:.0}s of target)", window_end - now);
+        eprintln!(
+            "[alarm] smart wake triggered! stage={stage} (within {:.0}s of target)",
+            window_end - now
+        );
         return true;
     }
 

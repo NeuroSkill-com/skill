@@ -84,6 +84,7 @@ const WORKSPACE_CRATES = [
 ];
 
 // Subset of workspace crates that CI runs `cargo test --lib` on.
+// Keep in sync with scripts/test-fast.sh tiers and ci.yml INT_CRATES.
 const TEST_CRATES = [
   "skill-eeg",
   "skill-data",
@@ -98,6 +99,12 @@ const TEST_CRATES = [
   "skill-autostart",
   "skill-tts",
   "skill-gpu",
+  "skill-jobs",
+  "skill-exg",
+  "skill-label-index",
+  "skill-skills",
+  "skill-commands",
+  "skill-screenshots",
 ];
 
 function checkForCompetingCargo() {
@@ -392,12 +399,12 @@ async function runPreflightChecks() {
     command: "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
   });
 
-  // Test all test crates in a single invocation
+  // Test all test crates (unit + integration tests)
   {
     const pkgFlags = TEST_CRATES.map((c) => `-p ${c}`).join(" ");
     steps.push({
       label: `test workspace (${TEST_CRATES.length} crates)`,
-      command: `cargo test ${pkgFlags} --lib`,
+      command: `cargo test ${pkgFlags}`,
     });
   }
 

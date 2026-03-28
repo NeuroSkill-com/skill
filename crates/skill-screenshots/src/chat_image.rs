@@ -78,10 +78,32 @@ pub fn save_chat_image(
         let png_path = screenshots_dir.join(&png_filename);
         img.save(&png_path).ok()?;
         let meta = std::fs::metadata(&png_path).ok()?;
-        return save_to_store(skill_dir, &png_filename, w, h, meta.len(), ts, unix_ts, source, caption, chat_session_id);
+        return save_to_store(
+            skill_dir,
+            &png_filename,
+            w,
+            h,
+            meta.len(),
+            ts,
+            unix_ts,
+            source,
+            caption,
+            chat_session_id,
+        );
     };
 
-    save_to_store(skill_dir, &filename, w, h, file_size, ts, unix_ts, source, caption, chat_session_id)
+    save_to_store(
+        skill_dir,
+        &filename,
+        w,
+        h,
+        file_size,
+        ts,
+        unix_ts,
+        source,
+        caption,
+        chat_session_id,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -119,7 +141,11 @@ fn save_to_store(
         ocr_embedding_dim: 0,
         ocr_hnsw_id: None,
         source: source.to_string(),
-        chat_session_id: if chat_session_id > 0 { Some(chat_session_id) } else { None },
+        chat_session_id: if chat_session_id > 0 {
+            Some(chat_session_id)
+        } else {
+            None
+        },
         caption: caption.to_string(),
     })?;
 
@@ -128,7 +154,10 @@ fn save_to_store(
         file_size
     );
 
-    Some(SavedChatImage { row_id, filename: filename.to_string() })
+    Some(SavedChatImage {
+        row_id,
+        filename: filename.to_string(),
+    })
 }
 
 fn parse_data_url(url: &str) -> Option<(&str, &str)> {

@@ -1,6 +1,6 @@
+use serde::Deserialize;
 use std::str::FromStr;
 use structopt::StructOpt;
-use serde::Deserialize;
 
 #[derive(StructOpt, Debug)]
 struct Opt {
@@ -73,9 +73,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Parse remote endpoint id and relay
     let remote_id = iroh_base::PublicKey::from_str(&p.endpoint_id)?;
-    let relay_url: iroh_base::RelayUrl = p.relay_url.parse().map_err(|e| anyhow::anyhow!("invalid relay url: {}", e))?;
+    let relay_url: iroh_base::RelayUrl = p
+        .relay_url
+        .parse()
+        .map_err(|e| anyhow::anyhow!("invalid relay url: {}", e))?;
 
-    let addr = iroh_base::EndpointAddr::from_parts(remote_id, std::iter::once(iroh_base::TransportAddr::Relay(relay_url)));
+    let addr =
+        iroh_base::EndpointAddr::from_parts(remote_id, std::iter::once(iroh_base::TransportAddr::Relay(relay_url)));
 
     println!("Connecting to remote...");
     let conn = endpoint
@@ -85,7 +89,16 @@ async fn main() -> anyhow::Result<()> {
     println!("Connected to remote: {}", conn.remote_id());
 
     // Generate current TOTP using totp-rs
-    let totp = totp_rs::TOTP::new(totp_rs::Algorithm::SHA1, 6, 1, 30, secret_bytes, Some("Skill".to_string()), opt.name.clone().unwrap_or_else(|| "client".to_string())).unwrap();
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("Skill".to_string()),
+        opt.name.clone().unwrap_or_else(|| "client".to_string()),
+    )
+    .unwrap();
     let code = totp.generate_current().unwrap();
 
     // Prepare HTTP POST to /v1/iroh/clients/register
@@ -109,8 +122,11 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("open_bi failed: {:?}", e))?;
 
     // Write request
-    send.write_all(req.as_bytes()).await.map_err(|e| anyhow::anyhow!("send failed: {}", e))?;
-    send.finish().map_err(|e| anyhow::anyhow!("send finish failed: {:?}", e))?;
+    send.write_all(req.as_bytes())
+        .await
+        .map_err(|e| anyhow::anyhow!("send failed: {}", e))?;
+    send.finish()
+        .map_err(|e| anyhow::anyhow!("send finish failed: {:?}", e))?;
 
     // Read response using iroh recv.read_to_end
     let response = recv

@@ -47,18 +47,39 @@ npm run tauri:build
 ### Running Tests
 
 ```bash
-# Frontend tests (Vitest)
-npm test
+# ── Fast feedback (daily development) ─────────────────────────────
+npm run test:rust          # Tier 1 Rust: ~5 s warm, ~27 s clean (350 tests)
+npm test                   # Frontend (Vitest): 683 tests in ~7 s
 
-# Rust tests (all crates)
-cargo test --workspace
+# ── Full Rust test suite ──────────────────────────────────────────
+npm run test:rust:all      # All 3 tiers (~65 s clean, ~650 Rust tests)
 
-# LLM end-to-end test (requires model download)
-npm run test:llm:e2e
+# ── Tiered Rust runner (scripts/test-fast.sh) ─────────────────────
+bash scripts/test-fast.sh              # Tier 1 only
+bash scripts/test-fast.sh --tier 2     # Tiers 1-2
+bash scripts/test-fast.sh --all        # All tiers
+bash scripts/test-fast.sh --continue   # Don't stop on first failure
 
-# Smoke test (build verification)
-npm run test:smoke
+# ── Slow / CI-only ────────────────────────────────────────────────
+npm run test:llm:e2e       # LLM E2E (downloads model, ~15 s cached)
+npm run test:smoke         # Build verification
 ```
+
+#### Rust Test Tiers
+
+Tests are split into tiers by compilation cost so you get fast feedback:
+
+| Tier | What it tests | Clean build | Warm cache | Tests |
+|------|---------------|-------------|------------|-------|
+| **1** | Core logic: eeg, tools, jobs, constants, exg, gpu | ~27 s | ~5 s | ~350 |
+| **2** | + data, settings, history, health, router, tts, labels, skills, commands | ~53 s | ~8 s | ~550 |
+| **3** | + screenshots, devices, llm (adds ML, TLS, heavy native deps) | ~65 s | ~15 s | ~650 |
+| **E2E** | LLM download → inference → tool calling (manual/CI dispatch) | ~15 s | ~12 s | 1 |
+
+> **Tip:** Install [sccache](https://github.com/mozilla/sccache) (`brew install sccache`) and
+> set `RUSTC_WRAPPER=sccache` for faster clean rebuilds.
+
+See [docs/TEST-COVERAGE.md](docs/TEST-COVERAGE.md) for a detailed coverage analysis and gaps.
 
 ### Code Quality
 

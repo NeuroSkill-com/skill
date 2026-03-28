@@ -7,14 +7,18 @@ pub mod device_receiver;
 pub mod scope;
 mod tunnel;
 
-pub use auth::{IrohAuthStore, IrohClientEntry, IrohClientView, IrohGeo, IrohInvitePayload, IrohTotpEntry, IrohTotpView, totp_from_entry};
-pub use device_receiver::{RemoteDeviceEvent, RemoteEventTx, RemoteEventRx, event_channel};
+pub use auth::{
+    totp_from_entry, IrohAuthStore, IrohClientEntry, IrohClientView, IrohGeo, IrohInvitePayload, IrohTotpEntry,
+    IrohTotpView,
+};
 pub use device_proto::Location as IrohLocation;
 pub use device_proto::PhoneImuSample;
+pub use device_receiver::{event_channel, RemoteDeviceEvent, RemoteEventRx, RemoteEventTx};
 pub use scope::ClientScope;
-pub use tunnel::{spawn, new_peer_map, rotate_secret_key, key_history, IrohPeerMap, IrohRuntimeState, SharedIrohAuth, SharedIrohRuntime, SharedDeviceEventTx};
-
-
+pub use tunnel::{
+    key_history, new_peer_map, rotate_secret_key, spawn, IrohPeerMap, IrohRuntimeState, SharedDeviceEventTx,
+    SharedIrohAuth, SharedIrohRuntime,
+};
 
 #[cfg(test)]
 mod tests;

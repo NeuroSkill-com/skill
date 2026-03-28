@@ -76,7 +76,13 @@ pub const GROUPS: &[CommandGroup] = &[
         label: "Remote Access (View)",
         description: "View tunnel status, credentials, and connected clients.",
         dangerous: false,
-        commands: &["iroh_info", "iroh_totp_list", "iroh_clients_list", "iroh_scope_groups", "iroh_client_permissions"],
+        commands: &[
+            "iroh_info",
+            "iroh_totp_list",
+            "iroh_clients_list",
+            "iroh_scope_groups",
+            "iroh_client_permissions",
+        ],
     },
     CommandGroup {
         id: "llm_view",
@@ -105,7 +111,6 @@ pub const GROUPS: &[CommandGroup] = &[
         dangerous: false,
         commands: &["list_calibrations", "get_calibration"],
     },
-
     // ── Write / mutating ─────────────────────────────────────────────────
     CommandGroup {
         id: "labels",
@@ -128,7 +133,6 @@ pub const GROUPS: &[CommandGroup] = &[
         dangerous: false,
         commands: &["calendar_request_permission"],
     },
-
     // ── Dangerous ────────────────────────────────────────────────────────
     CommandGroup {
         id: "device_control",
@@ -154,11 +158,7 @@ pub const GROUPS: &[CommandGroup] = &[
         description: "Create, modify, and delete calibration profiles. \
                        Deleting a profile is irreversible.",
         dangerous: true,
-        commands: &[
-            "create_calibration",
-            "update_calibration",
-            "delete_calibration",
-        ],
+        commands: &["create_calibration", "update_calibration", "delete_calibration"],
     },
     CommandGroup {
         id: "hooks",
@@ -166,13 +166,7 @@ pub const GROUPS: &[CommandGroup] = &[
         description: "View, create, and modify automation hooks. \
                        Hooks can execute shell commands and external scripts on the host.",
         dangerous: true,
-        commands: &[
-            "hooks_get",
-            "hooks_set",
-            "hooks_status",
-            "hooks_suggest",
-            "hooks_log",
-        ],
+        commands: &["hooks_get", "hooks_set", "hooks_status", "hooks_suggest", "hooks_log"],
     },
     CommandGroup {
         id: "llm_control",
@@ -210,7 +204,6 @@ pub const GROUPS: &[CommandGroup] = &[
             "iroh_client_revoke",
             "iroh_client_set_scope",
             "iroh_phone_invite",
-
         ],
     },
 ];
@@ -294,11 +287,9 @@ pub fn is_allowed(cs: &ClientScope, command: &str) -> bool {
                 return true;
             }
             // Check built-in read groups
-            READ_GROUPS.iter().any(|gid| {
-                group_by_id(gid)
-                    .map(|g| g.commands.contains(&command))
-                    .unwrap_or(false)
-            })
+            READ_GROUPS
+                .iter()
+                .any(|gid| group_by_id(gid).map(|g| g.commands.contains(&command)).unwrap_or(false))
         }
         "custom" => {
             // Explicit deny always wins
@@ -310,11 +301,9 @@ pub fn is_allowed(cs: &ClientScope, command: &str) -> bool {
                 return true;
             }
             // Check enabled groups
-            cs.groups.iter().any(|gid| {
-                group_by_id(gid)
-                    .map(|g| g.commands.contains(&command))
-                    .unwrap_or(false)
-            })
+            cs.groups
+                .iter()
+                .any(|gid| group_by_id(gid).map(|g| g.commands.contains(&command)).unwrap_or(false))
         }
         _ => false,
     }
@@ -398,9 +387,7 @@ pub fn normalize_scope(scope: &str) -> Result<String, String> {
         "read" | "readonly" => Ok("read".to_string()),
         "full" => Ok("full".to_string()),
         "custom" => Ok("custom".to_string()),
-        _ => Err(format!(
-            "invalid scope '{scope}': expected 'read', 'full', or 'custom'"
-        )),
+        _ => Err(format!("invalid scope '{scope}': expected 'read', 'full', or 'custom'")),
     }
 }
 
@@ -427,9 +414,7 @@ pub fn validate_commands(commands: &[String]) -> Result<(), String> {
 /// Returns true if the scope enables any dangerous group.
 pub fn has_dangerous_groups(cs: &ClientScope) -> bool {
     let active = effective_groups(cs);
-    GROUPS
-        .iter()
-        .any(|g| g.dangerous && active.contains(&g.id))
+    GROUPS.iter().any(|g| g.dangerous && active.contains(&g.id))
 }
 
 /// Returns the list of dangerous groups that are enabled.

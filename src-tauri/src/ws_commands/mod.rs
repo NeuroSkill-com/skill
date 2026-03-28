@@ -829,7 +829,10 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
             }))
         }
         "set_max_pipeline_channels" => {
-            let val = msg.get("value").and_then(|v| v.as_u64()).unwrap_or(24) as usize;
+            let val = msg
+                .get("value")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(24) as usize;
             let clamped = val.clamp(2, 1024);
             {
                 let r = app.app_state();
@@ -911,16 +914,19 @@ fn lsl_discover(_app: &AppHandle) -> Result<Value, String> {
         .join()
         .map_err(|_| "LSL discovery thread panicked".to_string())?;
 
-    let list: Vec<Value> = streams.iter().map(|s| {
-        serde_json::json!({
-            "name": s.name,
-            "type": s.stream_type,
-            "channels": s.channel_count,
-            "sample_rate": s.sample_rate,
-            "source_id": s.source_id,
-            "hostname": s.hostname,
+    let list: Vec<Value> = streams
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "name": s.name,
+                "type": s.stream_type,
+                "channels": s.channel_count,
+                "sample_rate": s.sample_rate,
+                "source_id": s.source_id,
+                "hostname": s.hostname,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(serde_json::json!({
         "ok": true,
@@ -932,7 +938,10 @@ fn lsl_discover(_app: &AppHandle) -> Result<Value, String> {
 
 /// `lsl_connect` — connect to a specific LSL stream by name and start a recording session.
 fn lsl_connect(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let name = msg.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let name = msg
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(std::string::ToString::to_string);
 
     // Start session with "lsl" device kind and the stream name as target
     let target = name.unwrap_or_default();
@@ -960,7 +969,8 @@ async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
         }
     }
 
-    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink().await
+    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink()
+        .await
         .map_err(|e| format!("rlsl-iroh sink failed: {e}"))?;
 
     // Store endpoint ID

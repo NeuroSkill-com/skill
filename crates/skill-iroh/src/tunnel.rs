@@ -77,7 +77,14 @@ pub fn spawn(
                 .build()
                 .expect("failed to create tokio runtime for iroh tunnel");
 
-            if let Err(e) = rt.block_on(run(&skill_dir, api_port, auth, runtime.clone(), peer_map, device_event_tx.clone())) {
+            if let Err(e) = rt.block_on(run(
+                &skill_dir,
+                api_port,
+                auth,
+                runtime.clone(),
+                peer_map,
+                device_event_tx.clone(),
+            )) {
                 lock_or_recover(&runtime).last_error = Some(e.clone());
                 eprintln!("[iroh] tunnel stopped: {e}");
             }
@@ -230,9 +237,7 @@ async fn handle_connection(
 ) -> Result<(), String> {
     // Track whether this peer has ever been authorized.
     // Unregistered peers get a grace window to send a registration request.
-    let mut was_ever_authorized = {
-        lock_or_recover(&auth).is_endpoint_allowed(&peer_id)
-    };
+    let mut was_ever_authorized = { lock_or_recover(&auth).is_endpoint_allowed(&peer_id) };
 
     loop {
         // If the peer was previously authorized, check if they've been revoked.
@@ -273,10 +278,7 @@ async fn handle_connection(
 
         // Register the local TCP source port → peer mapping so the axum
         // server can look up which iroh peer this connection belongs to.
-        let local_src_port = tcp
-            .local_addr()
-            .map(|a| a.port())
-            .unwrap_or(0);
+        let local_src_port = tcp.local_addr().map(|a| a.port()).unwrap_or(0);
         if local_src_port != 0 {
             lock_or_recover(&peer_map).insert(local_src_port, peer_id.clone());
         }
@@ -388,18 +390,15 @@ pub fn rotate_secret_key(skill_dir: &Path) -> Result<(String, String), String> {
         "endpoint_id": old_id,
         "rotated_at": crate::unix_secs(),
     }));
-    let hist_json = serde_json::to_string_pretty(&history)
-        .map_err(|e| format!("serialize history: {e}"))?;
-    std::fs::write(&history_path, hist_json)
-        .map_err(|e| format!("write history: {e}"))?;
+    let hist_json = serde_json::to_string_pretty(&history).map_err(|e| format!("serialize history: {e}"))?;
+    std::fs::write(&history_path, hist_json).map_err(|e| format!("write history: {e}"))?;
 
     // Generate new key
     let new_key = {
         let mut rng = rand::rng();
         SecretKey::generate(&mut rng)
     };
-    std::fs::write(&key_path, new_key.to_bytes())
-        .map_err(|e| format!("write new key: {e}"))?;
+    std::fs::write(&key_path, new_key.to_bytes()).map_err(|e| format!("write new key: {e}"))?;
 
     #[cfg(unix)]
     {

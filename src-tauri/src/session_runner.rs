@@ -624,10 +624,13 @@ fn process_eeg(
                 let rb = snap.channels.iter().map(|c| c.rel_beta).sum::<f32>() / nch;
                 if crate::ws_commands::dnd_sleep::check_smart_wake(alarm, rd, rt, ra, rb) {
                     drop(s); // release lock before broadcast
-                    app.state::<WsBroadcaster>().send("smart_wake", &serde_json::json!({
-                        "reason": "light_sleep_detected",
-                        "timestamp": crate::unix_secs(),
-                    }));
+                    app.state::<WsBroadcaster>().send(
+                        "smart_wake",
+                        &serde_json::json!({
+                            "reason": "light_sleep_detected",
+                            "timestamp": crate::unix_secs(),
+                        }),
+                    );
                     eprintln!("[alarm] smart_wake broadcast sent to all clients");
                 }
             }
@@ -941,7 +944,9 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
                 if let Ok(line) = serde_json::to_string(val) {
                     use std::io::Write;
                     if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true).append(true).open(&sidecar_path)
+                        .create(true)
+                        .append(true)
+                        .open(&sidecar_path)
                     {
                         let _ = writeln!(f, "{line}");
                     }
