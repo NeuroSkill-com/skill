@@ -10,8 +10,8 @@ skill-constants = { path = "../skill-constants" }
 skill-devices   = { path = "../skill-devices" }
 
 # LSL core + iroh bridge (published on crates.io)
-rlsl      = "0.0.3"
-rlsl-iroh = "0.0.3"
+rlsl      = "0.0.4"
+rlsl-iroh = "0.0.4"
 
 tokio       = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 async-trait = "0.1"
