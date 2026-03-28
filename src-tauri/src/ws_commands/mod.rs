@@ -954,6 +954,10 @@ fn lsl_connect(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 }
 
 /// `lsl_iroh_start` — start the rlsl-iroh sink to accept remote LSL streams.
+///
+/// Returns immediately with the iroh endpoint ID.  The adapter waits in the
+/// background for a remote source to connect (up to 120 s), then starts the
+/// recording session automatically.
 async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
     // Check if already running
     {
@@ -969,9 +973,11 @@ async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
         }
     }
 
-    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink()
+    // Two-phase start: bind iroh endpoint (fast) → return endpoint ID
+    // immediately.  The adapter future resolves once a remote connects.
+    let (endpoint_id, adapter_fut) = skill_lsl::IrohLslAdapter::start_sink_two_phase()
         .await
-        .map_err(|e| format!("rlsl-iroh sink failed: {e}"))?;
+        .map_err(|e| format!("rlsl-iroh bind failed: {e}"))?;
 
     // Store endpoint ID
     {
@@ -980,15 +986,26 @@ async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
         s.lsl_iroh_endpoint_id = Some(endpoint_id.clone());
     }
 
-    // Start session with this adapter
-    let csv = crate::session_csv::new_csv_path(app);
-    let cancel = tokio_util::sync::CancellationToken::new();
+    // Spawn background: wait for remote source → start session → cleanup
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
-        crate::session_runner::run_device_session(app2, cancel, csv, Box::new(adapter)).await;
+        match adapter_fut.await {
+            Ok(Ok(adapter)) => {
+                eprintln!("[lsl-iroh] source connected, starting session");
+                let csv = crate::session_csv::new_csv_path(&app2);
+                let cancel = tokio_util::sync::CancellationToken::new();
+                let app3 = app2.clone();
+                crate::session_runner::run_device_session(app3, cancel, csv, Box::new(adapter))
+                    .await;
+            }
+            Ok(Err(e)) => eprintln!("[lsl-iroh] sink resolve failed: {e}"),
+            Err(e) => eprintln!("[lsl-iroh] task panicked: {e}"),
+        }
+        // Clear endpoint ID when done
+        let r = app2.app_state();
+        let mut s = r.lock_or_recover();
+        s.lsl_iroh_endpoint_id = None;
     });
-
-    eprintln!("[lsl-iroh] sink started, endpoint_id={endpoint_id}");
 
     Ok(serde_json::json!({
         "ok": true,
