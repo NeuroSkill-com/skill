@@ -243,11 +243,6 @@ impl IrohAuthStore {
             return Ok(client_view(existing));
         }
 
-        // Enforce only one active client per TOTP (only for new registrations)
-        if self.db.clients.iter().any(|c| c.totp_id == matched_totp_id && c.revoked_at.is_none()) {
-            return Err("Only one active client is allowed per TOTP. Revoke the existing client before registering a new one.".into());
-        }
-
         let name = name_hint
             .map(str::trim)
             .filter(|s| !s.is_empty())
@@ -817,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn register_one_client_per_totp_enforced() {
+    fn register_multiple_clients_per_totp_allowed() {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
@@ -826,9 +821,9 @@ mod tests {
         s.register_client("ep1", &otp1, Some(&tentry.id), Some("first"), None).expect("first reg");
 
         let otp2 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
-        let result = s.register_client("ep2", &otp2, Some(&tentry.id), Some("second"), None);
-        assert!(result.is_err());
-        assert!(result.expect_err("err").contains("one active client"));
+        let c2 = s.register_client("ep2", &otp2, Some(&tentry.id), Some("second"), None).expect("second reg");
+        assert_eq!(c2.name, "second");
+        assert_eq!(s.list_clients().len(), 2);
     }
 
     #[test]
