@@ -1394,6 +1394,10 @@ useWindowTitle("window.title.history");
           placeholder={t("common.search")}
           class="flex-1 h-6 text-[0.62rem] rounded border border-border dark:border-white/[0.08]
                  bg-background px-2 outline-none focus:ring-1 focus:ring-ring/50" />
+        <button onclick={async () => { await invoke("open_label_window"); }}
+                class="text-[0.58rem] font-medium text-primary hover:text-primary/80 transition-colors">
+          + {t("history.addLabel")}
+        </button>
         <button onclick={() => showLabels = false}
                 aria-label={t("common.close")}
                 class="text-[0.7rem] text-muted-foreground/60 hover:text-foreground">✕</button>
@@ -1870,6 +1874,15 @@ useWindowTitle("window.title.history");
                           oncancel={() => { confirmDelete = null; }}
                         />
                       {:else}
+                        <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
+                                onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_label_window_at", { ts: session.start_utc }); }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                               class="w-3 h-3 mr-1">
+                            <path d="M12 5v14M5 12h14"/>
+                          </svg>
+                          {t("history.addLabel")}
+                        </Button>
                         <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_session_window", { csvPath: session.csv_path }); }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"

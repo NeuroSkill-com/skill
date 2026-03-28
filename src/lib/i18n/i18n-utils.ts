@@ -266,6 +266,10 @@ export const EXEMPT_KEY_PREFIXES = [
   "dashboard.primary", // "PRIMARY" badge
   "dashboard.backgroundRecordings", // "Background Recordings" label
   "dashboard.stopSecondary", // "Stop recording" action
+  "history.addLabel", // "Add Label" action
+  "label.customTime", // "Custom time" toggle
+  "label.labelNow", // "Label at now" default
+  "label.resetToNow", // "Reset to now" action
 ];
 
 /** Exact keys that are always the same across locales. */

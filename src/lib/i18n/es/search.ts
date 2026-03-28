@@ -203,6 +203,11 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "Texto de búsqueda extraído de capturas de pantalla capturadas. Utilice 'Coincidencia de texto' para una búsqueda de subcadenas exacta o 'Semántica' para una búsqueda basada en significado.",
   "search.imageNoResults": "No se encontraron capturas de pantalla coincidentes.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 };
 
 export default search;

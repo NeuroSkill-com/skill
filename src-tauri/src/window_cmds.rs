@@ -553,6 +553,27 @@ window_cmd!(open_label_window, "label", "label",
     size: (520.0, 560.0), min: (420.0, 380.0), always_on_top: true);
 
 #[tauri::command]
+pub fn open_label_window_at(app: AppHandle, ts: u64) -> Result<(), String> {
+    // Close existing label window if open (it may have a different timestamp)
+    if let Some(win) = app.get_webview_window("label") {
+        let _ = win.close();
+    }
+    let route = format!("label?ts={ts}");
+    focus_or_create(
+        &app,
+        WindowSpec {
+            label: "label-retro",
+            route: &route,
+            title: "Add Label",
+            inner_size: (520.0, 560.0),
+            min_inner_size: Some((420.0, 380.0)),
+            always_on_top: true,
+            ..Default::default()
+        },
+    )
+}
+
+#[tauri::command]
 pub fn close_label_window(app: AppHandle) {
     if let Some(win) = app.get_webview_window("label") {
         let _ = win.close();

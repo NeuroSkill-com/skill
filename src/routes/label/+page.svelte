@@ -25,6 +25,10 @@ let recentLabels = $state<string[]>([]);
 let historyIndex = $state(-1);
 let draftText = $state("");
 
+// Retroactive labeling — "now" by default, user can pick a past time
+let useCustomTime = $state(false);
+let customDatetime = $state(""); // ISO local datetime string for the input
+
 // bind:ref requires $state in Svelte 5
 let textareaEl = $state<HTMLTextAreaElement | null>(null);
 let contextEl = $state<HTMLTextAreaElement | null>(null);
@@ -38,12 +42,24 @@ async function closeWindow() {
   await invoke("close_label_window");
 }
 
+function effectiveTimestamp(): number {
+  if (useCustomTime && customDatetime) {
+    const d = new Date(customDatetime);
+    if (!isNaN(d.getTime())) return Math.floor(d.getTime() / 1000);
+  }
+  return labelStartUtc;
+}
+
 async function submit() {
   if (!text.trim() || saving) return;
   saving = true;
   error = "";
   try {
-    await invoke("submit_label", { labelStartUtc, text: text.trim(), context: context.trim() });
+    await invoke("submit_label", {
+      labelStartUtc: effectiveTimestamp(),
+      text: text.trim(),
+      context: context.trim(),
+    });
     await closeWindow();
   } catch (e) {
     error = String(e);
@@ -132,6 +148,20 @@ function onKeydown(e: KeyboardEvent) {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 onMount(() => {
   labelStartUtc = Math.floor(Date.now() / 1000);
+
+  // Check for ?ts= query param (retroactive labeling from history view)
+  const params = new URLSearchParams(window.location.search);
+  const tsParam = params.get("ts");
+  if (tsParam) {
+    const ts = parseInt(tsParam, 10);
+    if (!isNaN(ts) && ts > 0) {
+      useCustomTime = true;
+      const d = new Date(ts * 1000);
+      // Format as local datetime-local input value
+      customDatetime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+  }
+
   labelTitlebarState.active = true;
   timer = setInterval(() => elapsed++, 1000);
   setTimeout(() => textareaEl?.focus(), 60);
@@ -175,6 +205,43 @@ useWindowTitle("window.title.label");
              text-[0.82rem] leading-relaxed shrink-0"
       style="height: 80px"
     />
+
+    <!-- Time picker — defaults to "now", toggle for retroactive labeling -->
+    <div class="flex items-center gap-2 shrink-0">
+      <button
+        type="button"
+        class="flex items-center gap-1.5 text-[0.58rem] cursor-pointer transition-colors
+               {useCustomTime ? 'text-primary font-semibold' : 'text-muted-foreground/50 hover:text-muted-foreground'}"
+        onclick={() => {
+          useCustomTime = !useCustomTime;
+          if (useCustomTime && !customDatetime) {
+            const d = new Date();
+            customDatetime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+          }
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        {useCustomTime ? t("label.customTime") : t("label.labelNow")}
+      </button>
+      {#if useCustomTime}
+        <input
+          type="datetime-local"
+          bind:value={customDatetime}
+          class="h-6 rounded-md border border-border bg-background px-2 text-[0.62rem]
+                 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <button
+          type="button"
+          class="text-[0.52rem] text-muted-foreground/40 hover:text-foreground cursor-pointer"
+          onclick={() => { useCustomTime = false; customDatetime = ""; }}
+        >
+          {t("label.resetToNow")}
+        </button>
+      {/if}
+    </div>
 
     {#if recentLabels.length > 0}
       <div class="flex flex-col gap-1.5 shrink-0">

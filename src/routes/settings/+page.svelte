@@ -123,28 +123,49 @@ const tabLabel = (id: Tab) => TAB_LABELS[id]();
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 const modKey = isMac ? "⌘" : "Ctrl+";
 
-/* ── Cmd/Ctrl + 0‥9 to switch tabs ────────────────────────────────────── */
-// ⌘1–⌘9 → tabs 1–9, ⌘0 → tab 10.  Tabs 11+ reachable via ⌘K.
-const SHORTCUT_TABS = TAB_IDS.slice(0, 10);
+/* ── Keyboard shortcuts for tabs ──────────────────────────────────────── */
+// ⌘1–⌘9 → tabs 1–9, ⌘0 → tab 10
+// ⌃⌘1–⌃⌘9 → tabs 11–19 (Ctrl+Cmd on Mac, Ctrl+Alt on Windows/Linux)
 
 function digitForTab(i: number): string | null {
-  if (i < 9) return String(i + 1); // tabs 0–8 → "1"–"9"
-  if (i === 9) return "0"; // tab 9 → "0"
+  if (i < 9) return String(i + 1);
+  if (i === 9) return "0";
+  if (i >= 10 && i < 19) return String(i - 9);
   return null;
 }
 
+function modifierForTab(i: number): string {
+  if (i < 10) return modKey;
+  return isMac ? "⌃⌘" : "Ctrl+Alt+";
+}
+
 function onKeydown(e: KeyboardEvent) {
+  const digit = e.key >= "0" && e.key <= "9" ? parseInt(e.key, 10) : -1;
+  if (digit < 0) return;
   if (!(e.metaKey || e.ctrlKey)) return;
-  const key = e.key;
-  if (key >= "1" && key <= "9") {
-    const idx = parseInt(key, 10) - 1;
-    if (idx < SHORTCUT_TABS.length) {
-      e.preventDefault();
-      tab = SHORTCUT_TABS[idx];
+
+  // ⌃⌘ (Ctrl+Cmd on Mac, Ctrl+Alt on other) → tabs 11–19
+  const isExtended = isMac ? e.ctrlKey && e.metaKey : e.ctrlKey && e.altKey;
+
+  if (isExtended) {
+    if (digit >= 1 && digit <= 9) {
+      const idx = 10 + digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
     }
-  } else if (key === "0" && SHORTCUT_TABS.length >= 10) {
-    e.preventDefault();
-    tab = SHORTCUT_TABS[9];
+  } else {
+    if (digit >= 1 && digit <= 9) {
+      const idx = digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
+    } else if (digit === 0 && TAB_IDS.length >= 10) {
+      e.preventDefault();
+      tab = TAB_IDS[9];
+    }
   }
 }
 
@@ -260,7 +281,7 @@ $effect(() => {
           role="tab"
           aria-selected={active}
           aria-controls="tab-panel-{id}"
-          title="{tabLabel(id)}{digitForTab(i) ? ` (${modKey}${digitForTab(i)})` : ''}"
+          title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
                  rounded-lg text-left transition-colors text-[0.75rem] font-medium
                  {active
@@ -287,7 +308,7 @@ $effect(() => {
           {#if digitForTab(i)}
             <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
-              {modKey}{digitForTab(i)}
+              {modifierForTab(i)}{digitForTab(i)}
             </kbd>
           {/if}
         </button>

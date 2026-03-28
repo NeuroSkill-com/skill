@@ -202,6 +202,11 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "Suche nach Text in erfassten Screenshots. 'Textsuche' für exakte Teilzeichenfolge oder 'Semantisch' für bedeutungsbasierte Suche.",
   "search.imageNoResults": "Keine passenden Screenshots gefunden.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 };
 
 export default search;
