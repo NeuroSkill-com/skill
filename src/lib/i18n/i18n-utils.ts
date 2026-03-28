@@ -234,6 +234,13 @@ export const EXEMPT_KEY_PREFIXES = [
   "chat.ctx.messagesCount", // "messages" cognate (FR)
   "chat.tools.sourcesLabel", // "Sources" cognate (FR)
   "search.modeImages", // "Images" cognate (FR)
+  "settingsTabs.lsl", // "LSL" technical acronym
+  "lsl.localStreams", // "LSL Streams" technical term
+  "lsl.iroh", // "iroh" product name
+  "lsl.connect", // "Connect" cognate
+  "lsl.scanning", // "Scanning" cognate
+  "lsl.scanButton", // "Scan Network" technical
+  "lsl.noStreams", // technical LSL context
 ];
 
 /** Exact keys that are always the same across locales. */

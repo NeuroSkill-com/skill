@@ -10,6 +10,7 @@ pub mod activity_cmds;
 pub mod device_cmds;
 pub mod dnd_cmds;
 pub mod hook_cmds;
+pub mod lsl_cmds;
 pub mod screenshot_cmds;
 pub mod skills_cmds;
 
