@@ -5772,6 +5772,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec9d92d097f4749b64e8cc33d924d9f40a2d4eb91402b458014b781f5733d60f"
 
 [[package]]
+name = "hostname"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c731c3e10504cc8ed35cfe2f1db4c9274c3d35fa486e3b31df46f068ef3e867"
+dependencies = [
+ "libc",
+ "match_cfg",
+ "winapi",
+]
+
+[[package]]
 name = "hound"
 version = "3.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5932,7 +5943,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2",
+ "socket2 0.6.3",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -6341,7 +6352,7 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d40460c0ce33d6ce4b0630ad68ff63d6661961c48b6dba35e5a4d81cfb48222"
 dependencies = [
- "socket2",
+ "socket2 0.6.3",
  "widestring",
  "windows-registry",
  "windows-result 0.4.1",
@@ -7250,6 +7261,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "lzma-rust2"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7395,6 +7415,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "match_cfg"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
+
+[[package]]
 name = "match_token"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7467,7 +7493,7 @@ dependencies = [
  "log",
  "mio",
  "socket-pktinfo",
- "socket2",
+ "socket2 0.6.3",
 ]
 
 [[package]]
@@ -7989,7 +8015,7 @@ dependencies = [
  "objc2-system-configuration",
  "pin-project-lite",
  "serde",
- "socket2",
+ "socket2 0.6.3",
  "time",
  "tokio",
  "tokio-util",
@@ -8125,7 +8151,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.1",
  "rustls",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -8168,7 +8194,7 @@ checksum = "bb9be4fedd6b98f3ba82ccd3506f4d0219fb723c3f97c67e12fe1494aa020e44"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -9695,7 +9721,7 @@ dependencies = [
  "rand 0.9.2",
  "serde",
  "smallvec",
- "socket2",
+ "socket2 0.6.3",
  "time",
  "tokio",
  "tokio-util",
@@ -10096,7 +10122,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -10133,7 +10159,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -10716,6 +10742,45 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rlsl"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5819ed3ebf64ed3a5e05bea39eb45736a65051a0f270bed11f4e5145581e2270"
+dependencies = [
+ "crossbeam-channel",
+ "fxhash",
+ "hostname",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "socket2 0.5.10",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "rlsl-iroh"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83edcb708e548382fa64d00480476ddfbc1d54f902f86a0953666953d2b2afd8"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytes",
+ "clap 4.6.0",
+ "env_logger 0.11.10",
+ "iroh",
+ "log",
+ "lz4_flex",
+ "rlsl",
+ "serde",
+ "serde_json",
+ "snap",
+ "tokio",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -11784,6 +11849,7 @@ dependencies = [
  "skill-jobs",
  "skill-label-index",
  "skill-llm",
+ "skill-lsl",
  "skill-router",
  "skill-screenshots",
  "skill-settings",
@@ -11886,6 +11952,7 @@ dependencies = [
  "skill-constants",
  "skill-data",
  "skill-eeg",
+ "skill-iroh",
  "tokio",
 ]
 
@@ -11982,6 +12049,7 @@ dependencies = [
  "tokio",
  "totp-rs",
  "ureq 3.3.0",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -12031,6 +12099,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-lsl"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "iroh",
+ "log",
+ "rlsl",
+ "rlsl-iroh",
+ "serde_json",
+ "skill-constants",
+ "skill-devices",
+ "tokio",
+]
+
+[[package]]
 name = "skill-router"
 version = "0.0.1"
 dependencies = [
@@ -12053,6 +12137,7 @@ dependencies = [
 name = "skill-screenshots"
 version = "0.0.1"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "crossbeam-channel",
  "fast-hnsw",
@@ -12203,8 +12288,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "927136cc2ae6a1b0e66ac6b1210902b75c3f726db004a73bc18686dcd0dcd22f"
 dependencies = [
  "libc",
- "socket2",
+ "socket2 0.6.3",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "socket2"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -13541,7 +13636,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.6.3",
  "tokio-macros",
  "tracing",
  "windows-sys 0.61.2",

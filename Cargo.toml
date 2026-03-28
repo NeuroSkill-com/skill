@@ -30,6 +30,7 @@ members = [
     "crates/skill-iroh",
     "crates/skill-jobs",
     "crates/skill-label-index",
+    "crates/skill-lsl",
     "crates/skill-llm",
     "crates/skill-router",
     "crates/skill-screenshots",

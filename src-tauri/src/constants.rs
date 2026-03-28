@@ -65,8 +65,8 @@ mod tests {
     }
 
     #[test]
-    fn eeg_channels_is_twelve() {
-        assert_eq!(EEG_CHANNELS, 12);
+    fn eeg_channels_is_32() {
+        assert_eq!(EEG_CHANNELS, 32);
     }
 
     #[test]

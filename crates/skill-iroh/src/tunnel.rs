@@ -20,6 +20,7 @@ use tokio::{
 use crate::{auth::IrohAuthStore, auth::IrohGeo, lock_or_recover, unix_secs};
 
 const IROH_API_ALPN: &[u8] = b"skill/http-ws/1";
+const IROH_DEVICE_PROXY_ALPN: &[u8] = b"skill/device-proxy/2";
 const IROH_SECRET_FILE: &str = "iroh_secret_key.bin";
 
 pub type SharedIrohAuth = Arc<Mutex<IrohAuthStore>>;
@@ -48,12 +49,20 @@ pub struct IrohRuntimeState {
     pub last_error: Option<String>,
 }
 
+/// Shared, swappable device event sender.
+///
+/// Wrapped in `Arc<Mutex<>>` so the tx can be replaced after a session ends
+/// (the old rx is consumed by the session adapter; a fresh tx/rx pair is
+/// created and the tunnel picks up the new tx on the next connection).
+pub type SharedDeviceEventTx = Arc<Mutex<Option<crate::device_receiver::RemoteEventTx>>>;
+
 pub fn spawn(
     skill_dir: PathBuf,
     api_port: u16,
     auth: SharedIrohAuth,
     runtime: SharedIrohRuntime,
     peer_map: IrohPeerMap,
+    device_event_tx: SharedDeviceEventTx,
 ) {
     // Run the iroh tunnel on its own dedicated Tokio runtime in a background thread.
     // Calling tokio::spawn here would panic if no Tokio reactor is running in the
@@ -68,7 +77,7 @@ pub fn spawn(
                 .build()
                 .expect("failed to create tokio runtime for iroh tunnel");
 
-            if let Err(e) = rt.block_on(run(&skill_dir, api_port, auth, runtime.clone(), peer_map)) {
+            if let Err(e) = rt.block_on(run(&skill_dir, api_port, auth, runtime.clone(), peer_map, device_event_tx.clone())) {
                 lock_or_recover(&runtime).last_error = Some(e.clone());
                 eprintln!("[iroh] tunnel stopped: {e}");
             }
@@ -82,12 +91,13 @@ async fn run(
     auth: SharedIrohAuth,
     runtime: SharedIrohRuntime,
     peer_map: IrohPeerMap,
+    device_event_tx: SharedDeviceEventTx,
 ) -> Result<(), String> {
     let secret_key = load_or_create_secret_key(skill_dir)?;
 
     let endpoint = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
-        .alpns(vec![IROH_API_ALPN.to_vec()])
+        .alpns(vec![IROH_API_ALPN.to_vec(), IROH_DEVICE_PROXY_ALPN.to_vec()])
         .relay_mode(RelayMode::Default)
         .bind()
         .await
@@ -136,7 +146,9 @@ async fn run(
                 continue;
             }
         };
-        if alpn.as_slice() != IROH_API_ALPN {
+
+        let is_device_proxy = alpn.as_slice() == IROH_DEVICE_PROXY_ALPN;
+        if alpn.as_slice() != IROH_API_ALPN && !is_device_proxy {
             eprintln!(
                 "[iroh] rejected connection with unexpected ALPN: {}",
                 String::from_utf8_lossy(&alpn)
@@ -173,6 +185,29 @@ async fn run(
             // via the tunnel itself (no local network needed).
             eprintln!("[iroh] peer connected (unregistered, can register): {peer}");
         }
+
+        // ── Route by ALPN ─────────────────────────────────────────────────
+        if is_device_proxy {
+            // Device proxy stream — requires authorization
+            if !is_authorized {
+                eprintln!("[iroh] rejecting unauthorized device proxy from {peer}");
+                continue;
+            }
+            let tx_guard = lock_or_recover(&device_event_tx);
+            if let Some(ref tx) = *tx_guard {
+                let tx2 = tx.clone();
+                let peer2 = peer.clone();
+                drop(tx_guard);
+                tokio::spawn(async move {
+                    crate::device_receiver::handle_device_proxy_connection(conn, tx2, peer2).await;
+                });
+            } else {
+                drop(tx_guard);
+                eprintln!("[iroh] device proxy channel not configured, rejecting {peer}");
+            }
+            continue;
+        }
+
         let auth2 = auth.clone();
         let peer2 = peer.clone();
         let peer_map2 = peer_map.clone();

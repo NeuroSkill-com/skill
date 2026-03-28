@@ -726,6 +726,9 @@ pub fn run_screenshot_worker(
             ocr_embedding: None,
             ocr_embedding_dim: 0,
             ocr_hnsw_id: None,
+            source: "auto".into(),
+            chat_session_id: None,
+            caption: String::new(),
         });
 
         metrics

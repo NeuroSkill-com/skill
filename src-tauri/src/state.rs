@@ -153,6 +153,10 @@ pub struct DeviceStatus {
     pub fnirs_hbt_right: f64,
     /// Rolling left/right ΔHbO connectivity proxy (Pearson r, -1..1).
     pub fnirs_connectivity: f64,
+    /// Phone descriptor from the remote iOS client (model, OS, locale, etc.).
+    /// Populated when a remote device streams via iroh with `MSG_PHONE_INFO`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone_info: Option<serde_json::Value>,
     /// Hardware EEG channel count of the connected device.
     pub eeg_channel_count: usize,
     /// Hardware EEG sample rate of the connected device (Hz).
@@ -212,6 +216,7 @@ impl Default for DeviceStatus {
             fnirs_hbt_left: 0.0,
             fnirs_hbt_right: 0.0,
             fnirs_connectivity: 0.0,
+            phone_info: None,
             eeg_channel_count: 0,
             eeg_sample_rate_hz: 0.0,
             has_ppg: false,
@@ -262,6 +267,7 @@ impl DeviceStatus {
         self.fnirs_hbt_left = 0.0;
         self.fnirs_hbt_right = 0.0;
         self.fnirs_connectivity = 0.0;
+        self.phone_info = None;
         self.eeg_channel_count = 0;
         self.eeg_sample_rate_hz = 0.0;
         self.has_ppg = false;
@@ -529,9 +535,18 @@ pub struct AppState {
     pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config: crate::settings::ScannerConfig,
 
+    /// LSL stream sink settings.
+    #[allow(dead_code)]
+    pub lsl_enabled: bool,
+    /// rlsl-iroh sink endpoint ID (set when the sink is running).
+    pub lsl_iroh_endpoint_id: Option<String>,
+
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
     pub cortex_ws_state: String,
+
+    // ── Smart alarm ────────────────────────────────────────────────────────
+    pub alarm_config: Option<crate::ws_commands::dnd_sleep::AlarmConfig>,
 
     // ── TTS ───────────────────────────────────────────────────────────────
     pub neutts_config: NeuttsConfig,
@@ -543,6 +558,10 @@ pub struct AppState {
 
     // ── Storage / recording ───────────────────────────────────────────────
     pub settings_storage_format: String,
+    /// Maximum number of EEG channels to process through the DSP pipeline.
+    /// Channels beyond this limit are still recorded to CSV but not processed.
+    /// Range: 2–1024.  Default: 24.  Capped at `EEG_CHANNELS` (24) for DSP arrays.
+    pub max_pipeline_channels: usize,
     pub sleep_config: crate::settings::SleepConfig,
     pub screenshot_config: ScreenshotConfig,
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
@@ -678,9 +697,12 @@ impl Default for AppState {
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
+            lsl_enabled: false,
+            lsl_iroh_endpoint_id: None,
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),
+            alarm_config: None,
             neutts_config: NeuttsConfig::default(),
             tts_preload: true,
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),
@@ -688,6 +710,7 @@ impl Default for AppState {
             logger,
             dnd: std::sync::Arc::new(std::sync::Mutex::new(DndRuntimeState::default())),
             settings_storage_format: "csv".into(),
+            max_pipeline_channels: skill_constants::EEG_CHANNELS, // 32
             sleep_config: crate::settings::SleepConfig::default(),
             screenshot_config: ScreenshotConfig::default(),
             screenshot_store: None,

@@ -163,7 +163,14 @@ pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = ["zuna", "kitten", "neutt
 /// Set to 12 to accommodate the MW75 Neuro (12 channels).  Muse and Ganglion
 /// sessions only push data to the first 4 channels; the remaining 8 stay
 /// silent (zero / no_signal) with negligible overhead.
-pub const EEG_CHANNELS: usize = 12;
+/// Maximum number of EEG channels processed through the DSP pipeline
+/// (filter, FFT, band powers, quality, artifact detection, embeddings).
+///
+/// All channels are always recorded to CSV/Parquet regardless of this limit.
+/// The runtime setting `max_pipeline_channels` (2–1024) controls how many
+/// channels are actually processed; this constant is the upper bound for
+/// fixed-size DSP arrays.
+pub const EEG_CHANNELS: usize = 32;
 
 /// Default channel labels for 4-channel devices (Muse: TP9, AF7, AF8, TP10).
 pub const CHANNEL_NAMES: [&str; 4] = ["TP9", "AF7", "AF8", "TP10"];

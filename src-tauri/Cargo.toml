@@ -243,6 +243,7 @@ mdns-sd = "0.18"
 
 # NAT-traversing P2P transport + TOTP access control.
 skill-iroh = { path = "../crates/skill-iroh" }
+skill-lsl  = { path = "../crates/skill-lsl" }
 
 # ── EEG Embedding ─────────────────────────────────────────────────────────────
 

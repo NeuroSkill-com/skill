@@ -16,6 +16,7 @@ ureq = { version = "3", features = ["native-tls", "json"] }
 base64 = "0.22"
 qrcodegen = "1.8"
 image = "0.24"
+zstd = "0.13"
 
 [dev-dependencies]
 tempfile = "3"

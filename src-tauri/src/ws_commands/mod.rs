@@ -12,7 +12,7 @@
 
 mod calendar;
 mod calibration;
-mod dnd_sleep;
+pub(crate) mod dnd_sleep;
 mod health;
 mod hooks;
 #[cfg(feature = "llm")]
@@ -817,6 +817,37 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "dnd_set" => dnd_sleep::dnd_set(app, msg),
         "sleep_schedule" => dnd_sleep::sleep_schedule(app),
         "sleep_schedule_set" => dnd_sleep::sleep_schedule_set(app, msg),
+        "alarm_config" => dnd_sleep::alarm_config(app, msg),
+        // ── Pipeline config ────────────────────────────────────────────────
+        "get_max_pipeline_channels" => {
+            let r = app.app_state();
+            let s = r.lock_or_recover();
+            Ok(serde_json::json!({
+                "ok": true,
+                "max_pipeline_channels": s.max_pipeline_channels,
+                "eeg_channels_limit": skill_constants::EEG_CHANNELS,
+            }))
+        }
+        "set_max_pipeline_channels" => {
+            let val = msg.get("value").and_then(|v| v.as_u64()).unwrap_or(24) as usize;
+            let clamped = val.clamp(2, 1024);
+            {
+                let r = app.app_state();
+                let mut s = r.lock_or_recover();
+                s.max_pipeline_channels = clamped;
+            }
+            crate::save_settings(app);
+            Ok(serde_json::json!({
+                "ok": true,
+                "max_pipeline_channels": clamped,
+                "dsp_limit": clamped.min(skill_constants::EEG_CHANNELS),
+            }))
+        }
+        // ── LSL stream sink ───────────────────────────────────────────────
+        "lsl_discover" => lsl_discover(app),
+        "lsl_connect" => lsl_connect(app, msg),
+        "lsl_iroh_start" => lsl_iroh_start(app).await,
+        "lsl_iroh_status" => lsl_iroh_status(app),
         // ── Screenshot search ─────────────────────────────────────────────
         "search_screenshots" => screenshots::search_screenshots(app, msg),
         "screenshots_around" => screenshots::screenshots_around(app, msg),
@@ -870,4 +901,100 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "llm_hardware_fit" => llm_cmds::llm_hardware_fit(app, msg),
         other => Err(format!("unknown command: \"{other}\"")),
     }
+}
+
+// ── LSL stream commands ───────────────────────────────────────────────────────
+
+/// `lsl_discover` — scan for LSL streams on the local network.
+fn lsl_discover(_app: &AppHandle) -> Result<Value, String> {
+    let streams = std::thread::spawn(|| skill_lsl::discover_streams(3.0))
+        .join()
+        .map_err(|_| "LSL discovery thread panicked".to_string())?;
+
+    let list: Vec<Value> = streams.iter().map(|s| {
+        serde_json::json!({
+            "name": s.name,
+            "type": s.stream_type,
+            "channels": s.channel_count,
+            "sample_rate": s.sample_rate,
+            "source_id": s.source_id,
+            "hostname": s.hostname,
+        })
+    }).collect();
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_discover",
+        "streams": list,
+        "count": list.len(),
+    }))
+}
+
+/// `lsl_connect` — connect to a specific LSL stream by name and start a recording session.
+fn lsl_connect(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let name = msg.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+    // Start session with "lsl" device kind and the stream name as target
+    let target = name.unwrap_or_default();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::lifecycle::start_session(&app2, Some(format!("lsl:{target}")));
+    });
+
+    Ok(serde_json::json!({ "ok": true, "command": "lsl_connect" }))
+}
+
+/// `lsl_iroh_start` — start the rlsl-iroh sink to accept remote LSL streams.
+async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
+    // Check if already running
+    {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        if s.lsl_iroh_endpoint_id.is_some() {
+            return Ok(serde_json::json!({
+                "ok": true,
+                "command": "lsl_iroh_start",
+                "endpoint_id": s.lsl_iroh_endpoint_id,
+                "already_running": true,
+            }));
+        }
+    }
+
+    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink().await
+        .map_err(|e| format!("rlsl-iroh sink failed: {e}"))?;
+
+    // Store endpoint ID
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.lsl_iroh_endpoint_id = Some(endpoint_id.clone());
+    }
+
+    // Start session with this adapter
+    let csv = crate::session_csv::new_csv_path(app);
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::session_runner::run_device_session(app2, cancel, csv, Box::new(adapter)).await;
+    });
+
+    eprintln!("[lsl-iroh] sink started, endpoint_id={endpoint_id}");
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_start",
+        "endpoint_id": endpoint_id,
+    }))
+}
+
+/// `lsl_iroh_status` — return the rlsl-iroh sink endpoint ID.
+fn lsl_iroh_status(app: &AppHandle) -> Result<Value, String> {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_status",
+        "endpoint_id": s.lsl_iroh_endpoint_id,
+        "running": s.lsl_iroh_endpoint_id.is_some(),
+    }))
 }

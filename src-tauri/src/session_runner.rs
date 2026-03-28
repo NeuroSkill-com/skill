@@ -609,6 +609,29 @@ fn process_eeg(
         }
         let _ = app.emit("eeg-bands", &snap);
         app.state::<WsBroadcaster>().send("eeg-bands", &snap);
+
+        // ── Smart alarm check ────────────────────────────────────────────────
+        // If the iOS client configured an alarm, check if we should fire
+        // a smart_wake based on the current sleep stage.
+        {
+            let sr = app.app_state();
+            let mut s = sr.lock_or_recover();
+            if let Some(ref mut alarm) = s.alarm_config {
+                let nch = snap.channels.len().max(1) as f32;
+                let rd = snap.channels.iter().map(|c| c.rel_delta).sum::<f32>() / nch;
+                let rt = snap.channels.iter().map(|c| c.rel_theta).sum::<f32>() / nch;
+                let ra = snap.channels.iter().map(|c| c.rel_alpha).sum::<f32>() / nch;
+                let rb = snap.channels.iter().map(|c| c.rel_beta).sum::<f32>() / nch;
+                if crate::ws_commands::dnd_sleep::check_smart_wake(alarm, rd, rt, ra, rb) {
+                    drop(s); // release lock before broadcast
+                    app.state::<WsBroadcaster>().send("smart_wake", &serde_json::json!({
+                        "reason": "light_sleep_detected",
+                        "timestamp": crate::unix_secs(),
+                    }));
+                    eprintln!("[alarm] smart_wake broadcast sent to all clients");
+                }
+            }
+        }
     }
 
     // ── Periodic full status emit ────────────────────────────────────────────
@@ -908,6 +931,34 @@ fn process_battery(
 // ── Meta processing ───────────────────────────────────────────────────────────
 
 fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
+    // ── Persist phone/location/sensor Meta to a sidecar JSONL file ───────
+    // These events come from the iroh remote device proxy and must be stored
+    // alongside the session CSV so no data is lost.
+    if let Some(meta_type) = val.get("type").and_then(|v| v.as_str()) {
+        match meta_type {
+            "phone_info" | "phone_imu" | "location" => {
+                let sidecar_path = csv_path.with_extension("meta.jsonl");
+                if let Ok(line) = serde_json::to_string(val) {
+                    use std::io::Write;
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true).append(true).open(&sidecar_path)
+                    {
+                        let _ = writeln!(f, "{line}");
+                    }
+                }
+                // Also store phone_info in AppState for status display
+                if meta_type == "phone_info" {
+                    let r = app.app_state();
+                    let mut s = r.lock_or_recover();
+                    s.status.phone_info = Some(val.clone());
+                    drop(s);
+                    emit_status(app);
+                }
+            }
+            _ => {}
+        }
+    }
+
     // Extract device identity fields from Meta events.
     // Supports both Muse Control short keys (sn, ma, fw, hw, bl, tp) and
     // long-form keys used by other adapters (serial_number, mac_address, …).

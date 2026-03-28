@@ -460,17 +460,23 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         skill_iroh::IrohRuntimeState::default(),
     ));
     let iroh_peer_map = skill_iroh::new_peer_map();
+    let (iroh_eeg_tx, iroh_eeg_rx) = skill_iroh::event_channel();
+    let shared_device_tx: skill_iroh::SharedDeviceEventTx =
+        std::sync::Arc::new(std::sync::Mutex::new(Some(iroh_eeg_tx)));
     skill_iroh::spawn(
         skill_dir_for_iroh.clone(),
         ws_port,
         iroh_auth.clone(),
         iroh_runtime.clone(),
         iroh_peer_map.clone(),
+        shared_device_tx.clone(),
     );
 
     app.manage(iroh_auth);
     app.manage(iroh_runtime);
     app.manage(iroh_peer_map);
+    app.manage(shared_device_tx);
+    app.manage(std::sync::Arc::new(tokio::sync::Mutex::new(Some(iroh_eeg_rx))));
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {
@@ -781,6 +787,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         start_background_scanner(&app_scan);
+    });
+
+    // Watch for incoming EEG data from remote devices over iroh
+    // and auto-start a recording session when data arrives.
+    let app_iroh_eeg = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        crate::lifecycle::spawn_iroh_eeg_watcher(&app_iroh_eeg);
     });
 
     let app_auto = app.handle().clone();

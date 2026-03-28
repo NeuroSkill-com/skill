@@ -1125,6 +1125,12 @@ async fn llm_chat_post(
         }
     }
 
+    // ── Index chat images into screenshot store ─────────────────────────────
+    {
+        let skill_dir = state.app.app_state().lock_or_recover().skill_dir.clone();
+        index_chat_images(&skill_dir, &messages, 0); // no session_id for HTTP path
+    }
+
     // ── Collect response ──────────────────────────────────────────────────────
     let images = crate::llm::extract_images_from_messages(&messages);
     let mut tok_rx = match server.chat(messages, images, params) {
@@ -1252,6 +1258,62 @@ async fn llm_chat_post(
 /// { "command": "llm_chat", "ok": false, "type": "error", "error": "..." }
 /// ```
 #[cfg(feature = "llm")]
+/// Extract and index any user-provided images from LLM chat messages into the
+/// screenshot store so they appear in search results alongside automatic screenshots.
+///
+/// Scans the `messages` array for `image_url` content parts with `data:` URLs,
+/// saves each image to disk, and inserts a row with `source = "llm_chat"`.
+/// The existing screenshot embed pipeline will pick them up for vision embedding + OCR.
+fn index_chat_images(skill_dir: &std::path::Path, messages: &[Value], session_id: i64) {
+    let user_prompt: String = messages
+        .iter()
+        .rev()
+        .filter(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .filter_map(|m| m.get("content").and_then(|c| c.as_str()))
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(200)
+        .collect();
+
+    for msg in messages {
+        // Check both simple "images" array and content parts
+        let content = msg.get("content");
+
+        // Simple format: top-level "images" array
+        if let Some(imgs) = msg.get("images").and_then(|v| v.as_array()) {
+            for url_val in imgs {
+                if let Some(url) = url_val.as_str() {
+                    if url.starts_with("data:image/") {
+                        skill_screenshots::chat_image::save_chat_image(
+                            skill_dir, url, "llm_chat", &user_prompt, session_id,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Content parts format: [{"type": "image_url", "image_url": {"url": "data:..."}}]
+        if let Some(parts) = content.and_then(|c| c.as_array()) {
+            for part in parts {
+                if part.get("type").and_then(|t| t.as_str()) == Some("image_url") {
+                    if let Some(url) = part
+                        .get("image_url")
+                        .and_then(|u| u.get("url"))
+                        .and_then(|u| u.as_str())
+                    {
+                        if url.starts_with("data:image/") {
+                            skill_screenshots::chat_image::save_chat_image(
+                                skill_dir, url, "llm_chat", &user_prompt, session_id,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn handle_llm_chat_ws(
     state: &SharedState,
     peer: &str,
@@ -1394,6 +1456,12 @@ async fn handle_llm_chat_ws(
             .log_request(peer, "llm_chat", false);
         return Ok(());
     };
+
+    // ── Index chat images into screenshot store ──────────────────────────────
+    {
+        let skill_dir = app_state.lock_or_recover().skill_dir.clone();
+        index_chat_images(&skill_dir, &messages, session_id);
+    }
 
     // ── Run chat with built-in tool orchestration ──────────────────────────
     // Uses the same multi-round tool loop as the Tauri Chat window:

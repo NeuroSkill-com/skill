@@ -28,13 +28,14 @@ fn caps_empty_contains_nothing() {
 
 #[test]
 fn descriptor_pipeline_channels_capped() {
+    let n = skill_constants::EEG_CHANNELS + 8; // more than the DSP limit
     let desc = DeviceDescriptor {
         kind: "test",
         caps: DeviceCaps::EEG,
-        eeg_channels: 24,
+        eeg_channels: n,
         eeg_sample_rate: 250.0,
-        channel_names: (0..24).map(|i| format!("Ch{i}")).collect(),
-        pipeline_channels: 24_usize.min(skill_constants::EEG_CHANNELS),
+        channel_names: (0..n).map(|i| format!("Ch{i}")).collect(),
+        pipeline_channels: n.min(skill_constants::EEG_CHANNELS),
         ppg_channel_names: Vec::new(),
         imu_channel_names: Vec::new(),
         fnirs_channel_names: Vec::new(),
@@ -609,8 +610,9 @@ mod openbci_tests {
 
     #[test]
     fn make_descriptor_large_channel_count_capped() {
-        let desc = OpenBciAdapter::make_descriptor("galea", 24, 250.0, (0..24).map(|i| format!("Ch{i}")).collect());
-        assert_eq!(desc.eeg_channels, 24);
+        let n = skill_constants::EEG_CHANNELS + 8;
+        let desc = OpenBciAdapter::make_descriptor("galea", n, 250.0, (0..n).map(|i| format!("Ch{i}")).collect());
+        assert_eq!(desc.eeg_channels, n);
         assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
     }
 
