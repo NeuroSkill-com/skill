@@ -263,6 +263,9 @@ export const EXEMPT_KEY_PREFIXES = [
   "lsl.backgroundSessions", // "Background Recordings" technical
   "lsl.recording", // "RECORDING" badge
   "lsl.stopRecording", // "Stop recording" action
+  "dashboard.primary", // "PRIMARY" badge
+  "dashboard.backgroundRecordings", // "Background Recordings" label
+  "dashboard.stopSecondary", // "Stop recording" action
 ];
 
 /** Exact keys that are always the same across locales. */
