@@ -22,9 +22,7 @@
 
 ---
 
-## Next
-
-### Phase 2 — Concurrent Recording
+### Phase 2 — Concurrent Recording (done)
 Run multiple sessions simultaneously with independent CSV files and DSP
 pipelines, keeping one "primary" source for the dashboard.
 
@@ -64,7 +62,16 @@ pub struct SessionManager {
 **Files:** state.rs, lifecycle.rs, session_runner.rs, helpers.rs,
 dashboard, DevicesTab, LslTab, WS API.
 
-**Estimate:** 1 week.
+Implemented with a pragmatic dual-path design:
+- **Primary session** uses existing `stream` + `status` + full DSP/embedding
+  pipeline — zero changes to `session_runner.rs`
+- **Secondary sessions** use `secondary_sessions: HashMap<String, SecondarySessionHandle>`
+  with a lightweight runner that writes CSV and emits status events
+- UI: "Background" button + secondary strip with live sample counts + stop
+
+---
+
+## Next
 
 ### Phase 3 — Merged Multi-Source Embeddings
 Fuse channels from multiple devices into a single embedding window.
