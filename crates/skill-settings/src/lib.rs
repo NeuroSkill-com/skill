@@ -184,13 +184,13 @@ impl Default for ScannerConfig {
 #[serde(default)]
 pub struct DeviceApiConfig {
     /// Emotiv Cortex API application client id.
-    #[serde(default, skip_serializing)]
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub emotiv_client_id: String,
     /// Emotiv Cortex API application client secret.
-    #[serde(default, skip_serializing)]
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub emotiv_client_secret: String,
     /// IDUN Cloud API token used when cloud decoding is enabled.
-    #[serde(default, skip_serializing)]
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub idun_api_token: String,
 }
 
@@ -655,7 +655,7 @@ pub struct UserSettings {
     ///
     /// Stored in the system keychain; the JSON field is kept only for
     /// one-time migration of existing plaintext values.
-    #[serde(default, skip_serializing)]
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub api_token: String,
     /// Seconds between automatic background update checks (0 = disabled).
     #[serde(default = "default_update_check_interval")]
@@ -727,6 +727,13 @@ pub struct LslPairedStream {
     /// Sample rate in Hz.
     #[serde(default)]
     pub sample_rate: f64,
+}
+
+/// In release builds, secrets are always stripped from the JSON (stored in
+/// keychain instead).  In debug builds, secrets are kept in JSON to avoid
+/// macOS keychain prompts on every `tauri dev` rebuild.
+fn skip_secret_in_release(_value: &str) -> bool {
+    !cfg!(debug_assertions)
 }
 
 pub fn default_storage_format() -> String {
@@ -901,12 +908,16 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         }
     }
 
-    // ── Load secrets from keychain ───────────────────────────────────────
-    let secrets = keychain::load_secrets();
-    s.api_token = secrets.api_token;
-    s.device_api.emotiv_client_id = secrets.emotiv_client_id;
-    s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
-    s.device_api.idun_api_token = secrets.idun_api_token;
+    // ── Load secrets from keychain (release) or keep JSON values (debug) ──
+    if !cfg!(debug_assertions) {
+        let secrets = keychain::load_secrets();
+        s.api_token = secrets.api_token;
+        s.device_api.emotiv_client_id = secrets.emotiv_client_id;
+        s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
+        s.device_api.idun_api_token = secrets.idun_api_token;
+    }
+    // In debug mode, secrets stay as loaded from the JSON file — no keychain
+    // interaction, no macOS authorization prompts on every dev build.
 
     s
 }
