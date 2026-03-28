@@ -336,6 +336,87 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) -> bo
     true
 }
 
+// ── Secondary session management ─────────────────────────────────────────────
+
+/// Start a secondary (background) recording session.
+///
+/// The secondary session writes its own CSV but does not drive the dashboard
+/// or embeddings.  Returns `false` if a session with the same ID already exists.
+pub(crate) fn start_secondary_session(
+    app: &AppHandle,
+    session_id: String,
+    adapter: Box<dyn skill_devices::session::DeviceAdapter>,
+) -> bool {
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let csv = new_csv_path(app);
+    let desc = adapter.descriptor();
+
+    let info = crate::state::SecondarySessionInfo {
+        id: session_id.clone(),
+        device_name: desc.kind.to_string(),
+        device_kind: detect_device_kind(Some(&session_id), None).to_string(),
+        channels: desc.eeg_channels,
+        sample_rate: desc.eeg_sample_rate,
+        sample_count: 0,
+        csv_path: csv.to_string_lossy().to_string(),
+        started_at: unix_secs(),
+        battery: 0.0,
+    };
+
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        if s.secondary_sessions.contains_key(&session_id) {
+            return false;
+        }
+        s.secondary_sessions.insert(
+            session_id.clone(),
+            crate::state::SecondarySessionHandle {
+                cancel: cancel.clone(),
+                info,
+            },
+        );
+    }
+    crate::secondary_session::emit_secondary_status(app);
+
+    let app2 = app.clone();
+    let csv2 = csv;
+    tauri::async_runtime::spawn(async move {
+        crate::secondary_session::run_secondary_session(app2, session_id, cancel, csv2, adapter)
+            .await;
+    });
+    true
+}
+
+/// Cancel a specific secondary session by ID.
+pub(crate) fn cancel_secondary_session(app: &AppHandle, session_id: &str) {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    if let Some(handle) = s.secondary_sessions.get(session_id) {
+        handle.cancel.cancel();
+    }
+}
+
+/// Cancel ALL secondary sessions.
+#[allow(dead_code)]
+pub(crate) fn cancel_all_secondary_sessions(app: &AppHandle) {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    for handle in s.secondary_sessions.values() {
+        handle.cancel.cancel();
+    }
+}
+
+/// Get the list of active secondary sessions (for the frontend).
+pub(crate) fn list_secondary_sessions(app: &AppHandle) -> Vec<crate::state::SecondarySessionInfo> {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    s.secondary_sessions
+        .values()
+        .map(|h| h.info.clone())
+        .collect()
+}
+
 /// Cancel the current session and start a new one in its place.
 ///
 /// This is the "quick switch" action: the user wants to swap from the

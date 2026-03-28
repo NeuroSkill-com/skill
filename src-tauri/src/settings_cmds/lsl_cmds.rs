@@ -232,6 +232,44 @@ pub async fn lsl_switch_session(name: String, app: AppHandle) -> Result<(), Stri
     Ok(())
 }
 
+/// Start an LSL stream as a secondary (background) recording session.
+///
+/// The primary session (if any) keeps running.  The secondary writes its
+/// own CSV but does not drive the dashboard or embeddings.
+#[tauri::command]
+pub async fn lsl_start_secondary(name: String, app: AppHandle) -> Result<bool, String> {
+    let session_id = format!("lsl:{name}");
+
+    // Resolve the stream
+    let name2 = name.clone();
+    let info = tokio::task::spawn_blocking(move || {
+        let streams = skill_lsl::resolve_eeg_streams(5.0);
+        streams.into_iter().find(|s| s.name() == name2)
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))?
+    .ok_or_else(|| format!("No LSL stream named '{name}' found"))?;
+
+    let adapter = skill_lsl::LslAdapter::new(&info);
+    Ok(crate::lifecycle::start_secondary_session(
+        &app,
+        session_id,
+        Box::new(adapter),
+    ))
+}
+
+/// Cancel a specific secondary session by ID.
+#[tauri::command]
+pub fn lsl_cancel_secondary(session_id: String, app: AppHandle) {
+    crate::lifecycle::cancel_secondary_session(&app, &session_id);
+}
+
+/// List all active secondary sessions.
+#[tauri::command]
+pub fn list_secondary_sessions(app: AppHandle) -> Vec<crate::state::SecondarySessionInfo> {
+    crate::lifecycle::list_secondary_sessions(&app)
+}
+
 /// Start the rlsl-iroh sink to accept remote LSL streams over QUIC.
 #[tauri::command]
 pub async fn lsl_iroh_start(

@@ -259,6 +259,10 @@ export const EXEMPT_KEY_PREFIXES = [
   "cmdK.lslOpenSettings", // "LSL Settings" technical
   "cmdK.lslIrohStart", // "Start iroh Remote Sink" product name
   "cmdK.lslIrohStop", // "Stop iroh Remote Sink" product name
+  "lsl.background", // "Background" cognate
+  "lsl.backgroundSessions", // "Background Recordings" technical
+  "lsl.recording", // "RECORDING" badge
+  "lsl.stopRecording", // "Stop recording" action
 ];
 
 /** Exact keys that are always the same across locales. */
