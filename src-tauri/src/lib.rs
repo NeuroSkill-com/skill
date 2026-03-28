@@ -792,6 +792,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         start_background_scanner(&app_scan);
+        // Start LSL auto-scanner if enabled in settings
+        settings_cmds::lsl_cmds::maybe_start_lsl_auto_scanner(&app_scan);
     });
 
     // Watch for incoming EEG data from remote devices over iroh
@@ -967,6 +969,8 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.openbci_config = data.openbci;
         s.device_api_config = data.device_api;
         s.scanner_config = data.scanner;
+        s.lsl_auto_connect = data.lsl_auto_connect;
+        s.lsl_paired_streams = data.lsl_paired_streams;
         s.neutts_config = data.neutts.clone();
         s.tts_preload = data.tts_preload;
         s.input.track_active_window = data.track_active_window;
@@ -1652,6 +1656,10 @@ pub fn run() {
             session_connect::connect_openbci,
             settings_cmds::lsl_cmds::lsl_discover,
             settings_cmds::lsl_cmds::lsl_connect,
+            settings_cmds::lsl_cmds::lsl_pair_stream,
+            settings_cmds::lsl_cmds::lsl_unpair_stream,
+            settings_cmds::lsl_cmds::lsl_get_config,
+            settings_cmds::lsl_cmds::lsl_set_auto_connect,
             settings_cmds::lsl_cmds::lsl_iroh_start,
             settings_cmds::lsl_cmds::lsl_iroh_status,
             settings_cmds::lsl_cmds::lsl_iroh_stop,

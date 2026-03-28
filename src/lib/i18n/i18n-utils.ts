@@ -241,6 +241,11 @@ export const EXEMPT_KEY_PREFIXES = [
   "lsl.scanning", // "Scanning" cognate
   "lsl.scanButton", // "Scan Network" technical
   "lsl.noStreams", // technical LSL context
+  "lsl.pair", // "Pair" cognate
+  "lsl.unpair", // "Unpair" cognate
+  "lsl.paired", // "PAIRED" badge label
+  "lsl.autoScanning", // "Auto-scanning" technical
+  "lsl.autoConnect", // "Auto-Connect" technical
 ];
 
 /** Exact keys that are always the same across locales. */

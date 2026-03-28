@@ -535,10 +535,13 @@ pub struct AppState {
     pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config: crate::settings::ScannerConfig,
 
-    /// LSL stream sink settings.
-    #[allow(dead_code)]
     /// rlsl-iroh sink endpoint ID (set when the sink is running).
     pub lsl_iroh_endpoint_id: Option<String>,
+
+    /// Auto-scan for LSL streams and connect paired ones automatically.
+    pub lsl_auto_connect: bool,
+    /// Source IDs of LSL streams the user has "paired" for auto-connect.
+    pub lsl_paired_streams: Vec<String>,
 
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
@@ -697,6 +700,8 @@ impl Default for AppState {
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
             lsl_iroh_endpoint_id: None,
+            lsl_auto_connect: false,
+            lsl_paired_streams: Vec::new(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),

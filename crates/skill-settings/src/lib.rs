@@ -702,6 +702,12 @@ pub struct UserSettings {
     /// Background scanner backend toggles.
     #[serde(default)]
     pub scanner: ScannerConfig,
+    /// Auto-scan for LSL streams and connect paired ones automatically.
+    #[serde(default)]
+    pub lsl_auto_connect: bool,
+    /// Source IDs of LSL streams the user has "paired" for auto-connect.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lsl_paired_streams: Vec<String>,
 }
 
 pub fn default_storage_format() -> String {
@@ -840,6 +846,8 @@ impl Default for UserSettings {
             screenshot: ScreenshotConfig::default(),
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
+            lsl_auto_connect: false,
+            lsl_paired_streams: Vec::new(),
         }
     }
 }

@@ -444,6 +444,17 @@ const settings: Record<string, string> = {
   "lsl.irohCopied": "Copied!",
   "lsl.irohEndpointIdHint":
     "Share this ID with the remote rlsl-iroh source. The session will start automatically once the remote connects (timeout: 120 s).",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.autoConnect": "Auto-Connect",
+  "lsl.autoConnectToggle": "Auto-connect paired LSL streams",
+  "lsl.autoConnectDesc":
+    "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed.",
+  "lsl.pairedStreams": "Paired Streams",
+  "lsl.pair": "Pair",
+  "lsl.unpair": "Unpair",
+  "lsl.paired": "PAIRED",
+  "lsl.autoScanning": "Auto-scanning",
 };
 
 export default settings;

@@ -20,6 +20,7 @@ pub struct LslStreamEntry {
     pub sample_rate: f64,
     pub source_id: String,
     pub hostname: String,
+    pub paired: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,21 +29,34 @@ pub struct LslIrohStatus {
     pub endpoint_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LslConfig {
+    pub auto_connect: bool,
+    pub paired_streams: Vec<String>,
+}
+
 // ── Commands ────────────────────────────────────────────────────────────────
 
 /// Discover LSL streams on the local network (blocking scan, ~3 s).
 #[tauri::command]
-pub async fn lsl_discover() -> Result<Vec<LslStreamEntry>, String> {
-    tokio::task::spawn_blocking(|| {
+pub async fn lsl_discover(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<Vec<LslStreamEntry>, String> {
+    let paired: Vec<String> = { state.lock_or_recover().lsl_paired_streams.clone() };
+    tokio::task::spawn_blocking(move || {
         skill_lsl::discover_streams(3.0)
             .into_iter()
-            .map(|s| LslStreamEntry {
-                name: s.name,
-                stream_type: s.stream_type,
-                channels: s.channel_count,
-                sample_rate: s.sample_rate,
-                source_id: s.source_id,
-                hostname: s.hostname,
+            .map(|s| {
+                let is_paired = paired.contains(&s.source_id);
+                LslStreamEntry {
+                    name: s.name,
+                    stream_type: s.stream_type,
+                    channels: s.channel_count,
+                    sample_rate: s.sample_rate,
+                    source_id: s.source_id,
+                    hostname: s.hostname,
+                    paired: is_paired,
+                }
             })
             .collect()
     })
@@ -60,17 +74,68 @@ pub async fn lsl_connect(name: String, app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Pair an LSL stream (by source_id) for auto-connect.
+#[tauri::command]
+pub fn lsl_pair_stream(
+    source_id: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    if !s.lsl_paired_streams.contains(&source_id) {
+        s.lsl_paired_streams.push(source_id);
+    }
+    drop(s);
+    crate::save_settings(&app);
+}
+
+/// Unpair an LSL stream.
+#[tauri::command]
+pub fn lsl_unpair_stream(
+    source_id: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    s.lsl_paired_streams.retain(|id| id != &source_id);
+    drop(s);
+    crate::save_settings(&app);
+}
+
+/// Get LSL auto-connect config.
+#[tauri::command]
+pub fn lsl_get_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> LslConfig {
+    let s = state.lock_or_recover();
+    LslConfig {
+        auto_connect: s.lsl_auto_connect,
+        paired_streams: s.lsl_paired_streams.clone(),
+    }
+}
+
+/// Toggle LSL auto-connect on/off.
+#[tauri::command]
+pub fn lsl_set_auto_connect(
+    enabled: bool,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    {
+        let mut s = state.lock_or_recover();
+        s.lsl_auto_connect = enabled;
+    }
+    crate::save_settings(&app);
+    // Start or stop the background scanner
+    if enabled {
+        start_lsl_auto_scanner(app);
+    }
+}
+
 /// Start the rlsl-iroh sink to accept remote LSL streams over QUIC.
-///
-/// Returns the iroh endpoint ID immediately.  A background task waits for
-/// a remote source to connect (up to 120 s), then starts the recording
-/// session automatically.
 #[tauri::command]
 pub async fn lsl_iroh_start(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<LslIrohStatus, String> {
-    // Already running?
     {
         let s = state.lock_or_recover();
         if let Some(ref eid) = s.lsl_iroh_endpoint_id {
@@ -90,7 +155,6 @@ pub async fn lsl_iroh_start(
         s.lsl_iroh_endpoint_id = Some(endpoint_id.clone());
     }
 
-    // Background: wait for remote → start session → cleanup
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         match adapter_fut.await {
@@ -132,4 +196,85 @@ pub fn lsl_iroh_stop(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>
     crate::lifecycle::cancel_session(&app);
     let mut s = state.lock_or_recover();
     s.lsl_iroh_endpoint_id = None;
+}
+
+// ── Background auto-scanner ──────────────────────────────────────────────────
+
+/// Start the background LSL auto-scanner that periodically discovers streams
+/// and auto-connects paired ones.  Safe to call multiple times — only one
+/// scanner runs at a time.
+pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static SCANNER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+    // Only one scanner at a time
+    if SCANNER_RUNNING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        eprintln!("[lsl-auto] background scanner started");
+
+        loop {
+            // Check if auto-connect is still enabled
+            let (enabled, paired, is_session_active) = {
+                let r = app.app_state();
+                let s = r.lock_or_recover();
+                (
+                    s.lsl_auto_connect,
+                    s.lsl_paired_streams.clone(),
+                    s.stream.is_some(),
+                )
+            };
+
+            if !enabled {
+                eprintln!("[lsl-auto] auto-connect disabled, stopping scanner");
+                break;
+            }
+
+            // Skip scanning if a session is already active or no paired streams
+            if !is_session_active && !paired.is_empty() {
+                // Scan for LSL streams (blocking)
+                let streams = tokio::task::spawn_blocking(|| skill_lsl::discover_streams(3.0))
+                    .await
+                    .unwrap_or_default();
+
+                // Check if any discovered stream matches a paired source_id
+                let matched = streams.iter().find(|s| paired.contains(&s.source_id));
+
+                if let Some(stream) = matched {
+                    eprintln!(
+                        "[lsl-auto] found paired stream '{}' (source_id={}), connecting",
+                        stream.name, stream.source_id
+                    );
+                    let target = format!("lsl:{}", stream.name);
+                    let app2 = app.clone();
+                    crate::lifecycle::start_session(&app2, Some(target));
+
+                    // Wait a bit after starting session before scanning again
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    continue;
+                }
+            }
+
+            // Poll every 10 seconds
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        }
+
+        SCANNER_RUNNING.store(false, Ordering::Release);
+        eprintln!("[lsl-auto] background scanner stopped");
+    });
+}
+
+/// Called at app startup to resume the background scanner if auto-connect
+/// was enabled in settings.
+pub(crate) fn maybe_start_lsl_auto_scanner(app: &AppHandle) {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    let enabled = s.lsl_auto_connect;
+    drop(s);
+    if enabled {
+        start_lsl_auto_scanner(app.clone());
+    }
 }

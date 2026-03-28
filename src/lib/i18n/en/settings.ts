@@ -375,6 +375,15 @@ const settings: Record<string, string> = {
   "lsl.localStreams": "Local LSL Streams",
   "lsl.localStreamsDesc":
     "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source.",
+  "lsl.autoConnect": "Auto-Connect",
+  "lsl.autoConnectToggle": "Auto-connect paired LSL streams",
+  "lsl.autoConnectDesc":
+    "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed.",
+  "lsl.pairedStreams": "Paired Streams",
+  "lsl.pair": "Pair",
+  "lsl.unpair": "Unpair",
+  "lsl.paired": "PAIRED",
+  "lsl.autoScanning": "Auto-scanning",
   "lsl.scanButton": "Scan Network",
   "lsl.scanning": "Scanning…",
   "lsl.connect": "Connect",
