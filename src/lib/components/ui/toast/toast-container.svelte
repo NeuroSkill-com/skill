@@ -32,13 +32,13 @@ const ICON_CLASSES: Record<ToastLevel, string> = {
 </script>
 
 {#if toasts.length > 0}
-  <div class="fixed top-3 right-3 z-[9999] flex flex-col gap-2 pointer-events-none max-w-[360px] w-full"
+  <div class="fixed top-9 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none max-w-[360px] w-full"
        role="log" aria-live="polite" aria-label="Notifications">
     {#each toasts as toast (toast.id)}
       <div
         class="pointer-events-auto rounded-xl border px-3.5 py-2.5 shadow-lg backdrop-blur-sm
                flex items-start gap-2.5 {LEVEL_CLASSES[toast.level]}"
-        transition:fly={{ x: 80, duration: 250 }}
+        transition:fly={{ y: -20, duration: 250 }}
         animate:flip={{ duration: 200 }}
         role="alert"
       >

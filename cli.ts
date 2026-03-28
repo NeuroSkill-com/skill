@@ -39,6 +39,7 @@ const CLI_VERSION = "1.2.0";
  *   timer                          Open focus-timer window and start work phase immediately
  *   umap                           3D UMAP projection with live progress bar
  *   listen                         Stream broadcast events for N seconds
+ *   subscribe [opts]               Set broadcast filter (events, fields, rate limit)
  *   hooks                          List Proactive Hook rules, scenarios, and last-trigger metadata
  *   hooks list                     List raw hook rules (name, keywords, threshold, …)
  *   hooks add <name> [opts]        Add a new hook rule
@@ -155,6 +156,8 @@ const CLI_VERSION = "1.2.0";
  *   npx tsx cli.ts umap                             # auto: last 2 sessions → 3D points
  *   npx tsx cli.ts umap --json | jq '.points | length'
  *   npx tsx cli.ts listen --seconds 30              # 30s event stream
+ *   npx tsx cli.ts subscribe --events eeg-bands --fields focus,hr --max-hz 1
+ *   npx tsx cli.ts subscribe --events '*'       # reset to all events, all fields
  *   npx tsx cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
  *   npx tsx cli.ts hooks list --json
  *   npx tsx cli.ts hooks add "Deep Work Guard" --keywords "focus,deep work,flow" --scenario cognitive --threshold 0.14
@@ -767,6 +770,12 @@ interface Args {
    * Passed as `temperature` in GenParams.  Default: 0.8.
    */
   temperature?: number;
+  /** Comma-separated event types for `subscribe` (e.g. "eeg-bands,hook"). */
+  subEvents?: string;
+  /** Comma-separated field names for `subscribe` (e.g. "focus,hr,relAlpha"). */
+  subFields?: string;
+  /** Max broadcast rate in Hz for `subscribe` (0 = unlimited). */
+  maxHz?: number;
 }
 
 /**
@@ -817,6 +826,7 @@ function parseArgs(): Args {
     "--actions", "--loops", "--break", "--auto-start", "--name", "--by-image", "--window",
     "--bedtime", "--wake", "--preset",
     "--metric-type", "--otp", "--totp-id", "--scope",
+    "--events", "--fields", "--max-hz",
   ]);
 
   let i = 0;
@@ -895,6 +905,17 @@ function parseArgs(): Args {
     else if (a === "--otp")         { args.otp           = argv[++i]; }
     else if (a === "--totp-id")     { args.totpId        = argv[++i]; }
     else if (a === "--scope")       { args.scope         = argv[++i]; }
+    else if (a === "--events")      { args.subEvents     = argv[++i]; }
+    else if (a === "--fields")      { args.subFields     = argv[++i]; }
+    else if (a === "--max-hz")      {
+      const raw = argv[++i];
+      const n   = Number(raw);
+      if (raw == null || raw.trim() === "" || isNaN(n)) {
+        console.error(`error: --max-hz requires a numeric value (got: ${JSON.stringify(raw)})`);
+        process.exit(1);
+      }
+      args.maxHz = n;
+    }
     // ── Positional arguments ─────────────────────────────────────────────
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
@@ -1092,6 +1113,7 @@ ${m("llm logs",                                      "print last 500 LLM server 
 ${m("llm chat",                                       "interactive multi-turn chat REPL; type /help inside for commands")}
 ${m('llm chat "message"',                            "single-shot: send one message, stream the reply, and exit")}
 ${m("listen [--seconds <n>]",                        "listen for broadcast events (default: 5s)")}
+${m("subscribe [--events <csv>] [--fields <csv>] [--max-hz <n>]", "set broadcast filter for this connection")}
 ${m("hooks",                                         "list Proactive Hooks (scenario + last trigger metadata)")}
 ${m("hooks list",                                    "list raw hook rules (name, keywords, threshold, …)")}
 ${m("hooks add <name> [--keywords …] [opts]",       "add a new hook rule")}
@@ -4763,6 +4785,29 @@ async function cmdIroh(args: Args): Promise<void> {
   printError(`unknown iroh group: ${g}`);
 }
 
+async function cmdSubscribe(args: Args): Promise<void> {
+  const cmd: Record<string, unknown> = { command: "subscribe" };
+  if (args.subEvents) {
+    cmd.events = args.subEvents.split(",").map(s => s.trim());
+  }
+  if (args.subFields) {
+    cmd.fields = args.subFields.split(",").map(s => s.trim());
+  }
+  if (args.maxHz !== undefined) {
+    cmd.max_hz = args.maxHz;
+  }
+
+  const r = await send(cmd as any);
+  if (!r.ok) printError(r.error ?? "subscribe failed");
+  print(`${GREEN}✓${RESET} subscription updated`);
+  if (r.events?.length) print(`  events: ${CYAN}${r.events.join(", ")}${RESET}`);
+  else print(`  events: ${DIM}all${RESET}`);
+  if (r.fields?.length) print(`  fields: ${CYAN}${r.fields.join(", ")}${RESET}`);
+  else print(`  fields: ${DIM}all${RESET}`);
+  print(`  max_hz: ${CYAN}${r.max_hz ?? 0}${RESET} ${DIM}(0 = unlimited)${RESET}`);
+  printResult(r);
+}
+
 async function cmdListen(seconds: number): Promise<void> {
   print(`${BOLD}⚡ listen${RESET} ${DIM}for ${seconds}s…${RESET}\n`);
 
@@ -5741,6 +5786,15 @@ async function main(): Promise<void> {
           );
         }
         await cmdListen(args.seconds ?? 5);
+        break;
+      case "subscribe":
+        if (transport === "http") {
+          printError(
+            "subscribe requires WebSocket (subscriptions are per-connection).\n" +
+            "  Use --ws to force WebSocket, or omit --http for auto-transport."
+          );
+        }
+        await cmdSubscribe(args);
         break;
       case "hooks":
         await cmdHooks(args);

@@ -71,6 +71,18 @@ const perm: Record<string, string> = {
     "Zum Erfassen des aktiven Fensters für visuelle Ähnlichkeitssuche und cross-modale EEG-Korrelation. Nur manuell ausgelöste Screenshots werden gespeichert — keine Daueraufnahme.",
   "perm.matrixScreenRecording": "Screenshot-Erfassung",
   "perm.matrixScreenRecordingReq": "Bildschirmaufnahme erforderlich",
+  "perm.calendar": "Kalender",
+  "perm.calendarDesc":
+    "Kalender-Tools können Termine lesen, um Planungskontext bereitzustellen. Die Berechtigung wird von macOS bei Bedarf angefordert.",
+  "perm.requestCalendarPermission": "Kalenderberechtigung anfordern",
+  "perm.openCalendarSettings": "Kalender-Datenschutzeinstellungen öffnen",
+  "perm.openInputMonitoringSettings": "Eingabeüberwachungs-Einstellungen öffnen",
+  "perm.openFocusSettings": "Fokus-Einstellungen öffnen",
+  "perm.whyCalendar": "Kalender",
+  "perm.whyCalendarDesc":
+    "Um dem KI-Tool Planungskontext zu liefern, damit es auf Ihre bevorstehenden Termine verweisen kann.",
+  "perm.matrixCalendar": "Kalendertermine",
+  "perm.matrixCalendarReq": "Kalenderzugriff erforderlich",
 };
 
 export default perm;

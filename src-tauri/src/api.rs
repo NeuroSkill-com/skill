@@ -1897,7 +1897,10 @@ impl ClientSubscription {
         let event = json.get("event")?.as_str()?.to_owned();
 
         // Event filter
-        if !self.events.is_empty() && !self.events.contains(&event) && !self.events.contains(&"*".to_string()) {
+        if !self.events.is_empty()
+            && !self.events.contains(&event)
+            && !self.events.contains(&"*".to_string())
+        {
             return None;
         }
 
@@ -1915,7 +1918,8 @@ impl ClientSubscription {
         // Field projection
         if !self.fields.is_empty() {
             if let Some(payload) = json.get_mut("payload").and_then(|p| p.as_object_mut()) {
-                let keep: std::collections::HashSet<&str> = self.fields.iter().map(|s| s.as_str()).collect();
+                let keep: std::collections::HashSet<&str> =
+                    self.fields.iter().map(String::as_str).collect();
                 payload.retain(|k, _| k == "timestamp" || keep.contains(k.as_str()));
             }
         }
@@ -1933,18 +1937,35 @@ fn try_handle_subscribe(text: &str, sub: &mut ClientSubscription) -> Option<Stri
     }
 
     // Parse subscription parameters
-    sub.events = msg.get("events")
+    sub.events = msg
+        .get("events")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(ToOwned::to_owned)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
         .unwrap_or_default();
 
-    sub.fields = msg.get("fields")
+    sub.fields = msg
+        .get("fields")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(ToOwned::to_owned)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
         .unwrap_or_default();
 
-    let max_hz = msg.get("max_hz").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    sub.min_interval_ms = if max_hz > 0.0 { (1000.0 / max_hz) as u64 } else { 0 };
+    let max_hz = msg
+        .get("max_hz")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0);
+    sub.min_interval_ms = if max_hz > 0.0 {
+        (1000.0 / max_hz) as u64
+    } else {
+        0
+    };
     sub.last_sent.clear();
 
     let resp = json!({

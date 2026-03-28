@@ -198,6 +198,11 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Калібрування",
   "settingsTabs.updates": "Оновлення",
 
+  "settings.mainWindow": "Головне вікно",
+  "settings.autoFitToggle": "Автопідбір висоти панелі",
+  "settings.autoFitToggleDesc":
+    "Розширює або зменшує головне вікно відповідно до вмісту панелі, обмежуючись висотою екрана.",
+
   "settings.activityTracking": "Відстеження активності",
   "settings.activeWindowToggle": "Відстежувати активне вікно",
   "settings.activeWindowToggleDesc":

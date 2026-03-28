@@ -342,12 +342,13 @@ onDestroy(() => {
 <!-- ── Main Window ─────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-    Main Window
+    {t("settings.mainWindow")}
   </span>
 
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="py-0 px-0">
       <button
+        role="switch" aria-checked={mainWindowAutoFit}
         onclick={async () => {
           mainWindowAutoFit = !mainWindowAutoFit;
           await invoke("set_main_window_auto_fit", { enabled: mainWindowAutoFit });
@@ -361,10 +362,10 @@ onDestroy(() => {
         </div>
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            Auto-fit dashboard height
+            {t("settings.autoFitToggle")}
           </span>
           <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            Expands or contracts the main window to match dashboard content, clamped to screen height.
+            {t("settings.autoFitToggleDesc")}
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
@@ -390,6 +391,7 @@ onDestroy(() => {
 
       <!-- ── Active-window toggle ─────────────────────────────────────────── -->
       <button
+        role="switch" aria-checked={trackActiveWindow}
         onclick={async () => {
           trackActiveWindow = !trackActiveWindow;
           await invoke("set_active_window_tracking", { enabled: trackActiveWindow });
@@ -446,6 +448,7 @@ onDestroy(() => {
 
       <!-- ── Input-activity toggle ────────────────────────────────────────── -->
       <button
+        role="switch" aria-checked={trackInputActivity}
         onclick={async () => {
           trackInputActivity = !trackInputActivity;
           await invoke("set_input_activity_tracking", { enabled: trackInputActivity });
@@ -546,6 +549,7 @@ onDestroy(() => {
           ["tools",     t("settings.logTools"),        t("settings.logToolsDesc")],
         ] as [keyof LogConfig, string, string][]) as [key, label, desc]}
           <button
+            role="switch" aria-checked={logConfig[key]}
             onclick={() => toggleLog(key)}
             class="flex items-center gap-3 px-4 py-3 text-left transition-colors
                    hover:bg-slate-50 dark:hover:bg-white/[0.02]">

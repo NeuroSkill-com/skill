@@ -151,13 +151,25 @@ pub fn check_accessibility_permission() -> bool {
 }
 
 /// Open the OS panel where the user can grant Accessibility permission.
+///
+/// macOS 13+: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility`
+/// macOS 12−: `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility`
 #[tauri::command]
 pub fn open_accessibility_settings() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-            .spawn();
+        // Try the macOS 13+ (Ventura) deep link first; fall back to the
+        // legacy Security & Privacy URL for macOS 12 (Monterey) and below.
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                )
+                .spawn();
+        }
     }
     #[cfg(target_os = "linux")]
     { /* no-op */ }
@@ -223,38 +235,135 @@ pub fn check_screen_recording_permission() -> bool {
 }
 
 /// Open the macOS Screen Recording permission panel.
+///
+/// macOS 13+: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture`
+/// macOS 15+ (Sequoia): Screen Recording moved to its own sub-section.
 #[tauri::command]
 pub fn open_screen_recording_settings() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-            .spawn();
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+                )
+                .spawn();
+        }
     }
     #[cfg(not(target_os = "macos"))]
     { /* no-op — no special permission required */ }
 }
 
 /// Open the OS notification settings panel.
+///
+/// macOS 13+: deep-links directly to the Notifications pane.
+/// Windows: `ms-settings:notifications`
+/// Linux: gnome-control-center or KDE systemsettings.
 #[tauri::command]
 pub fn open_notifications_settings() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.preference.notifications")
-            .spawn();
+        // macOS 13+ Ventura: direct path to Notifications pane
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.Notifications")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.notifications")
+                .spawn();
+        }
     }
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("sh")
             .arg("-c")
-            .arg("gnome-control-center notifications 2>/dev/null || true")
+            .arg(
+                "gnome-control-center notifications 2>/dev/null \
+                  || systemsettings kcm_notifications 2>/dev/null \
+                  || true",
+            )
             .spawn();
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("ms-settings:notifications").spawn();
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "ms-settings:notifications"])
+            .spawn();
     }
+}
+
+/// Open the OS calendar privacy settings so the user can re-grant access
+/// after initially denying it.
+///
+/// macOS 13+: `Privacy_Calendars`
+/// macOS 12−: `Privacy_Calendars`
+/// Windows/Linux: no-op (calendar access uses native OS prompts).
+#[tauri::command]
+pub fn open_calendar_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+                .spawn();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { /* no-op */ }
+}
+
+/// Open the OS input-monitoring / keyboard privacy settings.
+///
+/// macOS 13+: `Privacy_ListenEvent` (input monitoring — required for global
+/// keyboard/mouse activity tracking).
+#[tauri::command]
+pub fn open_input_monitoring_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+                .spawn();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { /* no-op */ }
+}
+
+/// Open the OS Focus / Do Not Disturb settings.
+///
+/// macOS 13+: `com.apple.settings.Focus`
+/// Windows 11: `ms-settings:quiethours`
+#[tauri::command]
+pub fn open_focus_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.Focus")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.notifications")
+                .spawn();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "ms-settings:quiethours"])
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    { /* no-op */ }
 }
 
 /// Return calendar permission status as one of:
@@ -384,13 +493,24 @@ macro_rules! window_tab_cmd {
 
 // ── Bluetooth & utility windows ───────────────────────────────────────────────
 
+/// Open the OS Bluetooth settings pane.
+///
+/// macOS 13+: `com.apple.settings.Bluetooth`
+/// macOS 12−: `com.apple.Bluetooth-Settings.extension`
+/// Windows 11: `ms-settings:bluetooth` + `ms-settings:privacy-bluetooth`
+/// Linux: gnome-control-center or blueman-manager
 #[tauri::command]
 pub fn open_bt_settings() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension")
-            .spawn();
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.Bluetooth")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension")
+                .spawn();
+        }
     }
     #[cfg(target_os = "windows")]
     {
@@ -408,7 +528,12 @@ pub fn open_bt_settings() {
     {
         let _ = std::process::Command::new("sh")
             .arg("-c")
-            .arg("gnome-control-center bluetooth 2>/dev/null || blueman-manager 2>/dev/null")
+            .arg(
+                "gnome-control-center bluetooth 2>/dev/null \
+                  || blueman-manager 2>/dev/null \
+                  || systemsettings kcm_bluetooth 2>/dev/null \
+                  || true",
+            )
             .spawn();
     }
 }

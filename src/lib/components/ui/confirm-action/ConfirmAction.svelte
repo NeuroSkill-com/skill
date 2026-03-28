@@ -39,13 +39,14 @@ let { message, confirmLabel, cancelLabel, disabled = false, onconfirm, oncancel 
   <span class="text-[0.68rem] text-red-600 dark:text-red-400 font-medium flex-1">
     {message}
   </span>
+  <!-- HIG: Cancel on the left (leading), destructive action on the right (trailing) -->
+  <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2 text-muted-foreground"
+          onclick={(e: MouseEvent) => { e.stopPropagation(); oncancel(e); }}>
+    {cancelLabel}
+  </Button>
   <Button size="sm" variant="destructive" class="text-[0.62rem] h-6 px-2"
           {disabled}
           onclick={(e: MouseEvent) => { e.stopPropagation(); onconfirm(e); }}>
     {disabled ? "…" : confirmLabel}
-  </Button>
-  <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2 text-muted-foreground"
-          onclick={(e: MouseEvent) => { e.stopPropagation(); oncancel(e); }}>
-    {cancelLabel}
   </Button>
 </div>

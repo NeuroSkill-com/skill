@@ -474,6 +474,7 @@ onDestroy(() => {
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="py-0 px-0">
       <button
+        role="switch" aria-checked={autoConnect}
         onclick={toggleAutoConnect}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]"

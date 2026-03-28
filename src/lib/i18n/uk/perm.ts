@@ -68,6 +68,18 @@ const perm: Record<string, string> = {
     "Для захоплення активного вікна для пошуку візуальної подібності та крос-модальної кореляції EEG. Зберігаються лише обрані знімки — ніколи безперервний запис.",
   "perm.matrixScreenRecording": "Захоплення знімка екрана",
   "perm.matrixScreenRecordingReq": "Потрібен запис екрана",
+  "perm.calendar": "Календар",
+  "perm.calendarDesc":
+    "Інструменти календаря можуть читати події для надання контексту планування. Дозвіл запитується macOS за потреби.",
+  "perm.requestCalendarPermission": "Запросити дозвіл на календар",
+  "perm.openCalendarSettings": "Відкрити налаштування конфіденційності календаря",
+  "perm.openInputMonitoringSettings": "Відкрити налаштування моніторингу введення",
+  "perm.openFocusSettings": "Відкрити налаштування фокусування",
+  "perm.whyCalendar": "Календар",
+  "perm.whyCalendarDesc":
+    "Щоб надати контекст планування інструментам ШІ, щоб асистент міг посилатися на ваші майбутні події.",
+  "perm.matrixCalendar": "Календарні події",
+  "perm.matrixCalendarReq": "Потрібен доступ до календаря",
 };
 
 export default perm;

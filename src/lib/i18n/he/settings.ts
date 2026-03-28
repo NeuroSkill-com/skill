@@ -236,6 +236,10 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "כיול",
   "settingsTabs.updates": "עדכונים",
 
+  "settings.mainWindow": "חלון ראשי",
+  "settings.autoFitToggle": "התאמה אוטומטית של גובה לוח המחוונים",
+  "settings.autoFitToggleDesc": "מרחיב או מכווץ את החלון הראשי בהתאם לתוכן לוח המחוונים, מוגבל לגובה המסך.",
+
   "settings.activityTracking": "מעקב פעילות",
   "settings.activeWindowToggle": "עקוב אחר החלון הפעיל",
   "settings.activeWindowToggleDesc":

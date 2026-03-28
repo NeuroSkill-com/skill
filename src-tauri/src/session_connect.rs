@@ -674,6 +674,18 @@ pub(crate) async fn connect_emotiv(
     };
 
     if config.client_id.is_empty() || config.client_secret.is_empty() {
+        // Disable auto-reconnect — retrying won't help without credentials.
+        {
+            let r = app.app_state();
+            r.lock_or_recover().pending_reconnect = false;
+        }
+        crate::send_toast(
+            app,
+            crate::ToastLevel::Error,
+            "Emotiv Credentials Missing",
+            "Set Emotiv credentials in Settings → Devices → Device API, or set \
+             EMOTIV_CLIENT_ID and EMOTIV_CLIENT_SECRET environment variables.",
+        );
         return Err(ConnectError::Other(
             "Emotiv credentials not configured.\n\n\
              Set Emotiv credentials in Settings → Devices → Device API, or set\n\

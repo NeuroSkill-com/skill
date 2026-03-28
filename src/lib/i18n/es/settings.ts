@@ -328,6 +328,11 @@ const settings: Record<string, string> = {
 
   "settingsTabs.tts": "Voz",
 
+  "settings.mainWindow": "Ventana principal",
+  "settings.autoFitToggle": "Ajustar automáticamente la altura del panel",
+  "settings.autoFitToggleDesc":
+    "Expande o contrae la ventana principal para ajustarse al contenido del panel, limitado a la altura de la pantalla.",
+
   "settings.activityTracking": "Seguimiento de actividad",
   "settings.activeWindowToggle": "Seguimiento de ventana activa",
   "settings.activeWindowToggleDesc":
