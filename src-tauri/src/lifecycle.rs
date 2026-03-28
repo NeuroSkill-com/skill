@@ -188,12 +188,38 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
 // ── Session lifecycle ─────────────────────────────────────────────────────────
 
-pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
+/// Try to start a session.  Returns `true` if the session was started,
+/// `false` if another session is already active (with a toast + event).
+pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) -> bool {
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         if s.stream.is_some() {
-            return;
+            let current = s
+                .status
+                .device_name
+                .clone()
+                .unwrap_or_else(|| s.status.device_kind.clone());
+            let requested = preferred_id
+                .as_deref()
+                .unwrap_or("another device")
+                .to_string();
+            drop(s);
+            crate::send_toast(
+                app,
+                crate::ToastLevel::Warning,
+                "Session Active",
+                &format!("Disconnect {current} before connecting to {requested}, or use Switch."),
+            );
+            let _ = tauri::Emitter::emit(
+                app,
+                "session-blocked",
+                serde_json::json!({
+                    "current_device": current,
+                    "requested_device": requested,
+                }),
+            );
+            return false;
         }
         s.pending_reconnect = true;
     }
@@ -306,6 +332,30 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
                 go_disconnected(&app2, Some(msg), false);
             }
         }
+    });
+    true
+}
+
+/// Cancel the current session and start a new one in its place.
+///
+/// This is the "quick switch" action: the user wants to swap from the
+/// current device to a different one without two manual steps.
+pub(crate) fn switch_session(app: &AppHandle, target: Option<String>) {
+    cancel_session(app);
+    // The cancel is asynchronous (oneshot → CancellationToken → session loop
+    // exit → go_disconnected clears the stream handle).  We poll briefly
+    // until the slot is free, then start the new session.
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Wait up to 3 s for the old session to clear
+        for _ in 0..30 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let free = app2.app_state().lock_or_recover().stream.is_none();
+            if free {
+                break;
+            }
+        }
+        start_session(&app2, target);
     });
 }
 

@@ -251,6 +251,9 @@ export const EXEMPT_KEY_PREFIXES = [
   "lsl.sessionActive", // "LSL session active" technical
   "lsl.lastScanJustNow", // "just now" short label
   "lsl.scanningNetwork", // "Scanning local network..." technical
+  "lsl.switchTo", // "Switch to this" UI action
+  "lsl.switchHint", // "CLICK CONNECT TO SWITCH" hint
+  "lsl.otherSessionActive", // "Another device is streaming" technical
 ];
 
 /** Exact keys that are always the same across locales. */

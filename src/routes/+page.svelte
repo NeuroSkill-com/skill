@@ -467,6 +467,30 @@ const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
 const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi);
 
+/** Short transport/source label for the connected device. */
+const sourceLabel = $derived.by(() => {
+  switch (status.device_kind) {
+    case "lsl":
+      return "LSL";
+    case "lsl-iroh":
+      return "LSL · iroh";
+    case "iroh-remote":
+      return "iroh";
+    case "ganglion":
+      return "USB";
+    case "emotiv":
+      return "Cortex";
+    case "muse":
+    case "mw75":
+    case "hermes":
+    case "idun":
+    case "mendi":
+      return "BLE";
+    default:
+      return null;
+  }
+});
+
 // Channel labels and colours — dynamic based on connected device.
 // Use dynamic channel names from the device when available (handles
 // Emotiv Insight 5ch, EPOC 14ch, Flex 32ch, etc.), fall back to static
@@ -1149,7 +1173,13 @@ useWindowTitle("window.title.main");
             />
           {/if}
           {#if status.device_name && status.state === "connected"}
-            <span class="text-[0.65rem] text-muted-foreground truncate min-w-0 flex-1">{status.device_name}</span>
+            <span class="text-[0.65rem] text-muted-foreground truncate min-w-0 flex-1">
+              {status.device_name}
+              {#if sourceLabel}
+                <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
+                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+              {/if}
+            </span>
           {:else}
             <span class="flex-1"></span>
           {/if}
@@ -1219,7 +1249,13 @@ useWindowTitle("window.title.main");
           {/if}
 
           {#if status.device_name && status.state === "connected"}
-            <p class="text-[0.73rem] text-muted-foreground font-medium -mt-1">{status.device_name}</p>
+            <p class="text-[0.73rem] text-muted-foreground font-medium -mt-1">
+              {status.device_name}
+              {#if sourceLabel}
+                <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+              {/if}
+            </p>
             {#if status.serial_number || status.mac_address}
               <div class="flex flex-wrap justify-center gap-x-3 gap-y-0.5 -mt-0.5">
                 {#if status.serial_number}

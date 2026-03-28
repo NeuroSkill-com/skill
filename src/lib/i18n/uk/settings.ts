@@ -454,6 +454,11 @@ const settings: Record<string, string> = {
   "lsl.sessionActive": "LSL session active",
   "lsl.noStreamsHint":
     "Make sure your LSL source is running and broadcasting on the same network. Common sources: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.switchTo": "Switch to this",
+  "lsl.switchHint": "CLICK CONNECT TO SWITCH",
+  "lsl.otherSessionActive": "Another device is streaming",
 };
 
 export default settings;

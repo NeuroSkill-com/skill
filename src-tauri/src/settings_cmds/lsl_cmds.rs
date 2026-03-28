@@ -225,6 +225,13 @@ pub fn lsl_set_auto_connect(
     }
 }
 
+/// Switch from the current session to a new LSL stream (cancel + reconnect).
+#[tauri::command]
+pub async fn lsl_switch_session(name: String, app: AppHandle) -> Result<(), String> {
+    crate::lifecycle::switch_session(&app, Some(format!("lsl:{name}")));
+    Ok(())
+}
+
 /// Start the rlsl-iroh sink to accept remote LSL streams over QUIC.
 #[tauri::command]
 pub async fn lsl_iroh_start(

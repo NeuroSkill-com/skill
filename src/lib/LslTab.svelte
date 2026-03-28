@@ -72,10 +72,11 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unlisteners: UnlistenFn[] = [];
 
 // ── Derived ────────────────────────────────────────────────────────────────
-let isLslSessionActive = $derived(
-  (sessionState === "connected" || sessionState === "scanning") &&
-    (sessionDeviceKind === "lsl" || sessionDeviceKind === "lsl-iroh"),
-);
+let isSessionActive = $derived(sessionState === "connected" || sessionState === "scanning");
+
+let isLslSessionActive = $derived(isSessionActive && (sessionDeviceKind === "lsl" || sessionDeviceKind === "lsl-iroh"));
+
+let isOtherSessionActive = $derived(isSessionActive && !isLslSessionActive);
 
 let sortedStreams = $derived(
   [...streams].sort((a, b) => {
@@ -115,6 +116,47 @@ async function connectStream(stream: LslStream) {
     scanError = String(e);
   } finally {
     connecting = null;
+  }
+}
+
+async function switchToStream(stream: LslStream) {
+  connecting = stream.name;
+  try {
+    await invoke("lsl_switch_session", { name: stream.name });
+  } catch (e: unknown) {
+    scanError = String(e);
+  } finally {
+    connecting = null;
+  }
+}
+
+async function connectOrSwitch(stream: LslStream) {
+  if (!stream.paired) {
+    // Pair first
+    await invoke("lsl_pair_stream", {
+      sourceId: stream.source_id,
+      name: stream.name,
+      streamType: stream.type,
+      channels: stream.channels,
+      sampleRate: stream.sample_rate,
+    });
+    pairedStreams = [
+      ...pairedStreams,
+      {
+        source_id: stream.source_id,
+        name: stream.name,
+        stream_type: stream.type,
+        channels: stream.channels,
+        sample_rate: stream.sample_rate,
+      },
+    ];
+    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+  }
+  // If another session is active, switch; otherwise connect
+  if (isSessionActive) {
+    await switchToStream(stream);
+  } else {
+    await connectStream(stream);
   }
 }
 
@@ -280,7 +322,34 @@ onDestroy(() => {
 });
 </script>
 
-<!-- ── Live Session Banner ────────────────────────────────────────────────── -->
+<!-- ── Other-device session banner ─────────────────────────────────────── -->
+{#if isOtherSessionActive}
+  <Card class="border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/5 gap-0 py-0 overflow-hidden">
+    <CardContent class="flex items-center gap-3 p-4">
+      <span class="relative flex h-2.5 w-2.5 shrink-0">
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+      </span>
+      <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+        <span class="text-[0.72rem] font-semibold text-amber-700 dark:text-amber-300 leading-tight">
+          {t("lsl.otherSessionActive")}
+        </span>
+        <span class="text-[0.58rem] text-amber-600/70 dark:text-amber-400/70 truncate">
+          {sessionDeviceName ?? sessionDeviceKind}
+          {#if sessionSampleCount > 0}
+            · {sessionSampleCount.toLocaleString()} samples
+          {/if}
+        </span>
+      </div>
+      <span
+        class="text-[0.5rem] font-bold tracking-widest uppercase text-amber-600/60 dark:text-amber-400/60"
+      >
+        {t("lsl.switchHint")}
+      </span>
+    </CardContent>
+  </Card>
+{/if}
+
+<!-- ── Live LSL Session Banner ────────────────────────────────────────────── -->
 {#if isLslSessionActive}
   <Card class="border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/5 gap-0 py-0 overflow-hidden">
     <CardContent class="flex items-center gap-3 p-4">
@@ -505,11 +574,15 @@ onDestroy(() => {
                   variant={stream.paired ? "default" : "outline"}
                   size="sm"
                   class="h-7 text-[0.58rem] px-3"
-                  disabled={connecting !== null || isLslSessionActive}
-                  onclick={() => (stream.paired ? connectStream(stream) : pairAndConnect(stream))}
+                  disabled={connecting !== null}
+                  onclick={() => connectOrSwitch(stream)}
                 >
                   {#if connecting === stream.name}
                     {t("lsl.connecting")}
+                  {:else if isOtherSessionActive}
+                    {t("lsl.switchTo")}
+                  {:else if isLslSessionActive}
+                    {t("lsl.connect")}
                   {:else if stream.paired}
                     {t("lsl.connect")}
                   {:else}

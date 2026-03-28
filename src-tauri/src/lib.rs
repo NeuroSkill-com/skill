@@ -1660,6 +1660,7 @@ pub fn run() {
             settings_cmds::lsl_cmds::lsl_unpair_stream,
             settings_cmds::lsl_cmds::lsl_get_config,
             settings_cmds::lsl_cmds::lsl_set_auto_connect,
+            settings_cmds::lsl_cmds::lsl_switch_session,
             settings_cmds::lsl_cmds::lsl_iroh_start,
             settings_cmds::lsl_cmds::lsl_iroh_status,
             settings_cmds::lsl_cmds::lsl_iroh_stop,
