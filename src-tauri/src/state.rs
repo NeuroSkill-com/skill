@@ -537,7 +537,6 @@ pub struct AppState {
 
     /// LSL stream sink settings.
     #[allow(dead_code)]
-    pub lsl_enabled: bool,
     /// rlsl-iroh sink endpoint ID (set when the sink is running).
     pub lsl_iroh_endpoint_id: Option<String>,
 
@@ -697,7 +696,6 @@ impl Default for AppState {
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
-            lsl_enabled: false,
             lsl_iroh_endpoint_id: None,
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),

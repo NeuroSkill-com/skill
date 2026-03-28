@@ -139,10 +139,11 @@ impl IrohLslAdapter {
                 .name("rlsl-iroh-inlet".into())
                 .spawn(move || {
                     let inlet = rlsl::inlet::StreamInlet::new(&info2, 360, 0, true);
+                    let time_correction = inlet.time_correction(1.0);
                     let mut buf = vec![0.0f64; ch];
                     loop {
                         let ts = match inlet.pull_sample_d(&mut buf, 0.2) {
-                            Ok(t) if t > 0.0 => t,
+                            Ok(t) if t > 0.0 => t + time_correction,
                             _ => continue,
                         };
                         if tx2

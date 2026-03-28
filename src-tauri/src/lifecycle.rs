@@ -288,7 +288,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             "idun" => crate::session_connect::connect_idun(&app2, &cancel).await,
             "mendi" => crate::session_connect::connect_mendi(&app2, &cancel, target).await,
             "lsl" => connect_lsl(target).await,
-            "lsl-iroh" => connect_lsl_iroh().await,
+            "lsl-iroh" => connect_lsl_iroh(&app2).await,
             _ => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };
 
@@ -562,12 +562,18 @@ async fn connect_lsl(
 
 /// Start an rlsl-iroh sink and wait for a remote LSL stream.
 async fn connect_lsl_iroh(
+    app: &AppHandle,
 ) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
     let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink()
         .await
         .map_err(|e| crate::session_connect::ConnectError::Other(format!("rlsl-iroh sink: {e}")))?;
     eprintln!("[lsl-iroh] sink started, endpoint_id={endpoint_id}");
-    eprintln!("[lsl-iroh] waiting for remote source to connect...");
+    // Store the endpoint ID so lsl_iroh_status can report it.
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.lsl_iroh_endpoint_id = Some(endpoint_id);
+    }
     Ok(Box::new(adapter))
 }
 

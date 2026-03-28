@@ -120,6 +120,9 @@ impl LslAdapter {
                     headset_preset: None,
                 }));
 
+                // Pull samples in a tight loop, but check for shutdown periodically.
+                // LSL clock may differ from system clock — apply time correction.
+                let time_correction = inlet.time_correction(1.0);
                 let mut buf = vec![0.0f64; channel_count];
                 loop {
                     if shutdown_rx.try_recv().is_ok() {
@@ -133,10 +136,13 @@ impl LslAdapter {
                         continue;
                     }
 
+                    // Correct LSL timestamp to local system time.
+                    let corrected_ts = ts + time_correction;
+
                     if tx
                         .blocking_send(DeviceEvent::Eeg(EegFrame {
                             channels: buf.to_vec(),
-                            timestamp_s: ts,
+                            timestamp_s: corrected_ts,
                         }))
                         .is_err()
                     {

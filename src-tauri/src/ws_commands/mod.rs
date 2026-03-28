@@ -850,6 +850,7 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "lsl_discover" => lsl_discover(app),
         "lsl_connect" => lsl_connect(app, msg),
         "lsl_iroh_start" => lsl_iroh_start(app).await,
+        "lsl_iroh_stop" => lsl_iroh_stop(app),
         "lsl_iroh_status" => lsl_iroh_status(app),
         // ── Screenshot search ─────────────────────────────────────────────
         "search_screenshots" => screenshots::search_screenshots(app, msg),
@@ -910,9 +911,8 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
 
 /// `lsl_discover` — scan for LSL streams on the local network.
 fn lsl_discover(_app: &AppHandle) -> Result<Value, String> {
-    let streams = std::thread::spawn(|| skill_lsl::discover_streams(3.0))
-        .join()
-        .map_err(|_| "LSL discovery thread panicked".to_string())?;
+    // Run discovery on a blocking thread to avoid blocking the WS handler.
+    let streams = tokio::task::block_in_place(|| skill_lsl::discover_streams(3.0));
 
     let list: Vec<Value> = streams
         .iter()
@@ -1023,5 +1023,23 @@ fn lsl_iroh_status(app: &AppHandle) -> Result<Value, String> {
         "command": "lsl_iroh_status",
         "endpoint_id": s.lsl_iroh_endpoint_id,
         "running": s.lsl_iroh_endpoint_id.is_some(),
+    }))
+}
+
+/// `lsl_iroh_stop` — cancel a pending or active rlsl-iroh sink session.
+fn lsl_iroh_stop(app: &AppHandle) -> Result<Value, String> {
+    // Cancel the running session (if any), which will trigger the cleanup
+    // callback in lsl_iroh_start that clears the endpoint ID.
+    crate::lifecycle::cancel_session(app);
+    // Also clear the endpoint ID immediately in case the session hasn't
+    // started yet (still waiting for a remote source to connect).
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.lsl_iroh_endpoint_id = None;
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_stop",
     }))
 }
