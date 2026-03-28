@@ -581,17 +581,17 @@ onMount(async () => {
 });
 
 // Re-check bluetooth whenever the user navigates to that step
-$:{
-  if (step === 'enable_bluetooth') {
-    (async () => {
-      try {
-        btEnabled = await invoke<boolean>("check_bluetooth_power");
-      } catch (e) {
+$effect(() => {
+  if (step === "enable_bluetooth") {
+    invoke<boolean>("check_bluetooth_power")
+      .then((v) => {
+        btEnabled = v;
+      })
+      .catch(() => {
         btEnabled = true;
-      }
-    })();
+      });
   }
-}
+});
 
 async function checkBt() {
   try {
