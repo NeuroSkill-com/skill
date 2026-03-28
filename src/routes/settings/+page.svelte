@@ -123,16 +123,28 @@ const tabLabel = (id: Tab) => TAB_LABELS[id]();
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 const modKey = isMac ? "⌘" : "Ctrl+";
 
-/* ── Cmd/Ctrl + 1‥12 to switch tabs ───────────────────────────────────── */
-// Only Cmd/Ctrl+1–9 are reachable as single keystrokes; don't register beyond that.
-const SHORTCUT_TABS = TAB_IDS.slice(0, 9);
+/* ── Cmd/Ctrl + 0‥9 to switch tabs ────────────────────────────────────── */
+// ⌘1–⌘9 → tabs 1–9, ⌘0 → tab 10.  Tabs 11+ reachable via ⌘K.
+const SHORTCUT_TABS = TAB_IDS.slice(0, 10);
+
+function digitForTab(i: number): string | null {
+  if (i < 9) return String(i + 1); // tabs 0–8 → "1"–"9"
+  if (i === 9) return "0"; // tab 9 → "0"
+  return null;
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (!(e.metaKey || e.ctrlKey)) return;
-  const n = parseInt(e.key, 10);
-  if (n >= 1 && n <= SHORTCUT_TABS.length) {
+  const key = e.key;
+  if (key >= "1" && key <= "9") {
+    const idx = parseInt(key, 10) - 1;
+    if (idx < SHORTCUT_TABS.length) {
+      e.preventDefault();
+      tab = SHORTCUT_TABS[idx];
+    }
+  } else if (key === "0" && SHORTCUT_TABS.length >= 10) {
     e.preventDefault();
-    tab = SHORTCUT_TABS[n - 1];
+    tab = SHORTCUT_TABS[9];
   }
 }
 
@@ -248,7 +260,7 @@ $effect(() => {
           role="tab"
           aria-selected={active}
           aria-controls="tab-panel-{id}"
-          title="{tabLabel(id)}{i < 9 ? ` (${modKey}${i + 1})` : ''}"
+          title="{tabLabel(id)}{digitForTab(i) ? ` (${modKey}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
                  rounded-lg text-left transition-colors text-[0.75rem] font-medium
                  {active
@@ -272,10 +284,10 @@ $effect(() => {
           <span class="flex-1 leading-none">{tabLabel(id)}</span>
 
           <!-- Kbd hint -->
-          {#if i < 9}
+          {#if digitForTab(i)}
             <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
-              {modKey}{i + 1}
+              {modKey}{digitForTab(i)}
             </kbd>
           {/if}
         </button>
