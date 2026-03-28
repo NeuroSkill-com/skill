@@ -180,6 +180,11 @@ const dashboard: Record<string, string> = {
 
   "exg.title": "EXG",
   "exg.subtitle": "OpenBCI board configuration, signal processing filters, and EEG embedding pipeline.",
+
+  // ── Multi-device ─────────────────────────────────────────────────────
+  "dashboard.primary": "PRIMARY",
+  "dashboard.backgroundRecordings": "Background Recordings",
+  "dashboard.stopSecondary": "Stop recording",
 };
 
 export default dashboard;

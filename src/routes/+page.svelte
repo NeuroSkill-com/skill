@@ -322,6 +322,20 @@ let revealMAC = $state(false);
 let showElectrodes = $state(false);
 let showDeviceSwitcher = $state(false);
 
+// ── Secondary sessions ─────────────────────────────────────────────────────
+interface SecondarySession {
+  id: string;
+  device_name: string;
+  device_kind: string;
+  channels: number;
+  sample_rate: number;
+  sample_count: number;
+  csv_path: string;
+  started_at: number;
+  battery: number;
+}
+let secondarySessions = $state<SecondarySession[]>([]);
+
 let status = $state<DeviceStatus>({
   state: "disconnected",
   device_name: null,
@@ -466,6 +480,7 @@ const hasImuCap = $derived(status.has_imu);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
 const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi);
+const hasSecondary = $derived(secondarySessions.length > 0);
 
 /** Short transport/source label for the connected device. */
 const sourceLabel = $derived.by(() => {
@@ -928,6 +943,18 @@ onMount(async () => {
     }),
   );
 
+  // Secondary (background) sessions
+  try {
+    secondarySessions = await invoke<SecondarySession[]>("list_secondary_sessions");
+  } catch {
+    /* ignore — command may not exist in older builds */
+  }
+  unlisteners.push(
+    await listen<SecondarySession[]>("secondary-sessions", (ev) => {
+      secondarySessions = ev.payload;
+    }),
+  );
+
   // When the background scanner discovers a new unpaired device, let the user
   // know so they can go to Settings → Devices and pair it.
   unlisteners.push(
@@ -1179,6 +1206,11 @@ useWindowTitle("window.title.main");
                 <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
                              rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
               {/if}
+              {#if hasSecondary}
+                <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
+                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
+                <span class="text-[0.48rem] text-violet-500/60">+{secondarySessions.length}</span>
+              {/if}
             </span>
           {:else}
             <span class="flex-1"></span>
@@ -1254,6 +1286,10 @@ useWindowTitle("window.title.main");
               {#if sourceLabel}
                 <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
                              rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+              {/if}
+              {#if hasSecondary}
+                <span class="ml-1 text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
               {/if}
             </p>
             {#if status.serial_number || status.mac_address}
@@ -1957,6 +1993,54 @@ useWindowTitle("window.title.main");
 
     <!-- ── Footer ──────────────────────────────────────────────────────────── -->
     <Separator class="bg-border dark:bg-white/[0.06]" />
+    <!-- ── Secondary Sessions Strip ──────────────────────────────────── -->
+    {#if hasSecondary}
+      <div class="border-t border-border dark:border-white/[0.05]">
+        <div class="px-4 pt-2.5 pb-1">
+          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+            {t("dashboard.backgroundRecordings")}
+          </span>
+        </div>
+        {#each secondarySessions as sess (sess.id)}
+          <div class="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/30 dark:hover:bg-white/[0.02] transition-colors">
+            <!-- Pulsing dot -->
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+            </span>
+
+            <!-- Name + meta -->
+            <div class="flex items-center gap-1.5 flex-1 min-w-0">
+              <span class="text-[0.62rem] font-medium text-foreground truncate">
+                {sess.device_name}
+              </span>
+              <span class="text-[0.46rem] font-bold tracking-widest uppercase px-1 py-0.5 rounded
+                           bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
+                {sess.device_kind === "lsl" ? "LSL" : sess.device_kind === "lsl-iroh" ? "iroh" : sess.device_kind.toUpperCase()}
+              </span>
+            </div>
+
+            <!-- Stats -->
+            <span class="text-[0.54rem] text-muted-foreground/60 tabular-nums shrink-0">
+              {sess.channels}ch · {sess.sample_rate % 1 === 0 ? sess.sample_rate : sess.sample_rate.toFixed(1)} Hz
+            </span>
+            <span class="text-[0.56rem] text-muted-foreground tabular-nums shrink-0">
+              {sess.sample_count.toLocaleString()}
+            </span>
+
+            <!-- Stop -->
+            <button
+              class="text-muted-foreground/30 hover:text-red-500 transition-colors cursor-pointer text-[0.65rem] shrink-0"
+              onclick={() => invoke("lsl_cancel_secondary", { sessionId: sess.id })}
+              title={t("dashboard.stopSecondary")}
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
     <CardFooter class="px-5 py-3 flex items-center justify-between gap-2">
       <p class="text-[0.63rem] text-muted-foreground leading-relaxed truncate">
         {#if status.state === "connected"}

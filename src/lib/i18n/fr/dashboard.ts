@@ -183,6 +183,11 @@ const dashboard: Record<string, string> = {
 
   "exg.title": "EXG",
   "exg.subtitle": "Configuration de la carte OpenBCI, filtres de traitement du signal et pipeline d'intégration EEG.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "dashboard.primary": "PRIMARY",
+  "dashboard.backgroundRecordings": "Background Recordings",
+  "dashboard.stopSecondary": "Stop recording",
 };
 
 export default dashboard;
