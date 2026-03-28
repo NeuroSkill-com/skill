@@ -29,16 +29,8 @@
 
 ## Future (not planned)
 
-### Merged Multi-Source Embeddings
-Fuse channels from multiple devices into a single embedding window.
-Would require secondary sessions to run DSP pipelines (currently CSV-only).
-- Namespaced channels: `muse:TP9`, `lsl:Fp1`
-- Resample all sources to common rate
-- Union-channel embedding window
-- Combined session sidecar JSON
-
 ### Source-Aware History
 - Source icons in session list
-- Cross-source comparison view
+- Cross-source comparison / correlation view
 - Multi-source playback with synchronized timelines
 - UMAP coloring by source type
