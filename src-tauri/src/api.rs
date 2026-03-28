@@ -333,6 +333,15 @@ fn check_permission(state: &SharedState, addr: &SocketAddr, command: &str) -> Re
         return Ok(()); // local connection — always allowed
     };
 
+    // Registration must be allowed for unregistered iroh peers —
+    // they've already proven possession of the TOTP secret (included
+    // in the QR invite).  The register_client handler verifies the OTP
+    // before creating the client entry.  Without this exemption the
+    // phone can never register because it has no scope yet.
+    if command == "iroh_client_register" {
+        return Ok(());
+    }
+
     let Some(auth) = state.app.try_state::<skill_iroh::SharedIrohAuth>() else {
         return Ok(()); // no auth store — allow (shouldn't happen)
     };
