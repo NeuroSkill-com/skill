@@ -282,6 +282,12 @@ All data is stored locally in `~/.skill/` organised by UTC date:
 
 For the full SQLite schema and per-column documentation (60+ columns covering band powers, derived scores, cross-band ratios, spectral shape, Hjorth parameters, complexity measures, PPG, and composites), see [`docs/METRICS.md`](docs/METRICS.md).
 
+### Secrets
+
+API tokens and device credentials are stored in the **system keychain** (macOS Keychain Services, Windows Credential Manager, Linux Secret Service) in release builds. They are never written to `settings.json` in production.
+
+In debug builds (`tauri dev`), the keychain is skipped and secrets are kept in `settings.json` to avoid macOS authorization prompts on every rebuild. See [CONTRIBUTING.md](CONTRIBUTING.md#secrets--keychain) for details.
+
 ---
 
 ## WebSocket & REST API

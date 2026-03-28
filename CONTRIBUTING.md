@@ -129,6 +129,22 @@ Every feature or bugfix **must** include a changelog fragment:
 
 At release time, `npm run bump` compiles fragments into versioned release notes.
 
+## Secrets & Keychain
+
+In **release builds**, API tokens and device credentials are stored in the
+system keychain (macOS Keychain, Windows Credential Manager, Linux Secret
+Service) and stripped from `settings.json`.
+
+In **debug builds** (`tauri dev` / `cargo run`), the keychain is **skipped
+entirely**.  Secrets stay in `settings.json` so they persist across rebuilds.
+This avoids macOS prompting for keychain access on every launch — the dev
+binary has a different code signature on every build, which triggers a new
+authorization dialog each time.
+
+> **No password prompts during development.** If you're seeing keychain
+> dialogs, make sure you're running a debug build (`npm run tauri dev`),
+> not a release build.
+
 ## Architecture Notes
 
 - All Rust crates are **Tauri-independent** — they can be tested and used standalone.
