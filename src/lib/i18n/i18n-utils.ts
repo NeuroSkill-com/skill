@@ -254,6 +254,11 @@ export const EXEMPT_KEY_PREFIXES = [
   "lsl.switchTo", // "Switch to this" UI action
   "lsl.switchHint", // "CLICK CONNECT TO SWITCH" hint
   "lsl.otherSessionActive", // "Another device is streaming" technical
+  "cmdK.sectionLsl", // "LSL" technical acronym
+  "cmdK.lslScan", // "Scan for LSL Streams" technical
+  "cmdK.lslOpenSettings", // "LSL Settings" technical
+  "cmdK.lslIrohStart", // "Start iroh Remote Sink" product name
+  "cmdK.lslIrohStop", // "Stop iroh Remote Sink" product name
 ];
 
 /** Exact keys that are always the same across locales. */

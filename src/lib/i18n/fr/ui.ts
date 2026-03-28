@@ -291,6 +291,13 @@ const ui: Record<string, string> = {
     "Allumez votre casque BCI et placez-le à portée Bluetooth. Les appareils découverts apparaîtront ici automatiquement.",
   "devices.deviceSingular": "appareil",
   "devices.devicePlural": "appareils",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
 };
 
 export default ui;
