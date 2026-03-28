@@ -221,7 +221,9 @@ Phase 4 (stretch) → depends on Phase 2+3, mostly frontend
 
 - [x] LSL tab disables Connect when session active
 - [x] Live session banner in LSL tab
-- [ ] Toast when second connect is rejected ("Disconnect X to connect Y")
-- [ ] `switch_session` command (cancel + reconnect in one action)
-- [ ] `device_kind` badge on dashboard device card
+- [x] Toast when second connect is rejected ("Disconnect X to connect Y")
+- [x] `switch_session` command (cancel + reconnect in one action)
+- [x] `device_kind` badge on dashboard device card (BLE/LSL/iroh/USB/Cortex)
+- [x] Amber banner in LSL tab when non-LSL session is active
+- [x] "Switch to this" button (one-click swap from any device to LSL)
 - [ ] Tray tooltip shows device kind + name
