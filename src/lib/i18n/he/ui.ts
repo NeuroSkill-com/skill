@@ -277,6 +277,13 @@ const ui: Record<string, string> = {
     "הפעל את אוזניות ה-BCI שלך ומקם אותה בטווח Bluetooth. מכשירים שזוהו יופיעו כאן באופן אוטומטי.",
   "devices.deviceSingular": "מכשיר",
   "devices.devicePlural": "מכשירים",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
 };
 
 export default ui;

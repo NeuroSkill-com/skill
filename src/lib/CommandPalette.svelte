@@ -111,6 +111,63 @@ function commands(): Command[] {
       action: nav.openBtSettings,
     },
 
+    // ── LSL ────────────────────────────────────────────────────────────
+    {
+      id: "lsl-scan",
+      icon: "📡",
+      section: t("cmdK.sectionLsl"),
+      label: t("cmdK.lslScan"),
+      keywords: "lsl scan discover streams network eeg exg brainflow openbci pylsl",
+      action: async () => {
+        const streams = await invoke<{ name: string }[]>("lsl_discover");
+        if (streams.length === 0) {
+          addToast("info", "LSL Scan", "No LSL streams found on the network.");
+        } else {
+          addToast(
+            "success",
+            "LSL Scan",
+            `Found ${streams.length} stream${streams.length > 1 ? "s" : ""}: ${streams.map((s) => s.name).join(", ")}`,
+          );
+          nav.openSettingsTab("lsl");
+        }
+      },
+    },
+    {
+      id: "lsl-settings",
+      icon: "⚡",
+      section: t("cmdK.sectionLsl"),
+      label: t("cmdK.lslOpenSettings"),
+      keywords: "lsl settings tab streams pair auto connect iroh",
+      action: () => nav.openSettingsTab("lsl"),
+    },
+    {
+      id: "lsl-iroh-start",
+      icon: "🌐",
+      section: t("cmdK.sectionLsl"),
+      label: t("cmdK.lslIrohStart"),
+      keywords: "lsl iroh remote quic sink accept tunnel phone",
+      action: async () => {
+        try {
+          const r = await invoke<{ endpoint_id: string }>("lsl_iroh_start");
+          addToast("success", "iroh Sink", `Endpoint: ${r.endpoint_id.slice(0, 16)}…`);
+          nav.openSettingsTab("lsl");
+        } catch (e) {
+          addToast("error", "iroh Sink", String(e));
+        }
+      },
+    },
+    {
+      id: "lsl-iroh-stop",
+      icon: "⏹",
+      section: t("cmdK.sectionLsl"),
+      label: t("cmdK.lslIrohStop"),
+      keywords: "lsl iroh stop sink cancel disconnect",
+      action: async () => {
+        await invoke("lsl_iroh_stop");
+        addToast("info", "iroh Sink", "Stopped.");
+      },
+    },
+
     // ── Calibration ────────────────────────────────────────────────────
     {
       id: "open-calibration",

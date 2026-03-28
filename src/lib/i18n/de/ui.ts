@@ -290,6 +290,13 @@ const ui: Record<string, string> = {
     "Schalten Sie Ihr BCI-Headset ein und platzieren Sie es in Bluetooth-Reichweite. Erkannte Geräte erscheinen hier automatisch.",
   "devices.deviceSingular": "Gerät",
   "devices.devicePlural": "Geräte",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
 };
 
 export default ui;
