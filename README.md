@@ -74,6 +74,9 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 | **Local LLM** | On-device chat with function calling via llama.cpp — Metal, CUDA, and Vulkan GPU backends |
 | **Text-to-Speech** | KittenTTS and NeuTTS backends for voice feedback during sessions |
 | **Proactive Hooks** | Background monitoring that triggers actions when brain-state matches configured labels |
+| **LSL Integration** | Connect any Lab Streaming Layer source (OpenBCI, BrainFlow, MATLAB, pylsl) — auto-discover, pair, auto-connect, and record with full DSP pipeline |
+| **Remote LSL (rlsl-iroh)** | Stream EEG over the internet via encrypted iroh QUIC tunnels — start sink, share endpoint ID, recording starts automatically |
+| **Multi-Device Recording** | Record from multiple devices simultaneously — primary session drives dashboard + embeddings, secondary sessions write independent CSV files |
 | **DND Focus Mode** | Automatic Do Not Disturb toggling driven by real-time focus scores |
 | **Calendar Integration** | Reads OS calendar events — EventKit on macOS, `.ics` files on Linux/Windows. Exposes events via WS, HTTP, CLI, and LLM tools |
 | **WebSocket API** | JSON-based LAN API with mDNS discovery (`_skill._tcp`) |
@@ -212,6 +215,12 @@ The Rust backend is split into focused, zero-Tauri-dependency crates under [`cra
 | [`skill-tray`](crates/skill-tray/) | System tray helpers — progress-ring overlay, shortcut formatting, dedup (pure `std`) |
 | [`skill-autostart`](crates/skill-autostart/) | Platform-specific launch-at-login registration (macOS/Linux/Windows) |
 | [`skill-calendar`](crates/skill-calendar/) | Cross-platform calendar event fetching — EventKit (macOS), iCal files (Linux/Windows) |
+| [`skill-lsl`](crates/skill-lsl/) | LSL stream adapter — local network discovery + rlsl-iroh remote QUIC sink, auto-connect, channel label parsing |
+| [`skill-iroh`](crates/skill-iroh/) | iroh QUIC tunnel — endpoint management, TOTP auth, phone pairing, scope-based permissions |
+| [`skill-health`](crates/skill-health/) | HealthKit / health data sync — heart rate, sleep, steps, metrics storage and query |
+| [`skill-history`](crates/skill-history/) | Session history — listing, metrics extraction, timeseries caching, sleep analysis |
+| [`skill-headless`](crates/skill-headless/) | Headless mode — intercept store for running without a GUI (testing, CI) |
+| [`skill-gpu`](crates/skill-gpu/) | GPU stats — Metal/CUDA/Vulkan utilisation and memory reporting |
 | [`skill-vision`](crates/skill-vision/) | Apple Vision framework OCR via compiled Objective-C FFI (macOS only) |
 
 ### Vendored crates
