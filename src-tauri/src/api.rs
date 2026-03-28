@@ -1787,12 +1787,20 @@ async fn ws_client_task(
     let (mut sink, mut stream) = socket.split();
     let mut rx = state.tx.subscribe();
 
+    // ── Per-client subscription filter ────────────────────────────────────
+    // By default: all events, no filtering.
+    // After a `subscribe` command, only matching events are sent,
+    // optionally with field projection and rate limiting.
+    let mut sub = ClientSubscription::default();
+
     loop {
         tokio::select! {
             // ── Broadcast → this client ───────────────────────────────────
             result = rx.recv() => match result {
                 Ok(text) => {
-                    if sink.send(Message::Text(text.into())).await.is_err() { break; }
+                    if let Some(filtered) = sub.filter_broadcast(&text) {
+                        if sink.send(Message::Text(filtered.into())).await.is_err() { break; }
+                    }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     eprintln!("[ws] {peer} lagged {n} messages — slow consumer");
@@ -1832,6 +1840,8 @@ async fn ws_client_task(
                             let s = serde_json::to_string(&resp).unwrap_or_default();
                             if sink.send(Message::Text(s.into())).await.is_err() { break; }
                         }
+                    } else if let Some(subscribe_resp) = try_handle_subscribe(text_str, &mut sub) {
+                        if sink.send(Message::Text(subscribe_resp.into())).await.is_err() { break; }
                     } else if let Some(resp) = handle_ws_text(&state, &peer, text_str, &sock_addr).await {
                         if sink.send(Message::Text(resp.into())).await.is_err() { break; }
                     }
@@ -1843,6 +1853,108 @@ async fn ws_client_task(
 
     state.tracker.lock_or_recover().remove_client(&peer);
     eprintln!("[ws] - {peer}");
+}
+
+// ── Per-client subscription filter ────────────────────────────────────────────
+
+/// Tracks what a WebSocket client has subscribed to.
+///
+/// # Protocol
+///
+/// ```json
+/// { "command": "subscribe", "events": ["eeg-bands"], "fields": ["focus", "hr", "relAlpha"], "max_hz": 1 }
+/// ```
+///
+/// - `events`: which broadcast event types to receive (default: all).
+///   Pass `["*"]` or omit to receive everything.
+/// - `fields`: which top-level keys to keep in the payload (default: all).
+///   The `event` and `timestamp` keys are always included.
+/// - `max_hz`: maximum updates per second per event type (default: unlimited).
+///   The server drops excess messages.  `0` = unlimited.
+///
+/// Send `{ "command": "subscribe" }` with no args to reset to defaults (all events, all fields).
+#[derive(Default)]
+struct ClientSubscription {
+    /// Event types to pass through.  Empty = all.
+    events: Vec<String>,
+    /// Payload field allowlist.  Empty = all.
+    fields: Vec<String>,
+    /// Minimum interval between sends per event type (0 = unlimited).
+    min_interval_ms: u64,
+    /// Last send timestamp per event type (for rate limiting).
+    last_sent: std::collections::HashMap<String, std::time::Instant>,
+}
+
+impl ClientSubscription {
+    /// Returns `Some(text)` if this broadcast should be sent, `None` to drop.
+    fn filter_broadcast(&mut self, text: &str) -> Option<String> {
+        // Fast path: no subscription filter
+        if self.events.is_empty() && self.fields.is_empty() && self.min_interval_ms == 0 {
+            return Some(text.to_owned());
+        }
+
+        let mut json: Value = serde_json::from_str(text).ok()?;
+        let event = json.get("event")?.as_str()?.to_owned();
+
+        // Event filter
+        if !self.events.is_empty() && !self.events.contains(&event) && !self.events.contains(&"*".to_string()) {
+            return None;
+        }
+
+        // Rate limit
+        if self.min_interval_ms > 0 {
+            let now = std::time::Instant::now();
+            if let Some(last) = self.last_sent.get(&event) {
+                if now.duration_since(*last).as_millis() < self.min_interval_ms as u128 {
+                    return None; // Too soon, drop
+                }
+            }
+            self.last_sent.insert(event.clone(), now);
+        }
+
+        // Field projection
+        if !self.fields.is_empty() {
+            if let Some(payload) = json.get_mut("payload").and_then(|p| p.as_object_mut()) {
+                let keep: std::collections::HashSet<&str> = self.fields.iter().map(|s| s.as_str()).collect();
+                payload.retain(|k, _| k == "timestamp" || keep.contains(k.as_str()));
+            }
+        }
+
+        serde_json::to_string(&json).ok()
+    }
+}
+
+/// Try to handle a `subscribe` command.  Returns the response string if it was
+/// a subscribe command, `None` otherwise (so normal dispatch continues).
+fn try_handle_subscribe(text: &str, sub: &mut ClientSubscription) -> Option<String> {
+    let msg: Value = serde_json::from_str(text).ok()?;
+    if msg.get("command")?.as_str()? != "subscribe" {
+        return None;
+    }
+
+    // Parse subscription parameters
+    sub.events = msg.get("events")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(ToOwned::to_owned)).collect())
+        .unwrap_or_default();
+
+    sub.fields = msg.get("fields")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(ToOwned::to_owned)).collect())
+        .unwrap_or_default();
+
+    let max_hz = msg.get("max_hz").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    sub.min_interval_ms = if max_hz > 0.0 { (1000.0 / max_hz) as u64 } else { 0 };
+    sub.last_sent.clear();
+
+    let resp = json!({
+        "command": "subscribe",
+        "ok": true,
+        "events": &sub.events,
+        "fields": &sub.fields,
+        "max_hz": max_hz,
+    });
+    Some(serde_json::to_string(&resp).unwrap_or_default())
 }
 
 /// Parse one WS text frame as a JSON command and return the response string.
