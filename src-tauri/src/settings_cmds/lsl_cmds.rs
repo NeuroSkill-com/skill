@@ -7,6 +7,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
+use skill_settings::LslPairedStream;
 use tauri::AppHandle;
 
 use crate::state::AppState;
@@ -35,17 +36,18 @@ pub struct LslIrohStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct LslConfig {
     pub auto_connect: bool,
-    pub paired_streams: Vec<String>,
+    pub paired_streams: Vec<LslPairedStream>,
 }
 
 // ── Core helpers (shared by Tauri + WS commands) ─────────────────────────────
 
 /// Discover LSL streams on the local network (~3 s blocking scan).
-pub fn discover_streams_with_paired(paired: &[String]) -> Vec<LslStreamEntry> {
+pub fn discover_streams_with_paired(paired: &[LslPairedStream]) -> Vec<LslStreamEntry> {
+    let paired_ids: Vec<&str> = paired.iter().map(|p| p.source_id.as_str()).collect();
     skill_lsl::discover_streams(3.0)
         .into_iter()
         .map(|s| {
-            let is_paired = paired.contains(&s.source_id);
+            let is_paired = paired_ids.contains(&s.source_id.as_str());
             LslStreamEntry {
                 name: s.name,
                 stream_type: s.stream_type,
@@ -70,7 +72,6 @@ pub fn connect_lsl_by_name(app: &AppHandle, name: &str) {
 
 /// Start the rlsl-iroh sink.  Returns `(endpoint_id, already_running)`.
 pub async fn start_iroh_sink(app: &AppHandle) -> Result<(String, bool), String> {
-    // Already running?
     {
         let r = app.app_state();
         let s = r.lock_or_recover();
@@ -136,7 +137,7 @@ pub fn stop_iroh_sink(app: &AppHandle) {
 pub async fn lsl_discover(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<Vec<LslStreamEntry>, String> {
-    let paired: Vec<String> = { state.lock_or_recover().lsl_paired_streams.clone() };
+    let paired: Vec<LslPairedStream> = { state.lock_or_recover().lsl_paired_streams.clone() };
     tokio::task::spawn_blocking(move || discover_streams_with_paired(&paired))
         .await
         .map_err(|e| format!("lsl_discover: {e}"))
@@ -149,16 +150,36 @@ pub async fn lsl_connect(name: String, app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Pair an LSL stream (by source_id) for auto-connect.
+/// Pair an LSL stream for auto-connect (stores full stream metadata).
 #[tauri::command]
 pub fn lsl_pair_stream(
     source_id: String,
+    name: String,
+    stream_type: String,
+    channels: usize,
+    sample_rate: f64,
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    if !s.lsl_paired_streams.contains(&source_id) {
-        s.lsl_paired_streams.push(source_id);
+    // Update existing or insert new
+    if let Some(existing) = s
+        .lsl_paired_streams
+        .iter_mut()
+        .find(|p| p.source_id == source_id)
+    {
+        existing.name = name;
+        existing.stream_type = stream_type;
+        existing.channels = channels;
+        existing.sample_rate = sample_rate;
+    } else {
+        s.lsl_paired_streams.push(LslPairedStream {
+            source_id,
+            name,
+            stream_type,
+            channels,
+            sample_rate,
+        });
     }
     drop(s);
     crate::save_settings(&app);
@@ -172,7 +193,7 @@ pub fn lsl_unpair_stream(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    s.lsl_paired_streams.retain(|id| id != &source_id);
+    s.lsl_paired_streams.retain(|p| p.source_id != source_id);
     drop(s);
     crate::save_settings(&app);
 }
@@ -210,7 +231,6 @@ pub async fn lsl_iroh_start(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<LslIrohStatus, String> {
-    // Check already running via state (avoid double-bind)
     {
         let s = state.lock_or_recover();
         if let Some(ref eid) = s.lsl_iroh_endpoint_id {
@@ -247,13 +267,6 @@ pub fn lsl_iroh_stop(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>
 
 // ── Background auto-scanner ──────────────────────────────────────────────────
 
-/// Start the background LSL auto-scanner that periodically discovers streams
-/// and auto-connects paired ones.  Safe to call multiple times — only one
-/// scanner runs at a time.
-///
-/// The scanner also acts as the LSL reconnect mechanism: when a session ends
-/// (source disconnected, stream stopped, etc.) and auto-connect is still
-/// enabled, the next poll will detect the stream and reconnect automatically.
 pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -282,15 +295,15 @@ pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
                 break;
             }
 
-            // Only scan when no session is active and there are paired streams.
-            // This doubles as auto-reconnect: when a session ends the next poll
-            // will find the stream again and reconnect.
             if !is_session_active && !paired.is_empty() {
+                let paired2 = paired.clone();
                 let streams = tokio::task::spawn_blocking(move || skill_lsl::discover_streams(3.0))
                     .await
                     .unwrap_or_default();
 
-                let matched = streams.iter().find(|s| paired.contains(&s.source_id));
+                let matched = streams
+                    .iter()
+                    .find(|s| paired2.iter().any(|p| p.source_id == s.source_id));
 
                 if let Some(stream) = matched {
                     eprintln!(
@@ -298,7 +311,6 @@ pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
                         stream.name, stream.source_id
                     );
 
-                    // Emit event so the frontend can update immediately
                     let _ = tauri::Emitter::emit(
                         &app,
                         "lsl-auto-connect",
@@ -311,13 +323,11 @@ pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
                     let target = format!("lsl:{}", stream.name);
                     crate::lifecycle::start_session(&app, Some(target));
 
-                    // Wait before scanning again (session needs time to start)
                     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                     continue;
                 }
             }
 
-            // Poll every 10 seconds
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
 
@@ -326,8 +336,6 @@ pub(crate) fn start_lsl_auto_scanner(app: AppHandle) {
     });
 }
 
-/// Called at app startup to resume the background scanner if auto-connect
-/// was enabled in settings.
 pub(crate) fn maybe_start_lsl_auto_scanner(app: &AppHandle) {
     let r = app.app_state();
     let s = r.lock_or_recover();
@@ -356,7 +364,6 @@ mod tests {
             paired: true,
         };
         let json = serde_json::to_value(&entry).unwrap();
-        // `stream_type` field serialises as `type` (serde rename)
         assert_eq!(json["type"], "EEG");
         assert!(json.get("stream_type").is_none());
         assert_eq!(json["paired"], true);
@@ -386,11 +393,32 @@ mod tests {
 
     #[test]
     fn discover_streams_marks_paired() {
-        // No network streams expected in test, but the function shouldn't panic.
-        let result = discover_streams_with_paired(&["some-id".into()]);
-        // All returned streams should have correct paired flag
+        let paired = vec![LslPairedStream {
+            source_id: "some-id".into(),
+            name: "Test".into(),
+            stream_type: "EEG".into(),
+            channels: 4,
+            sample_rate: 256.0,
+        }];
+        let result = discover_streams_with_paired(&paired);
         for s in &result {
             assert_eq!(s.paired, s.source_id == "some-id");
         }
+    }
+
+    #[test]
+    fn lsl_paired_stream_round_trips() {
+        let p = LslPairedStream {
+            source_id: "abc-123".into(),
+            name: "MyEEG".into(),
+            stream_type: "EEG".into(),
+            channels: 8,
+            sample_rate: 500.0,
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        let p2: LslPairedStream = serde_json::from_str(&json).unwrap();
+        assert_eq!(p2.source_id, "abc-123");
+        assert_eq!(p2.name, "MyEEG");
+        assert_eq!(p2.channels, 8);
     }
 }

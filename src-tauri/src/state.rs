@@ -540,8 +540,8 @@ pub struct AppState {
 
     /// Auto-scan for LSL streams and connect paired ones automatically.
     pub lsl_auto_connect: bool,
-    /// Source IDs of LSL streams the user has "paired" for auto-connect.
-    pub lsl_paired_streams: Vec<String>,
+    /// LSL streams the user has "paired" for auto-connect.
+    pub lsl_paired_streams: Vec<skill_settings::LslPairedStream>,
 
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.

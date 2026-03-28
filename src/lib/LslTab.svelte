@@ -14,6 +14,7 @@ import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
 import { t } from "$lib/i18n/index.svelte";
+import type { DeviceStatus } from "$lib/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface LslStream {
@@ -31,9 +32,17 @@ interface LslIrohStatus {
   endpoint_id: string | null;
 }
 
+interface LslPairedStream {
+  source_id: string;
+  name: string;
+  stream_type: string;
+  channels: number;
+  sample_rate: number;
+}
+
 interface LslConfig {
   auto_connect: boolean;
-  paired_streams: string[];
+  paired_streams: LslPairedStream[];
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -41,18 +50,48 @@ let streams = $state<LslStream[]>([]);
 let scanning = $state(false);
 let connecting = $state<string | null>(null);
 let scanError = $state("");
+let lastScanTime = $state<number | null>(null);
 
 let autoConnect = $state(false);
-let pairedStreams = $state<string[]>([]);
+let pairedStreams = $state<LslPairedStream[]>([]);
+
+// Live session status
+let sessionState = $state<string>("disconnected");
+let sessionDeviceKind = $state<string>("");
+let sessionDeviceName = $state<string | null>(null);
+let sessionSampleCount = $state(0);
 
 let irohStatus = $state<LslIrohStatus>({ running: false, endpoint_id: null });
 let irohStarting = $state(false);
 let irohError = $state("");
 let irohCopied = $state(false);
+let irohExpanded = $state(false);
 
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unlisteners: UnlistenFn[] = [];
+
+// ── Derived ────────────────────────────────────────────────────────────────
+let isLslSessionActive = $derived(
+  (sessionState === "connected" || sessionState === "scanning") &&
+    (sessionDeviceKind === "lsl" || sessionDeviceKind === "lsl-iroh"),
+);
+
+let sortedStreams = $derived(
+  [...streams].sort((a, b) => {
+    // Paired first, then alphabetical
+    if (a.paired !== b.paired) return a.paired ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  }),
+);
+
+let lastScanLabel = $derived.by(() => {
+  if (!lastScanTime) return "";
+  const secs = Math.floor((Date.now() - lastScanTime) / 1000);
+  if (secs < 5) return t("lsl.lastScanJustNow");
+  if (secs < 60) return `${secs}s ago`;
+  return `${Math.floor(secs / 60)}m ago`;
+});
 
 // ── Actions ────────────────────────────────────────────────────────────────
 async function scanStreams() {
@@ -60,6 +99,7 @@ async function scanStreams() {
   scanError = "";
   try {
     streams = await invoke<LslStream[]>("lsl_discover");
+    lastScanTime = Date.now();
   } catch (e: unknown) {
     scanError = String(e);
   } finally {
@@ -67,10 +107,10 @@ async function scanStreams() {
   }
 }
 
-async function connectStream(name: string) {
-  connecting = name;
+async function connectStream(stream: LslStream) {
+  connecting = stream.name;
   try {
-    await invoke("lsl_connect", { name });
+    await invoke("lsl_connect", { name: stream.name });
   } catch (e: unknown) {
     scanError = String(e);
   } finally {
@@ -78,16 +118,63 @@ async function connectStream(name: string) {
   }
 }
 
-async function togglePair(sourceId: string, isPaired: boolean) {
-  if (isPaired) {
-    await invoke("lsl_unpair_stream", { sourceId });
-    pairedStreams = pairedStreams.filter((id) => id !== sourceId);
-  } else {
-    await invoke("lsl_pair_stream", { sourceId });
-    pairedStreams = [...pairedStreams, sourceId];
+async function pairAndConnect(stream: LslStream) {
+  // Pair if not already
+  if (!stream.paired) {
+    await invoke("lsl_pair_stream", {
+      sourceId: stream.source_id,
+      name: stream.name,
+      streamType: stream.type,
+      channels: stream.channels,
+      sampleRate: stream.sample_rate,
+    });
+    pairedStreams = [
+      ...pairedStreams,
+      {
+        source_id: stream.source_id,
+        name: stream.name,
+        stream_type: stream.type,
+        channels: stream.channels,
+        sample_rate: stream.sample_rate,
+      },
+    ];
+    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
   }
-  // Update paired flag in streams list
-  streams = streams.map((s) => (s.source_id === sourceId ? { ...s, paired: !isPaired } : s));
+  // Connect
+  await connectStream(stream);
+}
+
+async function togglePair(stream: LslStream) {
+  if (stream.paired) {
+    await invoke("lsl_unpair_stream", { sourceId: stream.source_id });
+    pairedStreams = pairedStreams.filter((p) => p.source_id !== stream.source_id);
+    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: false } : s));
+  } else {
+    await invoke("lsl_pair_stream", {
+      sourceId: stream.source_id,
+      name: stream.name,
+      streamType: stream.type,
+      channels: stream.channels,
+      sampleRate: stream.sample_rate,
+    });
+    pairedStreams = [
+      ...pairedStreams,
+      {
+        source_id: stream.source_id,
+        name: stream.name,
+        stream_type: stream.type,
+        channels: stream.channels,
+        sample_rate: stream.sample_rate,
+      },
+    ];
+    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+  }
+}
+
+async function unpairById(sourceId: string) {
+  await invoke("lsl_unpair_stream", { sourceId });
+  pairedStreams = pairedStreams.filter((p) => p.source_id !== sourceId);
+  streams = streams.map((s) => (s.source_id === sourceId ? { ...s, paired: false } : s));
 }
 
 async function toggleAutoConnect() {
@@ -102,7 +189,6 @@ function manageAutoScanTimer() {
     scanTimer = null;
   }
   if (autoConnect) {
-    // Auto-scan every 10s when auto-connect is on
     scanTimer = setInterval(scanStreams, 10_000);
   }
 }
@@ -143,9 +229,12 @@ async function copyEndpointId() {
   }
 }
 
+function fmtRate(hz: number): string {
+  return hz % 1 === 0 ? `${hz}` : hz.toFixed(1);
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 onMount(async () => {
-  // Load config
   try {
     const cfg = await invoke<LslConfig>("lsl_get_config");
     autoConnect = cfg.auto_connect;
@@ -154,20 +243,32 @@ onMount(async () => {
     /* ignore */
   }
 
+  // Get initial session status
+  try {
+    const s = await invoke<DeviceStatus>("get_status");
+    sessionState = s.state;
+    sessionDeviceKind = s.device_kind;
+    sessionDeviceName = s.device_name;
+    sessionSampleCount = s.sample_count;
+  } catch {
+    /* ignore */
+  }
+
   await refreshIrohStatus();
-  // Initial scan
   await scanStreams();
 
-  // Poll iroh status every 5s
   pollTimer = setInterval(refreshIrohStatus, 5000);
-  // Start auto-scan timer if auto-connect is on
   manageAutoScanTimer();
 
-  // Listen for backend auto-connect events (updates UI immediately)
   unlisteners.push(
     await listen("lsl-auto-connect", () => {
-      // Re-scan to refresh the stream list after auto-connect
       scanStreams();
+    }),
+    await listen<DeviceStatus>("status", (ev) => {
+      sessionState = ev.payload.state;
+      sessionDeviceKind = ev.payload.device_kind;
+      sessionDeviceName = ev.payload.device_name;
+      sessionSampleCount = ev.payload.sample_count;
     }),
   );
 });
@@ -178,6 +279,36 @@ onDestroy(() => {
   for (const u of unlisteners) u();
 });
 </script>
+
+<!-- ── Live Session Banner ────────────────────────────────────────────────── -->
+{#if isLslSessionActive}
+  <Card class="border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/5 gap-0 py-0 overflow-hidden">
+    <CardContent class="flex items-center gap-3 p-4">
+      <span class="relative flex h-2.5 w-2.5 shrink-0">
+        <span
+          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+        ></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+      </span>
+      <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+        <span class="text-[0.72rem] font-semibold text-emerald-700 dark:text-emerald-300 leading-tight">
+          {t("lsl.sessionActive")}
+        </span>
+        <span class="text-[0.58rem] text-emerald-600/70 dark:text-emerald-400/70 truncate">
+          {sessionDeviceName ?? "LSL Stream"}
+          {#if sessionSampleCount > 0}
+            · {sessionSampleCount.toLocaleString()} samples
+          {/if}
+        </span>
+      </div>
+      <span
+        class="text-[0.52rem] font-bold tracking-widest uppercase text-emerald-600 dark:text-emerald-400"
+      >
+        {sessionState === "scanning" ? t("lsl.connecting") : t("lsl.streaming")}
+      </span>
+    </CardContent>
+  </Card>
+{/if}
 
 <!-- ── Auto-Connect Toggle ────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
@@ -190,7 +321,8 @@ onDestroy(() => {
       <button
         onclick={toggleAutoConnect}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
-               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]"
+      >
         <div
           class="relative shrink-0 w-8 h-4 rounded-full transition-colors
                     {autoConnect ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}"
@@ -224,21 +356,26 @@ onDestroy(() => {
           <span class="text-[0.54rem] font-semibold tracking-widest uppercase text-muted-foreground/70">
             {t("lsl.pairedStreams")} ({pairedStreams.length})
           </span>
-          <div class="flex flex-wrap gap-1.5">
-            {#each pairedStreams as sourceId}
-              <span
-                class="inline-flex items-center gap-1 text-[0.58rem] font-mono px-2 py-1
-                       rounded-md bg-primary/10 text-primary border border-primary/20"
-              >
-                {sourceId}
+          <div class="flex flex-col gap-1.5">
+            {#each pairedStreams as paired}
+              <div class="flex items-center gap-2 text-[0.58rem]">
+                <span class="font-semibold text-foreground truncate">{paired.name || paired.source_id}</span>
+                {#if paired.name}
+                  <span class="text-muted-foreground/40 font-mono text-[0.5rem] truncate"
+                    >{paired.source_id}</span
+                  >
+                {/if}
+                <span class="text-muted-foreground/50 shrink-0">
+                  {paired.channels}ch · {fmtRate(paired.sample_rate)} Hz
+                </span>
                 <button
-                  class="ml-0.5 text-primary/50 hover:text-primary cursor-pointer"
-                  onclick={() => togglePair(sourceId, true)}
+                  class="ml-auto text-muted-foreground/40 hover:text-red-500 cursor-pointer shrink-0 text-[0.6rem]"
+                  onclick={() => unpairById(paired.source_id)}
                   title={t("lsl.unpair")}
                 >
                   ✕
                 </button>
-              </span>
+              </div>
             {/each}
           </div>
         </div>
@@ -249,16 +386,17 @@ onDestroy(() => {
 
 <!-- ── Local LSL Streams ──────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
-  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-    {t("lsl.localStreams")}
-  </span>
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("lsl.localStreams")}
+    </span>
+    {#if lastScanLabel}
+      <span class="ml-auto text-[0.5rem] text-muted-foreground/40">{lastScanLabel}</span>
+    {/if}
+  </div>
 
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col gap-3 p-4">
-      <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-        {t("lsl.localStreamsDesc")}
-      </p>
-
       <div class="flex items-center gap-2">
         <Button
           variant="outline"
@@ -281,7 +419,7 @@ onDestroy(() => {
         {#if streams.length > 0}
           <span class="text-[0.58rem] text-muted-foreground">
             {streams.length}
-            {streams.length === 1 ? "stream" : "streams"} found
+            {streams.length === 1 ? "stream" : "streams"}
           </span>
         {/if}
         {#if autoConnect}
@@ -303,11 +441,11 @@ onDestroy(() => {
         <p class="text-[0.58rem] text-red-500 leading-relaxed">{scanError}</p>
       {/if}
 
-      {#if streams.length > 0}
+      {#if sortedStreams.length > 0}
         <div class="flex flex-col gap-2 mt-1">
-          {#each streams as stream (stream.source_id || stream.name)}
+          {#each sortedStreams as stream (stream.source_id || stream.name)}
             <div
-              class="flex items-center gap-3 rounded-lg border px-4 py-3
+              class="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors
                         {stream.paired
                 ? 'border-primary/30 bg-primary/5 dark:bg-primary/5'
                 : 'border-border dark:border-white/[0.08] bg-muted/30 dark:bg-white/[0.02]'}"
@@ -319,65 +457,89 @@ onDestroy(() => {
                     >{stream.name}</span
                   >
                   <span
-                    class="text-[0.52rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
+                    class="text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
                                bg-primary/10 text-primary">{stream.type}</span
                   >
                   {#if stream.paired}
                     <span
-                      class="text-[0.48rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
+                      class="text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
                                  bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                     >
                       {t("lsl.paired")}
                     </span>
                   {/if}
                 </div>
-                <div class="flex items-center gap-3 text-[0.58rem] text-muted-foreground">
+                <div class="flex items-center gap-2 text-[0.58rem] text-muted-foreground">
                   <span>{stream.channels}ch</span>
-                  <span>·</span>
-                  <span>{stream.sample_rate} Hz</span>
+                  <span class="text-muted-foreground/30">·</span>
+                  <span>{fmtRate(stream.sample_rate)} Hz</span>
                   {#if stream.hostname}
-                    <span>·</span>
+                    <span class="text-muted-foreground/30">·</span>
                     <span class="truncate">{stream.hostname}</span>
                   {/if}
                 </div>
-                {#if stream.source_id}
-                  <span class="text-[0.52rem] font-mono text-muted-foreground/50 truncate">
-                    {stream.source_id}
-                  </span>
-                {/if}
               </div>
 
               <!-- Actions -->
               <div class="flex items-center gap-1.5 shrink-0">
-                <!-- Pair/Unpair button -->
+                {#if stream.paired}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 text-[0.54rem] px-2 text-muted-foreground/60 hover:text-red-500"
+                    onclick={() => togglePair(stream)}
+                  >
+                    {t("lsl.unpair")}
+                  </Button>
+                {:else}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 text-[0.54rem] px-2 text-muted-foreground"
+                    onclick={() => togglePair(stream)}
+                  >
+                    {t("lsl.pair")}
+                  </Button>
+                {/if}
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  class="h-7 text-[0.54rem] px-2 {stream.paired
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-muted-foreground'}"
-                  onclick={() => togglePair(stream.source_id, stream.paired)}
-                >
-                  {stream.paired ? t("lsl.unpair") : t("lsl.pair")}
-                </Button>
-                <!-- Connect button -->
-                <Button
-                  variant="default"
+                  variant={stream.paired ? "default" : "outline"}
                   size="sm"
                   class="h-7 text-[0.58rem] px-3"
-                  disabled={connecting !== null}
-                  onclick={() => connectStream(stream.name)}
+                  disabled={connecting !== null || isLslSessionActive}
+                  onclick={() => (stream.paired ? connectStream(stream) : pairAndConnect(stream))}
                 >
-                  {connecting === stream.name ? t("lsl.connecting") : t("lsl.connect")}
+                  {#if connecting === stream.name}
+                    {t("lsl.connecting")}
+                  {:else if stream.paired}
+                    {t("lsl.connect")}
+                  {:else}
+                    {t("lsl.pairAndConnect")}
+                  {/if}
                 </Button>
               </div>
             </div>
           {/each}
         </div>
-      {:else if !scanning}
-        <p class="text-[0.58rem] text-muted-foreground/50 italic">
-          {t("lsl.noStreams")}
-        </p>
+      {:else if scanning}
+        <div class="flex items-center justify-center py-6 gap-2">
+          <span
+            class="h-4 w-4 border-2 border-primary/40 border-t-primary rounded-full animate-spin"
+          ></span>
+          <span class="text-[0.62rem] text-muted-foreground">{t("lsl.scanningNetwork")}</span>
+        </div>
+      {:else}
+        <!-- Empty state -->
+        <div
+          class="flex flex-col items-center gap-3 py-6 text-center"
+        >
+          <div class="text-[1.5rem] opacity-20">📡</div>
+          <div class="flex flex-col gap-1">
+            <span class="text-[0.68rem] font-medium text-muted-foreground/70">{t("lsl.noStreams")}</span>
+            <span class="text-[0.56rem] text-muted-foreground/40 max-w-[28rem] leading-relaxed">
+              {t("lsl.noStreamsHint")}
+            </span>
+          </div>
+        </div>
       {/if}
     </CardContent>
   </Card>
@@ -385,96 +547,131 @@ onDestroy(() => {
 
 <Separator class="bg-border dark:bg-white/[0.05]" />
 
-<!-- ── Remote LSL via iroh (rlsl-iroh) ────────────────────────────────────── -->
+<!-- ── Remote LSL via iroh — collapsible ──────────────────────────────────── -->
 <section class="flex flex-col gap-2">
-  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-    {t("lsl.irohRemote")}
-  </span>
+  <button
+    class="flex items-center gap-1.5 px-0.5 text-left cursor-pointer group"
+    onclick={() => (irohExpanded = !irohExpanded)}
+  >
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="w-3 h-3 text-muted-foreground/40 transition-transform {irohExpanded
+        ? 'rotate-90'
+        : ''}"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+    <span
+      class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground group-hover:text-foreground/60 transition-colors"
+    >
+      {t("lsl.irohRemote")}
+    </span>
+    {#if irohStatus.running}
+      <span class="relative flex h-1.5 w-1.5 ml-1">
+        <span
+          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+        ></span>
+        <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+      </span>
+    {/if}
+  </button>
 
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="flex flex-col gap-3 p-4">
-      <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-        {t("lsl.irohDesc")}
-      </p>
+  {#if irohExpanded}
+    <Card
+      class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden"
+    >
+      <CardContent class="flex flex-col gap-3 p-4">
+        <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+          {t("lsl.irohDesc")}
+        </p>
 
-      <!-- Status + controls -->
-      <div class="flex items-center gap-2">
-        {#if irohStatus.running}
-          <span class="relative flex h-2 w-2 shrink-0">
-            <span
-              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
-            ></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span class="text-[0.62rem] font-semibold text-emerald-600 dark:text-emerald-400">
-            {t("lsl.irohRunning")}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-7 text-[0.58rem] px-3 ml-auto border-red-500/30 text-red-500 hover:bg-red-500/10"
-            onclick={stopIroh}
-          >
-            {t("lsl.irohStop")}
-          </Button>
-        {:else}
-          <span class="relative flex h-2 w-2 shrink-0">
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/30"></span>
-          </span>
-          <span class="text-[0.62rem] text-muted-foreground/60">
-            {t("lsl.irohStopped")}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-7 text-[0.58rem] px-3 ml-auto"
-            disabled={irohStarting}
-            onclick={startIroh}
-          >
-            {#if irohStarting}
-              <span class="flex items-center gap-1.5">
-                <span
-                  class="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin"
-                ></span>
-                {t("lsl.irohStarting")}
-              </span>
-            {:else}
-              {t("lsl.irohStart")}
-            {/if}
-          </Button>
-        {/if}
-      </div>
-
-      {#if irohError}
-        <p class="text-[0.58rem] text-red-500 leading-relaxed">{irohError}</p>
-      {/if}
-
-      <!-- Endpoint ID -->
-      {#if irohStatus.endpoint_id}
-        <div class="flex flex-col gap-2 rounded-lg bg-cyan-500/5 border border-cyan-500/20 px-4 py-3">
-          <div class="flex items-center gap-2">
-            <span
-              class="text-[0.56rem] font-semibold tracking-widest uppercase text-cyan-600 dark:text-cyan-400"
-            >
-              {t("lsl.irohEndpointId")}
+        <div class="flex items-center gap-2">
+          {#if irohStatus.running}
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span
+                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+              ></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <button
-              class="ml-auto text-[0.52rem] font-semibold px-2 py-0.5 rounded
-                     border border-cyan-500/30 text-cyan-600 dark:text-cyan-400
-                     hover:bg-cyan-500/10 transition-colors cursor-pointer"
-              onclick={copyEndpointId}
+            <span class="text-[0.62rem] font-semibold text-emerald-600 dark:text-emerald-400">
+              {t("lsl.irohRunning")}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 text-[0.58rem] px-3 ml-auto border-red-500/30 text-red-500 hover:bg-red-500/10"
+              onclick={stopIroh}
             >
-              {irohCopied ? t("lsl.irohCopied") : t("lsl.irohCopy")}
-            </button>
-          </div>
-          <code class="text-[0.62rem] font-mono text-foreground break-all select-all leading-relaxed">
-            {irohStatus.endpoint_id}
-          </code>
-          <p class="text-[0.54rem] text-muted-foreground/60 leading-relaxed">
-            {t("lsl.irohEndpointIdHint")}
-          </p>
+              {t("lsl.irohStop")}
+            </Button>
+          {:else}
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/30"
+              ></span>
+            </span>
+            <span class="text-[0.62rem] text-muted-foreground/60">
+              {t("lsl.irohStopped")}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 text-[0.58rem] px-3 ml-auto"
+              disabled={irohStarting}
+              onclick={startIroh}
+            >
+              {#if irohStarting}
+                <span class="flex items-center gap-1.5">
+                  <span
+                    class="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                  ></span>
+                  {t("lsl.irohStarting")}
+                </span>
+              {:else}
+                {t("lsl.irohStart")}
+              {/if}
+            </Button>
+          {/if}
         </div>
-      {/if}
-    </CardContent>
-  </Card>
+
+        {#if irohError}
+          <p class="text-[0.58rem] text-red-500 leading-relaxed">{irohError}</p>
+        {/if}
+
+        {#if irohStatus.endpoint_id}
+          <div
+            class="flex flex-col gap-2 rounded-lg bg-cyan-500/5 border border-cyan-500/20 px-4 py-3"
+          >
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[0.56rem] font-semibold tracking-widest uppercase text-cyan-600 dark:text-cyan-400"
+              >
+                {t("lsl.irohEndpointId")}
+              </span>
+              <button
+                class="ml-auto text-[0.52rem] font-semibold px-2 py-0.5 rounded
+                       border border-cyan-500/30 text-cyan-600 dark:text-cyan-400
+                       hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                onclick={copyEndpointId}
+              >
+                {irohCopied ? t("lsl.irohCopied") : t("lsl.irohCopy")}
+              </button>
+            </div>
+            <code
+              class="text-[0.62rem] font-mono text-foreground break-all select-all leading-relaxed"
+            >
+              {irohStatus.endpoint_id}
+            </code>
+            <p class="text-[0.54rem] text-muted-foreground/60 leading-relaxed">
+              {t("lsl.irohEndpointIdHint")}
+            </p>
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
+  {/if}
 </section>

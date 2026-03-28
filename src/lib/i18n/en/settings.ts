@@ -386,9 +386,16 @@ const settings: Record<string, string> = {
   "lsl.autoScanning": "Auto-scanning",
   "lsl.scanButton": "Scan Network",
   "lsl.scanning": "Scanning…",
+  "lsl.scanningNetwork": "Scanning local network for LSL streams…",
+  "lsl.lastScanJustNow": "just now",
   "lsl.connect": "Connect",
   "lsl.connecting": "Connecting…",
-  "lsl.noStreams": "No LSL streams found. Click Scan to search the network.",
+  "lsl.pairAndConnect": "Pair & Connect",
+  "lsl.streaming": "STREAMING",
+  "lsl.sessionActive": "LSL session active",
+  "lsl.noStreams": "No LSL streams found",
+  "lsl.noStreamsHint":
+    "Make sure your LSL source is running and broadcasting on the same network. Common sources: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
 
   "lsl.irohRemote": "Remote LSL via iroh",
   "lsl.irohDesc":

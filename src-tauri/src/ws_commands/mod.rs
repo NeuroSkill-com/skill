@@ -913,7 +913,7 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
 
 /// `lsl_discover` — scan for LSL streams on the local network.
 fn lsl_discover(app: &AppHandle) -> Result<Value, String> {
-    let paired: Vec<String> = app.app_state().lock_or_recover().lsl_paired_streams.clone();
+    let paired = app.app_state().lock_or_recover().lsl_paired_streams.clone();
     let streams = tokio::task::block_in_place(|| {
         crate::settings_cmds::lsl_cmds::discover_streams_with_paired(&paired)
     });

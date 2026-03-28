@@ -428,6 +428,15 @@ const settings: Record<string, string> = {
   "lsl.unpair": "Unpair",
   "lsl.paired": "PAIRED",
   "lsl.autoScanning": "Auto-scanning",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.scanningNetwork": "Scanning local network for LSL streams…",
+  "lsl.lastScanJustNow": "just now",
+  "lsl.pairAndConnect": "Pair & Connect",
+  "lsl.streaming": "STREAMING",
+  "lsl.sessionActive": "LSL session active",
+  "lsl.noStreamsHint":
+    "Make sure your LSL source is running and broadcasting on the same network. Common sources: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
 };
 
 export default settings;

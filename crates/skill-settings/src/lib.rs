@@ -705,9 +705,28 @@ pub struct UserSettings {
     /// Auto-scan for LSL streams and connect paired ones automatically.
     #[serde(default)]
     pub lsl_auto_connect: bool,
-    /// Source IDs of LSL streams the user has "paired" for auto-connect.
+    /// LSL streams the user has "paired" for auto-connect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub lsl_paired_streams: Vec<String>,
+    pub lsl_paired_streams: Vec<LslPairedStream>,
+}
+
+/// A remembered LSL stream for auto-connect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LslPairedStream {
+    /// LSL source_id — stable identifier across sessions.
+    pub source_id: String,
+    /// Human-readable stream name (last known).
+    #[serde(default)]
+    pub name: String,
+    /// Stream type (EEG, EXG, etc.).
+    #[serde(default)]
+    pub stream_type: String,
+    /// Channel count.
+    #[serde(default)]
+    pub channels: usize,
+    /// Sample rate in Hz.
+    #[serde(default)]
+    pub sample_rate: f64,
 }
 
 pub fn default_storage_format() -> String {
@@ -847,7 +866,7 @@ impl Default for UserSettings {
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
             lsl_auto_connect: false,
-            lsl_paired_streams: Vec::new(),
+            lsl_paired_streams: vec![],
         }
     }
 }
