@@ -45,7 +45,6 @@ let irohInfo: any = null;
 let err = "";
 let loading = true;
 
-let newTotpName = "";
 let qr: string | null = null;
 let creating = false;
 let showSuccess = false;
@@ -132,9 +131,8 @@ async function createInvite() {
   showSuccess = false;
   try {
     clientCountBeforeQr = activeClients.length;
-    const r = await api("/v1/iroh/phone-invite", "POST", { name: newTotpName || "Mobile" });
+    const r = await api("/v1/iroh/phone-invite", "POST", { name: "Invite" });
     qr = r.qr_png_base64;
-    newTotpName = "";
     await refresh();
     startPolling();
   } catch (e: any) {
@@ -463,18 +461,11 @@ onMount(async () => {
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
             Generate a QR code that your phone scans to connect. The code contains the
             server address, relay, and a one-time credential — everything the phone needs.
+            The device name is sent automatically by the client.
           </p>
-          <div class="flex gap-2 items-center">
-            <input
-              class="border border-border dark:border-white/[0.1] rounded-md px-2.5 py-1.5 text-xs bg-transparent flex-1
-                     focus:outline-none focus:ring-1 focus:ring-primary/40"
-              bind:value={newTotpName}
-              placeholder="Credential name (e.g. My iPhone)"
-            />
-            <Button size="sm" class="text-xs" disabled={creating} onclick={createInvite}>
-              {creating ? "Generating…" : "Generate QR"}
-            </Button>
-          </div>
+          <Button size="sm" class="text-xs" disabled={creating} onclick={createInvite}>
+            {creating ? "Generating…" : "Generate QR"}
+          </Button>
         {/if}
       </CardContent>
     </Card>
@@ -531,7 +522,7 @@ onMount(async () => {
     </section>
   {/if}
 
-  <!-- ── Credentials ────────────────────────────────────────────────────── -->
+  <!-- ── Credentials & Linked Clients ──────────────────────────────────── -->
   {#if activeTotp.length > 0}
     <section class="flex flex-col gap-2">
       <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
@@ -540,16 +531,45 @@ onMount(async () => {
       <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
         <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
           {#each activeTotp as t}
-            <div class="flex items-center justify-between px-4 py-2.5">
-              <div class="flex-1 min-w-0">
-                <span class="text-xs font-medium">{t.name}</span>
-                <div class="text-[0.52rem] text-muted-foreground">
-                  Created {fmt(t.created_at)}{t.last_used_at ? ` · used ${ago(t.last_used_at)}` : ""}
+            {@const linkedClients = activeClients.filter(c => c.totp_id === t.id)}
+            <div class="px-4 py-2.5">
+              <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium">{t.name}</span>
+                  <div class="text-[0.52rem] text-muted-foreground">
+                    Created {fmt(t.created_at)}{t.last_used_at ? ` · used ${ago(t.last_used_at)}` : ""}
+                    {#if linkedClients.length > 0}
+                      · {linkedClients.length} client{linkedClients.length !== 1 ? 's' : ''}
+                    {/if}
+                  </div>
                 </div>
+                <Button variant="outline" size="sm" class="text-[0.56rem] h-6 px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onclick={() => revokeTotp(t.id)}>
+                  Revoke
+                </Button>
               </div>
-              <Button variant="outline" size="sm" class="text-[0.56rem] h-6 px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onclick={() => revokeTotp(t.id)}>
-                Revoke
-              </Button>
+              <!-- Linked clients under this credential -->
+              {#if linkedClients.length > 0}
+                <div class="mt-2 flex flex-col gap-1">
+                  {#each linkedClients as c}
+                    <div class="flex items-center justify-between gap-2 pl-3 py-1.5 rounded-md bg-muted/30 dark:bg-white/[0.02]">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-[0.6rem] font-medium truncate">{c.name}</span>
+                        <Badge variant={c.scope === "full" ? "destructive" : c.scope === "custom" ? "default" : "secondary"}
+                               class="text-[0.45rem]">
+                          {c.scope}
+                        </Badge>
+                        {#if c.last_connected_at}
+                          <span class="text-[0.45rem] text-muted-foreground">{ago(c.last_connected_at)}</span>
+                        {/if}
+                      </div>
+                      <Button variant="ghost" size="sm" class="text-[0.5rem] h-5 px-1.5"
+                              onclick={() => openPermissions(c)}>
+                        Permissions
+                      </Button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/each}
         </CardContent>
