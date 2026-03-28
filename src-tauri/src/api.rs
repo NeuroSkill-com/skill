@@ -337,10 +337,23 @@ fn check_permission(state: &SharedState, addr: &SocketAddr, command: &str) -> Re
         return Ok(()); // no auth store — allow (shouldn't happen)
     };
 
-    let auth_g: std::sync::MutexGuard<'_, skill_iroh::IrohAuthStore> = skill_iroh::lock_or_recover(&auth);
+    let auth_g: std::sync::MutexGuard<'_, skill_iroh::IrohAuthStore> =
+        skill_iroh::lock_or_recover(&auth);
     if auth_g.is_command_allowed(&peer_endpoint_id, command) {
         return Ok(());
     }
+
+    // Debug: log what we're looking up vs what's registered
+    let registered_ids: Vec<String> = auth_g
+        .list_clients()
+        .iter()
+        .filter(|c| c.revoked_at.is_none())
+        .map(|c| format!("{}({})", c.endpoint_id, c.scope))
+        .collect();
+    eprintln!(
+        "[iroh-auth] DENIED {command} for peer={peer_endpoint_id} — registered: [{}]",
+        registered_ids.join(", ")
+    );
 
     // Build a helpful error
     let hint_group = skill_iroh::scope::group_for_command(command)
