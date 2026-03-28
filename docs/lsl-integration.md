@@ -50,9 +50,13 @@ while True:
 ```
 
 Then in Skill:
-1. Open **Settings → LSL Streams** (or use the CLI: `skill lsl_discover`)
+1. Open **Settings → LSL** (or press ⌘K → "Scan for LSL Streams")
 2. Your stream appears in the list
-3. Tap **Connect** → Skill starts recording with full DSP processing
+3. Click **Pair & Connect** → Skill starts recording with full DSP processing
+
+> **Tip:** Pair a stream and enable **Auto-Connect** — Skill will automatically
+> scan every 10 seconds and reconnect when the stream reappears (e.g. after
+> restarting your LSL source).
 
 ---
 
@@ -342,3 +346,100 @@ rlsl-iroh source --sink-node-id <endpoint_id> --compression delta-lz4
 `delta-lz4` applies XOR-delta encoding before LZ4 — consecutive EEG samples
 differ by tiny amounts, so the deltas are mostly zeros → extremely compressible.
 **Recommended for all remote EEG streaming.**
+
+---
+
+## Auto-Connect & Pairing
+
+Pair an LSL stream once, then Skill reconnects automatically whenever it appears.
+
+### How it works
+
+1. **Settings → LSL → Scan Network** — discovers all LSL streams on the LAN
+2. Click **Pair** on a stream (or **Pair & Connect** to pair and start immediately)
+3. Toggle **Auto-connect paired LSL streams** → ON
+4. Skill's background scanner polls every 10 seconds
+5. When a paired stream's `source_id` is found, the session starts automatically
+6. If the stream disappears and reappears (source restart), Skill reconnects on the next poll
+
+### Persistence
+
+Paired streams are stored in `~/.skill/settings.json` with full metadata:
+
+```json
+{
+  "lsl_auto_connect": true,
+  "lsl_paired_streams": [
+    {
+      "source_id": "openbci-cyton-42",
+      "name": "OpenBCI_Cyton",
+      "stream_type": "EEG",
+      "channels": 8,
+      "sample_rate": 250.0
+    }
+  ]
+}
+```
+
+### ⌘K Commands
+
+| Command | Action |
+|---------|--------|
+| **Scan for LSL Streams** | Run discovery, show toast with results, open LSL tab |
+| **LSL Settings** | Open Settings → LSL tab directly |
+| **Start iroh Remote Sink** | Start rlsl-iroh, show endpoint ID |
+| **Stop iroh Remote Sink** | Stop the sink |
+
+---
+
+## Multi-Device Recording
+
+Record from multiple devices simultaneously. One device is the **primary**
+(drives the dashboard, DSP, and embeddings); additional devices record as
+**secondary** sessions to their own CSV files.
+
+### Starting a secondary session
+
+When a primary session is already running:
+
+1. **Settings → LSL → Scan** — find your second stream
+2. Click **Background** — starts a secondary recording
+3. The **dashboard** shows the primary device with a `PRIMARY` badge,
+   and a strip at the bottom listing all secondary sessions with live
+   sample counts
+4. Click **✕** on a secondary to stop just that recording
+
+### Switching primary
+
+Click **Switch to this** on any LSL stream to cancel the current primary
+session and start a new one with the selected stream.
+
+### What secondary sessions record
+
+- Full CSV/Parquet at the original sample rate (all channels)
+- Session sidecar JSON metadata
+- Battery level (if available)
+
+### What secondary sessions do NOT run
+
+- DSP filters / band power analysis
+- ZUNA neural embeddings
+- Hook evaluation
+- Quality monitoring
+- Dashboard updates (those come from the primary only)
+
+---
+
+## Session Source Badges
+
+The dashboard shows a transport badge next to the device name so you always
+know what's streaming:
+
+| Badge | Source |
+|-------|--------|
+| **BLE** | Bluetooth Low Energy (Muse, MW75, Hermes, IDUN, Mendi, Ganglion) |
+| **LSL** | Local LSL stream |
+| **LSL · iroh** | Remote LSL via rlsl-iroh |
+| **iroh** | Phone streaming via iroh |
+| **USB** | USB serial (OpenBCI Cyton) |
+| **Cortex** | Emotiv Cortex WebSocket |
