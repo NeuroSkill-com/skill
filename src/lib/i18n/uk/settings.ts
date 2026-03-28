@@ -410,6 +410,30 @@ const settings: Record<string, string> = {
   "settings.storageFormatCsvDesc": "Зручний для читання, універсальний",
   "settings.storageFormatParquetDesc": "Стовпцевий, стиснутий",
   "settings.storageFormatBothDesc": "CSV + Parquet одночасно",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "settingsTabs.lsl": "LSL",
+  "lsl.localStreams": "Local LSL Streams",
+  "lsl.localStreamsDesc":
+    "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source.",
+  "lsl.scanButton": "Scan Network",
+  "lsl.scanning": "Scanning…",
+  "lsl.connect": "Connect",
+  "lsl.connecting": "Connecting…",
+  "lsl.noStreams": "No LSL streams found. Click Scan to search the network.",
+  "lsl.irohRemote": "Remote LSL via iroh",
+  "lsl.irohDesc":
+    "Accept a remote LSL stream tunnelled over iroh QUIC. Start the sink, share the endpoint ID with the remote client, and recording begins automatically when the source connects.",
+  "lsl.irohRunning": "Sink running — waiting for remote source",
+  "lsl.irohStopped": "Sink not running",
+  "lsl.irohStart": "Start Sink",
+  "lsl.irohStarting": "Starting…",
+  "lsl.irohStop": "Stop",
+  "lsl.irohEndpointId": "Endpoint ID",
+  "lsl.irohCopy": "Copy",
+  "lsl.irohCopied": "Copied!",
+  "lsl.irohEndpointIdHint":
+    "Share this ID with the remote rlsl-iroh source. The session will start automatically once the remote connects (timeout: 120 s).",
 };
 
 export default settings;
