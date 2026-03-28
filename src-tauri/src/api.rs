@@ -363,13 +363,24 @@ fn check_permission(state: &SharedState, addr: &SocketAddr, command: &str) -> Re
         .scope_for_endpoint(&peer_endpoint_id)
         .unwrap_or_else(|| "none".into());
 
+    let error_msg = if scope == "none" {
+        format!(
+            "forbidden: this device is not recognized. \
+             Please re-pair by scanning the QR code again in Skill's Remote Access settings. \
+             (peer: {}…)",
+            &peer_endpoint_id[..peer_endpoint_id.len().min(16)]
+        )
+    } else {
+        format!(
+            "forbidden: your scope ({scope}) does not permit '{command}'. \
+             Required: group '{hint_group}' or explicit grant."
+        )
+    };
+
     Err(json!({
         "command": command,
         "ok": false,
-        "error": format!(
-            "forbidden: your scope ({scope}) does not permit '{command}'. \
-             Required: group '{hint_group}' or explicit grant."
-        ),
+        "error": error_msg,
         "scope": scope,
         "hint_group": hint_group,
     }))
