@@ -139,21 +139,26 @@ impl IrohLslAdapter {
                 .name("rlsl-iroh-inlet".into())
                 .spawn(move || {
                     let inlet = rlsl::inlet::StreamInlet::new(&info2, 360, 0, true);
-                    let time_correction = inlet.time_correction(1.0);
-                    let mut buf = vec![0.0f64; ch];
+                    inlet.set_postprocessing(rlsl::types::PROC_ALL);
                     loop {
-                        let ts = match inlet.pull_sample_d(&mut buf, 0.2) {
-                            Ok(t) if t > 0.0 => t + time_correction,
-                            _ => continue,
+                        let Ok((timestamps, data)) = inlet.pull_chunk_d(256, 0.2) else {
+                            continue;
                         };
-                        if tx2
-                            .blocking_send(DeviceEvent::Eeg(EegFrame {
-                                channels: buf.to_vec(),
-                                timestamp_s: ts,
-                            }))
-                            .is_err()
-                        {
-                            break;
+                        if timestamps.is_empty() {
+                            continue;
+                        }
+                        for (i, &ts) in timestamps.iter().enumerate() {
+                            let offset = i * ch;
+                            let channels = data[offset..offset + ch].to_vec();
+                            if tx2
+                                .blocking_send(DeviceEvent::Eeg(EegFrame {
+                                    channels,
+                                    timestamp_s: ts,
+                                }))
+                                .is_err()
+                            {
+                                return;
+                            }
                         }
                     }
                 })

@@ -10747,8 +10747,6 @@ dependencies = [
 [[package]]
 name = "rlsl"
 version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5819ed3ebf64ed3a5e05bea39eb45736a65051a0f270bed11f4e5145581e2270"
 dependencies = [
  "crossbeam-channel",
  "fxhash",

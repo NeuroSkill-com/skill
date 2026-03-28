@@ -109,6 +109,11 @@ impl LslAdapter {
             .spawn(move || {
                 let inlet = rlsl::inlet::StreamInlet::new(&info_clone, 360, 0, true);
 
+                // Enable built-in timestamp postprocessing: clock sync +
+                // dejitter + monotonize.  This replaces manual time_correction()
+                // and also smooths jittery timestamps from network sources.
+                inlet.set_postprocessing(rlsl::types::PROC_ALL);
+
                 let _ = tx.blocking_send(DeviceEvent::Connected(DeviceInfo {
                     name: name.clone(),
                     id: source_id,
@@ -120,33 +125,36 @@ impl LslAdapter {
                     headset_preset: None,
                 }));
 
-                // Pull samples in a tight loop, but check for shutdown periodically.
-                // LSL clock may differ from system clock — apply time correction.
-                let time_correction = inlet.time_correction(1.0);
-                let mut buf = vec![0.0f64; channel_count];
+                // Pull samples in batches to reduce per-sample overhead.
+                // At 256 Hz, ~64 samples accumulate in 250 ms; at 1000 Hz
+                // ~250 samples.  Timestamps are already postprocessed by rlsl.
                 loop {
                     if shutdown_rx.try_recv().is_ok() {
                         break;
                     }
 
-                    let Ok(ts) = inlet.pull_sample_d(&mut buf, 0.1) else {
+                    let Ok((timestamps, data)) = inlet.pull_chunk_d(256, 0.1) else {
                         continue;
                     };
-                    if ts <= 0.0 {
+                    if timestamps.is_empty() {
                         continue;
                     }
 
-                    // Correct LSL timestamp to local system time.
-                    let corrected_ts = ts + time_correction;
-
-                    if tx
-                        .blocking_send(DeviceEvent::Eeg(EegFrame {
-                            channels: buf.to_vec(),
-                            timestamp_s: corrected_ts,
-                        }))
-                        .is_err()
-                    {
-                        break;
+                    // Send one DeviceEvent per sample (the session runner
+                    // processes them individually through the DSP pipeline).
+                    let n_ch = channel_count;
+                    for (i, &ts) in timestamps.iter().enumerate() {
+                        let offset = i * n_ch;
+                        let channels = data[offset..offset + n_ch].to_vec();
+                        if tx
+                            .blocking_send(DeviceEvent::Eeg(EegFrame {
+                                channels,
+                                timestamp_s: ts,
+                            }))
+                            .is_err()
+                        {
+                            return;
+                        }
                     }
                 }
             })
