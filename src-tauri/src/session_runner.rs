@@ -510,6 +510,33 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
     emit_status(app);
     refresh_tray(app);
 
+    // For Emotiv sessions the Cortex WebSocket is gone too — update the
+    // shared cortex_ws_state so every UI surface (DevicesTab badge, tray,
+    // dashboard) reflects the loss immediately.  The background scanner
+    // skips probing during an active session, so without this the stale
+    // "connected" badge would linger until the scanner resumes polling.
+    //
+    // We update the field + emit directly instead of calling
+    // `set_cortex_ws_state` because that helper sends a "Launcher
+    // Disconnected" toast which is misleading here — the Launcher may
+    // still be running; it's the headset that dropped.  The generic
+    // "Connection Lost" toast above already covers this case.
+    if kind == "emotiv" {
+        let changed = {
+            let sr = app.app_state();
+            let mut s = sr.lock_or_recover();
+            if s.cortex_ws_state != "disconnected" {
+                s.cortex_ws_state = "disconnected".into();
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            crate::helpers::emit_cortex_ws_state(app);
+        }
+    }
+
     let payload = serde_json::json!({
         "device_name": name,
         "device_id":   device_id,
