@@ -530,7 +530,7 @@ fn detect_openbci_serial_ports() -> Vec<(String, String)> {
 /// provides its own enumeration that matches by VID/PID and USB descriptor
 /// keywords (e.g. "CGX", "Quick-20r").
 fn detect_cgx_serial_ports() -> Vec<(String, String)> {
-    cognionics::prelude::enumerate_devices()
+    ::cognionics::prelude::enumerate_devices()
         .into_iter()
         .map(|d| {
             let display = if d.description.is_empty() {

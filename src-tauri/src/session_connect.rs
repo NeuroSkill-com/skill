@@ -1131,7 +1131,7 @@ pub(crate) async fn connect_cognionics(
     cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
-    use cognionics::prelude::*;
+    use ::cognionics::prelude::{CgxClient, CgxClientConfig};
     use skill_devices::session::cognionics::CognionicsAdapter;
 
     app_log!(
