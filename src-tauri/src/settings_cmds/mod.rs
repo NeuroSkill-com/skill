@@ -329,6 +329,46 @@ pub fn cancel_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     }
 }
 
+// ── EXG model catalog ─────────────────────────────────────────────────────────
+
+/// Return the bundled EXG model catalog enriched with per-family weight
+/// availability from the HuggingFace Hub disk cache.
+///
+/// The frontend uses this to render the model picker — greying out families
+/// whose weights have not been downloaded yet.
+#[tauri::command]
+pub fn get_exg_catalog() -> serde_json::Value {
+    use hf_hub::{Cache, Repo};
+
+    const BUNDLED: &str = include_str!("../../exg_catalog.json");
+    let mut catalog: serde_json::Value =
+        serde_json::from_str(BUNDLED).expect("exg_catalog.json must be valid JSON");
+
+    let cache = Cache::from_env();
+
+    // Probe each family's weights in the HF cache.
+    if let Some(families) = catalog.get_mut("families").and_then(|f| f.as_object_mut()) {
+        for (_id, fam) in families.iter_mut() {
+            let repo = fam.get("repo").and_then(|r| r.as_str()).unwrap_or("");
+            let weights = fam
+                .get("weights_file")
+                .and_then(|w| w.as_str())
+                .unwrap_or("");
+            if repo.is_empty() || weights.is_empty() {
+                fam.as_object_mut()
+                    .map(|o| o.insert("weights_cached".into(), serde_json::Value::Bool(false)));
+                continue;
+            }
+            let hf_repo = cache.repo(Repo::model(repo.to_string()));
+            let cached = hf_repo.get(weights).is_some();
+            fam.as_object_mut()
+                .map(|o| o.insert("weights_cached".into(), serde_json::Value::Bool(cached)));
+        }
+    }
+
+    catalog
+}
+
 // ── UMAP config ───────────────────────────────────────────────────────────────
 
 #[tauri::command]
