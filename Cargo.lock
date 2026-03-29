@@ -11779,6 +11779,7 @@ dependencies = [
  "libc",
  "llama-cpp-4",
  "llmfit-core",
+ "log",
  "luna-rs",
  "macos-focus",
  "mdns-sd",
