@@ -355,11 +355,7 @@ async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn best_test_model(catalog: &LlmCatalog) -> Option<&LlmModelEntry> {
-    let non_mmproj: Vec<&LlmModelEntry> = catalog
-        .entries
-        .iter()
-        .filter(|e| !e.is_mmproj && !e.filename.to_lowercase().contains("mmproj"))
-        .collect();
+    let non_mmproj: Vec<&LlmModelEntry> = catalog.entries.iter().filter(|e| !e.is_mmproj()).collect();
     // Smallest recommended model with params >= 1.5B — needs to be large
     // enough for reliable tool-call generation.  Models below 1.5B (e.g.
     // 1.2B) fail to produce tool calls consistently on CPU.

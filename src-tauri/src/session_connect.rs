@@ -1145,7 +1145,7 @@ pub(crate) async fn connect_cognionics(
     let port = preferred_id
         .as_deref()
         .and_then(|id| id.strip_prefix("cgx:"))
-        .map(|p| p.to_string());
+        .map(str::to_string);
 
     let config = CgxClientConfig {
         port,

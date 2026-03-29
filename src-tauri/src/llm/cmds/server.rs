@@ -52,7 +52,7 @@ pub fn start_llm_server(
             || llm.catalog.active_model_path().is_none_or(|p| !p.exists());
         if needs_model {
             if let Some(entry) = llm.catalog.entries.iter().find(|e| {
-                !e.is_mmproj
+                !e.is_mmproj()
                     && e.state == DownloadState::Downloaded
                     && e.local_path.as_ref().is_some_and(|p| p.exists())
             }) {
@@ -108,7 +108,7 @@ pub fn start_llm_server(
         .entries
         .iter()
         .filter(|e| {
-            !e.is_mmproj
+            !e.is_mmproj()
                 && (e.family_id == "lfm25-1.2b-instruct" || {
                     let name = e.family_name.to_lowercase();
                     name.contains("lfm2.5") && name.contains("1.2b") && name.contains("instruct")
@@ -137,7 +137,7 @@ pub fn start_llm_server(
             catalog
                 .entries
                 .iter()
-                .filter(|e| !e.is_mmproj && e.recommended)
+                .filter(|e| !e.is_mmproj() && e.recommended)
                 .min_by(|a, b| {
                     a.size_gb
                         .total_cmp(&b.size_gb)

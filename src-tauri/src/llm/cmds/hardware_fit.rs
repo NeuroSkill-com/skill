@@ -202,7 +202,7 @@ pub fn get_model_hardware_fit(
     llm.catalog
         .entries
         .iter()
-        .filter(|e| !e.is_mmproj)
+        .filter(|e| !e.is_mmproj())
         .map(|entry| {
             let model = catalog_entry_to_llm_model(entry);
             let fit = llmfit_core::fit::ModelFit::analyze(&model, specs);

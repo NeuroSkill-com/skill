@@ -68,7 +68,7 @@ pub fn init(
             let mmproj_repo = catalog
                 .entries
                 .iter()
-                .find(|e| e.is_mmproj && (e.local_path.as_ref().is_some_and(|lp| lp == p) || e.filename == file_name))
+                .find(|e| e.is_mmproj() && (e.local_path.as_ref().is_some_and(|lp| lp == p) || e.filename == file_name))
                 .map(|e| e.repo.as_str());
 
             if let Some(mm_repo) = mmproj_repo {

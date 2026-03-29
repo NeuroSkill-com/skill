@@ -68,7 +68,7 @@ pub fn set_llm_active_mmproj(
                 llm.catalog
                     .entries
                     .iter()
-                    .find(|e| e.is_mmproj && e.filename == filename),
+                    .find(|e| e.is_mmproj() && e.filename == filename),
             )
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo);
 
@@ -89,7 +89,7 @@ pub fn set_llm_active_mmproj(
                 llm.catalog
                     .entries
                     .iter()
-                    .find(|e| e.is_mmproj && e.filename == filename),
+                    .find(|e| e.is_mmproj() && e.filename == filename),
             )
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo)
         {

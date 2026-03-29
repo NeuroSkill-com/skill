@@ -321,6 +321,17 @@ pub struct LlmModelEntry {
 }
 
 impl LlmModelEntry {
+    /// Whether this entry is an mmproj (vision projector) file.
+    ///
+    /// Checks the family-level `is_mmproj` flag **and** falls back to a
+    /// filename heuristic (contains "mmproj" case-insensitively), matching
+    /// the same logic the frontend uses.  This is needed because mmproj
+    /// entries may live in the same family as their text models and inherit
+    /// `is_mmproj = false` from the family.
+    pub fn is_mmproj(&self) -> bool {
+        self.is_mmproj || self.filename.to_ascii_lowercase().contains("mmproj")
+    }
+
     /// Whether this entry represents a split (sharded) GGUF model.
     pub fn is_split(&self) -> bool {
         self.shard_files.len() > 1

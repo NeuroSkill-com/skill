@@ -139,7 +139,7 @@ impl LlmCatalog {
         if let Some(e) = self
             .entries
             .iter()
-            .find(|e| !e.is_mmproj && e.recommended && e.state == DownloadState::Downloaded)
+            .find(|e| !e.is_mmproj() && e.recommended && e.state == DownloadState::Downloaded)
         {
             self.active_model = e.filename.clone();
         }
@@ -152,7 +152,7 @@ impl LlmCatalog {
         }
         self.entries
             .iter()
-            .find(|e| !e.is_mmproj && e.filename == self.active_model)
+            .find(|e| !e.is_mmproj() && e.filename == self.active_model)
     }
 
     /// Active mmproj entry, regardless of download state.
@@ -162,14 +162,14 @@ impl LlmCatalog {
         }
         self.entries
             .iter()
-            .find(|e| e.is_mmproj && e.filename == self.active_mmproj)
+            .find(|e| e.is_mmproj() && e.filename == self.active_mmproj)
     }
 
     /// Local path of the active model if it is downloaded.
     pub fn active_model_path(&self) -> Option<PathBuf> {
         self.entries
             .iter()
-            .find(|e| !e.is_mmproj && e.filename == self.active_model && e.state == DownloadState::Downloaded)
+            .find(|e| !e.is_mmproj() && e.filename == self.active_model && e.state == DownloadState::Downloaded)
             .and_then(|e| e.local_path.clone())
     }
 
@@ -180,7 +180,7 @@ impl LlmCatalog {
         }
         self.entries
             .iter()
-            .find(|e| e.is_mmproj && e.filename == self.active_mmproj && e.state == DownloadState::Downloaded)
+            .find(|e| e.is_mmproj() && e.filename == self.active_mmproj && e.state == DownloadState::Downloaded)
             .and_then(|e| e.local_path.clone())
     }
 
@@ -208,7 +208,7 @@ impl LlmCatalog {
 
         self.entries
             .iter()
-            .filter(|e| !e.is_mmproj && e.repo == repo && e.state == DownloadState::Downloaded)
+            .filter(|e| !e.is_mmproj() && e.repo == repo && e.state == DownloadState::Downloaded)
             .min_by(|a, b| {
                 (!a.recommended)
                     .cmp(&!b.recommended)
@@ -224,7 +224,7 @@ impl LlmCatalog {
         let repo = self
             .entries
             .iter()
-            .find(|e| e.is_mmproj && e.filename == mmproj_filename)?
+            .find(|e| e.is_mmproj() && e.filename == mmproj_filename)?
             .repo
             .clone();
         self.best_downloaded_model_for_repo(&repo)
@@ -244,7 +244,7 @@ impl LlmCatalog {
 
         self.entries
             .iter()
-            .filter(|e| e.is_mmproj && e.repo == active_repo && e.state == DownloadState::Downloaded)
+            .filter(|e| e.is_mmproj() && e.repo == active_repo && e.state == DownloadState::Downloaded)
             .min_by_key(|e| (!e.recommended as u8, quant_rank(&e.quant)))
     }
 

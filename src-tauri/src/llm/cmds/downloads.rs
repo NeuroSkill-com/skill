@@ -140,7 +140,7 @@ pub fn download_llm_model(
                         entry.local_path = Some(path);
                         entry.status_msg = None;
                         entry.progress = 1.0;
-                        if !entry.is_mmproj {
+                        if !entry.is_mmproj() {
                             let should_activate = llm.catalog.active_model.is_empty()
                                 || llm.catalog.active_model_path().is_none_or(|p| !p.exists());
                             if should_activate {

@@ -589,8 +589,8 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
                         device_log("cgx", &msg);
                         changed = true;
                     }
-                    upsert_discovered(&app, &id, &display_name, 0);
-                    try_auto_connect(&app, &id, &display_name);
+                    upsert_discovered(&app, &id, display_name, 0);
+                    try_auto_connect(&app, &id, display_name);
                 }
 
                 // Remove stale entries for ports that disappeared.
