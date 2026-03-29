@@ -47,6 +47,8 @@ let loading = $state(true);
 
 // QR flow
 let qr = $state<string | null>(null);
+let inviteLink = $state<string | null>(null);
+let linkCopied = $state(false);
 let creating = $state(false);
 let showSuccess = $state(false);
 let inviteScope = $state<"read" | "custom" | "full">("read");
@@ -140,6 +142,7 @@ async function createInvite() {
   err = "";
   creating = true;
   showSuccess = false;
+  linkCopied = false;
   try {
     clientCountBeforeQr = activeClients.length;
     const r = await api("/v1/iroh/phone-invite", "POST", {
@@ -147,12 +150,40 @@ async function createInvite() {
       scope: inviteScope,
     });
     qr = r.qr_png_base64;
+    // Build a deep link from the invite payload so users can copy/paste
+    // it when camera access is unavailable (e.g. simulator, no camera).
+    if (r.payload) {
+      const json = JSON.stringify(r.payload);
+      const b64 = btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      inviteLink = `neuroskill://invite/${b64}`;
+    }
     await refresh();
     startPolling();
   } catch (e: any) {
     err = String(e?.message || e);
   } finally {
     creating = false;
+  }
+}
+
+async function copyInviteLink() {
+  if (!inviteLink) return;
+  try {
+    await navigator.clipboard.writeText(inviteLink);
+    linkCopied = true;
+    setTimeout(() => (linkCopied = false), 2000);
+  } catch {
+    // Fallback for environments where clipboard API is unavailable
+    const ta = document.createElement("textarea");
+    ta.value = inviteLink;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    linkCopied = true;
+    setTimeout(() => (linkCopied = false), 2000);
   }
 }
 
@@ -163,6 +194,8 @@ function startPolling() {
     if (activeClients.length > clientCountBeforeQr) {
       showSuccess = true;
       qr = null;
+      inviteLink = null;
+      linkCopied = false;
       stopPolling();
       setTimeout(() => {
         showSuccess = false;
@@ -493,6 +526,37 @@ onDestroy(() => stopPolling());
             <p class="text-[0.6rem] text-muted-foreground text-center max-w-56">
               Scan with the Skill mobile app. The device connects automatically.
             </p>
+
+            <!-- Copy invite link (for simulator / no-camera devices) -->
+            {#if inviteLink}
+              <div class="flex flex-col items-center gap-1.5 w-full max-w-64">
+                <button
+                  onclick={copyInviteLink}
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border dark:border-white/[0.1]
+                         text-[0.58rem] text-muted-foreground hover:text-foreground hover:bg-muted
+                         transition-colors cursor-pointer w-full justify-center"
+                >
+                  {#if linkCopied}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-emerald-500 shrink-0">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+                  {:else}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                    <span>Copy invite link</span>
+                  {/if}
+                </button>
+                <p class="text-[0.48rem] text-muted-foreground/60 text-center leading-tight">
+                  Open this link on the phone if you can't scan the QR code
+                </p>
+              </div>
+            {/if}
+
             <div class="flex items-center gap-2">
               <Badge
                 variant={inviteScope === "full" ? "destructive" : inviteScope === "custom" ? "default" : "secondary"}
@@ -506,6 +570,8 @@ onDestroy(() => stopPolling());
                 class="text-xs"
                 onclick={() => {
                   qr = null;
+                  inviteLink = null;
+                  linkCopied = false;
                   stopPolling();
                 }}
               >
