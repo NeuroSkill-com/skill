@@ -223,6 +223,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let gyro = status.gyro;
     let fuel_gauge_mv = status.fuel_gauge_mv;
     let temperature_raw = status.temperature_raw;
+    let phone_info = status.phone_info.clone();
 
     // ── Hooks — most recent trigger across all hooks ─────────────────────────
     let hooks_summary = {
@@ -366,6 +367,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
         },
         "hooks": hooks_summary,
         "history": history_json,
+        "phone_info": phone_info,
     }))
 }
 

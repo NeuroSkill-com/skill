@@ -112,6 +112,8 @@ async function api(path: string, method = "GET", body?: any) {
   return j;
 }
 
+let phoneInfo = $state<any>(null);
+
 async function refresh() {
   err = "";
   try {
@@ -119,6 +121,12 @@ async function refresh() {
     irohInfo = info;
     totp = t.totp || [];
     clients = c.clients || [];
+    // Fetch phone info from session status (if a phone is connected)
+    try {
+      const status = await invoke("ws_command", { msg: JSON.stringify({ command: "status" }) });
+      const s = typeof status === "string" ? JSON.parse(status) : status;
+      if (s?.phone_info) phoneInfo = s.phone_info;
+    } catch { /* phone info is optional */ }
   } catch (e: any) {
     err = String(e?.message || e);
   } finally {
@@ -651,9 +659,15 @@ onDestroy(() => stopPolling());
                     <span class="text-[0.5rem] text-muted-foreground">{ago(d.last_connected_at)}</span>
                   {/if}
                 </div>
-                <div class="text-[0.52rem] text-muted-foreground mt-0.5 font-mono truncate">
-                  {d.endpoint_id}
-                </div>
+                {#if phoneInfo && d.endpoint_id === phoneInfo.iroh_endpoint_id}
+                  <div class="text-[0.52rem] text-muted-foreground mt-0.5 truncate">
+                    {phoneInfo.phone_marketing_name || phoneInfo.phone_model || ""}{phoneInfo.os_version ? ` · iOS ${phoneInfo.os_version}` : ""}
+                  </div>
+                {:else}
+                  <div class="text-[0.52rem] text-muted-foreground mt-0.5 font-mono truncate">
+                    {d.endpoint_id}
+                  </div>
+                {/if}
                 {#if d.last_ip || d.last_country || d.last_city}
                   <div class="text-[0.5rem] text-muted-foreground/60 mt-0.5">
                     {[d.last_city, d.last_country, d.last_ip].filter(Boolean).join(" · ")}
