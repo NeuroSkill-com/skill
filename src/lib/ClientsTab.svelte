@@ -662,12 +662,13 @@ onDestroy(() => stopPolling());
                     <span class="text-[0.5rem] text-muted-foreground">{ago(d.last_connected_at)}</span>
                   {/if}
                 </div>
-                {@const liveModel = phoneInfo && d.endpoint_id === phoneInfo.iroh_endpoint_id
-                  ? `${phoneInfo.phone_marketing_name || phoneInfo.phone_model || ""}${phoneInfo.os_version ? ` · iOS ${phoneInfo.os_version}` : ""}`
-                  : ""}
-                {#if liveModel || d.device_model}
+                {#if phoneInfo && d.endpoint_id === phoneInfo.iroh_endpoint_id && (phoneInfo.phone_marketing_name || phoneInfo.phone_model)}
                   <div class="text-[0.52rem] text-muted-foreground mt-0.5 truncate">
-                    {liveModel || d.device_model}
+                    {phoneInfo.phone_marketing_name || phoneInfo.phone_model}{phoneInfo.os_version ? ` · iOS ${phoneInfo.os_version}` : ""}
+                  </div>
+                {:else if d.device_model}
+                  <div class="text-[0.52rem] text-muted-foreground mt-0.5 truncate">
+                    {d.device_model}
                   </div>
                 {:else}
                   <div class="text-[0.52rem] text-muted-foreground mt-0.5 font-mono truncate">

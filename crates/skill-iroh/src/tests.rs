@@ -154,8 +154,8 @@ mod receiver_tests {
     #[test]
     fn event_channel_capacity() {
         let (tx, _rx) = event_channel();
-        // Should be able to send up to capacity without blocking
-        for i in 0..16 {
+        // Should be able to send up to capacity (256) without blocking
+        for i in 0..256 {
             tx.try_send(RemoteDeviceEvent::Battery {
                 seq: i,
                 timestamp: 0,
@@ -163,10 +163,10 @@ mod receiver_tests {
             })
             .expect("should not be full");
         }
-        // 17th should fail (capacity=16)
+        // 257th should fail (capacity=256)
         assert!(tx
             .try_send(RemoteDeviceEvent::Battery {
-                seq: 17,
+                seq: 257,
                 timestamp: 0,
                 level_pct: 50.0,
             })

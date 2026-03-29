@@ -59,7 +59,11 @@ const MAX_PAYLOAD: u32 = 4 * 1024 * 1024;
 /// Maximum decompressed size (8 MB).
 const MAX_DECOMPRESSED: usize = 8 * 1024 * 1024;
 
-const CHANNEL_CAPACITY: usize = 16;
+/// Channel capacity for the device proxy event channel.
+/// Must be large enough to absorb bursts while the session runner processes
+/// chunks.  At ~8 msgs/s (5s EEG chunks + phone IMU + PPG + battery +
+/// location), 256 gives ~30s of buffer.
+const CHANNEL_CAPACITY: usize = 256;
 
 pub type RemoteEventTx = mpsc::Sender<RemoteDeviceEvent>;
 pub type RemoteEventRx = mpsc::Receiver<RemoteDeviceEvent>;
@@ -208,9 +212,19 @@ async fn handle_one_message(
     let ack = encode_ack(hdr.seq, ACK_OK);
     send.write_all(&ack).await.map_err(|e| format!("write ack: {e}"))?;
 
-    // 6. Forward
-    if tx.send(event).await.is_err() {
-        eprintln!("[iroh-device] event channel full/closed, seq={} dropped", hdr.seq);
+    // 6. Forward (non-blocking: prefer dropping a message over stalling
+    //    the QUIC stream, which would block the phone's ACK and outbox).
+    match tx.try_send(event) {
+        Ok(_) => {}
+        Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+            eprintln!(
+                "[iroh-device] event channel full, seq={} dropped (capacity={})",
+                hdr.seq, CHANNEL_CAPACITY
+            );
+        }
+        Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+            eprintln!("[iroh-device] event channel closed, seq={} dropped", hdr.seq);
+        }
     }
 
     Ok(hdr.seq)

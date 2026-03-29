@@ -611,8 +611,10 @@ pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
                     s.stream.is_some()
                 };
                 if session_active {
-                    // Already have a session — skip auto-start
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    // A local BLE session is already running.  The iroh
+                    // remote data will be consumed when that session ends
+                    // and a new one starts.  Don't block — just wait.
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     continue;
                 }
 
