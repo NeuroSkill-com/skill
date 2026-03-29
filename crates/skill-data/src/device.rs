@@ -333,7 +333,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "attentivu".into(),
             name_key: "settings.supportedDevices.company.attentivu".into(),
-            logo: "/logos/attentivu.png".into(),
+            logo: "/devices/attentivu-glasses.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.attentivuGlasses".into(),
                 ios_only: true,
