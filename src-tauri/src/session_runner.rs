@@ -1064,15 +1064,36 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
                 if meta_type == "phone_info" {
                     // If the phone_info contains an iroh_endpoint_id, resolve
                     // the registered client name from the auth store.
-                    let client_name = val
+                    let iroh_eid = val
                         .get("iroh_endpoint_id")
                         .and_then(|v| v.as_str())
-                        .and_then(|eid| {
-                            app.try_state::<skill_iroh::SharedIrohAuth>()
-                                .and_then(|auth| {
-                                    skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(eid)
-                                })
-                        });
+                        .map(str::to_owned);
+
+                    let client_name = iroh_eid.as_deref().and_then(|eid| {
+                        app.try_state::<skill_iroh::SharedIrohAuth>()
+                            .and_then(|auth| {
+                                skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(eid)
+                            })
+                    });
+
+                    // Persist the device model string so it shows even when
+                    // the phone is offline.
+                    if let Some(ref eid) = iroh_eid {
+                        let marketing = val.get("phone_marketing_name").and_then(|v| v.as_str());
+                        let model = val.get("phone_model").and_then(|v| v.as_str());
+                        let os_ver = val.get("os_version").and_then(|v| v.as_str());
+                        let label = marketing.or(model).unwrap_or("");
+                        if !label.is_empty() {
+                            let device_model = match os_ver {
+                                Some(v) if !v.is_empty() => format!("{label} · iOS {v}"),
+                                _ => label.to_owned(),
+                            };
+                            if let Some(auth) = app.try_state::<skill_iroh::SharedIrohAuth>() {
+                                let _ = skill_iroh::lock_or_recover(&auth)
+                                    .update_client_device_model(eid, &device_model);
+                            }
+                        }
+                    }
 
                     let r = app.app_state();
                     let mut s = r.lock_or_recover();

@@ -29,6 +29,7 @@ type Client = {
   last_country?: string | null;
   last_city?: string | null;
   last_locale?: string | null;
+  device_model?: string | null;
 };
 type CommandGroup = {
   id: string;
@@ -126,7 +127,9 @@ async function refresh() {
       const status = await invoke("ws_command", { msg: JSON.stringify({ command: "status" }) });
       const s = typeof status === "string" ? JSON.parse(status) : status;
       if (s?.phone_info) phoneInfo = s.phone_info;
-    } catch { /* phone info is optional */ }
+    } catch {
+      /* phone info is optional */
+    }
   } catch (e: any) {
     err = String(e?.message || e);
   } finally {
@@ -659,9 +662,12 @@ onDestroy(() => stopPolling());
                     <span class="text-[0.5rem] text-muted-foreground">{ago(d.last_connected_at)}</span>
                   {/if}
                 </div>
-                {#if phoneInfo && d.endpoint_id === phoneInfo.iroh_endpoint_id}
+                {@const liveModel = phoneInfo && d.endpoint_id === phoneInfo.iroh_endpoint_id
+                  ? `${phoneInfo.phone_marketing_name || phoneInfo.phone_model || ""}${phoneInfo.os_version ? ` · iOS ${phoneInfo.os_version}` : ""}`
+                  : ""}
+                {#if liveModel || d.device_model}
                   <div class="text-[0.52rem] text-muted-foreground mt-0.5 truncate">
-                    {phoneInfo.phone_marketing_name || phoneInfo.phone_model || ""}{phoneInfo.os_version ? ` · iOS ${phoneInfo.os_version}` : ""}
+                    {liveModel || d.device_model}
                   </div>
                 {:else}
                   <div class="text-[0.52rem] text-muted-foreground mt-0.5 font-mono truncate">
@@ -726,6 +732,9 @@ onDestroy(() => stopPolling());
               <div class="px-4 py-2">
                 <div class="flex items-center gap-1.5">
                   <span class="text-[0.6rem] line-through">{c.name}</span>
+                  {#if c.device_model}
+                    <span class="text-[0.5rem] text-muted-foreground/60">{c.device_model}</span>
+                  {/if}
                   <span class="text-[0.5rem] text-muted-foreground">revoked {fmt(c.revoked_at)}</span>
                 </div>
               </div>
