@@ -26,9 +26,11 @@ const onboarding: Record<string, string> = {
   "onboarding.bluetoothBody":
     "Turn on your BCI device and wear it. {app} will scan for nearby devices and connect automatically.",
   "onboarding.enableBluetoothTitle": "Enable Bluetooth on Your Mac",
-  "onboarding.enableBluetoothBody": "{app} needs your Mac's Bluetooth adapter powered on to find and connect to your BCI device. Please enable Bluetooth in System Settings if it is turned off.",
+  "onboarding.enableBluetoothBody":
+    "{app} needs your Mac's Bluetooth adapter powered on to find and connect to your BCI device. Please enable Bluetooth in System Settings if it is turned off.",
   "onboarding.enableBluetoothStatus": "Bluetooth adapter",
-  "onboarding.enableBluetoothHint": "Open Bluetooth settings and turn Bluetooth on. If running in development via Terminal, ensure the system adapter is enabled.",
+  "onboarding.enableBluetoothHint":
+    "Open Bluetooth settings and turn Bluetooth on. If running in development via Terminal, ensure the system adapter is enabled.",
   "onboarding.enableBluetoothOpen": "Open Bluetooth Settings",
   "onboarding.btConnected": "Connected to {name}",
   "onboarding.btScanning": "Scanning…",

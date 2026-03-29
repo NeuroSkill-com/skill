@@ -297,6 +297,14 @@ pub struct SupportedDevice {
     pub name_key: String,
     /// Path to the device image (relative to `/devices/`).
     pub image: String,
+    /// If `true`, this device connects via the SkillClient iOS app only
+    /// (BLE on phone → iroh tunnel → desktop processing).
+    #[serde(skip_serializing_if = "is_false")]
+    pub ios_only: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !v
 }
 
 /// A company / brand grouping in the "Supported Devices" UI.
@@ -327,18 +335,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.muse2016".into(),
+                    ios_only: false,
                     image: "/devices/muse-gen1.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.muse2".into(),
+                    ios_only: false,
                     image: "/devices/muse-gen2.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.museS".into(),
+                    ios_only: false,
                     image: "/devices/muse-s-gen1.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.museSAthena".into(),
+                    ios_only: false,
                     image: "/devices/muse-s-athena.jpg".into(),
                 },
             ],
@@ -353,6 +365,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             logo: "/logos/neurable.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.mw75Neuro".into(),
+                ios_only: false,
                 image: "/devices/muse-mw75.jpg".into(),
             }],
             instruction_keys: vec![
@@ -367,18 +380,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.ganglion".into(),
+                    ios_only: false,
                     image: "/devices/openbci-ganglion.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.cyton".into(),
+                    ios_only: false,
                     image: "/devices/openbci-cyton.png".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.cytonDaisy".into(),
+                    ios_only: false,
                     image: "/devices/openbci-cyton-daisy.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.galea".into(),
+                    ios_only: false,
                     image: "/devices/openbci-galea.jpg".into(),
                 },
             ],
@@ -394,18 +411,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.epocX".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-epoc-x.webp".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.insight".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-insight.webp".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.flexSaline".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-flex-saline.webp".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.mn8".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-mn8.webp".into(),
                 },
             ],
@@ -420,6 +441,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             logo: "/logos/idun.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.guardian".into(),
+                ios_only: false,
                 image: "/devices/idun-guardian.png".into(),
             }],
             instruction_keys: vec![
@@ -433,6 +455,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             logo: "/logos/reak.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.nucleusHermes".into(),
+                ios_only: false,
                 image: "/devices/re-ak-nucleus-hermes.png".into(),
             }],
             instruction_keys: vec![
@@ -446,11 +469,27 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             logo: "/logos/mendi.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.mendiHeadband".into(),
+                ios_only: false,
                 image: "/devices/mendi-headband.png".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.mendi1".into(),
                 "settings.supportedDevices.instruction.mendi2".into(),
+            ],
+        },
+        SupportedCompany {
+            id: "attentivu".into(),
+            name_key: "settings.supportedDevices.company.attentivu".into(),
+            logo: "/logos/attentivu.png".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.attentivuGlasses".into(),
+                ios_only: true,
+                image: "/devices/attentivu-glasses.svg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.attentivu1".into(),
+                "settings.supportedDevices.instruction.attentivu2".into(),
+                "settings.supportedDevices.instruction.attentivu3".into(),
             ],
         },
     ]

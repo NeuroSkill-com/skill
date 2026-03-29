@@ -57,9 +57,11 @@ const onboarding: Record<string, string> = {
   "onboarding.calibrationNeedsBt": "Спочатку підключіть пристрій для запуску калібрування.",
   "onboarding.calibrationSkip": "Можна пропустити і калібрувати пізніше з меню трею або налаштувань.",
   "onboarding.enableBluetoothTitle": "Увімкніть Bluetooth на вашому Mac",
-  "onboarding.enableBluetoothBody": "{app} потребує, щоб адаптер Bluetooth вашого Mac був ввімкнений, щоб знайти й підключити ваш BCI-пристрій. Увімкніть Bluetooth у Налаштуваннях системи, якщо він вимкнений.",
+  "onboarding.enableBluetoothBody":
+    "{app} потребує, щоб адаптер Bluetooth вашого Mac був ввімкнений, щоб знайти й підключити ваш BCI-пристрій. Увімкніть Bluetooth у Налаштуваннях системи, якщо він вимкнений.",
   "onboarding.enableBluetoothStatus": "Адаптер Bluetooth",
-  "onboarding.enableBluetoothHint": "Відкрийте Налаштування → Bluetooth та увімкніть Bluetooth. Якщо ви запускаєте у розробці через Terminal, переконайтеся, що системний адаптер увімкнений.",
+  "onboarding.enableBluetoothHint":
+    "Відкрийте Налаштування → Bluetooth та увімкніть Bluetooth. Якщо ви запускаєте у розробці через Terminal, переконайтеся, що системний адаптер увімкнений.",
   "onboarding.enableBluetoothOpen": "Відкрити налаштування Bluetooth",
   "onboarding.modelsTitle": "Завантаження рекомендованих моделей",
   "onboarding.modelsBody":

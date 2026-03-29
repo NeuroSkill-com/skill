@@ -372,6 +372,15 @@ const settings: Record<string, string> = {
     "Скануйте та з'єднайте його у списку пристроїв, потім підключіть через бажаний процес.",
   "settings.supportedDevices.instruction.mendi1": "Увімкніть Mendi і тримайте його поруч із цим комп’ютером.",
   "settings.supportedDevices.instruction.mendi2": "Проскануйте та спаруйте його зі списку пристроїв, потім підключіть.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "Окуляри AttentivU",
+  "settings.supportedDevices.instruction.attentivu1":
+    "Встановіть додаток NeuroSkill™ для iOS та спаруйте його з цим настільним додатком.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "У додатку iOS скануйте BLE-пристрої та підключіть окуляри AttentivU.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "Дані EEG передаються з окулярів → iPhone → комп'ютер через зашифрований тунель iroh. Вся обробка відбувається на цьому комп'ютері.",
   "settings.scanner.title": "Бекенди сканера",
   "settings.scanner.desc":
     "Оберіть, які транспорти виявлення працюють у фоновому режимі. Зміни набудуть чинності після перезапуску додатку.",

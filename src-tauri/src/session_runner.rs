@@ -29,23 +29,9 @@ use skill_eeg::eeg_quality::QualityMonitor;
 
 // ── Data watchdog ─────────────────────────────────────────────────────────────
 
-/// If no [`DeviceEvent`] arrives for this duration, treat the connection as
-/// silently lost and break out of the event loop.  BLE devices can sometimes
-/// maintain the L2CAP link while GATT notifications stop flowing (radio
-/// interference, firmware hang, headset entered sleep mode, …).  Without a
-/// watchdog the session runner would block on `next_event()` forever.
-///
-/// 15 seconds is generous enough to tolerate short radio glitches (BLE
-/// supervision timeouts are typically 2–6 s) while still recovering promptly
-/// when data truly stops.
-const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// Extended watchdog for iroh-remote sessions.  The phone's QUIC tunnel may
-/// take 30–60 seconds to reconnect (relay negotiation, NAT traversal) while
-/// BLE data continues recording into the phone's local outbox.  We don't
-/// want to kill the desktop session during a transient network interruption
-/// — the phone will resend all buffered data once the tunnel reconnects.
-const DATA_WATCHDOG_TIMEOUT_IROH: Duration = Duration::from_secs(90);
+const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(skill_constants::DATA_WATCHDOG_SECS);
+const DATA_WATCHDOG_TIMEOUT_IROH: Duration =
+    Duration::from_secs(skill_constants::DATA_WATCHDOG_IROH_SECS);
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
