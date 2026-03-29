@@ -102,6 +102,29 @@
       "paper": "https://arxiv.org/abs/2510.21585",
       "doi": "10.48550/arXiv.2510.21585"
     },
+    "opentslm": {
+      "name": "OpenTSLM",
+      "description": "Time-Series Language Model for reasoning over multivariate medical data. Trainable TransformerCNN encoder (128-dim) + frozen LLM backbone (Qwen3 GGUF via llama.cpp). 5-stage curriculum: wearable MCQ, captioning, HAR chain-of-thought, sleep-stage EEG CoT, ECG arrhythmia CoT. Processes accelerometer, gyroscope, EEG, and ECG.",
+      "repo": "StanfordBDHG/OpenTSLM",
+      "tags": [
+        "eeg",
+        "ecg",
+        "accelerometer",
+        "gyroscope",
+        "multimodal",
+        "language",
+        "wearable",
+        "sleep",
+        "embedding",
+        "small"
+      ],
+      "weights_file": "model.safetensors",
+      "config_file": "config.json",
+      "params_m": 5,
+      "embed_dim": 128,
+      "paper": "https://arxiv.org/abs/2510.02410",
+      "doi": "10.48550/arXiv.2510.02410"
+    },
     "sensorlm": {
       "name": "SensorLM",
       "description": "Sensor-language foundation model family (CLIP/CoCa variants) for wearable sensor data + natural language. Pretrained on 59.7M hours from 103,000+ people. Multimodal: accelerometer, PPG (heart rate), skin temperature, EDA, gyroscope. Zero-shot recognition, sensor captioning, and cross-modal retrieval.",
@@ -352,6 +375,13 @@
       "filename": "model.safetensors",
       "size_mb": 400,
       "description": "SensorLM — sensor-language model, wearable multimodal (PPG+accel+EDA+temp+gyro) + text",
+      "recommended": true
+    },
+    {
+      "family": "opentslm",
+      "filename": "model.safetensors",
+      "size_mb": 20,
+      "description": "OpenTSLM — ~5M trainable params, 128-dim encoder + frozen Qwen3 LLM backbone",
       "recommended": true
     }
   ]
