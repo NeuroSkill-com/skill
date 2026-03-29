@@ -40,6 +40,13 @@ use skill_eeg::eeg_quality::QualityMonitor;
 /// when data truly stops.
 const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Extended watchdog for iroh-remote sessions.  The phone's QUIC tunnel may
+/// take 30–60 seconds to reconnect (relay negotiation, NAT traversal) while
+/// BLE data continues recording into the phone's local outbox.  We don't
+/// want to kill the desktop session during a transient network interruption
+/// — the phone will resend all buffered data once the tunnel reconnects.
+const DATA_WATCHDOG_TIMEOUT_IROH: Duration = Duration::from_secs(90);
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 /// Run a device session using any [`DeviceAdapter`].
@@ -108,6 +115,14 @@ pub(crate) async fn run_device_session(
     let mut battery_ema = BatteryEma::new(0.1);
 
     // ── Event loop ───────────────────────────────────────────────────────────
+    // Use extended watchdog for iroh-remote sessions — the phone may be
+    // reconnecting its QUIC tunnel while BLE data accumulates locally.
+    let watchdog = if kind == "iroh-remote" {
+        DATA_WATCHDOG_TIMEOUT_IROH
+    } else {
+        DATA_WATCHDOG_TIMEOUT
+    };
+
     let mut user_cancelled = false;
     let mut last_event_at = Instant::now();
     loop {
@@ -118,7 +133,7 @@ pub(crate) async fn run_device_session(
                 user_cancelled = true;
                 break;
             }
-            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + DATA_WATCHDOG_TIMEOUT)) => {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + watchdog)) => {
                 // No event received for DATA_WATCHDOG_TIMEOUT — treat as
                 // silent disconnect.  This catches scenarios where the BLE
                 // link stays up but GATT notifications stop (radio
