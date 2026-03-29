@@ -379,7 +379,8 @@ const settings: Record<string, string> = {
     "Schalten Sie Nucleus-Hermès ein und halten Sie es in der Nähe dieses Computers.",
   "settings.supportedDevices.instruction.reak2":
     "Scannen und koppeln Sie es in der Geräteliste, dann über den bevorzugten Gerätefluss verbinden.",
-  "settings.supportedDevices.instruction.cognionics1": "Schließen Sie den CGX-USB-Dongle an und schalten Sie das Headset ein.",
+  "settings.supportedDevices.instruction.cognionics1":
+    "Schließen Sie den CGX-USB-Dongle an und schalten Sie das Headset ein.",
   "settings.supportedDevices.instruction.cognionics2":
     "Das Gerät wird automatisch über den seriellen USB-Anschluss erkannt. Wählen Sie es aus der Geräteliste und verbinden Sie sich.",
   "settings.supportedDevices.instruction.mendi1":
