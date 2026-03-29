@@ -53,6 +53,10 @@ pub enum DeviceKind {
     Idun,
     /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
     Mendi,
+    /// AttentivU EEG glasses — 4-channel ExG (250 Hz) + 9-axis IMU (BLE).
+    /// Broadcasts as "AttentivU-XXXX" or "AtU-XXXX" / "AtUXXXX".
+    #[serde(rename = "attentivu")]
+    AttentivU,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -128,6 +132,9 @@ impl DeviceKind {
         }
         if n.starts_with("mendi") {
             return Self::Mendi;
+        }
+        if n.starts_with("atu") || n.starts_with("attentivu") {
+            return Self::AttentivU;
         }
 
         Self::Unknown
@@ -220,6 +227,16 @@ impl DeviceKind {
                 sample_rate_hz: 0.0,
                 electrode_names: Vec::new(),
             },
+            Self::AttentivU => DeviceCapabilities {
+                kind: Self::AttentivU,
+                channel_count: 4, // 4 ExG channels (EEG/EOG)
+                has_ppg: false,
+                has_imu: true,                 // 9-axis IMU
+                has_central_electrodes: false, // forehead/temple placement
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["ExG0", "ExG1", "ExG2", "ExG3"]),
+            },
             Self::Unknown => DeviceCapabilities {
                 kind: Self::Unknown,
                 channel_count: 0,
@@ -250,6 +267,7 @@ impl DeviceKind {
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
             Self::Mendi => "mendi",
+            Self::AttentivU => "attentivu",
             Self::Unknown => "unknown",
         }
     }
@@ -270,6 +288,7 @@ impl DeviceKind {
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
             "mendi" => Self::Mendi,
+            "attentivu" => Self::AttentivU,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -550,6 +569,14 @@ mod tests {
         assert_eq!(DeviceKind::from_name(Some("IDUN-Guardian")), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_name(Some("Guardian-001")), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_name(Some("IGE-1234")), DeviceKind::Idun);
+    }
+
+    #[test]
+    fn from_name_attentivu() {
+        assert_eq!(DeviceKind::from_name(Some("AttentivU-1234")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("AtU1234")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("AtU-5678")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("atu9999")), DeviceKind::AttentivU);
     }
 
     #[test]
