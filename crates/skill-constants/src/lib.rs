@@ -78,6 +78,8 @@ pub mod prelude {
         EMOTIV_INSIGHT_EEG_CHANNELS,
         EMOTIV_SAMPLE_RATE,
         EMOTIV_SAMPLE_RATE_256,
+        // EXG catalog
+        EXG_CATALOG_FILE,
         FILTER_HOP,
         FILTER_OVERLAP,
         // Filter
@@ -576,6 +578,9 @@ pub const LABEL_EEG_INDEX_FILE: &str = "label_eeg_index.hnsw";
 
 /// Filename of the persisted LLM model catalog.
 pub const LLM_CATALOG_FILE: &str = "llm_catalog.json";
+
+/// Filename of the persisted EXG (EEG/ExG) model catalog.
+pub const EXG_CATALOG_FILE: &str = "exg_catalog.json";
 
 /// Directory name under `skill_dir` for LLM session log files.
 pub const LLM_LOG_DIR: &str = "llm_logs";
