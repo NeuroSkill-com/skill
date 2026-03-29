@@ -64,16 +64,40 @@ pub(crate) fn emit_cortex_ws_state(app: &AppHandle) {
 }
 
 /// Update the Cortex WS state in AppState and emit it to the frontend.
+/// Sends a toast notification on meaningful transitions (connected ↔ disconnected).
 pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
-    {
+    let prev = {
         let s_ref = app.app_state();
         let mut g = s_ref.lock_or_recover();
         if g.cortex_ws_state == state {
             return;
         }
+        let prev = g.cortex_ws_state.clone();
         g.cortex_ws_state = state.to_owned();
-    }
+        prev
+    };
     emit_cortex_ws_state(app);
+
+    // Notify the user on meaningful transitions.
+    match (prev.as_str(), state) {
+        ("connected", "disconnected") => {
+            send_toast(
+                app,
+                crate::ToastLevel::Warning,
+                "Emotiv Launcher Disconnected",
+                "The Cortex service is no longer reachable. Make sure EMOTIV Launcher is running.",
+            );
+        }
+        (_, "connected") if prev != "connected" => {
+            send_toast(
+                app,
+                crate::ToastLevel::Success,
+                "Emotiv Launcher Connected",
+                "Cortex service is reachable. Headsets will appear in the device list.",
+            );
+        }
+        _ => {}
+    }
 }
 
 // ── Toast / notification helpers ──────────────────────────────────────────────
