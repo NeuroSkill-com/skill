@@ -771,7 +771,11 @@ pub const DATA_WATCHDOG_SECS: u64 = 15;
 /// The phone's QUIC tunnel may take 30–60 s to reconnect after a network
 /// interruption while BLE data continues recording into the phone's local
 /// outbox.  90 s prevents premature session termination on the desktop.
-pub const DATA_WATCHDOG_IROH_SECS: u64 = 90;
+/// Extended watchdog for iroh-remote sessions.  With 0.25s streaming
+/// chunks the normal 15s watchdog would be fine, but relay reconnection
+/// can take 10–20s, so we keep a modest buffer.  The synthetic
+/// `DeviceDisconnected` from `device_receiver.rs` handles the fast path.
+pub const DATA_WATCHDOG_IROH_SECS: u64 = 30;
 
 /// Maximum age of unsent messages in the phone's outbox before they are
 /// pruned (seconds).  24 hours — old enough to survive overnight gaps.
