@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120">
-  <rect width="200" height="120" rx="8" fill="#1a1a2e"/>
-  <text x="100" y="50" text-anchor="middle" fill="#e0e0e0" font-family="system-ui" font-size="14" font-weight="600">AttentivU</text>
-  <text x="100" y="72" text-anchor="middle" fill="#8888aa" font-family="system-ui" font-size="10">EEG Glasses · 4ch · 250 Hz</text>
-  <text x="100" y="100" text-anchor="middle" fill="#66bbff" font-family="system-ui" font-size="9">📱 via iOS only</text>
-</svg>
