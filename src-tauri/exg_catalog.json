@@ -102,6 +102,29 @@
       "paper": "https://arxiv.org/abs/2510.21585",
       "doi": "10.48550/arXiv.2510.21585"
     },
+    "sensorlm": {
+      "name": "SensorLM",
+      "description": "Sensor-language foundation model family (CLIP/CoCa variants) for wearable sensor data + natural language. Pretrained on 59.7M hours from 103,000+ people. Multimodal: accelerometer, PPG (heart rate), skin temperature, EDA, gyroscope. Zero-shot recognition, sensor captioning, and cross-modal retrieval.",
+      "repo": "google/sensorlm",
+      "tags": [
+        "ppg",
+        "accelerometer",
+        "eda",
+        "temperature",
+        "gyroscope",
+        "multimodal",
+        "language",
+        "wearable",
+        "embedding",
+        "medium"
+      ],
+      "weights_file": "model.safetensors",
+      "config_file": "config.json",
+      "params_m": 100,
+      "embed_dim": 512,
+      "paper": "https://arxiv.org/abs/2506.09108",
+      "doi": "10.48550/arXiv.2506.09108"
+    },
     "sleepfm": {
       "name": "SleepFM",
       "description": "Contrastive multimodal sleep foundation model (~3M params, 128-dim). SetTransformer with attention pooling over variable-channel PSG. Processes 4 modalities independently: BAS (10-ch EEG+EOG), RESP (7-ch respiratory+SpO2), EKG (2-ch), EMG (4-ch chin+legs). 128 Hz. Published in Nature Medicine.",
@@ -322,6 +345,13 @@
       "filename": "model_base.safetensors",
       "size_mb": 12,
       "description": "SleepFM — ~3M params, 128-dim, contrastive multimodal PSG (EEG+EOG+ECG+EMG+RESP+SpO2)",
+      "recommended": true
+    },
+    {
+      "family": "sensorlm",
+      "filename": "model.safetensors",
+      "size_mb": 400,
+      "description": "SensorLM — sensor-language model, wearable multimodal (PPG+accel+EDA+temp+gyro) + text",
       "recommended": true
     }
   ]
