@@ -333,6 +333,42 @@ fn on_connected(
         if s.status.device_id.is_none() {
             s.status.device_id = Some(info.id.clone());
         }
+        // For iroh-remote sessions, detect the actual device kind from the
+        // device name so the dashboard can show device-specific UI and the
+        // tray icon / status badge reflect the real hardware.
+        if s.status.device_kind == "iroh-remote" {
+            let name_lower = info.name.to_lowercase();
+            let remote_kind = if name_lower.contains("muse") {
+                "muse"
+            } else if name_lower.contains("atu") || name_lower.contains("attentivu") {
+                "attentivu"
+            } else if name_lower.contains("mw75") || name_lower.contains("neurable") {
+                "mw75"
+            } else if name_lower.contains("ganglion")
+                || name_lower.contains("cyton")
+                || name_lower.contains("openbci")
+            {
+                "openbci"
+            } else if name_lower.contains("epoc")
+                || name_lower.contains("insight")
+                || name_lower.contains("emotiv")
+                || name_lower.contains("flex")
+                || name_lower.contains("mn8")
+            {
+                "emotiv"
+            } else if name_lower.contains("idun") || name_lower.contains("guardian") {
+                "idun"
+            } else if name_lower.contains("hermes") || name_lower.contains("nucleus") {
+                "hermes"
+            } else if name_lower.contains("mendi") {
+                "mendi"
+            } else if name_lower.contains("polar") {
+                "polar"
+            } else {
+                "iroh-remote"
+            };
+            s.status.device_kind = remote_kind.into();
+        }
         // Populate device identity fields from the adapter's DeviceInfo.
         if let Some(ref v) = info.serial_number {
             s.status.serial_number = Some(v.clone());
