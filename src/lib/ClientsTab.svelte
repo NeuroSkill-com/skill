@@ -155,7 +155,7 @@ async function createInvite() {
     if (r.payload) {
       const json = JSON.stringify(r.payload);
       const b64 = btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      inviteLink = `neuroskill://invite/${b64}`;
+      inviteLink = `skillclient://invite?payload=${b64}`;
     }
     await refresh();
     startPolling();
