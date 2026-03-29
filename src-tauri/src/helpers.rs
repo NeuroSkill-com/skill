@@ -64,16 +64,46 @@ pub(crate) fn emit_cortex_ws_state(app: &AppHandle) {
 }
 
 /// Update the Cortex WS state in AppState and emit it to the frontend.
+/// Sends a toast notification on meaningful transitions (connected ↔ disconnected).
 pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
-    {
+    let prev = {
         let s_ref = app.app_state();
         let mut g = s_ref.lock_or_recover();
         if g.cortex_ws_state == state {
             return;
         }
+        let prev = g.cortex_ws_state.clone();
         g.cortex_ws_state = state.to_owned();
-    }
+        prev
+    };
     emit_cortex_ws_state(app);
+
+    // Notify the user on meaningful transitions.
+    match (prev.as_str(), state) {
+        ("connected", "disconnected") => {
+            // Remove stale Cortex-discovered devices so the UI doesn't show
+            // green "paired" badges for headsets that are no longer reachable.
+            remove_discovered_by_prefix(app, "cortex:");
+            send_toast(
+                app,
+                crate::ToastLevel::Warning,
+                "Emotiv Launcher Disconnected",
+                "The Cortex service is no longer reachable. Make sure EMOTIV Launcher is running.",
+            );
+        }
+        ("disconnected", "connected") => {
+            // Only toast on the first successful probe after being truly
+            // disconnected.  The scanner cycles through "connecting" →
+            // "connected" on every 10 s poll; we don't want a toast each time.
+            send_toast(
+                app,
+                crate::ToastLevel::Success,
+                "Emotiv Launcher Connected",
+                "Cortex service is reachable. Headsets will appear in the device list.",
+            );
+        }
+        _ => {}
+    }
 }
 
 // ── Toast / notification helpers ──────────────────────────────────────────────
@@ -242,6 +272,8 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         sleep: s.sleep_config.clone(),
         storage_format: s.settings_storage_format.clone(),
         scanner: s.scanner_config.clone(),
+        lsl_auto_connect: s.lsl_auto_connect,
+        lsl_paired_streams: s.lsl_paired_streams.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -355,4 +387,20 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
         });
     }
     s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+}
+
+/// Remove all discovered devices whose id starts with `prefix`.
+/// Used when a scanner backend goes offline (e.g. Cortex Launcher disconnects)
+/// so stale entries don't linger in the device list with green badges.
+pub(crate) fn remove_discovered_by_prefix(app: &AppHandle, prefix: &str) {
+    let changed = {
+        let s_ref = app.app_state();
+        let mut s = s_ref.lock_or_recover();
+        let before = s.discovered.len();
+        s.discovered.retain(|d| !d.id.starts_with(prefix));
+        s.discovered.len() != before
+    };
+    if changed {
+        emit_devices(app);
+    }
 }

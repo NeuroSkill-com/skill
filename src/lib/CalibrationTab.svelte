@@ -522,7 +522,8 @@ onDestroy(() => clearInterval(nowTimer));
 
         <!-- Auto-start -->
         <div class="flex items-center gap-3 px-4 py-3.5">
-          <button onclick={() => editing!.auto_start = !editing!.auto_start}
+          <button role="switch" aria-checked={editing.auto_start}
+                  onclick={() => editing!.auto_start = !editing!.auto_start}
                   class="flex items-center gap-3 text-left w-full">
             <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
                         {editing.auto_start ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}">

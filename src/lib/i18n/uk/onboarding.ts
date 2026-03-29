@@ -13,6 +13,7 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Калібрування",
   "onboarding.step.models": "Моделі",
   "onboarding.step.tray": "Трей",
+  "onboarding.step.enable_bluetooth": "Увімкнути Bluetooth",
   "onboarding.step.done": "Готово",
   "onboarding.welcomeTitle": "Ласкаво просимо до {app}",
   "onboarding.welcomeBody":
@@ -55,6 +56,13 @@ const onboarding: Record<string, string> = {
   "onboarding.openCalibration": "Відкрити калібрування",
   "onboarding.calibrationNeedsBt": "Спочатку підключіть пристрій для запуску калібрування.",
   "onboarding.calibrationSkip": "Можна пропустити і калібрувати пізніше з меню трею або налаштувань.",
+  "onboarding.enableBluetoothTitle": "Увімкніть Bluetooth на вашому Mac",
+  "onboarding.enableBluetoothBody":
+    "{app} потребує, щоб адаптер Bluetooth вашого Mac був ввімкнений, щоб знайти й підключити ваш BCI-пристрій. Увімкніть Bluetooth у Налаштуваннях системи, якщо він вимкнений.",
+  "onboarding.enableBluetoothStatus": "Адаптер Bluetooth",
+  "onboarding.enableBluetoothHint":
+    "Відкрийте Налаштування → Bluetooth та увімкніть Bluetooth. Якщо ви запускаєте у розробці через Terminal, переконайтеся, що системний адаптер увімкнений.",
+  "onboarding.enableBluetoothOpen": "Відкрити налаштування Bluetooth",
   "onboarding.modelsTitle": "Завантаження рекомендованих моделей",
   "onboarding.modelsBody":
     "Для найкращого локального досвіду завантажте зараз ці стандартні моделі: Qwen3.5 4B (Q4_K_M), кодер ZUNA, NeuTTS та Kitten TTS.",

@@ -28,13 +28,14 @@ fn caps_empty_contains_nothing() {
 
 #[test]
 fn descriptor_pipeline_channels_capped() {
+    let n = skill_constants::EEG_CHANNELS + 8; // more than the DSP limit
     let desc = DeviceDescriptor {
         kind: "test",
         caps: DeviceCaps::EEG,
-        eeg_channels: 24,
+        eeg_channels: n,
         eeg_sample_rate: 250.0,
-        channel_names: (0..24).map(|i| format!("Ch{i}")).collect(),
-        pipeline_channels: 24_usize.min(skill_constants::EEG_CHANNELS),
+        channel_names: (0..n).map(|i| format!("Ch{i}")).collect(),
+        pipeline_channels: n.min(skill_constants::EEG_CHANNELS),
         ppg_channel_names: Vec::new(),
         imu_channel_names: Vec::new(),
         fnirs_channel_names: Vec::new(),
@@ -568,6 +569,289 @@ mod emotiv_tests {
         assert!(matches!(ev, DeviceEvent::Disconnected));
     }
 
+    #[tokio::test]
+    async fn emotiv_cortex_disconnected_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_headset_disconnected_warning_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::HEADSET_DISCONNECTED,
+            message: serde_json::Value::String("INSIGHT-ABC".into()),
+        })
+        .await
+        .unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_headset_connection_failed_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::HEADSET_CONNECTION_FAILED,
+            message: serde_json::Value::String("EPOCX-123".into()),
+        })
+        .await
+        .unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_subscribe_error_does_not_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        // Subscribe failure should NOT trigger disconnect.
+        tx.send(CortexEvent::Error("Subscribe 'eeg' failed: code=123 no license".into()))
+            .await
+            .unwrap();
+        // Follow with a real disconnect to verify the subscribe error was skipped.
+        tx.send(CortexEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // Should get Disconnected from the explicit CortexEvent::Disconnected,
+        // NOT from the subscribe error.
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_channel_closed_returns_none() {
+        let (tx, rx) = mpsc::channel(16);
+        drop(tx); // Close channel immediately.
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // Closed channel → None.
+        assert!(adapter.next_event().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn emotiv_non_data_events_skipped_gracefully() {
+        let (tx, rx) = mpsc::channel(16);
+
+        // Send a bunch of non-data events that produce no DeviceEvent.
+        tx.send(CortexEvent::Connected).await.unwrap();
+        tx.send(CortexEvent::Authorized).await.unwrap();
+        tx.send(CortexEvent::Metrics(emotiv::types::MetricsData {
+            values: vec![0.5; 13],
+            time: 100.0,
+        }))
+        .await
+        .unwrap();
+        tx.send(CortexEvent::BandPower(emotiv::types::BandPowerData {
+            powers: vec![1.0; 5],
+            time: 100.0,
+        }))
+        .await
+        .unwrap();
+        // End with an actual data event.
+        tx.send(CortexEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // All non-data events should be skipped; first visible event is Disconnected.
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_motion_translates_to_imu() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Motion(emotiv::types::MotionData {
+            samples: vec![0.0, 0.0, 0.5, 0.3, 0.2, 0.1, 0.01, 0.02, -1.0, 50.0, 30.0, 20.0],
+            time: 100.0,
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Imu(imu) => {
+                assert!((imu.accel[0] - 0.01).abs() < f32::EPSILON);
+                assert!((imu.accel[1] - 0.02).abs() < f32::EPSILON);
+                assert!((imu.accel[2] - (-1.0)).abs() < f32::EPSILON);
+                assert!(imu.gyro.is_none()); // Cortex has quaternions, not raw gyro
+                assert!(imu.mag.is_some());
+                let mag = imu.mag.unwrap();
+                assert!((mag[0] - 50.0).abs() < f32::EPSILON);
+            }
+            other => panic!("expected Imu, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn emotiv_dev_translates_to_battery() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Dev(emotiv::types::DevData {
+            signal: 2.0,
+            contact_quality: vec![4.0, 4.0, 3.0, 4.0, 4.0],
+            battery_percent: 72.0,
+            time: 100.0,
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Battery(b) => {
+                assert!((b.level_pct - 72.0).abs() < f32::EPSILON);
+                assert!(b.voltage_mv.is_none());
+            }
+            other => panic!("expected Battery, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn emotiv_data_labels_updates_descriptor() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::DataLabels(emotiv::types::DataLabels {
+            stream_name: "eeg".into(),
+            labels: vec![
+                "COUNTER".into(),
+                "INTERPOLATED".into(),
+                "AF3".into(),
+                "AF4".into(),
+                "T7".into(),
+                "T8".into(),
+                "Pz".into(),
+                "RAW_CQ".into(),
+                "MARKERS".into(),
+            ],
+        }))
+        .await
+        .unwrap();
+        // Follow with an EEG frame to verify electrode_indices are used.
+        tx.send(CortexEvent::Eeg(EegData {
+            samples: vec![99.0, 88.0, 1.0, 2.0, 3.0, 4.0, 5.0, 77.0, 66.0],
+            time: 100.0,
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        // Start with 14 channels, DataLabels should correct to 5.
+        let names: Vec<String> = (0..14).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 14, names);
+
+        // DataLabels produces no DeviceEvent, skip straight to EEG.
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                // Should have 5 electrode values (AF3, AF4, T7, T8, Pz),
+                // NOT the full 9-element raw array.
+                assert_eq!(frame.channels.len(), 5);
+                assert!((frame.channels[0] - 1.0).abs() < f64::EPSILON); // AF3
+                assert!((frame.channels[4] - 5.0).abs() < f64::EPSILON); // Pz
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+
+        // Descriptor should be updated.
+        let desc = adapter.descriptor();
+        assert_eq!(desc.eeg_channels, 5);
+        assert_eq!(desc.channel_names, vec!["AF3", "AF4", "T7", "T8", "Pz"]);
+    }
+
+    #[tokio::test]
+    async fn emotiv_replay_queues_events() {
+        let (tx, rx) = mpsc::channel(16);
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // Replay a DataLabels + EEG combo as would happen during connect.
+        adapter.replay(vec![
+            CortexEvent::DataLabels(emotiv::types::DataLabels {
+                stream_name: "eeg".into(),
+                labels: vec!["AF3".into(), "AF4".into(), "Pz".into()],
+            }),
+            CortexEvent::Eeg(EegData {
+                samples: vec![10.0, 20.0, 30.0],
+                time: 200.0,
+            }),
+        ]);
+
+        // EEG from replay should be available.
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                assert_eq!(frame.channels.len(), 3);
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn emotiv_double_disconnect_is_harmless() {
+        let (tx, rx) = mpsc::channel(16);
+
+        // Simulate the double-disconnect from Warning(HEADSET_DISCONNECTED) +
+        // CortexEvent::Disconnected that the Cortex client sends.
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::HEADSET_DISCONNECTED,
+            message: serde_json::Value::Null,
+        })
+        .await
+        .unwrap();
+        tx.send(CortexEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // First call gets Disconnected (from the Warning).
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+
+        // Second call also returns Disconnected (from CortexEvent::Disconnected).
+        // This is fine — session runner breaks on the first one.
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
     #[test]
     fn emotiv_descriptor_correct() {
         let (_, rx) = mpsc::channel(16);
@@ -609,8 +893,9 @@ mod openbci_tests {
 
     #[test]
     fn make_descriptor_large_channel_count_capped() {
-        let desc = OpenBciAdapter::make_descriptor("galea", 24, 250.0, (0..24).map(|i| format!("Ch{i}")).collect());
-        assert_eq!(desc.eeg_channels, 24);
+        let n = skill_constants::EEG_CHANNELS + 8;
+        let desc = OpenBciAdapter::make_descriptor("galea", n, 250.0, (0..n).map(|i| format!("Ch{i}")).collect());
+        assert_eq!(desc.eeg_channels, n);
         assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
     }
 

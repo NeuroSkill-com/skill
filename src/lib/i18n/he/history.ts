@@ -246,6 +246,9 @@ const history: Record<string, string> = {
   "history.minutesAgo": "לפני {n} דק׳",
   "history.hoursAgo": "לפני {n} שע׳",
   "history.daysAgo": "לפני {n} ימים",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "history.addLabel": "Add Label",
 };
 
 export default history;

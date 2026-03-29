@@ -18,6 +18,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface SupportedDeviceItem {
   name_key: string;
   image: string;
+  ios_only?: boolean;
 }
 
 export interface SupportedCompany {

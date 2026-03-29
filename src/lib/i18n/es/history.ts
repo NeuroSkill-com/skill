@@ -247,6 +247,9 @@ const history: Record<string, string> = {
   "history.streakAmazing": "¡Consistencia increíble!",
   "history.streakKeepGoing": "¡Sigue así!",
   "history.streakGreatStart": "¡Gran comienzo!",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "history.addLabel": "Add Label",
 };
 
 export default history;

@@ -234,6 +234,42 @@ export const EXEMPT_KEY_PREFIXES = [
   "chat.ctx.messagesCount", // "messages" cognate (FR)
   "chat.tools.sourcesLabel", // "Sources" cognate (FR)
   "search.modeImages", // "Images" cognate (FR)
+  "settingsTabs.lsl", // "LSL" technical acronym
+  "lsl.localStreams", // "LSL Streams" technical term
+  "lsl.iroh", // "iroh" product name
+  "lsl.connect", // "Connect" cognate
+  "lsl.scanning", // "Scanning" cognate
+  "lsl.scanButton", // "Scan Network" technical
+  "lsl.noStreams", // technical LSL context
+  "lsl.pair", // "Pair" cognate
+  "lsl.unpair", // "Unpair" cognate
+  "lsl.paired", // "PAIRED" badge label
+  "lsl.autoScanning", // "Auto-scanning" technical
+  "lsl.autoConnect", // "Auto-Connect" technical
+  "lsl.pairAndConnect", // "Pair & Connect" cognate
+  "lsl.streaming", // "STREAMING" badge
+  "lsl.sessionActive", // "LSL session active" technical
+  "lsl.lastScanJustNow", // "just now" short label
+  "lsl.scanningNetwork", // "Scanning local network..." technical
+  "lsl.switchTo", // "Switch to this" UI action
+  "lsl.switchHint", // "CLICK CONNECT TO SWITCH" hint
+  "lsl.otherSessionActive", // "Another device is streaming" technical
+  "cmdK.sectionLsl", // "LSL" technical acronym
+  "cmdK.lslScan", // "Scan for LSL Streams" technical
+  "cmdK.lslOpenSettings", // "LSL Settings" technical
+  "cmdK.lslIrohStart", // "Start iroh Remote Sink" product name
+  "cmdK.lslIrohStop", // "Stop iroh Remote Sink" product name
+  "lsl.background", // "Background" cognate
+  "lsl.backgroundSessions", // "Background Recordings" technical
+  "lsl.recording", // "RECORDING" badge
+  "lsl.stopRecording", // "Stop recording" action
+  "dashboard.primary", // "PRIMARY" badge
+  "dashboard.backgroundRecordings", // "Background Recordings" label
+  "dashboard.stopSecondary", // "Stop recording" action
+  "history.addLabel", // "Add Label" action
+  "label.customTime", // "Custom time" toggle
+  "label.labelNow", // "Label at now" default
+  "label.resetToNow", // "Reset to now" action
 ];
 
 /** Exact keys that are always the same across locales. */

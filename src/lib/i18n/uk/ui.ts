@@ -284,6 +284,19 @@ const ui: Record<string, string> = {
     "Увімкніть BCI-гарнітуру та розмістіть її в зоні дії Bluetooth. Виявлені пристрої з'являться тут автоматично.",
   "devices.deviceSingular": "пристрій",
   "devices.devicePlural": "пристроїв",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
+
+  "devices.iosOnly": "лише через iOS",
+
+  "invite.copyLink": "Копіювати посилання запрошення",
+  "invite.copied": "Скопійовано!",
+  "invite.linkHint": "Відкрийте це посилання на телефоні, якщо не вдається сканувати QR-код",
 };
 
 export default ui;

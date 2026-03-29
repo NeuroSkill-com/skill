@@ -163,7 +163,14 @@ pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = ["zuna", "kitten", "neutt
 /// Set to 12 to accommodate the MW75 Neuro (12 channels).  Muse and Ganglion
 /// sessions only push data to the first 4 channels; the remaining 8 stay
 /// silent (zero / no_signal) with negligible overhead.
-pub const EEG_CHANNELS: usize = 12;
+/// Maximum number of EEG channels processed through the DSP pipeline
+/// (filter, FFT, band powers, quality, artifact detection, embeddings).
+///
+/// All channels are always recorded to CSV/Parquet regardless of this limit.
+/// The runtime setting `max_pipeline_channels` (2–1024) controls how many
+/// channels are actually processed; this constant is the upper bound for
+/// fixed-size DSP arrays.
+pub const EEG_CHANNELS: usize = 32;
 
 /// Default channel labels for 4-channel devices (Muse: TP9, AF7, AF8, TP10).
 pub const CHANNEL_NAMES: [&str; 4] = ["TP9", "AF7", "AF8", "TP10"];
@@ -751,6 +758,58 @@ pub const SKILLS_SUBDIR: &str = "skills";
 
 /// The marker filename that identifies a directory as a skill root.
 pub const SKILL_MARKER: &str = "SKILL.md";
+
+// ── iroh remote streaming ─────────────────────────────────────────────────────
+
+/// Data watchdog timeout for locally connected BLE devices (seconds).
+/// If no [`DeviceEvent`] arrives within this window, the session is treated
+/// as silently disconnected.  15 s is generous for BLE (supervision timeout
+/// is typically 2–6 s).
+pub const DATA_WATCHDOG_SECS: u64 = 15;
+
+/// Extended data watchdog for iroh-remote sessions (seconds).
+/// The phone's QUIC tunnel may take 30–60 s to reconnect after a network
+/// interruption while BLE data continues recording into the phone's local
+/// outbox.  90 s prevents premature session termination on the desktop.
+/// Extended watchdog for iroh-remote sessions.  With 0.25s streaming
+/// chunks the normal 15s watchdog would be fine, but relay reconnection
+/// can take 10–20s, so we keep a modest buffer.  The synthetic
+/// `DeviceDisconnected` from `device_receiver.rs` handles the fast path.
+pub const DATA_WATCHDOG_IROH_SECS: u64 = 30;
+
+/// Maximum age of unsent messages in the phone's outbox before they are
+/// pruned (seconds).  24 hours — old enough to survive overnight gaps.
+pub const OUTBOX_MAX_AGE_SECS: u64 = 86_400;
+
+/// Duration of each sensor chunk accumulated on the phone before sending
+/// to the desktop (seconds).  5 s aligns with the embedding epoch window.
+pub const DEVICE_PROXY_EPOCH_SECS: f32 = 5.0;
+
+/// Maximum raw (uncompressed) payload size for a single device proxy
+/// message (bytes).  2 MiB — large enough for 5 s × 32 ch × 256 Hz.
+pub const DEVICE_PROXY_MAX_PAYLOAD: usize = 2_097_152;
+
+/// Number of outbox messages to send per drain batch.  Small batches
+/// yield to live data sends between batches.
+pub const OUTBOX_DRAIN_BATCH_SIZE: usize = 4;
+
+/// Pause between drain batches (milliseconds).  Lets live sensor data
+/// through the QUIC connection before the next backlog batch is sent.
+pub const OUTBOX_DRAIN_INTER_BATCH_MS: u64 = 200;
+
+/// How long the drain loop waits before re-checking an empty outbox
+/// (milliseconds).
+pub const OUTBOX_DRAIN_IDLE_MS: u64 = 2_000;
+
+/// Maximum consecutive empty outbox polls before the drain loop exits.
+/// `set_connection` restarts the drain on the next reconnect.
+/// 30 × 2 s = 60 s idle before exiting.
+pub const OUTBOX_DRAIN_MAX_IDLE_POLLS: u32 = 30;
+
+/// Discard partial embedding epoch data if no EEG samples arrive for
+/// this duration (seconds).  Prevents stale data from producing
+/// misleading embeddings when recording resumes after a long gap.
+pub const STALE_EPOCH_TIMEOUT_SECS: u64 = 3600;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

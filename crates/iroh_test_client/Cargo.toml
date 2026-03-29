@@ -1,0 +1,24 @@
+[package]
+name = "iroh_test_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iroh = { version = "0.97", package = "iroh" }
+iroh-base = "0.97"
+rand = "0.8"
+totp-rs = "5.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+structopt = "0.3"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+env_logger = "0.10"
+base32 = "0.4"
+url = "2"
+tempfile = "3"
+skill-iroh = { path = "../skill-iroh" }
+
+[dev-dependencies]
+base32 = "0.4"
+url = "2"

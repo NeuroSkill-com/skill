@@ -218,7 +218,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Absans", sans-serif;
+    font-family: "Absans", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     height: 100vh;
     overflow: hidden;   /* the <main> scroll container handles scrolling */
     user-select: none;
@@ -278,6 +278,30 @@
   .high-contrast [class*="border-border"],
   .high-contrast [class*="divide-border"] {
     border-color: var(--border) !important;
+  }
+}
+
+/* ── Increased contrast — respect macOS "Increase contrast" setting ─────────── */
+@media (prefers-contrast: more) {
+  :root:not(.high-contrast) {
+    --border: oklch(0.60 0 0);
+    --input:  oklch(0.60 0 0);
+  }
+  .dark:not(.high-contrast) {
+    --border: oklch(0.50 0 0);
+    --input:  oklch(0.50 0 0);
+  }
+}
+
+/* ── Reduced motion — respect macOS "Reduce motion" accessibility setting ──── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

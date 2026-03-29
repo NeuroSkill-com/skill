@@ -21,7 +21,7 @@ use serde_json::Value;
 ///  - string-encoded JSON → parsed     (when schema expects object/array and value is a string)
 ///  - object properties   → recurse    (each property coerced against its own sub-schema)
 ///  - `null` for missing optional fields is passed through unchanged
-pub(crate) fn coerce_value(value: &Value, schema: &Value) -> Value {
+pub fn coerce_value(value: &Value, schema: &Value) -> Value {
     // If schema is a boolean schema (`true` = accept all, `false` = reject all)
     // or not an object, return value as-is.
     let Some(schema_obj) = schema.as_object() else {

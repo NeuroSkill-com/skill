@@ -171,9 +171,16 @@ use skill_exg::GPU_DEVICE_POISONED;
 /// epochs with configurable overlap.
 const PPG_CHANNELS: usize = crate::constants::PPG_CHANNELS;
 
+const STALE_EPOCH_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(skill_constants::STALE_EPOCH_TIMEOUT_SECS);
+
 pub struct EegAccumulator {
     bufs: [VecDeque<f32>; EEG_CHANNELS],
     since_last: [usize; EEG_CHANNELS],
+    /// When the last EEG sample was pushed.  Used to detect stale partial
+    /// epochs — if more than `STALE_EPOCH_TIMEOUT` elapses without new
+    /// data, the buffers are cleared so the next recording starts fresh.
+    last_push_at: std::time::Instant,
     /// Number of EEG channels the connected device actually uses.
     /// Only `bufs[0..device_channels]` are populated; the rest stay empty
     /// and are zero-filled when building the model input tensor.
@@ -267,6 +274,7 @@ impl EegAccumulator {
         Self {
             bufs: std::array::from_fn(|_| VecDeque::new()),
             since_last: [0; EEG_CHANNELS],
+            last_push_at: std::time::Instant::now(),
             device_channels: CHANNEL_NAMES.len(),
             hop_samples: EMBEDDING_HOP_SAMPLES,
             native_epoch_samples: EMBEDDING_EPOCH_SAMPLES,
@@ -446,6 +454,31 @@ impl EegAccumulator {
         if electrode >= EEG_CHANNELS {
             return;
         }
+
+        // Discard stale partial epoch data if no samples arrived for a long
+        // time (e.g. device disconnected for an hour, then reconnects).
+        // This prevents stitching old partial data with fresh samples,
+        // which would produce a nonsensical embedding.
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_push_at) > STALE_EPOCH_TIMEOUT {
+            let n_ch = self.device_channels;
+            let any_data = self.bufs[..n_ch].iter().any(|b| !b.is_empty());
+            if any_data {
+                skill_log!(
+                    self.logger,
+                    "embedder",
+                    "discarding stale partial epoch ({:.0}s since last push)",
+                    now.duration_since(self.last_push_at).as_secs_f64()
+                );
+                for b in &mut self.bufs {
+                    b.clear();
+                }
+                self.since_last = [0; EEG_CHANNELS];
+                self.ppg_sums = [0.0; PPG_CHANNELS];
+                self.ppg_counts = [0; PPG_CHANNELS];
+            }
+        }
+        self.last_push_at = now;
 
         self.bufs[electrode].extend(samples.iter().copied());
         self.since_last[electrode] += samples.len();

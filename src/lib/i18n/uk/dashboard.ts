@@ -181,6 +181,11 @@ const dashboard: Record<string, string> = {
 
   "exg.title": "EXG",
   "exg.subtitle": "Конфігурація плати OpenBCI, фільтри обробки сигналу та конвеєр вбудовування ЕЕГ.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "dashboard.primary": "PRIMARY",
+  "dashboard.backgroundRecordings": "Background Recordings",
+  "dashboard.stopSecondary": "Stop recording",
 };
 
 export default dashboard;

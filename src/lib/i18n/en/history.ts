@@ -246,6 +246,7 @@ const history: Record<string, string> = {
   "history.streakAmazing": "Amazing consistency!",
   "history.streakKeepGoing": "Keep it going!",
   "history.streakGreatStart": "Great start!",
+  "history.addLabel": "Add Label",
 };
 
 export default history;

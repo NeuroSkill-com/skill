@@ -53,6 +53,10 @@ pub enum DeviceKind {
     Idun,
     /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
     Mendi,
+    /// AttentivU EEG glasses — 4-channel ExG (250 Hz) + 9-axis IMU (BLE).
+    /// Broadcasts as "AttentivU-XXXX" or "AtU-XXXX" / "AtUXXXX".
+    #[serde(rename = "attentivu")]
+    AttentivU,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -128,6 +132,9 @@ impl DeviceKind {
         }
         if n.starts_with("mendi") {
             return Self::Mendi;
+        }
+        if n.starts_with("atu") || n.starts_with("attentivu") {
+            return Self::AttentivU;
         }
 
         Self::Unknown
@@ -220,6 +227,16 @@ impl DeviceKind {
                 sample_rate_hz: 0.0,
                 electrode_names: Vec::new(),
             },
+            Self::AttentivU => DeviceCapabilities {
+                kind: Self::AttentivU,
+                channel_count: 4, // 4 ExG channels (EEG/EOG)
+                has_ppg: false,
+                has_imu: true,                 // 9-axis IMU
+                has_central_electrodes: false, // forehead/temple placement
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["ExG0", "ExG1", "ExG2", "ExG3"]),
+            },
             Self::Unknown => DeviceCapabilities {
                 kind: Self::Unknown,
                 channel_count: 0,
@@ -250,6 +267,7 @@ impl DeviceKind {
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
             Self::Mendi => "mendi",
+            Self::AttentivU => "attentivu",
             Self::Unknown => "unknown",
         }
     }
@@ -270,6 +288,7 @@ impl DeviceKind {
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
             "mendi" => Self::Mendi,
+            "attentivu" => Self::AttentivU,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -297,6 +316,14 @@ pub struct SupportedDevice {
     pub name_key: String,
     /// Path to the device image (relative to `/devices/`).
     pub image: String,
+    /// If `true`, this device connects via the SkillClient iOS app only
+    /// (BLE on phone → iroh tunnel → desktop processing).
+    #[serde(skip_serializing_if = "is_false")]
+    pub ios_only: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !v
 }
 
 /// A company / brand grouping in the "Supported Devices" UI.
@@ -319,74 +346,25 @@ pub struct SupportedCompany {
 /// This is the **single source of truth** — the Svelte frontend fetches
 /// this via the `get_supported_companies` Tauri command.
 pub fn supported_companies() -> Vec<SupportedCompany> {
+    // Sorted alphabetically by company name.
     vec![
+        // ── A ─────────────────────────────────────────────────────────────
         SupportedCompany {
-            id: "muse".into(),
-            name_key: "settings.supportedDevices.company.muse".into(),
-            logo: "/logos/muse.png".into(),
-            devices: vec![
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.muse2016".into(),
-                    image: "/devices/muse-gen1.jpg".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.muse2".into(),
-                    image: "/devices/muse-gen2.jpg".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.museS".into(),
-                    image: "/devices/muse-s-gen1.jpg".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.museSAthena".into(),
-                    image: "/devices/muse-s-athena.jpg".into(),
-                },
-            ],
-            instruction_keys: vec![
-                "settings.supportedDevices.instruction.muse1".into(),
-                "settings.supportedDevices.instruction.muse2".into(),
-            ],
-        },
-        SupportedCompany {
-            id: "neurable".into(),
-            name_key: "settings.supportedDevices.company.neurable".into(),
-            logo: "/logos/neurable.png".into(),
+            id: "attentivu".into(),
+            name_key: "settings.supportedDevices.company.attentivu".into(),
+            logo: "/devices/attentivu-glasses.png".into(),
             devices: vec![SupportedDevice {
-                name_key: "settings.supportedDevices.device.mw75Neuro".into(),
-                image: "/devices/muse-mw75.jpg".into(),
+                name_key: "settings.supportedDevices.device.attentivuGlasses".into(),
+                ios_only: true,
+                image: "/devices/attentivu-glasses.png".into(),
             }],
             instruction_keys: vec![
-                "settings.supportedDevices.instruction.neurable1".into(),
-                "settings.supportedDevices.instruction.neurable2".into(),
+                "settings.supportedDevices.instruction.attentivu1".into(),
+                "settings.supportedDevices.instruction.attentivu2".into(),
+                "settings.supportedDevices.instruction.attentivu3".into(),
             ],
         },
-        SupportedCompany {
-            id: "openbci".into(),
-            name_key: "settings.supportedDevices.company.openbci".into(),
-            logo: "/logos/openbci.png".into(),
-            devices: vec![
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.ganglion".into(),
-                    image: "/devices/openbci-ganglion.jpg".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.cyton".into(),
-                    image: "/devices/openbci-cyton.png".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.cytonDaisy".into(),
-                    image: "/devices/openbci-cyton-daisy.jpg".into(),
-                },
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.galea".into(),
-                    image: "/devices/openbci-galea.jpg".into(),
-                },
-            ],
-            instruction_keys: vec![
-                "settings.supportedDevices.instruction.openbci1".into(),
-                "settings.supportedDevices.instruction.openbci2".into(),
-            ],
-        },
+        // ── E ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "emotiv".into(),
             name_key: "settings.supportedDevices.company.emotiv".into(),
@@ -394,18 +372,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.epocX".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-epoc-x.webp".into(),
                 },
                 SupportedDevice {
-                    name_key: "settings.supportedDevices.device.insight".into(),
-                    image: "/devices/emotiv-insight.webp".into(),
-                },
-                SupportedDevice {
                     name_key: "settings.supportedDevices.device.flexSaline".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-flex-saline.webp".into(),
                 },
                 SupportedDevice {
+                    name_key: "settings.supportedDevices.device.insight".into(),
+                    ios_only: false,
+                    image: "/devices/emotiv-insight.webp".into(),
+                },
+                SupportedDevice {
                     name_key: "settings.supportedDevices.device.mn8".into(),
+                    ios_only: false,
                     image: "/devices/emotiv-mn8.webp".into(),
                 },
             ],
@@ -414,12 +396,14 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.emotiv2".into(),
             ],
         },
+        // ── I ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "idun".into(),
             name_key: "settings.supportedDevices.company.idun".into(),
             logo: "/logos/idun.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.guardian".into(),
+                ios_only: false,
                 image: "/devices/idun-guardian.png".into(),
             }],
             instruction_keys: vec![
@@ -428,29 +412,111 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             ],
         },
         SupportedCompany {
-            id: "reak".into(),
-            name_key: "settings.supportedDevices.company.reak".into(),
-            logo: "/logos/reak.png".into(),
-            devices: vec![SupportedDevice {
-                name_key: "settings.supportedDevices.device.nucleusHermes".into(),
-                image: "/devices/re-ak-nucleus-hermes.png".into(),
-            }],
+            id: "muse".into(),
+            name_key: "settings.supportedDevices.company.muse".into(),
+            logo: "/logos/muse.png".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.muse2016".into(),
+                    ios_only: false,
+                    image: "/devices/muse-gen1.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.muse2".into(),
+                    ios_only: false,
+                    image: "/devices/muse-gen2.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.museS".into(),
+                    ios_only: false,
+                    image: "/devices/muse-s-gen1.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.museSAthena".into(),
+                    ios_only: false,
+                    image: "/devices/muse-s-athena.jpg".into(),
+                },
+            ],
             instruction_keys: vec![
-                "settings.supportedDevices.instruction.reak1".into(),
-                "settings.supportedDevices.instruction.reak2".into(),
+                "settings.supportedDevices.instruction.muse1".into(),
+                "settings.supportedDevices.instruction.muse2".into(),
             ],
         },
+        // ── M ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "mendi".into(),
             name_key: "settings.supportedDevices.company.mendi".into(),
             logo: "/logos/mendi.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.mendiHeadband".into(),
+                ios_only: false,
                 image: "/devices/mendi-headband.png".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.mendi1".into(),
                 "settings.supportedDevices.instruction.mendi2".into(),
+            ],
+        },
+        // ── N ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "neurable".into(),
+            name_key: "settings.supportedDevices.company.neurable".into(),
+            logo: "/logos/neurable.png".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.mw75Neuro".into(),
+                ios_only: false,
+                image: "/devices/muse-mw75.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.neurable1".into(),
+                "settings.supportedDevices.instruction.neurable2".into(),
+            ],
+        },
+        // ── O ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "openbci".into(),
+            name_key: "settings.supportedDevices.company.openbci".into(),
+            logo: "/logos/openbci.png".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cyton".into(),
+                    ios_only: false,
+                    image: "/devices/openbci-cyton.png".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cytonDaisy".into(),
+                    ios_only: false,
+                    image: "/devices/openbci-cyton-daisy.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.galea".into(),
+                    ios_only: false,
+                    image: "/devices/openbci-galea.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.ganglion".into(),
+                    ios_only: false,
+                    image: "/devices/openbci-ganglion.jpg".into(),
+                },
+            ],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.openbci1".into(),
+                "settings.supportedDevices.instruction.openbci2".into(),
+            ],
+        },
+        // ── R ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "reak".into(),
+            name_key: "settings.supportedDevices.company.reak".into(),
+            logo: "/logos/reak.png".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.nucleusHermes".into(),
+                ios_only: false,
+                image: "/devices/re-ak-nucleus-hermes.png".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.reak1".into(),
+                "settings.supportedDevices.instruction.reak2".into(),
             ],
         },
     ]
@@ -503,6 +569,14 @@ mod tests {
         assert_eq!(DeviceKind::from_name(Some("IDUN-Guardian")), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_name(Some("Guardian-001")), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_name(Some("IGE-1234")), DeviceKind::Idun);
+    }
+
+    #[test]
+    fn from_name_attentivu() {
+        assert_eq!(DeviceKind::from_name(Some("AttentivU-1234")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("AtU1234")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("AtU-5678")), DeviceKind::AttentivU);
+        assert_eq!(DeviceKind::from_name(Some("atu9999")), DeviceKind::AttentivU);
     }
 
     #[test]

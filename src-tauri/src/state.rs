@@ -89,6 +89,29 @@ pub struct ScannerHandle {
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 
+// ── Secondary (concurrent) sessions ──────────────────────────────────────────
+
+/// A lightweight concurrent session that records to its own CSV while
+/// the primary session owns the dashboard and embedding pipeline.
+#[derive(Clone, Serialize)]
+pub struct SecondarySessionInfo {
+    pub id: String,
+    pub device_name: String,
+    pub device_kind: String,
+    pub channels: usize,
+    pub sample_rate: f64,
+    pub sample_count: u64,
+    pub csv_path: String,
+    pub started_at: u64,
+    pub battery: f32,
+}
+
+/// Cancel handle for a secondary session (not serialisable).
+pub struct SecondarySessionHandle {
+    pub cancel: tokio_util::sync::CancellationToken,
+    pub info: SecondarySessionInfo,
+}
+
 // ── Shared frontend-visible status ────────────────────────────────────────────
 
 #[derive(Clone, Serialize)]
@@ -153,6 +176,14 @@ pub struct DeviceStatus {
     pub fnirs_hbt_right: f64,
     /// Rolling left/right ΔHbO connectivity proxy (Pearson r, -1..1).
     pub fnirs_connectivity: f64,
+    /// Phone descriptor from the remote iOS client (model, OS, locale, etc.).
+    /// Populated when a remote device streams via iroh with `MSG_PHONE_INFO`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone_info: Option<serde_json::Value>,
+    /// Display name of the connected iroh client (from the auth store).
+    /// Set when a remote session starts via iroh's device-proxy channel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iroh_client_name: Option<String>,
     /// Hardware EEG channel count of the connected device.
     pub eeg_channel_count: usize,
     /// Hardware EEG sample rate of the connected device (Hz).
@@ -212,6 +243,8 @@ impl Default for DeviceStatus {
             fnirs_hbt_left: 0.0,
             fnirs_hbt_right: 0.0,
             fnirs_connectivity: 0.0,
+            phone_info: None,
+            iroh_client_name: None,
             eeg_channel_count: 0,
             eeg_sample_rate_hz: 0.0,
             has_ppg: false,
@@ -262,6 +295,8 @@ impl DeviceStatus {
         self.fnirs_hbt_left = 0.0;
         self.fnirs_hbt_right = 0.0;
         self.fnirs_connectivity = 0.0;
+        self.phone_info = None;
+        self.iroh_client_name = None;
         self.eeg_channel_count = 0;
         self.eeg_sample_rate_hz = 0.0;
         self.has_ppg = false;
@@ -494,6 +529,10 @@ pub struct AppState {
     pub snr_sum: f64,
     pub snr_count: u64,
 
+    /// Concurrent secondary sessions recording in the background.
+    /// Key is the session id (e.g. "lsl:OpenBCI", "ble:Muse-1234").
+    pub secondary_sessions: std::collections::HashMap<String, SecondarySessionHandle>,
+
     // ── Infrastructure ────────────────────────────────────────────────────
     pub skill_dir: std::path::PathBuf,
     pub logger: std::sync::Arc<SkillLogger>,
@@ -529,9 +568,20 @@ pub struct AppState {
     pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config: crate::settings::ScannerConfig,
 
+    /// rlsl-iroh sink endpoint ID (set when the sink is running).
+    pub lsl_iroh_endpoint_id: Option<String>,
+
+    /// Auto-scan for LSL streams and connect paired ones automatically.
+    pub lsl_auto_connect: bool,
+    /// LSL streams the user has "paired" for auto-connect.
+    pub lsl_paired_streams: Vec<skill_settings::LslPairedStream>,
+
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
     pub cortex_ws_state: String,
+
+    // ── Smart alarm ────────────────────────────────────────────────────────
+    pub alarm_config: Option<crate::ws_commands::dnd_sleep::AlarmConfig>,
 
     // ── TTS ───────────────────────────────────────────────────────────────
     pub neutts_config: NeuttsConfig,
@@ -543,6 +593,10 @@ pub struct AppState {
 
     // ── Storage / recording ───────────────────────────────────────────────
     pub settings_storage_format: String,
+    /// Maximum number of EEG channels to process through the DSP pipeline.
+    /// Channels beyond this limit are still recorded to CSV but not processed.
+    /// Range: 2–1024.  Default: 24.  Capped at `EEG_CHANNELS` (24) for DSP arrays.
+    pub max_pipeline_channels: usize,
     pub sleep_config: crate::settings::SleepConfig,
     pub screenshot_config: ScreenshotConfig,
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
@@ -658,6 +712,7 @@ impl Default for AppState {
             session_start_utc: None,
             snr_sum: 0.0,
             snr_count: 0,
+            secondary_sessions: std::collections::HashMap::new(),
             label_store: label_store::LabelStore::open(&skill_dir),
 
             shortcuts: ShortcutState::default(),
@@ -678,9 +733,13 @@ impl Default for AppState {
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
+            lsl_iroh_endpoint_id: None,
+            lsl_auto_connect: false,
+            lsl_paired_streams: Vec::new(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),
+            alarm_config: None,
             neutts_config: NeuttsConfig::default(),
             tts_preload: true,
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),
@@ -688,6 +747,7 @@ impl Default for AppState {
             logger,
             dnd: std::sync::Arc::new(std::sync::Mutex::new(DndRuntimeState::default())),
             settings_storage_format: "csv".into(),
+            max_pipeline_channels: skill_constants::EEG_CHANNELS, // 32
             sleep_config: crate::settings::SleepConfig::default(),
             screenshot_config: ScreenshotConfig::default(),
             screenshot_store: None,

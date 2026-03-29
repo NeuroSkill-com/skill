@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
-import { turboApprox, rgbToHex, normalisePoints, randomPositions, buildColorArray } from "$lib/umap-viewer-logic";
+import { describe, expect, it } from "vitest";
+import { buildColorArray, normalisePoints, randomPositions, rgbToHex, turboApprox } from "$lib/umap-viewer-logic";
 
 describe("turboApprox", () => {
   it("returns values in [0,1] for all inputs", () => {

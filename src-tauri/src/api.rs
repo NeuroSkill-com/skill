@@ -180,6 +180,9 @@ pub struct SharedState {
     pub tx: broadcast::Sender<String>,
     /// Connected-client list and request log — shared with the Tauri UI.
     pub tracker: SharedTracker,
+    /// Kept for backward compat with `serve_with_mode`. Unused when peer_map is set.
+    #[allow(dead_code)]
+    pub readonly: bool,
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -217,6 +220,19 @@ pub fn router(state: SharedState) -> Router {
             .delete(delete_calibration_delete))
         .route("/dnd",            get(dnd_get).post(dnd_post))
 
+        // ── iroh tunnel auth endpoints ───────────────────────────────────
+        .route("/iroh/info",            get(iroh_info_get))
+        .route("/iroh/totp",            get(iroh_totp_list_get).post(iroh_totp_create_post))
+        .route("/iroh/totp/qr",         post(iroh_totp_qr_post))
+        .route("/iroh/totp/revoke",     post(iroh_totp_revoke_post))
+        .route("/iroh/clients",         get(iroh_clients_list_get))
+        .route("/iroh/clients/register",post(iroh_client_register_post))
+        .route("/iroh/clients/revoke",  post(iroh_client_revoke_post))
+        .route("/iroh/clients/scope",   post(iroh_client_set_scope_post))
+        .route("/iroh/phone-invite",   post(iroh_phone_invite_post))
+        .route("/iroh/scope-groups",   get(iroh_scope_groups_get))
+        .route("/iroh/clients/permissions", post(iroh_client_permissions_post))
+
         // ── Versioned /v1/ REST endpoints (stateless, one-shot) ──────────
         // Mirrors every unversioned shortcut above.  Shares the /v1/ namespace
         // with the LLM sub-router (/v1/models, /v1/chat/completions, …) —
@@ -241,6 +257,19 @@ pub fn router(state: SharedState) -> Router {
             .patch(update_calibration_patch)
             .delete(delete_calibration_delete))
         .route("/v1/dnd",            get(dnd_get).post(dnd_post))
+
+        // ── Versioned iroh tunnel auth endpoints ─────────────────────────
+        .route("/v1/iroh/info",             get(iroh_info_get))
+        .route("/v1/iroh/totp",             get(iroh_totp_list_get).post(iroh_totp_create_post))
+        .route("/v1/iroh/totp/qr",          post(iroh_totp_qr_post))
+        .route("/v1/iroh/totp/revoke",      post(iroh_totp_revoke_post))
+        .route("/v1/iroh/clients",          get(iroh_clients_list_get))
+        .route("/v1/iroh/clients/register", post(iroh_client_register_post))
+        .route("/v1/iroh/clients/revoke",   post(iroh_client_revoke_post))
+        .route("/v1/iroh/clients/scope",    post(iroh_client_set_scope_post))
+        .route("/v1/iroh/phone-invite",     post(iroh_phone_invite_post))
+        .route("/v1/iroh/scope-groups",      get(iroh_scope_groups_get))
+        .route("/v1/iroh/clients/permissions", post(iroh_client_permissions_post))
 
         // ── LLM REST shortcuts (non-/v1/ — /v1/ routes are in llm::router)
         .route("/llm/start",            post(llm_start_post))
@@ -286,8 +315,121 @@ pub fn router(state: SharedState) -> Router {
 
 /// Run one command via [`crate::ws_commands::dispatch`], log it in the tracker,
 /// and return an HTTP [`Response`] with the standard envelope JSON.
+/// Look up the iroh peer endpoint ID for a given TCP source port.
+/// Returns `None` for local (non-iroh) connections.
+fn iroh_peer_for_addr(state: &SharedState, addr: &SocketAddr) -> Option<String> {
+    use tauri::Manager;
+    let peer_map = state.app.try_state::<skill_iroh::IrohPeerMap>()?;
+    let map = skill_iroh::lock_or_recover(&peer_map);
+    map.get(&addr.port()).cloned()
+}
+
+/// Check whether a command is allowed for a given connection.
+/// Local (non-iroh) connections always have full access.
+fn check_permission(state: &SharedState, addr: &SocketAddr, command: &str) -> Result<(), Value> {
+    use tauri::Manager;
+
+    let Some(peer_endpoint_id) = iroh_peer_for_addr(state, addr) else {
+        return Ok(()); // local connection — always allowed
+    };
+
+    // Registration must be allowed for unregistered iroh peers —
+    // they've already proven possession of the TOTP secret (included
+    // in the QR invite).  The register_client handler verifies the OTP
+    // before creating the client entry.  Without this exemption the
+    // phone can never register because it has no scope yet.
+    if command == "iroh_client_register" {
+        return Ok(());
+    }
+
+    let Some(auth) = state.app.try_state::<skill_iroh::SharedIrohAuth>() else {
+        return Ok(()); // no auth store — allow (shouldn't happen)
+    };
+
+    let auth_g: std::sync::MutexGuard<'_, skill_iroh::IrohAuthStore> =
+        skill_iroh::lock_or_recover(&auth);
+    if auth_g.is_command_allowed(&peer_endpoint_id, command) {
+        return Ok(());
+    }
+
+    // Debug: log what we're looking up vs what's registered
+    let registered_ids: Vec<String> = auth_g
+        .list_clients()
+        .iter()
+        .filter(|c| c.revoked_at.is_none())
+        .map(|c| format!("{}({})", c.endpoint_id, c.scope))
+        .collect();
+    eprintln!(
+        "[iroh-auth] DENIED {command} for peer={peer_endpoint_id} — registered: [{}]",
+        registered_ids.join(", ")
+    );
+
+    // Build a helpful error
+    let hint_group = skill_iroh::scope::group_for_command(command)
+        .map(|g| g.id)
+        .unwrap_or("unknown");
+    let scope = auth_g
+        .scope_for_endpoint(&peer_endpoint_id)
+        .unwrap_or_else(|| "none".into());
+
+    let error_msg = if scope == "none" {
+        format!(
+            "forbidden: this device is not recognized. \
+             Please re-pair by scanning the QR code again in Skill's Remote Access settings. \
+             (peer: {}…)",
+            &peer_endpoint_id[..peer_endpoint_id.len().min(16)]
+        )
+    } else {
+        format!(
+            "forbidden: your scope ({scope}) does not permit '{command}'. \
+             Required: group '{hint_group}' or explicit grant."
+        )
+    };
+
+    Err(json!({
+        "command": command,
+        "ok": false,
+        "error": error_msg,
+        "scope": scope,
+        "hint_group": hint_group,
+    }))
+}
+
+#[cfg(test)]
+mod permission_tests {
+    #[test]
+    fn read_scope_allows_basic_commands() {
+        let cs = skill_iroh::ClientScope::read();
+        assert!(skill_iroh::scope::is_allowed(&cs, "status"));
+        assert!(skill_iroh::scope::is_allowed(&cs, "search"));
+        assert!(skill_iroh::scope::is_allowed(&cs, "iroh_info"));
+        assert!(!skill_iroh::scope::is_allowed(&cs, "label"));
+        assert!(!skill_iroh::scope::is_allowed(&cs, "notify"));
+        assert!(!skill_iroh::scope::is_allowed(&cs, "iroh_client_set_scope"));
+    }
+}
+
+#[allow(dead_code)]
 async fn cmd(state: &SharedState, peer: &str, command: &str, msg: Value) -> Response {
+    cmd_with_addr(state, peer, command, msg, None).await
+}
+
+async fn cmd_with_addr(
+    state: &SharedState,
+    peer: &str,
+    command: &str,
+    msg: Value,
+    addr: Option<&SocketAddr>,
+) -> Response {
     eprintln!("[http] {peer} → {command}");
+
+    // Granular per-command permission check for iroh clients
+    if let Some(a) = addr {
+        if let Err(body) = check_permission(state, a, command) {
+            return (StatusCode::FORBIDDEN, Json(body)).into_response();
+        }
+    }
+
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();
     state
@@ -355,7 +497,8 @@ async fn root_get(
             Err(rej) => return rej.into_response(),
         };
         let peer = addr.0.to_string();
-        ws.on_upgrade(move |socket| ws_client_task(socket, peer, state))
+        let sock_addr = addr.0;
+        ws.on_upgrade(move |socket| ws_client_task(socket, peer, state, sock_addr))
     } else {
         let info = json!({
             "name":    "Skill API",
@@ -437,17 +580,17 @@ async fn command_post(
             return (StatusCode::BAD_REQUEST, Json(err)).into_response();
         }
     };
-    cmd(&state, &peer_str(addr), &command, msg).await
+    cmd_with_addr(&state, &peer_str(addr), &command, msg, Some(&addr.0)).await
 }
 
 // ── REST shortcut handlers ────────────────────────────────────────────────────
 
 async fn status_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "status", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "status", json!({}), Some(&addr.0)).await
 }
 
 async fn sessions_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "sessions", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "sessions", json!({}), Some(&addr.0)).await
 }
 
 async fn label_post(
@@ -455,7 +598,14 @@ async fn label_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "label", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "label",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn notify_post(
@@ -463,7 +613,14 @@ async fn notify_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "notify", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "notify",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `POST /say` — speak text via on-device TTS (fire-and-forget).
@@ -473,7 +630,14 @@ async fn say_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "say", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "say",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `POST /calibrate` — open the calibration window and auto-start.
@@ -483,17 +647,18 @@ async fn calibrate_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "run_calibration",
         merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
 
 async fn timer_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "timer", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "timer", json!({}), Some(&addr.0)).await
 }
 
 async fn search_post(
@@ -501,7 +666,14 @@ async fn search_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "search", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "search",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn search_labels_post(
@@ -509,7 +681,14 @@ async fn search_labels_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "search_labels", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "search_labels",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn compare_post(
@@ -517,7 +696,14 @@ async fn compare_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "compare", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "compare",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn sleep_post(
@@ -525,7 +711,14 @@ async fn sleep_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "sleep", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "sleep",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn umap_post(
@@ -533,7 +726,14 @@ async fn umap_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "umap", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "umap",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn umap_poll_get(
@@ -541,11 +741,12 @@ async fn umap_poll_get(
     addr: ConnectInfo<SocketAddr>,
     Path(job_id): Path<u64>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "umap_poll",
         json!({ "job_id": job_id }),
+        Some(&addr.0),
     )
     .await
 }
@@ -556,7 +757,14 @@ async fn list_calibrations_get(
     State(s): State<SharedState>,
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "list_calibrations", json!({})).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "list_calibrations",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn create_calibration_post(
@@ -564,11 +772,12 @@ async fn create_calibration_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "create_calibration",
         merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
@@ -578,7 +787,14 @@ async fn get_calibration_get(
     addr: ConnectInfo<SocketAddr>,
     Path(id): Path<String>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "get_calibration", json!({ "id": id })).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "get_calibration",
+        json!({ "id": id }),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn update_calibration_patch(
@@ -589,7 +805,14 @@ async fn update_calibration_patch(
 ) -> Response {
     let mut msg = merge(json!({}), body);
     msg["id"] = id.into();
-    cmd(&s, &peer_str(addr), "update_calibration", msg).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "update_calibration",
+        msg,
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `GET /dnd` — return the full DND automation status snapshot.
@@ -598,7 +821,7 @@ async fn update_calibration_patch(
 /// Returns config (enabled, threshold, duration, mode), live timer progress
 /// (`elapsed_secs`), app-side `dnd_active`, and the real OS Focus state.
 async fn dnd_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "dnd", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "dnd", json!({}), Some(&addr.0)).await
 }
 
 /// `POST /dnd` — force-enable or disable DND, bypassing the EEG threshold.
@@ -613,7 +836,14 @@ async fn dnd_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "dnd_set", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "dnd_set",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn delete_calibration_delete(
@@ -621,11 +851,180 @@ async fn delete_calibration_delete(
     addr: ConnectInfo<SocketAddr>,
     Path(id): Path<String>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "delete_calibration",
         json!({ "id": id }),
+        Some(&addr.0),
+    )
+    .await
+}
+
+// ── iroh REST handlers ───────────────────────────────────────────────────────
+
+async fn iroh_info_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
+    cmd_with_addr(&s, &peer_str(addr), "iroh_info", json!({}), Some(&addr.0)).await
+}
+
+async fn iroh_totp_list_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_list",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_totp_create_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_create",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_totp_qr_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_qr",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_totp_revoke_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_totp_revoke",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_clients_list_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_clients_list",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_client_register_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_client_register",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_client_revoke_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_client_revoke",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_client_set_scope_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_client_set_scope",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_phone_invite_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_phone_invite",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_scope_groups_get(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_scope_groups",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
+}
+
+async fn iroh_client_permissions_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "iroh_client_permissions",
+        merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
@@ -633,15 +1032,15 @@ async fn delete_calibration_delete(
 // ── LLM REST shortcut handlers ────────────────────────────────────────────────
 
 async fn llm_start_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "llm_start", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "llm_start", json!({}), Some(&addr.0)).await
 }
 
 async fn llm_stop_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "llm_stop", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "llm_stop", json!({}), Some(&addr.0)).await
 }
 
 async fn llm_catalog_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "llm_catalog", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "llm_catalog", json!({}), Some(&addr.0)).await
 }
 
 async fn llm_download_post(
@@ -649,7 +1048,14 @@ async fn llm_download_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "llm_download", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "llm_download",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn llm_cancel_download_post(
@@ -657,11 +1063,12 @@ async fn llm_cancel_download_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "llm_cancel_download",
         merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
@@ -671,11 +1078,18 @@ async fn llm_delete_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "llm_delete", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "llm_delete",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 async fn llm_logs_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
-    cmd(&s, &peer_str(addr), "llm_logs", json!({})).await
+    cmd_with_addr(&s, &peer_str(addr), "llm_logs", json!({}), Some(&addr.0)).await
 }
 
 /// `POST /llm/chat` — non-streaming LLM chat over HTTP.
@@ -844,6 +1258,12 @@ async fn llm_chat_post(
         }
     }
 
+    // ── Index chat images into screenshot store ─────────────────────────────
+    {
+        let skill_dir = state.app.app_state().lock_or_recover().skill_dir.clone();
+        index_chat_images(&skill_dir, &messages, 0); // no session_id for HTTP path
+    }
+
     // ── Collect response ──────────────────────────────────────────────────────
     let images = crate::llm::extract_images_from_messages(&messages);
     let mut tok_rx = match server.chat(messages, images, params) {
@@ -971,6 +1391,70 @@ async fn llm_chat_post(
 /// { "command": "llm_chat", "ok": false, "type": "error", "error": "..." }
 /// ```
 #[cfg(feature = "llm")]
+/// Extract and index any user-provided images from LLM chat messages into the
+/// screenshot store so they appear in search results alongside automatic screenshots.
+///
+/// Scans the `messages` array for `image_url` content parts with `data:` URLs,
+/// saves each image to disk, and inserts a row with `source = "llm_chat"`.
+/// The existing screenshot embed pipeline will pick them up for vision embedding + OCR.
+fn index_chat_images(skill_dir: &std::path::Path, messages: &[Value], session_id: i64) {
+    let user_prompt: String = messages
+        .iter()
+        .rev()
+        .filter(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .filter_map(|m| m.get("content").and_then(|c| c.as_str()))
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(200)
+        .collect();
+
+    for msg in messages {
+        // Check both simple "images" array and content parts
+        let content = msg.get("content");
+
+        // Simple format: top-level "images" array
+        if let Some(imgs) = msg.get("images").and_then(|v| v.as_array()) {
+            for url_val in imgs {
+                if let Some(url) = url_val.as_str() {
+                    if url.starts_with("data:image/") {
+                        skill_screenshots::chat_image::save_chat_image(
+                            skill_dir,
+                            url,
+                            "llm_chat",
+                            &user_prompt,
+                            session_id,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Content parts format: [{"type": "image_url", "image_url": {"url": "data:..."}}]
+        if let Some(parts) = content.and_then(|c| c.as_array()) {
+            for part in parts {
+                if part.get("type").and_then(|t| t.as_str()) == Some("image_url") {
+                    if let Some(url) = part
+                        .get("image_url")
+                        .and_then(|u| u.get("url"))
+                        .and_then(|u| u.as_str())
+                    {
+                        if url.starts_with("data:image/") {
+                            skill_screenshots::chat_image::save_chat_image(
+                                skill_dir,
+                                url,
+                                "llm_chat",
+                                &user_prompt,
+                                session_id,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn handle_llm_chat_ws(
     state: &SharedState,
     peer: &str,
@@ -1113,6 +1597,12 @@ async fn handle_llm_chat_ws(
             .log_request(peer, "llm_chat", false);
         return Ok(());
     };
+
+    // ── Index chat images into screenshot store ──────────────────────────────
+    {
+        let skill_dir = app_state.lock_or_recover().skill_dir.clone();
+        index_chat_images(&skill_dir, &messages, session_id);
+    }
 
     // ── Run chat with built-in tool orchestration ──────────────────────────
     // Uses the same multi-round tool loop as the Tauri Chat window:
@@ -1283,7 +1773,12 @@ async fn handle_llm_chat_ws(
 
 /// One connected WebSocket client.
 /// Fans out broadcast messages and handles inbound command frames.
-async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, state: SharedState) {
+async fn ws_client_task(
+    socket: axum::extract::ws::WebSocket,
+    peer: String,
+    state: SharedState,
+    sock_addr: SocketAddr,
+) {
     use axum::extract::ws::Message;
 
     state.tracker.lock_or_recover().add_client(&peer);
@@ -1292,12 +1787,20 @@ async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, stat
     let (mut sink, mut stream) = socket.split();
     let mut rx = state.tx.subscribe();
 
+    // ── Per-client subscription filter ────────────────────────────────────
+    // By default: all events, no filtering.
+    // After a `subscribe` command, only matching events are sent,
+    // optionally with field projection and rate limiting.
+    let mut sub = ClientSubscription::default();
+
     loop {
         tokio::select! {
             // ── Broadcast → this client ───────────────────────────────────
             result = rx.recv() => match result {
                 Ok(text) => {
-                    if sink.send(Message::Text(text.into())).await.is_err() { break; }
+                    if let Some(filtered) = sub.filter_broadcast(&text) {
+                        if sink.send(Message::Text(filtered.into())).await.is_err() { break; }
+                    }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     eprintln!("[ws] {peer} lagged {n} messages — slow consumer");
@@ -1319,6 +1822,12 @@ async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, stat
                         .unwrap_or(false);
 
                     if is_llm_chat {
+                        // Check permission for llm_chat
+                        if let Err(body) = check_permission(&state, &sock_addr, "llm_chat") {
+                            let s = serde_json::to_string(&body).unwrap_or_default();
+                            if sink.send(Message::Text(s.into())).await.is_err() { break; }
+                            continue;
+                        }
                         #[cfg(feature = "llm")]
                         {
                             if handle_llm_chat_ws(&state, &peer, text_str, &mut sink).await.is_err() {
@@ -1331,7 +1840,9 @@ async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, stat
                             let s = serde_json::to_string(&resp).unwrap_or_default();
                             if sink.send(Message::Text(s.into())).await.is_err() { break; }
                         }
-                    } else if let Some(resp) = handle_ws_text(&state, &peer, text_str).await {
+                    } else if let Some(subscribe_resp) = try_handle_subscribe(text_str, &mut sub) {
+                        if sink.send(Message::Text(subscribe_resp.into())).await.is_err() { break; }
+                    } else if let Some(resp) = handle_ws_text(&state, &peer, text_str, &sock_addr).await {
                         if sink.send(Message::Text(resp.into())).await.is_err() { break; }
                     }
                 }
@@ -1344,12 +1855,145 @@ async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, stat
     eprintln!("[ws] - {peer}");
 }
 
+// ── Per-client subscription filter ────────────────────────────────────────────
+
+/// Tracks what a WebSocket client has subscribed to.
+///
+/// # Protocol
+///
+/// ```json
+/// { "command": "subscribe", "events": ["eeg-bands"], "fields": ["focus", "hr", "relAlpha"], "max_hz": 1 }
+/// ```
+///
+/// - `events`: which broadcast event types to receive (default: all).
+///   Pass `["*"]` or omit to receive everything.
+/// - `fields`: which top-level keys to keep in the payload (default: all).
+///   The `event` and `timestamp` keys are always included.
+/// - `max_hz`: maximum updates per second per event type (default: unlimited).
+///   The server drops excess messages.  `0` = unlimited.
+///
+/// Send `{ "command": "subscribe" }` with no args to reset to defaults (all events, all fields).
+#[derive(Default)]
+struct ClientSubscription {
+    /// Event types to pass through.  Empty = all.
+    events: Vec<String>,
+    /// Payload field allowlist.  Empty = all.
+    fields: Vec<String>,
+    /// Minimum interval between sends per event type (0 = unlimited).
+    min_interval_ms: u64,
+    /// Last send timestamp per event type (for rate limiting).
+    last_sent: std::collections::HashMap<String, std::time::Instant>,
+}
+
+impl ClientSubscription {
+    /// Returns `Some(text)` if this broadcast should be sent, `None` to drop.
+    fn filter_broadcast(&mut self, text: &str) -> Option<String> {
+        // Fast path: no subscription filter
+        if self.events.is_empty() && self.fields.is_empty() && self.min_interval_ms == 0 {
+            return Some(text.to_owned());
+        }
+
+        let mut json: Value = serde_json::from_str(text).ok()?;
+        let event = json.get("event")?.as_str()?.to_owned();
+
+        // Event filter
+        if !self.events.is_empty()
+            && !self.events.contains(&event)
+            && !self.events.contains(&"*".to_string())
+        {
+            return None;
+        }
+
+        // Rate limit
+        if self.min_interval_ms > 0 {
+            let now = std::time::Instant::now();
+            if let Some(last) = self.last_sent.get(&event) {
+                if now.duration_since(*last).as_millis() < self.min_interval_ms as u128 {
+                    return None; // Too soon, drop
+                }
+            }
+            self.last_sent.insert(event.clone(), now);
+        }
+
+        // Field projection
+        if !self.fields.is_empty() {
+            if let Some(payload) = json.get_mut("payload").and_then(|p| p.as_object_mut()) {
+                let keep: std::collections::HashSet<&str> =
+                    self.fields.iter().map(String::as_str).collect();
+                payload.retain(|k, _| k == "timestamp" || keep.contains(k.as_str()));
+            }
+        }
+
+        serde_json::to_string(&json).ok()
+    }
+}
+
+/// Try to handle a `subscribe` command.  Returns the response string if it was
+/// a subscribe command, `None` otherwise (so normal dispatch continues).
+fn try_handle_subscribe(text: &str, sub: &mut ClientSubscription) -> Option<String> {
+    let msg: Value = serde_json::from_str(text).ok()?;
+    if msg.get("command")?.as_str()? != "subscribe" {
+        return None;
+    }
+
+    // Parse subscription parameters
+    sub.events = msg
+        .get("events")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    sub.fields = msg
+        .get("fields")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let max_hz = msg
+        .get("max_hz")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0);
+    sub.min_interval_ms = if max_hz > 0.0 {
+        (1000.0 / max_hz) as u64
+    } else {
+        0
+    };
+    sub.last_sent.clear();
+
+    let resp = json!({
+        "command": "subscribe",
+        "ok": true,
+        "events": &sub.events,
+        "fields": &sub.fields,
+        "max_hz": max_hz,
+    });
+    Some(serde_json::to_string(&resp).unwrap_or_default())
+}
+
 /// Parse one WS text frame as a JSON command and return the response string.
 /// Returns `None` for unparseable frames (no reply sent).
-async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<String> {
+async fn handle_ws_text(
+    state: &SharedState,
+    peer: &str,
+    text: &str,
+    sock_addr: &SocketAddr,
+) -> Option<String> {
     let msg: Value = serde_json::from_str(text).ok()?;
     let command = msg.get("command")?.as_str()?;
     eprintln!("[ws] {peer} → {command}");
+
+    // Per-command permission check for iroh clients
+    if let Err(body) = check_permission(state, sock_addr, command) {
+        return serde_json::to_string(&body).ok();
+    }
 
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();
@@ -1396,7 +2040,14 @@ async fn health_sync_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "health_sync", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "health_sync",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `POST /v1/health/query` — query stored HealthKit data by type and range.
@@ -1412,7 +2063,14 @@ async fn health_query_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "health_query", merge(json!({}), body)).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "health_query",
+        merge(json!({}), body),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `GET /v1/health/summary` — aggregate counts (default: last 24h).
@@ -1420,7 +2078,14 @@ async fn health_summary_get(
     State(s): State<SharedState>,
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "health_summary", json!({})).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "health_summary",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `POST /v1/health/summary` — aggregate counts for a custom range.
@@ -1429,11 +2094,12 @@ async fn health_summary_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "health_summary",
         merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
@@ -1443,7 +2109,14 @@ async fn health_metric_types_get(
     State(s): State<SharedState>,
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "health_metric_types", json!({})).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "health_metric_types",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
 }
 
 // ── Calendar HTTP handlers ────────────────────────────────────────────────────
@@ -1458,11 +2131,12 @@ async fn calendar_events_post(
     addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "calendar_events",
         merge(json!({}), body),
+        Some(&addr.0),
     )
     .await
 }
@@ -1472,7 +2146,14 @@ async fn calendar_status_get(
     State(s): State<SharedState>,
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "calendar_status", json!({})).await
+    cmd_with_addr(
+        &s,
+        &peer_str(addr),
+        "calendar_status",
+        json!({}),
+        Some(&addr.0),
+    )
+    .await
 }
 
 /// `POST /v1/calendar/permission` — request calendar access (macOS: system dialog).
@@ -1480,11 +2161,12 @@ async fn calendar_permission_post(
     State(s): State<SharedState>,
     addr: ConnectInfo<SocketAddr>,
 ) -> Response {
-    cmd(
+    cmd_with_addr(
         &s,
         &peer_str(addr),
         "calendar_request_permission",
         json!({}),
+        Some(&addr.0),
     )
     .await
 }

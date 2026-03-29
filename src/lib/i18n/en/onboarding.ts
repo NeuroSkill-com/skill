@@ -13,6 +13,7 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Calibration",
   "onboarding.step.models": "Models",
   "onboarding.step.tray": "Tray",
+  "onboarding.step.enable_bluetooth": "Enable Bluetooth",
   "onboarding.step.done": "Done",
   "onboarding.welcomeTitle": "Welcome to {app}",
   "onboarding.welcomeBody":
@@ -24,6 +25,13 @@ const onboarding: Record<string, string> = {
   "onboarding.bluetoothTitle": "Connect Your BCI Device",
   "onboarding.bluetoothBody":
     "Turn on your BCI device and wear it. {app} will scan for nearby devices and connect automatically.",
+  "onboarding.enableBluetoothTitle": "Enable Bluetooth on Your Mac",
+  "onboarding.enableBluetoothBody":
+    "{app} needs your Mac's Bluetooth adapter powered on to find and connect to your BCI device. Please enable Bluetooth in System Settings if it is turned off.",
+  "onboarding.enableBluetoothStatus": "Bluetooth adapter",
+  "onboarding.enableBluetoothHint":
+    "Open Bluetooth settings and turn Bluetooth on. If running in development via Terminal, ensure the system adapter is enabled.",
+  "onboarding.enableBluetoothOpen": "Open Bluetooth Settings",
   "onboarding.btConnected": "Connected to {name}",
   "onboarding.btScanning": "Scanning…",
   "onboarding.btReady": "Ready to scan",

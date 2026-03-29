@@ -197,6 +197,11 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "Шукайте текст, вилучений зі знімків екрана. Використовуйте «Текстовий збіг» для точного пошуку або «Семантичний» для пошуку за змістом.",
   "search.imageNoResults": "Відповідних знімків екрана не знайдено.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 };
 
 export default search;

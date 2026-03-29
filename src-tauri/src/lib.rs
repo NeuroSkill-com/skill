@@ -79,6 +79,7 @@ mod device_scanner;
 pub(crate) use device_scanner::start_background_scanner;
 
 /// Generic device session runner (replaces per-device session modules).
+mod secondary_session;
 mod session_runner;
 
 /// Per-device scan / connect factories → `Box<dyn DeviceAdapter>`.
@@ -192,15 +193,17 @@ mod calibration_service;
 mod window_cmds;
 pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{
-    autosize_main_window, check_accessibility_permission, check_screen_recording_permission,
-    close_calibration_window, close_label_window, complete_onboarding, create_calibration_profile,
-    delete_calibration_profile, dismiss_whats_new, emit_calibration_event, get_active_calibration,
-    get_app_name, get_app_version, get_calendar_events, get_calendar_permission_status,
-    get_calibration_config, get_calibration_profile, get_data_dir, get_onboarding_complete,
+    autosize_main_window, check_accessibility_permission, check_bluetooth_power,
+    check_screen_recording_permission, close_calibration_window, close_label_window,
+    complete_onboarding, create_calibration_profile, delete_calibration_profile, dismiss_whats_new,
+    emit_calibration_event, get_active_calibration, get_app_name, get_app_version,
+    get_calendar_events, get_calendar_permission_status, get_calibration_config,
+    get_calibration_profile, get_data_dir, get_onboarding_complete,
     get_onboarding_model_download_order, get_whats_new_seen_version, get_ws_clients, get_ws_port,
     get_ws_request_log, is_session_live, list_calibration_profiles, open_accessibility_settings,
-    open_and_start_calibration, open_api_window, open_bt_settings, open_calibration_window,
-    open_focus_timer_window, open_help_window, open_label_window, open_labels_window,
+    open_and_start_calibration, open_api_window, open_bt_settings, open_calendar_settings,
+    open_calibration_window, open_focus_settings, open_focus_timer_window, open_help_window,
+    open_input_monitoring_settings, open_label_window, open_label_window_at, open_labels_window,
     open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
     open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
@@ -372,10 +375,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let app_name = app.package_info().name.to_lowercase();
-    let ws_cfg = {
+    let (ws_cfg, skill_dir_for_iroh) = {
         let dir = app.app_state().lock_or_recover().skill_dir.clone();
         let s = load_settings(&dir);
-        (s.ws_host, s.ws_port)
+        ((s.ws_host, s.ws_port), dir)
     };
 
     // ── LLM server (optional, same port) ──────────────────────────────
@@ -440,9 +443,47 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    tauri::async_runtime::spawn(async move {
-        serve_handle.serve(ws_app).await;
+    let ws_port = serve_handle.port;
+    let (ws_shutdown_tx, ws_shutdown_rx) = tokio::sync::watch::channel(false);
+    let ws_task = tauri::async_runtime::spawn(async move {
+        serve_handle
+            .serve_with_mode(ws_app, false, Some(ws_shutdown_rx))
+            .await;
     });
+    let ws_control: ws_server::SharedWsControl = std::sync::Arc::new(std::sync::Mutex::new(Some(
+        ws_server::WsServerControl::new(ws_shutdown_tx, ws_task),
+    )));
+    app.manage(ws_control);
+
+    // NAT-traversing P2P bridge — proxies iroh peers to the single API port.
+    // The peer map lets the axum server identify which iroh client is on each
+    // TCP connection so it can enforce per-command permissions.
+    let iroh_auth = std::sync::Arc::new(std::sync::Mutex::new(skill_iroh::IrohAuthStore::open(
+        &skill_dir_for_iroh,
+    )));
+    let iroh_runtime = std::sync::Arc::new(std::sync::Mutex::new(
+        skill_iroh::IrohRuntimeState::default(),
+    ));
+    let iroh_peer_map = skill_iroh::new_peer_map();
+    let (iroh_eeg_tx, iroh_eeg_rx) = skill_iroh::event_channel();
+    let shared_device_tx: skill_iroh::SharedDeviceEventTx =
+        std::sync::Arc::new(std::sync::Mutex::new(Some(iroh_eeg_tx)));
+    skill_iroh::spawn(
+        skill_dir_for_iroh.clone(),
+        ws_port,
+        iroh_auth.clone(),
+        iroh_runtime.clone(),
+        iroh_peer_map.clone(),
+        shared_device_tx.clone(),
+    );
+
+    app.manage(iroh_auth);
+    app.manage(iroh_runtime);
+    app.manage(iroh_peer_map);
+    app.manage(shared_device_tx);
+    app.manage(std::sync::Arc::new(tokio::sync::Mutex::new(Some(
+        iroh_eeg_rx,
+    ))));
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {
@@ -753,6 +794,16 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         start_background_scanner(&app_scan);
+        // Start LSL auto-scanner if enabled in settings
+        settings_cmds::lsl_cmds::maybe_start_lsl_auto_scanner(&app_scan);
+    });
+
+    // Watch for incoming EEG data from remote devices over iroh
+    // and auto-start a recording session when data arrives.
+    let app_iroh_eeg = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        crate::lifecycle::spawn_iroh_eeg_watcher(&app_iroh_eeg);
     });
 
     let app_auto = app.handle().clone();
@@ -920,6 +971,8 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.openbci_config = data.openbci;
         s.device_api_config = data.device_api;
         s.scanner_config = data.scanner;
+        s.lsl_auto_connect = data.lsl_auto_connect;
+        s.lsl_paired_streams = data.lsl_paired_streams;
         s.neutts_config = data.neutts.clone();
         s.tts_preload = data.tts_preload;
         s.input.track_active_window = data.track_active_window;
@@ -1320,6 +1373,7 @@ pub fn run() {
             retry_connect,
             cancel_retry,
             open_bt_settings,
+            check_bluetooth_power,
             open_settings_window,
             open_updates_window,
             open_model_tab,
@@ -1332,6 +1386,9 @@ pub fn run() {
             get_calendar_permission_status,
             request_calendar_permission,
             get_calendar_events,
+            open_calendar_settings,
+            open_input_monitoring_settings,
+            open_focus_settings,
             get_filter_config,
             set_filter_config,
             set_notch_preset,
@@ -1374,6 +1431,7 @@ pub fn run() {
             get_hook_log_count,
             quit_app,
             open_label_window,
+            open_label_window_at,
             open_labels_window,
             open_focus_timer_window,
             submit_label,
@@ -1602,6 +1660,19 @@ pub fn run() {
             tts_get_voice,
             tts_list_neutts_voices,
             session_connect::connect_openbci,
+            settings_cmds::lsl_cmds::lsl_discover,
+            settings_cmds::lsl_cmds::lsl_connect,
+            settings_cmds::lsl_cmds::lsl_pair_stream,
+            settings_cmds::lsl_cmds::lsl_unpair_stream,
+            settings_cmds::lsl_cmds::lsl_get_config,
+            settings_cmds::lsl_cmds::lsl_set_auto_connect,
+            settings_cmds::lsl_cmds::lsl_switch_session,
+            settings_cmds::lsl_cmds::lsl_start_secondary,
+            settings_cmds::lsl_cmds::lsl_cancel_secondary,
+            settings_cmds::lsl_cmds::list_secondary_sessions,
+            settings_cmds::lsl_cmds::lsl_iroh_start,
+            settings_cmds::lsl_cmds::lsl_iroh_status,
+            settings_cmds::lsl_cmds::lsl_iroh_stop,
             open_api_window,
             open_whats_new_window,
             get_whats_new_seen_version,

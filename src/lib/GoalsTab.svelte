@@ -595,6 +595,7 @@ const streak = $derived.by(() => {
 
         <!-- ── Enable toggle ──────────────────────────────────────────────── -->
         <button
+          role="switch" aria-checked={dndConfig.enabled}
           onclick={toggleDnd}
           class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                  hover:bg-slate-50 dark:hover:bg-white/[0.02]">
@@ -762,6 +763,7 @@ const streak = $derived.by(() => {
 
           <!-- ── Exit notification toggle ──────────────────────────────── -->
           <button
+            role="switch" aria-checked={dndConfig.exit_notification}
             onclick={toggleExitNotification}
             class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                    hover:bg-slate-50 dark:hover:bg-white/[0.02]">

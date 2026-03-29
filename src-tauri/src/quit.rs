@@ -48,7 +48,7 @@ pub(crate) fn confirm_and_quit(app: AppHandle) {
 #[cfg(not(target_os = "macos"))]
 fn quit_confirmed(lang: &str, app: &AppHandle) -> bool {
     use tauri::Manager;
-    let (title, description) = quit_dialog_strings(lang);
+    let (title, description, _, _) = quit_dialog_strings(lang);
     let mut dialog = rfd::MessageDialog::new()
         .set_title(title)
         .set_description(description)
@@ -68,7 +68,7 @@ fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
     use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};
     use objc2_foundation::NSString;
 
-    let (title, description) = quit_dialog_strings(lang);
+    let (title, description, quit_btn, cancel_btn) = quit_dialog_strings(lang);
     let mut confirmed = false;
     DispatchQueue::main().exec_sync(|| {
         // SAFETY: This closure runs on the main thread via DispatchQueue::main().exec_sync.
@@ -76,38 +76,53 @@ fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
         let alert = NSAlert::new(mtm);
         alert.setMessageText(&NSString::from_str(title));
         alert.setInformativeText(&NSString::from_str(description));
-        alert.addButtonWithTitle(&NSString::from_str("Yes"));
-        alert.addButtonWithTitle(&NSString::from_str("No"));
+        alert.addButtonWithTitle(&NSString::from_str(quit_btn));
+        alert.addButtonWithTitle(&NSString::from_str(cancel_btn));
         confirmed = alert.runModal() == NSAlertFirstButtonReturn;
     });
     confirmed
 }
 
-fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
+fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str, &'static str, &'static str) {
+    // HIG: Alert buttons should use action verbs ("Quit", "Cancel"), not
+    // generic "Yes"/"No".  The first button returned is the default
+    // (destructive) action; the second is the cancel action.
     match lang {
         "de" => (
             "NeuroSkill™ beenden",
             "Möchten Sie NeuroSkill™ wirklich beenden?",
+            "Beenden",
+            "Abbrechen",
         ),
         "fr" => (
             "Quitter NeuroSkill™",
             "Voulez-vous vraiment quitter NeuroSkill™ ?",
+            "Quitter",
+            "Annuler",
         ),
         "es" => (
             "Salir de NeuroSkill™",
             "¿Seguro que quieres salir de NeuroSkill™?",
+            "Salir",
+            "Cancelar",
         ),
         "he" => (
             "לצאת מ-NeuroSkill™",
             "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?",
+            "צא",
+            "ביטול",
         ),
         "uk" => (
             "Вийти з NeuroSkill™",
             "Ви впевнені, що хочете вийти з NeuroSkill™?",
+            "Вийти",
+            "Скасувати",
         ),
         _ => (
             "Quit NeuroSkill™",
             "Are you sure you want to quit NeuroSkill™?",
+            "Quit",
+            "Cancel",
         ),
     }
 }

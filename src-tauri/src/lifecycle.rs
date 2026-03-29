@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::{
     helpers::{emit_status, unix_secs, AppStateExt},
@@ -32,7 +32,13 @@ fn detect_device_kind(id: Option<&str>, name_lower: Option<&str>) -> &'static st
         }
         if id.starts_with("usb:") {
             return "ganglion";
-        } // OpenBCI serial
+        }
+        if id.starts_with("lsl:") {
+            return "lsl";
+        }
+        if id == "lsl-iroh" {
+            return "lsl-iroh";
+        }
     }
     use skill_data::device::DeviceKind;
     match DeviceKind::from_name(name_lower) {
@@ -182,12 +188,38 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
 // ── Session lifecycle ─────────────────────────────────────────────────────────
 
-pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
+/// Try to start a session.  Returns `true` if the session was started,
+/// `false` if another session is already active (with a toast + event).
+pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) -> bool {
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         if s.stream.is_some() {
-            return;
+            let current = s
+                .status
+                .device_name
+                .clone()
+                .unwrap_or_else(|| s.status.device_kind.clone());
+            let requested = preferred_id
+                .as_deref()
+                .unwrap_or("another device")
+                .to_string();
+            drop(s);
+            crate::send_toast(
+                app,
+                crate::ToastLevel::Warning,
+                "Session Active",
+                &format!("Disconnect {current} before connecting to {requested}, or use Switch."),
+            );
+            let _ = tauri::Emitter::emit(
+                app,
+                "session-blocked",
+                serde_json::json!({
+                    "current_device": current,
+                    "requested_device": requested,
+                }),
+            );
+            return false;
         }
         s.pending_reconnect = true;
     }
@@ -281,6 +313,8 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             "emotiv" => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
             "idun" => crate::session_connect::connect_idun(&app2, &cancel).await,
             "mendi" => crate::session_connect::connect_mendi(&app2, &cancel, target).await,
+            "lsl" => connect_lsl(target).await,
+            "lsl-iroh" => connect_lsl_iroh(&app2).await,
             _ => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };
 
@@ -299,6 +333,388 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             }
         }
     });
+    true
+}
+
+// ── Secondary session management ─────────────────────────────────────────────
+
+/// Start a secondary (background) recording session.
+///
+/// The secondary session writes its own CSV but does not drive the dashboard
+/// or embeddings.  Returns `false` if a session with the same ID already exists.
+pub(crate) fn start_secondary_session(
+    app: &AppHandle,
+    session_id: String,
+    adapter: Box<dyn skill_devices::session::DeviceAdapter>,
+) -> bool {
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let csv = new_csv_path(app);
+    let desc = adapter.descriptor();
+
+    let info = crate::state::SecondarySessionInfo {
+        id: session_id.clone(),
+        device_name: desc.kind.to_string(),
+        device_kind: detect_device_kind(Some(&session_id), None).to_string(),
+        channels: desc.eeg_channels,
+        sample_rate: desc.eeg_sample_rate,
+        sample_count: 0,
+        csv_path: csv.to_string_lossy().to_string(),
+        started_at: unix_secs(),
+        battery: 0.0,
+    };
+
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        if s.secondary_sessions.contains_key(&session_id) {
+            return false;
+        }
+        s.secondary_sessions.insert(
+            session_id.clone(),
+            crate::state::SecondarySessionHandle {
+                cancel: cancel.clone(),
+                info,
+            },
+        );
+    }
+    crate::secondary_session::emit_secondary_status(app);
+
+    let app2 = app.clone();
+    let csv2 = csv;
+    tauri::async_runtime::spawn(async move {
+        crate::secondary_session::run_secondary_session(app2, session_id, cancel, csv2, adapter)
+            .await;
+    });
+    true
+}
+
+/// Cancel a specific secondary session by ID.
+pub(crate) fn cancel_secondary_session(app: &AppHandle, session_id: &str) {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    if let Some(handle) = s.secondary_sessions.get(session_id) {
+        handle.cancel.cancel();
+    }
+}
+
+/// Cancel ALL secondary sessions.
+#[allow(dead_code)]
+pub(crate) fn cancel_all_secondary_sessions(app: &AppHandle) {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    for handle in s.secondary_sessions.values() {
+        handle.cancel.cancel();
+    }
+}
+
+/// Get the list of active secondary sessions (for the frontend).
+pub(crate) fn list_secondary_sessions(app: &AppHandle) -> Vec<crate::state::SecondarySessionInfo> {
+    let r = app.app_state();
+    let s = r.lock_or_recover();
+    s.secondary_sessions
+        .values()
+        .map(|h| h.info.clone())
+        .collect()
+}
+
+/// Cancel the current session and start a new one in its place.
+///
+/// This is the "quick switch" action: the user wants to swap from the
+/// current device to a different one without two manual steps.
+pub(crate) fn switch_session(app: &AppHandle, target: Option<String>) {
+    cancel_session(app);
+    // The cancel is asynchronous (oneshot → CancellationToken → session loop
+    // exit → go_disconnected clears the stream handle).  We poll briefly
+    // until the slot is free, then start the new session.
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Wait up to 3 s for the old session to clear
+        for _ in 0..30 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let free = app2.app_state().lock_or_recover().stream.is_none();
+            if free {
+                break;
+            }
+        }
+        start_session(&app2, target);
+    });
+}
+
+/// Start a session driven by a remote device streaming EEG over iroh.
+///
+/// Takes ownership of the `EegChunkRx` from the managed Tauri state and
+/// wraps it in an [`IrohRemoteAdapter`] so the standard session runner
+/// pipeline (DSP → CSV → embeddings → broadcast → DND → hooks) processes
+/// the remote data identically to a local BLE device.
+pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
+    use skill_devices::session::iroh_remote::IrohRemoteAdapter;
+    use skill_iroh::RemoteEventRx;
+
+    let app2 = app.clone();
+
+    // Take the EegChunkRx from Tauri state (only one remote session at a time).
+    let rx_arc = app.state::<std::sync::Arc<tokio::sync::Mutex<Option<RemoteEventRx>>>>();
+    let rx_arc2 = rx_arc.inner().clone();
+
+    let (tx, rx_cancel) = tokio::sync::oneshot::channel::<()>();
+    app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
+    let csv = new_csv_path(app);
+
+    // Set scanning / connecting state
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.session_start_utc = Some(unix_secs());
+        s.snr_sum = 0.0;
+        s.snr_count = 0;
+        s.status
+            .reset_for_scanning("iroh-remote", &csv, Some(&peer_id));
+        s.status.device_id = Some(peer_id.clone());
+
+        // Look up the registered client name for this peer so the dashboard
+        // can display it (e.g. "Mario's iPhone").
+        let client_name = app
+            .try_state::<skill_iroh::SharedIrohAuth>()
+            .and_then(|auth| skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(&peer_id));
+        s.status.iroh_client_name = client_name;
+    }
+    refresh_tray(app);
+    emit_status(app);
+
+    tauri::async_runtime::spawn(async move {
+        // Take the receiver out of the mutex
+        let chunk_rx = {
+            let mut guard = rx_arc2.lock().await;
+            match guard.take() {
+                Some(rx) => rx,
+                None => {
+                    eprintln!("[iroh-remote] no EegChunkRx available — another session active?");
+                    crate::go_disconnected(
+                        &app2,
+                        Some("No remote EEG channel available".into()),
+                        false,
+                    );
+                    return;
+                }
+            }
+        };
+
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel2 = cancel.clone();
+        tokio::spawn(async move {
+            let _ = rx_cancel.await;
+            cancel2.cancel();
+        });
+
+        // Default to Muse configuration (4ch @ 256 Hz with PPG) since that's
+        // the device the iOS SkillClient connects to.  The adapter dynamically
+        // adjusts if the first chunk header reports different parameters.
+        // The adapter starts with default Muse config but will update
+        // when it receives a DeviceConnected event from the remote.
+        let adapter = IrohRemoteAdapter::new(chunk_rx, peer_id);
+
+        run_device_session(app2.clone(), cancel, csv, Box::new(adapter)).await;
+
+        // Session ended — the adapter's rx was consumed.  Create a fresh
+        // tx/rx pair: swap the tunnel's shared tx so new iroh connections
+        // send into the new channel, and store the new rx in managed state.
+        let (new_tx, new_rx) = skill_iroh::event_channel();
+        {
+            let shared_tx = app2.state::<skill_iroh::SharedDeviceEventTx>();
+            let mut guard = shared_tx
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *guard = Some(new_tx);
+        }
+        {
+            let mut guard = rx_arc2.lock().await;
+            *guard = Some(new_rx);
+        }
+    });
+}
+
+/// Spawn a background task that watches for incoming EEG data from the iroh
+/// tunnel and automatically starts a remote session when the first chunk
+/// arrives.
+///
+/// Call once at app startup (after `skill_iroh::spawn`).
+pub(crate) fn spawn_iroh_eeg_watcher(app: &AppHandle) {
+    let app2 = app.clone();
+    let rx_arc =
+        app.state::<std::sync::Arc<tokio::sync::Mutex<Option<skill_iroh::RemoteEventRx>>>>();
+    let rx_arc2 = rx_arc.inner().clone();
+
+    tauri::async_runtime::spawn(async move {
+        loop {
+            // Peek at the channel: wait until a chunk is available, then
+            // start a session to consume it.  We don't actually take the
+            // chunk — start_iroh_remote_session will take the whole Rx.
+            //
+            // We need to detect that the Rx has data waiting.  The simplest
+            // approach: take the Rx, recv one chunk, put it back through a
+            // new channel that has the chunk pre-loaded, then start the session.
+            let has_data = {
+                let guard = rx_arc2.lock().await;
+                guard.is_some()
+            };
+            if !has_data {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+
+            // Try to peek — take the rx, recv with timeout, put back
+            let chunk: Option<skill_iroh::RemoteDeviceEvent> = {
+                let mut guard = rx_arc2.lock().await;
+                let Some(mut rx) = guard.take() else {
+                    drop(guard);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                };
+                match tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await {
+                    Ok(Some(chunk)) => {
+                        // Got a chunk — we need to create a new channel with this
+                        // chunk pre-loaded + the remaining rx
+                        let (new_tx, new_rx): (
+                            skill_iroh::RemoteEventTx,
+                            skill_iroh::RemoteEventRx,
+                        ) = skill_iroh::event_channel();
+                        let _ = new_tx.send(chunk.clone()).await;
+                        // Spawn a forwarder to keep piping the old rx into new_tx
+                        tokio::spawn(async move {
+                            while let Some(c) = rx.recv().await {
+                                if new_tx.send(c).await.is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                        *guard = Some(new_rx);
+                        Some(chunk)
+                    }
+                    Ok(None) => {
+                        // Channel closed — iroh tunnel shut down
+                        *guard = None;
+                        None
+                    }
+                    Err(_) => {
+                        // Timeout — no data yet, put rx back
+                        *guard = Some(rx);
+                        None
+                    }
+                }
+            };
+
+            if let Some(chunk) = chunk {
+                // Check if a session is already running
+                let session_active = {
+                    let r = app2.app_state();
+                    let s = r.lock_or_recover();
+                    s.stream.is_some()
+                };
+                if session_active {
+                    // A local BLE session is already running.  The iroh
+                    // remote data will be consumed when that session ends
+                    // and a new one starts.  Don't block — just wait.
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    continue;
+                }
+
+                let peer_id = match &chunk {
+                    skill_iroh::RemoteDeviceEvent::DeviceConnected {
+                        descriptor_json, ..
+                    } => {
+                        // Extract device ID from the JSON if available
+                        serde_json::from_str::<serde_json::Value>(descriptor_json)
+                            .ok()
+                            .and_then(|v| v["id"].as_str().map(str::to_owned))
+                            .unwrap_or_else(|| "iroh-remote".into())
+                    }
+                    _ => "iroh-remote".into(),
+                };
+                eprintln!("[iroh-remote] auto-starting session from peer={peer_id}");
+                start_iroh_remote_session(&app2, peer_id);
+
+                // Wait for this session to end before watching again
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    let still_active = {
+                        let r = app2.app_state();
+                        let s = r.lock_or_recover();
+                        s.stream.is_some()
+                    };
+                    if !still_active {
+                        break;
+                    }
+                }
+            } else {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        }
+    });
+}
+
+/// Connect to a local LSL stream.  `target` is an optional stream name filter.
+async fn connect_lsl(
+    target: Option<String>,
+) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
+    // Strip "lsl:" prefix if present
+    let query_target = target
+        .as_ref()
+        .map(|t| t.strip_prefix("lsl:").unwrap_or(t).to_string())
+        .filter(|s| !s.is_empty());
+    let streams = tokio::task::spawn_blocking(move || skill_lsl::resolve_eeg_streams(5.0))
+        .await
+        .map_err(|e| crate::session_connect::ConnectError::Other(format!("LSL resolve: {e}")))?;
+
+    if streams.is_empty() {
+        return Err(crate::session_connect::ConnectError::Other(
+            "No LSL EEG streams found on the network".into(),
+        ));
+    }
+
+    // If target specified, find matching stream; otherwise use first
+    let info = if let Some(ref name) = query_target {
+        streams
+            .iter()
+            .find(|s| s.name().contains(name.as_str()))
+            .or(streams.first())
+            .cloned()
+            .ok_or_else(|| {
+                crate::session_connect::ConnectError::Other(format!(
+                    "No LSL stream matching '{name}'"
+                ))
+            })?
+    } else {
+        streams
+            .into_iter()
+            .next()
+            .expect("streams verified non-empty above")
+    };
+
+    eprintln!(
+        "[lsl] connecting to '{}' ({}ch @ {}Hz)",
+        info.name(),
+        info.channel_count(),
+        info.nominal_srate()
+    );
+    let adapter = skill_lsl::LslAdapter::new(&info);
+    Ok(Box::new(adapter))
+}
+
+/// Start an rlsl-iroh sink and wait for a remote LSL stream.
+async fn connect_lsl_iroh(
+    app: &AppHandle,
+) -> Result<Box<dyn skill_devices::session::DeviceAdapter>, crate::session_connect::ConnectError> {
+    let (adapter, endpoint_id) = skill_lsl::IrohLslAdapter::start_sink()
+        .await
+        .map_err(|e| crate::session_connect::ConnectError::Other(format!("rlsl-iroh sink: {e}")))?;
+    eprintln!("[lsl-iroh] sink started, endpoint_id={endpoint_id}");
+    // Store the endpoint ID so lsl_iroh_status can report it.
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.lsl_iroh_endpoint_id = Some(endpoint_id);
+    }
+    Ok(Box::new(adapter))
 }
 
 pub(crate) fn cancel_session(app: &AppHandle) {

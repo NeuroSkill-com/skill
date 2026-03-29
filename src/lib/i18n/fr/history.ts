@@ -250,6 +250,9 @@ const history: Record<string, string> = {
   "compare.needSessions": "Aucune session enregistrée pour l'instant.",
   "compare.needSessionsHint":
     "Enregistrez au moins une session EEG, puis revenez ici pour comparer les plages horaires.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "history.addLabel": "Add Label",
 };
 
 export default history;

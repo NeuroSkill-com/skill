@@ -68,7 +68,17 @@ pub struct Secrets {
 }
 
 /// Load all secrets from the system keychain.
+///
+/// In debug builds the keychain is **skipped** entirely to avoid macOS
+/// Keychain authorization dialogs on every `cargo run` / `tauri dev`
+/// (the dev binary has a different code signature each build, so macOS
+/// asks for permission every time).  Secrets fall back to the JSON
+/// settings file which still contains them in dev mode.
 pub fn load_secrets() -> Secrets {
+    if cfg!(debug_assertions) {
+        eprintln!("[keychain] skipping keychain in debug build");
+        return Secrets::default();
+    }
     Secrets {
         api_token: get_secret(KEY_API_TOKEN),
         emotiv_client_id: get_secret(KEY_EMOTIV_CLIENT_ID),
@@ -78,7 +88,12 @@ pub fn load_secrets() -> Secrets {
 }
 
 /// Save all secrets to the system keychain.
+///
+/// No-op in debug builds (see [`load_secrets`] for rationale).
 pub fn save_secrets(secrets: &Secrets) {
+    if cfg!(debug_assertions) {
+        return;
+    }
     set_secret(KEY_API_TOKEN, &secrets.api_token);
     set_secret(KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id);
     set_secret(KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret);
@@ -97,6 +112,9 @@ pub fn migrate_plaintext_secrets(
     emotiv_client_secret: &str,
     idun_api_token: &str,
 ) -> bool {
+    if cfg!(debug_assertions) {
+        return false;
+    }
     let mut migrated = false;
 
     let pairs: &[(&str, &str)] = &[

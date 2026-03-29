@@ -39,6 +39,7 @@ const CLI_VERSION = "1.2.0";
  *   timer                          Open focus-timer window and start work phase immediately
  *   umap                           3D UMAP projection with live progress bar
  *   listen                         Stream broadcast events for N seconds
+ *   subscribe [opts]               Set broadcast filter (events, fields, rate limit)
  *   hooks                          List Proactive Hook rules, scenarios, and last-trigger metadata
  *   hooks list                     List raw hook rules (name, keywords, threshold, …)
  *   hooks add <name> [opts]        Add a new hook rule
@@ -63,6 +64,9 @@ const CLI_VERSION = "1.2.0";
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
  *   dnd on                         Force-enable DND immediately (bypass EEG threshold)
  *   dnd off                        Force-disable DND immediately
+ *   iroh info                      Show iroh endpoint details and auth summary
+ *   iroh totp ...                  Manage TOTP credentials (list/create/qr/revoke)
+ *   iroh clients ...               Manage iroh clients (list/register/revoke/scope)
  *   llm status                     LLM server status (stopped/loading/running)
  *   llm start                      Load active model and start LLM inference server
  *   llm stop                       Stop LLM inference server and free GPU memory
@@ -152,6 +156,8 @@ const CLI_VERSION = "1.2.0";
  *   npx tsx cli.ts umap                             # auto: last 2 sessions → 3D points
  *   npx tsx cli.ts umap --json | jq '.points | length'
  *   npx tsx cli.ts listen --seconds 30              # 30s event stream
+ *   npx tsx cli.ts subscribe --events eeg-bands --fields focus,hr --max-hz 1
+ *   npx tsx cli.ts subscribe --events '*'       # reset to all events, all fields
  *   npx tsx cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
  *   npx tsx cli.ts hooks list --json
  *   npx tsx cli.ts hooks add "Deep Work Guard" --keywords "focus,deep work,flow" --scenario cognitive --threshold 0.14
@@ -709,6 +715,14 @@ interface Args {
   metricType?: string;
   /** Calendar subcommand: `status` | `permission` | undefined (events). */
   calendarSub?: string;
+  /** iroh subcommand group/action. */
+  irohSub?: string;
+  /** One-time password for iroh client registration. */
+  otp?: string;
+  /** TOTP credential id hint for registration. */
+  totpId?: string;
+  /** Client scope for iroh authorization: read|full. */
+  scope?: string;
   /** Bedtime for `sleep-schedule set --bedtime HH:MM` (24-h format). */
   bedtime?: string;
   /** Wake time for `sleep-schedule set --wake HH:MM` (24-h format). */
@@ -756,6 +770,12 @@ interface Args {
    * Passed as `temperature` in GenParams.  Default: 0.8.
    */
   temperature?: number;
+  /** Comma-separated event types for `subscribe` (e.g. "eeg-bands,hook"). */
+  subEvents?: string;
+  /** Comma-separated field names for `subscribe` (e.g. "focus,hr,relAlpha"). */
+  subFields?: string;
+  /** Max broadcast rate in Hz for `subscribe` (0 = unlimited). */
+  maxHz?: number;
 }
 
 /**
@@ -805,7 +825,8 @@ function parseArgs(): Args {
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
     "--actions", "--loops", "--break", "--auto-start", "--name", "--by-image", "--window",
     "--bedtime", "--wake", "--preset",
-    "--metric-type",
+    "--metric-type", "--otp", "--totp-id", "--scope",
+    "--events", "--fields", "--max-hz",
   ]);
 
   let i = 0;
@@ -881,6 +902,20 @@ function parseArgs(): Args {
     else if (a === "--bedtime")     { args.bedtime      = argv[++i]; }
     else if (a === "--wake")        { args.wake          = argv[++i]; }
     else if (a === "--preset")      { args.preset        = argv[++i]; }
+    else if (a === "--otp")         { args.otp           = argv[++i]; }
+    else if (a === "--totp-id")     { args.totpId        = argv[++i]; }
+    else if (a === "--scope")       { args.scope         = argv[++i]; }
+    else if (a === "--events")      { args.subEvents     = argv[++i]; }
+    else if (a === "--fields")      { args.subFields     = argv[++i]; }
+    else if (a === "--max-hz")      {
+      const raw = argv[++i];
+      const n   = Number(raw);
+      if (raw == null || raw.trim() === "" || isNaN(n)) {
+        console.error(`error: --max-hz requires a numeric value (got: ${JSON.stringify(raw)})`);
+        process.exit(1);
+      }
+      args.maxHz = n;
+    }
     // ── Positional arguments ─────────────────────────────────────────────
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
@@ -946,6 +981,21 @@ function parseArgs(): Args {
     }
     else if (args.command === "calendar" && !args.calendarSub) {
       args.calendarSub = a.toLowerCase(); // "status" | "permission"
+    }
+    else if (args.command === "iroh" && !args.irohSub) {
+      args.irohSub = a.toLowerCase();
+    }
+    else if (args.command === "iroh" && (args.irohSub === "totp" || args.irohSub === "clients") && !args.subAction) {
+      args.subAction = a.toLowerCase();
+    }
+    else if (args.command === "iroh" && args.irohSub === "totp" && ["create", "qr", "revoke"].includes(args.subAction ?? "") && !args.text) {
+      args.text = a;
+    }
+    else if (args.command === "iroh" && args.irohSub === "clients" && ["register", "revoke", "scope"].includes(args.subAction ?? "") && !args.text) {
+      args.text = a;
+    }
+    else if (args.command === "iroh" && args.irohSub === "clients" && args.subAction === "scope" && !args.body) {
+      args.body = a;
     }
     else if (args.command === "calibrations"  && !args.subAction) {
       // calibrations [list|get|create|update|delete] [<id-or-name>]
@@ -1063,6 +1113,7 @@ ${m("llm logs",                                      "print last 500 LLM server 
 ${m("llm chat",                                       "interactive multi-turn chat REPL; type /help inside for commands")}
 ${m('llm chat "message"',                            "single-shot: send one message, stream the reply, and exit")}
 ${m("listen [--seconds <n>]",                        "listen for broadcast events (default: 5s)")}
+${m("subscribe [--events <csv>] [--fields <csv>] [--max-hz <n>]", "set broadcast filter for this connection")}
 ${m("hooks",                                         "list Proactive Hooks (scenario + last trigger metadata)")}
 ${m("hooks list",                                    "list raw hook rules (name, keywords, threshold, …)")}
 ${m("hooks add <name> [--keywords …] [opts]",       "add a new hook rule")}
@@ -1072,6 +1123,9 @@ ${m("hooks disable <name>",                          "disable a hook")}
 ${m("hooks update <name> [--keywords …] [opts]",    "update fields on an existing hook")}
 ${m('hooks suggest "kw1,kw2"',                       "suggest threshold from matching labels + recent EEG embeddings")}
 ${m("hooks log [--limit <n>] [--offset <n>]",       "show hook trigger audit history from hooks.sqlite")}
+${m("iroh info",                                     "show iroh endpoint + auth summary")}
+${m("iroh totp list|create|qr|revoke",               "manage iroh TOTP credentials")}
+${m("iroh clients list|register|revoke|scope",       "manage iroh clients and permissions")}
 ${m("raw '{\"command\":\"status\"}'",                "send raw JSON, print full response")}
 
 ${BOLD}OPTIONS${RESET}
@@ -1119,6 +1173,9 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--version${RESET}         print CLI version and exit
 
   ${YELLOW}--metric-type <t>${RESET} (health metrics) metric type (e.g. ${GREEN}restingHeartRate${RESET}, ${GREEN}hrv${RESET}, ${GREEN}vo2Max${RESET})
+  ${YELLOW}--otp <code>${RESET}       (iroh clients register) TOTP code from authenticator
+  ${YELLOW}--totp-id <id>${RESET}    (iroh clients register) optional TOTP credential id
+  ${YELLOW}--scope <read|full>${RESET} (iroh clients register/scope) permission scope
 
 ${BOLD}EXAMPLES${RESET}
   When parameters are omitted, the CLI auto-selects ranges from your session
@@ -4671,6 +4728,86 @@ async function cmdHooks(args: Args): Promise<void> {
  *
  * @param seconds - How long to listen (default 5 s via `--seconds` flag).
  */
+async function cmdIroh(args: Args): Promise<void> {
+  const g = (args.irohSub || "info").toLowerCase();
+
+  if (g === "info") {
+    const r = await send({ command: "iroh_info" });
+    printJson(r);
+    return;
+  }
+
+  if (g === "totp") {
+    const a = (args.subAction || "list").toLowerCase();
+    if (a === "list") return printJson(await send({ command: "iroh_totp_list" }));
+    if (a === "create") {
+      if (!args.text) printError("usage: cli.ts iroh totp create <name>");
+      return printJson(await send({ command: "iroh_totp_create", name: args.text }));
+    }
+    if (a === "qr") {
+      if (!args.text) printError("usage: cli.ts iroh totp qr <id>");
+      return printJson(await send({ command: "iroh_totp_qr", id: args.text }));
+    }
+    if (a === "revoke") {
+      if (!args.text) printError("usage: cli.ts iroh totp revoke <id>");
+      return printJson(await send({ command: "iroh_totp_revoke", id: args.text }));
+    }
+    printError(`unknown iroh totp action: ${a}`);
+  }
+
+  if (g === "clients") {
+    const a = (args.subAction || "list").toLowerCase();
+    if (a === "list") return printJson(await send({ command: "iroh_clients_list" }));
+    if (a === "register") {
+      if (!args.text || !args.otp) {
+        printError("usage: cli.ts iroh clients register <endpoint_id> --otp <code> [--name <name>] [--scope read|full] [--totp-id <id>]");
+      }
+      return printJson(await send({
+        command: "iroh_client_register",
+        endpoint_id: args.text,
+        otp: args.otp,
+        name: args.calName,
+        totp_id: args.totpId,
+        scope: args.scope ?? "read",
+      }));
+    }
+    if (a === "revoke") {
+      if (!args.text) printError("usage: cli.ts iroh clients revoke <id>");
+      return printJson(await send({ command: "iroh_client_revoke", id: args.text }));
+    }
+    if (a === "scope") {
+      if (!args.text || !args.body) printError("usage: cli.ts iroh clients scope <id> <read|full>");
+      return printJson(await send({ command: "iroh_client_set_scope", id: args.text, scope: args.body }));
+    }
+    printError(`unknown iroh clients action: ${a}`);
+  }
+
+  printError(`unknown iroh group: ${g}`);
+}
+
+async function cmdSubscribe(args: Args): Promise<void> {
+  const cmd: Record<string, unknown> = { command: "subscribe" };
+  if (args.subEvents) {
+    cmd.events = args.subEvents.split(",").map(s => s.trim());
+  }
+  if (args.subFields) {
+    cmd.fields = args.subFields.split(",").map(s => s.trim());
+  }
+  if (args.maxHz !== undefined) {
+    cmd.max_hz = args.maxHz;
+  }
+
+  const r = await send(cmd as any);
+  if (!r.ok) printError(r.error ?? "subscribe failed");
+  print(`${GREEN}✓${RESET} subscription updated`);
+  if (r.events?.length) print(`  events: ${CYAN}${r.events.join(", ")}${RESET}`);
+  else print(`  events: ${DIM}all${RESET}`);
+  if (r.fields?.length) print(`  fields: ${CYAN}${r.fields.join(", ")}${RESET}`);
+  else print(`  fields: ${DIM}all${RESET}`);
+  print(`  max_hz: ${CYAN}${r.max_hz ?? 0}${RESET} ${DIM}(0 = unlimited)${RESET}`);
+  printResult(r);
+}
+
 async function cmdListen(seconds: number): Promise<void> {
   print(`${BOLD}⚡ listen${RESET} ${DIM}for ${seconds}s…${RESET}\n`);
 
@@ -5650,8 +5787,20 @@ async function main(): Promise<void> {
         }
         await cmdListen(args.seconds ?? 5);
         break;
+      case "subscribe":
+        if (transport === "http") {
+          printError(
+            "subscribe requires WebSocket (subscriptions are per-connection).\n" +
+            "  Use --ws to force WebSocket, or omit --http for auto-transport."
+          );
+        }
+        await cmdSubscribe(args);
+        break;
       case "hooks":
         await cmdHooks(args);
+        break;
+      case "iroh":
+        await cmdIroh(args);
         break;
       case "llm":
         await cmdLlm(args);
