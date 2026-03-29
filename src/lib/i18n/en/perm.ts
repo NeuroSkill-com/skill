@@ -67,6 +67,18 @@ const perm: Record<string, string> = {
     "To capture the active window for visual-similarity search and cross-modal EEG correlation. Only opt-in screenshots are stored — never continuous recording.",
   "perm.matrixScreenRecording": "Screenshot capture",
   "perm.matrixScreenRecordingReq": "Screen Recording required",
+  "perm.calendar": "Calendar",
+  "perm.calendarDesc":
+    "Calendar tools can read events for scheduling context. Permission is requested by macOS when needed.",
+  "perm.requestCalendarPermission": "Request Calendar Permission",
+  "perm.openCalendarSettings": "Open Calendar Privacy Settings",
+  "perm.openInputMonitoringSettings": "Open Input Monitoring Settings",
+  "perm.openFocusSettings": "Open Focus Settings",
+  "perm.whyCalendar": "Calendar",
+  "perm.whyCalendarDesc":
+    "To provide scheduling context to the LLM tools so the AI can reference your upcoming events.",
+  "perm.matrixCalendar": "Calendar events",
+  "perm.matrixCalendarReq": "Calendar access required",
 };
 
 export default perm;

@@ -8,6 +8,7 @@
 //! - **capture** — capture worker, embed thread, HNSW search, OCR
 
 pub mod capture;
+pub mod chat_image;
 pub mod config;
 pub mod context;
 #[allow(dead_code)]

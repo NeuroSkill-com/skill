@@ -25,6 +25,7 @@
 pub mod emotiv;
 pub mod hermes;
 pub mod idun;
+pub mod iroh_remote;
 pub mod mendi;
 pub mod muse;
 pub mod mw75;

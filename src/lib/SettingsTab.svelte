@@ -42,6 +42,19 @@ interface GpuStats {
 }
 let gpuStats = $state<GpuStats | null>(null);
 
+// ── Geo Provider ───────────────────────────────────────────────────────────
+type GeoProvider = "off" | "local" | "remote";
+let geoProvider = $state<GeoProvider>("remote");
+
+// Persist geoProvider in localStorage (or use invoke for backend persistence if needed)
+onMount(() => {
+  const stored = localStorage.getItem("geoProvider");
+  if (stored === "off" || stored === "local" || stored === "remote") geoProvider = stored;
+});
+$effect(() => {
+  localStorage.setItem("geoProvider", geoProvider);
+});
+
 let storageFormat = $state<"csv" | "parquet" | "both">("csv");
 let logConfig = $state<LogConfig>({
   embedder: true,
@@ -162,6 +175,34 @@ onDestroy(() => {
   clearInterval(nowTimer);
 });
 </script>
+
+<!-- ── Geo Provider Toggle ────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("settings.geoProvider")}
+  </span>
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-3 p-4">
+      <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+        {t("settings.geoProviderDesc")}
+      </p>
+      <div class="flex gap-2">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="off" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderOff")}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="local" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderLocal")}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="geoProvider" value="remote" bind:group={geoProvider} />
+          <span>{t("settings.geoProviderRemote")}</span>
+        </label>
+      </div>
+    </CardContent>
+  </Card>
+</section>
 
 <!-- ── Storage Format ───────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
@@ -301,12 +342,13 @@ onDestroy(() => {
 <!-- ── Main Window ─────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-    Main Window
+    {t("settings.mainWindow")}
   </span>
 
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="py-0 px-0">
       <button
+        role="switch" aria-checked={mainWindowAutoFit}
         onclick={async () => {
           mainWindowAutoFit = !mainWindowAutoFit;
           await invoke("set_main_window_auto_fit", { enabled: mainWindowAutoFit });
@@ -320,10 +362,10 @@ onDestroy(() => {
         </div>
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-            Auto-fit dashboard height
+            {t("settings.autoFitToggle")}
           </span>
           <span class="text-[0.58rem] text-muted-foreground leading-tight">
-            Expands or contracts the main window to match dashboard content, clamped to screen height.
+            {t("settings.autoFitToggleDesc")}
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
@@ -349,6 +391,7 @@ onDestroy(() => {
 
       <!-- ── Active-window toggle ─────────────────────────────────────────── -->
       <button
+        role="switch" aria-checked={trackActiveWindow}
         onclick={async () => {
           trackActiveWindow = !trackActiveWindow;
           await invoke("set_active_window_tracking", { enabled: trackActiveWindow });
@@ -405,6 +448,7 @@ onDestroy(() => {
 
       <!-- ── Input-activity toggle ────────────────────────────────────────── -->
       <button
+        role="switch" aria-checked={trackInputActivity}
         onclick={async () => {
           trackInputActivity = !trackInputActivity;
           await invoke("set_input_activity_tracking", { enabled: trackInputActivity });
@@ -505,6 +549,7 @@ onDestroy(() => {
           ["tools",     t("settings.logTools"),        t("settings.logToolsDesc")],
         ] as [keyof LogConfig, string, string][]) as [key, label, desc]}
           <button
+            role="switch" aria-checked={logConfig[key]}
             onclick={() => toggleLog(key)}
             class="flex items-center gap-3 px-4 py-3 text-left transition-colors
                    hover:bg-slate-50 dark:hover:bg-white/[0.02]">
@@ -653,11 +698,11 @@ onDestroy(() => {
         </div>
       </div>
 
-      <!-- Save / restart banner -->
+      <!-- Save banner -->
       {#if wsChanged && !wsPortError}
-        <div class="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-          <span class="text-[0.58rem] text-amber-600 dark:text-amber-400 flex-1">
-            {t("settings.wsRestart")}
+        <div class="flex items-center gap-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-3 py-2">
+          <span class="text-[0.58rem] text-cyan-600 dark:text-cyan-400 flex-1">
+            Apply changes to the server.
           </span>
           <Button variant="outline" size="sm"
                   class="h-7 text-[0.58rem] px-3"
@@ -667,18 +712,18 @@ onDestroy(() => {
                     if (isNaN(port) || port < 1024 || port > 65535) return;
                     wsSaving = true;
                     try {
-                      await invoke("set_ws_config", { host: wsHost, port });
-                      wsPort = port;
+                      const newPort = await invoke<number>("set_ws_config", { host: wsHost, port });
+                      wsPort = newPort;
+                      wsPortInput = String(newPort);
                       wsHostChanged = false;
                       wsPortChanged = false;
-                      try { await relaunch(); } catch { /* user can restart manually */ }
                     } catch (e: unknown) {
                       console.error("set_ws_config error:", e);
                     } finally {
                       wsSaving = false;
                     }
                   }}>
-            {wsSaving ? "…" : t("settings.dataDirRestartNow")}
+            {wsSaving ? "Applying…" : "Apply"}
           </Button>
         </div>
       {/if}

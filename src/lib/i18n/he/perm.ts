@@ -67,6 +67,16 @@ const perm: Record<string, string> = {
     "ללכידת החלון הפעיל לחיפוש דמיון חזותי וקורלציית EEG חוצת-מודאליות. רק צילומי מסך שנבחרו נשמרים — אף פעם לא הקלטה רציפה.",
   "perm.matrixScreenRecording": "לכידת צילום מסך",
   "perm.matrixScreenRecordingReq": "נדרשת הקלטת מסך",
+  "perm.calendar": "לוח שנה",
+  "perm.calendarDesc": "כלי לוח השנה יכולים לקרוא אירועים כדי לספק הקשר תזמון. ההרשאה מתבקשת על ידי macOS בעת הצורך.",
+  "perm.requestCalendarPermission": "בקש הרשאת לוח שנה",
+  "perm.openCalendarSettings": "פתח הגדרות פרטיות לוח שנה",
+  "perm.openInputMonitoringSettings": "פתח הגדרות ניטור קלט",
+  "perm.openFocusSettings": "פתח הגדרות ריכוז",
+  "perm.whyCalendar": "לוח שנה",
+  "perm.whyCalendarDesc": "כדי לספק הקשר תזמון לכלי הבינה המלאכותית כך שהעוזר יוכל להתייחס לאירועים הקרובים שלך.",
+  "perm.matrixCalendar": "אירועי לוח שנה",
+  "perm.matrixCalendarReq": "נדרשת גישה ללוח שנה",
 };
 
 export default perm;

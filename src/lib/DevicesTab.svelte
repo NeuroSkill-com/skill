@@ -673,6 +673,9 @@ onDestroy(() => {
                         <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-cover" />
                       </div>
                       <span class="text-[0.52rem] text-center leading-tight text-foreground/75 truncate">{t(item.name_key)}</span>
+                      {#if item.ios_only}
+                        <span class="text-[0.42rem] text-center leading-tight text-blue-500 dark:text-blue-400 font-semibold">📱 {t("devices.iosOnly")}</span>
+                      {/if}
                     </div>
                   {/each}
                 </div>

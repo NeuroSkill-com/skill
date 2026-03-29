@@ -29,16 +29,9 @@ use skill_eeg::eeg_quality::QualityMonitor;
 
 // ── Data watchdog ─────────────────────────────────────────────────────────────
 
-/// If no [`DeviceEvent`] arrives for this duration, treat the connection as
-/// silently lost and break out of the event loop.  BLE devices can sometimes
-/// maintain the L2CAP link while GATT notifications stop flowing (radio
-/// interference, firmware hang, headset entered sleep mode, …).  Without a
-/// watchdog the session runner would block on `next_event()` forever.
-///
-/// 15 seconds is generous enough to tolerate short radio glitches (BLE
-/// supervision timeouts are typically 2–6 s) while still recovering promptly
-/// when data truly stops.
-const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
+const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(skill_constants::DATA_WATCHDOG_SECS);
+const DATA_WATCHDOG_TIMEOUT_IROH: Duration =
+    Duration::from_secs(skill_constants::DATA_WATCHDOG_IROH_SECS);
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -108,6 +101,14 @@ pub(crate) async fn run_device_session(
     let mut battery_ema = BatteryEma::new(0.1);
 
     // ── Event loop ───────────────────────────────────────────────────────────
+    // Use extended watchdog for iroh-remote sessions — the phone may be
+    // reconnecting its QUIC tunnel while BLE data accumulates locally.
+    let watchdog = if kind == "iroh-remote" {
+        DATA_WATCHDOG_TIMEOUT_IROH
+    } else {
+        DATA_WATCHDOG_TIMEOUT
+    };
+
     let mut user_cancelled = false;
     let mut last_event_at = Instant::now();
     loop {
@@ -118,7 +119,7 @@ pub(crate) async fn run_device_session(
                 user_cancelled = true;
                 break;
             }
-            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + DATA_WATCHDOG_TIMEOUT)) => {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + watchdog)) => {
                 // No event received for DATA_WATCHDOG_TIMEOUT — treat as
                 // silent disconnect.  This catches scenarios where the BLE
                 // link stays up but GATT notifications stop (radio
@@ -333,6 +334,42 @@ fn on_connected(
         if s.status.device_id.is_none() {
             s.status.device_id = Some(info.id.clone());
         }
+        // For iroh-remote sessions, detect the actual device kind from the
+        // device name so the dashboard can show device-specific UI and the
+        // tray icon / status badge reflect the real hardware.
+        if s.status.device_kind == "iroh-remote" {
+            let name_lower = info.name.to_lowercase();
+            let remote_kind = if name_lower.contains("muse") {
+                "muse"
+            } else if name_lower.contains("atu") || name_lower.contains("attentivu") {
+                "attentivu"
+            } else if name_lower.contains("mw75") || name_lower.contains("neurable") {
+                "mw75"
+            } else if name_lower.contains("ganglion")
+                || name_lower.contains("cyton")
+                || name_lower.contains("openbci")
+            {
+                "openbci"
+            } else if name_lower.contains("epoc")
+                || name_lower.contains("insight")
+                || name_lower.contains("emotiv")
+                || name_lower.contains("flex")
+                || name_lower.contains("mn8")
+            {
+                "emotiv"
+            } else if name_lower.contains("idun") || name_lower.contains("guardian") {
+                "idun"
+            } else if name_lower.contains("hermes") || name_lower.contains("nucleus") {
+                "hermes"
+            } else if name_lower.contains("mendi") {
+                "mendi"
+            } else if name_lower.contains("polar") {
+                "polar"
+            } else {
+                "iroh-remote"
+            };
+            s.status.device_kind = remote_kind.into();
+        }
         // Populate device identity fields from the adapter's DeviceInfo.
         if let Some(ref v) = info.serial_number {
             s.status.serial_number = Some(v.clone());
@@ -459,6 +496,47 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
     };
     app_log!(app, "devices", "[{kind}] disconnected: {name}");
     crate::device_scanner::device_log("session", &format!("[{kind}] Disconnected: {name}"));
+
+    // Immediately mark the status as "disconnecting" so the UI reacts right
+    // away when it calls refreshStatus().  The full cleanup (go_disconnected)
+    // happens after CSV finalisation, but we don't want the dashboard to show
+    // a stale "connected" state for hundreds of milliseconds.
+    {
+        let sr = app.app_state();
+        let mut s = sr.lock_or_recover();
+        s.status.state = "disconnected".into();
+        s.status.device_error = Some("DEVICE_DISCONNECTED".into());
+    }
+    emit_status(app);
+    refresh_tray(app);
+
+    // For Emotiv sessions the Cortex WebSocket is gone too — update the
+    // shared cortex_ws_state so every UI surface (DevicesTab badge, tray,
+    // dashboard) reflects the loss immediately.  The background scanner
+    // skips probing during an active session, so without this the stale
+    // "connected" badge would linger until the scanner resumes polling.
+    //
+    // We update the field + emit directly instead of calling
+    // `set_cortex_ws_state` because that helper sends a "Launcher
+    // Disconnected" toast which is misleading here — the Launcher may
+    // still be running; it's the headset that dropped.  The generic
+    // "Connection Lost" toast above already covers this case.
+    if kind == "emotiv" {
+        let changed = {
+            let sr = app.app_state();
+            let mut s = sr.lock_or_recover();
+            if s.cortex_ws_state != "disconnected" {
+                s.cortex_ws_state = "disconnected".into();
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            crate::helpers::emit_cortex_ws_state(app);
+        }
+    }
+
     let payload = serde_json::json!({
         "device_name": name,
         "device_id":   device_id,
@@ -607,8 +685,65 @@ fn process_eeg(
             }
             s.latest_bands = Some(snap.clone());
         }
-        let _ = app.emit("eeg-bands", &snap);
-        app.state::<WsBroadcaster>().send("eeg-bands", &snap);
+        // Compute composite scores and merge into the broadcast payload
+        // so clients (iOS, NeuroLoop, etc.) get ready-to-use values.
+        let engage_raw = skill_devices::compute_engagement_raw(&snap);
+        let focus = skill_devices::focus_score(engage_raw);
+        let nch = snap.channels.len().max(1) as f64;
+        let avg_alpha = snap
+            .channels
+            .iter()
+            .map(|c| c.rel_alpha as f64)
+            .sum::<f64>()
+            / nch;
+        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
+        let relaxation = if (avg_alpha + avg_beta) > 0.0 {
+            (avg_alpha / (avg_alpha + avg_beta)) * 100.0
+        } else {
+            0.0
+        };
+        let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
+
+        let mut enriched = serde_json::to_value(&snap).unwrap_or_default();
+        if let Some(obj) = enriched.as_object_mut() {
+            obj.insert("focus".into(), serde_json::json!(skill_router::r1d(focus)));
+            obj.insert(
+                "relaxation".into(),
+                serde_json::json!(skill_router::r1d(relaxation)),
+            );
+            obj.insert(
+                "engagement".into(),
+                serde_json::json!(skill_router::r1d(engagement)),
+            );
+        }
+        let _ = app.emit("eeg-bands", &enriched);
+        app.state::<WsBroadcaster>().send("eeg-bands", &enriched);
+
+        // ── Smart alarm check ────────────────────────────────────────────────
+        // If the iOS client configured an alarm, check if we should fire
+        // a smart_wake based on the current sleep stage.
+        {
+            let sr = app.app_state();
+            let mut s = sr.lock_or_recover();
+            if let Some(ref mut alarm) = s.alarm_config {
+                let nch = snap.channels.len().max(1) as f32;
+                let rd = snap.channels.iter().map(|c| c.rel_delta).sum::<f32>() / nch;
+                let rt = snap.channels.iter().map(|c| c.rel_theta).sum::<f32>() / nch;
+                let ra = snap.channels.iter().map(|c| c.rel_alpha).sum::<f32>() / nch;
+                let rb = snap.channels.iter().map(|c| c.rel_beta).sum::<f32>() / nch;
+                if crate::ws_commands::dnd_sleep::check_smart_wake(alarm, rd, rt, ra, rb) {
+                    drop(s); // release lock before broadcast
+                    app.state::<WsBroadcaster>().send(
+                        "smart_wake",
+                        &serde_json::json!({
+                            "reason": "light_sleep_detected",
+                            "timestamp": crate::unix_secs(),
+                        }),
+                    );
+                    eprintln!("[alarm] smart_wake broadcast sent to all clients");
+                }
+            }
+        }
     }
 
     // ── Periodic full status emit ────────────────────────────────────────────
@@ -908,6 +1043,72 @@ fn process_battery(
 // ── Meta processing ───────────────────────────────────────────────────────────
 
 fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
+    // ── Persist phone/location/sensor Meta to a sidecar JSONL file ───────
+    // These events come from the iroh remote device proxy and must be stored
+    // alongside the session CSV so no data is lost.
+    if let Some(meta_type) = val.get("type").and_then(|v| v.as_str()) {
+        match meta_type {
+            "phone_info" | "phone_imu" | "location" => {
+                let sidecar_path = csv_path.with_extension("meta.jsonl");
+                if let Ok(line) = serde_json::to_string(val) {
+                    use std::io::Write;
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&sidecar_path)
+                    {
+                        let _ = writeln!(f, "{line}");
+                    }
+                }
+                // Also store phone_info in AppState for status display
+                if meta_type == "phone_info" {
+                    // If the phone_info contains an iroh_endpoint_id, resolve
+                    // the registered client name from the auth store.
+                    let iroh_eid = val
+                        .get("iroh_endpoint_id")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned);
+
+                    let client_name = iroh_eid.as_deref().and_then(|eid| {
+                        app.try_state::<skill_iroh::SharedIrohAuth>()
+                            .and_then(|auth| {
+                                skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(eid)
+                            })
+                    });
+
+                    // Persist the device model string so it shows even when
+                    // the phone is offline.
+                    if let Some(ref eid) = iroh_eid {
+                        let marketing = val.get("phone_marketing_name").and_then(|v| v.as_str());
+                        let model = val.get("phone_model").and_then(|v| v.as_str());
+                        let os_ver = val.get("os_version").and_then(|v| v.as_str());
+                        let label = marketing.or(model).unwrap_or("");
+                        if !label.is_empty() {
+                            let device_model = match os_ver {
+                                Some(v) if !v.is_empty() => format!("{label} · iOS {v}"),
+                                _ => label.to_owned(),
+                            };
+                            if let Some(auth) = app.try_state::<skill_iroh::SharedIrohAuth>() {
+                                let _ = skill_iroh::lock_or_recover(&auth)
+                                    .update_client_device_model(eid, &device_model);
+                            }
+                        }
+                    }
+
+                    let r = app.app_state();
+                    let mut s = r.lock_or_recover();
+                    s.status.phone_info = Some(val.clone());
+                    if client_name.is_some() {
+                        s.status.iroh_client_name = client_name;
+                    }
+                    drop(s);
+                    emit_status(app);
+                }
+            }
+            _ => {}
+        }
+    }
+
     // Extract device identity fields from Meta events.
     // Supports both Muse Control short keys (sn, ma, fw, hw, bl, tp) and
     // long-form keys used by other adapters (serial_number, mac_address, …).

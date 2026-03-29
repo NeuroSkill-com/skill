@@ -301,12 +301,28 @@ impl DeviceAdapter for EmotivAdapter {
     }
 
     async fn next_event(&mut self) -> Option<DeviceEvent> {
+        // The Cortex WebSocket may continue sending non-data events
+        // (heartbeats, system events, performance metrics) even after
+        // the headset physically disconnects.  These events are silently
+        // consumed by translate() without producing DeviceEvents, which
+        // means this function never returns and the session runner's
+        // watchdog never fires.
+        //
+        // Fix: track how long we've been spinning without producing a
+        // DeviceEvent.  If it exceeds the watchdog timeout, return None
+        // to let the session runner detect the stall.
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_secs(skill_constants::DATA_WATCHDOG_SECS);
+
         loop {
             if let Some(ev) = self.pending.pop_front() {
                 return Some(ev);
             }
-            let vendor_ev = self.rx.recv().await?;
-            self.translate(vendor_ev);
+            match tokio::time::timeout_at(deadline, self.rx.recv()).await {
+                Ok(Some(vendor_ev)) => self.translate(vendor_ev),
+                Ok(None) => return None, // channel closed
+                Err(_) => return None,   // no data events for DATA_WATCHDOG_SECS
+            }
         }
     }
 

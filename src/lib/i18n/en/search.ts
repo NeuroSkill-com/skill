@@ -30,6 +30,9 @@ const search: Record<string, string> = {
   "label.previousLabels": "Previous labels",
   "label.previousHint": "↑/↓ to cycle",
   "label.saveLabel": "Save Label",
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 
   "search.title": "EEG Embedding Search",
   "search.querySummary": "{queries} queries · {k} neighbors · {days} day(s)",

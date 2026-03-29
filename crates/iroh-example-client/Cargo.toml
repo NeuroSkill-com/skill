@@ -1,0 +1,18 @@
+[package]
+name = "iroh-example-client"
+version = "0.1.0"
+edition = "2021"
+description = "End-to-end example: create TOTP, spin up iroh endpoint, generate OTP, register with Skill iroh server"
+
+[dependencies]
+iroh = "0.97"
+iroh-base = "0.97"
+skill-iroh = { path = "../skill-iroh" }
+tokio = { version = "1", features = ["full"] }
+totp-rs = "5.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+base32 = "0.4"
+url = "2"
+tempfile = "3"

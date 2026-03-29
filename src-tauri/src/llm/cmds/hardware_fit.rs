@@ -143,6 +143,8 @@ fn catalog_entry_to_llm_model(
         release_date: None,
         gguf_sources: vec![],
         capabilities: vec![],
+        num_attention_heads: None,
+        num_key_value_heads: None,
     }
 }
 
@@ -216,6 +218,7 @@ pub fn get_model_hardware_fit(
                 llmfit_core::fit::RunMode::MoeOffload => "moe",
                 llmfit_core::fit::RunMode::CpuOffload => "cpu_gpu",
                 llmfit_core::fit::RunMode::CpuOnly => "cpu",
+                llmfit_core::fit::RunMode::TensorParallel => "tensor_parallel",
             };
 
             ModelHardwareFit {

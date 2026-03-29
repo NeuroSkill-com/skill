@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import AppearanceTab from "$lib/AppearanceTab.svelte";
 import CalibrationTab from "$lib/CalibrationTab.svelte";
+import ClientsTab from "$lib/ClientsTab.svelte";
 import DevicesTab from "$lib/DevicesTab.svelte";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import EmbeddingsTab from "$lib/EmbeddingsTab.svelte";
@@ -18,6 +19,7 @@ import GoalsTab from "$lib/GoalsTab.svelte";
 import HooksTab from "$lib/HooksTab.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import LlmTab from "$lib/LlmTab.svelte";
+import LslTab from "$lib/LslTab.svelte";
 import PermissionsTab from "$lib/PermissionsTab.svelte";
 import ScreenshotsTab from "$lib/ScreenshotsTab.svelte";
 import SettingsTab from "$lib/SettingsTab.svelte";
@@ -32,6 +34,7 @@ type Tab =
   | "goals"
   | "devices"
   | "exg"
+  | "lsl"
   | "sleep"
   | "calibration"
   | "embeddings"
@@ -45,6 +48,7 @@ type Tab =
   | "permissions"
   | "llm"
   | "tools"
+  | "clients"
   | "screenshots";
 let tab = $state<Tab>("goals");
 
@@ -52,11 +56,13 @@ const TAB_IDS: Tab[] = [
   "goals",
   "devices",
   "exg",
+  "lsl",
   "sleep",
   "calibration",
   "tts",
   "llm",
   "tools",
+  "clients",
   "embeddings",
   "screenshots",
   "hooks",
@@ -71,11 +77,13 @@ const TAB_LABELS: Record<Tab, () => string> = {
   goals: () => t("settingsTabs.goals"),
   devices: () => t("settingsTabs.devices"),
   exg: () => t("settingsTabs.exg"),
+  lsl: () => t("settingsTabs.lsl"),
   sleep: () => t("settingsTabs.sleep"),
   calibration: () => t("settingsTabs.calibration"),
   tts: () => t("settingsTabs.tts"),
   llm: () => t("settingsTabs.llm"),
   tools: () => t("settingsTabs.tools"),
+  clients: () => "Clients",
   embeddings: () => t("settingsTabs.embeddings"),
   hooks: () => t("settingsTabs.hooks"),
   appearance: () => t("settingsTabs.appearance"),
@@ -93,11 +101,13 @@ const TAB_ICONS: Record<Tab, string> = {
   goals: `<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm0-14a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4zm0-6a2 2 0 1 0 2 2 2 2 0 0 0-2-2z"/>`,
   devices: `<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>`,
   exg: `<path d="M2 12h2l3-7 4 14 4-14 3 7h2"/><circle cx="12" cy="12" r="1"/>`,
+  lsl: `<path d="M4 6h4v12H4zM10 3h4v18h-4zM16 8h4v8h-4"/>`,
   sleep: `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`,
   calibration: `<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/>`,
   tts: `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
   llm: `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
   tools: `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`,
+  clients: `<path d="M17 11V7a5 5 0 0 0-10 0v4"/><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="16" r="1.5"/>`,
   embeddings: `<circle cx="12" cy="12" r="2"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="m6 6.5 4 4.5M14 6.5l-2 4M18 7l-4 4.5M6 17l4-4.5M14 17.5l2-4M18 17l-4-4.5"/>`,
   hooks: `<path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 1 1-7-7L7 11"/>`,
   appearance: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
@@ -113,31 +123,81 @@ const tabLabel = (id: Tab) => TAB_LABELS[id]();
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 const modKey = isMac ? "⌘" : "Ctrl+";
 
-/* ── Cmd/Ctrl + 1‥12 to switch tabs ───────────────────────────────────── */
-// Only Cmd/Ctrl+1–9 are reachable as single keystrokes; don't register beyond that.
-const SHORTCUT_TABS = TAB_IDS.slice(0, 9);
+/* ── Keyboard shortcuts for tabs ──────────────────────────────────────── */
+// ⌘1–⌘9 → tabs 1–9, ⌘0 → tab 10
+// ⌃⌘1–⌃⌘9 → tabs 11–19 (Ctrl+Cmd on Mac, Ctrl+Alt on Windows/Linux)
+
+function digitForTab(i: number): string | null {
+  if (i < 9) return String(i + 1);
+  if (i === 9) return "0";
+  if (i >= 10 && i < 19) return String(i - 9);
+  return null;
+}
+
+function modifierForTab(i: number): string {
+  if (i < 10) return modKey;
+  return isMac ? "⌃⌘" : "Ctrl+Alt+";
+}
 
 function onKeydown(e: KeyboardEvent) {
+  const digit = e.key >= "0" && e.key <= "9" ? parseInt(e.key, 10) : -1;
+  if (digit < 0) return;
   if (!(e.metaKey || e.ctrlKey)) return;
-  const n = parseInt(e.key, 10);
-  if (n >= 1 && n <= SHORTCUT_TABS.length) {
-    e.preventDefault();
-    tab = SHORTCUT_TABS[n - 1];
+
+  // ⌃⌘ (Ctrl+Cmd on Mac, Ctrl+Alt on other) → tabs 11–19
+  const isExtended = isMac ? e.ctrlKey && e.metaKey : e.ctrlKey && e.altKey;
+
+  if (isExtended) {
+    if (digit >= 1 && digit <= 9) {
+      const idx = 10 + digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
+    }
+  } else {
+    if (digit >= 1 && digit <= 9) {
+      const idx = digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
+    } else if (digit === 0 && TAB_IDS.length >= 10) {
+      e.preventDefault();
+      tab = TAB_IDS[9];
+    }
   }
 }
 
 let unlisten: UnlistenFn | null = null;
+let fontObserver: MutationObserver | null = null;
 let splitRoot: HTMLDivElement | null = null;
+let navEl: HTMLElement | null = null;
 let navWidth = $state(176);
 let resizingNav = false;
 let lastSettingsWindowTitle = "";
 
 const NAV_WIDTH_MIN = 140;
-const NAV_WIDTH_MAX = 320;
+const NAV_WIDTH_MAX = 480;
 const NAV_WIDTH_KEY = "settings.nav.width";
 
 function clampNavWidth(px: number): number {
   return Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, Math.round(px)));
+}
+
+/** Measure the nav's natural content width and ensure navWidth is at least that. */
+function ensureNavFitsContent(): void {
+  if (!navEl) return;
+  // Temporarily remove the fixed width so we can measure natural content width
+  const prev = navEl.style.width;
+  navEl.style.width = "max-content";
+  const natural = navEl.scrollWidth;
+  navEl.style.width = prev;
+  const needed = clampNavWidth(natural);
+  if (navWidth < needed) {
+    navWidth = needed;
+    persistNavWidth(navWidth);
+  }
 }
 
 function persistNavWidth(px: number): void {
@@ -190,6 +250,16 @@ onMount(async () => {
 
   window.addEventListener("keydown", onKeydown);
 
+  // Ensure sidebar is wide enough for its content at the current font size
+  ensureNavFitsContent();
+
+  // Re-check when the root font-size changes (appearance settings)
+  fontObserver = new MutationObserver(() => {
+    // Wait a frame for layout to settle after font-size change
+    requestAnimationFrame(() => ensureNavFitsContent());
+  });
+  fontObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+
   // Support ?tab=updates query param (used by open_updates_window)
   const params = new URLSearchParams(window.location.search);
   const qTab = params.get("tab");
@@ -208,6 +278,7 @@ onDestroy(() => {
   if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
   stopResize();
   unlisten?.();
+  fontObserver?.disconnect();
 });
 
 $effect(() => {
@@ -227,7 +298,7 @@ $effect(() => {
   <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
     <!-- Sidebar nav -->
-    <nav style={`width:${navWidth}px`} class="shrink-0 border-r border-border dark:border-white/[0.07]
+    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`} class="shrink-0 border-r border-border dark:border-white/[0.07]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
@@ -238,7 +309,7 @@ $effect(() => {
           role="tab"
           aria-selected={active}
           aria-controls="tab-panel-{id}"
-          title="{tabLabel(id)}{i < 9 ? ` (${modKey}${i + 1})` : ''}"
+          title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
                  rounded-lg text-left transition-colors text-[0.75rem] font-medium
                  {active
@@ -259,13 +330,13 @@ $effect(() => {
           </svg>
 
           <!-- Label -->
-          <span class="flex-1 leading-none">{tabLabel(id)}</span>
+          <span class="flex-1 leading-none whitespace-nowrap">{tabLabel(id)}</span>
 
           <!-- Kbd hint -->
-          {#if i < 9}
+          {#if digitForTab(i)}
             <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
-              {modKey}{i + 1}
+              {modifierForTab(i)}{digitForTab(i)}
             </kbd>
           {/if}
         </button>
@@ -286,6 +357,8 @@ $effect(() => {
         <DevicesTab />
       {:else if tab === "exg"}
         <ExgTab />
+      {:else if tab === "lsl"}
+        <LslTab />
       {:else if tab === "settings"}
         <SettingsTab />
       {:else if tab === "appearance"}
@@ -310,6 +383,8 @@ $effect(() => {
         <ToolsTab />
       {:else if tab === "umap"}
         <UmapTab />
+      {:else if tab === "clients"}
+        <ClientsTab />
       {:else if tab === "updates"}
         <UpdatesTab />
       {:else if tab === "screenshots"}

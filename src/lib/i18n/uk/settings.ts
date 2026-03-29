@@ -198,6 +198,11 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Калібрування",
   "settingsTabs.updates": "Оновлення",
 
+  "settings.mainWindow": "Головне вікно",
+  "settings.autoFitToggle": "Автопідбір висоти панелі",
+  "settings.autoFitToggleDesc":
+    "Розширює або зменшує головне вікно відповідно до вмісту панелі, обмежуючись висотою екрана.",
+
   "settings.activityTracking": "Відстеження активності",
   "settings.activeWindowToggle": "Відстежувати активне вікно",
   "settings.activeWindowToggleDesc":
@@ -367,6 +372,15 @@ const settings: Record<string, string> = {
     "Скануйте та з'єднайте його у списку пристроїв, потім підключіть через бажаний процес.",
   "settings.supportedDevices.instruction.mendi1": "Увімкніть Mendi і тримайте його поруч із цим комп’ютером.",
   "settings.supportedDevices.instruction.mendi2": "Проскануйте та спаруйте його зі списку пристроїв, потім підключіть.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "Окуляри AttentivU",
+  "settings.supportedDevices.instruction.attentivu1":
+    "Встановіть додаток NeuroSkill™ для iOS та спаруйте його з цим настільним додатком.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "У додатку iOS скануйте BLE-пристрої та підключіть окуляри AttentivU.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "Дані EEG передаються з окулярів → iPhone → комп'ютер через зашифрований тунель iroh. Вся обробка відбувається на цьому комп'ютері.",
   "settings.scanner.title": "Бекенди сканера",
   "settings.scanner.desc":
     "Оберіть, які транспорти виявлення працюють у фоновому режимі. Зміни набудуть чинності після перезапуску додатку.",
@@ -410,6 +424,62 @@ const settings: Record<string, string> = {
   "settings.storageFormatCsvDesc": "Зручний для читання, універсальний",
   "settings.storageFormatParquetDesc": "Стовпцевий, стиснутий",
   "settings.storageFormatBothDesc": "CSV + Parquet одночасно",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "settingsTabs.lsl": "LSL",
+  "lsl.localStreams": "Local LSL Streams",
+  "lsl.localStreamsDesc":
+    "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source.",
+  "lsl.scanButton": "Scan Network",
+  "lsl.scanning": "Scanning…",
+  "lsl.connect": "Connect",
+  "lsl.connecting": "Connecting…",
+  "lsl.noStreams": "No LSL streams found. Click Scan to search the network.",
+  "lsl.irohRemote": "Remote LSL via iroh",
+  "lsl.irohDesc":
+    "Accept a remote LSL stream tunnelled over iroh QUIC. Start the sink, share the endpoint ID with the remote client, and recording begins automatically when the source connects.",
+  "lsl.irohRunning": "Sink running — waiting for remote source",
+  "lsl.irohStopped": "Sink not running",
+  "lsl.irohStart": "Start Sink",
+  "lsl.irohStarting": "Starting…",
+  "lsl.irohStop": "Stop",
+  "lsl.irohEndpointId": "Endpoint ID",
+  "lsl.irohCopy": "Copy",
+  "lsl.irohCopied": "Copied!",
+  "lsl.irohEndpointIdHint":
+    "Share this ID with the remote rlsl-iroh source. The session will start automatically once the remote connects (timeout: 120 s).",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.autoConnect": "Auto-Connect",
+  "lsl.autoConnectToggle": "Auto-connect paired LSL streams",
+  "lsl.autoConnectDesc":
+    "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed.",
+  "lsl.pairedStreams": "Paired Streams",
+  "lsl.pair": "Pair",
+  "lsl.unpair": "Unpair",
+  "lsl.paired": "PAIRED",
+  "lsl.autoScanning": "Auto-scanning",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.scanningNetwork": "Scanning local network for LSL streams…",
+  "lsl.lastScanJustNow": "just now",
+  "lsl.pairAndConnect": "Pair & Connect",
+  "lsl.streaming": "STREAMING",
+  "lsl.sessionActive": "LSL session active",
+  "lsl.noStreamsHint":
+    "Make sure your LSL source is running and broadcasting on the same network. Common sources: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.switchTo": "Switch to this",
+  "lsl.switchHint": "CLICK CONNECT TO SWITCH",
+  "lsl.otherSessionActive": "Another device is streaming",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "lsl.background": "Background",
+  "lsl.backgroundHint": "Record this stream in the background while the primary session continues",
+  "lsl.backgroundSessions": "Background Recordings",
+  "lsl.recording": "RECORDING",
+  "lsl.stopRecording": "Stop recording",
 };
 
 export default settings;

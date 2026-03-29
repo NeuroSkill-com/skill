@@ -96,6 +96,7 @@ const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
       <!-- High contrast toggle -->
       <div class="flex items-center gap-3 px-4 py-3.5">
         <button
+          role="switch" aria-checked={getHighContrast()}
           onclick={() => toggleHighContrast()}
           class="flex items-center gap-3 text-left transition-colors w-full">
           <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors

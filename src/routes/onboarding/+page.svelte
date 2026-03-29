@@ -74,10 +74,13 @@ interface Phase {
 }
 
 // ── Steps ──────────────────────────────────────────────────────────────────
-type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
-const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "models", "tray", "done"];
+type Step = "welcome" | "enable_bluetooth" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
+const STEPS: Step[] = ["welcome", "enable_bluetooth", "bluetooth", "fit", "calibration", "models", "tray", "done"];
 
 let step = $state<Step>("welcome");
+
+// ── Bluetooth adapter check (OS-level)
+let btEnabled = $state<boolean | null>(null);
 let stepIdx = $derived(STEPS.indexOf(step));
 
 // ── Reactive status ────────────────────────────────────────────────────────
@@ -556,6 +559,14 @@ onMount(async () => {
       screenRecPerm = await invoke<boolean>("check_screen_recording_permission");
     } catch (e) {}
   }
+
+  // Check OS-level bluetooth adapter state (macOS only)
+  try {
+    btEnabled = await invoke<boolean>("check_bluetooth_power");
+  } catch (e) {
+    btEnabled = true;
+  }
+
   autoModelsStarted = true;
   void driveAutoModelQueue();
   modelsTimer = setInterval(() => {
@@ -568,6 +579,32 @@ onMount(async () => {
         .catch((_e) => {});
   }, 2000);
 });
+
+// Re-check bluetooth whenever the user navigates to that step
+$effect(() => {
+  if (step === "enable_bluetooth") {
+    invoke<boolean>("check_bluetooth_power")
+      .then((v) => {
+        btEnabled = v;
+      })
+      .catch(() => {
+        btEnabled = true;
+      });
+  }
+});
+
+async function checkBt() {
+  try {
+    btEnabled = await invoke<boolean>("check_bluetooth_power");
+  } catch (e) {
+    btEnabled = true;
+  }
+}
+
+async function openBt() {
+  await invoke("open_bt_settings");
+}
+
 onDestroy(async () => {
   // biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
   unsubs.forEach((u) => u());
@@ -672,6 +709,40 @@ useWindowTitle("window.title.onboarding");
             </div>
           {/each}
         </div>
+      </div>
+
+    <!-- ════ ENABLE BLUETOOTH (OS) ═════════════════════════════════════════════════ -->
+    {:else if step === "enable_bluetooth"}
+      <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-3xl">{btEnabled ? '✅' : '🔌'}</span>
+        <h2 class="text-[0.95rem] font-bold">{t("onboarding.enableBluetoothTitle")}</h2>
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.enableBluetoothBody")}
+        </p>
+
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-2.5">
+            <div class="flex items-center gap-2.5">
+              <div class="flex flex-col gap-0 flex-1 min-w-0">
+                <span class="text-[0.68rem] font-semibold">{t('onboarding.enableBluetoothStatus')}</span>
+              </div>
+              <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.55rem] font-semibold
+                           {btEnabled ? 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'}">
+                <span class="w-1.5 h-1.5 rounded-full {btEnabled ? 'bg-green-500' : 'bg-amber-400'}"></span>
+                {btEnabled ? t('perm.granted') : t('perm.denied')}
+              </span>
+            </div>
+            <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed mt-2">{t('onboarding.enableBluetoothHint')}</p>
+            <div class="flex justify-end mt-2 gap-2">
+              <Button size="sm" variant="outline" class="h-7 text-[0.62rem] px-3" onclick={openBt}>
+                {t('onboarding.enableBluetoothOpen')}
+              </Button>
+              <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={checkBt}>
+                {t('onboarding.btScan')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
     <!-- ════ BLUETOOTH ════════════════════════════════════════════════════════ -->

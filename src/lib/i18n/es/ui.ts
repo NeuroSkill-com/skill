@@ -308,6 +308,19 @@ const ui: Record<string, string> = {
     "Encienda sus auriculares BCI y colóquelos dentro del alcance de Bluetooth. Los dispositivos descubiertos aparecerán aquí automáticamente.",
   "devices.deviceSingular": "dispositivo",
   "devices.devicePlural": "dispositivos",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
+
+  "devices.iosOnly": "solo vía iOS",
+
+  "invite.copyLink": "Copiar enlace de invitación",
+  "invite.copied": "¡Copiado!",
+  "invite.linkHint": "Abre este enlace en el teléfono si no puedes escanear el código QR",
 };
 
 export default ui;

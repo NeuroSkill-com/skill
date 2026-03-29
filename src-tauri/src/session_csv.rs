@@ -88,6 +88,9 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
         "filter_config":          s.status.filter_config,
         "embedding_overlap_secs": s.status.embedding_overlap_secs,
 
+        // ── Remote phone (if connected via iroh) ─────────────────────────
+        "phone_info":             s.status.phone_info,
+
         // ── App ──────────────────────────────────────────────────────────
         "app_version":            env!("CARGO_PKG_VERSION"),
         "platform":               std::env::consts::OS,

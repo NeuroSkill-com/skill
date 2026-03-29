@@ -202,6 +202,11 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "Recherchez du texte extrait des captures d'écran. Utilisez « Correspondance texte » pour une recherche exacte ou « Sémantique » pour une recherche par sens.",
   "search.imageNoResults": "Aucune capture d'écran correspondante trouvée.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 };
 
 export default search;

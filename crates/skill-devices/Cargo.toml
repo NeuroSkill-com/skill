@@ -9,6 +9,7 @@ description = "Device-session pure logic — DND focus-mode decision engine, com
 skill-constants = { path = "../skill-constants" }
 skill-eeg       = { path = "../skill-eeg" }
 skill-data      = { path = "../skill-data" }
+skill-iroh      = { path = "../skill-iroh" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -31,7 +32,7 @@ mw75 = { version = "0.0.6", default-features = false }
 hermes-ble = { version = "0.0.1", default-features = false }
 
 # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
-emotiv = { version = "0.0.9", default-features = false }
+emotiv = { version = "0.0.11", default-features = false }
 
 # IDUN Guardian in-ear EEG earbud (BLE)
 idun = { version = "0.0.3", default-features = false }

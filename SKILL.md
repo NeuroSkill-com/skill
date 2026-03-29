@@ -2144,6 +2144,44 @@ node cli.ts listen --seconds 300 --json | jq '[.[] | select(.event == "hook") | 
     text: You're in deep focus — stay in the zone!
 ```
 
+### subscribe — Per-connection broadcast filter
+
+Control which broadcast events reach your WebSocket connection, with optional
+field projection and rate limiting.  Reduces bandwidth for mobile clients,
+widgets, and integrations that only need specific metrics.
+
+> Requires WebSocket (`--http` mode has no push streaming).
+
+```bash
+# Only receive eeg-bands, keep focus + hr fields, at max 1 Hz:
+node cli.ts subscribe --events eeg-bands --fields focus,hr --max-hz 1
+
+# Receive eeg-bands and hook events, all fields, unlimited rate:
+node cli.ts subscribe --events eeg-bands,hook
+
+# Reset to default (all events, all fields, unlimited):
+node cli.ts subscribe --events '*'
+node cli.ts subscribe                      # same — no args = reset
+```
+
+**WebSocket JSON:**
+```json
+→ {"command":"subscribe","events":["eeg-bands"],"fields":["focus","hr","timestamp"],"max_hz":1}
+← {"command":"subscribe","ok":true,"events":["eeg-bands"],"fields":["focus","hr","timestamp"],"max_hz":1.0}
+```
+
+| Parameter  | Type       | Default       | Description |
+|------------|------------|---------------|-------------|
+| `events`   | `string[]` | `[]` (all)    | Event types to receive. `["*"]` = all. |
+| `fields`   | `string[]` | `[]` (all)    | Payload keys to keep. `timestamp` always included. |
+| `max_hz`   | `number`   | `0` (unlimited) | Max updates per second per event type. Server drops excess. |
+
+**Use cases:**
+- **iOS/Android client on LTE:** `events: ["eeg-bands"], fields: ["focus","hr","relaxation"], max_hz: 1` → ~200 bytes/sec instead of 12 KB/sec
+- **Lock screen widget:** `events: ["eeg-bands"], fields: ["focus"], max_hz: 0.2`
+- **Hook monitor:** `events: ["hook"]` — only receive hook triggers
+- **Full firehose:** omit all params or `events: ["*"]`
+
 When a hook fires during the listen window, the CLI prints a dedicated
 **🪝 Hook Triggers** section showing the hook name, scenario, cosine distance
 to the matched label, and the label that triggered it.
@@ -3036,6 +3074,7 @@ ws.send(JSON.stringify({
 | `llm_hardware_fit` | — | — | Check which models fit in available RAM/VRAM |
 | `llm_logs` | — | — | Last ≤500 log entries |
 | `llm_chat` | `messages` (array) **or** `message` (string) | `temperature`, `top_k`, `top_p`, `repeat_penalty`, `seed`, `max_tokens`, `thinking_budget` | Streaming chat (multi-frame response; `messages` grows per turn for multi-turn) |
+| `subscribe` | — | `events` (string[]), `fields` (string[]), `max_hz` (number) | Filter broadcasts for this connection (WS only). Empty/omit = reset to all. |
 
 **GenParams reference** (applicable to `llm_chat`):
 
@@ -4130,3 +4169,38 @@ for s in sessions["sessions"][:3]:
 sleep = skill("sleep", start_utc=sessions["sessions"][0]["start_utc"],
                        end_utc=sessions["sessions"][0]["end_utc"])
 print
+
+---
+
+## iroh Clients, TOTP, and Scopes
+
+NeuroSkill now supports iroh client authorization with TOTP and per-client scopes.
+
+### Commands
+
+- `iroh info`
+- `iroh totp list`
+- `iroh totp create <name>`
+- `iroh totp qr <totp_id>`
+- `iroh totp revoke <totp_id>`
+- `iroh clients list`
+- `iroh clients register <endpoint_id> --otp <code> [--totp-id <id>] [--scope read|full]`
+- `iroh clients scope <client_id> <read|full>`
+- `iroh clients revoke <client_id>`
+
+### Scope model
+
+- `read` (default): read-only access to basic metrics/status endpoints.
+- `full`: full API control, including mutating commands.
+
+> ⚠️ **Warning**: granting `full` scope gives remote control over the full local API.
+
+### Settings UI
+
+A **Clients** tab is available in Settings for:
+
+- creating and revoking TOTP credentials,
+- viewing enrollment QR codes,
+- registering/revoking iroh clients,
+- changing scopes (`read` / `full`),
+- viewing last connection metadata (time, IP, geo fields when available).

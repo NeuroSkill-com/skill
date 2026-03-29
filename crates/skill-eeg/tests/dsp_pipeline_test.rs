@@ -74,7 +74,7 @@ fn band_analyzer_beta_dominates_for_20hz() {
 
 #[test]
 fn quality_monitor_channels() {
-    let mut monitor = QualityMonitor::new(4);
+    let mut monitor = QualityMonitor::with_window(4, 256);
 
     let clean = sine_wave(10.0, 256.0, 512);
     for ch in 0..4 {

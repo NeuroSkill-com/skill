@@ -67,6 +67,12 @@ const MIGRATE_OCR_EMBEDDING: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embe
 const MIGRATE_OCR_DIM: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
 const MIGRATE_OCR_HNSW: &str = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
 const MIGRATE_GIF_FILENAME: &str = "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
+/// Migration: add source tag to distinguish automatic screenshots from chat images.
+const MIGRATE_SOURCE: &str = "ALTER TABLE screenshots ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'";
+/// Migration: link chat images back to the LLM chat session that produced them.
+const MIGRATE_CHAT_SESSION_ID: &str = "ALTER TABLE screenshots ADD COLUMN chat_session_id INTEGER";
+/// Migration: optional user-provided caption / prompt text for chat images.
+const MIGRATE_CAPTION: &str = "ALTER TABLE screenshots ADD COLUMN caption TEXT NOT NULL DEFAULT ''";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -91,6 +97,13 @@ pub struct ScreenshotRow {
     pub ocr_embedding: Option<Vec<f32>>,
     pub ocr_embedding_dim: usize,
     pub ocr_hnsw_id: Option<u64>,
+    /// Image source: `"auto"` (periodic screenshot), `"llm_chat"` (user-sent in chat),
+    /// `"phone_upload"` (from iOS client).
+    pub source: String,
+    /// LLM chat session ID (if source is `"llm_chat"`).
+    pub chat_session_id: Option<i64>,
+    /// User-provided caption or the chat prompt that accompanied this image.
+    pub caption: String,
 }
 
 /// Lightweight result type for search queries.
@@ -197,6 +210,9 @@ impl ScreenshotStore {
             MIGRATE_OCR_DIM,
             MIGRATE_OCR_HNSW,
             MIGRATE_GIF_FILENAME,
+            MIGRATE_SOURCE,
+            MIGRATE_CHAT_SESSION_ID,
+            MIGRATE_CAPTION,
         ] {
             let _ = conn.execute(sql, []);
         }
@@ -214,8 +230,9 @@ impl ScreenshotStore {
                 hnsw_id, embedding, embedding_dim,
                 model_backend, model_id, image_size, quality,
                 app_name, window_title,
-                ocr_text, ocr_embedding, ocr_embedding_dim, ocr_hnsw_id
-            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+                ocr_text, ocr_embedding, ocr_embedding_dim, ocr_hnsw_id,
+                source, chat_session_id, caption
+            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
             params![
                 row.timestamp,
                 row.unix_ts as i64,
@@ -236,6 +253,9 @@ impl ScreenshotStore {
                 ocr_blob,
                 row.ocr_embedding_dim as i64,
                 row.ocr_hnsw_id.map(|v| v as i64),
+                row.source,
+                row.chat_session_id,
+                row.caption,
             ],
         )
         .ok()?;

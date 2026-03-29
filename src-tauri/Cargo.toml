@@ -241,6 +241,10 @@ llama-cpp-4 = { version = "0.2.12", optional = true }
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"
 
+# NAT-traversing P2P transport + TOTP access control.
+skill-iroh = { path = "../crates/skill-iroh" }
+skill-lsl  = { path = "../crates/skill-lsl" }
+
 # ── EEG Embedding ─────────────────────────────────────────────────────────────
 
 # ZUNA EEG foundation model — encoder-only, wgpu GPU backend.

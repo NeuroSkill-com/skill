@@ -322,6 +322,20 @@ let revealMAC = $state(false);
 let showElectrodes = $state(false);
 let showDeviceSwitcher = $state(false);
 
+// ── Secondary sessions ─────────────────────────────────────────────────────
+interface SecondarySession {
+  id: string;
+  device_name: string;
+  device_kind: string;
+  channels: number;
+  sample_rate: number;
+  sample_count: number;
+  csv_path: string;
+  started_at: number;
+  battery: number;
+}
+let secondarySessions = $state<SecondarySession[]>([]);
+
 let status = $state<DeviceStatus>({
   state: "disconnected",
   device_name: null,
@@ -466,6 +480,31 @@ const hasImuCap = $derived(status.has_imu);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
 const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi);
+const hasSecondary = $derived(secondarySessions.length > 0);
+
+/** Short transport/source label for the connected device. */
+const sourceLabel = $derived.by(() => {
+  switch (status.device_kind) {
+    case "lsl":
+      return "LSL";
+    case "lsl-iroh":
+      return "LSL · iroh";
+    case "iroh-remote":
+      return "iroh";
+    case "ganglion":
+      return "USB";
+    case "emotiv":
+      return "Cortex";
+    case "muse":
+    case "mw75":
+    case "hermes":
+    case "idun":
+    case "mendi":
+      return "BLE";
+    default:
+      return null;
+  }
+});
 
 // Channel labels and colours — dynamic based on connected device.
 // Use dynamic channel names from the device when available (handles
@@ -904,6 +943,18 @@ onMount(async () => {
     }),
   );
 
+  // Secondary (background) sessions
+  try {
+    secondarySessions = await invoke<SecondarySession[]>("list_secondary_sessions");
+  } catch {
+    /* ignore — command may not exist in older builds */
+  }
+  unlisteners.push(
+    await listen<SecondarySession[]>("secondary-sessions", (ev) => {
+      secondarySessions = ev.payload;
+    }),
+  );
+
   // When the background scanner discovers a new unpaired device, let the user
   // know so they can go to Settings → Devices and pair it.
   unlisteners.push(
@@ -1057,6 +1108,57 @@ useWindowTitle("window.title.main");
     <GpuChart />
   </div>
 
+  <!-- ── Connected iroh client banner ──────────────────────────────────── -->
+  {#if status.iroh_client_name && status.state === "connected"}
+    {@const pi = status.phone_info}
+    <div class="w-full max-w-[1200px] mb-1">
+      <div class="flex items-center gap-2.5 rounded-xl
+                  border border-indigo-400/30 bg-indigo-50/70 dark:bg-indigo-950/20
+                  px-3 py-2">
+        <!-- iroh icon -->
+        <div class="flex items-center justify-center w-7 h-7 rounded-lg shrink-0
+                    bg-gradient-to-br from-indigo-500 to-violet-500
+                    shadow-sm shadow-indigo-500/20">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3.5 h-3.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+
+        <div class="flex flex-col gap-0 flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[0.7rem] font-semibold text-indigo-800 dark:text-indigo-300 truncate">
+              {status.iroh_client_name}
+            </span>
+            <span class="relative flex h-1.5 w-1.5 shrink-0">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75 animate-ping"></span>
+              <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+            </span>
+          </div>
+          <span class="text-[0.54rem] text-indigo-600/60 dark:text-indigo-400/50 truncate">
+            {#if pi?.phone_model}
+              {pi.phone_model}{#if pi?.os_version} · {pi.os} {pi.os_version}{/if}{#if pi?.app_version} · v{pi.app_version}{/if}
+            {:else}
+              iroh remote client
+            {/if}
+          </span>
+        </div>
+
+        {#if pi?.battery_level != null && (pi?.battery_level ?? 0) > 0}
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-[0.54rem] text-indigo-600/50 dark:text-indigo-400/40">📱</span>
+            <span class="text-[0.58rem] font-semibold tabular-nums text-indigo-700/70 dark:text-indigo-300/60">
+              {Math.round((pi?.battery_level ?? 0) * 100)}%
+            </span>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- ── ZUNA model download / retry progress banner ─────────────────────── -->
   {#if modelDlVisible}
     <div class="w-full max-w-[1200px] mb-1">
@@ -1149,7 +1251,18 @@ useWindowTitle("window.title.main");
             />
           {/if}
           {#if status.device_name && status.state === "connected"}
-            <span class="text-[0.65rem] text-muted-foreground truncate min-w-0 flex-1">{status.device_name}</span>
+            <span class="text-[0.65rem] text-muted-foreground truncate min-w-0 flex-1">
+              {status.device_name}
+              {#if sourceLabel}
+                <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
+                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+              {/if}
+              {#if hasSecondary}
+                <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
+                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
+                <span class="text-[0.48rem] text-violet-500/60">+{secondarySessions.length}</span>
+              {/if}
+            </span>
           {:else}
             <span class="flex-1"></span>
           {/if}
@@ -1219,7 +1332,17 @@ useWindowTitle("window.title.main");
           {/if}
 
           {#if status.device_name && status.state === "connected"}
-            <p class="text-[0.73rem] text-muted-foreground font-medium -mt-1">{status.device_name}</p>
+            <p class="text-[0.73rem] text-muted-foreground font-medium -mt-1">
+              {status.device_name}
+              {#if sourceLabel}
+                <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+              {/if}
+              {#if hasSecondary}
+                <span class="ml-1 text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
+              {/if}
+            </p>
             {#if status.serial_number || status.mac_address}
               <div class="flex flex-wrap justify-center gap-x-3 gap-y-0.5 -mt-0.5">
                 {#if status.serial_number}
@@ -1284,6 +1407,19 @@ useWindowTitle("window.title.main");
                 </button>
               {/if}
             {/if}
+
+            <!-- Disconnect button -->
+            <button
+              onclick={cancelRetry}
+              class="text-[0.55rem] text-muted-foreground/50 hover:text-destructive
+                     transition-colors mt-0.5 flex items-center gap-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   class="w-2.5 h-2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              {t("common.disconnect")}
+            </button>
           {/if}
         </div>
       {/if}
@@ -1921,6 +2057,54 @@ useWindowTitle("window.title.main");
 
     <!-- ── Footer ──────────────────────────────────────────────────────────── -->
     <Separator class="bg-border dark:bg-white/[0.06]" />
+    <!-- ── Secondary Sessions Strip ──────────────────────────────────── -->
+    {#if hasSecondary}
+      <div class="border-t border-border dark:border-white/[0.05]">
+        <div class="px-4 pt-2.5 pb-1">
+          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+            {t("dashboard.backgroundRecordings")}
+          </span>
+        </div>
+        {#each secondarySessions as sess (sess.id)}
+          <div class="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/30 dark:hover:bg-white/[0.02] transition-colors">
+            <!-- Pulsing dot -->
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+            </span>
+
+            <!-- Name + meta -->
+            <div class="flex items-center gap-1.5 flex-1 min-w-0">
+              <span class="text-[0.62rem] font-medium text-foreground truncate">
+                {sess.device_name}
+              </span>
+              <span class="text-[0.46rem] font-bold tracking-widest uppercase px-1 py-0.5 rounded
+                           bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
+                {sess.device_kind === "lsl" ? "LSL" : sess.device_kind === "lsl-iroh" ? "iroh" : sess.device_kind.toUpperCase()}
+              </span>
+            </div>
+
+            <!-- Stats -->
+            <span class="text-[0.54rem] text-muted-foreground/60 tabular-nums shrink-0">
+              {sess.channels}ch · {sess.sample_rate % 1 === 0 ? sess.sample_rate : sess.sample_rate.toFixed(1)} Hz
+            </span>
+            <span class="text-[0.56rem] text-muted-foreground tabular-nums shrink-0">
+              {sess.sample_count.toLocaleString()}
+            </span>
+
+            <!-- Stop -->
+            <button
+              class="text-muted-foreground/30 hover:text-red-500 transition-colors cursor-pointer text-[0.65rem] shrink-0"
+              onclick={() => invoke("lsl_cancel_secondary", { sessionId: sess.id })}
+              title={t("dashboard.stopSecondary")}
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
     <CardFooter class="px-5 py-3 flex items-center justify-between gap-2">
       <p class="text-[0.63rem] text-muted-foreground leading-relaxed truncate">
         {#if status.state === "connected"}
@@ -1930,13 +2114,6 @@ useWindowTitle("window.title.main");
         {/if}
       </p>
       <div class="flex items-center gap-2 shrink-0">
-        {#if status.state === "connected"}
-          <Button size="sm" variant="outline"
-                  class="h-5 px-2 text-[0.56rem] text-muted-foreground hover:text-destructive hover:border-destructive/50"
-                  onclick={cancelRetry}>
-            {t("common.disconnect")}
-          </Button>
-        {/if}
         <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>
       </div>
     </CardFooter>

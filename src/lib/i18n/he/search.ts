@@ -193,6 +193,11 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "חפש טקסט שחולץ מצילומי מסך. השתמש ב'התאמת טקסט' לחיפוש מדויק או 'סמנטי' לחיפוש לפי משמעות.",
   "search.imageNoResults": "לא נמצאו צילומי מסך תואמים.",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "label.customTime": "Custom time",
+  "label.labelNow": "Label at now",
+  "label.resetToNow": "Reset to now",
 };
 
 export default search;

@@ -195,6 +195,13 @@ const ui: Record<string, string> = {
   "cmdK.kw.highContrast": "accessibility visibility contrast borders text",
   "cmdK.kw.updates": "version upgrade download install patch",
 
+  // ── LSL commands ─────────────────────────────────────────────────────
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
+
   "toast.connected": "Connected",
   "toast.connectedMsg": "{name} is now streaming EEG data.",
   "toast.connectionLost": "Connection Lost",
@@ -286,6 +293,13 @@ const ui: Record<string, string> = {
     "Power on your BCI headset and place it within Bluetooth range. Discovered devices will appear here automatically.",
   "devices.deviceSingular": "device",
   "devices.devicePlural": "devices",
+
+  // ── Invite link (Clients tab) ──────────────────────────────────────────
+  "devices.iosOnly": "via iOS only",
+
+  "invite.copyLink": "Copy invite link",
+  "invite.copied": "Copied!",
+  "invite.linkHint": "Open this link on the phone if you can't scan the QR code",
 };
 
 export default ui;

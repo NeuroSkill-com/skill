@@ -12,7 +12,7 @@
 
 mod calendar;
 mod calibration;
-mod dnd_sleep;
+pub(crate) mod dnd_sleep;
 mod health;
 mod hooks;
 #[cfg(feature = "llm")]
@@ -223,6 +223,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let gyro = status.gyro;
     let fuel_gauge_mv = status.fuel_gauge_mv;
     let temperature_raw = status.temperature_raw;
+    let phone_info = status.phone_info.clone();
 
     // ── Hooks — most recent trigger across all hooks ─────────────────────────
     let hooks_summary = {
@@ -366,6 +367,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
         },
         "hooks": hooks_summary,
         "history": history_json,
+        "phone_info": phone_info,
     }))
 }
 
@@ -755,6 +757,57 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "hooks_suggest" => hooks::hooks_suggest(app, msg),
         "hooks_log" => hooks::hooks_log(app, msg),
         "umap_poll" => umap_poll(app, msg),
+        // ── iroh NAT-traversing API tunnel auth ─────────────────────────
+        "iroh_info" => {
+            let rt = app.state::<skill_iroh::SharedIrohRuntime>();
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_info(&auth, &rt)
+        }
+        "iroh_totp_list" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_list(&auth)
+        }
+        "iroh_totp_create" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_create(&auth, msg)
+        }
+        "iroh_totp_qr" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_qr(&auth, msg)
+        }
+        "iroh_totp_revoke" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_totp_revoke(&auth, msg)
+        }
+        "iroh_clients_list" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_clients_list(&auth)
+        }
+        "iroh_client_register" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_register(&auth, msg)
+        }
+        "iroh_client_revoke" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_revoke(&auth, msg)
+        }
+        "iroh_client_set_scope" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_set_scope(&auth, msg)
+        }
+        "iroh_phone_invite" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            let rt = app.state::<skill_iroh::SharedIrohRuntime>();
+            skill_iroh::commands::iroh_phone_invite(&auth, &rt, msg)
+        }
+        "iroh_scope_groups" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_scope_groups(&auth)
+        }
+        "iroh_client_permissions" => {
+            let auth = app.state::<skill_iroh::SharedIrohAuth>();
+            skill_iroh::commands::iroh_client_permissions(&auth, msg)
+        }
         "list_calibrations" => calibration::list_calibrations(app),
         "get_calibration" => calibration::get_calibration(app, msg),
         "create_calibration" => calibration::create_calibration(app, msg),
@@ -766,6 +819,41 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "dnd_set" => dnd_sleep::dnd_set(app, msg),
         "sleep_schedule" => dnd_sleep::sleep_schedule(app),
         "sleep_schedule_set" => dnd_sleep::sleep_schedule_set(app, msg),
+        "alarm_config" => dnd_sleep::alarm_config(app, msg),
+        // ── Pipeline config ────────────────────────────────────────────────
+        "get_max_pipeline_channels" => {
+            let r = app.app_state();
+            let s = r.lock_or_recover();
+            Ok(serde_json::json!({
+                "ok": true,
+                "max_pipeline_channels": s.max_pipeline_channels,
+                "eeg_channels_limit": skill_constants::EEG_CHANNELS,
+            }))
+        }
+        "set_max_pipeline_channels" => {
+            let val = msg
+                .get("value")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(24) as usize;
+            let clamped = val.clamp(2, 1024);
+            {
+                let r = app.app_state();
+                let mut s = r.lock_or_recover();
+                s.max_pipeline_channels = clamped;
+            }
+            crate::save_settings(app);
+            Ok(serde_json::json!({
+                "ok": true,
+                "max_pipeline_channels": clamped,
+                "dsp_limit": clamped.min(skill_constants::EEG_CHANNELS),
+            }))
+        }
+        // ── LSL stream sink ───────────────────────────────────────────────
+        "lsl_discover" => lsl_discover(app),
+        "lsl_connect" => lsl_connect(app, msg),
+        "lsl_iroh_start" => lsl_iroh_start(app).await,
+        "lsl_iroh_stop" => lsl_iroh_stop(app),
+        "lsl_iroh_status" => lsl_iroh_status(app),
         // ── Screenshot search ─────────────────────────────────────────────
         "search_screenshots" => screenshots::search_screenshots(app, msg),
         "screenshots_around" => screenshots::screenshots_around(app, msg),
@@ -819,4 +907,61 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "llm_hardware_fit" => llm_cmds::llm_hardware_fit(app, msg),
         other => Err(format!("unknown command: \"{other}\"")),
     }
+}
+
+// ── LSL stream commands ───────────────────────────────────────────────────────
+// Delegates to shared helpers in settings_cmds::lsl_cmds to avoid duplication
+// between WS and Tauri command layers.
+
+/// `lsl_discover` — scan for LSL streams on the local network.
+fn lsl_discover(app: &AppHandle) -> Result<Value, String> {
+    let paired = app.app_state().lock_or_recover().lsl_paired_streams.clone();
+    let streams = tokio::task::block_in_place(|| {
+        crate::settings_cmds::lsl_cmds::discover_streams_with_paired(&paired)
+    });
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_discover",
+        "streams": streams,
+        "count": streams.len(),
+    }))
+}
+
+/// `lsl_connect` — connect to a specific LSL stream by name.
+fn lsl_connect(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let name = msg.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+    crate::settings_cmds::lsl_cmds::connect_lsl_by_name(app, name);
+    Ok(serde_json::json!({ "ok": true, "command": "lsl_connect" }))
+}
+
+/// `lsl_iroh_start` — start the rlsl-iroh sink.
+async fn lsl_iroh_start(app: &AppHandle) -> Result<Value, String> {
+    let (endpoint_id, already_running) =
+        crate::settings_cmds::lsl_cmds::start_iroh_sink(app).await?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_start",
+        "endpoint_id": endpoint_id,
+        "already_running": already_running,
+    }))
+}
+
+/// `lsl_iroh_status` — return the rlsl-iroh sink endpoint ID.
+fn lsl_iroh_status(app: &AppHandle) -> Result<Value, String> {
+    let s = crate::settings_cmds::lsl_cmds::get_iroh_status(app);
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_status",
+        "endpoint_id": s.endpoint_id,
+        "running": s.running,
+    }))
+}
+
+/// `lsl_iroh_stop` — cancel a pending or active rlsl-iroh sink session.
+fn lsl_iroh_stop(app: &AppHandle) -> Result<Value, String> {
+    crate::settings_cmds::lsl_cmds::stop_iroh_sink(app);
+    Ok(serde_json::json!({
+        "ok": true,
+        "command": "lsl_iroh_stop",
+    }))
 }

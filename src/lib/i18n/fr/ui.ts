@@ -291,6 +291,19 @@ const ui: Record<string, string> = {
     "Allumez votre casque BCI et placez-le à portée Bluetooth. Les appareils découverts apparaîtront ici automatiquement.",
   "devices.deviceSingular": "appareil",
   "devices.devicePlural": "appareils",
+
+  // ── Auto-synced from en/ (2026-03-28) ──
+  "cmdK.sectionLsl": "LSL",
+  "cmdK.lslScan": "Scan for LSL Streams",
+  "cmdK.lslOpenSettings": "LSL Settings",
+  "cmdK.lslIrohStart": "Start iroh Remote Sink",
+  "cmdK.lslIrohStop": "Stop iroh Remote Sink",
+
+  "devices.iosOnly": "via iOS uniquement",
+
+  "invite.copyLink": "Copier le lien d'invitation",
+  "invite.copied": "Copié !",
+  "invite.linkHint": "Ouvrez ce lien sur le téléphone si vous ne pouvez pas scanner le code QR",
 };
 
 export default ui;

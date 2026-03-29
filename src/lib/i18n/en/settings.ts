@@ -91,6 +91,15 @@ const settings: Record<string, string> = {
     "Scan and pair it in the Devices list, then connect from the preferred device flow.",
   "settings.supportedDevices.instruction.mendi1": "Power on Mendi and keep it near this computer.",
   "settings.supportedDevices.instruction.mendi2": "Scan and pair it from the Devices list, then connect.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "AttentivU Glasses",
+  "settings.supportedDevices.instruction.attentivu1":
+    "Install the NeuroSkill™ iOS app on your iPhone and pair it with this desktop app.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "In the iOS app, scan for BLE devices and connect to your AttentivU glasses.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "EEG data streams from the glasses → iPhone → desktop via the encrypted iroh tunnel. All processing happens on this computer.",
   "settings.scanner.title": "Scanner Backends",
   "settings.scanner.desc":
     "Toggle which discovery transports run in the background. Changes take effect on next app restart.",
@@ -314,6 +323,11 @@ const settings: Record<string, string> = {
 
   "settingsTabs.tts": "Voice",
 
+  "settings.mainWindow": "Main Window",
+  "settings.autoFitToggle": "Auto-fit dashboard height",
+  "settings.autoFitToggleDesc":
+    "Expands or contracts the main window to match dashboard content, clamped to screen height.",
+
   "settings.activityTracking": "Activity Tracking",
   "settings.activeWindowToggle": "Track Active Window",
   "settings.activeWindowToggleDesc":
@@ -369,6 +383,55 @@ const settings: Record<string, string> = {
   "settingsTabs.sleep": "Sleep",
   "settingsTabs.devices": "Devices",
   "settingsTabs.exg": "EXG",
+  "settingsTabs.lsl": "LSL",
+
+  // ── LSL tab ──────────────────────────────────────────────────────────────
+  "lsl.localStreams": "Local LSL Streams",
+  "lsl.localStreamsDesc":
+    "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source.",
+  "lsl.autoConnect": "Auto-Connect",
+  "lsl.autoConnectToggle": "Auto-connect paired LSL streams",
+  "lsl.autoConnectDesc":
+    "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed.",
+  "lsl.pairedStreams": "Paired Streams",
+  "lsl.pair": "Pair",
+  "lsl.unpair": "Unpair",
+  "lsl.paired": "PAIRED",
+  "lsl.autoScanning": "Auto-scanning",
+  "lsl.scanButton": "Scan Network",
+  "lsl.scanning": "Scanning…",
+  "lsl.scanningNetwork": "Scanning local network for LSL streams…",
+  "lsl.lastScanJustNow": "just now",
+  "lsl.connect": "Connect",
+  "lsl.connecting": "Connecting…",
+  "lsl.pairAndConnect": "Pair & Connect",
+  "lsl.switchTo": "Switch to this",
+  "lsl.switchHint": "CLICK CONNECT TO SWITCH",
+  "lsl.otherSessionActive": "Another device is streaming",
+  "lsl.background": "Background",
+  "lsl.backgroundHint": "Record this stream in the background while the primary session continues",
+  "lsl.backgroundSessions": "Background Recordings",
+  "lsl.recording": "RECORDING",
+  "lsl.stopRecording": "Stop recording",
+  "lsl.streaming": "STREAMING",
+  "lsl.sessionActive": "LSL session active",
+  "lsl.noStreams": "No LSL streams found",
+  "lsl.noStreamsHint":
+    "Make sure your LSL source is running and broadcasting on the same network. Common sources: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
+
+  "lsl.irohRemote": "Remote LSL via iroh",
+  "lsl.irohDesc":
+    "Accept a remote LSL stream tunnelled over iroh QUIC. Start the sink, share the endpoint ID with the remote client, and recording begins automatically when the source connects.",
+  "lsl.irohRunning": "Sink running — waiting for remote source",
+  "lsl.irohStopped": "Sink not running",
+  "lsl.irohStart": "Start Sink",
+  "lsl.irohStarting": "Starting…",
+  "lsl.irohStop": "Stop",
+  "lsl.irohEndpointId": "Endpoint ID",
+  "lsl.irohCopy": "Copy",
+  "lsl.irohCopied": "Copied!",
+  "lsl.irohEndpointIdHint":
+    "Share this ID with the remote rlsl-iroh source. The session will start automatically once the remote connects (timeout: 120 s).",
 
   "sleepSettings.title": "Sleep Schedule",
   "sleepSettings.subtitle": "Set your sleeping hours for sleep analysis and session classification.",
