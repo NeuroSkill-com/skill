@@ -96,7 +96,13 @@ pub async fn handle_device_proxy_connection(conn: iroh::endpoint::Connection, tx
         }
     }
 
-    eprintln!("[iroh-device] peer {peer_id} disconnected");
+    eprintln!("[iroh-device] peer {peer_id} disconnected — sending synthetic DeviceDisconnected");
+
+    // The phone may not have had a chance to send MSG_DEVICE_DISCONNECTED
+    // (e.g. app killed, phone out of range, iroh relay down).  Send a
+    // synthetic disconnect so the session runner ends the recording
+    // promptly instead of waiting for the data watchdog timeout.
+    let _ = tx.try_send(RemoteDeviceEvent::DeviceDisconnected { seq: 0, timestamp: 0 });
 }
 
 async fn handle_one_message(
