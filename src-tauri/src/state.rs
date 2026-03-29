@@ -180,6 +180,10 @@ pub struct DeviceStatus {
     /// Populated when a remote device streams via iroh with `MSG_PHONE_INFO`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phone_info: Option<serde_json::Value>,
+    /// Display name of the connected iroh client (from the auth store).
+    /// Set when a remote session starts via iroh's device-proxy channel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iroh_client_name: Option<String>,
     /// Hardware EEG channel count of the connected device.
     pub eeg_channel_count: usize,
     /// Hardware EEG sample rate of the connected device (Hz).
@@ -240,6 +244,7 @@ impl Default for DeviceStatus {
             fnirs_hbt_right: 0.0,
             fnirs_connectivity: 0.0,
             phone_info: None,
+            iroh_client_name: None,
             eeg_channel_count: 0,
             eeg_sample_rate_hz: 0.0,
             has_ppg: false,
@@ -291,6 +296,7 @@ impl DeviceStatus {
         self.fnirs_hbt_right = 0.0;
         self.fnirs_connectivity = 0.0;
         self.phone_info = None;
+        self.iroh_client_name = None;
         self.eeg_channel_count = 0;
         self.eeg_sample_rate_hz = 0.0;
         self.has_ppg = false;

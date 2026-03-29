@@ -470,6 +470,13 @@ pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
         s.status
             .reset_for_scanning("iroh-remote", &csv, Some(&peer_id));
         s.status.device_id = Some(peer_id.clone());
+
+        // Look up the registered client name for this peer so the dashboard
+        // can display it (e.g. "Mario's iPhone").
+        let client_name = app
+            .try_state::<skill_iroh::SharedIrohAuth>()
+            .and_then(|auth| skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(&peer_id));
+        s.status.iroh_client_name = client_name;
     }
     refresh_tray(app);
     emit_status(app);

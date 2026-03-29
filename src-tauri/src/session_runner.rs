@@ -1062,9 +1062,24 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
                 }
                 // Also store phone_info in AppState for status display
                 if meta_type == "phone_info" {
+                    // If the phone_info contains an iroh_endpoint_id, resolve
+                    // the registered client name from the auth store.
+                    let client_name = val
+                        .get("iroh_endpoint_id")
+                        .and_then(|v| v.as_str())
+                        .and_then(|eid| {
+                            app.try_state::<skill_iroh::SharedIrohAuth>()
+                                .and_then(|auth| {
+                                    skill_iroh::lock_or_recover(&auth).client_name_for_endpoint(eid)
+                                })
+                        });
+
                     let r = app.app_state();
                     let mut s = r.lock_or_recover();
                     s.status.phone_info = Some(val.clone());
+                    if client_name.is_some() {
+                        s.status.iroh_client_name = client_name;
+                    }
                     drop(s);
                     emit_status(app);
                 }

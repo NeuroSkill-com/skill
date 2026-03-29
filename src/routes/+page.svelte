@@ -1108,6 +1108,57 @@ useWindowTitle("window.title.main");
     <GpuChart />
   </div>
 
+  <!-- ── Connected iroh client banner ──────────────────────────────────── -->
+  {#if status.iroh_client_name && status.state === "connected"}
+    {@const pi = status.phone_info}
+    <div class="w-full max-w-[1200px] mb-1">
+      <div class="flex items-center gap-2.5 rounded-xl
+                  border border-indigo-400/30 bg-indigo-50/70 dark:bg-indigo-950/20
+                  px-3 py-2">
+        <!-- iroh icon -->
+        <div class="flex items-center justify-center w-7 h-7 rounded-lg shrink-0
+                    bg-gradient-to-br from-indigo-500 to-violet-500
+                    shadow-sm shadow-indigo-500/20">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3.5 h-3.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+
+        <div class="flex flex-col gap-0 flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[0.7rem] font-semibold text-indigo-800 dark:text-indigo-300 truncate">
+              {status.iroh_client_name}
+            </span>
+            <span class="relative flex h-1.5 w-1.5 shrink-0">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75 animate-ping"></span>
+              <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+            </span>
+          </div>
+          <span class="text-[0.54rem] text-indigo-600/60 dark:text-indigo-400/50 truncate">
+            {#if pi?.phone_model}
+              {pi.phone_model}{#if pi?.os_version} · {pi.os} {pi.os_version}{/if}{#if pi?.app_version} · v{pi.app_version}{/if}
+            {:else}
+              iroh remote client
+            {/if}
+          </span>
+        </div>
+
+        {#if pi?.battery_level != null && (pi?.battery_level ?? 0) > 0}
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-[0.54rem] text-indigo-600/50 dark:text-indigo-400/40">📱</span>
+            <span class="text-[0.58rem] font-semibold tabular-nums text-indigo-700/70 dark:text-indigo-300/60">
+              {Math.round((pi?.battery_level ?? 0) * 100)}%
+            </span>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- ── ZUNA model download / retry progress banner ─────────────────────── -->
   {#if modelDlVisible}
     <div class="w-full max-w-[1200px] mb-1">

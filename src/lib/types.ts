@@ -106,6 +106,20 @@ export interface DeviceStatus {
   eeg_channel_count?: number;
   /** Hardware EEG sample rate in Hz (e.g. 128 for Emotiv). */
   eeg_sample_rate_hz?: number;
+  /** Phone descriptor from the remote iOS client (model, OS, locale, etc.). */
+  phone_info?: {
+    phone_model?: string;
+    phone_name?: string;
+    os?: string;
+    os_version?: string;
+    app_version?: string;
+    battery_level?: number;
+    battery_state?: string;
+    iroh_endpoint_id?: string;
+    [k: string]: unknown;
+  } | null;
+  /** Display name of the connected iroh client (from the auth store). */
+  iroh_client_name?: string | null;
   /** Catch-all for future fields not yet typed. */
   [k: string]: unknown;
 }

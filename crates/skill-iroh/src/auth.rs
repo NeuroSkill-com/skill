@@ -342,6 +342,17 @@ impl IrohAuthStore {
         })
     }
 
+    /// Return the display name of the client registered for `endpoint_id`,
+    /// or `None` if no active (non-revoked) client matches.
+    pub fn client_name_for_endpoint(&self, endpoint_id: &str) -> Option<String> {
+        let endpoint_id = endpoint_id.trim().to_lowercase();
+        self.db
+            .clients
+            .iter()
+            .find(|c| c.revoked_at.is_none() && c.endpoint_id == endpoint_id)
+            .map(|c| c.name.clone())
+    }
+
     pub fn is_endpoint_allowed(&self, endpoint_id: &str) -> bool {
         let endpoint_id = endpoint_id.trim().to_lowercase();
         self.db
