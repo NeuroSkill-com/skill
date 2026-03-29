@@ -378,6 +378,15 @@ const settings: Record<string, string> = {
     "Schalten Sie Mendi ein und halten Sie es in der Nähe dieses Computers.",
   "settings.supportedDevices.instruction.mendi2":
     "Scannen und koppeln Sie es in der Geräteliste und verbinden Sie es dann.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "AttentivU Brille",
+  "settings.supportedDevices.instruction.attentivu1":
+    "Installiere die NeuroSkill™ iOS-App und kopple sie mit dieser Desktop-App.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "Scanne in der iOS-App nach BLE-Geräten und verbinde dich mit deiner AttentivU Brille.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "EEG-Daten werden von der Brille → iPhone → Desktop über den verschlüsselten iroh-Tunnel gestreamt. Alle Verarbeitung findet auf diesem Computer statt.",
   "settings.scanner.title": "Scanner-Backends",
   "settings.scanner.desc":
     "Wählen Sie, welche Erkennungstransporte im Hintergrund laufen. Änderungen werden beim nächsten App-Neustart wirksam.",

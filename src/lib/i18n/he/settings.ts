@@ -355,6 +355,15 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak2": "סרוק ושייך אותו ברשימת המכשירים, ואז התחבר דרך תהליך המכשיר המועדף.",
   "settings.supportedDevices.instruction.mendi1": "הפעל את Mendi ושמור אותו בקרבת המחשב הזה.",
   "settings.supportedDevices.instruction.mendi2": "סרוק ושייך אותו מרשימת המכשירים ואז התחבר.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "משקפי AttentivU",
+  "settings.supportedDevices.instruction.attentivu1":
+    "התקן את אפליקציית NeuroSkill™ ל-iOS ושייך אותה עם אפליקציית שולחן העבודה.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "באפליקציית ה-iOS, סרוק מכשירי BLE והתחבר למשקפי ה-AttentivU שלך.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "נתוני EEG זורמים מהמשקפיים → אייפון → שולחן עבודה דרך מנהרת iroh מוצפנת. כל העיבוד מתבצע במחשב זה.",
   "settings.scanner.title": "מנועי סריקה",
   "settings.scanner.desc": "בחרו אילו שכבות תקשורת גילוי פועלות ברקע. שינויים ייכנסו לתוקף בהפעלה מחדש של האפליקציה.",
   "settings.scanner.ble": "Bluetooth LE",

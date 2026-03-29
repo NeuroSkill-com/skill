@@ -295,6 +295,8 @@ const ui: Record<string, string> = {
   "devices.devicePlural": "devices",
 
   // ── Invite link (Clients tab) ──────────────────────────────────────────
+  "devices.iosOnly": "via iOS only",
+
   "invite.copyLink": "Copy invite link",
   "invite.copied": "Copied!",
   "invite.linkHint": "Open this link on the phone if you can't scan the QR code",

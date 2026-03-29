@@ -52,9 +52,11 @@ const onboarding: Record<string, string> = {
   "onboarding.calibrationNeedsBt": "חבר את המכשיר קודם כדי להפעיל כיול.",
   "onboarding.calibrationSkip": "אפשר לדלג ולכייל מאוחר יותר מתפריט המגש או ההגדרות.",
   "onboarding.enableBluetoothTitle": "הפעל Bluetooth ב‑Mac שלך",
-  "onboarding.enableBluetoothBody": "{app} זקוק להפעלת מתאם ה‑Bluetooth במחשב כדי למצוא ולחבר את מכשיר ה‑BCI. אנא הפעל את ה‑Bluetooth בהגדרות המערכת אם הוא כבוי.",
+  "onboarding.enableBluetoothBody":
+    "{app} זקוק להפעלת מתאם ה‑Bluetooth במחשב כדי למצוא ולחבר את מכשיר ה‑BCI. אנא הפעל את ה‑Bluetooth בהגדרות המערכת אם הוא כבוי.",
   "onboarding.enableBluetoothStatus": "מתאם Bluetooth",
-  "onboarding.enableBluetoothHint": "פתח את הגדרות ה‑Bluetooth והפעל אותו. אם אתה מריץ בפיתוח דרך ה‑Terminal, וודא שהמתאם המערכת מופעל.",
+  "onboarding.enableBluetoothHint":
+    "פתח את הגדרות ה‑Bluetooth והפעל אותו. אם אתה מריץ בפיתוח דרך ה‑Terminal, וודא שהמתאם המערכת מופעל.",
   "onboarding.enableBluetoothOpen": "פתח הגדרות Bluetooth",
   "onboarding.modelsTitle": "הורדת מודלים מומלצים",
   "onboarding.modelsBody":

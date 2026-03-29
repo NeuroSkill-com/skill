@@ -62,9 +62,11 @@ const onboarding: Record<string, string> = {
   "onboarding.calibrationSkip":
     "Vous pouvez sauter cette étape et calibrer plus tard depuis le menu ou les paramètres.",
   "onboarding.enableBluetoothTitle": "Activez le Bluetooth sur votre Mac",
-  "onboarding.enableBluetoothBody": "{app} a besoin que l'adaptateur Bluetooth de votre Mac soit activé pour trouver et connecter votre appareil BCI. Veuillez activer Bluetooth dans les Réglages si il est désactivé.",
+  "onboarding.enableBluetoothBody":
+    "{app} a besoin que l'adaptateur Bluetooth de votre Mac soit activé pour trouver et connecter votre appareil BCI. Veuillez activer Bluetooth dans les Réglages si il est désactivé.",
   "onboarding.enableBluetoothStatus": "Adaptateur Bluetooth",
-  "onboarding.enableBluetoothHint": "Ouvrez Réglages → Bluetooth et activez Bluetooth. Si vous exécutez en développement via le Terminal, assurez-vous que l'adaptateur système est activé.",
+  "onboarding.enableBluetoothHint":
+    "Ouvrez Réglages → Bluetooth et activez Bluetooth. Si vous exécutez en développement via le Terminal, assurez-vous que l'adaptateur système est activé.",
   "onboarding.enableBluetoothOpen": "Ouvrir les réglages Bluetooth",
   "onboarding.modelsTitle": "Télécharger les modèles recommandés",
   "onboarding.modelsBody":

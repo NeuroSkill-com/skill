@@ -298,6 +298,8 @@ const ui: Record<string, string> = {
   "cmdK.lslIrohStart": "Start iroh Remote Sink",
   "cmdK.lslIrohStop": "Stop iroh Remote Sink",
 
+  "devices.iosOnly": "nur über iOS",
+
   "invite.copyLink": "Einladungslink kopieren",
   "invite.copied": "Kopiert!",
   "invite.linkHint": "Öffne diesen Link auf dem Handy, wenn du den QR-Code nicht scannen kannst",

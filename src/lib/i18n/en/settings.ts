@@ -91,6 +91,15 @@ const settings: Record<string, string> = {
     "Scan and pair it in the Devices list, then connect from the preferred device flow.",
   "settings.supportedDevices.instruction.mendi1": "Power on Mendi and keep it near this computer.",
   "settings.supportedDevices.instruction.mendi2": "Scan and pair it from the Devices list, then connect.",
+
+  "settings.supportedDevices.company.attentivu": "AttentivU",
+  "settings.supportedDevices.device.attentivuGlasses": "AttentivU Glasses",
+  "settings.supportedDevices.instruction.attentivu1":
+    "Install the NeuroSkill™ iOS app on your iPhone and pair it with this desktop app.",
+  "settings.supportedDevices.instruction.attentivu2":
+    "In the iOS app, scan for BLE devices and connect to your AttentivU glasses.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "EEG data streams from the glasses → iPhone → desktop via the encrypted iroh tunnel. All processing happens on this computer.",
   "settings.scanner.title": "Scanner Backends",
   "settings.scanner.desc":
     "Toggle which discovery transports run in the background. Changes take effect on next app restart.",
