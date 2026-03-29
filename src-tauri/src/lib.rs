@@ -264,7 +264,7 @@ use llm::cmds::{
     pause_llm_download, refresh_llm_catalog, rename_chat_session, resume_llm_download,
     save_chat_message, save_chat_tool_calls, set_llm_active_mmproj, set_llm_active_model,
     set_llm_autoload_mmproj, set_session_params, start_llm_server, stop_llm_server,
-    switch_llm_model, unarchive_chat_session,
+    switch_llm_mmproj, switch_llm_model, unarchive_chat_session,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -1599,6 +1599,7 @@ pub fn run() {
             #[cfg(feature = "llm")]
             stop_llm_server,
             #[cfg(feature = "llm")]
+            switch_llm_mmproj,
             switch_llm_model,
             #[cfg(feature = "llm")]
             get_llm_server_status,

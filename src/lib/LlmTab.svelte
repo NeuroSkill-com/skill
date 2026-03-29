@@ -202,8 +202,14 @@ async function selectModel(filename: string) {
 }
 
 async function selectMmproj(filename: string) {
+  startError = "";
   const next = catalog.active_mmproj === filename ? "" : filename;
-  await invoke("set_llm_active_mmproj", { filename: next });
+  // Atomic switch: set mmproj → stop → start in one backend call (mirrors
+  // selectModel / switch_llm_model behaviour so the server restarts with the
+  // new projector immediately).
+  invoke("switch_llm_mmproj", { filename: next }).catch((e: unknown) => {
+    startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Failed to switch mmproj";
+  });
   await loadCatalog();
 }
 

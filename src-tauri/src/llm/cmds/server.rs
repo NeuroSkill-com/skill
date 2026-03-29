@@ -477,6 +477,129 @@ pub fn switch_llm_model(
     Ok("switching".to_string())
 }
 
+/// Atomic mmproj switch: update the active mmproj → stop → restart the server.
+///
+/// Mirrors [`switch_llm_model`] but changes only the vision projector while
+/// keeping the text model unchanged.  If the server is not running, only the
+/// catalog/config is updated (no restart needed).
+#[tauri::command]
+pub fn switch_llm_mmproj(
+    filename: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+
+    // 1. Update catalog + config.
+    crate::llm::cmds::set_llm_active_mmproj(filename.clone(), app.clone(), state.clone());
+
+    let (cell, log_buf, loading, start_error) = {
+        let s = state.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let llm = __llm_arc.lock_or_recover();
+        (
+            llm.state_cell.clone(),
+            llm.logs.clone(),
+            llm.loading.clone(),
+            llm.start_error.clone(),
+        )
+    };
+
+    // 2. If the server is not running, nothing more to do.
+    let server_state = { cell.lock_or_recover().take() };
+    if server_state.is_none() && !loading.load(Ordering::Relaxed) {
+        return Ok("updated".to_string());
+    }
+
+    // 3. Server was running — restart it with the new mmproj.
+    *start_error.lock_or_recover() = None;
+    loading.store(true, Ordering::Relaxed);
+
+    let label = if filename.is_empty() {
+        "disabling vision projector".to_string()
+    } else {
+        format!("switching mmproj to {filename}")
+    };
+
+    let emitter = crate::llm::TauriEmitter(app.clone());
+    push_log(
+        &emitter,
+        &log_buf,
+        "info",
+        &format!("switch_llm_mmproj: {label}"),
+    );
+
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Shut down old server.
+        if let Some(old) = server_state {
+            let log_buf2 = log_buf.clone();
+            let emitter2 = crate::llm::TauriEmitter(app2.clone());
+            tokio::task::spawn_blocking(move || {
+                match std::sync::Arc::try_unwrap(old) {
+                    Ok(owned) => owned.shutdown(),
+                    Err(arc) => drop(arc),
+                }
+                push_log(
+                    &emitter2,
+                    &log_buf2,
+                    "info",
+                    "model unloaded for mmproj switch",
+                );
+            })
+            .await
+            .ok();
+        }
+
+        // Start with updated config.
+        let (mut config, catalog, skill_dir) = {
+            let r = app2.state::<Mutex<Box<AppState>>>();
+            let s = r.lock_or_recover();
+            let __llm_arc = s.llm.clone();
+            let llm = __llm_arc.lock_or_recover();
+            (llm.config.clone(), llm.catalog.clone(), s.skill_dir.clone())
+        };
+
+        if config.mmproj.is_none() {
+            config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
+        }
+
+        let emitter = crate::llm::TauriEmitter(app2.clone());
+        let emitter_arc: std::sync::Arc<dyn crate::llm::LlmEventEmitter> =
+            std::sync::Arc::new(crate::llm::TauriEmitter(app2));
+        let result = tokio::task::spawn_blocking(move || {
+            crate::llm::init(&config, &catalog, emitter_arc, log_buf, &skill_dir)
+        })
+        .await;
+
+        loading.store(false, Ordering::Relaxed);
+
+        match result {
+            Ok(Some(s)) => {
+                *cell.lock_or_recover() = Some(s);
+            }
+            Ok(None) => {
+                let msg = "Failed to restart LLM server after mmproj switch.".to_string();
+                *start_error.lock_or_recover() = Some(msg.clone());
+                emitter.emit_event(
+                    "llm:status",
+                    serde_json::json!({"status":"stopped","error":msg}),
+                );
+            }
+            Err(e) => {
+                let msg = format!("Load task panicked: {e}");
+                *start_error.lock_or_recover() = Some(msg.clone());
+                emitter.emit_event(
+                    "llm:status",
+                    serde_json::json!({"status":"stopped","error":msg}),
+                );
+            }
+        }
+    });
+
+    Ok("switching".to_string())
+}
+
 // ── Status ────────────────────────────────────────────────────────────────────
 
 /// Return the current server status: `Stopped | Loading | Running`.

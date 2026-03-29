@@ -43,8 +43,8 @@ pub use hardware_fit::{get_model_hardware_fit, ModelHardwareFit};
 pub use selection::{set_llm_active_mmproj, set_llm_active_model, set_llm_autoload_mmproj};
 #[allow(unused_imports)]
 pub use server::{
-    get_llm_logs, get_llm_server_status, start_llm_server, stop_llm_server, switch_llm_model,
-    LlmServerStatusResponse,
+    get_llm_logs, get_llm_server_status, start_llm_server, stop_llm_server, switch_llm_mmproj,
+    switch_llm_model, LlmServerStatusResponse,
 };
 #[allow(unused_imports)]
 pub use streaming::{
