@@ -557,7 +557,7 @@ pub(super) fn run_actor(
                 let prompt: Option<String> = 'build_prompt: {
                     loop {
                         let chat_msgs = build_chat_msgs(&trimmed_messages);
-                        let p = match model.apply_chat_template(None, chat_msgs, true) {
+                        let p = match model.apply_chat_template(None, &chat_msgs, true) {
                             Ok(p) => p,
                             Err(e) => {
                                 llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
