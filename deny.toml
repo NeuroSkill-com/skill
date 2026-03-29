@@ -25,7 +25,6 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
-    { id = "RUSTSEC-2026-0002", reason = "transitive dep, IterMut not exercised by our code; upgrade tracked" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
@@ -84,6 +83,13 @@ exceptions = [
     # so we allow both the deprecated alias and the canonical form.
     { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "mw75" },
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
+    { allow = ["GPL-3.0-only"], crate = "skill-iroh" },
+    { allow = ["GPL-3.0-only"], crate = "skill-lsl" },
+    { allow = ["GPL-3.0-only"], crate = "sleepfm" },
+    { allow = ["GPL-3.0-only"], crate = "iroh-example-client" },
+    { allow = ["GPL-3.0-only"], crate = "iroh_test_client" },
+    { allow = ["GPL-3.0-only"], crate = "rlsl" },
+    { allow = ["GPL-3.0-only"], crate = "rlsl-iroh" },
 ]
 
 [[licenses.clarify]]
