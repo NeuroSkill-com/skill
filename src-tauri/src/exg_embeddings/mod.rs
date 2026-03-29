@@ -11,7 +11,7 @@
 //! ```text
 //! ~/.skill/
 //!   20260223/
-//!     eeg_embeddings.hnsw   ← daily HNSW approximate-NN index
+//!     exg_embeddings.hnsw   ← daily HNSW approximate-NN index
 //!     eeg.sqlite            ← daily SQLite database
 //!   20260224/
 //!     ...
@@ -47,7 +47,7 @@ use std::{
 
 use crate::settings::{HookLastTrigger, HookRule};
 use crate::skill_log::SkillLogger;
-use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus};
+use skill_eeg::eeg_model_config::{EegModelStatus, ExgModelConfig};
 
 use crate::constants::{
     CHANNEL_NAMES, EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS,
@@ -214,7 +214,7 @@ pub struct EegAccumulator {
     // All fields below are cloned each time we (re)spawn the background worker.
     // They must be kept in sync with the parameters passed to `embed_worker`.
     skill_dir: PathBuf,
-    config: EegModelConfig,
+    config: ExgModelConfig,
     status: Arc<Mutex<EegModelStatus>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
     /// When set to `true` by `trigger_weights_download`, the running embed
@@ -239,7 +239,7 @@ impl EegAccumulator {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         skill_dir: PathBuf,
-        config: EegModelConfig,
+        config: ExgModelConfig,
         status: Arc<Mutex<EegModelStatus>>,
         cancel: Arc<std::sync::atomic::AtomicBool>,
         reload_requested: Arc<std::sync::atomic::AtomicBool>,
@@ -310,7 +310,7 @@ impl EegAccumulator {
     #[allow(clippy::too_many_arguments)]
     fn spawn_worker(
         skill_dir: PathBuf,
-        config: EegModelConfig,
+        config: ExgModelConfig,
         status: Arc<Mutex<EegModelStatus>>,
         cancel: Arc<std::sync::atomic::AtomicBool>,
         reload_requested: Arc<std::sync::atomic::AtomicBool>,
@@ -648,5 +648,157 @@ mod tests {
     fn resample_zero_target() {
         let out = resample_linear(&[1.0, 2.0, 3.0], 0);
         assert!(out.is_empty());
+    }
+
+    // ── EXG catalog tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn exg_catalog_is_valid_json() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value =
+            serde_json::from_str(json).expect("exg_catalog.json must be valid JSON");
+        assert!(catalog.get("families").is_some());
+        assert!(catalog.get("models").is_some());
+        assert!(catalog.get("active_model").is_some());
+    }
+
+    #[test]
+    fn exg_catalog_has_all_families() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+
+        // Must have at least these families
+        let expected = [
+            "zuna",
+            "luna-base",
+            "luna-large",
+            "luna-huge",
+            "reve-base",
+            "reve-large",
+            "cbramod",
+            "eegpt",
+            "labram",
+            "signaljepa",
+            "osf-base",
+            "sleepfm",
+            "sleeplm",
+            "sensorlm",
+            "opentslm",
+        ];
+        for name in &expected {
+            assert!(families.contains_key(*name), "missing family: {name}");
+        }
+    }
+
+    #[test]
+    fn exg_catalog_families_have_required_fields() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+
+        for (id, fam) in families {
+            assert!(fam["name"].is_string(), "{id}: missing name");
+            assert!(fam["description"].is_string(), "{id}: missing description");
+            assert!(fam["repo"].is_string(), "{id}: missing repo");
+            assert!(fam["tags"].is_array(), "{id}: missing tags");
+            assert!(
+                fam["weights_file"].is_string() || fam["weights_file"].is_null(),
+                "{id}: weights_file must be string or null"
+            );
+            assert!(fam["params_m"].is_number(), "{id}: missing params_m");
+            assert!(fam["embed_dim"].is_number(), "{id}: missing embed_dim");
+            assert!(fam["paper"].is_string(), "{id}: missing paper");
+            assert!(fam["doi"].is_string(), "{id}: missing doi");
+        }
+    }
+
+    #[test]
+    fn exg_catalog_models_reference_valid_families() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+        let models = catalog["models"].as_array().unwrap();
+
+        for m in models {
+            let fam_id = m["family"].as_str().unwrap();
+            assert!(
+                families.contains_key(fam_id),
+                "model references unknown family: {fam_id}"
+            );
+            assert!(m["filename"].is_string(), "{fam_id}: missing filename");
+            assert!(m["size_mb"].is_number(), "{fam_id}: missing size_mb");
+            assert!(
+                m["description"].is_string(),
+                "{fam_id}: missing description"
+            );
+        }
+    }
+
+    #[test]
+    fn exg_catalog_every_family_has_a_model() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        let model_families: std::collections::HashSet<&str> =
+            models.iter().filter_map(|m| m["family"].as_str()).collect();
+
+        for id in families.keys() {
+            assert!(
+                model_families.contains(id.as_str()),
+                "family {id} has no model entry"
+            );
+        }
+    }
+
+    #[test]
+    fn exg_catalog_zuna_is_active_default() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(catalog["active_model"].as_str().unwrap(), "ZUNA");
+    }
+
+    #[test]
+    fn exg_catalog_all_dois_are_nonempty() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+        for (id, fam) in families {
+            let doi = fam["doi"].as_str().unwrap();
+            assert!(!doi.is_empty(), "{id}: doi is empty");
+            assert!(
+                doi.starts_with("10."),
+                "{id}: doi doesn't start with 10.: {doi}"
+            );
+        }
+    }
+
+    #[test]
+    fn exg_catalog_all_papers_are_urls() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+        for (id, fam) in families {
+            let paper = fam["paper"].as_str().unwrap();
+            assert!(
+                paper.starts_with("https://"),
+                "{id}: paper is not https URL: {paper}"
+            );
+        }
+    }
+
+    #[test]
+    fn exg_catalog_repos_look_valid() {
+        let json = include_str!("../../exg_catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
+        let families = catalog["families"].as_object().unwrap();
+        for (id, fam) in families {
+            let repo = fam["repo"].as_str().unwrap();
+            assert!(
+                repo.contains('/'),
+                "{id}: repo doesn't look like org/name: {repo}"
+            );
+        }
     }
 }

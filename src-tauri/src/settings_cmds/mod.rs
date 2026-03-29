@@ -49,7 +49,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
 use crate::autostart;
-use crate::eeg_embeddings::download_hf_weights;
+use crate::exg_embeddings::download_hf_weights;
 use crate::settings::{save_umap_config, UmapUserConfig};
 use crate::settings::{DeviceApiConfig, NeuttsConfig, OpenBciConfig};
 use crate::AppStateExt;
@@ -60,7 +60,7 @@ use crate::{
 };
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_filter::{FilterConfig, PowerlineFreq};
-use skill_eeg::eeg_model_config::{save_model_config, EegModelConfig, EegModelStatus};
+use skill_eeg::eeg_model_config::{save_model_config, EegModelStatus, ExgModelConfig};
 // Hook keyword suggestions — moved to hook_cmds.rs
 
 // ── EEG / PPG / IMU subscriptions ────────────────────────────────────────────
@@ -208,12 +208,12 @@ pub fn set_log_config(
 // ── EEG model config ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelConfig {
+pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> ExgModelConfig {
     state.lock_or_recover().embedding.model_config.clone()
 }
 
 #[tauri::command]
-pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_eeg_model_config(config: ExgModelConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let (skill_dir, backend_changed) = {
         let mut s = state.lock_or_recover();
         let changed = s.embedding.model_config.model_backend != config.model_backend
@@ -277,6 +277,25 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
             config.luna_weights_file().to_string(),
             skill_constants::LUNA_CONFIG_FILE.to_string(),
         ),
+        // Generic: look up repo/files from the bundled EXG catalog.
+        _ => {
+            let catalog: serde_json::Value =
+                serde_json::from_str(include_str!("../../exg_catalog.json"))
+                    .expect("exg_catalog.json");
+            let key = config.model_backend.as_str();
+            let fam = &catalog["families"][key];
+            (
+                fam["repo"].as_str().unwrap_or("").to_string(),
+                fam["weights_file"]
+                    .as_str()
+                    .unwrap_or("model.safetensors")
+                    .to_string(),
+                fam["config_file"]
+                    .as_str()
+                    .unwrap_or("config.json")
+                    .to_string(),
+            )
+        }
     };
 
     // Clear any previous cancellation so the new attempt actually runs.
@@ -984,6 +1003,23 @@ pub async fn pick_gguf_file() -> Option<String> {
     .flatten()
 }
 
+/// Open a native file-picker dialog for selecting EXG model weights.
+///
+/// Returns `None` if the user cancels.
+#[tauri::command]
+pub async fn pick_exg_weights_file() -> Option<String> {
+    tokio::task::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("Model weights", &["safetensors", "pth", "bin", "pt"])
+            .set_title("Select EXG model weights")
+            .pick_file()
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 // ── Re-embed all raw EXG data ─────────────────────────────────────────────────
 
 /// Get a summary of what re-embedding would do: how many date directories
@@ -1144,7 +1180,7 @@ fn read_eeg_parquet(
 
 fn reembed_worker(
     skill_dir: std::path::PathBuf,
-    config: EegModelConfig,
+    config: ExgModelConfig,
     logger: std::sync::Arc<crate::skill_log::SkillLogger>,
     app: AppHandle,
 ) {
@@ -1217,6 +1253,20 @@ fn reembed_worker(
         skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
             skill_exg::resolve_luna_weights(&config.luna_hf_repo, config.luna_weights_file())
         }
+        // Generic: probe HF cache from catalog metadata.
+        _ => {
+            use hf_hub::{Cache, Repo};
+            let catalog: serde_json::Value =
+                serde_json::from_str(include_str!("../../exg_catalog.json"))
+                    .expect("exg_catalog.json");
+            let fam = &catalog["families"][backend_str];
+            let repo = fam["repo"].as_str().unwrap_or("");
+            let wf = fam["weights_file"].as_str().unwrap_or("model.safetensors");
+            let cf = fam["config_file"].as_str().unwrap_or("config.json");
+            let cache = Cache::from_env();
+            let hf = cache.repo(Repo::model(repo.to_string()));
+            hf.get(wf).and_then(|w| hf.get(cf).map(|c| (w, c)))
+        }
     };
 
     let Some((w_path, c_path)) = weights else {
@@ -1261,7 +1311,7 @@ fn reembed_worker(
         }
         skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
             let cfg_path =
-                crate::eeg_embeddings::luna_variant_config_path(&c_path, &config.luna_variant);
+                crate::exg_embeddings::luna_variant_config_path(&c_path, &config.luna_variant);
             match luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w_path, device.clone()) {
                 Ok((e, ms)) => {
                     skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)");
@@ -1278,6 +1328,17 @@ fn reembed_worker(
                     return;
                 }
             }
+        }
+        // Other backends: re-embed not yet supported.
+        _ => {
+            skill_log!(logger, "reembed", "{} re-embed not yet supported", backend);
+            emit(&ReembedProgress {
+                done: 0,
+                total: 0,
+                date: String::new(),
+                status: format!("error_{}_not_supported", backend_str),
+            });
+            return;
         }
     };
 
@@ -1534,7 +1595,7 @@ fn reembed_worker(
                     if ch.len() == epoch_samples {
                         ch.clone()
                     } else {
-                        crate::eeg_embeddings::resample_linear(ch, epoch_samples)
+                        crate::exg_embeddings::resample_linear(ch, epoch_samples)
                     }
                 })
                 .collect();

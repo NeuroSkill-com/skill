@@ -39,7 +39,7 @@ macro_rules! app_log {
     }};
 }
 
-mod eeg_embeddings;
+mod exg_embeddings;
 mod global_eeg_index;
 use global_eeg_index::GlobalEegIndex;
 
@@ -238,8 +238,8 @@ use settings_cmds::{
     get_skills_sync_on_launch, get_sleep_config, get_status, get_storage_format,
     get_supported_companies, get_theme_and_language, get_tts_preload, get_umap_config,
     get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports, list_skills,
-    open_session_for_timestamp, pair_device, pick_gguf_file, pick_ref_wav_file,
-    rebuild_screenshot_embeddings, retry_connect, search_screenshots_by_image,
+    open_session_for_timestamp, pair_device, pick_exg_weights_file, pick_gguf_file,
+    pick_ref_wav_file, rebuild_screenshot_embeddings, retry_connect, search_screenshots_by_image,
     search_screenshots_by_text, search_screenshots_by_vector, set_accent_color,
     set_active_window_tracking, set_api_token, set_autostart_enabled, set_daily_goal,
     set_device_api_config, set_disabled_skills, set_dnd_config, set_eeg_model_config,
@@ -1563,6 +1563,7 @@ pub fn run() {
             set_sleep_config,
             get_llm_config,
             set_llm_config,
+            pick_exg_weights_file,
             pick_gguf_file,
             web_cache_stats,
             web_cache_list,

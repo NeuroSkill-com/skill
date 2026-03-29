@@ -137,16 +137,16 @@ fn metrics_to_json(
 
 // ── Per-day storage (HNSW index + SQLite database) ────────────────────────────
 
-pub(in crate::eeg_embeddings) struct DayStore {
-    pub(in crate::eeg_embeddings) index:
+pub(in crate::exg_embeddings) struct DayStore {
+    pub(in crate::exg_embeddings) index:
         fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>,
-    pub(in crate::eeg_embeddings) index_path: PathBuf,
-    pub(in crate::eeg_embeddings) db_path: PathBuf,
-    pub(in crate::eeg_embeddings) conn: rusqlite::Connection,
-    pub(in crate::eeg_embeddings) logger: Arc<SkillLogger>,
+    pub(in crate::exg_embeddings) index_path: PathBuf,
+    pub(in crate::exg_embeddings) db_path: PathBuf,
+    pub(in crate::exg_embeddings) conn: rusqlite::Connection,
+    pub(in crate::exg_embeddings) logger: Arc<SkillLogger>,
     /// Which model backend owns this HNSW file (for logging / future use).
     #[allow(dead_code)]
-    pub(in crate::eeg_embeddings) model_backend: String,
+    pub(in crate::exg_embeddings) model_backend: String,
 }
 
 impl DayStore {
@@ -154,8 +154,8 @@ impl DayStore {
     /// for `date` inside `skill_dir`.
     ///
     /// Each model backend gets its own HNSW file:
-    /// - `eeg_embeddings.hnsw` for ZUNA (backward-compatible)
-    /// - `eeg_embeddings_luna.hnsw` for LUNA
+    /// - `exg_embeddings.hnsw` for ZUNA (backward-compatible)
+    /// - `exg_embeddings_luna.hnsw` for LUNA
     ///
     /// SQLite is shared — rows are differentiated by the `model_backend` column.
     pub(super) fn open(

@@ -15,7 +15,7 @@ use crate::global_eeg_index;
 use crate::settings::{HookLastTrigger, HookRule};
 use crate::skill_log::SkillLogger;
 use crate::MutexExt;
-use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, ExgModelBackend};
+use skill_eeg::eeg_model_config::{EegModelStatus, ExgModelBackend, ExgModelConfig};
 use skill_exg::{
     configure_cubecl_cache, panic_msg, yyyymmdd_utc, yyyymmddhhmmss_utc, EpochMetrics,
     GPU_DEVICE_POISONED,
@@ -359,7 +359,7 @@ fn msg_ts_utc_now() -> u64 {
 
 // Removed: use crate::unix_secs instead (was duplicated as unix_secs_now).
 
-// Re-exported so callers can use `crate::eeg_embeddings::cosine_distance`.
+// Re-exported so callers can use `crate::exg_embeddings::cosine_distance`.
 // Prefer importing `skill_exg::cosine_distance` directly in new code.
 pub(crate) use skill_exg::cosine_distance;
 
@@ -401,7 +401,7 @@ pub(crate) use skill_exg::fuzzy_match;
 pub(super) fn embed_worker(
     rx: mpsc::Receiver<EpochMsg>,
     skill_dir: PathBuf,
-    config: EegModelConfig,
+    config: ExgModelConfig,
     status: Arc<Mutex<EegModelStatus>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
     reload_requested: Arc<std::sync::atomic::AtomicBool>,
@@ -467,6 +467,25 @@ pub(super) fn embed_worker(
                 let wf = config.luna_weights_file();
                 skill_exg::resolve_luna_weights(&config.luna_hf_repo, wf)
             }
+            // Generic HF cache probe for all other backends.
+            _ => {
+                use hf_hub::{Cache, Repo};
+                let catalog: serde_json::Value =
+                    serde_json::from_str(include_str!("../../exg_catalog.json")).ok()?;
+                let families = catalog.get("families")?.as_object()?;
+                let fam = families.get(active_backend.as_str())?;
+                let repo = fam.get("repo")?.as_str()?;
+                let wf = fam.get("weights_file")?.as_str()?;
+                let cf = fam
+                    .get("config_file")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("config.json");
+                let cache = Cache::from_env();
+                let hf_repo = cache.repo(Repo::model(repo.to_string()));
+                let w = hf_repo.get(wf)?;
+                let c = hf_repo.get(cf)?;
+                Some((w, c))
+            }
         }
     };
 
@@ -481,6 +500,23 @@ pub(super) fn embed_worker(
             config.luna_weights_file().to_string(),
             skill_constants::LUNA_CONFIG_FILE.to_string(),
         ),
+        // Generic: look up repo/files from the bundled catalog.
+        _ => {
+            let catalog: serde_json::Value =
+                serde_json::from_str(include_str!("../../exg_catalog.json"))
+                    .expect("exg_catalog.json");
+            let fam = &catalog["families"][active_backend.as_str()];
+            let repo = fam["repo"].as_str().unwrap_or("").to_string();
+            let wf = fam["weights_file"]
+                .as_str()
+                .unwrap_or("model.safetensors")
+                .to_string();
+            let cf = fam["config_file"]
+                .as_str()
+                .unwrap_or("config.json")
+                .to_string();
+            (repo, wf, cf)
+        }
     };
 
     let weights = resolve_fn().or_else(|| {
@@ -688,6 +724,8 @@ pub(super) fn embed_worker(
     enum LoadedEncoder {
         Zuna(Box<ZunaEncoder<Wgpu>>),
         Luna(Box<luna_rs::LunaEncoder<Wgpu>>),
+        Reve(Box<reve_rs::ReveEncoder<Wgpu>>),
+        Osf(Box<osf_rs::OsfEncoder<Wgpu>>),
     }
 
     impl LoadedEncoder {
@@ -695,6 +733,8 @@ pub(super) fn embed_worker(
             match self {
                 Self::Zuna(e) => e.describe().to_string(),
                 Self::Luna(e) => e.describe(),
+                Self::Reve(e) => e.describe(),
+                Self::Osf(e) => e.describe(),
             }
         }
     }
@@ -726,6 +766,21 @@ pub(super) fn embed_worker(
                         luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w, device.clone())
                             .map(|(enc, ms)| (LoadedEncoder::Luna(Box::new(enc)), ms))
                             .map_err(|e| format!("{e:#}"))
+                    }
+                    ExgModelBackend::Reve => {
+                        reve_rs::ReveEncoder::<Wgpu>::load(&c, &w, device.clone())
+                            .map(|(enc, ms)| (LoadedEncoder::Reve(Box::new(enc)), ms))
+                            .map_err(|e| format!("{e:#}"))
+                    }
+                    ExgModelBackend::Osf => {
+                        osf_rs::OsfEncoder::<Wgpu>::load(&c, &w, device.clone())
+                            .map(|(enc, ms)| (LoadedEncoder::Osf(Box::new(enc)), ms))
+                            .map_err(|e| format!("{e:#}"))
+                    }
+                    // Crates with raw model API only (no high-level Encoder
+                    // wrapper yet) or incompatible burn version.
+                    _ => {
+                        Err(format!("{} encoder wrapper not yet integrated — weights downloaded, encoder pending", backend))
                     }
                 }
             },
@@ -1035,6 +1090,50 @@ pub(super) fn embed_worker(
                             return Err("empty luna embedding after pooling".into());
                         }
                         Ok(emb)
+                    }
+                    // REVE: build_batch needs positions (3D coords per channel)
+                    LoadedEncoder::Reve(reve_enc) => {
+                        let n_ch = ch_names.len().min(EEG_CHANNELS);
+                        let n_samples = if n_ch > 0 && !msg.samples[0].is_empty() {
+                            msg.samples[0].len()
+                        } else {
+                            EMBEDDING_EPOCH_SAMPLES
+                        };
+                        let flat: Vec<f32> = (0..n_ch)
+                            .flat_map(|ch| msg.samples[ch].iter().copied())
+                            .collect();
+                        // Default electrode positions (zeros — REVE uses 4D Fourier encoding)
+                        let positions = vec![0.0f32; n_ch * 3];
+                        let batch = reve_rs::data::build_batch::<Wgpu>(
+                            flat, positions, n_ch, n_samples, &device,
+                        );
+                        let result = reve_enc
+                            .run_batch(&batch)
+                            .map_err(|e| format!("reve encode: {e:#}"))?;
+                        if result.output.is_empty() {
+                            return Err("empty reve output".into());
+                        }
+                        Ok(result.output)
+                    }
+                    // OSF: 12-ch PSG input, 64 Hz, 30s = 1920 samples
+                    LoadedEncoder::Osf(osf_enc) => {
+                        let n_ch = ch_names.len().min(12);
+                        let n_samples = if n_ch > 0 && !msg.samples[0].is_empty() {
+                            msg.samples[0].len()
+                        } else {
+                            1920
+                        };
+                        let flat: Vec<f32> = (0..n_ch)
+                            .flat_map(|ch| msg.samples[ch].iter().copied())
+                            .collect();
+                        let batch = osf_rs::build_batch::<Wgpu>(flat, n_ch, n_samples, &device);
+                        let result = osf_enc
+                            .run_batch(&batch)
+                            .map_err(|e| format!("osf encode: {e:#}"))?;
+                        if result.cls_emb.is_empty() {
+                            return Err("empty osf output".into());
+                        }
+                        Ok(result.cls_emb)
                     }
                 }
             }));
@@ -1373,7 +1472,7 @@ fn store_metrics_only(
     status: &Arc<Mutex<EegModelStatus>>,
     logger: &Arc<SkillLogger>,
     skill_dir: &Path,
-    config: &EegModelConfig,
+    config: &ExgModelConfig,
 ) {
     // Rotate DayStore on midnight UTC rollover.
     let today = yyyymmdd_utc();

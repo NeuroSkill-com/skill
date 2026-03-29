@@ -34,7 +34,7 @@
 
 use tauri::{AppHandle, Manager};
 
-use crate::eeg_embeddings::EegAccumulator;
+use crate::exg_embeddings::EegAccumulator;
 use crate::AppStateExt;
 use crate::MutexExt;
 use skill_eeg::artifact_detection::ArtifactDetector;

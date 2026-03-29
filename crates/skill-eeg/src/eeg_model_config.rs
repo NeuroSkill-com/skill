@@ -26,19 +26,36 @@ use crate::constants::{
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExgModelBackend {
-    /// ZUNA encoder (Zyphra) — default.
+    /// ZUNA encoder (Zyphra) — default, recommended.
     #[default]
     Zuna,
-    /// LUNA encoder (thorir) — topology-agnostic, multiple sizes.
+    /// LUNA encoder (PulpBio) — topology-agnostic, multiple sizes.
     Luna,
+    /// REVE encoder (Brain-BZH) — 4D Fourier positional encoding.
+    Reve,
+    /// CBraMod encoder (braindecode) — criss-cross attention.
+    Cbramod,
+    /// EEGPT encoder (braindecode) — dual self-supervised transformer.
+    Eegpt,
+    /// LaBraM encoder (braindecode) — BEiTv2-style neural tokenization.
+    Labram,
+    /// SignalJEPA encoder (braindecode) — JEPA with dynamic spatial attention.
+    Signaljepa,
+    /// OSF encoder (yang-ai-lab) — multimodal PSG ViT-Base.
+    Osf,
+    /// SleepFM encoder (zou-group) — contrastive multimodal PSG.
+    Sleepfm,
+    /// SleepLM encoder (yang-ai-lab) — CoCa PSG + language.
+    Sleeplm,
+    /// SensorLM encoder (Google) — wearable sensor + language.
+    Sensorlm,
+    /// OpenTSLM encoder (Stanford BDHG) — time-series + LLM.
+    Opentslm,
 }
 
 impl std::fmt::Display for ExgModelBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Zuna => write!(f, "zuna"),
-            Self::Luna => write!(f, "luna"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -47,6 +64,16 @@ impl ExgModelBackend {
     pub fn from_str_loose(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "luna" => Self::Luna,
+            "reve" => Self::Reve,
+            "cbramod" => Self::Cbramod,
+            "eegpt" => Self::Eegpt,
+            "labram" => Self::Labram,
+            "signaljepa" => Self::Signaljepa,
+            "osf" => Self::Osf,
+            "sleepfm" => Self::Sleepfm,
+            "sleeplm" => Self::Sleeplm,
+            "sensorlm" => Self::Sensorlm,
+            "opentslm" => Self::Opentslm,
             _ => Self::Zuna,
         }
     }
@@ -56,19 +83,29 @@ impl ExgModelBackend {
         match self {
             Self::Zuna => "zuna",
             Self::Luna => "luna",
+            Self::Reve => "reve",
+            Self::Cbramod => "cbramod",
+            Self::Eegpt => "eegpt",
+            Self::Labram => "labram",
+            Self::Signaljepa => "signaljepa",
+            Self::Osf => "osf",
+            Self::Sleepfm => "sleepfm",
+            Self::Sleeplm => "sleeplm",
+            Self::Sensorlm => "sensorlm",
+            Self::Opentslm => "opentslm",
         }
     }
 }
 
 // ── Persisted configuration ───────────────────────────────────────────────────
 
-/// All user-tunable parameters for the ZUNA embedding pipeline.
+/// All user-tunable parameters for the EXG embedding pipeline.
 ///
 /// Saved to `~/.skill/model_config.json`.
 /// Changes to HNSW parameters take effect when the next daily index is created
 /// (i.e., at midnight UTC or on the next app launch).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EegModelConfig {
+pub struct ExgModelConfig {
     /// HuggingFace repository that contains the ZUNA weights.
     ///
     /// Default: `"Zyphra/ZUNA"`.  Weights must be downloaded manually:
@@ -138,7 +175,10 @@ fn default_luna_hf_repo() -> String {
     LUNA_HF_REPO.to_string()
 }
 
-impl Default for EegModelConfig {
+/// Legacy alias — old configs may have the old struct name.
+pub type EegModelConfig = ExgModelConfig;
+
+impl Default for ExgModelConfig {
     fn default() -> Self {
         Self {
             hf_repo: default_hf_repo(),
@@ -152,7 +192,7 @@ impl Default for EegModelConfig {
     }
 }
 
-impl EegModelConfig {
+impl ExgModelConfig {
     /// Return the LUNA safetensors filename for the current variant.
     ///
     /// Falls back to `LUNA_base.safetensors` if the variant is unrecognised.
@@ -335,9 +375,9 @@ pub struct LatestEpochMetrics {
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
-pub fn load_model_config(skill_dir: &Path) -> EegModelConfig {
+pub fn load_model_config(skill_dir: &Path) -> ExgModelConfig {
     let path = skill_dir.join(MODEL_CONFIG_FILE);
-    let mut cfg: EegModelConfig = std::fs::read_to_string(&path)
+    let mut cfg: ExgModelConfig = std::fs::read_to_string(&path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
@@ -351,7 +391,7 @@ pub fn load_model_config(skill_dir: &Path) -> EegModelConfig {
     cfg
 }
 
-pub fn save_model_config(skill_dir: &Path, cfg: &EegModelConfig) {
+pub fn save_model_config(skill_dir: &Path, cfg: &ExgModelConfig) {
     let _ = std::fs::create_dir_all(skill_dir);
     let path = skill_dir.join(MODEL_CONFIG_FILE);
     if let Ok(json) = serde_json::to_string_pretty(cfg) {
@@ -514,5 +554,153 @@ mod tests {
         assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── ExgModelBackend enum ──────────────────────────────────────────────
+
+    const ALL_BACKENDS: &[ExgModelBackend] = &[
+        ExgModelBackend::Zuna,
+        ExgModelBackend::Luna,
+        ExgModelBackend::Reve,
+        ExgModelBackend::Cbramod,
+        ExgModelBackend::Eegpt,
+        ExgModelBackend::Labram,
+        ExgModelBackend::Signaljepa,
+        ExgModelBackend::Osf,
+        ExgModelBackend::Sleepfm,
+        ExgModelBackend::Sleeplm,
+        ExgModelBackend::Sensorlm,
+        ExgModelBackend::Opentslm,
+    ];
+
+    #[test]
+    fn backend_default_is_zuna() {
+        assert_eq!(ExgModelBackend::default(), ExgModelBackend::Zuna);
+    }
+
+    #[test]
+    fn backend_as_str_round_trips_through_from_str_loose() {
+        for b in ALL_BACKENDS {
+            let s = b.as_str();
+            let parsed = ExgModelBackend::from_str_loose(s);
+            assert_eq!(&parsed, b, "round-trip failed for {s}");
+        }
+    }
+
+    #[test]
+    fn backend_as_str_is_lowercase_ascii() {
+        for b in ALL_BACKENDS {
+            let s = b.as_str();
+            assert!(!s.is_empty(), "empty as_str for {:?}", b);
+            assert!(
+                s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                "non-lowercase as_str for {:?}: {s}",
+                b
+            );
+        }
+    }
+
+    #[test]
+    fn backend_display_matches_as_str() {
+        for b in ALL_BACKENDS {
+            assert_eq!(b.to_string(), b.as_str());
+        }
+    }
+
+    #[test]
+    fn backend_from_str_loose_is_case_insensitive() {
+        assert_eq!(ExgModelBackend::from_str_loose("ZUNA"), ExgModelBackend::Zuna);
+        assert_eq!(ExgModelBackend::from_str_loose("Luna"), ExgModelBackend::Luna);
+        assert_eq!(ExgModelBackend::from_str_loose("REVE"), ExgModelBackend::Reve);
+        assert_eq!(ExgModelBackend::from_str_loose("CbraMod"), ExgModelBackend::Cbramod);
+        assert_eq!(ExgModelBackend::from_str_loose("EEGPT"), ExgModelBackend::Eegpt);
+        assert_eq!(ExgModelBackend::from_str_loose("LaBraM"), ExgModelBackend::Labram);
+        assert_eq!(
+            ExgModelBackend::from_str_loose("SignalJEPA"),
+            ExgModelBackend::Signaljepa
+        );
+        assert_eq!(ExgModelBackend::from_str_loose("OSF"), ExgModelBackend::Osf);
+        assert_eq!(ExgModelBackend::from_str_loose("SleepFM"), ExgModelBackend::Sleepfm);
+        assert_eq!(ExgModelBackend::from_str_loose("SleepLM"), ExgModelBackend::Sleeplm);
+        assert_eq!(ExgModelBackend::from_str_loose("SensorLM"), ExgModelBackend::Sensorlm);
+        assert_eq!(ExgModelBackend::from_str_loose("OpenTSLM"), ExgModelBackend::Opentslm);
+    }
+
+    #[test]
+    fn backend_from_str_loose_unknown_defaults_to_zuna() {
+        assert_eq!(ExgModelBackend::from_str_loose(""), ExgModelBackend::Zuna);
+        assert_eq!(ExgModelBackend::from_str_loose("unknown"), ExgModelBackend::Zuna);
+        assert_eq!(ExgModelBackend::from_str_loose("gpt4"), ExgModelBackend::Zuna);
+    }
+
+    #[test]
+    fn backend_serde_round_trip_all_variants() {
+        for b in ALL_BACKENDS {
+            let json = serde_json::to_string(b).unwrap();
+            let parsed: ExgModelBackend = serde_json::from_str(&json).unwrap();
+            assert_eq!(&parsed, b, "serde round-trip failed for {:?}", b);
+        }
+    }
+
+    #[test]
+    fn backend_serde_snake_case_format() {
+        // Verify serde uses snake_case as specified by rename_all
+        let json = serde_json::to_string(&ExgModelBackend::Signaljepa).unwrap();
+        assert_eq!(json, "\"signaljepa\"");
+        let json = serde_json::to_string(&ExgModelBackend::Sleepfm).unwrap();
+        assert_eq!(json, "\"sleepfm\"");
+        let json = serde_json::to_string(&ExgModelBackend::Opentslm).unwrap();
+        assert_eq!(json, "\"opentslm\"");
+    }
+
+    #[test]
+    fn backend_all_variants_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for b in ALL_BACKENDS {
+            assert!(seen.insert(b.as_str()), "duplicate as_str for {:?}", b);
+        }
+    }
+
+    #[test]
+    fn config_with_new_backend_round_trips() {
+        for b in ALL_BACKENDS {
+            let cfg = ExgModelConfig {
+                model_backend: b.clone(),
+                ..ExgModelConfig::default()
+            };
+            let json = serde_json::to_string(&cfg).unwrap();
+            let parsed: ExgModelConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed.model_backend, *b, "config round-trip failed for {:?}", b);
+        }
+    }
+
+    #[test]
+    fn config_with_new_backend_persists_and_loads() {
+        let dir = std::env::temp_dir().join("skill_test_exg_backends");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        for b in ALL_BACKENDS {
+            let cfg = ExgModelConfig {
+                model_backend: b.clone(),
+                hf_repo: format!("test/{}", b.as_str()),
+                ..ExgModelConfig::default()
+            };
+            save_model_config(&dir, &cfg);
+            let loaded = load_model_config(&dir);
+            assert_eq!(loaded.model_backend, *b);
+            assert_eq!(loaded.hf_repo, format!("test/{}", b.as_str()));
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── ExgModelConfig alias ──────────────────────────────────────────────
+
+    #[test]
+    fn eeg_model_config_alias_works() {
+        // EegModelConfig is a type alias for ExgModelConfig
+        let cfg: EegModelConfig = ExgModelConfig::default();
+        assert_eq!(cfg.model_backend, ExgModelBackend::Zuna);
     }
 }

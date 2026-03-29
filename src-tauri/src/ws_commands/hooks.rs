@@ -162,7 +162,7 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
         return Ok(serde_json::json!({ "suggestion": out }));
     }
 
-    fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<Vec<f32>> {
+    fn sample_recent_exg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<Vec<f32>> {
         let mut date_dirs: Vec<std::path::PathBuf> = std::fs::read_dir(skill_dir)
             .into_iter()
             .flatten()
@@ -219,7 +219,7 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
         out
     }
 
-    let samples = sample_recent_eeg_embeddings(&skill_dir, 300);
+    let samples = sample_recent_exg_embeddings(&skill_dir, 300);
     let sample_n = samples.len();
     if sample_n == 0 {
         let out = crate::settings_cmds::HookDistanceSuggestion {
