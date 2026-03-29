@@ -459,6 +459,20 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
     };
     app_log!(app, "devices", "[{kind}] disconnected: {name}");
     crate::device_scanner::device_log("session", &format!("[{kind}] Disconnected: {name}"));
+
+    // Immediately mark the status as "disconnecting" so the UI reacts right
+    // away when it calls refreshStatus().  The full cleanup (go_disconnected)
+    // happens after CSV finalisation, but we don't want the dashboard to show
+    // a stale "connected" state for hundreds of milliseconds.
+    {
+        let sr = app.app_state();
+        let mut s = sr.lock_or_recover();
+        s.status.state = "disconnected".into();
+        s.status.device_error = Some("DEVICE_DISCONNECTED".into());
+    }
+    emit_status(app);
+    refresh_tray(app);
+
     let payload = serde_json::json!({
         "device_name": name,
         "device_id":   device_id,

@@ -293,6 +293,11 @@ const ui: Record<string, string> = {
     "Power on your BCI headset and place it within Bluetooth range. Discovered devices will appear here automatically.",
   "devices.deviceSingular": "device",
   "devices.devicePlural": "devices",
+
+  // ── Invite link (Clients tab) ──────────────────────────────────────────
+  "invite.copyLink": "Copy invite link",
+  "invite.copied": "Copied!",
+  "invite.linkHint": "Open this link on the phone if you can't scan the QR code",
 };
 
 export default ui;
