@@ -740,6 +740,7 @@ pub(crate) async fn connect_emotiv(
                 + std::time::Duration::from_secs(30);
             let mut warn_142 = 0usize;
             let mut warn_11 = 0usize;
+            let mut empty_queries = 0usize;
             while tokio::time::Instant::now() < deadline {
                 match tokio::time::timeout_at(deadline, rx.recv()).await {
                     Ok(Some(CortexEvent::SessionCreated(sid))) => {
@@ -764,6 +765,17 @@ pub(crate) async fn connect_emotiv(
                             CortexEvent::Warning { code, .. } => {
                                 if *code == 142 {
                                     warn_142 += 1;
+                                    // HEADSET_SCANNING_FINISHED keeps firing when no
+                                    // headset is connected.  Fail fast instead of
+                                    // burning the full 30 s timeout.
+                                    if warn_142 >= 3 {
+                                        app_log!(app, "devices",
+                                            "[emotiv] 3× scanning-finished with no session — headset not connecting");
+                                        return Err(format!(
+                                            "Headset not connecting (scanning finished {warn_142} times). \
+                                             Make sure the headset is turned on and paired in the EMOTIV Launcher."
+                                        ));
+                                    }
                                 } else if *code == 11 {
                                     warn_11 += 1;
                                 }
@@ -775,6 +787,17 @@ pub(crate) async fn connect_emotiv(
                                 let ids: Vec<&str> = list.iter().map(|h| h.id.as_str()).collect();
                                 app_log!(app, "devices",
                                     "[emotiv] headsets queried: {ids:?}");
+                                if list.is_empty() {
+                                    empty_queries += 1;
+                                    if empty_queries >= 2 {
+                                        app_log!(app, "devices",
+                                            "[emotiv] no headsets found after {empty_queries} queries");
+                                        return Err(
+                                            "No Emotiv headsets found. Make sure the headset is \
+                                             turned on and visible in the EMOTIV Launcher.".into()
+                                        );
+                                    }
+                                }
                                 "HeadsetsQueried"
                             }
                             _ => "other",
@@ -809,6 +832,16 @@ pub(crate) async fn connect_emotiv(
     };
     if let Err(e) = session_ok {
         app_log!(app, "devices", "[emotiv] session wait failed: {e}");
+        // "No headsets found" and "headset not connecting" are not transient
+        // — the user needs to turn on the headset or pair it in the Launcher.
+        // Disable auto-reconnect to avoid a futile retry loop.
+        let is_headset_missing = e.contains("No Emotiv headsets")
+            || e.contains("Headset not connecting")
+            || e.contains("scanning finished");
+        if is_headset_missing {
+            let r = app.app_state();
+            r.lock_or_recover().pending_reconnect = false;
+        }
         return Err(ConnectError::Other(format!(
             "Emotiv session creation failed: {e}\n\n\
              Make sure a headset is connected in the EMOTIV Launcher."
