@@ -81,6 +81,9 @@ pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
     // Notify the user on meaningful transitions.
     match (prev.as_str(), state) {
         ("connected", "disconnected") => {
+            // Remove stale Cortex-discovered devices so the UI doesn't show
+            // green "paired" badges for headsets that are no longer reachable.
+            remove_discovered_by_prefix(app, "cortex:");
             send_toast(
                 app,
                 crate::ToastLevel::Warning,
@@ -381,4 +384,20 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
         });
     }
     s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+}
+
+/// Remove all discovered devices whose id starts with `prefix`.
+/// Used when a scanner backend goes offline (e.g. Cortex Launcher disconnects)
+/// so stale entries don't linger in the device list with green badges.
+pub(crate) fn remove_discovered_by_prefix(app: &AppHandle, prefix: &str) {
+    let changed = {
+        let s_ref = app.app_state();
+        let mut s = s_ref.lock_or_recover();
+        let before = s.discovered.len();
+        s.discovered.retain(|d| !d.id.starts_with(prefix));
+        s.discovered.len() != before
+    };
+    if changed {
+        emit_devices(app);
+    }
 }
