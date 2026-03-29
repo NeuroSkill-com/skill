@@ -216,7 +216,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -227,7 +227,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1850,6 +1850,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cbramod-rs"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df52767383a2d1d052c91adf9260a7f7c138f9d580c4a5ddac75c47b117a5f7c"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "rustfft",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2073,7 +2089,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.0",
 ]
 
 [[package]]
@@ -2109,7 +2125,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3524,7 +3540,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3567,7 +3583,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -3751,6 +3767,21 @@ dependencies = [
  "signature",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "eegpt-rs"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "212f2bb84c79f10d8ce8321b40628cf64e9266996b43d6a4e1ee93c7df683dfd"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4051,7 +4082,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4998,7 +5029,7 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.1.3",
+ "windows-link 0.2.1",
  "windows-result 0.4.1",
 ]
 
@@ -6586,7 +6617,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6905,6 +6936,21 @@ dependencies = [
  "html5ever 0.29.1",
  "indexmap 2.13.0",
  "selectors 0.24.0",
+]
+
+[[package]]
+name = "labram-rs"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7e561fb36c2fbe5f8c49c19c490e2850a726bbfda76dbdfe2555240d9ed30d5"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8248,7 +8294,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -9092,6 +9138,21 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "osf-rs"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1030c3973eab027950e90c3dbb618cacf5051e9ac82d47c2d923611cbadd88ea"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -10667,6 +10728,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 
 [[package]]
+name = "reve-rs"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "174b48f52088459b8c609203822e20d0c937b96c1a557cbc955f5ece822c4606"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rfd"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10995,7 +11071,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11054,7 +11130,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11301,7 +11377,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11700,6 +11776,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "signaljepa"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63c176ebd9742a60a44e0f75a726ad049fb32b631a225f89626c7d0092d8a065"
+dependencies = [
+ "anyhow",
+ "burn",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "signature"
 version = "3.0.0-rc.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11758,6 +11848,7 @@ dependencies = [
  "btleplug 0.11.8",
  "burn",
  "burn-cubecl",
+ "cbramod-rs",
  "chrono",
  "cognionics",
  "crossbeam-channel",
@@ -11766,6 +11857,7 @@ dependencies = [
  "cubecl-runtime",
  "dirs",
  "dispatch2",
+ "eegpt-rs",
  "fast-hnsw",
  "fast-umap",
  "fastembed",
@@ -11776,6 +11868,7 @@ dependencies = [
  "image 0.25.10",
  "jsonschema",
  "kittentts",
+ "labram-rs",
  "libc",
  "llama-cpp-4",
  "llmfit-core",
@@ -11790,10 +11883,12 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "ocrs",
  "ort",
+ "osf-rs",
  "parquet",
  "png 0.18.1",
  "pollster",
  "regex",
+ "reve-rs",
  "rfd",
  "rodio",
  "rten",
@@ -11803,6 +11898,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2 0.10.9",
+ "signaljepa",
  "skill-autostart",
  "skill-calendar",
  "skill-commands",
@@ -11826,6 +11922,8 @@ dependencies = [
  "skill-tray",
  "skill-tts",
  "skill-vision",
+ "sleepfm",
+ "sleeplm",
  "stacker",
  "sysinfo 0.38.4",
  "tauri",
@@ -12222,6 +12320,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "sleepfm"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e50d6a671cc1fe4bb7927ab9dd7b183b6964632a8354fc22edeab42a9e29305d"
+dependencies = [
+ "anyhow",
+ "burn",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sleeplm"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced74400919ed0688623a456896f46904c6bcdf037b36dff28a4e9556fbdb2cd"
+dependencies = [
+ "anyhow",
+ "burn",
+ "bytemuck",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "slotmap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12280,7 +12409,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -13320,7 +13449,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -14210,7 +14339,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15267,7 +15396,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15849,7 +15978,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

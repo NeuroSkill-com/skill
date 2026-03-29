@@ -17,7 +17,7 @@ import ExgModelPickerSection from "$lib/exg/ExgModelPickerSection.svelte";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-interface EegModelConfig {
+interface ExgModelConfig {
   hf_repo: string;
   hnsw_m: number;
   hnsw_ef_construction: number;
@@ -57,7 +57,7 @@ interface ReembedProgress {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let modelConfig = $state<EegModelConfig>({
+let modelConfig = $state<ExgModelConfig>({
   hf_repo: "Zyphra/ZUNA",
   hnsw_m: 16,
   hnsw_ef_construction: 200,
@@ -105,7 +105,7 @@ async function refreshStatus() {
   modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
 }
 
-async function saveModelConfig(patch: Partial<EegModelConfig>) {
+async function saveModelConfig(patch: Partial<ExgModelConfig>) {
   modelConfig = { ...modelConfig, ...patch };
   modelConfigSaving = true;
   try {
@@ -186,7 +186,7 @@ let statusTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenReembed: (() => void) | undefined;
 
 onMount(async () => {
-  modelConfig = await invoke<EegModelConfig>("get_eeg_model_config");
+  modelConfig = await invoke<ExgModelConfig>("get_eeg_model_config");
   modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
   statusTimer = setInterval(refreshStatus, 2000);
   loadReembedEstimate();

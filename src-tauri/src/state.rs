@@ -30,7 +30,7 @@ use skill_data::label_store;
 use skill_data::screenshot_store;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_filter::FilterConfig;
-use skill_eeg::eeg_model_config::{load_model_config, EegModelConfig, EegModelStatus};
+use skill_eeg::eeg_model_config::{load_model_config, EegModelStatus, ExgModelConfig};
 use skill_eeg::eeg_quality::SignalQuality;
 use std::collections::VecDeque;
 
@@ -476,7 +476,7 @@ impl Default for InputTrackingState {
 
 /// EEG model weights, download progress, and encoder reload flag.
 pub struct EmbeddingModelState {
-    pub model_config: EegModelConfig,
+    pub model_config: ExgModelConfig,
     pub model_status: std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
     pub download_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub encoder_reload_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,

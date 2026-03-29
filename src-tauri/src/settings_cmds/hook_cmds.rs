@@ -130,7 +130,7 @@ fn suggest_hook_distances_sync(
     }
 
     // ── Step 3: sample recent EEG embeddings ─────────────────────────────────
-    let samples = sample_recent_eeg_embeddings(skill_dir, 300);
+    let samples = sample_recent_exg_embeddings(skill_dir, 300);
     let sample_n = samples.len();
     if sample_n == 0 {
         return HookDistanceSuggestion {
@@ -201,7 +201,7 @@ fn suggest_hook_distances_sync(
 }
 
 /// Read up to `max` EEG embedding blobs from the most-recent daily `eeg.sqlite` files.
-fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<Vec<f32>> {
+fn sample_recent_exg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<Vec<f32>> {
     let mut date_dirs: Vec<std::path::PathBuf> = std::fs::read_dir(skill_dir)
         .into_iter()
         .flatten()

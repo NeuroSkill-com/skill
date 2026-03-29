@@ -12,7 +12,7 @@
 //! ~/.skill/
 //!   eeg_global.hnsw     ← single flat index across all days
 //!   20260223/
-//!     eeg_embeddings.hnsw  ← per-day index (still maintained)
+//!     exg_embeddings.hnsw  ← per-day index (still maintained)
 //!     eeg.sqlite
 //!   20260224/
 //!     …

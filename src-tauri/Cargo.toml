@@ -260,6 +260,35 @@ zuna-rs   = { version = "0.0.2", default-features = false, features = ["wgpu"] }
 # LUNA EEG foundation model — topology-agnostic encoder, wgpu GPU backend.
 luna-rs   = { version = "0.0.3", default-features = false, features = ["wgpu"] }
 
+# REVE EEG foundation model — 4D Fourier positional encoding, wgpu GPU backend.
+reve-rs   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# CBraMod EEG foundation model — criss-cross attention, wgpu GPU backend.
+cbramod-rs = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# EEGPT EEG foundation model — dual self-supervised transformer, wgpu GPU backend.
+eegpt-rs  = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# LaBraM EEG foundation model — BEiTv2-style neural tokenization, wgpu GPU backend.
+labram-rs = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# SignalJEPA EEG foundation model — JEPA with dynamic spatial attention, wgpu GPU backend.
+signaljepa = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# OSF Sleep foundation model — multimodal PSG ViT-Base, wgpu GPU backend.
+osf-rs    = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# SleepFM foundation model — contrastive multimodal PSG, wgpu GPU backend.
+sleepfm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# SleepLM foundation model — CoCa PSG + language, wgpu GPU backend.
+sleeplm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# SensorLM and OpenTSLM use burn 0.14 — incompatible with workspace burn 0.20.1.
+# They will be re-added once the crates are updated.
+# sensorlm-rs = { version = "0.1.0", default-features = false, features = ["wgpu"] }
+# opentslm  = { version = "0.1.0", default-features = false }
+
 # Pure-Rust HNSW approximate nearest-neighbour index with binary persistence.
 fast-hnsw = { version = "1.0.1" }
 
