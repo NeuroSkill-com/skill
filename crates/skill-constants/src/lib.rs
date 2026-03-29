@@ -56,8 +56,7 @@ pub mod prelude {
         BAND_HOP,
         BAND_SYMBOLS,
         BAND_WINDOW,
-        CGX_CHANNEL_NAMES,
-        CGX_EEG_CHANNELS,
+        CGX_MAX_EEG_CHANNELS,
         CGX_SAMPLE_RATE,
         CHANNEL_NAMES,
         DEFAULT_HP_HZ,
@@ -265,20 +264,27 @@ pub const EMOTIV_EPOC_CHANNEL_NAMES: [&str; EMOTIV_EPOC_EEG_CHANNELS] = [
 /// Emotiv Insight channel labels (5 electrodes).
 pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] = ["AF3", "AF4", "T7", "T8", "Pz"];
 
-/// Cognionics / CGX Quick-20r EEG channel count (20 EEG channels at 500 Hz).
-/// This is the most common CGX model; actual channel count is determined at
-/// runtime from the [`cognionics::DeviceConfig`] but we need a compile-time
-/// constant for the DSP pipeline upper bound.
-pub const CGX_EEG_CHANNELS: usize = 20;
+/// Maximum EEG channel count across all Cognionics / CGX models.
+///
+/// The Quick-32r has 30 EEG electrodes — the highest of any CGX headset.
+/// The actual channel count and electrode labels are determined at runtime
+/// from the USB descriptor via the `cognionics` crate's `DeviceConfig`.
+///
+/// | Model | EEG ch | ExG | ACC | Rate |
+/// |---|---|---|---|---|
+/// | Quick-20 / 20r / 20m | 20 | 1–4 | ✓* | 500 Hz |
+/// | Quick-32r | 30 | 2 | ✓ | 500 Hz |
+/// | Quick-8r | 9 | 1 | ✓ | 500 Hz |
+/// | AIM-2 | 0 | 11 | ✗ | 500 Hz |
+/// | Dev Kit | 8 | 0 | ✓ | 500 Hz |
+/// | Patch-v1 / v2 | 2 | 2–3 | ✓ | 250 Hz |
+///
+/// *Quick-20 (original wired) has no ACC; all wireless variants do.
+pub const CGX_MAX_EEG_CHANNELS: usize = 30;
 
 /// Cognionics / CGX default hardware sample rate (Hz).
+/// Most models run at 500 Hz; Patch-v1/v2 run at 250 Hz.
 pub const CGX_SAMPLE_RATE: f64 = 500.0;
-
-/// Cognionics / CGX Quick-20r channel labels (20 EEG electrodes, 10-20 system).
-pub const CGX_CHANNEL_NAMES: [&str; CGX_EEG_CHANNELS] = [
-    "F7", "Fp1", "Fp2", "F8", "F3", "Fz", "F4", "C3", "Cz", "T6", "T5", "Pz", "P4", "T3", "P3", "O1", "O2", "C4", "T4",
-    "A2",
-];
 
 /// IDUN Guardian EEG channel count (single bipolar channel at 250 Hz).
 pub const IDUN_EEG_CHANNELS: usize = 1;
@@ -904,7 +910,7 @@ mod tests {
         assert!(EEG_CHANNELS >= CHANNEL_NAMES.len());
         assert!(EEG_CHANNELS >= HERMES_EEG_CHANNELS);
         assert!(EEG_CHANNELS >= MW75_EEG_CHANNELS);
-        assert!(EEG_CHANNELS >= CGX_EEG_CHANNELS);
+        assert!(EEG_CHANNELS >= CGX_MAX_EEG_CHANNELS);
     }
 
     #[test]
@@ -915,7 +921,7 @@ mod tests {
         assert_eq!(EMOTIV_EPOC_CHANNEL_NAMES.len(), EMOTIV_EPOC_EEG_CHANNELS);
         assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
         assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
-        assert_eq!(CGX_CHANNEL_NAMES.len(), CGX_EEG_CHANNELS);
+        assert!(CGX_MAX_EEG_CHANNELS >= 30); // Quick-32r has 30 EEG channels
     }
 
     // ── Emotiv sample rate derivation ────────────────────────────────────

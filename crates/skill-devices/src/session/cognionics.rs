@@ -3,20 +3,37 @@
 //
 //! [`DeviceAdapter`] for Cognionics / CGX EEG headsets.
 //!
-//! CGX headsets (Quick-20, Quick-20r, Quick-32r, Quick-8r, etc.) stream
-//! multi-channel EEG data over USB serial (FTDI dongle) at up to 500 Hz.
+//! CGX headsets stream multi-channel EEG data over USB serial (FTDI dongle).
 //! The [`cognionics`] crate handles device scanning, serial framing, and
 //! 24-bit ADC decoding.  This adapter translates [`CgxEvent`]s into the
 //! unified [`DeviceEvent`] vocabulary.
+//!
+//! ## Supported models
+//!
+//! | Model | EEG ch | ExG | ACC | Rate |
+//! |---|---|---|---|---|
+//! | Quick-20 | 20 | 4 | ✗ | 500 Hz |
+//! | Quick-20r-v1 | 20 | 1 | ✓ | 500 Hz |
+//! | Quick-20m | 20 | 1 | ✓ | 500 Hz |
+//! | Quick-20r | 20 | 2 | ✓ | 500 Hz |
+//! | Quick-32r | 30 | 2 | ✓ | 500 Hz |
+//! | Quick-8r | 9 | 1 | ✓ | 500 Hz |
+//! | AIM-2 | 0 | 11 | ✗ | 500 Hz |
+//! | Dev Kit | 8 | 0 | ✓ | 500 Hz |
+//! | Patch-v1 | 2 | 3 | ✓ | 250 Hz |
+//! | Patch-v2 | 2 | 2 | ✓ | 250 Hz |
+//!
+//! The exact channel layout and sample rate are auto-detected from the USB
+//! descriptor string and read from [`CgxHandle`] at connection time.
 
 use std::collections::VecDeque;
 
 use cognionics::prelude::*;
 use tokio::sync::mpsc;
 
-use skill_constants::{CGX_CHANNEL_NAMES, CGX_EEG_CHANNELS, CGX_SAMPLE_RATE, EEG_CHANNELS};
+use skill_constants::EEG_CHANNELS;
 
-use super::{now_secs, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame};
+use super::{now_secs, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame};
 
 // ── CognionicsAdapter ─────────────────────────────────────────────────────────
 
@@ -25,30 +42,62 @@ pub struct CognionicsAdapter {
     handle: Option<CgxHandle>,
     desc: DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
+    /// Indices into the signal-channel vector that correspond to
+    /// accelerometer axes (ACCX, ACCY, ACCZ).  Empty if the model has no
+    /// accelerometer.  These are indices into the *signal* channels
+    /// (i.e. the `CgxSample::channels` vec), not the raw wire order.
+    acc_signal_indices: Vec<usize>,
+    /// Indices into the signal-channel vector for ExG channels.
+    exg_signal_indices: Vec<usize>,
 }
 
 impl CognionicsAdapter {
     /// Create a new adapter from a cognionics event receiver and handle.
     ///
-    /// The `handle` provides device metadata (model, channel names, sample
-    /// rate) and is used to stop the background reader on disconnect.
+    /// The `handle` provides device metadata (model, channel count, channel
+    /// names, sample rate) auto-detected from the USB descriptor string.
+    /// All per-model differences (Quick-20 vs Quick-32r vs Patch-v2 etc.)
+    /// are resolved by the cognionics crate before this point.
     pub fn new(rx: mpsc::Receiver<CgxEvent>, handle: CgxHandle) -> Self {
-        let eeg_channels = handle.num_eeg_channels();
+        let cfg = &handle.device_config;
+        let eeg_count = cfg.eeg_indices.len();
         let sample_rate = handle.sampling_rate();
-        let channel_names: Vec<String> = handle.signal_channel_names().iter().map(|s| (*s).to_string()).collect();
+        let has_acc = !cfg.acc_indices.is_empty();
 
-        // Determine IMU channel names from the device config's accelerometer indices.
-        let imu_channel_names: Vec<String> = if !handle.device_config.acc_indices.is_empty() {
+        // Build the EEG-only channel labels from the device config.
+        let eeg_channel_names: Vec<String> = cfg.eeg_indices.iter().map(|&i| cfg.channels[i].to_string()).collect();
+
+        // Build ExG channel labels (used for metadata events only).
+        let _exg_channel_names: Vec<String> = cfg.exg_indices.iter().map(|&i| cfg.channels[i].to_string()).collect();
+
+        // Determine IMU channel names.
+        let imu_channel_names: Vec<String> = if has_acc {
             vec!["ACCX".into(), "ACCY".into(), "ACCZ".into()]
         } else {
             Vec::new()
         };
 
-        let caps = if imu_channel_names.is_empty() {
-            DeviceCaps::EEG | DeviceCaps::META
-        } else {
-            DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::META
-        };
+        // Map raw-wire ACC / ExG indices to their position in the
+        // *signal-channel* vector (which excludes Packet Counter and TRIGGER).
+        let signal_indices = cfg.signal_channel_indices();
+        let acc_signal_indices: Vec<usize> = cfg
+            .acc_indices
+            .iter()
+            .filter_map(|raw| signal_indices.iter().position(|&si| si == *raw))
+            .collect();
+        let exg_signal_indices: Vec<usize> = cfg
+            .exg_indices
+            .iter()
+            .filter_map(|raw| signal_indices.iter().position(|&si| si == *raw))
+            .collect();
+
+        let mut caps = DeviceCaps::META;
+        if eeg_count > 0 {
+            caps |= DeviceCaps::EEG;
+        }
+        if has_acc {
+            caps |= DeviceCaps::IMU;
+        }
 
         Self {
             rx,
@@ -56,22 +105,18 @@ impl CognionicsAdapter {
             desc: DeviceDescriptor {
                 kind: "cognionics",
                 caps,
-                eeg_channels,
+                eeg_channels: eeg_count,
                 eeg_sample_rate: sample_rate,
-                channel_names,
-                pipeline_channels: eeg_channels.min(EEG_CHANNELS),
+                channel_names: eeg_channel_names,
+                pipeline_channels: eeg_count.min(EEG_CHANNELS),
                 ppg_channel_names: Vec::new(),
                 imu_channel_names,
                 fnirs_channel_names: Vec::new(),
             },
             pending: VecDeque::new(),
+            acc_signal_indices,
+            exg_signal_indices,
         }
-    }
-
-    /// Construct with default Quick-20r parameters (for use when handle
-    /// metadata is not yet available, e.g. auto-scan).
-    pub fn new_default(rx: mpsc::Receiver<CgxEvent>, handle: CgxHandle) -> Self {
-        Self::new(rx, handle)
     }
 
     fn translate(&mut self, ev: CgxEvent) {
@@ -87,21 +132,46 @@ impl CognionicsAdapter {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
             CgxEvent::Sample(sample) => {
-                // Extract only EEG channels (exclude ExG/ACC from the signal
-                // channels list).  The cognionics crate's `signal_channel_names`
-                // includes EEG + ExG + ACC; we take only the first
-                // `eeg_channels` values which correspond to the EEG electrodes.
+                // ── EEG channels ──────────────────────────────────────────
                 let eeg_count = self.desc.eeg_channels;
-                let channels: Vec<f64> = if sample.channels.len() >= eeg_count {
-                    sample.channels[..eeg_count].to_vec()
-                } else {
-                    sample.channels.clone()
-                };
+                if eeg_count > 0 && sample.channels.len() >= eeg_count {
+                    let channels = sample.channels[..eeg_count].to_vec();
+                    self.pending.push_back(DeviceEvent::Eeg(EegFrame {
+                        channels,
+                        timestamp_s: sample.timestamp,
+                    }));
+                }
 
-                self.pending.push_back(DeviceEvent::Eeg(EegFrame {
-                    channels,
-                    timestamp_s: sample.timestamp,
-                }));
+                // ── Accelerometer → IMU ───────────────────────────────────
+                if self.acc_signal_indices.len() == 3 {
+                    let ch = &sample.channels;
+                    let ax = self.acc_signal_indices[0];
+                    let ay = self.acc_signal_indices[1];
+                    let az = self.acc_signal_indices[2];
+                    if ch.len() > ax && ch.len() > ay && ch.len() > az {
+                        self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                            accel: [ch[ax] as f32, ch[ay] as f32, ch[az] as f32],
+                            gyro: None,
+                            mag: None,
+                        }));
+                    }
+                }
+
+                // ── ExG channels as metadata ──────────────────────────────
+                if !self.exg_signal_indices.is_empty() {
+                    let exg_vals: Vec<f64> = self
+                        .exg_signal_indices
+                        .iter()
+                        .filter_map(|&i| sample.channels.get(i).copied())
+                        .collect();
+                    if !exg_vals.is_empty() {
+                        self.pending.push_back(DeviceEvent::Meta(serde_json::json!({
+                            "source": "cgx_exg",
+                            "timestamp_s": sample.timestamp,
+                            "channels": exg_vals,
+                        })));
+                    }
+                }
             }
             CgxEvent::PacketLoss {
                 lost,

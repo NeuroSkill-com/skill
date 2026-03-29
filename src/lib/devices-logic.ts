@@ -53,6 +53,12 @@ export function deviceImage(name: string, hw?: string | null): string | null {
   if (n.includes("hermes")) return "/devices/hermes.jpg";
   if (n.includes("mendi")) return "/devices/mendi-headband.png";
   if (n.includes("atu") || n.includes("attentivu")) return "/devices/attentivu-glasses.png";
+  if (n.includes("quick-32") || n.includes("q32")) return "/devices/cgx-quick-32r.png";
+  if (n.includes("quick-20r-v1") || n.includes("q20r-v1")) return "/devices/cgx-quick-20r-v1.png";
+  if (n.includes("quick-20") || n.includes("q20") || n.includes("cognionics") || n.includes("cgx"))
+    return "/devices/cgx-quick-20r.png";
+  if (n.includes("quick-8") || n.includes("q8")) return "/devices/cgx-quick-8r.png";
+  if (n.includes("aim-2") || n.includes("aim2")) return "/devices/cgx-aim-2.png";
   return null;
 }
 

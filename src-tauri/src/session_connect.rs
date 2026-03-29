@@ -1124,6 +1124,69 @@ pub(crate) async fn connect_mendi(
     Ok(Box::new(MendiAdapter::new(rx, handle)))
 }
 
+// ── Cognionics / CGX (USB serial) ──────────────────────────────────────────────
+
+pub(crate) async fn connect_cognionics(
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
+    preferred_id: Option<String>,
+) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
+    use cognionics::prelude::*;
+    use skill_devices::session::cognionics::CognionicsAdapter;
+
+    app_log!(
+        app,
+        "devices",
+        "[cognionics] connecting (preferred={preferred_id:?})…"
+    );
+
+    // Build client config.
+    // If the preferred_id is a "cgx:<port>" scanner ID, extract the port path.
+    let port = preferred_id
+        .as_deref()
+        .and_then(|id| id.strip_prefix("cgx:"))
+        .map(|p| p.to_string());
+
+    let config = CgxClientConfig {
+        port,
+        ..Default::default()
+    };
+
+    let client = CgxClient::new(config);
+
+    // Connect (blocking serial I/O happens on a background thread inside
+    // the cognionics crate).
+    let connect_result = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = client.start() => r.map_err(|e| format!("{e}")),
+    };
+
+    let (rx, handle) = match connect_result {
+        Ok(v) => v,
+        Err(msg) => {
+            app_log!(app, "devices", "[cognionics] connect failed: {msg}");
+            return Err(ConnectError::Other(format!(
+                "CGX connection failed: {msg}\n\n\
+                 Make sure the CGX USB dongle is plugged in and the headset is powered on."
+            )));
+        }
+    };
+
+    let model = handle.model().to_string();
+    let n_eeg = handle.num_eeg_channels();
+    let n_sig = handle.num_signal_channels();
+    let srate = handle.sampling_rate();
+    app_log!(
+        app,
+        "devices",
+        "[cognionics] connected — {model} ({n_eeg} EEG + {n_sig_extra} ExG/ACC channels at {srate} Hz)",
+        n_sig_extra = n_sig.saturating_sub(n_eeg),
+    );
+
+    Ok(Box::new(CognionicsAdapter::new(rx, handle)))
+}
+
 // ── Tauri command: connect_openbci ────────────────────────────────────────────
 
 /// Connect to any non-BLE OpenBCI board using the current `openbci_config`

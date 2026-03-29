@@ -11759,6 +11759,7 @@ dependencies = [
  "burn",
  "burn-cubecl",
  "chrono",
+ "cognionics",
  "crossbeam-channel",
  "csv",
  "cubecl",

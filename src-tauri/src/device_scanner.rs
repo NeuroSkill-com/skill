@@ -524,6 +524,25 @@ fn detect_openbci_serial_ports() -> Vec<(String, String)> {
     results
 }
 
+/// Detect Cognionics / CGX USB dongles by scanning serial ports.
+///
+/// CGX headsets use FTDI USB-to-serial dongles.  The `cognionics` crate
+/// provides its own enumeration that matches by VID/PID and USB descriptor
+/// keywords (e.g. "CGX", "Quick-20r").
+fn detect_cgx_serial_ports() -> Vec<(String, String)> {
+    cognionics::prelude::enumerate_devices()
+        .into_iter()
+        .map(|d| {
+            let display = if d.description.is_empty() {
+                format!("CGX ({})", d.port)
+            } else {
+                format!("CGX {} ({})", d.description, d.port)
+            };
+            (d.port, display)
+        })
+        .collect()
+}
+
 async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
     let mut poll_tick = tokio::time::interval(Duration::from_secs(5));
     let mut known_ports: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -536,6 +555,7 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
                 return;
             }
             _ = poll_tick.tick() => {
+                // ── OpenBCI serial dongles ─────────────────────────────────
                 let ports = tokio::task::spawn_blocking(detect_openbci_serial_ports)
                     .await
                     .unwrap_or_default();
@@ -554,10 +574,30 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
                     try_auto_connect(&app, &id, display_name);
                 }
 
+                // ── Cognionics / CGX serial dongles ───────────────────────
+                let cgx_ports = tokio::task::spawn_blocking(detect_cgx_serial_ports)
+                    .await
+                    .unwrap_or_default();
+
+                for (port_name, display_name) in &cgx_ports {
+                    // Use "cgx:<port>" as a stable device ID (distinct from
+                    // OpenBCI's "usb:<port>" prefix).
+                    let id = format!("cgx:{port_name}");
+                    if known_ports.insert(id.clone()) {
+                        let msg = format!("{display_name} port={port_name}");
+                        app_log!(app, "scanner", "[cgx] {msg}");
+                        device_log("cgx", &msg);
+                        changed = true;
+                    }
+                    upsert_discovered(&app, &id, &display_name, 0);
+                    try_auto_connect(&app, &id, &display_name);
+                }
+
                 // Remove stale entries for ports that disappeared.
-                let current_ids: std::collections::HashSet<String> = ports.iter()
+                let mut current_ids: std::collections::HashSet<String> = ports.iter()
                     .map(|(p, _)| format!("usb:{p}"))
                     .collect();
+                current_ids.extend(cgx_ports.iter().map(|(p, _)| format!("cgx:{p}")));
                 known_ports.retain(|id| current_ids.contains(id));
 
                 if changed { emit_devices(&app); }

@@ -53,6 +53,9 @@ pub enum DeviceKind {
     Idun,
     /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
     Mendi,
+    /// Cognionics / CGX EEG headsets — Quick-20/20r/32r/8r, AIM-2, Patch, Dev Kit.
+    /// Connects over USB serial (FTDI dongle) at up to 500 Hz.
+    Cognionics,
     /// AttentivU EEG glasses — 4-channel ExG (250 Hz) + 9-axis IMU (BLE).
     /// Broadcasts as "AttentivU-XXXX" or "AtU-XXXX" / "AtUXXXX".
     #[serde(rename = "attentivu")]
@@ -132,6 +135,14 @@ impl DeviceKind {
         }
         if n.starts_with("mendi") {
             return Self::Mendi;
+        }
+        if n.contains("cognionics")
+            || n.contains("cgx")
+            || n.starts_with("quick-")
+            || n.starts_with("aim-")
+            || n.starts_with("patch")
+        {
+            return Self::Cognionics;
         }
         if n.starts_with("atu") || n.starts_with("attentivu") {
             return Self::AttentivU;
@@ -217,6 +228,29 @@ impl DeviceKind {
                 sample_rate_hz: 250.0,
                 electrode_names: sv(&["EEG"]),
             },
+            // Static defaults for the Quick-20r (most common CGX model).
+            // Actual channel count, electrode names, sample rate, and IMU
+            // availability are determined at runtime from the USB descriptor
+            // and vary per model:
+            //   Quick-20/20r/20m  — 20 EEG, 500 Hz, ACC on r/m variants
+            //   Quick-32r         — 30 EEG, 500 Hz, ACC
+            //   Quick-8r          —  9 EEG, 500 Hz, ACC
+            //   AIM-2             —  0 EEG (11 ExG), 500 Hz
+            //   Dev Kit           —  8 EEG, 500 Hz, ACC
+            //   Patch-v1/v2       —  2 EEG, 250 Hz, ACC
+            Self::Cognionics => DeviceCapabilities {
+                kind: Self::Cognionics,
+                channel_count: 20,
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: true,
+                has_full_montage: true,
+                sample_rate_hz: 500.0,
+                electrode_names: sv(&[
+                    "F7", "Fp1", "Fp2", "F8", "F3", "Fz", "F4", "C3", "Cz", "T6", "T5", "Pz", "P4", "T3", "P3", "O1",
+                    "O2", "C4", "T4", "A2",
+                ]),
+            },
             Self::Mendi => DeviceCapabilities {
                 kind: Self::Mendi,
                 channel_count: 0, // fNIRS optical channels (not EEG electrodes)
@@ -266,6 +300,7 @@ impl DeviceKind {
             Self::Hermes => "hermes",
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
+            Self::Cognionics => "cognionics",
             Self::Mendi => "mendi",
             Self::AttentivU => "attentivu",
             Self::Unknown => "unknown",
@@ -287,6 +322,7 @@ impl DeviceKind {
             "hermes" => Self::Hermes,
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
+            "cognionics" => Self::Cognionics,
             "mendi" => Self::Mendi,
             "attentivu" => Self::AttentivU,
             "unknown" => Self::Unknown,
@@ -362,6 +398,38 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.attentivu1".into(),
                 "settings.supportedDevices.instruction.attentivu2".into(),
                 "settings.supportedDevices.instruction.attentivu3".into(),
+            ],
+        },
+        // ── C ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "cognionics".into(),
+            name_key: "settings.supportedDevices.company.cognionics".into(),
+            logo: "/logos/cognionics.png".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cgxQuick20r".into(),
+                    ios_only: false,
+                    image: "/devices/cgx-quick-20r.png".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cgxQuick32r".into(),
+                    ios_only: false,
+                    image: "/devices/cgx-quick-32r.png".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cgxQuick8r".into(),
+                    ios_only: false,
+                    image: "/devices/cgx-quick-8r.png".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.cgxAim2".into(),
+                    ios_only: false,
+                    image: "/devices/cgx-aim-2.png".into(),
+                },
+            ],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.cognionics1".into(),
+                "settings.supportedDevices.instruction.cognionics2".into(),
             ],
         },
         // ── E ─────────────────────────────────────────────────────────────
@@ -586,6 +654,19 @@ mod tests {
     }
 
     #[test]
+    fn from_name_cognionics() {
+        assert_eq!(DeviceKind::from_name(Some("CGX Quick-20r")), DeviceKind::Cognionics);
+        assert_eq!(DeviceKind::from_name(Some("cognionics-device")), DeviceKind::Cognionics);
+        assert_eq!(
+            DeviceKind::from_name(Some("Quick-20r v2 Q20r-ABCD")),
+            DeviceKind::Cognionics
+        );
+        assert_eq!(DeviceKind::from_name(Some("Quick-32r")), DeviceKind::Cognionics);
+        assert_eq!(DeviceKind::from_name(Some("AIM-2 device")), DeviceKind::Cognionics);
+        assert_eq!(DeviceKind::from_name(Some("Patch-v2")), DeviceKind::Cognionics);
+    }
+
+    #[test]
     fn from_name_mendi() {
         assert_eq!(DeviceKind::from_name(Some("Mendi")), DeviceKind::Mendi);
         assert_eq!(DeviceKind::from_name(Some("mendi-1234")), DeviceKind::Mendi);
@@ -600,6 +681,7 @@ mod tests {
         assert_eq!(DeviceKind::from_kind_str("hermes"), DeviceKind::Hermes);
         assert_eq!(DeviceKind::from_kind_str("emotiv"), DeviceKind::Emotiv);
         assert_eq!(DeviceKind::from_kind_str("idun"), DeviceKind::Idun);
+        assert_eq!(DeviceKind::from_kind_str("cognionics"), DeviceKind::Cognionics);
         assert_eq!(DeviceKind::from_kind_str("mendi"), DeviceKind::Mendi);
         assert_eq!(DeviceKind::from_kind_str("unknown"), DeviceKind::Unknown);
     }

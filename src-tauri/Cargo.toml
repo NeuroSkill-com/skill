@@ -118,6 +118,10 @@ btleplug = "0.11"
 # Serial port enumeration (for Cyton board selection in settings)
 serialport = "4"
 
+# Cognionics / CGX EEG headsets (USB/FTDI serial) — used by the device scanner
+# for enumerate_devices() and by session_connect for CgxClient.
+cognionics = { version = "0.0.1", default-features = false }
+
 # Async runtime (Tauri re-exports tokio but we need 'full' for select! etc.)
 tokio      = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }

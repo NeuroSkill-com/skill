@@ -33,6 +33,9 @@ fn detect_device_kind(id: Option<&str>, name_lower: Option<&str>) -> &'static st
         if id.starts_with("usb:") {
             return "ganglion";
         }
+        if id.starts_with("cgx:") {
+            return "cognionics";
+        }
         if id.starts_with("lsl:") {
             return "lsl";
         }
@@ -313,6 +316,9 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) -> bo
             "emotiv" => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
             "idun" => crate::session_connect::connect_idun(&app2, &cancel).await,
             "mendi" => crate::session_connect::connect_mendi(&app2, &cancel, target).await,
+            "cognionics" => {
+                crate::session_connect::connect_cognionics(&app2, &cancel, target).await
+            }
             "lsl" => connect_lsl(target).await,
             "lsl-iroh" => connect_lsl_iroh(&app2).await,
             _ => crate::session_connect::connect_muse(&app2, &cancel, target).await,
@@ -791,6 +797,23 @@ mod tests {
     fn detect_device_kind_mendi() {
         assert_eq!(detect_device_kind(None, Some("mendi")), "mendi");
         assert_eq!(detect_device_kind(None, Some("mendi-1234")), "mendi");
+    }
+
+    #[test]
+    fn detect_device_kind_cognionics() {
+        assert_eq!(
+            detect_device_kind(Some("cgx:/dev/ttyUSB0"), None),
+            "cognionics"
+        );
+        assert_eq!(
+            detect_device_kind(None, Some("cgx quick-20r")),
+            "cognionics"
+        );
+        assert_eq!(
+            detect_device_kind(None, Some("cognionics-device")),
+            "cognionics"
+        );
+        assert_eq!(detect_device_kind(None, Some("quick-20r")), "cognionics");
     }
 
     #[test]
