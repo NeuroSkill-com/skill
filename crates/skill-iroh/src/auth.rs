@@ -42,6 +42,10 @@ pub struct IrohClientEntry {
     pub last_country: Option<String>,
     pub last_city: Option<String>,
     pub last_locale: Option<String>,
+    /// Human-readable device model string persisted from `phone_info`,
+    /// e.g. "iPhone 15 Pro · iOS 18.2".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_model: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -75,6 +79,9 @@ pub struct IrohClientView {
     pub last_country: Option<String>,
     pub last_city: Option<String>,
     pub last_locale: Option<String>,
+    /// Human-readable device model string, e.g. "iPhone 15 Pro · iOS 18.2".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_model: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -270,6 +277,7 @@ impl IrohAuthStore {
             last_country: None,
             last_city: None,
             last_locale: None,
+            device_model: None,
         });
         self.save()?;
         let view = client_view(self.db.clients.last().unwrap());
@@ -300,6 +308,30 @@ impl IrohAuthStore {
             c.last_city = geo.city;
             c.last_locale = geo.locale;
         }
+        self.save()
+    }
+
+    /// Persist the human-readable device model string for a client identified
+    /// by its iroh endpoint ID.  Called when `phone_info` metadata arrives so
+    /// that the device description is available even when the phone is offline.
+    pub fn update_client_device_model(&mut self, endpoint_id: &str, device_model: &str) -> Result<(), String> {
+        let endpoint_id = endpoint_id.trim().to_lowercase();
+        let device_model = device_model.trim();
+        if endpoint_id.is_empty() || device_model.is_empty() {
+            return Ok(());
+        }
+        let Some(c) = self
+            .db
+            .clients
+            .iter_mut()
+            .find(|c| c.endpoint_id == endpoint_id && c.revoked_at.is_none())
+        else {
+            return Ok(()); // silently ignore unknown endpoints
+        };
+        if c.device_model.as_deref() == Some(device_model) {
+            return Ok(()); // unchanged — skip disk write
+        }
+        c.device_model = Some(device_model.to_owned());
         self.save()
     }
 
@@ -556,6 +588,7 @@ fn client_view(c: &IrohClientEntry) -> IrohClientView {
         last_country: c.last_country.clone(),
         last_city: c.last_city.clone(),
         last_locale: c.last_locale.clone(),
+        device_model: c.device_model.clone(),
     }
 }
 
