@@ -491,6 +491,14 @@ const settings: Record<string, string> = {
   "lsl.backgroundSessions": "Background Recordings",
   "lsl.recording": "RECORDING",
   "lsl.stopRecording": "Stop recording",
+
+  // ── Geo provider ──────────────────────────────────────────────────────────
+  "settings.geoProvider": "Fournisseur de géolocalisation",
+  "settings.geoProviderDesc":
+    "Choisissez comment l'application détermine votre position pour les métadonnées de session. « Désactivé » désactive la géolocalisation, « Local » utilise le GPS de l'appareil et « Distant » interroge un service externe.",
+  "settings.geoProviderOff": "Désactivé",
+  "settings.geoProviderLocal": "Local",
+  "settings.geoProviderRemote": "Distant",
 };
 
 export default settings;

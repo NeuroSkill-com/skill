@@ -480,6 +480,14 @@ const settings: Record<string, string> = {
   "lsl.backgroundSessions": "Background Recordings",
   "lsl.recording": "RECORDING",
   "lsl.stopRecording": "Stop recording",
+
+  // ── Geo provider ──────────────────────────────────────────────────────────
+  "settings.geoProvider": "Постачальник геолокації",
+  "settings.geoProviderDesc":
+    "Оберіть, як застосунок визначає ваше місцезнаходження для метаданих сеансу. «Вимкнено» вимикає геолокацію, «Локально» використовує GPS пристрою, а «Віддалено» звертається до зовнішнього сервісу.",
+  "settings.geoProviderOff": "Вимкнено",
+  "settings.geoProviderLocal": "Локально",
+  "settings.geoProviderRemote": "Віддалено",
 };
 
 export default settings;

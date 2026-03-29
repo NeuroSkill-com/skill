@@ -336,8 +336,8 @@ onDestroy(() => {
   {configSaving}
   {wsPort}
   activeMaxCtx={activeEntry?.max_context_length || 0}
-  hasAnyMmproj={catalog.entries.some((e) => e.is_mmproj)}
-  hasDownloadedMmproj={catalog.entries.some((e) => e.is_mmproj && e.state === "downloaded")}
+  hasAnyMmproj={catalog.entries.some((e) => e.is_mmproj || e.filename.toLowerCase().includes("mmproj"))}
+  hasDownloadedMmproj={catalog.entries.some((e) => (e.is_mmproj || e.filename.toLowerCase().includes("mmproj")) && e.state === "downloaded")}
   onSetGpuLayers={async (val) => { config = { ...config, n_gpu_layers: val }; await saveConfig(); }}
   onSetCtxSize={async (val) => { config = { ...config, ctx_size: val }; await saveConfig(); }}
   onSetParallel={async (val) => { config = { ...config, parallel: val }; await saveConfig(); }}

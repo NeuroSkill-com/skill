@@ -77,9 +77,35 @@ const orderedSelectedMmproj = $derived.by<LlmModelEntry[]>(() => {
   return [...selectedFamily.mmproj].sort((a, b) => compareModelEntries(a, b, active));
 });
 
+// Global activity: downloading & active entries across all families
+const downloadingEntries = $derived(catalog.entries.filter((e) => e.state === "downloading"));
+const activeEntry = $derived(
+  catalog.entries.find(
+    (e) => e.filename === catalog.active_model && !e.is_mmproj && !e.filename.toLowerCase().includes("mmproj"),
+  ) ?? null,
+);
+
+function navigateToEntry(entry: LlmModelEntry) {
+  selectedFamilyId = entry.family_id;
+}
+
 $effect(() => {
   const next = autoSelectFamily(families, catalog, selectedFamilyId);
   if (next && next !== selectedFamilyId) selectedFamilyId = next;
+});
+
+// Auto-switch to the family of a newly downloading model so progress is visible
+$effect(() => {
+  if (downloadingEntries.length > 0) {
+    const dl = downloadingEntries[0];
+    // Only auto-switch if we're not already viewing a family with downloads
+    const currentHasDownloads =
+      selectedFamily?.entries.some((e) => e.state === "downloading") ||
+      selectedFamily?.mmproj.some((e) => e.state === "downloading");
+    if (!currentHasDownloads) {
+      selectedFamilyId = dl.family_id;
+    }
+  }
 });
 
 $effect(() => {
@@ -158,6 +184,58 @@ function fitBadgeLabel(level: string): string {
       </CardContent>
     </Card>
   {:else}
+    <!-- ── Activity banner: active model + downloads ─────────────────────── -->
+    {#if activeEntry || downloadingEntries.length > 0}
+      <div class="flex flex-col gap-1.5">
+        {#if activeEntry}
+          {@const isInCurrentFamily = activeEntry.family_id === selectedFamilyId}
+          <button onclick={() => navigateToEntry(activeEntry)}
+            class="flex items-center gap-2 w-full rounded-lg border px-3 py-2 text-left transition-all cursor-pointer
+                   {isInCurrentFamily
+                     ? 'border-emerald-500/30 bg-emerald-500/8 dark:bg-emerald-950/20'
+                     : 'border-border/60 dark:border-white/[0.06] bg-white dark:bg-[#14141e] hover:border-emerald-500/30'}">
+            <span class="text-[0.52rem] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">✓ ACTIVE</span>
+            <span class="text-[0.68rem] font-semibold text-foreground truncate">{activeEntry.family_name}</span>
+            <span class="text-[0.64rem] font-mono text-muted-foreground shrink-0">{activeEntry.quant}</span>
+            <span class="text-[0.62rem] text-muted-foreground/60 shrink-0">{fmtSize(activeEntry.size_gb)}</span>
+            {#if !isInCurrentFamily}
+              <span class="ml-auto text-[0.5rem] text-muted-foreground/40 shrink-0">→</span>
+            {/if}
+          </button>
+        {/if}
+        {#each downloadingEntries as dl (dl.filename)}
+          {@const isInCurrentFamily = dl.family_id === selectedFamilyId}
+          <button onclick={() => navigateToEntry(dl)}
+            class="flex flex-col gap-1 w-full rounded-lg border px-3 py-2 text-left transition-all cursor-pointer
+                   {isInCurrentFamily
+                     ? 'border-blue-500/30 bg-blue-500/8 dark:bg-blue-950/20'
+                     : 'border-border/60 dark:border-white/[0.06] bg-white dark:bg-[#14141e] hover:border-blue-500/30'}">
+            <div class="flex items-center gap-2 w-full">
+              <span class="text-[0.52rem] font-semibold text-blue-500 shrink-0 animate-pulse">⬇ DOWNLOADING</span>
+              <span class="text-[0.68rem] font-semibold text-foreground truncate">{dl.family_name}</span>
+              <span class="text-[0.64rem] font-mono text-muted-foreground shrink-0">{dl.quant}</span>
+              <span class="text-[0.62rem] text-muted-foreground/60 shrink-0">{fmtSize(dl.size_gb)}</span>
+              {#if !isInCurrentFamily}
+                <span class="ml-auto text-[0.5rem] text-muted-foreground/40 shrink-0">→</span>
+              {/if}
+            </div>
+            <div class="h-1 w-full rounded-full bg-muted overflow-hidden">
+              {#if dl.progress > 0}
+                <div class="h-full rounded-full bg-blue-500 transition-all duration-300" style="width:{(dl.progress * 100).toFixed(1)}%"></div>
+              {:else}
+                <div class="h-full w-2/5 rounded-full bg-blue-500 animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"></div>
+              {/if}
+            </div>
+            {#if dl.status_msg}
+              <span class="text-[0.54rem] text-blue-500/80 truncate">{dl.status_msg}</span>
+            {:else if dl.progress > 0}
+              <span class="text-[0.54rem] text-blue-500/80">{(dl.progress * 100).toFixed(1)}%</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
     {#if hardwareFits.size > 0}
       {@const anyFit = hardwareFits.values().next().value}
       {#if anyFit}
@@ -186,7 +264,7 @@ function fitBadgeLabel(level: string): string {
     </div>
 
     {#if selectedFamily}
-      {@const hasVision = selectedFamily.tags.some((t: string) => t === "vision" || t === "multimodal")}
+
       <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
         <CardContent class="py-0 px-0 flex flex-col">
           <div class="px-4 pt-3.5 pb-3 flex flex-col gap-1.5">
@@ -307,7 +385,7 @@ function fitBadgeLabel(level: string): string {
             {/each}
           </div>
 
-          {#if hasVision && selectedFamily.mmproj.length > 0}
+          {#if selectedFamily.mmproj.length > 0}
             <div class="border-t border-border dark:border-white/[0.06] px-4 py-3 bg-amber-50/30 dark:bg-amber-950/10">
               <p class="text-[0.6rem] font-semibold text-amber-700 dark:text-amber-400 mb-2">Vision projector (required for image input)</p>
               <p class="text-[0.58rem] text-amber-700/80 dark:text-amber-300/80 mb-2 leading-snug">Multimodal projectors extend the active LLM. They are loaded with a compatible text model, not used as standalone models.</p>

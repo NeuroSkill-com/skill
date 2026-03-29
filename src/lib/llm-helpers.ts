@@ -223,7 +223,7 @@ export function buildFamilies(entries: LlmModelEntry[]): ModelFamily[] {
     }
     const vendor = vendorLabel(e.repo);
     if (!f.vendors.includes(vendor)) f.vendors.push(vendor);
-    if (e.is_mmproj) {
+    if (e.is_mmproj || e.filename.toLowerCase().includes("mmproj")) {
       f.mmproj.push(e);
     } else {
       f.entries.push(e);
