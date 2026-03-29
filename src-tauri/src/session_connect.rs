@@ -707,6 +707,18 @@ pub(crate) async fn connect_emotiv(
         Ok(v) => v,
         Err(msg) => {
             app_log!(app, "devices", "[emotiv] connect failed: {msg}");
+            // The Cortex service runs locally — "Connection refused" means
+            // the EMOTIV Launcher is not running.  Retrying won't help;
+            // the user must start the Launcher manually.  Disable
+            // auto-reconnect to avoid a futile 12-attempt backoff loop.
+            let is_launcher_offline = msg.contains("Connection refused")
+                || msg.contains("connection refused")
+                || msg.contains("os error 61")   // macOS ECONNREFUSED
+                || msg.contains("os error 111"); // Linux ECONNREFUSED
+            if is_launcher_offline {
+                let r = app.app_state();
+                r.lock_or_recover().pending_reconnect = false;
+            }
             return Err(ConnectError::Other(format!(
                 "Emotiv Cortex connection failed: {msg}\n\n\
                  Make sure the EMOTIV Launcher is running and a headset is connected."
@@ -743,7 +755,12 @@ pub(crate) async fn connect_emotiv(
                         let tag = match &other {
                             CortexEvent::Connected    => "Connected",
                             CortexEvent::Authorized   => "Authorized",
-                            CortexEvent::Disconnected => "Disconnected",
+                            CortexEvent::Disconnected => {
+                                app_log!(app, "devices",
+                                    "[emotiv] WebSocket disconnected during auth flow");
+                                return Err("Cortex WebSocket disconnected during authentication. \
+                                    Make sure the EMOTIV Launcher is running.".into());
+                            }
                             CortexEvent::Warning { code, .. } => {
                                 if *code == 142 {
                                     warn_142 += 1;

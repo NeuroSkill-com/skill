@@ -516,4 +516,220 @@ mod tests {
         assert_eq!(imu_count, 2);
         assert_eq!(other, 1); // Connected
     }
+
+    /// Backlog data arriving with older timestamps must be shifted forward
+    /// so the pipeline always sees non-decreasing timestamps.
+    #[tokio::test]
+    async fn adapter_monotonic_timestamps_backlog() {
+        let (tx, rx) = mpsc::channel(8);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        // Send a "live" chunk at timestamp T=120500
+        let live_chunk = skill_iroh::device_proto::SensorChunk {
+            sample_rate: 256.0,
+            eeg_data: vec![vec![1.0; 4]; 4],
+            ppg_data: vec![],
+            imu_data: vec![],
+        };
+        tx.send(RemoteDeviceEvent::SensorChunk {
+            seq: 1,
+            timestamp: 20260315120500, // 12:05:00
+            chunk: live_chunk,
+        })
+        .await
+        .unwrap();
+
+        // Drain: Connected + 4 EEG
+        for _ in 0..5 {
+            adapter.next_event().await.unwrap();
+        }
+
+        // Now send "backlog" chunk with OLDER timestamp T=120000 (before live)
+        let backlog_chunk = skill_iroh::device_proto::SensorChunk {
+            sample_rate: 256.0,
+            eeg_data: vec![vec![2.0; 4]; 4],
+            ppg_data: vec![],
+            imu_data: vec![],
+        };
+        tx.send(RemoteDeviceEvent::SensorChunk {
+            seq: 2,
+            timestamp: 20260315120000, // 12:00:00 — BEFORE the live chunk
+            chunk: backlog_chunk,
+        })
+        .await
+        .unwrap();
+
+        // Drain 4 EEG frames from backlog
+        let mut backlog_timestamps = Vec::new();
+        for _ in 0..4 {
+            match adapter.next_event().await.unwrap() {
+                DeviceEvent::Eeg(f) => backlog_timestamps.push(f.timestamp_s),
+                other => panic!("expected Eeg, got {:?}", std::mem::discriminant(&other)),
+            }
+        }
+
+        // The backlog timestamps should be AFTER the live chunk's timestamps
+        // (shifted forward because the adapter enforces monotonic ordering)
+        let live_base = ts_to_unix_approx(20260315120500);
+        for ts in &backlog_timestamps {
+            assert!(
+                *ts >= live_base,
+                "backlog timestamp {ts} should be >= live base {live_base}"
+            );
+        }
+    }
+
+    /// Two chunks with the same timestamp should not produce duplicate times.
+    #[tokio::test]
+    async fn adapter_monotonic_same_timestamp() {
+        let (tx, rx) = mpsc::channel(8);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        let ts = 20260315120000i64;
+        for seq in 1..=2 {
+            let chunk = skill_iroh::device_proto::SensorChunk {
+                sample_rate: 256.0,
+                eeg_data: vec![vec![0.0; 2]; 4],
+                ppg_data: vec![],
+                imu_data: vec![],
+            };
+            tx.send(RemoteDeviceEvent::SensorChunk {
+                seq,
+                timestamp: ts,
+                chunk,
+            })
+            .await
+            .unwrap();
+        }
+
+        // Drain Connected + 2 EEG from chunk 1
+        let mut all_ts = Vec::new();
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Connected(_)));
+        for _ in 0..2 {
+            if let DeviceEvent::Eeg(f) = adapter.next_event().await.unwrap() {
+                all_ts.push(f.timestamp_s);
+            }
+        }
+        // Drain 2 EEG from chunk 2
+        for _ in 0..2 {
+            if let DeviceEvent::Eeg(f) = adapter.next_event().await.unwrap() {
+                all_ts.push(f.timestamp_s);
+            }
+        }
+
+        // All timestamps should be strictly non-decreasing
+        for i in 1..all_ts.len() {
+            assert!(
+                all_ts[i] >= all_ts[i - 1],
+                "timestamps must be non-decreasing: {} < {} at index {}",
+                all_ts[i],
+                all_ts[i - 1],
+                i
+            );
+        }
+        // Chunk 2 timestamps should be > chunk 1 timestamps (shifted forward)
+        assert!(all_ts[2] > all_ts[1], "second chunk must be shifted forward");
+    }
+
+    /// DeviceDisconnected event returns None (session ends).
+    #[tokio::test]
+    async fn adapter_disconnect_returns_none() {
+        let (tx, rx) = mpsc::channel(4);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        tx.send(RemoteDeviceEvent::DeviceDisconnected {
+            seq: 1,
+            timestamp: 20260315120000,
+        })
+        .await
+        .unwrap();
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    /// Channel close (tunnel drop) returns None.
+    #[tokio::test]
+    async fn adapter_channel_close_returns_none() {
+        let (tx, rx) = mpsc::channel(4);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        drop(tx); // simulate tunnel drop
+
+        let ev = adapter.next_event().await;
+        assert!(ev.is_none(), "channel close should return None");
+    }
+
+    /// AttentivU device descriptor updates caps correctly.
+    #[tokio::test]
+    async fn adapter_attentivu_descriptor() {
+        let (tx, rx) = mpsc::channel(4);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        let json = serde_json::json!({
+            "kind": "attentivu",
+            "name": "AtU-1234",
+            "id": "XX:YY:ZZ",
+            "sample_rate": 250.0,
+            "eeg_channels": ["EXG0_CH0", "EXG0_CH1", "EXG1_CH0", "EXG1_CH1"],
+            "ppg_channels": [],
+            "imu_channels": ["AccelX", "AccelY", "AccelZ", "GyroX", "GyroY", "GyroZ"],
+            "caps": ["eeg", "imu", "battery"]
+        })
+        .to_string();
+
+        tx.send(RemoteDeviceEvent::DeviceConnected {
+            seq: 1,
+            timestamp: 20260315120000,
+            descriptor_json: json,
+        })
+        .await
+        .unwrap();
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Connected(info) => {
+                assert_eq!(info.name, "AtU-1234");
+            }
+            _ => panic!("expected Connected"),
+        }
+        assert_eq!(adapter.descriptor().eeg_channels, 4);
+        assert_eq!(adapter.descriptor().eeg_sample_rate, 250.0);
+        assert!(adapter.descriptor().ppg_channel_names.is_empty());
+        assert!(!adapter.descriptor().caps.contains(DeviceCaps::PPG));
+        assert!(adapter.descriptor().caps.contains(DeviceCaps::EEG));
+        assert!(adapter.descriptor().caps.contains(DeviceCaps::IMU));
+    }
+
+    /// PhoneInfo event is forwarded as Meta.
+    #[tokio::test]
+    async fn adapter_phone_info() {
+        let (tx, rx) = mpsc::channel(4);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+
+        let info_json = serde_json::json!({
+            "phone_model": "iPhone16,1",
+            "os": "iOS",
+            "os_version": "18.2",
+        })
+        .to_string();
+
+        tx.send(RemoteDeviceEvent::PhoneInfo {
+            seq: 1,
+            timestamp: 20260315120000,
+            info_json,
+        })
+        .await
+        .unwrap();
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Meta(json) => {
+                assert_eq!(json["type"], "phone_info");
+                assert_eq!(json["phone_model"], "iPhone16,1");
+            }
+            _ => panic!("expected Meta"),
+        }
+    }
 }

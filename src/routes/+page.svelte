@@ -1356,6 +1356,19 @@ useWindowTitle("window.title.main");
                 </button>
               {/if}
             {/if}
+
+            <!-- Disconnect button -->
+            <button
+              onclick={cancelRetry}
+              class="text-[0.55rem] text-muted-foreground/50 hover:text-destructive
+                     transition-colors mt-0.5 flex items-center gap-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   class="w-2.5 h-2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              {t("common.disconnect")}
+            </button>
           {/if}
         </div>
       {/if}
@@ -2050,13 +2063,6 @@ useWindowTitle("window.title.main");
         {/if}
       </p>
       <div class="flex items-center gap-2 shrink-0">
-        {#if status.state === "connected"}
-          <Button size="sm" variant="outline"
-                  class="h-5 px-2 text-[0.56rem] text-muted-foreground hover:text-destructive hover:border-destructive/50"
-                  onclick={cancelRetry}>
-            {t("common.disconnect")}
-          </Button>
-        {/if}
         <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>
       </div>
     </CardFooter>
