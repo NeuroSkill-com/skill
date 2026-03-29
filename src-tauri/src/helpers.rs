@@ -91,7 +91,10 @@ pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
                 "The Cortex service is no longer reachable. Make sure EMOTIV Launcher is running.",
             );
         }
-        (_, "connected") if prev != "connected" => {
+        ("disconnected", "connected") => {
+            // Only toast on the first successful probe after being truly
+            // disconnected.  The scanner cycles through "connecting" →
+            // "connected" on every 10 s poll; we don't want a toast each time.
             send_toast(
                 app,
                 crate::ToastLevel::Success,
