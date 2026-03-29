@@ -341,6 +341,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
@@ -355,6 +356,10 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.insight": "Insight",
   "settings.supportedDevices.device.flexSaline": "FLEX Saline",
   "settings.supportedDevices.device.mn8": "MN8",
+  "settings.supportedDevices.device.cgxQuick20r": "Quick-20r",
+  "settings.supportedDevices.device.cgxQuick32r": "Quick-32r",
+  "settings.supportedDevices.device.cgxQuick8r": "Quick-8r",
+  "settings.supportedDevices.device.cgxAim2": "AIM-2",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
   "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
@@ -378,6 +383,9 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Allumez Nucleus-Hermès et gardez-le près de cet ordinateur.",
   "settings.supportedDevices.instruction.reak2":
     "Scannez et appairez-le dans la liste des appareils, puis connectez via le flux d'appareil préféré.",
+  "settings.supportedDevices.instruction.cognionics1": "Branchez le dongle USB CGX et allumez le casque.",
+  "settings.supportedDevices.instruction.cognionics2":
+    "L'appareil est détecté automatiquement via le port série USB. Sélectionnez-le dans la liste des appareils et connectez-vous.",
   "settings.supportedDevices.instruction.mendi1": "Allumez Mendi et gardez-le près de cet ordinateur.",
   "settings.supportedDevices.instruction.mendi2":
     "Scannez-le et appairez-le depuis la liste des appareils, puis connectez-le.",

@@ -336,6 +336,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
@@ -350,6 +351,10 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.insight": "Insight",
   "settings.supportedDevices.device.flexSaline": "FLEX Saline",
   "settings.supportedDevices.device.mn8": "MN8",
+  "settings.supportedDevices.device.cgxQuick20r": "Quick-20r",
+  "settings.supportedDevices.device.cgxQuick32r": "Quick-32r",
+  "settings.supportedDevices.device.cgxQuick8r": "Quick-8r",
+  "settings.supportedDevices.device.cgxAim2": "AIM-2",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
   "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
@@ -370,6 +375,9 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.reak1": "Увімкніть Nucleus-Hermès та тримайте його поруч з цим комп'ютером.",
   "settings.supportedDevices.instruction.reak2":
     "Скануйте та з'єднайте його у списку пристроїв, потім підключіть через бажаний процес.",
+  "settings.supportedDevices.instruction.cognionics1": "Підключіть USB-донгл CGX і увімкніть гарнітуру.",
+  "settings.supportedDevices.instruction.cognionics2":
+    "Пристрій автоматично визначається через послідовний порт USB. Виберіть його зі списку пристроїв і підключіться.",
   "settings.supportedDevices.instruction.mendi1": "Увімкніть Mendi і тримайте його поруч із цим комп’ютером.",
   "settings.supportedDevices.instruction.mendi2": "Проскануйте та спаруйте його зі списку пристроїв, потім підключіть.",
 

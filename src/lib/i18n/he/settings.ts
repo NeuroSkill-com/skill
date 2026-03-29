@@ -323,6 +323,7 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.reak": "RE-AK",
+  "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",
   "settings.supportedDevices.device.muse2016": "Muse 2016",
   "settings.supportedDevices.device.muse2": "Muse 2",
@@ -337,6 +338,10 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.insight": "Insight",
   "settings.supportedDevices.device.flexSaline": "FLEX Saline",
   "settings.supportedDevices.device.mn8": "MN8",
+  "settings.supportedDevices.device.cgxQuick20r": "Quick-20r",
+  "settings.supportedDevices.device.cgxQuick32r": "Quick-32r",
+  "settings.supportedDevices.device.cgxQuick8r": "Quick-8r",
+  "settings.supportedDevices.device.cgxAim2": "AIM-2",
   "settings.supportedDevices.device.guardian": "Guardian",
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
   "settings.supportedDevices.device.mendiHeadband": "Mendi Headband",
@@ -353,6 +358,9 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2": "שמור טוקן, ואז שייך/חבר את ההדסט מרשימת המכשירים.",
   "settings.supportedDevices.instruction.reak1": "הפעל את Nucleus-Hermès ושמור אותו בקרבת המחשב.",
   "settings.supportedDevices.instruction.reak2": "סרוק ושייך אותו ברשימת המכשירים, ואז התחבר דרך תהליך המכשיר המועדף.",
+  "settings.supportedDevices.instruction.cognionics1": "חבר את דונגל ה-USB של CGX והפעל את האוזניות.",
+  "settings.supportedDevices.instruction.cognionics2":
+    "המכשיר מזוהה אוטומטית מהיציאה הטורית USB. בחר אותו מרשימת המכשירים והתחבר.",
   "settings.supportedDevices.instruction.mendi1": "הפעל את Mendi ושמור אותו בקרבת המחשב הזה.",
   "settings.supportedDevices.instruction.mendi2": "סרוק ושייך אותו מרשימת המכשירים ואז התחבר.",
 
