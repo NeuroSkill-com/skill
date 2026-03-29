@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { fitBadgeClass, fitBadgeIcon, fitBadgeLabel } from "$lib/llm-tab-logic";
 
 describe("fitBadgeClass", () => {

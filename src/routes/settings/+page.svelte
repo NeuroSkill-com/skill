@@ -170,17 +170,34 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 let unlisten: UnlistenFn | null = null;
+let fontObserver: MutationObserver | null = null;
 let splitRoot: HTMLDivElement | null = null;
+let navEl: HTMLElement | null = null;
 let navWidth = $state(176);
 let resizingNav = false;
 let lastSettingsWindowTitle = "";
 
 const NAV_WIDTH_MIN = 140;
-const NAV_WIDTH_MAX = 320;
+const NAV_WIDTH_MAX = 480;
 const NAV_WIDTH_KEY = "settings.nav.width";
 
 function clampNavWidth(px: number): number {
   return Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, Math.round(px)));
+}
+
+/** Measure the nav's natural content width and ensure navWidth is at least that. */
+function ensureNavFitsContent(): void {
+  if (!navEl) return;
+  // Temporarily remove the fixed width so we can measure natural content width
+  const prev = navEl.style.width;
+  navEl.style.width = "max-content";
+  const natural = navEl.scrollWidth;
+  navEl.style.width = prev;
+  const needed = clampNavWidth(natural);
+  if (navWidth < needed) {
+    navWidth = needed;
+    persistNavWidth(navWidth);
+  }
 }
 
 function persistNavWidth(px: number): void {
@@ -233,6 +250,16 @@ onMount(async () => {
 
   window.addEventListener("keydown", onKeydown);
 
+  // Ensure sidebar is wide enough for its content at the current font size
+  ensureNavFitsContent();
+
+  // Re-check when the root font-size changes (appearance settings)
+  fontObserver = new MutationObserver(() => {
+    // Wait a frame for layout to settle after font-size change
+    requestAnimationFrame(() => ensureNavFitsContent());
+  });
+  fontObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+
   // Support ?tab=updates query param (used by open_updates_window)
   const params = new URLSearchParams(window.location.search);
   const qTab = params.get("tab");
@@ -251,6 +278,7 @@ onDestroy(() => {
   if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
   stopResize();
   unlisten?.();
+  fontObserver?.disconnect();
 });
 
 $effect(() => {
@@ -270,7 +298,7 @@ $effect(() => {
   <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
     <!-- Sidebar nav -->
-    <nav style={`width:${navWidth}px`} class="shrink-0 border-r border-border dark:border-white/[0.07]
+    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`} class="shrink-0 border-r border-border dark:border-white/[0.07]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
@@ -302,7 +330,7 @@ $effect(() => {
           </svg>
 
           <!-- Label -->
-          <span class="flex-1 leading-none">{tabLabel(id)}</span>
+          <span class="flex-1 leading-none whitespace-nowrap">{tabLabel(id)}</span>
 
           <!-- Kbd hint -->
           {#if digitForTab(i)}

@@ -15,12 +15,14 @@ const STORAGE_KEY = "skill-font-size";
 
 /** Available presets (percentage of base 16px). */
 export const FONT_SIZE_PRESETS = [
+  { label: "2XS", value: 50 },
   { label: "XS", value: 75 },
   { label: "S", value: 87 },
   { label: "M", value: 100 },
   { label: "L", value: 112 },
   { label: "XL", value: 125 },
   { label: "XXL", value: 150 },
+  { label: "3XL", value: 200 },
 ] as const;
 
 export type FontSizeValue = (typeof FONT_SIZE_PRESETS)[number]["value"];

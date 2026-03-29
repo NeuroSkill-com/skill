@@ -25,6 +25,9 @@ import { t } from "$lib/i18n/index.svelte";
 import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+const modKey = isMac ? "⌘" : "Ctrl+";
+
 type Tab =
   | "dashboard"
   | "electrodes"
@@ -54,8 +57,6 @@ const TAB_IDS: Tab[] = [
   "faq",
 ];
 const helpTabLabel = (id: Tab) => t(`helpTabs.${id}`);
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-const modKey = isMac ? "⌘" : "Ctrl+";
 
 // ── Icons per tab ─────────────────────────────────────────────────────────
 const TAB_ICONS: Record<Tab, string> = {
@@ -287,26 +288,146 @@ $effect(() => {
   });
 });
 
-/* ── Cmd/Ctrl + 1‥9 to switch tabs ────────────────────────────────────── */
-// Only Cmd/Ctrl+1–9 are reachable as single keystrokes; don't register beyond that.
-const SHORTCUT_TABS = TAB_IDS.slice(0, 9);
+/* ── Keyboard shortcuts for tabs ──────────────────────────────────────── */
+// ⌘1–⌘9 → tabs 1–9, ⌘0 → tab 10
+// ⌃⌘1–⌃⌘9 → tabs 11–19 (Ctrl+Cmd on Mac, Ctrl+Alt on Windows/Linux)
+
+function digitForTab(i: number): string | null {
+  if (i < 9) return String(i + 1);
+  if (i === 9) return "0";
+  if (i >= 10 && i < 19) return String(i - 9);
+  return null;
+}
+
+function modifierForTab(i: number): string {
+  if (i < 10) return modKey;
+  return isMac ? "⌃⌘" : "Ctrl+Alt+";
+}
 
 function onKeydown(e: KeyboardEvent) {
+  const digit = e.key >= "0" && e.key <= "9" ? parseInt(e.key, 10) : -1;
+  if (digit < 0) return;
   if (!(e.metaKey || e.ctrlKey)) return;
-  const n = parseInt(e.key, 10);
-  if (n >= 1 && n <= SHORTCUT_TABS.length) {
-    e.preventDefault();
-    tab = SHORTCUT_TABS[n - 1];
+
+  const isExtended = isMac ? e.ctrlKey && e.metaKey : e.ctrlKey && e.altKey;
+
+  if (isExtended) {
+    if (digit >= 1 && digit <= 9) {
+      const idx = 10 + digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
+    }
+  } else {
+    if (digit >= 1 && digit <= 9) {
+      const idx = digit - 1;
+      if (idx < TAB_IDS.length) {
+        e.preventDefault();
+        tab = TAB_IDS[idx];
+      }
+    } else if (digit === 0 && TAB_IDS.length >= 10) {
+      e.preventDefault();
+      tab = TAB_IDS[9];
+    }
   }
 }
+
+/* ── Resizable sidebar ────────────────────────────────────────────────── */
+let splitRoot: HTMLDivElement | null = null;
+let navEl: HTMLElement | null = null;
+let navWidth = $state(176);
+let resizingNav = false;
+
+const NAV_WIDTH_MIN = 140;
+const NAV_WIDTH_MAX = 480;
+const NAV_WIDTH_KEY = "help.nav.width";
+
+function clampNavWidth(px: number): number {
+  return Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, Math.round(px)));
+}
+
+function persistNavWidth(px: number): void {
+  try {
+    localStorage.setItem(NAV_WIDTH_KEY, String(px));
+  } catch (e) {}
+}
+
+function ensureNavFitsContent(): void {
+  if (!navEl) return;
+  const prev = navEl.style.width;
+  navEl.style.width = "max-content";
+  const natural = navEl.scrollWidth;
+  navEl.style.width = prev;
+  const needed = clampNavWidth(natural);
+  if (navWidth < needed) {
+    navWidth = needed;
+    persistNavWidth(navWidth);
+  }
+}
+
+function setNavWidthFromPointer(clientX: number): void {
+  if (!splitRoot) return;
+  const rect = splitRoot.getBoundingClientRect();
+  const next = clampNavWidth(clientX - rect.left);
+  navWidth = next;
+}
+
+function onResizeMove(e: MouseEvent): void {
+  if (!resizingNav) return;
+  e.preventDefault();
+  setNavWidthFromPointer(e.clientX);
+}
+
+function stopResize(): void {
+  if (!resizingNav) return;
+  resizingNav = false;
+  persistNavWidth(navWidth);
+  if (typeof document !== "undefined") {
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }
+  window.removeEventListener("mousemove", onResizeMove);
+  window.removeEventListener("mouseup", stopResize);
+}
+
+function startResize(e: MouseEvent): void {
+  e.preventDefault();
+  resizingNav = true;
+  if (typeof document !== "undefined") {
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+  window.addEventListener("mousemove", onResizeMove);
+  window.addEventListener("mouseup", stopResize);
+}
+
+let fontObserver: MutationObserver | null = null;
 
 onMount(async () => {
   helpTitlebarState.version = await invoke<string>("get_app_version");
   window.addEventListener("keydown", onKeydown);
+
+  // Restore persisted nav width
+  try {
+    const stored = Number(localStorage.getItem(NAV_WIDTH_KEY) ?? "");
+    if (!Number.isNaN(stored) && stored > 0) navWidth = clampNavWidth(stored);
+  } catch (e) {}
+
+  // Ensure sidebar fits content at current font size
+  ensureNavFitsContent();
+
+  // Re-check when the root font-size changes
+  fontObserver = new MutationObserver(() => {
+    requestAnimationFrame(() => ensureNavFitsContent());
+  });
+  fontObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
 });
 onDestroy(() => {
   helpTitlebarState.query = "";
   if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
+  stopResize();
+  fontObserver?.disconnect();
 });
 
 useWindowTitle("window.title.help");
@@ -315,10 +436,11 @@ useWindowTitle("window.title.help");
 <main class="h-full min-h-0 flex flex-col overflow-hidden">
 
   <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
-  <div class="min-h-0 flex-1 flex overflow-hidden">
+  <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
     <!-- Sidebar nav (always visible, dims when searching) -->
-    <nav class="w-40 shrink-0 border-r border-border dark:border-white/[0.07]
+    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`}
+         class="shrink-0 border-r border-border dark:border-white/[0.07]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]
                 transition-opacity {searchQuery ? 'opacity-40' : 'opacity-100'}"
@@ -327,7 +449,7 @@ useWindowTitle("window.title.help");
         {@const active = tab === id && !searchQuery}
         <button
           onclick={() => goToTab(id)}
-          title="{helpTabLabel(id)}{i < 9 ? ` (${modKey}${i + 1})` : ''}"
+          title="{helpTabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
                  rounded-lg text-left transition-colors text-[0.75rem] font-medium
                  {active
@@ -345,17 +467,24 @@ useWindowTitle("window.title.help");
             {@html TAB_ICONS[id]}
           </svg>
 
-          <span class="flex-1 leading-none">{helpTabLabel(id)}</span>
+          <span class="flex-1 leading-none whitespace-nowrap">{helpTabLabel(id)}</span>
 
-          {#if i < 9}
+          {#if digitForTab(i)}
             <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
-              {modKey}{i + 1}
+              {modifierForTab(i)}{digitForTab(i)}
             </kbd>
           {/if}
         </button>
       {/each}
     </nav>
+
+    <button
+      type="button"
+      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-primary/40 transition-colors"
+      aria-label="Resize sidebar"
+      onmousedown={startResize}
+    ></button>
 
     <!-- Content / search results -->
     <div class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
