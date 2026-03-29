@@ -291,6 +291,10 @@ const ui: Record<string, string> = {
   "cmdK.lslOpenSettings": "LSL Settings",
   "cmdK.lslIrohStart": "Start iroh Remote Sink",
   "cmdK.lslIrohStop": "Stop iroh Remote Sink",
+
+  "invite.copyLink": "Копіювати посилання запрошення",
+  "invite.copied": "Скопійовано!",
+  "invite.linkHint": "Відкрийте це посилання на телефоні, якщо не вдається сканувати QR-код",
 };
 
 export default ui;

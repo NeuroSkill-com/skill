@@ -6,6 +6,7 @@ import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
 type Permissions = {
@@ -541,18 +542,18 @@ onDestroy(() => stopPolling());
                          stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-emerald-500 shrink-0">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-medium">{t("invite.copied")}</span>
                   {:else}
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                       <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
                     </svg>
-                    <span>Copy invite link</span>
+                    <span>{t("invite.copyLink")}</span>
                   {/if}
                 </button>
                 <p class="text-[0.48rem] text-muted-foreground/60 text-center leading-tight">
-                  Open this link on the phone if you can't scan the QR code
+                  {t("invite.linkHint")}
                 </p>
               </div>
             {/if}
