@@ -37,6 +37,12 @@ pub struct IrohRemoteAdapter {
     peer_id: String,
     /// Whether we've received a DeviceConnected event from the remote.
     got_connected: bool,
+    /// Highest timestamp (compact YYYYMMDDHHmmss) we've emitted.
+    /// Used to enforce monotonic ordering — backlog data that arrives
+    /// with timestamps older than what we've already processed is
+    /// re-stamped to `last_ts + epsilon` so the pipeline never sees
+    /// out-of-order data.
+    last_emitted_ts: i64,
 }
 
 impl IrohRemoteAdapter {
@@ -68,10 +74,16 @@ impl IrohRemoteAdapter {
             pending: VecDeque::new(),
             peer_id,
             got_connected: false,
+            last_emitted_ts: 0,
         }
     }
 
     /// Expand a SensorChunk into individual DeviceEvents.
+    ///
+    /// Enforces monotonic timestamps: if this chunk's timestamp is older
+    /// than the last emitted timestamp (backlog data arriving after live),
+    /// we adjust it forward so the pipeline always sees increasing times.
+    /// The adjustment preserves intra-chunk sample spacing (1/sample_rate).
     fn expand_sensor_chunk(&mut self, timestamp: i64, chunk: skill_iroh::device_proto::SensorChunk) {
         let ch = chunk.eeg_data.len();
         if ch == 0 {
@@ -89,7 +101,18 @@ impl IrohRemoteAdapter {
             self.desc.pipeline_channels = ch.min(skill_constants::EEG_CHANNELS);
         }
 
-        let base_ts = ts_to_unix_approx(timestamp);
+        // Enforce monotonic ordering.  If the chunk is from the backlog
+        // (timestamp ≤ last emitted), shift it just past the last emitted
+        // time.  This keeps all downstream models/storage/logic happy —
+        // they rely on strictly non-decreasing timestamps.
+        let effective_ts = if timestamp <= self.last_emitted_ts {
+            self.last_emitted_ts + 1 // +1 second in compact format
+        } else {
+            timestamp
+        };
+        self.last_emitted_ts = effective_ts;
+
+        let base_ts = ts_to_unix_approx(effective_ts);
         let dt = 1.0 / chunk.sample_rate as f64;
 
         // PPG interleaving
