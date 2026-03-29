@@ -14,10 +14,17 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve ONNX cache dir
+      id: ort-cache
+      shell: powershell
+      run: |
+        $dir = Join-Path $env:USERPROFILE ".cache\onnxruntime"
+        "dir=$dir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
     - name: Cache ONNX Runtime (Windows x64)
       uses: actions/cache@v5
       with:
-        path: ${{ runner.temp }}\..\runneradmin\.cache\onnxruntime
+        path: ${{ steps.ort-cache.outputs.dir }}
         key: ${{ inputs.cache-key-prefix }}-${{ inputs.version }}-x64
 
     - name: Install ONNX Runtime (Windows x64) + export ORT env

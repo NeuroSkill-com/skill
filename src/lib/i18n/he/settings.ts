@@ -462,6 +462,14 @@ const settings: Record<string, string> = {
   "lsl.backgroundSessions": "Background Recordings",
   "lsl.recording": "RECORDING",
   "lsl.stopRecording": "Stop recording",
+
+  // ── Geo provider ──────────────────────────────────────────────────────────
+  "settings.geoProvider": "ספק מיקום גאוגרפי",
+  "settings.geoProviderDesc":
+    "בחרו כיצד האפליקציה מזהה את מיקומכם עבור מטא-נתוני הפגישה. «כבוי» משבית מיקום לחלוטין, «מקומי» משתמש ב-GPS של המכשיר ו-«מרוחק» פונה לשירות חיצוני.",
+  "settings.geoProviderOff": "כבוי",
+  "settings.geoProviderLocal": "מקומי",
+  "settings.geoProviderRemote": "מרוחק",
 };
 
 export default settings;

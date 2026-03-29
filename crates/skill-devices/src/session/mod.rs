@@ -22,6 +22,7 @@
 //! * [`hermes::HermesAdapter`] — Hermes V1 (8 ch @ 250 Hz, IMU)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 
+pub mod cognionics;
 pub mod emotiv;
 pub mod hermes;
 pub mod idun;

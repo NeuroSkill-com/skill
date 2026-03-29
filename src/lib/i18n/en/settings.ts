@@ -456,6 +456,14 @@ const settings: Record<string, string> = {
     "Sleep staging (N1/N2/N3/REM) uses delta, theta, alpha, and beta power ratios within this window.",
   "sleepSettings.info3": "Adjusting the schedule helps the app distinguish intentional naps from overnight sleep.",
 
+  // ── Geo provider ──────────────────────────────────────────────────────────
+  "settings.geoProvider": "Geolocation Provider",
+  "settings.geoProviderDesc":
+    "Choose how the app resolves your location for session metadata. 'Off' disables geolocation entirely, 'Local' uses on-device GPS, and 'Remote' queries an external service.",
+  "settings.geoProviderOff": "Off",
+  "settings.geoProviderLocal": "Local",
+  "settings.geoProviderRemote": "Remote",
+
   // ── Storage format ───────────────────────────────────────────────────────
   "settings.storageFormat": "Recording Format",
   "settings.storageFormatDesc":

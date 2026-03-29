@@ -38,7 +38,10 @@ emotiv = { version = "0.0.11", default-features = false }
 idun = { version = "0.0.3", default-features = false }
 
 # Mendi fNIRS headband (BLE)
-mendi = { version = "0.0.1", default-features = false }
+mendi = { version = "0.0.2", default-features = false }
+
+# Cognionics / CGX EEG headsets (USB/FTDI serial)
+cognionics = { version = "0.0.1", default-features = false }
 
 [features]
 default = []
