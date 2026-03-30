@@ -704,8 +704,12 @@ const filteredLabels = $derived.by(() => {
 });
 
 // ── Calendar heatmap state ──────────────────────────────────────────────
-let viewMode = $state<HistoryViewMode>("month");
-/** Anchor date for calendar navigation. */
+/** Start in day view so the session list is visible immediately.
+ *  Users can switch to month/week/year from the title-bar buttons. */
+let viewMode = $state<HistoryViewMode>("day");
+/** Anchor date for calendar navigation — updated to the most recent
+ *  session date once allUtcDays has been loaded, so switching to the
+ *  month/year calendar always lands on a populated period. */
 let calendarAnchor = $state(new Date());
 
 function setViewMode(m: HistoryViewMode) {
@@ -1458,6 +1462,12 @@ onMount(async () => {
     allUtcDays = await invoke<string[]>("list_session_days");
   } catch (e) {}
   daysLoading = false;
+  // Anchor the calendar to the most recent session month so switching
+  // to month/year view always shows a populated heatmap.
+  if (localDays.length > 0) {
+    const [cy, cm, cd] = localDays[0].split("-").map(Number);
+    calendarAnchor = new Date(cy, cm - 1, cd);
+  }
   if (localDays.length > 0) await loadDay(0);
   // Load screenshot port
   invoke<[string, number]>("get_screenshots_dir")

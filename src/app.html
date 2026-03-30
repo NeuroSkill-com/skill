@@ -7,8 +7,23 @@
     <title>NeuroSkill™</title>
     <!-- Apply theme + font size synchronously before first paint → no flash. -->
     <script>
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.classList.add('dark');
+      // 1. Resolve dark/light: stored preference wins over OS setting.
+      //    This must match the logic in theme.svelte.ts → loadMode().
+      var _dark;
+      try {
+        var _t = localStorage.getItem('skill-theme');
+        if (_t === 'dark')  _dark = true;
+        else if (_t === 'light') _dark = false;
+        else _dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      } catch(e) {
+        _dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      if (_dark) document.documentElement.classList.add('dark');
+      // 2. Paint the background synchronously so transparent windows never
+      //    flash black while the CSS bundle is still downloading.
+      //    Values match --background in app.css (:root vs .dark).
+      document.documentElement.style.background =
+        _dark ? 'oklch(0.145 0 0)' : 'oklch(1 0 0)';
       try {
         var fs = localStorage.getItem('skill-font-size');
         if (fs) document.documentElement.style.fontSize = fs + '%';

@@ -22,6 +22,8 @@ interface ExgFamily {
   paper: string;
   doi: string;
   weights_cached: boolean;
+  /** Optional URL to a preview image shown in the model detail card. */
+  preview_image?: string | null;
 }
 interface ExgModelEntry {
   family: string;
@@ -325,6 +327,17 @@ $effect(() => {
                {!selectedFamily.weights_cached ? 'opacity-80' : ''}"
       >
         <CardContent class="py-0 px-0 flex flex-col">
+          <!-- Preview image (optional, e.g. brain visualisation for TRIBE v2) -->
+          {#if selectedFamily.preview_image}
+            <div class="w-full border-b border-border/40 dark:border-white/[0.04] bg-black/5 dark:bg-white/[0.03] overflow-hidden">
+              <img
+                src={selectedFamily.preview_image}
+                alt="{selectedFamily.name} preview"
+                class="w-full max-h-36 object-contain"
+                onerror={(e) => { const p = (e.currentTarget as HTMLElement).closest('div'); if (p) (p as HTMLElement).style.display = 'none'; }}
+              />
+            </div>
+          {/if}
           <!-- Description + tags -->
           <div class="px-4 pt-3.5 pb-3 flex flex-col gap-1.5">
             <div class="flex items-center gap-1.5">
