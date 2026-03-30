@@ -20,6 +20,17 @@ pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     };
     let store = store.ok_or_else(|| "health store not available".to_string())?;
     let result = store.sync(&payload);
+    #[cfg(not(feature = "gps"))]
+    eprintln!(
+        "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={}",
+        result.sleep_upserted,
+        result.workouts_upserted,
+        result.heart_rate_upserted,
+        result.steps_upserted,
+        result.mindfulness_upserted,
+        result.metrics_upserted,
+    );
+    #[cfg(feature = "gps")]
     eprintln!(
         "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={} location={}",
         result.sleep_upserted,
@@ -87,11 +98,15 @@ pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
             let rows = store.query_metrics(metric_type, start_utc, end_utc, limit);
             Ok(serde_json::json!({ "type": "metrics", "metric_type": metric_type, "count": rows.len(), "results": rows }))
         }
+        #[cfg(feature = "gps")]
         "location" => {
             let rows = store.query_location(start_utc, end_utc, limit);
             Ok(serde_json::json!({ "type": "location", "count": rows.len(), "results": rows }))
         }
+        #[cfg(feature = "gps")]
         other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics|location")),
+        #[cfg(not(feature = "gps"))]
+        other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics")),
     }
 }
 

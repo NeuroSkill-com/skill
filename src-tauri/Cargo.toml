@@ -33,6 +33,7 @@ license = "GPL-3.0-only"
 #
 [features]
 default    = ["tts-kitten", "tts-neutts", "llm", "mw75-rfcomm", "screenshots"]
+gps        = ["skill-data/gps"]
 screenshots = ["skill-screenshots/capture"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
 tts-kitten = ["dep:kittentts", "dep:rodio", "skill-tts/tts-kitten"]
