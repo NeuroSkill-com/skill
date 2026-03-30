@@ -819,10 +819,11 @@ fn clear_readonly(path: &Path) {
 fn setup_vulkan_sdk_windows() {
     // use std::fs;
 
-    let vulkan_sdk_path = "C:\\VulkanSDK";
+    let vulkan_sdk_path =
+        std::env::var("VULKAN_SDK").unwrap_or_else(|_| "C:\\VulkanSDK".to_string());
 
     // Check if Vulkan SDK is already installed
-    if Path::new(vulkan_sdk_path).exists() {
+    if Path::new(&vulkan_sdk_path).exists() {
         println!(
             "cargo:warning=Vulkan SDK already installed at {}",
             vulkan_sdk_path

@@ -454,7 +454,7 @@ pub fn tilde_path(p: &Path) -> String {
         }
         if let Some(rest) = s.strip_prefix(h) {
             if rest.starts_with('/') || rest.starts_with('\\') {
-                return format!("~{rest}");
+                return format!("~{}", rest.replace('\\', "/"));
             }
         }
     }
