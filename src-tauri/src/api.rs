@@ -506,6 +506,10 @@ async fn root_get(
         let sock_addr = addr.0;
         ws.on_upgrade(move |socket| ws_client_task(socket, peer, state, sock_addr))
     } else {
+        #[cfg(feature = "gps")]
+        let health_sync_doc = "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics?, location? }";
+        #[cfg(not(feature = "gps"))]
+        let health_sync_doc = "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics? }";
         let info = json!({
             "name":    "Skill API",
             "version": 1,
@@ -545,7 +549,7 @@ async fn root_get(
                 "DELETE /v1/calibrations/{id}":     "delete calibration profile",
                 "GET  /v1/dnd":                     "DND automation status",
                 "POST /v1/dnd":                     "force-enable/disable DND: { enabled: bool }",
-                "POST /v1/health/sync":             "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics?, location? }",
+                "POST /v1/health/sync":             health_sync_doc,
                 "POST /v1/health/query":            "query health data: { type, start_utc?, end_utc?, limit?, metric_type? }",
                 "GET  /v1/health/summary":          "aggregate health counts (last 24h default)",
                 "POST /v1/health/summary":          "aggregate health counts: { start_utc, end_utc }",

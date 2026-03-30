@@ -5,6 +5,9 @@ edition = "2021"
 license = "GPL-3.0-only"
 description = "Apple HealthKit data store — sync, query, and summary over SQLite"
 
+[features]
+gps = []
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

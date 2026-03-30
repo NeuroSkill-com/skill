@@ -111,6 +111,11 @@ CREATE TABLE IF NOT EXISTS health_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_hm_type_ts ON health_metrics (metric_type, timestamp);
 
+";
+
+/// DDL applied only when the `gps` feature is enabled.
+#[cfg(feature = "gps")]
+const DDL_GPS: &str = "
 CREATE TABLE IF NOT EXISTS location_samples (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     source_id           TEXT    NOT NULL DEFAULT '',
@@ -194,6 +199,7 @@ pub struct HealthMetric {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[cfg(feature = "gps")]
 /// A GPS fix recorded by the iOS companion app (CoreLocation / CLLocation).
 ///
 /// All fields follow Apple's `CLLocation` conventions:
@@ -202,6 +208,7 @@ pub struct HealthMetric {
 ///   value means the measurement is invalid
 /// - `speed` is metres-per-second; negative = invalid
 /// - `course` is degrees clockwise from true north; negative = invalid
+#[cfg(feature = "gps")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocationSample {
     #[serde(default)]
@@ -217,7 +224,9 @@ pub struct LocationSample {
     pub course: Option<f64>,
 }
 
+#[cfg(feature = "gps")]
 /// A GPS location row returned from the database.
+#[cfg(feature = "gps")]
 #[derive(Clone, Debug, Serialize)]
 pub struct LocationRow {
     pub id: i64,
@@ -250,6 +259,7 @@ pub struct HealthSyncPayload {
     pub metrics: Vec<HealthMetric>,
     /// GPS fixes from CoreLocation (optional — only sent when location
     /// permission has been granted and fixes are available).
+    #[cfg(feature = "gps")]
     #[serde(default)]
     pub location: Vec<LocationSample>,
 }
@@ -263,6 +273,7 @@ pub struct SyncResult {
     pub steps_upserted: usize,
     pub mindfulness_upserted: usize,
     pub metrics_upserted: usize,
+    #[cfg(feature = "gps")]
     pub location_upserted: usize,
 }
 
@@ -346,6 +357,8 @@ impl HealthStore {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
             .ok()?;
         conn.execute_batch(DDL).ok()?;
+        #[cfg(feature = "gps")]
+        conn.execute_batch(DDL_GPS).ok()?;
         Some(Self { conn: Mutex::new(conn) })
     }
 
@@ -364,6 +377,7 @@ impl HealthStore {
             steps_upserted: 0,
             mindfulness_upserted: 0,
             metrics_upserted: 0,
+            #[cfg(feature = "gps")]
             location_upserted: 0,
         };
 
@@ -493,6 +507,7 @@ impl HealthStore {
             }
         }
 
+        #[cfg(feature = "gps")]
         if !payload.location.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO location_samples
@@ -654,6 +669,7 @@ impl HealthStore {
     }
 
     /// Query GPS location samples in the given UTC time range.
+    #[cfg(feature = "gps")]
     pub fn query_location(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<LocationRow> {
         let conn = lock_or_recover(&self.conn);
         let Ok(mut stmt) = conn.prepare(
@@ -744,25 +760,40 @@ impl HealthStore {
             )
             .unwrap_or(0);
 
-        let location_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM location_samples WHERE timestamp >= ?1 AND timestamp <= ?2",
-                params![start_utc, end_utc],
-                |r| r.get(0),
-            )
-            .unwrap_or(0);
-
-        serde_json::json!({
-            "start_utc":            start_utc,
-            "end_utc":              end_utc,
-            "sleep_samples":        sleep_count,
-            "workouts":             workout_count,
-            "heart_rate_samples":   hr_count,
-            "total_steps":          total_steps,
-            "mindfulness_sessions": mindful_count,
-            "metric_entries":       metric_count,
-            "location_fixes":       location_count,
-        })
+        #[cfg(not(feature = "gps"))]
+        {
+            serde_json::json!({
+                "start_utc":            start_utc,
+                "end_utc":              end_utc,
+                "sleep_samples":        sleep_count,
+                "workouts":             workout_count,
+                "heart_rate_samples":   hr_count,
+                "total_steps":          total_steps,
+                "mindfulness_sessions": mindful_count,
+                "metric_entries":       metric_count,
+            })
+        }
+        #[cfg(feature = "gps")]
+        {
+            let location_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM location_samples WHERE timestamp >= ?1 AND timestamp <= ?2",
+                    params![start_utc, end_utc],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            serde_json::json!({
+                "start_utc":            start_utc,
+                "end_utc":              end_utc,
+                "sleep_samples":        sleep_count,
+                "workouts":             workout_count,
+                "heart_rate_samples":   hr_count,
+                "total_steps":          total_steps,
+                "mindfulness_sessions": mindful_count,
+                "metric_entries":       metric_count,
+                "location_fixes":       location_count,
+            })
+        }
     }
 }
 
@@ -922,6 +953,7 @@ mod tests {
         assert_eq!(types, vec!["hrv", "restingHeartRate"]);
     }
 
+    #[cfg(feature = "gps")]
     #[test]
     fn sync_location_and_query() {
         let (_dir, store) = temp_store();
@@ -949,6 +981,7 @@ mod tests {
         assert_eq!(rows[0].source_id, "iphone");
     }
 
+    #[cfg(feature = "gps")]
     #[test]
     fn sync_location_is_idempotent() {
         let (_dir, store) = temp_store();
@@ -972,6 +1005,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
     }
 
+    #[cfg(feature = "gps")]
     #[test]
     fn sync_location_optional_fields_nullable() {
         let (_dir, store) = temp_store();
@@ -996,6 +1030,7 @@ mod tests {
         assert!(rows[0].speed.is_none());
     }
 
+    #[cfg(feature = "gps")]
     #[test]
     fn summary_includes_location_count() {
         let (_dir, store) = temp_store();

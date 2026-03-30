@@ -24,6 +24,9 @@ llmfit-core = "0.8.4"
 sysinfo     = "0.38"
 libc        = "0.2"
 
+[features]
+gps = ["skill-health/gps"]
+
 [target.'cfg(target_os = "macos")'.dependencies]
 macos-focus = "0.0.1"
 
