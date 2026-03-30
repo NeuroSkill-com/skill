@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Tauri wrapper — pre-builds the espeak-ng static library for the current
- * platform before delegating to the Tauri CLI.
+ * Tauri wrapper — handles platform-specific setup (Vulkan SDK, linker
+ * flags, macOS target) before delegating to the Tauri CLI.
  *
  * Handles: dev, build (and passes everything else straight through).
  *
@@ -11,15 +11,6 @@
  *   npm run tauri build -- --debug
  *   npm run tauri build -- --target x86_64-pc-windows-gnu
  *   npm run tauri info
- *
- * Platform behaviour for `dev` and `build`:
- *   macOS         → bash scripts/build-espeak-static.sh
- *                   `build` adds --target aarch64-apple-darwin --no-sign and
- *                   defaults to --no-bundle unless caller passed bundle flags
- *   Windows MSVC  → PowerShell scripts\build-espeak-static.ps1
- *   Linux         → bash scripts/build-espeak-static.sh
- *   *-windows-gnu → bash scripts/build-espeak-static-mingw.sh
- *                   (cross-compile from Linux/macOS, or native MSYS2)
  */
 
 import { execSync } from "node:child_process";
@@ -136,11 +127,11 @@ function removeBundleArg(args, parsedBundleArg) {
 // argv: ["node", "tauri-build.js", subcommand?, ...rest]
 const [subcommand = "", ...subArgs] = process.argv.slice(2);
 
-// Subcommands that need espeak pre-built before Tauri runs.
-const needsEspeak = subcommand === "dev" || subcommand === "build";
+// Subcommands that need platform setup before Tauri runs.
+const needsSetup = subcommand === "dev" || subcommand === "build";
 
-// ── Pass-through for subcommands that don't need espeak ───────────────────────
-if (!needsEspeak) {
+// ── Pass-through for subcommands that don't need setup ───────────────────────
+if (!needsSetup) {
   const passCmd =
     process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri") ? ["cargo", "tauri"] : ["npx", "tauri"];
   const cmd = [...passCmd, subcommand, ...subArgs].filter(Boolean).join(" ");
@@ -200,22 +191,17 @@ if (isLinux && explicitTarget?.endsWith("-unknown-linux-gnu") && process.env.ALL
   }
 }
 
-// ── Pre-build espeak-ng and resolve ESPEAK_LIB_DIR ───────────────────────────
-let espeakLib;
+// ── Platform-specific setup ──────────────────────────────────────────────────
+//
+// espeak-ng is now a pure Rust dependency (espeak-ng crate) — no C build
+// scripts needed.  This section handles platform flags, Vulkan SDK, and
+// macOS/Windows/Linux quirks.
+
 let platformFlags = []; // extra flags injected before the user's subArgs
 
 if (isMingwTarget) {
-  execSync("bash scripts/build-espeak-static-mingw.sh", {
-    cwd: root,
-    stdio: "inherit",
-  });
-  espeakLib = resolve(root, "src-tauri/espeak-static-mingw/lib");
+  // MinGW cross-compilation — no special setup needed.
 } else if (isMac) {
-  execSync("bash scripts/build-espeak-static.sh", {
-    cwd: root,
-    stdio: "inherit",
-  });
-  espeakLib = resolve(root, "src-tauri/espeak-static/lib");
   // Release builds target Apple Silicon; dev builds use the host triple.
   if (subcommand === "build" && !explicitTarget) {
     platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
@@ -289,11 +275,6 @@ if (isMingwTarget) {
     }
   } else {
   }
-  execSync("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1", {
-    cwd: root,
-    stdio: "inherit",
-  });
-  espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 
   // ── Windows: skip Tauri bundling for `build` subcommand ────────────────────
   //
@@ -361,11 +342,6 @@ if (isMingwTarget) {
     cwd: root,
     stdio: "inherit",
   });
-  execSync("bash scripts/build-espeak-static.sh", {
-    cwd: root,
-    stdio: "inherit",
-  });
-  espeakLib = resolve(root, "src-tauri/espeak-static/lib");
 
   // ── Linux: enable Vulkan GPU offloading for LLM inference ────────────────
   //
@@ -527,7 +503,7 @@ function runTauriWithArgs(args) {
   execSync(cmd, {
     cwd: root,
     stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+    env: process.env,
   });
 }
 
@@ -536,7 +512,7 @@ function runTauriSubcommand(command, args) {
   execSync(cmd, {
     cwd: root,
     stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+    env: process.env,
   });
 }
 
@@ -741,7 +717,7 @@ function assembleMacOsApp() {
     }
   }
 
-  // Copy resources (e.g. espeak-ng-data, neutts-samples)
+  // Copy resources (e.g. neutts-samples)
   for (const [src, dst] of Object.entries(resources)) {
     const srcPath = resolve(root, "src-tauri", src);
     const dstPath = resolve(resDir, dst);
