@@ -12357,6 +12357,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-location"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "ureq 3.3.0",
+]
+
+[[package]]
 name = "skill-lsl"
 version = "0.0.1"
 dependencies = [
@@ -12475,6 +12487,7 @@ dependencies = [
  "sha2 0.10.9",
  "skill-constants",
  "skill-headless",
+ "skill-location",
  "thiserror 2.0.18",
  "tokio",
  "ureq 3.3.0",

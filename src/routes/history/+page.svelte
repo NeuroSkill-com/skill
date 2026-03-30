@@ -802,6 +802,26 @@ $effect(() => {
   }
 });
 
+/** Derived week grid data for the HistoryCalendar week view.
+ *  Built from calendarCells (7 day cells) + weekSessions (loaded async). */
+const weekGridDays = $derived.by(() => {
+  if (viewMode !== "week") return [];
+  return calendarCells.map((cell) => ({
+    dayKey: cell.dayKey,
+    label: cell.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+    sessions: (weekSessions.get(cell.dayKey) ?? [])
+      .filter(
+        (s): s is SessionEntry & { session_start_utc: number; session_end_utc: number } =>
+          s.session_start_utc != null && s.session_end_utc != null,
+      )
+      .map((s) => ({
+        csv_path: s.csv_path,
+        start_utc: s.session_start_utc,
+        end_utc: s.session_end_utc,
+      })),
+  }));
+});
+
 /** Svelte action: draw epoch dots + labels on a 24h canvas timeline for a given day. */
 function drawDayDots(
   canvas: HTMLCanvasElement,
@@ -1572,7 +1592,7 @@ useWindowTitle("window.title.history");
           {navigateToDay}
           {recordingStreak}
           {calendarMonth}
-          weekGridDays={[]}
+          {weekGridDays}
           drawDayDots={() => {}}
           renderDayDots={() => {}}
           handleDayDotsHover={() => {}}

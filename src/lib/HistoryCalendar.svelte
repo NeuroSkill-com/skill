@@ -189,7 +189,7 @@ let {
           </div>
           <div class="col-span-48 h-5 relative">
             {#each wgd.sessions as sess}
-              {@const dayStart = new Date(wgd.dayKey.slice(0,4) + '-' + wgd.dayKey.slice(4,6) + '-' + wgd.dayKey.slice(6,8)).getTime()/1000}
+              {@const dayStart = new Date(wgd.dayKey + 'T00:00:00').getTime()/1000}
               {@const sOff = Math.max(0, sess.start_utc - dayStart)}
               {@const dur  = Math.max(60, sess.end_utc - sess.start_utc)}
               {@const left = (sOff / 86400 * 100).toFixed(2)}
