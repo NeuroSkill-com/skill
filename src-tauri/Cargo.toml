@@ -28,7 +28,7 @@ license = "GPL-3.0-only"
 #                Multimodal (image / audio inputs):
 #                  --features llm-mtmd
 #
-#                neutts 0.0.7 uses llama-cpp-4 too — no `links = "llama"`
+#                neutts 0.1.0 uses llama-cpp-4 too — no `links = "llama"`
 #                conflict; both features can be active simultaneously.
 #
 [features]
@@ -57,7 +57,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 # ── LLM feature tree ──────────────────────────────────────────────────────────
 #
-# neutts 0.0.7 migrated its backbone from llama-cpp-2 to llama-cpp-4.
+# neutts 0.1.0 uses llama-cpp-4 for its backbone.
 # Both neutts and llama-cpp-4 now resolve to the same package — Cargo
 # deduplicates them, so the `links = "llama"` conflict is fully resolved.
 #
@@ -138,10 +138,10 @@ csv = "1"
 # On Windows, build-espeak-static.ps1 (PowerShell) builds libespeak-ng
 # statically using CMake + MSVC, exactly as build-espeak-static.sh does on
 # macOS/Linux.  See WINDOWS.md for setup instructions.
-kittentts = { version = "0.2.7", features = ["espeak"], optional = true }
+kittentts = { version = "0.3.0", features = ["espeak"], optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
-# 0.0.7+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
+# 0.1.0: backbone is llama-cpp-4.  This means neutts
 #         and our `llm` feature share the same native llama library — Cargo
 #         deduplicates them into one package, so the `links = "llama"` conflict
 #         that existed with 0.0.4 is fully resolved.
@@ -155,7 +155,7 @@ kittentts = { version = "0.2.7", features = ["espeak"], optional = true }
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -241,7 +241,7 @@ async-stream      = "0.3"
 # ── LLM (OpenAI-compatible local inference via llama-cpp-4) ────────────────────
 # Optional — enabled by the `llm` feature flag (see [features] above).
 #
-# neutts 0.0.7 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
+# neutts 0.1.0 uses llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
 llama-cpp-4 = { version = "0.2.12", optional = true }
@@ -366,7 +366,7 @@ dispatch2        = "0.3.1"
 # `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
-neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # ort-download-binaries-native-tls enables both ort/download-binaries and

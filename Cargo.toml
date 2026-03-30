@@ -63,7 +63,7 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 
 
 # ── kittentts / neutts pre-release patches ───────────────────────────────────
-# Uncomment to test local changes before publishing kittentts 0.2.8 / neutts 0.0.8.
+# Uncomment to test local changes before publishing.
 # Remove once those versions land on crates.io.
 # kittentts = { path = "kittentts-rs" }
 # neutts    = { path = "neutts-rs" }

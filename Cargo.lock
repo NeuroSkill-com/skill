@@ -4092,6 +4092,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6"
 
 [[package]]
+name = "espeak-ng"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf53da2d1e3049cfff5ae289a05b456c753c15cbe0bff2b97251aef5a748da94"
+dependencies = [
+ "bitflags 2.11.0",
+ "espeak-ng-data-dict-ru",
+ "espeak-ng-data-dicts",
+ "espeak-ng-data-phonemes",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "espeak-ng-data-dict-ru"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b62f5cac7f103b5ef324f02b2fd883897404eac9766dd21d90864eeb633b7ff"
+
+[[package]]
+name = "espeak-ng-data-dicts"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "393d19356251c91ffc4f08f446af2a5331efb6b6a5e7d109b26172bdea594eea"
+
+[[package]]
+name = "espeak-ng-data-phonemes"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d65418fdbf64db690f177ae55b6cb0f01eec5ffd46f5e1cba6f841ae3f214ec0"
+
+[[package]]
 name = "event-listener"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6987,11 +7018,12 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kittentts"
-version = "0.2.7"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13d2cb89fbc08316a57356f305d348cb099e3debf3fa7917c65c699d092d6dd1"
+checksum = "4daa563b33b6e7d9bb377f2f0cf43d90f8aa2737b622388730ba12f8386235b9"
 dependencies = [
  "anyhow",
+ "espeak-ng",
  "fancy-regex 0.14.0",
  "hf-hub 0.5.0",
  "hound",
@@ -8157,13 +8189,14 @@ dependencies = [
 
 [[package]]
 name = "neutts"
-version = "0.0.7"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a532304b1d33b1ff0e0a73de6fa0c73671c0fff9ad4883eee8e705420c88faf"
+checksum = "f9f7951ff820b71a8ff441c36ab1307bb7f23763abdba81600fec4dc9aa2f649"
 dependencies = [
  "anyhow",
  "burn",
  "dirs",
+ "espeak-ng",
  "fancy-regex 0.14.0",
  "hf-hub 0.5.0",
  "hound",
