@@ -287,6 +287,9 @@ sleepfm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
 # SleepLM foundation model — CoCa PSG + language, wgpu GPU backend.
 sleeplm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
 
+# TRIBE v2 multimodal fMRI brain-encoding foundation model (Meta AI) — wgpu GPU backend.
+tribev2   = { version = "0.0.2", default-features = false, features = ["wgpu"] }
+
 # SensorLM and OpenTSLM use burn 0.14 — incompatible with workspace burn 0.20.1.
 # They will be re-added once the crates are updated.
 # sensorlm-rs = { version = "0.1.0", default-features = false, features = ["wgpu"] }
