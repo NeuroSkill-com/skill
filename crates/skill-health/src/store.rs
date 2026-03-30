@@ -199,7 +199,6 @@ pub struct HealthMetric {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[cfg(feature = "gps")]
 /// A GPS fix recorded by the iOS companion app (CoreLocation / CLLocation).
 ///
 /// All fields follow Apple's `CLLocation` conventions:
@@ -224,7 +223,6 @@ pub struct LocationSample {
     pub course: Option<f64>,
 }
 
-#[cfg(feature = "gps")]
 /// A GPS location row returned from the database.
 #[cfg(feature = "gps")]
 #[derive(Clone, Debug, Serialize)]
@@ -240,6 +238,33 @@ pub struct LocationRow {
     pub speed: Option<f64>,
     pub course: Option<f64>,
     pub created_at: i64,
+}
+
+#[cfg(feature = "gps")]
+impl LocationSample {
+    /// Returns `true` when this fix carries valid, finite data safe to store.
+    ///
+    /// Rejects:
+    /// - non-finite (NaN / Inf) latitude or longitude
+    /// - latitude outside `[-90, 90]` or longitude outside `[-180, 180]`
+    /// - timestamp ≤ 0 (before the Unix epoch)
+    /// - NaN or Inf in any present optional field
+    ///
+    /// Negative values in `horizontal_accuracy`, `vertical_accuracy`, `speed`,
+    /// and `course` are intentionally accepted — CoreLocation uses `-1` as an
+    /// "invalid / unavailable" sentinel and callers may wish to store that fact.
+    pub fn is_valid(&self) -> bool {
+        self.latitude.is_finite()
+            && self.longitude.is_finite()
+            && (-90.0..=90.0).contains(&self.latitude)
+            && (-180.0..=180.0).contains(&self.longitude)
+            && self.timestamp > 0
+            && self.altitude.is_none_or(f64::is_finite)
+            && self.horizontal_accuracy.is_none_or(f64::is_finite)
+            && self.vertical_accuracy.is_none_or(f64::is_finite)
+            && self.speed.is_none_or(f64::is_finite)
+            && self.course.is_none_or(f64::is_finite)
+    }
 }
 
 /// Batch sync payload sent by the iOS companion app.
@@ -358,7 +383,11 @@ impl HealthStore {
             .ok()?;
         conn.execute_batch(DDL).ok()?;
         #[cfg(feature = "gps")]
-        conn.execute_batch(DDL_GPS).ok()?;
+        if let Err(e) = conn.execute_batch(DDL_GPS) {
+            // Non-fatal: base health tables are unaffected; GPS fixes simply
+            // won't be persisted until the issue is resolved on next open.
+            eprintln!("[health] GPS DDL failed — location data will not be stored: {e}");
+        }
         Some(Self { conn: Mutex::new(conn) })
     }
 
@@ -516,6 +545,9 @@ impl HealthStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             ) {
                 for loc in &payload.location {
+                    if !loc.is_valid() {
+                        continue; // skip fixes with out-of-range or non-finite coordinates
+                    }
                     if stmt
                         .execute(params![
                             loc.source_id,
@@ -820,6 +852,8 @@ mod tests {
         let result = store.sync(&HealthSyncPayload::default());
         assert_eq!(result.sleep_upserted, 0);
         assert_eq!(result.workouts_upserted, 0);
+        #[cfg(feature = "gps")]
+        assert_eq!(result.location_upserted, 0);
     }
 
     #[test]
@@ -1104,5 +1138,247 @@ mod tests {
         let s = store.summary(0, 500);
         assert_eq!(s["sleep_samples"], 2);
         assert_eq!(s["total_steps"], 9500);
+        // When gps is enabled, summary must include location_fixes (0 here).
+        #[cfg(feature = "gps")]
+        assert_eq!(s["location_fixes"], 0);
+    }
+
+    // ── GPS tests ───────────────────────────────────────────────────────────────
+
+    /// Helper: build a minimal valid `LocationSample`.
+    #[cfg(feature = "gps")]
+    fn loc(timestamp: i64, lat: f64, lon: f64) -> LocationSample {
+        LocationSample {
+            source_id: String::new(),
+            timestamp,
+            latitude: lat,
+            longitude: lon,
+            altitude: None,
+            horizontal_accuracy: None,
+            vertical_accuracy: None,
+            speed: None,
+            course: None,
+        }
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn sync_location_time_range_filtering() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![loc(100, 0.0, 0.0), loc(500, 1.0, 1.0), loc(1000, 2.0, 2.0)],
+            ..Default::default()
+        };
+        store.sync(&payload);
+        // Only the fix at t=500 falls within [200, 800].
+        let rows = store.query_location(200, 800, 100);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].timestamp, 500);
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn sync_location_limit_respected() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: (1..=10).map(|i| loc(i, i as f64 * 0.1, i as f64 * 0.1)).collect(),
+            ..Default::default()
+        };
+        store.sync(&payload);
+        let rows = store.query_location(0, 100, 3);
+        assert_eq!(rows.len(), 3);
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn query_location_ordered_newest_first() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![loc(100, 0.0, 0.0), loc(300, 0.1, 0.1), loc(200, 0.2, 0.2)],
+            ..Default::default()
+        };
+        store.sync(&payload);
+        let rows = store.query_location(0, 400, 10);
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].timestamp >= rows[1].timestamp);
+        assert!(rows[1].timestamp >= rows[2].timestamp);
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn query_location_empty_range_returns_empty() {
+        let (_dir, store) = temp_store();
+        store.sync(&HealthSyncPayload {
+            location: vec![loc(5000, 0.0, 0.0)],
+            ..Default::default()
+        });
+        assert!(store.query_location(0, 1000, 10).is_empty());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn sync_location_multiple_source_ids() {
+        let (_dir, store) = temp_store();
+        // Same timestamp, different source_ids — both must be stored.
+        let payload = HealthSyncPayload {
+            location: vec![
+                LocationSample {
+                    source_id: "iphone".into(),
+                    ..loc(1000, 10.0, 20.0)
+                },
+                LocationSample {
+                    source_id: "ipad".into(),
+                    ..loc(1000, 11.0, 21.0)
+                },
+            ],
+            ..Default::default()
+        };
+        let result = store.sync(&payload);
+        assert_eq!(result.location_upserted, 2);
+        assert_eq!(store.query_location(0, 2000, 10).len(), 2);
+    }
+
+    // ── LocationSample::is_valid ─────────────────────────────────────────────
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_accepts_boundary_coordinates() {
+        assert!(loc(1, 0.0, 0.0).is_valid());
+        assert!(loc(1, 90.0, 180.0).is_valid());
+        assert!(loc(1, -90.0, -180.0).is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_rejects_out_of_range_coordinates() {
+        assert!(!LocationSample {
+            latitude: 90.001,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            latitude: -90.001,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            longitude: 180.001,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            longitude: -180.001,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_rejects_nan_and_inf_coordinates() {
+        assert!(!LocationSample {
+            latitude: f64::NAN,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            longitude: f64::NAN,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            latitude: f64::INFINITY,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            longitude: f64::NEG_INFINITY,
+            ..loc(1, 0.0, 0.0)
+        }
+        .is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_rejects_nonpositive_timestamp() {
+        assert!(!loc(0, 0.0, 0.0).is_valid());
+        assert!(!loc(-1, 0.0, 0.0).is_valid());
+        assert!(loc(1, 0.0, 0.0).is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_rejects_non_finite_optional_fields() {
+        let base = loc(1, 10.0, 20.0);
+        assert!(!LocationSample {
+            altitude: Some(f64::INFINITY),
+            ..base.clone()
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            horizontal_accuracy: Some(f64::NAN),
+            ..base.clone()
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            vertical_accuracy: Some(f64::NEG_INFINITY),
+            ..base.clone()
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            speed: Some(f64::NAN),
+            ..base.clone()
+        }
+        .is_valid());
+        assert!(!LocationSample {
+            course: Some(f64::INFINITY),
+            ..base.clone()
+        }
+        .is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn is_valid_accepts_negative_sentinel_values() {
+        // CoreLocation reports -1 for unavailable accuracy / speed / course.
+        let fix = LocationSample {
+            horizontal_accuracy: Some(-1.0),
+            vertical_accuracy: Some(-1.0),
+            speed: Some(-1.0),
+            course: Some(-1.0),
+            altitude: Some(-50.0), // below sea level — valid
+            ..loc(1, 10.0, 20.0)
+        };
+        assert!(fix.is_valid());
+    }
+
+    #[cfg(feature = "gps")]
+    #[test]
+    fn sync_location_skips_invalid_counts_valid() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![
+                loc(1000, 10.0, 20.0), // valid
+                LocationSample {
+                    latitude: f64::NAN,
+                    ..loc(1001, 0.0, 0.0)
+                }, // ✕ NaN lat
+                LocationSample {
+                    latitude: 91.0,
+                    ..loc(1002, 0.0, 0.0)
+                }, // ✕ lat > 90
+                LocationSample {
+                    longitude: -181.0,
+                    ..loc(1003, 0.0, 0.0)
+                }, // ✕ lon < -180
+                loc(0, 0.0, 0.0),      // ✕ zero ts
+                loc(-5, 0.0, 0.0),     // ✕ negative ts
+                loc(1004, -45.0, 170.0), // valid
+            ],
+            ..Default::default()
+        };
+        let result = store.sync(&payload);
+        assert_eq!(result.location_upserted, 2);
+        assert_eq!(store.query_location(0, 2000, 10).len(), 2);
     }
 }

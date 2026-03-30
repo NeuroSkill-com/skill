@@ -47,7 +47,11 @@ pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 /// `health_query` — query stored HealthKit data by type and time range.
 pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let data_type = msg.get("type").and_then(|v| v.as_str()).ok_or_else(|| {
-        "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string()
+        #[cfg(feature = "gps")]
+        const TYPES: &str = "sleep|workouts|heart_rate|steps|metrics|location";
+        #[cfg(not(feature = "gps"))]
+        const TYPES: &str = "sleep|workouts|heart_rate|steps|metrics";
+        format!("missing required field: \"type\" ({TYPES})")
     })?;
     let start_utc = msg
         .get("start_utc")
