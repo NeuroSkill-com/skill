@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#![allow(clippy::unwrap_used)]
 //! Advanced tests — HTML rendering, screenshots, viewport sizes, WebGL, user-agent.
 //!
 //! On GTK/Linux, only one event loop can hold the main context at a time.

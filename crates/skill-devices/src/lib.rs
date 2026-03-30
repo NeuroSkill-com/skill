@@ -455,6 +455,7 @@ pub fn dnd_apply_os_result(state: &mut DndState, enabled: bool) {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use skill_eeg::eeg_bands::{BandPowers, BandSnapshot};

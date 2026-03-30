@@ -34,6 +34,7 @@ pub mod mw75;
 pub mod openbci;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests;
 
 use std::time::{SystemTime, UNIX_EPOCH};

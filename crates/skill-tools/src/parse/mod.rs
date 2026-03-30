@@ -34,4 +34,5 @@ pub use validate::validate_tool_arguments;
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests;

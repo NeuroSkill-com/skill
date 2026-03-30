@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Integration tests for the DSP pipeline: band analysis → quality.
+#![allow(clippy::unwrap_used)]
 //!
 //! These tests verify that the pipeline works end-to-end with synthetic
 //! signals at different sample rates (multi-device support).

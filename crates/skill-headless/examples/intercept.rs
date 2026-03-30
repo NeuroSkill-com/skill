@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#![allow(clippy::unwrap_used)]
 //! Network interception tests — fetch/XHR capture, navigation events, URL blocking.
 
 use skill_headless::{Browser, BrowserConfig, Command, Mode};

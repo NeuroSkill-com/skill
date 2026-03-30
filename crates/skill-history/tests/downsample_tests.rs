@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for downsample_timeseries.
+#![allow(clippy::unwrap_used)]
 
 use skill_history::cache::downsample_timeseries;
 use skill_history::EpochRow;

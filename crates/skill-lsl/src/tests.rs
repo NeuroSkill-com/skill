@@ -2,6 +2,7 @@
 //! Unit tests for skill-lsl.
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use skill_devices::session::{DeviceAdapter, DeviceCaps};
 

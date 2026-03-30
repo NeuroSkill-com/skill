@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for skill-history session listing, helpers, and CSV timestamp parsing.
+#![allow(clippy::unwrap_used)]
 
 use skill_history::{delete_session, get_history_stats, list_session_days, list_sessions_for_day};
 use std::fs;

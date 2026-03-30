@@ -548,6 +548,7 @@ fn parse_date_to_utc(s: &str) -> i64 {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

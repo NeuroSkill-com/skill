@@ -475,7 +475,7 @@ mod tests {
     fn permutation_entropy_constant() {
         let signal: Vec<f32> = vec![1.0; 100];
         let pe = permutation_entropy(&signal);
-        assert!(pe >= 0.0 && pe <= 1.0, "PE={pe} should be in [0,1]");
+        assert!((0.0..=1.0).contains(&pe), "PE={pe} should be in [0,1]");
     }
 
     #[test]

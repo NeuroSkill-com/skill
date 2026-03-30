@@ -215,17 +215,29 @@ fn relaxed_opt_u64<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<u64
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             f.write_str("a number (int, float, or string) or null")
         }
-        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
-        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
-        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> { Ok(Some(v)) }
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(Some(v))
+        }
         fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
             Ok(if v >= 0 { Some(v as u64) } else { None })
         }
         fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-            Ok(if v >= 0.0 && v <= u64::MAX as f64 { Some(v as u64) } else { None })
+            Ok(if v >= 0.0 && v <= u64::MAX as f64 {
+                Some(v as u64)
+            } else {
+                None
+            })
         }
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-            Ok(v.parse::<u64>().ok().or_else(|| v.parse::<f64>().ok().map(|f| f as u64)))
+            Ok(v.parse::<u64>()
+                .ok()
+                .or_else(|| v.parse::<f64>().ok().map(|f| f as u64)))
         }
     }
     de.deserialize_any(V)
@@ -241,11 +253,21 @@ fn relaxed_opt_f64<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<f64
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             f.write_str("a number (int, float, or string) or null")
         }
-        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
-        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
-        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> { Ok(Some(v as f64)) }
-        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> { Ok(Some(v as f64)) }
-        fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> { Ok(Some(v)) }
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(Some(v as f64))
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(Some(v as f64))
+        }
+        fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+            Ok(Some(v))
+        }
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             Ok(v.parse::<f64>().ok())
         }
@@ -1046,6 +1068,7 @@ pub(crate) fn parse_ts_from_line(line: &[u8]) -> Option<u64> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

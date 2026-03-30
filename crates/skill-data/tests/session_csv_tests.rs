@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for session CSV path helpers.
+#![allow(clippy::unwrap_used)]
 
 use skill_data::session_csv::{imu_csv_path, metrics_csv_path, ppg_csv_path};
 use std::path::Path;

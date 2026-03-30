@@ -587,6 +587,7 @@ fn escape_xml(s: &str) -> String {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::fs;

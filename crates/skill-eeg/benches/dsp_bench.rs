@@ -4,13 +4,16 @@
 //!
 //! Run: `cargo bench -p skill-eeg`
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use skill_eeg::cpu_fft::{fft_batch, ifft_batch, psd};
+#[cfg(not(feature = "gpu"))]
+use criterion::BenchmarkId;
+use criterion::{criterion_group, criterion_main, Criterion};
 use skill_eeg::eeg_bands::BandAnalyzer;
 use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
 use std::hint::black_box;
 
+#[cfg(not(feature = "gpu"))]
 fn bench_fft(c: &mut Criterion) {
+    use skill_eeg::cpu_fft::{fft_batch, ifft_batch};
     let mut group = c.benchmark_group("fft");
     for &size in &[128, 256, 512, 1024] {
         let signal: Vec<f32> = (0..size).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -19,9 +22,7 @@ fn bench_fft(c: &mut Criterion) {
         });
     }
     group.finish();
-}
 
-fn bench_ifft(c: &mut Criterion) {
     let mut group = c.benchmark_group("ifft");
     for &size in &[128, 256, 512, 1024] {
         let signal: Vec<f32> = (0..size).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -33,7 +34,9 @@ fn bench_ifft(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(not(feature = "gpu"))]
 fn bench_psd(c: &mut Criterion) {
+    use skill_eeg::cpu_fft::psd;
     let mut group = c.benchmark_group("psd");
     for &size in &[128, 256, 512] {
         let real: Vec<f32> = (0..size).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -82,12 +85,10 @@ fn bench_filter(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    benches,
-    bench_fft,
-    bench_ifft,
-    bench_psd,
-    bench_band_analyzer,
-    bench_filter
-);
+#[cfg(not(feature = "gpu"))]
+criterion_group!(benches, bench_fft, bench_psd, bench_band_analyzer, bench_filter);
+
+#[cfg(feature = "gpu")]
+criterion_group!(benches, bench_band_analyzer, bench_filter);
+
 criterion_main!(benches);

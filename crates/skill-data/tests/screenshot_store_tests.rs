@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for the ScreenshotStore.
+#![allow(clippy::unwrap_used)]
 
 use skill_data::screenshot_store::{ScreenshotRow, ScreenshotStore};
 use tempfile::tempdir;

@@ -710,7 +710,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn parquet_session_preferred_over_csv() {
         let tmp = tempfile::tempdir().unwrap();
         let skill = tmp.path();

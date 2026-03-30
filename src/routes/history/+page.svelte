@@ -135,11 +135,28 @@ function inview(node: HTMLElement, onEnter: () => void) {
 }
 
 // ── Per-day cache stubs ─────────────────────────────────────────────────
-// All caching removed — always fetch fresh from Rust.
-function readDayCache(_day: string): SessionEntry[] | null { return null; }
-function writeDayCache(_day: string, _data: SessionEntry[]) {}
-function readMetricsCache(_csvPath: string): CsvMetricsResult | null { return null; }
-function writeMetricsCache(_csvPath: string, _result: CsvMetricsResult) {}
+// In-memory caches — survive within a page session so that calendar heatmaps,
+// prefetched adjacent days, and repeated tab switches all use real data.
+//
+// `dayCacheVersion` is a reactive counter that gets bumped on every write,
+// so that `$derived` blocks (e.g. `daySessionCounts`) re-evaluate when the
+// cache grows.  The underlying Map is non-reactive on purpose (cheap reads).
+let dayCacheVersion = $state(0);
+const _dayCache = new Map<string, SessionEntry[]>();
+function readDayCache(day: string): SessionEntry[] | null {
+  return _dayCache.get(day) ?? null;
+}
+function writeDayCache(day: string, data: SessionEntry[]) {
+  _dayCache.set(day, data);
+  dayCacheVersion++;
+}
+const _metricsCache = new Map<string, CsvMetricsResult>();
+function readMetricsCache(csvPath: string): CsvMetricsResult | null {
+  return _metricsCache.get(csvPath) ?? null;
+}
+function writeMetricsCache(csvPath: string, result: CsvMetricsResult) {
+  _metricsCache.set(csvPath, result);
+}
 
 // ── Caches: sleep / metrics / timeseries / location / embeddings ─────────
 let sleepCache = $state<Record<string, SleepStages | "loading" | "short">>({});
@@ -1185,6 +1202,9 @@ const currentDayStart = $derived.by(() => {
 /** Session counts per local day - uses cached session lists where available,
  *  falls back to 1 for days we haven't loaded yet. */
 const daySessionCounts = $derived.by(() => {
+  // Touch the reactive version counter so this derived re-runs when the
+  // day cache is populated (e.g. after week data loads or prefetching).
+  void dayCacheVersion;
   const counts = new Map<string, number>();
   for (const d of localDays) {
     const cached = readDayCache(d);

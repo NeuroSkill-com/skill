@@ -21,6 +21,7 @@ mod tools_web;
 pub(crate) mod truncate;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests;
 
 use serde_json::{json, Value};

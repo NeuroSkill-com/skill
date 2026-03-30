@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for tool execution helpers — path resolution, retry, UTC formatting.
+#![allow(clippy::unwrap_used)]
 
 use skill_tools::exec::resolve_tool_path;
 use std::time::Duration;

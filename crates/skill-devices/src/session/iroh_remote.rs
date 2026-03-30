@@ -372,6 +372,7 @@ fn ts_to_unix_approx(ts: i64) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
 

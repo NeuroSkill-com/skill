@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! LSL loopback test: create outlet → adapter → pull samples via DeviceAdapter.
+#![allow(clippy::unwrap_used, clippy::panic)]
 
 use rlsl::prelude::*;
 use rlsl::types::ChannelFormat;

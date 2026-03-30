@@ -71,6 +71,7 @@ mod engine;
 mod error;
 mod intercept;
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod intercept_tests;
 mod response;
 mod session;

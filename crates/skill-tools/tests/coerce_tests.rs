@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for schema-driven type coercion of LLM tool-call arguments.
+#![allow(clippy::approx_constant)]
 
 use serde_json::json;
 use skill_tools::parse::coerce_value;

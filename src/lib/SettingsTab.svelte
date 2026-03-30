@@ -190,6 +190,7 @@ onDestroy(() => {
       <div class="flex items-center justify-between gap-3">
         <span class="text-[0.75rem] font-medium text-foreground">{t("settings.geoProviderLocal")}</span>
         <button
+          aria-label={t("settings.geoProviderLocal")}
           class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors
                  {locationEnabled ? 'bg-primary' : 'bg-muted'}
                  {locationToggling ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}"
@@ -220,7 +221,7 @@ onDestroy(() => {
           <span
             class="inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform
                    {locationEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}"
-          />
+          ></span>
         </button>
       </div>
 

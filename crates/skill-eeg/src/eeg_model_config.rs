@@ -406,6 +406,7 @@ pub fn save_model_config(skill_dir: &Path, cfg: &ExgModelConfig) {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 

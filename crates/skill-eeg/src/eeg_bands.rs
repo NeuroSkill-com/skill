@@ -975,7 +975,7 @@ impl BandAnalyzer {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[allow(deprecated)]
+#[allow(deprecated, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::f64::consts::PI;

@@ -268,7 +268,7 @@ mod tests {
         det.push(1, &vec![5.0; 256]);
         // Inject 10 blinks with enough spacing
         for _ in 0..10 {
-            det.push(1, &vec![200.0; 8]);
+            det.push(1, &[200.0; 8]);
             det.push(1, &vec![5.0; refractory + 32]);
         }
         let rate = det.metrics().blink_rate;

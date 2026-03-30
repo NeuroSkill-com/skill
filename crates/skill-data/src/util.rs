@@ -294,6 +294,7 @@ pub fn fmt_unix_utc(ts: u64) -> String {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::approx_constant)]
 mod tests {
     use super::*;
 

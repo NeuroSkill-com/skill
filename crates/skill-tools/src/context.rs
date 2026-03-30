@@ -120,6 +120,7 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::CompressionLevel;

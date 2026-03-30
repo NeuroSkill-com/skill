@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Integration tests for the JobQueue.
+#![allow(clippy::panic)]
 
 use skill_jobs::{JobPollResult, JobQueue};
 use std::time::Duration;

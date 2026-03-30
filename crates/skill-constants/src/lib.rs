@@ -843,6 +843,7 @@ pub const STALE_EPOCH_TIMEOUT_SECS: u64 = 3600;
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
 

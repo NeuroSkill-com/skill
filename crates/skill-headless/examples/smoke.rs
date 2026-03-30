@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#![allow(clippy::unwrap_used)]
 //! Smoke test — launches a headless browser, navigates, evaluates JS, and
 //! exercises the major command categories.
 

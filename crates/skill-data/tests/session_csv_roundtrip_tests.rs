@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for CsvState: write EEG/PPG/metrics and verify the output.
+#![allow(clippy::unwrap_used)]
 
 use skill_data::session_csv::{build_metrics_header, CsvState};
 use std::path::Path;

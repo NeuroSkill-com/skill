@@ -621,6 +621,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::{parse_first_ts_from_bytes, parse_last_ts_from_bytes, SessionJsonMeta};
 

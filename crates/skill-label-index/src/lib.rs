@@ -582,6 +582,7 @@ pub fn search_by_eeg_vec(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
