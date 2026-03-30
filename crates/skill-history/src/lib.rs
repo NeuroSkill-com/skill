@@ -452,12 +452,18 @@ pub fn list_sessions_for_day(
 
         let csv_file = meta.csv_file.unwrap_or_default();
         let csv_full = day_dir.join(&csv_file);
-        // Check for both CSV and Parquet data files.
+        // Prefer Parquet over CSV when both exist.
         let pq_full = csv_full.with_extension("parquet");
-        let csv_size = if pq_full.exists() {
-            std::fs::metadata(&pq_full).map(|m| m.len()).unwrap_or(0)
+        let (data_path, csv_size) = if pq_full.exists() {
+            (
+                pq_full.clone(),
+                std::fs::metadata(&pq_full).map(|m| m.len()).unwrap_or(0),
+            )
         } else {
-            std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0)
+            (
+                csv_full.clone(),
+                std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0),
+            )
         };
         let start = meta.session_start_utc;
         let end = meta.session_end_utc;
@@ -468,7 +474,7 @@ pub fn list_sessions_for_day(
         raw.push((
             SessionEntry {
                 csv_file,
-                csv_path: csv_full.to_string_lossy().into_owned(),
+                csv_path: data_path.to_string_lossy().into_owned(),
                 session_start_utc: start,
                 session_end_utc: end,
                 session_duration_s: meta

@@ -601,4 +601,205 @@ mod tests {
         let sessions = list_all_sessions(tmp.path(), None);
         assert!(sessions.is_empty());
     }
+
+    // ── Real-world data regression test ──────────────────────────────────
+    // Reproduces the exact directory layout and timestamps from the user's
+    // ~/.skill on their PDT (UTC-7) Mac to verify sessions are not silently
+    // filtered out.
+
+    fn write_session(dir: &std::path::Path, prefix: &str, ts: u64) {
+        let name = format!("{prefix}_{ts}");
+        std::fs::write(
+            dir.join(format!("{name}.json")),
+            format!(
+                r#"{{"csv_file":"{name}.csv","session_start_utc":{ts},"session_end_utc":{}}}"#,
+                ts + 600
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("{name}.csv")), "t,v\n").unwrap();
+    }
+
+    #[test]
+    fn real_world_pdt_sessions_not_filtered() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+
+        // 20260301: sessions at various UTC hours
+        let d = skill.join("20260301");
+        std::fs::create_dir_all(&d).unwrap();
+        write_session(&d, "muse", 1_772_323_371); // March 1 00:02 UTC = Feb 28 17:02 PDT
+        write_session(&d, "muse", 1_772_355_414); // March 1 08:56 UTC = March 1 01:56 PDT
+        write_session(&d, "muse", 1_772_409_504); // March 1 23:58 UTC = March 1 16:58 PDT
+
+        // 20260302: sessions spanning UTC midnight
+        let d = skill.join("20260302");
+        std::fs::create_dir_all(&d).unwrap();
+        write_session(&d, "muse", 1_772_409_627); // March 2 00:00 UTC = March 1 17:00 PDT
+        write_session(&d, "muse", 1_772_458_700); // March 2 13:38 UTC = March 2 06:38 PDT
+
+        // 20260329: exg sessions
+        let d = skill.join("20260329");
+        std::fs::create_dir_all(&d).unwrap();
+        write_session(&d, "exg", 1_774_744_342); // March 29 00:32 UTC = March 28 17:32 PDT
+        write_session(&d, "exg", 1_774_767_629); // March 29 07:00 UTC = March 29 00:00 PDT
+
+        // Verify list_local_session_days returns the correct local days
+        let days = list_local_session_days(skill, TZ_PDT);
+        let keys: Vec<&str> = days.iter().map(|d| d.key.as_str()).collect();
+
+        // Feb 28 local has muse_1772323371 (early UTC March 1 = late PDT Feb 28)
+        assert!(keys.contains(&"2026-02-28"), "missing Feb 28; got: {keys:?}");
+        // March 1 local has muse_1772355414, muse_1772409504, muse_1772409627
+        assert!(keys.contains(&"2026-03-01"), "missing March 1; got: {keys:?}");
+        // March 2 local has muse_1772458700
+        assert!(keys.contains(&"2026-03-02"), "missing March 2; got: {keys:?}");
+        // March 28 local has exg_1774744342
+        assert!(keys.contains(&"2026-03-28"), "missing March 28; got: {keys:?}");
+        // March 29 local has exg_1774767629
+        assert!(keys.contains(&"2026-03-29"), "missing March 29; got: {keys:?}");
+
+        // Verify sessions are correctly assigned to local days
+        let feb28 = list_sessions_for_local_day("2026-02-28", TZ_PDT, skill, None);
+        assert_eq!(feb28.len(), 1, "Feb 28 should have 1 session, got {}", feb28.len());
+        assert_eq!(feb28[0].session_start_utc, Some(1_772_323_371));
+
+        let mar1 = list_sessions_for_local_day("2026-03-01", TZ_PDT, skill, None);
+        assert_eq!(mar1.len(), 3, "March 1 should have 3 sessions, got {}", mar1.len());
+        // Newest first
+        assert_eq!(mar1[0].session_start_utc, Some(1_772_409_627));
+        assert_eq!(mar1[1].session_start_utc, Some(1_772_409_504));
+        assert_eq!(mar1[2].session_start_utc, Some(1_772_355_414));
+
+        let mar2 = list_sessions_for_local_day("2026-03-02", TZ_PDT, skill, None);
+        assert_eq!(mar2.len(), 1, "March 2 should have 1 session, got {}", mar2.len());
+
+        let mar28 = list_sessions_for_local_day("2026-03-28", TZ_PDT, skill, None);
+        assert_eq!(mar28.len(), 1, "March 28 should have 1 session, got {}", mar28.len());
+
+        let mar29 = list_sessions_for_local_day("2026-03-29", TZ_PDT, skill, None);
+        assert_eq!(mar29.len(), 1, "March 29 should have 1 session, got {}", mar29.len());
+        assert_eq!(mar29[0].session_start_utc, Some(1_774_767_629));
+    }
+
+    #[test]
+    fn real_world_pdt_list_all_sessions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+
+        let d = skill.join("20260301");
+        std::fs::create_dir_all(&d).unwrap();
+        write_session(&d, "muse", 1_772_323_371);
+        write_session(&d, "muse", 1_772_409_504);
+
+        let d = skill.join("20260329");
+        std::fs::create_dir_all(&d).unwrap();
+        write_session(&d, "exg", 1_774_744_342);
+
+        // Log-only dir should not contribute
+        let d = skill.join("20260330");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("log_1774832450.txt"), "log").unwrap();
+
+        let all = list_all_sessions(skill, None);
+        assert_eq!(all.len(), 3, "expected 3 sessions, got {}", all.len());
+        // Newest first
+        assert_eq!(all[0].session_start_utc, Some(1_774_744_342));
+        assert_eq!(all[1].session_start_utc, Some(1_772_409_504));
+        assert_eq!(all[2].session_start_utc, Some(1_772_323_371));
+    }
+
+    #[test]
+    #[test]
+    fn parquet_session_preferred_over_csv() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+        let d = skill.join("20260301");
+        std::fs::create_dir_all(&d).unwrap();
+
+        // JSON sidecar references CSV, but parquet also exists
+        std::fs::write(
+            d.join("exg_1772348400.json"),
+            r#"{"csv_file":"exg_1772348400.csv","session_start_utc":1772348400,"session_end_utc":1772352000}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("exg_1772348400.csv"), "t,v\n").unwrap();
+        std::fs::write(d.join("exg_1772348400.parquet"), "PAR1").unwrap();
+
+        let sessions = list_sessions_for_local_day("2026-03-01", TZ_PDT, skill, None);
+        assert_eq!(sessions.len(), 1);
+        assert!(
+            sessions[0].csv_path.ends_with(".parquet"),
+            "should prefer parquet, got: {}",
+            sessions[0].csv_path
+        );
+    }
+
+    #[test]
+    fn parquet_only_session_no_csv() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+        let d = skill.join("20260301");
+        std::fs::create_dir_all(&d).unwrap();
+
+        // JSON references CSV but only parquet exists on disk
+        std::fs::write(
+            d.join("exg_1772348400.json"),
+            r#"{"csv_file":"exg_1772348400.csv","session_start_utc":1772348400,"session_end_utc":1772352000}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("exg_1772348400.parquet"), "PAR1").unwrap();
+        // No .csv file!
+
+        let sessions = list_sessions_for_local_day("2026-03-01", TZ_PDT, skill, None);
+        assert_eq!(sessions.len(), 1);
+        assert!(
+            sessions[0].csv_path.ends_with(".parquet"),
+            "should find parquet, got: {}",
+            sessions[0].csv_path
+        );
+        assert!(sessions[0].file_size_bytes > 0);
+    }
+
+    #[test]
+    fn orphan_parquet_without_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+        let d = skill.join("20260301");
+        std::fs::create_dir_all(&d).unwrap();
+
+        // Only a parquet file, no JSON sidecar
+        std::fs::write(d.join("exg_1772348400.parquet"), "PAR1").unwrap();
+
+        let days = crate::list_session_days(skill);
+        assert_eq!(days.len(), 1, "orphan parquet should count as a session day");
+
+        let sessions = list_sessions_for_local_day("2026-03-01", TZ_PDT, skill, None);
+        assert_eq!(sessions.len(), 1, "orphan parquet should be listed");
+        assert!(sessions[0].csv_path.ends_with(".parquet"));
+    }
+
+    #[test]
+    fn json_without_csv_still_listed() {
+        // Reproduces exg_1773948304.json in 20260319 that has no .csv
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+        let d = skill.join("20260319");
+        std::fs::create_dir_all(&d).unwrap();
+
+        // JSON with csv_file pointing to non-existent CSV
+        std::fs::write(
+            d.join("exg_1773948304.json"),
+            r#"{"csv_file":"exg_1773948304.csv","session_start_utc":1773948304,"session_end_utc":1773949000}"#,
+        )
+        .unwrap();
+        // No CSV file created!
+
+        let days = list_local_session_days(skill, TZ_PDT);
+        assert!(!days.is_empty(), "should find day even without CSV");
+
+        // 1773948304 = March 19 19:25 UTC = March 19 12:25 PDT
+        let sessions = list_sessions_for_local_day("2026-03-19", TZ_PDT, skill, None);
+        assert_eq!(sessions.len(), 1, "session without CSV should still be listed");
+    }
 }
