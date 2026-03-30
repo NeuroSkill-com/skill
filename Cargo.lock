@@ -12099,6 +12099,7 @@ dependencies = [
  "skill-jobs",
  "skill-label-index",
  "skill-llm",
+ "skill-location",
  "skill-lsl",
  "skill-oura",
  "skill-router",

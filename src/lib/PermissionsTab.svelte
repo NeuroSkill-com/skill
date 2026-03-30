@@ -21,6 +21,7 @@ const isLinux = typeof navigator !== "undefined" && /Linux/i.test(navigator.plat
 let accessibilityGranted = $state<boolean | null>(null);
 let screenRecordingGranted = $state<boolean | null>(null);
 let calendarPermissionStatus = $state<"authorized" | "denied" | "restricted" | "not_determined" | "unknown">("unknown");
+let locationPermissionStatus = $state<"authorized" | "denied" | "restricted" | "not_determined" | "unknown">("unknown");
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshAccessibility() {
@@ -52,15 +53,30 @@ async function refreshCalendarPermission() {
   }
 }
 
+async function refreshLocationPermission() {
+  try {
+    const s = await invoke<string>("get_location_permission_status");
+    if (s === "authorized" || s === "denied" || s === "restricted" || s === "not_determined") {
+      locationPermissionStatus = s;
+    } else {
+      locationPermissionStatus = "unknown";
+    }
+  } catch {
+    locationPermissionStatus = "unknown";
+  }
+}
+
 onMount(() => {
   refreshAccessibility();
   refreshScreenRecording();
   refreshCalendarPermission();
+  refreshLocationPermission();
   // Poll every 3 s so the status updates after the user grants it in System Settings
   pollTimer = setInterval(() => {
     refreshAccessibility();
     refreshScreenRecording();
     refreshCalendarPermission();
+    refreshLocationPermission();
   }, 3000);
 });
 onDestroy(() => {
@@ -85,6 +101,13 @@ async function requestCalendarPermission() {
 }
 async function openCalendarSettings() {
   await invoke("open_calendar_settings");
+}
+async function requestLocationPermission() {
+  await invoke("request_location_permission").catch(() => false);
+  await refreshLocationPermission();
+}
+async function openLocationSettings() {
+  await invoke("open_location_settings");
 }
 async function openInputMonitoringSettings() {
   await invoke("open_input_monitoring_settings");
@@ -133,6 +156,14 @@ const calendarStatus = $derived<Status>(
   calendarPermissionStatus === "authorized"
     ? "granted"
     : calendarPermissionStatus === "denied" || calendarPermissionStatus === "restricted"
+      ? "denied"
+      : "unknown",
+);
+
+const locationStatus = $derived<Status>(
+  locationPermissionStatus === "authorized"
+    ? "granted"
+    : locationPermissionStatus === "denied" || locationPermissionStatus === "restricted"
       ? "denied"
       : "unknown",
 );
@@ -352,6 +383,80 @@ const notifStatus: Status = "unknown";
     </Card>
   </section>
 
+  <!-- ── Location ──────────────────────────────────────────────────────────── -->
+  {#if isMac}
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("perm.location")}
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📍</span>
+            <span class="text-[0.8rem] font-semibold text-foreground">{t("perm.location")}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold
+                         {statusClass(locationStatus)}">
+              <span class="w-1.5 h-1.5 rounded-full {statusDot(locationStatus)}"></span>
+              {statusLabel(locationStatus)}
+            </span>
+            <Button size="sm" variant="outline"
+                    class="h-6 px-2 text-[0.65rem]"
+                    onclick={refreshLocationPermission}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        </div>
+
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("perm.locationDesc")}
+        </p>
+
+        {#if locationStatus === "denied"}
+        <div class="rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 px-3 py-2.5
+                    text-[0.68rem] text-amber-800 dark:text-amber-300 leading-relaxed flex flex-col gap-1">
+          <strong>{t("perm.locationFallback")}</strong>
+          <ol class="flex flex-col gap-0.5 list-decimal list-inside">
+            <li>{t("perm.locationStep1")}</li>
+            <li>{t("perm.locationStep2")}</li>
+            <li>{t("perm.locationStep3")}</li>
+          </ol>
+        </div>
+        {:else if locationStatus === "granted"}
+        <p class="text-[0.67rem] text-green-700 dark:text-green-400 leading-relaxed">
+          {t("perm.locationOk")}
+        </p>
+        {/if}
+
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline"
+                  class="text-[0.7rem] h-7"
+                  onclick={requestLocationPermission}>
+            {t("perm.requestLocationPermission")}
+          </Button>
+          {#if locationPermissionStatus === "denied"}
+            <Button size="sm" variant="outline"
+                    class="text-[0.7rem] h-7"
+                    onclick={openLocationSettings}>
+              {t("perm.openLocationSettings")}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   class="w-3 h-3 ml-1 shrink-0">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </Button>
+          {/if}
+        </div>
+
+      </CardContent>
+    </Card>
+  </section>
+  {/if}
+
   <!-- ── Bluetooth ─────────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
@@ -462,6 +567,7 @@ const notifStatus: Status = "unknown";
               [t("perm.matrixActiveWindow"),      "✅ " + t("perm.matrixNone"), "✅ xdotool", "✅ " + t("perm.matrixNone")],
               [t("perm.matrixNotifications"),     "⚙️ " + t("perm.matrixOsPrompt"), "✅ " + t("perm.matrixNone"), "⚙️ " + t("perm.matrixOsPrompt")],
               [t("perm.matrixScreenRecording"),  "🔑 " + t("perm.matrixScreenRecordingReq"), "✅ " + t("perm.matrixNone"), "✅ " + t("perm.matrixNone")],
+              [t("perm.matrixLocation"),            "🔑 " + t("perm.matrixLocationReq"),        "✅ " + t("perm.matrixNone"), "✅ " + t("perm.matrixNone")],
             ] as [feat, mac, linux, win]}
               <tr class="divide-x divide-border dark:divide-white/[0.04]">
                 <td class="px-3 py-2 text-foreground/80">{feat}</td>
@@ -495,6 +601,7 @@ const notifStatus: Status = "unknown";
           <p>⌨️ <strong class="text-foreground">{t("perm.whyAccessibility")}</strong> — {t("perm.whyAccessibilityDesc")}</p>
           <p>🔔 <strong class="text-foreground">{t("perm.whyNotifications")}</strong> — {t("perm.whyNotificationsDesc")}</p>
           <p>🖥️ <strong class="text-foreground">{t("perm.whyScreenRecording")}</strong> — {t("perm.whyScreenRecordingDesc")}</p>
+          <p>📍 <strong class="text-foreground">{t("perm.whyLocation")}</strong> — {t("perm.whyLocationDesc")}</p>
           <p class="pt-1 text-[0.62rem]">{t("perm.privacyNote")}</p>
         </div>
       </CardContent>

@@ -211,6 +211,7 @@ use window_cmds::{
     record_calibration_completed, request_calendar_permission, set_active_calibration,
     set_calibration_config, set_data_dir, set_update_ready, show_main_window,
     update_calibration_profile,
+    get_location_permission_status, request_location_permission, open_location_settings,
 };
 
 mod label_cmds;
@@ -1437,6 +1438,9 @@ pub fn run() {
             request_calendar_permission,
             get_calendar_events,
             open_calendar_settings,
+            get_location_permission_status,
+            request_location_permission,
+            open_location_settings,
             open_input_monitoring_settings,
             open_focus_settings,
             get_filter_config,

@@ -137,15 +137,19 @@ pub struct SessionEntry {
 /// uses `BTreeMap<String, Value>` for JSON objects — expensive to build and
 /// drop for every session file.  Only the fields needed by `list_sessions_for_day`
 /// are included; unknown fields are silently ignored via `deny_unknown_fields = false`.
+///
+/// All numeric fields use `relaxed_*` deserializers so that int/float/string
+/// representations all parse successfully — a `"sample_rate_hz": 128.0` (float)
+/// won't silently kill the entire session.
 #[derive(Deserialize, Default)]
 struct SessionJsonMeta {
     #[serde(default)]
     csv_file: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_u64")]
     session_start_utc: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_u64")]
     session_end_utc: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_u64")]
     session_duration_s: Option<u64>,
     #[serde(default)]
     device: SessionDeviceMeta,
@@ -164,16 +168,15 @@ struct SessionJsonMeta {
     hardware_version: Option<String>,
     #[serde(default)]
     headset_preset: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_f64")]
     battery_pct_end: Option<f64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_f64")]
     battery_pct: Option<f64>,
-    /// Average SNR (dB) across the session — written by the session runner.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_f64")]
     avg_snr_db: Option<f64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_u64")]
     total_samples: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "relaxed_opt_u64")]
     sample_rate_hz: Option<u64>,
 }
 
@@ -193,6 +196,61 @@ struct SessionDeviceMeta {
     hardware_version: Option<String>,
     #[serde(default)]
     preset: Option<String>,
+}
+
+// ── Relaxed numeric deserializers ─────────────────────────────────────────────
+//
+// Session JSON sidecars are written by various app versions and device drivers.
+// Numeric fields may arrive as JSON integers (`128`), floats (`128.0`), or even
+// stringified numbers (`"128"`).  These helpers accept all three forms so that
+// a type mismatch never silently drops an entire session.
+
+/// Deserialize an `Option<u64>` from int, float, string, or null.
+fn relaxed_opt_u64<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<u64>, D::Error> {
+    use serde::de::{self, Visitor};
+
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Option<u64>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a number (int, float, or string) or null")
+        }
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> { Ok(Some(v)) }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(if v >= 0 { Some(v as u64) } else { None })
+        }
+        fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+            Ok(if v >= 0.0 && v <= u64::MAX as f64 { Some(v as u64) } else { None })
+        }
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(v.parse::<u64>().ok().or_else(|| v.parse::<f64>().ok().map(|f| f as u64)))
+        }
+    }
+    de.deserialize_any(V)
+}
+
+/// Deserialize an `Option<f64>` from int, float, string, or null.
+fn relaxed_opt_f64<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<f64>, D::Error> {
+    use serde::de::{self, Visitor};
+
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Option<f64>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a number (int, float, or string) or null")
+        }
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> { Ok(None) }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> { Ok(Some(v as f64)) }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> { Ok(Some(v as f64)) }
+        fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> { Ok(Some(v)) }
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(v.parse::<f64>().ok())
+        }
+    }
+    de.deserialize_any(V)
 }
 
 // ── SessionMetrics ────────────────────────────────────────────────────────────

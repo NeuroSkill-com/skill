@@ -401,6 +401,47 @@ pub async fn get_calendar_events(
         .map_err(|e| format!("calendar events task error: {e}"))?
 }
 
+// ── Location permission ───────────────────────────────────────────────────────
+
+/// Return location permission status as one of:
+/// `authorized`, `denied`, `restricted`, `not_determined`.
+#[tauri::command]
+pub fn get_location_permission_status() -> String {
+    match skill_location::auth_status() {
+        skill_location::LocationAuthStatus::Authorized => "authorized",
+        skill_location::LocationAuthStatus::Denied => "denied",
+        skill_location::LocationAuthStatus::Restricted => "restricted",
+        skill_location::LocationAuthStatus::NotDetermined => "not_determined",
+    }
+    .to_string()
+}
+
+/// Request location access (macOS shows the native dialog; other platforms are no-op).
+#[tauri::command]
+pub async fn request_location_permission() -> Result<bool, String> {
+    tokio::task::spawn_blocking(|| skill_location::request_access(30.0))
+        .await
+        .map_err(|e| format!("location permission task error: {e}"))
+}
+
+/// Open the macOS Location Services privacy settings pane.
+#[tauri::command]
+pub fn open_location_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocationServices")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+                .spawn();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { /* no-op */ }
+}
+
 // ── First-launch window reveal ────────────────────────────────────────────────
 
 /// Called from `+layout.svelte` `onMount` to reveal the main window only
