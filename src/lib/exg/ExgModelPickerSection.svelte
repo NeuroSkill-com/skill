@@ -329,7 +329,7 @@ $effect(() => {
         <CardContent class="py-0 px-0 flex flex-row">
           <!-- Preview image on the left (optional, e.g. brain visualisation for TRIBE v2) -->
           {#if selectedFamily.preview_image}
-            <div class="shrink-0 w-36 border-r border-border/40 dark:border-white/[0.04] bg-black/5 dark:bg-white/[0.03] overflow-hidden flex items-center justify-center">
+            <div class="shrink-0 w-36 self-stretch border-r border-border/40 dark:border-white/[0.04] bg-black/5 dark:bg-white/[0.03] overflow-hidden flex items-center justify-center">
               <img
                 src={selectedFamily.preview_image}
                 alt="{selectedFamily.name} preview"
