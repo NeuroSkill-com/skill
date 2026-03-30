@@ -4,7 +4,7 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- Session History — single-day view with prev/next pagination. -->
+<!-- Session History - single-day view with prev/next pagination. -->
 
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
@@ -32,6 +32,8 @@ import {
 import HistoryCalendar from "$lib/HistoryCalendar.svelte";
 import HistoryStatsBar from "$lib/HistoryStatsBar.svelte";
 import Hypnogram from "$lib/Hypnogram.svelte";
+import type { GpsPoint } from "$lib/history/SessionMap.svelte";
+import SessionMap from "$lib/history/SessionMap.svelte";
 import {
   type CalendarOverlayEvent,
   type GridData,
@@ -72,7 +74,7 @@ import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { LabelRow, SleepStages } from "$lib/types";
 
 // ── Pagination state ────────────────────────────────────────────────────
-/** All recording day keys (YYYYMMDD UTC), newest first — used only for fetching. */
+/** All recording day keys (YYYYMMDD UTC), newest first - used only for fetching. */
 let allUtcDays = $state<string[]>([]);
 let currentDayIdx = $state(0);
 let dayLoading = $state(false);
@@ -100,13 +102,13 @@ let historyStats = $state<HistoryStatsData | null>(null);
 let expanded = $state<Record<string, boolean>>({});
 let confirmDelete = $state<string | null>(null);
 let hoveredSession = $state<string | null>(null);
-/** Currently hovered label id — drives exact-match and proximity highlighting. */
+/** Currently hovered label id - drives exact-match and proximity highlighting. */
 let hoveredLabelId = $state<number | null>(null);
 /** Fixed-position tooltip for hovered label dots (avoids overflow clipping). */
 let labelTooltip = $state<{ x: number; y: number; text: string; time: string; timeEnd?: string } | null>(null);
 
 // ── Chart visibility (IntersectionObserver per row) ─────────────────────
-/** csv_paths whose row has entered the viewport — chart is only mounted then. */
+/** csv_paths whose row has entered the viewport - chart is only mounted then. */
 let renderedRows = $state(new Set<string>());
 
 /** Svelte action: fires onEnter once when the element scrolls into view
@@ -156,10 +158,14 @@ function writeMetricsCache(csvPath: string, result: CsvMetricsResult) {
   } catch (e) {}
 }
 
-// ── Caches: sleep / metrics / timeseries ────────────────────────────────
+// ── Caches: sleep / metrics / timeseries / location / embeddings ─────────
 let sleepCache = $state<Record<string, SleepStages | "loading" | "short">>({});
 let metricsCache = $state<Record<string, SessionMetrics | "loading" | "none">>({});
 let tsCache = $state<Record<string, EpochRow[] | "loading">>({});
+/** GPS track per csv_path — "loading" while IPC is in flight; [] when no data. */
+let locationCache = $state<Record<string, GpsPoint[] | "loading">>({});
+/** HNSW+SQLite epoch count per csv_path. */
+let embedCountCache = $state<Record<string, number | "loading">>({});
 
 // ── Health / Oura data overlay ───────────────────────────────────────────
 interface HealthDaySummary {
@@ -177,7 +183,7 @@ let healthCache = $state<Record<string, HealthDaySummary | "loading" | "none">>(
 let healthApiPort = $state<number | null>(null);
 
 /** Fetch JSON from the local HTTP API.  Returns null on any error. */
-async function healthFetch(path: string, body: Record<string, unknown>): Promise<any> {
+async function healthFetch(path: string, body: Record<string, unknown>): Promise<unknown> {
   if (!healthApiPort) {
     try {
       healthApiPort = await invoke<number>("get_ws_port");
@@ -206,7 +212,8 @@ async function loadHealthForDay(localKey: string) {
   healthCache[localKey] = "loading";
   try {
     const { startSec, endSec } = localDayBounds(localKey);
-    const summary: any = await healthFetch("/v1/health/summary", { start_utc: startSec, end_utc: endSec });
+    // biome-ignore lint/suspicious/noExplicitAny: opaque health API response
+    const summary = (await healthFetch("/v1/health/summary", { start_utc: startSec, end_utc: endSec })) as any;
     if (!summary) {
       healthCache[localKey] = "none";
       return;
@@ -227,34 +234,37 @@ async function loadHealthForDay(localKey: string) {
     let oura_readiness_score: number | undefined;
     let oura_activity_score: number | undefined;
     try {
-      const r: any = await healthFetch("/v1/health/query", {
+      const rSleep = await healthFetch("/v1/health/query", {
         type: "metrics",
         metric_type: "oura_sleep_score",
         start_utc: startSec,
         end_utc: endSec,
         limit: 1,
       });
-      if (r?.results?.[0]?.value) oura_sleep_score = r.results[0].value;
+      // biome-ignore lint/suspicious/noExplicitAny: cast on opaque API shape
+      if ((rSleep as any)?.results?.[0]?.value) oura_sleep_score = (rSleep as any).results[0].value;
     } catch {}
     try {
-      const r: any = await healthFetch("/v1/health/query", {
+      const rReady = await healthFetch("/v1/health/query", {
         type: "metrics",
         metric_type: "oura_readiness_score",
         start_utc: startSec,
         end_utc: endSec,
         limit: 1,
       });
-      if (r?.results?.[0]?.value) oura_readiness_score = r.results[0].value;
+      // biome-ignore lint/suspicious/noExplicitAny: cast on opaque API shape
+      if ((rReady as any)?.results?.[0]?.value) oura_readiness_score = (rReady as any).results[0].value;
     } catch {}
     try {
-      const r: any = await healthFetch("/v1/health/query", {
+      const rActivity = await healthFetch("/v1/health/query", {
         type: "metrics",
         metric_type: "oura_activity_score",
         start_utc: startSec,
         end_utc: endSec,
         limit: 1,
       });
-      if (r?.results?.[0]?.value) oura_activity_score = r.results[0].value;
+      // biome-ignore lint/suspicious/noExplicitAny: cast on opaque API shape
+      if ((rActivity as any)?.results?.[0]?.value) oura_activity_score = (rActivity as any).results[0].value;
     } catch {}
     healthCache[localKey] = {
       ...(summary as HealthDaySummary),
@@ -336,7 +346,7 @@ async function loadMetricsBatch(csvPaths: string[]) {
   }
 }
 
-/** Fallback for a single session without _metrics.csv — queries SQLite. */
+/** Fallback for a single session without _metrics.csv - queries SQLite. */
 async function loadMetricsFallback(csvPath: string) {
   const session = sessionRegistry.get(csvPath);
   if (!session?.session_start_utc || !session?.session_end_utc) {
@@ -362,7 +372,7 @@ async function loadMetricsFallback(csvPath: string) {
   }
 }
 
-/** Legacy single-session loader — still used by expand toggle and prefetch. */
+/** Legacy single-session loader - still used by expand toggle and prefetch. */
 function loadMetrics(csvPath: string) {
   if (csvPath in metricsCache) return;
   void loadMetricsBatch([csvPath]);
@@ -387,19 +397,57 @@ async function loadSleep(csvPath: string) {
   }
 }
 
+// ── GPS location loader ──────────────────────────────────────────────────
+function getLocation(csvPath: string): GpsPoint[] | null {
+  const v = locationCache[csvPath];
+  if (!v || v === "loading") return null;
+  return v as GpsPoint[];
+}
+async function loadLocation(csvPath: string) {
+  if (csvPath in locationCache) return;
+  const session = sessionRegistry.get(csvPath);
+  if (!session?.session_start_utc || !session?.session_end_utc) return;
+  locationCache[csvPath] = "loading";
+  try {
+    locationCache[csvPath] = await invoke<GpsPoint[]>("get_session_location", {
+      csvPath,
+      startUtc: session.session_start_utc,
+      endUtc: session.session_end_utc,
+    });
+  } catch {
+    locationCache[csvPath] = [];
+  }
+}
+
+// ── Embedding-count loader ─────────────────────────────────────────────────
+async function loadEmbedCount(csvPath: string) {
+  if (csvPath in embedCountCache) return;
+  const session = sessionRegistry.get(csvPath);
+  if (!session?.session_start_utc || !session?.session_end_utc) return;
+  embedCountCache[csvPath] = "loading";
+  try {
+    embedCountCache[csvPath] = await invoke<number>("get_session_embedding_count", {
+      startUtc: session.session_start_utc,
+      endUtc: session.session_end_utc,
+    });
+  } catch {
+    embedCountCache[csvPath] = 0;
+  }
+}
+
 // ── Local-day helpers ────────────────────────────────────────────────────
 /** Convert a UTC Unix-seconds value to its UTC YYYYMMDD directory name. */
 
 /** Build a sorted (newest-first) list of unique LOCAL YYYY-MM-DD day keys
  *  from the UTC YYYYMMDD directory names.
  *
- *  Each UTC dir covers 00:00–23:59:59 UTC.  Depending on the local
+ *  Each UTC dir covers 00:00-23:59:59 UTC.  Depending on the local
  *  timezone offset that window may straddle two local calendar days, so we
  *  emit both endpoints and de-duplicate.
  *
  *  We cap at today's local date: a UTC dir whose *end* converts to a local
  *  day that hasn't started yet (e.g. UTC Mar 2 00:00 = local Mar 1 19:00 in
- *  EST) must not generate a future "Mar 2" tab — no sessions can be recorded
+ *  EST) must not generate a future "Mar 2" tab - no sessions can be recorded
  *  there yet and it would become the default first page with 0 sessions. */
 function buildLocalDays(utcDirs: string[]): string[] {
   const today = dateKey(Date.now() / 1000); // local today as YYYY-MM-DD
@@ -420,12 +468,12 @@ function buildLocalDays(utcDirs: string[]): string[] {
 }
 
 // ── Day navigation ──────────────────────────────────────────────────────
-/** Monotonically increasing counter — incremented on every loadDay call so
+/** Monotonically increasing counter - incremented on every loadDay call so
  *  that stale responses from rapid navigation are silently discarded.    */
 let loadSeq = 0;
 
 /** Fetch sessions for a local day key and return the filtered list.
- *  Pure data function — touches no reactive state.                    */
+ *  Pure data function - touches no reactive state.                    */
 async function fetchDaySessions(localKey: string): Promise<SessionEntry[]> {
   const { startSec, endSec } = localDayBounds(localKey);
   const dir1 = secToUtcDir(startSec);
@@ -451,11 +499,11 @@ async function fetchDaySessions(localKey: string): Promise<SessionEntry[]> {
   // Keep only sessions whose start time falls within the local calendar day.
   // Prefer session_start_utc for the comparison; fall back to session_end_utc only
   // when start is absent (genuinely orphaned CSV whose timestamp couldn't be parsed).
-  // Sessions that have neither timestamp are excluded — they are corrupt/empty entries.
+  // Sessions that have neither timestamp are excluded - they are corrupt/empty entries.
   const { startSec: s0, endSec: s1 } = localDayBounds(localKey);
   const filtered = merged.filter((s) => {
     const t = s.session_start_utc ?? s.session_end_utc;
-    if (!t) return false; // no usable timestamp — exclude rather than show a ghost row
+    if (!t) return false; // no usable timestamp - exclude rather than show a ghost row
     return t >= s0 && t < s1;
   });
 
@@ -479,7 +527,7 @@ async function prefetchDay(localKey: string) {
       list = await fetchDaySessions(localKey);
       writeDayCache(localKey, list);
     } catch {
-      return; /* silent — prefetch is best-effort */
+      return; /* silent - prefetch is best-effort */
     }
   }
 
@@ -513,7 +561,7 @@ async function loadDay(idx: number) {
   hoveredSession = null;
   confirmDelete = null;
 
-  // ① Show cached sessions immediately — zero-latency first paint
+  // 1 Show cached sessions immediately - zero-latency first paint
   const cached = readDayCache(localKey);
   if (cached && cached.length > 0) {
     sessions = cached;
@@ -532,11 +580,11 @@ async function loadDay(idx: number) {
     sessions = [];
   }
 
-  // ② Load fresh data from the backend (both UTC dirs fetched in parallel).
+  // 2 Load fresh data from the backend (both UTC dirs fetched in parallel).
   dayLoading = true;
   try {
     const fresh = await fetchDaySessions(localKey);
-    if (loadSeq !== seq) return; // navigated away — discard stale response
+    if (loadSeq !== seq) return; // navigated away - discard stale response
 
     sessions = fresh;
     registerSessions(fresh);
@@ -564,13 +612,13 @@ async function loadDay(idx: number) {
     if (loadSeq === seq) dayLoading = false;
   }
 
-  // ③ Load screenshots + calendar events + health data for the day.
+  // 3 Load screenshots + calendar events + health data for the day.
   const { startSec } = localDayBounds(localKey);
   void loadDayScreenshots(startSec);
   void loadDayCalendarEvents(startSec);
   void loadHealthForDay(localKey);
 
-  // ④ Speculatively warm adjacent days so the next navigation is instant.
+  // 4 Speculatively warm adjacent days so the next navigation is instant.
   setTimeout(() => {
     if (idx > 0) void prefetchDay(localDays[idx - 1]);
     if (idx < localDays.length - 1) void prefetchDay(localDays[idx + 1]);
@@ -591,6 +639,8 @@ function toggleExpand(csvPath: string) {
   if (expanded[csvPath]) {
     loadSleep(csvPath);
     loadMetrics(csvPath);
+    void loadLocation(csvPath);
+    void loadEmbedCount(csvPath);
     // Scroll expanded row into view after DOM update (#13)
     requestAnimationFrame(() => {
       const idx = sessions.findIndex((s) => s.csv_path === csvPath);
@@ -639,7 +689,7 @@ interface ScreenshotInfo {
 }
 /** Screenshots for the current day, keyed by unix_ts for fast lookup. */
 let dayScreenshots = $state<ScreenshotInfo[]>([]);
-/** Set of unix timestamps that have a screenshot — for O(1) cell lookup. */
+/** Set of unix timestamps that have a screenshot - for O(1) cell lookup. */
 let screenshotTsSet = $derived(new Set(dayScreenshots.map((s) => s.unix_ts)));
 /** Map unix_ts → ScreenshotInfo for tooltip/preview lookup. */
 let screenshotByTs = $derived(new Map(dayScreenshots.map((s) => [s.unix_ts, s])));
@@ -707,7 +757,7 @@ const filteredLabels = $derived.by(() => {
 /** Start in day view so the session list is visible immediately.
  *  Users can switch to month/week/year from the title-bar buttons. */
 let viewMode = $state<HistoryViewMode>("day");
-/** Anchor date for calendar navigation — updated to the most recent
+/** Anchor date for calendar navigation - updated to the most recent
  *  session date once allUtcDays has been loaded, so switching to the
  *  month/year calendar always lands on a populated period. */
 let calendarAnchor = $state(new Date());
@@ -853,7 +903,7 @@ function handleDayDotsHover(
   const { sessions, dayStart, labels } = data;
   const dayEnd = dayStart + 86400;
 
-  // ① Check label circles first (drawn at bottom of canvas)
+  // 1 Check label circles first (drawn at bottom of canvas)
   const dotR = Math.max(3, Math.min(5, h * 0.06));
   const hitR = dotR + 4; // slightly larger hit area
   let foundLabel = false;
@@ -876,7 +926,7 @@ function handleDayDotsHover(
     }
   }
 
-  // ② Check epoch dots if no label was hit
+  // 2 Check epoch dots if no label was hit
   if (!foundLabel) {
     if (hoveredLabelId != null) {
       hoveredLabelId = null;
@@ -1065,7 +1115,7 @@ function handleGridHover(canvas: HTMLCanvasElement, e: MouseEvent, data: GridDat
     labelTooltip = null;
   }
 
-  // Check for screenshot in this cell — show preview if hovering directly on the indicator
+  // Check for screenshot in this cell - show preview if hovering directly on the indicator
   let foundScreenshot = false;
   for (let t = cellT; t < cellEnd; t++) {
     const info = screenshotByTs.get(t);
@@ -1185,7 +1235,7 @@ const currentDayStart = $derived.by(() => {
 
 // ── Calendar-derived state (depends on localDays) ────────────────────────
 
-/** Session counts per local day — uses cached session lists where available,
+/** Session counts per local day - uses cached session lists where available,
  *  falls back to 1 for days we haven't loaded yet. */
 const daySessionCounts = $derived.by(() => {
   const counts = new Map<string, number>();
@@ -1209,7 +1259,7 @@ const calendarLabel = $derived.by(() => {
       start.setDate(start.getDate() - start.getDay());
       const end = new Date(start);
       end.setDate(end.getDate() + 6);
-      return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+      return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
     }
     default:
       return "";
@@ -1391,13 +1441,15 @@ function drawSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {
  *  Drives highlight on the session row below.                           */
 let gridHoveredSessionIdx = $state<number | null>(null);
 
-/** Scroll to and expand a session by index — triggered by clicking the grid. */
+/** Scroll to and expand a session by index - triggered by clicking the grid. */
 function focusSession(sIdx: number) {
   const s = sessions[sIdx];
   if (!s) return;
   expanded[s.csv_path] = true;
   loadSleep(s.csv_path);
   loadMetrics(s.csv_path);
+  void loadLocation(s.csv_path);
+  void loadEmbedCount(s.csv_path);
   // Scroll to the session row after DOM update
   requestAnimationFrame(() => {
     const el = document.getElementById(`session-row-${sIdx}`);
@@ -1475,7 +1527,7 @@ onMount(async () => {
       screenshotPort = port;
     })
     .catch((_e) => {});
-  // Load aggregate stats lazily — not needed for initial render
+  // Load aggregate stats lazily - not needed for initial render
   invoke<HistoryStatsData>("get_history_stats")
     .then((s) => {
       historyStats = s;
@@ -1881,7 +1933,7 @@ useWindowTitle("window.title.history");
                   </span>
                   <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">{dur}</span>
 
-                  <!-- Sparkline — only mounted after the row enters the viewport -->
+                  <!-- Sparkline - only mounted after the row enters the viewport -->
                   {#if renderedRows.has(session.csv_path) && getTs(session.csv_path)}
                     {@const ts = getTs(session.csv_path)!}
                     <canvas class="h-3 w-16 shrink-0 rounded-sm opacity-60"
@@ -1987,6 +2039,36 @@ useWindowTitle("window.title.history");
                       metrics={getMetrics(session.csv_path)}
                       timeseries={getTs(session.csv_path)} />
 
+                    <!-- GPS track map (PMTiles + MapLibre) -->
+                    {#if locationCache[session.csv_path] === "loading"}
+                      <div class="flex items-center gap-2 py-1">
+                        <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
+                        <span class="text-[0.55rem] text-muted-foreground/40">Loading GPS track…</span>
+                      </div>
+                    {:else}
+                      {@const gpsPoints = getLocation(session.csv_path)}
+                      {#if gpsPoints && gpsPoints.length > 0}
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+                              GPS Track
+                            </span>
+                            <span class="text-[0.48rem] text-muted-foreground/40">{gpsPoints.length} fixes</span>
+                          </div>
+                          <SessionMap points={gpsPoints} color={color} height="180px" />
+                        </div>
+                      {/if}
+                    {/if}
+
+                    <!-- HNSW / SQLite embedding count -->
+                    {#if embedCountCache[session.csv_path] !== undefined && embedCountCache[session.csv_path] !== "loading" && (embedCountCache[session.csv_path] as number) > 0}
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">Embeddings</span>
+                        <span class="text-[0.65rem] font-mono tabular-nums text-foreground">{(embedCountCache[session.csv_path] as number).toLocaleString()}</span>
+                        <span class="text-[0.48rem] text-muted-foreground/40">epochs in HNSW/SQLite</span>
+                      </div>
+                    {/if}
+
                     <!-- Labels (rainbow circles with hover interaction) -->
                     {#if session.labels.length > 0}
                       <div class="flex flex-col gap-1.5">
@@ -2024,7 +2106,7 @@ useWindowTitle("window.title.history");
                     {#if sleepCache[session.csv_path] === "loading"}
                       <div class="flex items-center gap-2 py-2">
                         <Spinner size="w-3.5 h-3.5" class="text-muted-foreground/50" />
-                        <span class="text-[0.6rem] text-muted-foreground/50">{t("sleep.title")}…</span>
+                        <span class="text-[0.6rem] text-muted-foreground/50">{t("sleep.title")}...</span>
                       </div>
                     {:else if sleepCache[session.csv_path] === "short"}
                       <div class="flex items-center gap-1.5 py-1">
@@ -2113,7 +2195,7 @@ useWindowTitle("window.title.history");
 
         </div><!-- end current-day -->
       {/if}
-    <!-- Grid tooltip (follows cursor, portal-style — shared by day grid & week dots) -->
+    <!-- Grid tooltip (follows cursor, portal-style - shared by day grid & week dots) -->
     {#if gridTooltip}
       <div class="fixed pointer-events-none z-[100]"
            style="left:{gridTooltip.x + 12}px; top:{gridTooltip.y - 8}px;">
@@ -2155,7 +2237,7 @@ useWindowTitle("window.title.history");
       </div>
     {/if}
 
-    <!-- Label dot tooltip (fixed position — avoids overflow clipping) -->
+    <!-- Label dot tooltip (fixed position - avoids overflow clipping) -->
     {#if labelTooltip}
       <div class="fixed pointer-events-none z-[120]"
            style="left:{labelTooltip.x}px; top:{labelTooltip.y - 10}px; transform: translate(-50%, -100%);">
@@ -2163,7 +2245,7 @@ useWindowTitle("window.title.history");
                     shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
           <span class="block text-[0.6rem] font-medium leading-tight truncate">{labelTooltip.text}</span>
           <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
-            {labelTooltip.time}{#if labelTooltip.timeEnd} – {labelTooltip.timeEnd}{/if}
+            {labelTooltip.time}{#if labelTooltip.timeEnd} - {labelTooltip.timeEnd}{/if}
           </span>
         </div>
         <!-- Arrow -->

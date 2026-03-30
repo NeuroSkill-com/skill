@@ -100,8 +100,8 @@ pub(crate) use session_analysis::{
 };
 use session_analysis::{
     compute_umap_compare, enqueue_umap_compare, get_csv_metrics, get_day_metrics_batch,
-    get_session_metrics, get_session_timeseries, get_sleep_stages, open_compare_window,
-    open_compare_window_with_sessions, poll_job,
+    get_session_embedding_count, get_session_location, get_session_metrics, get_session_timeseries,
+    get_sleep_stages, open_compare_window, open_compare_window_with_sessions, poll_job,
 };
 
 // ── Existing extracted modules ────────────────────────────────────────────────
@@ -1463,6 +1463,8 @@ pub fn run() {
             open_compare_window_with_sessions,
             get_session_metrics,
             get_session_timeseries,
+            get_session_location,
+            get_session_embedding_count,
             get_csv_metrics,
             get_day_metrics_batch,
             list_embedding_sessions,
