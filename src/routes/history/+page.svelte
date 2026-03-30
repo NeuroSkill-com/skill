@@ -534,6 +534,8 @@ async function loadDay(idx: number) {
   dayLoading = true;
   try {
     const fresh = await fetchDaySessions(localKey);
+    // biome-ignore lint/suspicious/noConsole: temporary diagnostic — remove after confirming fix
+    console.warn(`[history] loadDay(${localKey}) → ${fresh.length} sessions`);
     if (loadSeq !== seq) return; // navigated away - discard stale response
 
     sessions = fresh;
@@ -1481,6 +1483,8 @@ onMount(async () => {
 
   try {
     allLocalDays = await invoke<LocalDayInfo[]>("list_local_session_days", { tzOffsetSecs: tzOffsetSecs });
+    // biome-ignore lint/suspicious/noConsole: temporary diagnostic — remove after confirming fix
+    console.warn(`[history] ${allLocalDays.length} local days, tzOffset=${tzOffsetSecs}`);
   } catch (e) {
     // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
     console.error("list_local_session_days failed:", e);

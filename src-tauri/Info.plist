@@ -65,5 +65,15 @@
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>Skill reads your calendar events to correlate scheduled activities with your EEG focus and wellbeing data.</string>
 
+  <!-- ── Location ──────────────────────────────────────────────────────────────── -->
+
+  <!--
+    Required for CoreLocation on macOS 10.14+.  Without this key the
+    system silently denies location access and no permission dialog
+    is shown.  The app falls back to IP geolocation if denied.
+  -->
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Skill uses your location to provide geographic context for EEG sessions and to enrich LLM responses with local information such as timezone, city, and weather.</string>
+
 </dict>
 </plist>

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 fn main() {
-    #[cfg(target_os = "macos")]
-    {
+    // Only compile the Objective-C bridge when targeting macOS.
+    // `cfg!()` checks the *target* triple (not the host), so cross-compilation
+    // from Linux/Windows targeting macOS will still compile the .m file, while
+    // native Linux/Windows builds skip it entirely.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         println!("cargo:rerun-if-changed=src/skill_location_macos.m");
 
         cc::Build::new()
