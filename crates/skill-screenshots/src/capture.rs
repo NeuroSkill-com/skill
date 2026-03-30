@@ -216,12 +216,12 @@ pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> 
 }
 
 /// Try to create a fastembed `ImageEmbedding` instance.
-fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
+fn load_fastembed_image(config: &ScreenshotConfig, _skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
     if config.embed_backend != "fastembed" {
         return None;
     }
     let model = crate::config::fastembed_model_enum(config)?;
-    let cache = skill_dir.join("fastembed_cache");
+    let cache = skill_data::util::hf_cache_root();
     let eps = build_execution_providers(config.use_gpu);
     match fastembed::ImageEmbedding::try_new(
         fastembed::ImageInitOptions::new(model)
