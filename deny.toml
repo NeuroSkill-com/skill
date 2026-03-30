@@ -66,6 +66,7 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-gpu" },
     { allow = ["GPL-3.0-only"], crate = "skill-headless" },
     { allow = ["GPL-3.0-only"], crate = "skill-health" },
+    { allow = ["GPL-3.0-only"], crate = "skill-oura" },
     { allow = ["GPL-3.0-only"], crate = "skill-history" },
     { allow = ["GPL-3.0-only"], crate = "skill-jobs" },
     { allow = ["GPL-3.0-only"], crate = "skill-label-index" },

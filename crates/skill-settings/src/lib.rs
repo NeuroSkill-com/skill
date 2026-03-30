@@ -192,6 +192,9 @@ pub struct DeviceApiConfig {
     /// IDUN Cloud API token used when cloud decoding is enabled.
     #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub idun_api_token: String,
+    /// Oura Ring V2 personal access token for cloud data sync.
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
+    pub oura_access_token: String,
 }
 
 // ── Sleep schedule ─────────────────────────────────────────────────────────────
@@ -900,6 +903,7 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         &s.device_api.emotiv_client_id,
         &s.device_api.emotiv_client_secret,
         &s.device_api.idun_api_token,
+        &s.device_api.oura_access_token,
     );
     if migrated {
         // Re-save without the secret fields (skip_serializing takes care of it).
@@ -915,6 +919,7 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         s.device_api.emotiv_client_id = secrets.emotiv_client_id;
         s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
         s.device_api.idun_api_token = secrets.idun_api_token;
+        s.device_api.oura_access_token = secrets.oura_access_token;
     }
     // In debug mode, secrets stay as loaded from the JSON file — no keychain
     // interaction, no macOS authorization prompts on every dev build.
@@ -932,6 +937,7 @@ pub fn save_secrets_from_settings(settings: &UserSettings) {
         emotiv_client_id: settings.device_api.emotiv_client_id.clone(),
         emotiv_client_secret: settings.device_api.emotiv_client_secret.clone(),
         idun_api_token: settings.device_api.idun_api_token.clone(),
+        oura_access_token: settings.device_api.oura_access_token.clone(),
     });
 }
 

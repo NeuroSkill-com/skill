@@ -25,6 +25,7 @@ members = [
     "crates/skill-exg",
     "crates/skill-headless",
     "crates/skill-health",
+    "crates/skill-oura",
     "crates/skill-gpu",
     "crates/skill-history",
     "crates/skill-iroh",

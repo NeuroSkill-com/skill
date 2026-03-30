@@ -572,6 +572,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.openbci2".into(),
             ],
         },
+        // ── O ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "oura".into(),
+            name_key: "settings.supportedDevices.company.oura".into(),
+            logo: "/logos/oura.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.ouraRing".into(),
+                ios_only: false,
+                image: "/devices/oura-ring.svg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.oura1".into(),
+                "settings.supportedDevices.instruction.oura2".into(),
+                "settings.supportedDevices.instruction.oura3".into(),
+            ],
+        },
         // ── R ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "reak".into(),

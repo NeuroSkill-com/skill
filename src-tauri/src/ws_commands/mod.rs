@@ -17,6 +17,7 @@ mod health;
 mod hooks;
 #[cfg(feature = "llm")]
 mod llm_cmds;
+mod oura;
 mod screenshots;
 mod search;
 
@@ -870,6 +871,9 @@ pub async fn dispatch(app: &AppHandle, command: &str, msg: &Value) -> Result<Val
         "health_query" => health::health_query(app, msg),
         "health_summary" => health::health_summary(app, msg),
         "health_metric_types" => health::health_metric_types(app),
+        // ── Oura Ring ─────────────────────────────────────────────────────
+        "oura_sync" => oura::oura_sync(app, msg),
+        "oura_status" => oura::oura_status(app),
         // ── LLM commands (llm_chat is handled before dispatch — see api.rs) ──
         #[cfg(feature = "llm")]
         "llm_status" => llm_cmds::llm_status(app),

@@ -58,6 +58,9 @@ const CLI_VERSION = "1.2.0";
  *   health metrics --metric-type <t> [--start --end] Query scalar health metrics
  *   health metric-types            List all stored metric types
  *   health sync <json>             Push HealthKit data (iOS companion format)
+ *   oura                           Oura Ring status — check token and connectivity
+ *   oura sync [--start --end]      Sync Oura Ring data for a date range (default: last 30 days)
+ *   oura status                    Check Oura Ring token and user info
  *   calendar [--start --end]       List calendar events in a time range (default: next 7 days)
  *   calendar status                Show calendar access status + platform
  *   calendar permission            Request calendar access (macOS — shows system dialog)
@@ -713,6 +716,12 @@ interface Args {
   healthType?: string;
   /** Metric type for `health metrics` queries (e.g. restingHeartRate, hrv, vo2Max). */
   metricType?: string;
+  /** Oura subcommand: `sync` | `status` | undefined. */
+  ouraSub?: string;
+  /** Oura start date for sync (YYYY-MM-DD). */
+  ouraStart?: string;
+  /** Oura end date for sync (YYYY-MM-DD). */
+  ouraEnd?: string;
   /** Calendar subcommand: `status` | `permission` | undefined (events). */
   calendarSub?: string;
   /** iroh subcommand group/action. */
@@ -825,7 +834,7 @@ function parseArgs(): Args {
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
     "--actions", "--loops", "--break", "--auto-start", "--name", "--by-image", "--window",
     "--bedtime", "--wake", "--preset",
-    "--metric-type", "--otp", "--totp-id", "--scope",
+    "--metric-type", "--oura-start", "--oura-end", "--otp", "--totp-id", "--scope",
     "--events", "--fields", "--max-hz",
   ]);
 
@@ -899,6 +908,8 @@ function parseArgs(): Args {
     else if (a === "--auto-start")  { args.calAutoStart = true; }
     else if (a === "--name")        { args.calName      = argv[++i]; }
     else if (a === "--metric-type") { args.metricType    = argv[++i]; }
+    else if (a === "--oura-start") { args.ouraStart     = argv[++i]; }
+    else if (a === "--oura-end")   { args.ouraEnd       = argv[++i]; }
     else if (a === "--bedtime")     { args.bedtime      = argv[++i]; }
     else if (a === "--wake")        { args.wake          = argv[++i]; }
     else if (a === "--preset")      { args.preset        = argv[++i]; }
@@ -978,6 +989,9 @@ function parseArgs(): Args {
     }
     else if (args.command === "health" && args.subAction === "sync" && !args.rawJson) {
       args.rawJson = a; // JSON payload
+    }
+    else if (args.command === "oura" && !args.ouraSub) {
+      args.ouraSub = a.toLowerCase(); // "sync" | "status"
     }
     else if (args.command === "calendar" && !args.calendarSub) {
       args.calendarSub = a.toLowerCase(); // "status" | "permission"
@@ -1087,6 +1101,9 @@ ${m("health steps [--start --end] [--limit N]",         "query step counts")}
 ${m("health metrics --metric-type <t> [--start --end]", "query scalar health metrics (restingHeartRate, hrv, vo2Max, …)")}
 ${m("health metric-types",                              "list all stored metric types")}
 ${m('health sync \'{"sleep":[...]}\'',                  "push HealthKit data from iOS companion (JSON payload)")}
+${m("oura",                                            "Oura Ring status — check token and connectivity")}
+${m("oura sync [--start YYYY-MM-DD --end YYYY-MM-DD]", "sync Oura Ring data for a date range (default: last 30 days)")}
+${m("oura status",                                     "check Oura Ring token and user info")}
 ${m("calendar [--start --end]",                         "list calendar events in a range (default: now → +7 days)")}
 ${m("calendar status",                                  "show calendar access status and platform (macos/linux/windows)")}
 ${m("calendar permission",                              "request calendar access — macOS only, shows system dialog")}
@@ -1474,6 +1491,13 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}$${RESET} npx tsx cli.ts health metrics --metric-type hrv --json | jq '.results[].value'
   ${DIM}$${RESET} npx tsx cli.ts health metric-types                 ${DIM}# list all metric types${RESET}
   ${DIM}$${RESET} npx tsx cli.ts health sync '{"steps":[{"start_utc":1740000000,"end_utc":1740086400,"count":9500}]}'
+
+  ${BOLD}oura${RESET} — Oura Ring cloud data sync
+  ${DIM}$${RESET} npx tsx cli.ts oura                                   ${DIM}# check token + connectivity${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts oura status                            ${DIM}# user info from Oura API${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts oura sync                              ${DIM}# sync last 30 days${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts oura sync --start 2026-03-01 --end 2026-03-28  ${DIM}# custom range${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts oura sync --json                       ${DIM}# raw JSON response${RESET}
   ${DIM}# Output (summary):${RESET}
   ${DIM}#   ⚡ health  last 24h${RESET}
   ${DIM}#${RESET}
@@ -4156,6 +4180,81 @@ async function cmdHealth(args: Args): Promise<void> {
 }
 
 /**
+ * `oura [sync|status]` — Oura Ring cloud data sync and status.
+ *
+ * Subcommands:
+ * - (none) / `status` — check if Oura token is configured and test connectivity
+ * - `sync`            — fetch Oura Ring data for a date range (default: last 30 days)
+ */
+async function cmdOura(args: Args): Promise<void> {
+  const sub = (args.ouraSub ?? "status").toLowerCase();
+
+  // ── status ──────────────────────────────────────────────────────────────
+  if (sub === "status" || (!args.ouraSub && sub === "status")) {
+    print(`${BOLD}⚡ oura status${RESET}`);
+    const r = await send({ command: "oura_status" });
+    if (jsonMode) { printResult(r); return; }
+
+    print("");
+    if (r.configured) {
+      print(`  token       ${GREEN}configured${RESET}`);
+      if (r.connected) {
+        print(`  connected   ${GREEN}yes${RESET}`);
+        if (r.user) {
+          if (r.user.email)          print(`  email       ${BOLD}${r.user.email}${RESET}`);
+          if (r.user.age)            print(`  age         ${BOLD}${r.user.age}${RESET}`);
+          if (r.user.biological_sex) print(`  sex         ${BOLD}${r.user.biological_sex}${RESET}`);
+        }
+      } else {
+        print(`  connected   ${RED}no${RESET}`);
+        if (r.error) print(`  error       ${DIM}${r.error}${RESET}`);
+      }
+    } else {
+      print(`  token       ${YELLOW}not configured${RESET}`);
+      print("");
+      print(`  ${DIM}Set your Oura personal access token in Settings → Device API → Oura Ring.${RESET}`);
+      print(`  ${DIM}Get a token from: ${RESET}${CYAN}https://cloud.ouraring.com/personal-access-tokens${RESET}`);
+    }
+    print("");
+    printResult(r);
+    return;
+  }
+
+  // ── sync ────────────────────────────────────────────────────────────────
+  if (sub === "sync") {
+    const now = new Date();
+    // Accept both --oura-start/--oura-end (date strings) and --start/--end (unix timestamps → converted)
+    let endDate   = args.ouraEnd   ?? (args.end ? new Date(args.end * 1000).toISOString().split("T")[0] : now.toISOString().split("T")[0]);
+    let startDate = args.ouraStart ?? (args.start ? new Date(args.start * 1000).toISOString().split("T")[0] : new Date(now.getTime() - 30 * 86400 * 1000).toISOString().split("T")[0]);
+
+    print(`${BOLD}⚡ oura sync${RESET}  ${DIM}${startDate} → ${endDate}${RESET}`);
+    const r = await send({ command: "oura_sync", start_date: startDate, end_date: endDate }, 120000);
+    if (jsonMode) { printResult(r); return; }
+
+    if (r.ok) {
+      print("");
+      print(`  ${GREEN}synced from Oura Ring${RESET}`);
+      const f = r.fetched ?? {};
+      const s = r.stored ?? {};
+      if (f.sleep_samples)  print(`    sleep:       ${CYAN}${f.sleep_samples}${RESET} fetched → ${BOLD}${s.sleep_upserted ?? 0}${RESET} stored`);
+      if (f.workouts)       print(`    workouts:    ${CYAN}${f.workouts}${RESET} fetched → ${BOLD}${s.workouts_upserted ?? 0}${RESET} stored`);
+      if (f.heart_rate)     print(`    heart rate:  ${CYAN}${f.heart_rate}${RESET} fetched → ${BOLD}${s.heart_rate_upserted ?? 0}${RESET} stored`);
+      if (f.steps)          print(`    steps:       ${CYAN}${f.steps}${RESET} fetched → ${BOLD}${s.steps_upserted ?? 0}${RESET} stored`);
+      if (f.mindfulness)    print(`    mindfulness: ${CYAN}${f.mindfulness}${RESET} fetched → ${BOLD}${s.mindfulness_upserted ?? 0}${RESET} stored`);
+      if (f.metrics)        print(`    metrics:     ${CYAN}${f.metrics}${RESET} fetched → ${BOLD}${s.metrics_upserted ?? 0}${RESET} stored`);
+    } else {
+      print("");
+      print(`  ${RED}sync failed:${RESET} ${r.error ?? "unknown error"}`);
+    }
+    print("");
+    printResult(r);
+    return;
+  }
+
+  printError(`unknown oura subcommand: "${sub}". Use: oura, oura status, oura sync`);
+}
+
+/**
  * `calendar [status|permission] [--start --end]`
  *
  * Subcommands:
@@ -5737,6 +5836,9 @@ async function main(): Promise<void> {
         break;
       case "health":
         await cmdHealth(args);
+        break;
+      case "oura":
+        await cmdOura(args);
         break;
       case "calendar":
         await cmdCalendar(args);

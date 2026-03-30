@@ -21,6 +21,7 @@ const KEY_API_TOKEN: &str = "api_token";
 const KEY_EMOTIV_CLIENT_ID: &str = "emotiv_client_id";
 const KEY_EMOTIV_CLIENT_SECRET: &str = "emotiv_client_secret";
 const KEY_IDUN_API_TOKEN: &str = "idun_api_token";
+const KEY_OURA_ACCESS_TOKEN: &str = "oura_access_token";
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ pub struct Secrets {
     pub emotiv_client_id: String,
     pub emotiv_client_secret: String,
     pub idun_api_token: String,
+    pub oura_access_token: String,
 }
 
 /// Load all secrets from the system keychain.
@@ -84,6 +86,7 @@ pub fn load_secrets() -> Secrets {
         emotiv_client_id: get_secret(KEY_EMOTIV_CLIENT_ID),
         emotiv_client_secret: get_secret(KEY_EMOTIV_CLIENT_SECRET),
         idun_api_token: get_secret(KEY_IDUN_API_TOKEN),
+        oura_access_token: get_secret(KEY_OURA_ACCESS_TOKEN),
     }
 }
 
@@ -98,6 +101,7 @@ pub fn save_secrets(secrets: &Secrets) {
     set_secret(KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id);
     set_secret(KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret);
     set_secret(KEY_IDUN_API_TOKEN, &secrets.idun_api_token);
+    set_secret(KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token);
 }
 
 /// Migrate plaintext secrets from settings JSON into the keychain.
@@ -111,6 +115,7 @@ pub fn migrate_plaintext_secrets(
     emotiv_client_id: &str,
     emotiv_client_secret: &str,
     idun_api_token: &str,
+    oura_access_token: &str,
 ) -> bool {
     if cfg!(debug_assertions) {
         return false;
@@ -122,6 +127,7 @@ pub fn migrate_plaintext_secrets(
         (KEY_EMOTIV_CLIENT_ID, emotiv_client_id),
         (KEY_EMOTIV_CLIENT_SECRET, emotiv_client_secret),
         (KEY_IDUN_API_TOKEN, idun_api_token),
+        (KEY_OURA_ACCESS_TOKEN, oura_access_token),
     ];
 
     for &(key, plaintext) in pairs {

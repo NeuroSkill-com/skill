@@ -91,6 +91,13 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.emotiv2": "Save credentials, then pair/connect your Emotiv headset.",
   "settings.supportedDevices.instruction.idun1": "Open Device API and add your IDUN API token if required.",
   "settings.supportedDevices.instruction.idun2": "Save token, then pair/connect the headset from the device list.",
+  "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
+  "settings.supportedDevices.instruction.oura1":
+    "Get a Personal Access Token from cloud.ouraring.com/personal-access-tokens.",
+  "settings.supportedDevices.instruction.oura2": "Open Device API → Oura Ring and paste your token, then Save.",
+  "settings.supportedDevices.instruction.oura3":
+    "Click Sync Now to fetch sleep, activity, readiness, heart rate, and SpO2 data.",
   "settings.supportedDevices.instruction.reak1": "Power on Nucleus-Hermès and keep it near this computer.",
   "settings.supportedDevices.instruction.reak2":
     "Scan and pair it in the Devices list, then connect from the preferred device flow.",
@@ -133,6 +140,15 @@ const settings: Record<string, string> = {
   "settings.deviceApi.idunTitle": "IDUN Cloud",
   "settings.deviceApi.idunDesc": "Optional token for IDUN cloud decoding features.",
   "settings.deviceApi.idunDashboard": "Get API token from IDUN dashboard",
+  "settings.deviceApi.ouraTitle": "Oura Ring",
+  "settings.deviceApi.ouraDesc":
+    "Personal access token for syncing sleep, activity, readiness, heart rate, and SpO2 data from the Oura Ring V2 Cloud API.",
+  "settings.deviceApi.ouraDashboard": "Get token from Oura Developer Portal",
+  "settings.deviceApi.ouraAccessToken": "Access Token",
+  "settings.deviceApi.ouraSyncBtn": "Sync Now",
+  "settings.deviceApi.ouraSyncing": "Syncing…",
+  "settings.deviceApi.ouraSynced": "Synced!",
+  "settings.deviceApi.ouraSyncDesc": "Fetch the last 30 days of Oura Ring data and store in the health database.",
   "settings.deviceApi.clientId": "Client ID",
   "settings.deviceApi.clientSecret": "Client Secret",
   "settings.deviceApi.apiToken": "API Token",

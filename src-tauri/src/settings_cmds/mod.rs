@@ -753,6 +753,7 @@ pub fn get_device_api_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> s
         "emotiv_client_id":     c.emotiv_client_id,
         "emotiv_client_secret": c.emotiv_client_secret,
         "idun_api_token":       c.idun_api_token,
+        "oura_access_token":    c.oura_access_token,
     })
 }
 

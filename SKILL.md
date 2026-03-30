@@ -2609,6 +2609,85 @@ Sync:
 > **Common metric types:** `restingHeartRate`, `hrv` (SDNN ms), `vo2Max`, `bodyMass`,
 > `bloodPressureSystolic`, `bloodPressureDiastolic`, `respiratoryRate`, `bodyTemperature`,
 > `oxygenSaturation`, `bloodGlucose`.
+>
+> **Oura Ring metric types:** `oura_sleep_score`, `oura_readiness_score`, `oura_activity_score`,
+> `oura_deep_sleep_secs`, `oura_rem_sleep_secs`, `oura_light_sleep_secs`, `oura_awake_time_secs`,
+> `oura_total_sleep_secs`, `oura_sleep_efficiency`, `oura_breath_rate`, `oura_sleep_avg_hr`,
+> `oura_temperature_deviation`, `oura_temperature_trend_deviation`, `oura_active_calories`,
+> `oura_total_calories`, `oura_high_activity_time`, `oura_medium_activity_time`,
+> `oura_low_activity_time`, `oura_sedentary_time`, `oura_resting_time`,
+> `oura_equivalent_walking_distance`, plus standard types `hrv`, `restingHeartRate`, `spo2`.
+
+---
+
+### `oura`
+
+Sync data from the Oura Ring V2 Cloud API and store it in the unified health database.
+Data flows through the same `health.sqlite` pipeline as Apple HealthKit — query with
+`health` commands after syncing.
+
+| Subcommand | Description |
+|---|---|
+| `oura` / `oura status` | Check if Oura token is configured and test API connectivity |
+| `oura sync` | Sync last 30 days of Oura Ring data (sleep, activity, readiness, HR, SpO2, workouts) |
+
+```bash
+node cli.ts oura                                # check token + connectivity
+node cli.ts oura status                         # user info from Oura API
+node cli.ts oura status --json                  # raw JSON
+node cli.ts oura sync                           # sync last 30 days
+node cli.ts oura sync --oura-start 2026-03-01 --oura-end 2026-03-28  # custom date range
+node cli.ts oura sync --json                    # raw JSON response
+```
+
+**HTTP:**
+```bash
+# Status:
+curl -s http://127.0.0.1:8375/v1/oura/status | jq '.'
+
+# Sync (last 30 days):
+curl -s -X POST http://127.0.0.1:8375/v1/oura/sync \
+  -H "Content-Type: application/json" \
+  -d '{"start_date":"2026-03-01","end_date":"2026-03-28"}'
+```
+
+**WebSocket:**
+```jsonc
+{ "command": "oura_status" }
+{ "command": "oura_sync", "start_date": "2026-03-01", "end_date": "2026-03-28" }
+```
+
+**Example output (status):**
+```
+⚡ oura status
+
+  token       configured
+  connected   yes
+  email       user@example.com
+  age         32
+```
+
+**Example output (sync):**
+```
+⚡ oura sync  2026-03-01 → 2026-03-28
+
+  synced from Oura Ring
+    sleep:       28 fetched → 28 stored
+    workouts:    12 fetched → 12 stored
+    heart rate:  8064 fetched → 8064 stored
+    steps:       28 fetched → 28 stored
+    mindfulness: 5 fetched → 5 stored
+    metrics:     392 fetched → 392 stored
+```
+
+> After syncing, query Oura data with standard health commands:
+> ```bash
+> node cli.ts health metrics --metric-type oura_sleep_score
+> node cli.ts health metrics --metric-type oura_readiness_score
+> node cli.ts health hr --limit 20     # includes Oura HR samples
+> node cli.ts health steps             # includes Oura step counts
+> node cli.ts health metric-types      # lists all oura_* metric types
+> ```
 
 ---
 
@@ -3118,7 +3197,7 @@ commands include: `status`, `sessions`, `session_metrics`, `search`, `compare`,
 `screenshots_for_eeg`, `eeg_for_screenshots`, `search_screenshots_vision`,
 `search_screenshots_by_image_b64`, `hooks_status`, `hooks_get`, `hooks_suggest`,
 `hooks_log`, `dnd`, `notify`, `say`, `health_summary`, `health_query`,
-`health_metric_types`, `health_sync`, and others.
+`health_metric_types`, `health_sync`, `oura_sync`, `oura_status`, and others.
 
 **Blocked commands:** For safety, the LLM cannot invoke self-management commands:
 `llm_start`, `llm_stop`, `llm_select_model`, `llm_select_mmproj`, `llm_add_model`,

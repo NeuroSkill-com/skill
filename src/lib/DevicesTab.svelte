@@ -63,6 +63,7 @@ interface DeviceApiConfig {
   emotiv_client_id: string;
   emotiv_client_secret: string;
   idun_api_token: string;
+  oura_access_token: string;
 }
 const OPENBCI_DEFAULT: OpenBciConfig = {
   board: "ganglion",
@@ -79,7 +80,12 @@ let openbciChanged = $state(false);
 let openbciConnecting = $state(false);
 let openbciError = $state("");
 let openbciExpanded = $state(false);
-let deviceApi = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "", idun_api_token: "" });
+let deviceApi = $state<DeviceApiConfig>({
+  emotiv_client_id: "",
+  emotiv_client_secret: "",
+  idun_api_token: "",
+  oura_access_token: "",
+});
 let emotivApiChanged = $state(false);
 let emotivApiSaved = $state(false);
 let emotivApiError = $state("");
@@ -90,6 +96,14 @@ let emotivSecretVisible = $state(false);
 let idunTokenVisible = $state(false);
 let emotivApiExpanded = $state(false);
 let idunApiExpanded = $state(false);
+let ouraApiChanged = $state(false);
+let ouraApiSaved = $state(false);
+let ouraApiError = $state("");
+let ouraTokenVisible = $state(false);
+let ouraApiExpanded = $state(false);
+let ouraSyncing = $state(false);
+let ouraSynced = $state(false);
+let ouraSyncError = $state("");
 let supportedCompanies = $state(getSupportedCompanies());
 let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
 let supportedDevicesSearchQuery = $state("");
@@ -227,6 +241,58 @@ async function saveIdunApi() {
     }, 2000);
   } catch (e: unknown) {
     idunApiError = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function saveOuraApi() {
+  ouraApiError = "";
+  try {
+    await invoke("set_device_api_config", { config: deviceApi });
+    ouraApiChanged = false;
+    ouraApiSaved = true;
+    setTimeout(() => {
+      ouraApiSaved = false;
+    }, 2000);
+  } catch (e: unknown) {
+    ouraApiError = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function ouraSync() {
+  ouraSyncError = "";
+  ouraSyncing = true;
+  try {
+    const now = new Date();
+    const end = now.toISOString().split("T")[0];
+    const start = new Date(now.getTime() - 30 * 86400 * 1000).toISOString().split("T")[0];
+    const port = await invoke<number>("get_ws_port");
+    const resp = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "oura_sync", start_date: start, end_date: end }),
+      signal: AbortSignal.timeout(300000), // 5 min — Oura API can be slow for large ranges
+    });
+    if (!resp.ok) {
+      ouraSyncError = `Server returned ${resp.status} ${resp.statusText}`;
+      return;
+    }
+    const r = await resp.json().catch(() => null);
+    if (!r) {
+      ouraSyncError = "Invalid response from server";
+      return;
+    }
+    if (r.ok) {
+      ouraSynced = true;
+      setTimeout(() => {
+        ouraSynced = false;
+      }, 3000);
+    } else {
+      ouraSyncError = r.error ?? "Sync failed";
+    }
+  } catch (e: unknown) {
+    ouraSyncError = e instanceof Error ? e.message : String(e);
+  } finally {
+    ouraSyncing = false;
   }
 }
 
@@ -438,6 +504,9 @@ function deviceImage(name: string, hw?: string | null): string | null {
   if (n.includes("hermes") || n.includes("nucleus") || n.includes("re-ak") || n.includes("reak")) {
     return "/devices/re-ak-nucleus-hermes.png";
   }
+  if (n.includes("oura")) {
+    return "/devices/oura-ring.svg";
+  }
 
   return null;
 }
@@ -461,6 +530,7 @@ function expandSupportedCompany(id: SupportedCompanyId) {
   if (id === "openbci") openbciExpanded = true;
   if (id === "emotiv") emotivApiExpanded = true;
   if (id === "idun") idunApiExpanded = true;
+  if (id === "oura") ouraApiExpanded = true;
 }
 
 // ── Sorted device lists ────────────────────────────────────────────────────
@@ -1056,6 +1126,91 @@ onDestroy(() => {
           </div>
           {#if idunApiError}
             <p class="text-[0.62rem] text-destructive">{idunApiError}</p>
+          {/if}
+        {/if}
+
+        <Separator class="bg-border dark:bg-white/[0.04]" />
+
+        <button
+          onclick={() => ouraApiExpanded = !ouraApiExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={ouraApiExpanded}
+        >
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.ouraTitle")}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {ouraApiExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if ouraApiExpanded}
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            {t("settings.deviceApi.ouraDesc")}
+          </p>
+          <a
+            href="https://cloud.ouraring.com/personal-access-tokens"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-[0.62rem] text-primary hover:underline w-fit">
+            {t("settings.deviceApi.ouraDashboard")}
+          </a>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="oura-access-token" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.ouraAccessToken")}</label>
+            <div class="flex items-center gap-2">
+              <input
+                id="oura-access-token"
+                type={ouraTokenVisible ? "text" : "password"}
+                bind:value={deviceApi.oura_access_token}
+                oninput={() => { ouraApiChanged = true; }}
+                placeholder="Oura Personal Access Token"
+                class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <Button size="sm" variant="outline"
+                class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                onclick={() => ouraTokenVisible = !ouraTokenVisible}>
+                {ouraTokenVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-2">
+            <Button size="sm"
+              variant={ouraSynced ? "secondary" : "outline"}
+              class="text-[0.66rem] h-7 px-3
+                {ouraSynced ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+                ouraSyncing ? 'border-yellow-500/30 text-yellow-600 dark:text-yellow-400' :
+                'border-border dark:border-white/10 text-muted-foreground'}"
+              onclick={ouraSync}
+              disabled={ouraSyncing || !deviceApi.oura_access_token}>
+              {#if ouraSyncing}
+                {t("settings.deviceApi.ouraSyncing")}
+              {:else if ouraSynced}
+                {t("settings.deviceApi.ouraSynced")}
+              {:else}
+                {t("settings.deviceApi.ouraSyncBtn")}
+              {/if}
+            </Button>
+            <Button size="sm"
+              variant={ouraApiSaved ? "secondary" : "outline"}
+              class="text-[0.66rem] h-7 px-3
+                {ouraApiSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+                ouraApiChanged ? 'border-primary/50 text-primary' :
+                'border-border dark:border-white/10 text-muted-foreground'}"
+              onclick={saveOuraApi}
+              disabled={!ouraApiChanged && !ouraApiSaved}>
+              {ouraApiSaved ? t("settings.deviceApi.saved") : t("settings.deviceApi.save")}
+            </Button>
+          </div>
+          <p class="text-[0.58rem] text-muted-foreground/60 leading-relaxed">
+            {t("settings.deviceApi.ouraSyncDesc")}
+          </p>
+          {#if ouraApiError}
+            <p class="text-[0.62rem] text-destructive">{ouraApiError}</p>
+          {/if}
+          {#if ouraSyncError}
+            <p class="text-[0.62rem] text-destructive">{ouraSyncError}</p>
           {/if}
         {/if}
       </CardContent>

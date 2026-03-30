@@ -11,6 +11,7 @@ thiserror = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-eeg       = { path = "../skill-eeg" }
 skill-health    = { path = "../skill-health" }
+skill-oura      = { path = "../skill-oura" }
 skill-gpu       = { path = "../skill-gpu" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"

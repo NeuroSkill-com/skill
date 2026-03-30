@@ -3707,6 +3707,93 @@ async function testHealth(): Promise<void> {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 25b. OURA RING COMMANDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testOura(): Promise<void> {
+  heading("oura ring commands");
+  info("Tests Oura Ring V2 API status and sync commands.");
+
+  // ── oura_status ─────────────────────────────────────────────────────────
+  try {
+    info("Testing oura_status…");
+    const r = await send({ command: "oura_status" });
+    r.ok ? ok("oura_status succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    typeof r.configured === "boolean"
+      ? ok(`configured=${r.configured}`)
+      : fail("configured is not a boolean");
+
+    if (r.configured) {
+      field("connected", r.connected, "API connectivity");
+      if (r.connected && r.user) {
+        field("user.id", r.user.id, "user id");
+      }
+    } else {
+      ok("token not configured — skipping connectivity check (expected in CI)");
+    }
+  } catch (e: any) { fail(`oura_status failed: ${e.message}`); }
+
+  // ── oura_sync — no token case ───────────────────────────────────────────
+  try {
+    info("Testing oura_sync structural response (may fail if no token)…");
+    const r = await send({ command: "oura_sync", start_date: "2026-03-01", end_date: "2026-03-02" });
+    // Without a token configured, this should return ok=false with a helpful error.
+    // With a token, it should return ok=true with sync counts.
+    if (r.ok) {
+      ok("oura_sync returned ok=true (token present)");
+      typeof r.fetched === "object"
+        ? ok("fetched counts object present")
+        : fail("fetched not an object");
+      typeof r.stored === "object"
+        ? ok("stored counts object present")
+        : fail("stored not an object");
+      field("source", r.source, "data source identifier");
+    } else {
+      ok(`oura_sync correctly rejected: ${r.error}`);
+      // Verify the error mentions the token.
+      typeof r.error === "string" && r.error.toLowerCase().includes("token")
+        ? ok("error mentions token configuration")
+        : fail(`error does not mention token: "${r.error}"`);
+    }
+  } catch (e: any) { fail(`oura_sync failed: ${e.message}`); }
+
+  // ── oura_sync — missing start_date → error ──────────────────────────────
+  try {
+    info("Testing oura_sync with missing start_date (should return ok=false)…");
+    const r = await send({ command: "oura_sync", end_date: "2026-03-02" });
+    r.ok === false
+      ? ok(`correctly rejected missing start_date: error="${r.error}"`)
+      : fail("expected ok=false for missing start_date");
+  } catch (e: any) { fail(`oura_sync missing-date test failed: ${e.message}`); }
+
+  // ── oura_sync — missing end_date → error ────────────────────────────────
+  try {
+    info("Testing oura_sync with missing end_date (should return ok=false)…");
+    const r = await send({ command: "oura_sync", start_date: "2026-03-01" });
+    r.ok === false
+      ? ok(`correctly rejected missing end_date: error="${r.error}"`)
+      : fail("expected ok=false for missing end_date");
+  } catch (e: any) { fail(`oura_sync missing-date test failed: ${e.message}`); }
+
+  // ── Verify Oura data flows into health query pipeline ───────────────────
+  try {
+    info("Testing that Oura metric types appear in health_metric_types…");
+    const r = await send({ command: "health_metric_types" });
+    r.ok ? ok("health_metric_types succeeded (Oura data flows into same store)") : fail(`ok=${r.ok}`);
+    // If an Oura sync happened, oura_* metric types should appear.
+    const types: string[] = r.metric_types ?? [];
+    const ouraTypes = types.filter((t: string) => t.startsWith("oura_"));
+    if (ouraTypes.length > 0) {
+      ok(`found ${ouraTypes.length} Oura metric types: ${ouraTypes.slice(0, 5).join(", ")}`);
+    } else {
+      ok("no Oura metric types yet (sync hasn't run or no token — expected in CI)");
+    }
+  } catch (e: any) { fail(`health_metric_types (oura check) failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 26. EXTENDED LLM COMMANDS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4349,6 +4436,7 @@ async function main(): Promise<void> {
   await testCalibrationCrud();
   await testSleepSchedule();
   await testHealth();
+  await testOura();
   await testSkillsCommands();
   await testUnknownCommand();
   await testBroadcastEvents();   // skips gracefully when transport === "http"

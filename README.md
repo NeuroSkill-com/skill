@@ -218,6 +218,7 @@ The Rust backend is split into focused, zero-Tauri-dependency crates under [`cra
 | [`skill-lsl`](crates/skill-lsl/) | LSL stream adapter — local network discovery + rlsl-iroh remote QUIC sink, auto-connect, channel label parsing |
 | [`skill-iroh`](crates/skill-iroh/) | iroh QUIC tunnel — endpoint management, TOTP auth, phone pairing, scope-based permissions |
 | [`skill-health`](crates/skill-health/) | HealthKit / health data sync — heart rate, sleep, steps, metrics storage and query |
+| [`skill-oura`](crates/skill-oura/) | Oura Ring V2 Cloud API — sleep, activity, readiness, HR, SpO2 → unified health pipeline |
 | [`skill-history`](crates/skill-history/) | Session history — listing, metrics extraction, timeseries caching, sleep analysis |
 | [`skill-headless`](crates/skill-headless/) | Headless mode — intercept store for running without a GUI (testing, CI) |
 | [`skill-gpu`](crates/skill-gpu/) | GPU stats — Metal/CUDA/Vulkan utilisation and memory reporting |

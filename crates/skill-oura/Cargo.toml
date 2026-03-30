@@ -1,0 +1,19 @@
+[package]
+name = "skill-oura"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Oura Ring V2 API integration — fetch sleep, activity, heart rate, readiness, SpO2 and convert to HealthSyncPayload"
+
+[dependencies]
+oura-api = "0.1.2"
+skill-health = { path = "../skill-health" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

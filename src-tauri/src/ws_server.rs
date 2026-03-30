@@ -92,6 +92,8 @@
 //! | `health_query`    | `type`, `start_utc?`, `end_utc?`, `limit?`              | Query stored HealthKit samples by type |
 //! | `health_summary`  | `start_utc?`, `end_utc?`                                | Aggregate HealthKit counts for a time range |
 //! | `health_metric_types` | _(none)_                                            | List all distinct HealthKit metric types stored |
+//! | `oura_sync`       | `start_date`, `end_date`                                | Fetch Oura Ring data for a date range and store in health DB |
+//! | `oura_status`     | _(none)_                                                | Check Oura token configuration and API connectivity |
 //! | `calendar_events` | `start_utc`, `end_utc` (i64)                           | Fetch OS calendar events overlapping the range (EventKit / iCal) |
 //! | `calendar_status` | _(none)_                                                | Return calendar access status (`authorized`/`denied`/…) and platform |
 //! | `calendar_request_permission` | _(none)_                               | Request calendar access (macOS: shows system dialog; no-op elsewhere) |

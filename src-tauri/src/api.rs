@@ -291,6 +291,12 @@ pub fn router(state: SharedState) -> Router {
         .route("/v1/health/summary",      get(health_summary_get).post(health_summary_post))
         .route("/v1/health/metric_types", get(health_metric_types_get))
 
+        // ── Oura Ring endpoints ─────────────────────────────────────────
+        .route("/oura/sync",           post(oura_sync_post))
+        .route("/oura/status",         get(oura_status_get))
+        .route("/v1/oura/sync",        post(oura_sync_post))
+        .route("/v1/oura/status",      get(oura_status_get))
+
         // ── Calendar endpoints ──────────────────────────────────────────
         .route("/calendar/events",     post(calendar_events_post))
         .route("/calendar/status",     get(calendar_status_get))
@@ -2117,6 +2123,26 @@ async fn health_metric_types_get(
         Some(&addr.0),
     )
     .await
+}
+
+// ── Oura Ring HTTP handlers ───────────────────────────────────────────────────
+
+/// `POST /v1/oura/sync` — fetch Oura Ring data for a date range.
+///
+/// ```json
+/// { "start_date": "2026-03-01", "end_date": "2026-03-28" }
+/// ```
+async fn oura_sync_post(
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    cmd_with_addr(&s, &peer_str(addr), "oura_sync", body, Some(&addr.0)).await
+}
+
+/// `GET /v1/oura/status` — check Oura token and connectivity.
+async fn oura_status_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
+    cmd_with_addr(&s, &peer_str(addr), "oura_status", json!({}), Some(&addr.0)).await
 }
 
 // ── Calendar HTTP handlers ────────────────────────────────────────────────────

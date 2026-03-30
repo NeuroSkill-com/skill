@@ -8,6 +8,10 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+### Features
+
+- **Oura Ring V2 integration**: New `skill-oura` crate fetches sleep, activity, readiness, heart rate, SpO2, workouts, and mindfulness data from the Oura Cloud API and stores it in the unified `health.sqlite` pipeline alongside Apple HealthKit data. Includes `oura_sync` and `oura_status` WS/HTTP commands, CLI `oura` command with `sync` and `status` subcommands, REST endpoints (`/v1/oura/sync`, `/v1/oura/status`), token management via system keychain, Settings UI with token input + Sync Now button, history view health overlay card showing Oura sleep/readiness/activity scores, 11 Rust tests with full round-trip integration test, E2E tests in test.ts, i18n in 6 languages, supported devices catalog entry, and comprehensive SKILL.md documentation.
+
 ## [0.0.75] — 2026-03-29
 
 ### Features

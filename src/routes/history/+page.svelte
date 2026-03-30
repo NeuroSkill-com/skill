@@ -161,6 +161,118 @@ let sleepCache = $state<Record<string, SleepStages | "loading" | "short">>({});
 let metricsCache = $state<Record<string, SessionMetrics | "loading" | "none">>({});
 let tsCache = $state<Record<string, EpochRow[] | "loading">>({});
 
+// ── Health / Oura data overlay ───────────────────────────────────────────
+interface HealthDaySummary {
+  sleep_samples: number;
+  workouts: number;
+  heart_rate_samples: number;
+  total_steps: number;
+  mindfulness_sessions: number;
+  metric_entries: number;
+  oura_sleep_score?: number;
+  oura_readiness_score?: number;
+  oura_activity_score?: number;
+}
+let healthCache = $state<Record<string, HealthDaySummary | "loading" | "none">>({});
+let healthApiPort = $state<number | null>(null);
+
+/** Fetch JSON from the local HTTP API.  Returns null on any error. */
+async function healthFetch(path: string, body: Record<string, unknown>): Promise<any> {
+  if (!healthApiPort) {
+    try {
+      healthApiPort = await invoke<number>("get_ws_port");
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const resp = await fetch(`http://127.0.0.1:${healthApiPort}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return null;
+    const ct = resp.headers.get("content-type") ?? "";
+    if (!ct.includes("json")) return null;
+    return await resp.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+async function loadHealthForDay(localKey: string) {
+  if (localKey in healthCache) return;
+  healthCache[localKey] = "loading";
+  try {
+    const { startSec, endSec } = localDayBounds(localKey);
+    const summary: any = await healthFetch("/v1/health/summary", { start_utc: startSec, end_utc: endSec });
+    if (!summary) {
+      healthCache[localKey] = "none";
+      return;
+    }
+    const total =
+      (summary.sleep_samples ?? 0) +
+      (summary.workouts ?? 0) +
+      (summary.heart_rate_samples ?? 0) +
+      (summary.total_steps ?? 0) +
+      (summary.mindfulness_sessions ?? 0) +
+      (summary.metric_entries ?? 0);
+    if (total === 0) {
+      healthCache[localKey] = "none";
+      return;
+    }
+    // Try to fetch key Oura scores
+    let oura_sleep_score: number | undefined;
+    let oura_readiness_score: number | undefined;
+    let oura_activity_score: number | undefined;
+    try {
+      const r: any = await healthFetch("/v1/health/query", {
+        type: "metrics",
+        metric_type: "oura_sleep_score",
+        start_utc: startSec,
+        end_utc: endSec,
+        limit: 1,
+      });
+      if (r?.results?.[0]?.value) oura_sleep_score = r.results[0].value;
+    } catch {}
+    try {
+      const r: any = await healthFetch("/v1/health/query", {
+        type: "metrics",
+        metric_type: "oura_readiness_score",
+        start_utc: startSec,
+        end_utc: endSec,
+        limit: 1,
+      });
+      if (r?.results?.[0]?.value) oura_readiness_score = r.results[0].value;
+    } catch {}
+    try {
+      const r: any = await healthFetch("/v1/health/query", {
+        type: "metrics",
+        metric_type: "oura_activity_score",
+        start_utc: startSec,
+        end_utc: endSec,
+        limit: 1,
+      });
+      if (r?.results?.[0]?.value) oura_activity_score = r.results[0].value;
+    } catch {}
+    healthCache[localKey] = {
+      ...(summary as HealthDaySummary),
+      oura_sleep_score,
+      oura_readiness_score,
+      oura_activity_score,
+    };
+  } catch {
+    healthCache[localKey] = "none";
+  }
+}
+
+function getHealthData(localKey: string): HealthDaySummary | null {
+  const v = healthCache[localKey];
+  if (!v || v === "loading" || v === "none") return null;
+  return v as HealthDaySummary;
+}
+
 /** Accumulates every SessionEntry we've ever fetched (current day + prefetched
  *  adjacent days).  Lets runMetrics / loadSleep look up timestamps for any
  *  session regardless of which day is currently displayed.              */
@@ -452,10 +564,11 @@ async function loadDay(idx: number) {
     if (loadSeq === seq) dayLoading = false;
   }
 
-  // ③ Load screenshots + calendar events for the day.
+  // ③ Load screenshots + calendar events + health data for the day.
   const { startSec } = localDayBounds(localKey);
   void loadDayScreenshots(startSec);
   void loadDayCalendarEvents(startSec);
+  void loadHealthForDay(localKey);
 
   // ④ Speculatively warm adjacent days so the next navigation is instant.
   setTimeout(() => {
@@ -1613,6 +1726,80 @@ useWindowTitle("window.title.history");
               {/if}
               <div class="flex items-center gap-1 ml-auto">
                 <span class="text-muted-foreground/40">{sessions.length} sessions</span>
+              </div>
+            </div>
+          {/if}
+
+          <!-- #11: Health / Oura Ring daily overlay card -->
+          {#if currentLocalKey && getHealthData(currentLocalKey)}
+            {@const hd = getHealthData(currentLocalKey)!}
+            <div class="rounded-lg border border-border/50 dark:border-white/[0.06]
+                        bg-muted/20 dark:bg-white/[0.01] px-3 py-2.5
+                        flex flex-col gap-1.5">
+              <div class="flex items-center gap-1.5">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     class="w-3 h-3 text-rose-500/70">
+                  <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                </svg>
+                <span class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground/60">
+                  Health
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.55rem]">
+                {#if hd.oura_sleep_score != null}
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-500/70"></span>
+                    <span class="text-muted-foreground/50">Sleep:</span>
+                    <span class="font-semibold tabular-nums">{Math.round(hd.oura_sleep_score)}</span>
+                  </div>
+                {/if}
+                {#if hd.oura_readiness_score != null}
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/70"></span>
+                    <span class="text-muted-foreground/50">Readiness:</span>
+                    <span class="font-semibold tabular-nums">{Math.round(hd.oura_readiness_score)}</span>
+                  </div>
+                {/if}
+                {#if hd.oura_activity_score != null}
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500/70"></span>
+                    <span class="text-muted-foreground/50">Activity:</span>
+                    <span class="font-semibold tabular-nums">{Math.round(hd.oura_activity_score)}</span>
+                  </div>
+                {/if}
+                {#if hd.total_steps > 0}
+                  <div class="flex items-center gap-1">
+                    <span class="text-muted-foreground/50">Steps:</span>
+                    <span class="font-semibold tabular-nums">{hd.total_steps.toLocaleString()}</span>
+                  </div>
+                {/if}
+                {#if hd.heart_rate_samples > 0}
+                  <div class="flex items-center gap-1">
+                    <span class="text-muted-foreground/50">HR:</span>
+                    <span class="font-semibold tabular-nums">{hd.heart_rate_samples.toLocaleString()}</span>
+                    <span class="text-muted-foreground/40">samples</span>
+                  </div>
+                {/if}
+                {#if hd.sleep_samples > 0}
+                  <div class="flex items-center gap-1">
+                    <span class="text-muted-foreground/50">Sleep:</span>
+                    <span class="font-semibold tabular-nums">{hd.sleep_samples}</span>
+                    <span class="text-muted-foreground/40">samples</span>
+                  </div>
+                {/if}
+                {#if hd.workouts > 0}
+                  <div class="flex items-center gap-1">
+                    <span class="text-muted-foreground/50">Workouts:</span>
+                    <span class="font-semibold tabular-nums">{hd.workouts}</span>
+                  </div>
+                {/if}
+                {#if hd.mindfulness_sessions > 0}
+                  <div class="flex items-center gap-1">
+                    <span class="text-muted-foreground/50">Mindfulness:</span>
+                    <span class="font-semibold tabular-nums">{hd.mindfulness_sessions}</span>
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}

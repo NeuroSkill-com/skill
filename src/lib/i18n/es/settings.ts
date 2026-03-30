@@ -143,6 +143,16 @@ const settings: Record<string, string> = {
   "settings.deviceApi.idunTitle": "Nube IDUN",
   "settings.deviceApi.idunDesc": "Token opcional para las funciones de decodificación en la nube IDUN.",
   "settings.deviceApi.idunDashboard": "Obtenga el token API desde el panel de IDUN",
+  "settings.deviceApi.ouraTitle": "Oura Ring",
+  "settings.deviceApi.ouraDesc":
+    "Token de acceso personal para sincronizar datos de sueño, actividad, preparación, frecuencia cardíaca y SpO2 desde la API Cloud Oura Ring V2.",
+  "settings.deviceApi.ouraDashboard": "Obtener token desde el portal de desarrolladores de Oura",
+  "settings.deviceApi.ouraAccessToken": "Token de acceso",
+  "settings.deviceApi.ouraSyncBtn": "Sincronizar ahora",
+  "settings.deviceApi.ouraSyncing": "Sincronizando…",
+  "settings.deviceApi.ouraSynced": "¡Sincronizado!",
+  "settings.deviceApi.ouraSyncDesc":
+    "Obtener los últimos 30 días de datos del Oura Ring y almacenarlos en la base de datos de salud.",
   "settings.deviceApi.clientId": "ID de cliente",
   "settings.deviceApi.clientSecret": "Secreto del cliente",
   "settings.deviceApi.apiToken": "Token de API",

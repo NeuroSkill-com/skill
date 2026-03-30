@@ -25,6 +25,7 @@ pub mod gpu_stats;
 pub mod health_store;
 pub mod hooks_log;
 pub mod label_store;
+pub mod oura_sync;
 pub mod ppg_analysis;
 pub mod screenshot_store;
 pub mod session_csv;

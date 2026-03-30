@@ -197,6 +197,8 @@ skill-headless = { path = "../crates/skill-headless" }
 skill-eeg  = { path = "../crates/skill-eeg", features = ["gpu"] }
 skill-tts  = { path = "../crates/skill-tts" }
 skill-data      = { path = "../crates/skill-data" }
+skill-oura      = { path = "../crates/skill-oura" }
+oura-api        = "0.1.2"
 
 # Arrow / Parquet — used for reading EEG session files during re-embed.
 parquet     = { version = "58", default-features = false, features = ["arrow"] }
