@@ -145,20 +145,6 @@ jobs:
         uses: ./.github/actions/setup-vulkan-linux
 
       # ── espeak-ng static library ──────────────────────────────────────────────
-      # Cache keyed on the build script; a script change busts the cache.
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: |
-            src-tauri/espeak-static
-            src-tauri/resources/espeak-ng-data
-          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
-
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
         run: npm run build
@@ -192,7 +178,6 @@ jobs:
       #   (covers NVIDIA, AMD, Intel Arc without vendor-specific SDKs).
       - name: Compile (frontend + Rust)
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
@@ -220,12 +205,10 @@ jobs:
 
       - name: Build Linux deb/rpm via system tools
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
 
       - name: Build Linux portable tarball
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: bash scripts/package-linux-dist.sh --target x86_64-unknown-linux-gnu --skip-build
 
       # ── Post-build sanity check ─────────────────────────────────────────────

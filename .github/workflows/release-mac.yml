@@ -142,18 +142,6 @@ jobs:
           echo "✓ Notarization credentials are valid."
 
       # ── espeak-ng static library ──────────────────────────────────────────────
-      # Cache keyed on the build script itself; a script change busts the cache.
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: src-tauri/espeak-static
-          key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: ESPEAK_ARCHS=arm64 bash scripts/build-espeak-static.sh
-
       # ── Apple Developer certificate → temporary keychain ─────────────────────
       #
       # Secrets required:
@@ -220,7 +208,6 @@ jobs:
       # bypass the CLI here to avoid its post-compilation SIGILL.
       - name: Compile (frontend + Rust)
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
           # Let sccache cache C/C++ compilations from cmake-based -sys crates
           # (llama-cpp-sys, espeak-ng, etc.).  Without these, only rustc
@@ -299,8 +286,6 @@ jobs:
           fi
 
           # Resources declared in tauri.conf.json (paths relative to src-tauri/)
-          cp -R "src-tauri/resources/espeak-ng-data" \
-                "$APP_BUNDLE/Contents/Resources/"
           cp -R "src-tauri/resources/neutts-samples" \
                 "$APP_BUNDLE/Contents/Resources/"
 
