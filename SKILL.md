@@ -2436,7 +2436,8 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 Query and manage Apple HealthKit data synced from the iOS companion app.
 Data is stored in `~/.skill/health.sqlite` and covers sleep analysis, workouts,
-heart rate, step counts, mindfulness sessions, and arbitrary scalar health metrics.
+heart rate, step counts, mindfulness sessions, arbitrary scalar health metrics,
+and GPS location fixes recorded by CoreLocation.
 
 **Subcommands:**
 
@@ -2449,6 +2450,7 @@ heart rate, step counts, mindfulness sessions, and arbitrary scalar health metri
 | `health steps` | Query step count aggregates |
 | `health metrics --metric-type <t>` | Query scalar health metrics (restingHeartRate, hrv, vo2Max, …) |
 | `health metric-types` | List all distinct metric types stored in the database |
+| `health location` | Query GPS fixes from CoreLocation (lat, lon, altitude, accuracy, speed) |
 | `health sync '<json>'` | Push HealthKit data from the iOS companion app |
 
 **Options (apply to query subcommands):**
@@ -2489,6 +2491,12 @@ node cli.ts health metrics --metric-type hrv --json | jq '.results[].value'
 # List available metric types:
 node cli.ts health metric-types
 
+# GPS location fixes:
+node cli.ts health location
+node cli.ts health location --limit 50
+node cli.ts health location --json | jq '.results[] | {lat:.latitude,lon:.longitude,ts:.timestamp}'
+node cli.ts health location --start 1740000000 --end 1740086400 --json
+
 # Sync data from iOS companion:
 node cli.ts health sync '{"steps":[{"start_utc":1740000000,"end_utc":1740086400,"count":9500}]}'
 ```
@@ -2515,6 +2523,11 @@ curl -s -X POST http://127.0.0.1:8375/v1/health/query \
 # List metric types:
 curl -s http://127.0.0.1:8375/v1/health/metric_types | jq '.metric_types'
 
+# GPS location fixes:
+curl -s -X POST http://127.0.0.1:8375/v1/health/query \
+  -H "Content-Type: application/json" \
+  -d '{"type":"location","start_utc":1740000000,"end_utc":1740086400,"limit":100}'
+
 # Sync from iOS:
 curl -s -X POST http://127.0.0.1:8375/v1/health/sync \
   -H "Content-Type: application/json" \
@@ -2525,7 +2538,9 @@ curl -s -X POST http://127.0.0.1:8375/v1/health/sync \
     "heart_rate": [{"timestamp":1740030000,"bpm":72.0,"context":"sedentary"}],
     "steps": [{"start_utc":1740000000,"end_utc":1740086400,"count":9500}],
     "mindfulness": [{"start_utc":1740040000,"end_utc":1740041200}],
-    "metrics": [{"metric_type":"restingHeartRate","timestamp":1740000000,"value":58.0,"unit":"bpm"}]
+    "metrics": [{"metric_type":"restingHeartRate","timestamp":1740000000,"value":58.0,"unit":"bpm"}],
+    "location": [{"source_id":"iphone","timestamp":1740030000,"latitude":37.3317,"longitude":-122.0307,
+                   "altitude":25.0,"horizontal_accuracy":5.0,"speed":1.4,"course":270.0}]
   }'
 ```
 
@@ -2540,6 +2555,18 @@ curl -s -X POST http://127.0.0.1:8375/v1/health/sync \
     total steps    9500
     mindfulness       1 sessions
     metrics          24 entries
+    location fixes  312
+```
+
+**Example output (location):**
+```
+⚡ health location  last 24h  limit: 100
+
+  type: location  count: 3
+
+  37.33170, -122.03070  alt 25m  ±5m  1.4 km/h  [iphone]  3/29/2026, 10:30:00 AM
+  37.33251, -122.03140  alt 24m  ±8m  0.0 km/h  [iphone]  3/29/2026, 10:25:00 AM
+  37.33089, -122.02980  alt 26m  ±6m  4.2 km/h  [iphone]  3/29/2026, 10:20:00 AM
 ```
 
 **Example output (workouts):**
