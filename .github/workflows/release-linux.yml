@@ -204,11 +204,9 @@ jobs:
           retention-days: 30
 
       - name: Build Linux deb/rpm via system tools
-        env:
         run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
 
       - name: Build Linux portable tarball
-        env:
         run: bash scripts/package-linux-dist.sh --target x86_64-unknown-linux-gnu --skip-build
 
       # ── Post-build sanity check ─────────────────────────────────────────────
