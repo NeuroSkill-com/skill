@@ -70,6 +70,9 @@ mod ip_fallback_stub;
 
 pub use types::*;
 
+#[cfg(test)]
+mod tests;
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Return the current location authorisation status.

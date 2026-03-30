@@ -44,33 +44,60 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
     tokio::task::spawn_blocking(move || {
         use super::helpers::retry_with_backoff;
 
-        let result = retry_with_backoff(max_retries, base_delay, || {
-            let agent: ureq::Agent = ureq::Agent::config_builder()
-                .timeout_connect(Some(std::time::Duration::from_secs(2)))
-                .timeout_recv_body(Some(std::time::Duration::from_secs(3)))
-                .build()
-                .into();
-            let resp = agent.get("https://ipwho.is/").call();
-            match resp {
-                Ok(r) => {
-                    let v: Value = r.into_body().read_json::<Value>().unwrap_or_else(|_| json!({}));
-                    Ok(json!({
-                        "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
-                        "tool": "location",
-                        "country": v.get("country").cloned().unwrap_or(Value::Null),
-                        "region": v.get("region").cloned().unwrap_or(Value::Null),
-                        "city": v.get("city").cloned().unwrap_or(Value::Null),
-                        "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
-                        "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
-                        "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
-                        "ip": v.get("ip").cloned().unwrap_or(Value::Null),
-                    }))
-                }
-                Err(ureq::Error::StatusCode(code)) if code == 429 || (500..600).contains(&code) => {
-                    Err(format!("HTTP {}", code))
-                }
-                Err(e) => Err(e.to_string()),
+        // Try skill-location first (CoreLocation on macOS, IP fallback elsewhere).
+        // Then enrich with IP geolocation metadata (country/city/timezone) which
+        // CoreLocation doesn't provide.
+        let result: Result<Value, String> = retry_with_backoff(max_retries, base_delay, || {
+            let fix = skill_location::fetch_location(10.0)
+                .map_err(|e| e.to_string())?;
+
+            // On macOS we got a precise fix but no geo metadata — fetch IP
+            // location too for country/city/timezone if the primary source
+            // was CoreLocation.
+            let (country, region, city, timezone, ip) =
+                if fix.source == skill_location::LocationSource::CoreLocation {
+                    match skill_location::fetch_ip_location() {
+                        Ok(ip_fix) => (
+                            ip_fix.country.map(Value::String).unwrap_or(Value::Null),
+                            ip_fix.region.map(Value::String).unwrap_or(Value::Null),
+                            ip_fix.city.map(Value::String).unwrap_or(Value::Null),
+                            ip_fix.timezone.map(Value::String).unwrap_or(Value::Null),
+                            Value::Null,
+                        ),
+                        Err(_) => (Value::Null, Value::Null, Value::Null, Value::Null, Value::Null),
+                    }
+                } else {
+                    (
+                        fix.country.clone().map(Value::String).unwrap_or(Value::Null),
+                        fix.region.clone().map(Value::String).unwrap_or(Value::Null),
+                        fix.city.clone().map(Value::String).unwrap_or(Value::Null),
+                        fix.timezone.clone().map(Value::String).unwrap_or(Value::Null),
+                        Value::Null,
+                    )
+                };
+
+            let mut result = json!({
+                "ok": true,
+                "tool": "location",
+                "source": format!("{:?}", fix.source),
+                "lat": fix.latitude,
+                "lon": fix.longitude,
+                "country": country,
+                "region": region,
+                "city": city,
+                "timezone": timezone,
+                "ip": ip,
+            });
+
+            // Include accuracy fields when available (CoreLocation)
+            if let Some(h) = fix.horizontal_accuracy {
+                result["horizontal_accuracy_m"] = json!(h);
             }
+            if let Some(alt) = fix.altitude {
+                result["altitude_m"] = json!(alt);
+            }
+
+            Ok(result)
         });
 
         match result {

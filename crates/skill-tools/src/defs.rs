@@ -25,7 +25,7 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
             tool_type: "function".into(),
             function: ToolFunction {
                 name: "location".into(),
-                description: Some("Get an approximate public-IP location snapshot (country/region/city/timezone).".into()),
+                description: Some("Get the current location. On macOS uses CoreLocation (GPS/Wi-Fi) for high accuracy; on other platforms uses IP geolocation (city-level). Returns lat/lon, country, region, city, timezone.".into()),
                 parameters: Some(json!({
                     "type": "object",
                     "properties": {},
