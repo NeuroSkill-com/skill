@@ -264,6 +264,28 @@
       "paper": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/4540d267eeec4e5dbd9dae9448f0b739-Abstract-Conference.html",
       "doi": "10.52202/079017-1239"
     },
+    "tribev2": {
+      "name": "TRIBE v2",
+      "description": "Meta AI's multimodal fMRI brain encoding foundation model (177M params, hidden=1152). Predicts cortical fMRI responses to naturalistic stimuli from video, audio, and text. Combines LLaMA 3.2-3B (text), V-JEPA2 (video), and Wav2Vec-BERT (audio) features through an 8-layer 8-head Transformer encoder mapped onto the fsaverage5 cortical surface (~20,484 vertices). Pretrained on 4 fMRI datasets: Algonauts2025, Lahner2024, Lebel2023, Wen2017. d'Ascoli et al., 2026.",
+      "repo": "facebook/tribev2",
+      "tags": [
+        "fmri",
+        "brain-encoding",
+        "multimodal",
+        "video",
+        "audio",
+        "text",
+        "cortical",
+        "large"
+      ],
+      "weights_file": "best.ckpt",
+      "config_file": "config.yaml",
+      "params_m": 177,
+      "embed_dim": 1152,
+      "paper": "https://arxiv.org/abs/2503.18013",
+      "doi": "10.48550/arXiv.2503.18013",
+      "preview_image": "https://raw.githubusercontent.com/eugenehp/tribev2-rs/HEAD/figures/brain_coolwarm.png"
+    },
     "cbramod": {
       "name": "CBraMod",
       "description": "Criss-Cross Brain Foundation Model (~4M params, d_model=200). Uses criss-cross attention to separately model spatial (channel) and temporal (patch) dependencies. Pretrained on Temple University Hospital EEG Corpus via masked patch reconstruction. ICLR 2025.",
@@ -375,6 +397,13 @@
       "filename": "model.safetensors",
       "size_mb": 400,
       "description": "SensorLM — sensor-language model, wearable multimodal (PPG+accel+EDA+temp+gyro) + text",
+      "recommended": true
+    },
+    {
+      "family": "tribev2",
+      "filename": "best.ckpt",
+      "size_mb": 676,
+      "description": "TRIBE v2 pretrained checkpoint — requires safetensors conversion before Rust inference (see eugenehp/tribev2-rs)",
       "recommended": true
     },
     {
