@@ -7,7 +7,7 @@
  */
 
 import type { EpochRow } from "$lib/dashboard/SessionDetail.svelte";
-import { dateToLocalKey, fmtTimeShort, fromUnix, pad } from "$lib/format";
+import { fmtTimeShort, fromUnix, pad } from "$lib/format";
 import type { LabelRow } from "$lib/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -165,54 +165,10 @@ export function dayPct(utc: number, dayStart: number): number {
 
 // ── Local-day helpers ────────────────────────────────────────────────────────
 
-/** Convert a UTC Unix-seconds value to its UTC YYYYMMDD directory name. */
-export function secToUtcDir(sec: number): string {
-  const d = new Date(sec * 1000);
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
-}
-
-/** Local [midnight, nextMidnight) in Unix seconds for a YYYY-MM-DD local key. */
-export function localDayBounds(localKey: string): { startSec: number; endSec: number } {
-  const [y, mo, d] = localKey.split("-").map(Number);
-  const startDate = new Date(y, mo - 1, d, 0, 0, 0);
-  const startSec = Math.floor(startDate.getTime() / 1000);
-  const nextDate = new Date(y, mo - 1, d + 1, 0, 0, 0);
-  const endSec = Math.floor(nextDate.getTime() / 1000);
-  return { startSec, endSec };
-}
-
-/**
- * Build a sorted (newest-first) list of unique LOCAL YYYY-MM-DD day keys
- * from the raw UTC-based YYYYMMDD directory names.
- */
-export function buildLocalDays(utcDirs: string[], sessionStore: Map<string, SessionEntry[]>): string[] {
-  const localSet = new Set<string>();
-
-  // 1) For each session we have already loaded, derive the local key from its
-  //    session_start_utc. This gives a precise mapping.
-  for (const [, entries] of sessionStore) {
-    for (const s of entries) {
-      if (s.session_start_utc) {
-        localSet.add(dateToLocalKey(fromUnix(s.session_start_utc)));
-      }
-    }
-  }
-
-  // 2) For any UTC dir we haven't loaded yet, approximate by converting the
-  //    dir name to a date and applying the local timezone offset.
-  for (const dir of utcDirs) {
-    const y = +dir.slice(0, 4),
-      mo = +dir.slice(4, 6),
-      d = +dir.slice(6, 8);
-    const utcNoon = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
-    const localKey = dateToLocalKey(utcNoon);
-    localSet.add(localKey);
-    // Also add the previous local day — a late-night session in UTC may belong
-    // to the previous calendar day locally.
-    const prevDate = new Date(utcNoon);
-    prevDate.setDate(prevDate.getDate() - 1);
-    localSet.add(dateToLocalKey(prevDate));
-  }
-
-  return [...localSet].sort().reverse();
-}
+// NOTE: secToUtcDir, localDayBounds, and buildLocalDays have been moved to
+// the Rust `skill-history` crate (local_days.rs) as the single source of
+// truth.  The frontend now calls `list_local_session_days` and
+// `list_sessions_for_local_day` IPC commands instead.
+//
+// See crates/skill-history/src/local_days.rs for the canonical implementation
+// and its comprehensive test suite.

@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import {
   assignLabelRainbowColors,
-  buildLocalDays,
   dateKey,
   dayPct,
   fmtDuration,
@@ -14,9 +13,7 @@ import {
   LABEL_PROXIMITY_SECS,
   labelRelations,
   labelsForDay,
-  localDayBounds,
   type SessionEntry,
-  secToUtcDir,
   totalDurationSecs,
 } from "$lib/history-helpers";
 import type { LabelRow } from "$lib/types";
@@ -195,54 +192,10 @@ describe("dayPct", () => {
   it("clamps above 100", () => expect(dayPct(1000 + 90000, 1000)).toBe(100));
 });
 
-// ── secToUtcDir ───────────────────────────────────────────────────────────────
-
-describe("secToUtcDir", () => {
-  it("epoch → '19700101'", () => expect(secToUtcDir(0)).toBe("19700101"));
-  it("known date", () => {
-    // 2023-11-14 22:13:20 UTC = 1700000000
-    expect(secToUtcDir(1700000000)).toBe("20231114");
-  });
-});
-
-// ── localDayBounds ────────────────────────────────────────────────────────────
-
-describe("localDayBounds", () => {
-  it("returns startSec < endSec", () => {
-    const { startSec, endSec } = localDayBounds("2026-03-15");
-    expect(endSec - startSec).toBe(86400);
-  });
-  it("start is midnight local", () => {
-    const { startSec } = localDayBounds("2026-03-15");
-    const d = new Date(startSec * 1000);
-    expect(d.getHours()).toBe(0);
-    expect(d.getMinutes()).toBe(0);
-  });
-});
-
-// ── buildLocalDays ────────────────────────────────────────────────────────────
-
-describe("buildLocalDays", () => {
-  it("empty input → empty output", () => {
-    expect(buildLocalDays([], new Map())).toEqual([]);
-  });
-  it("converts UTC dirs to local day keys (sorted newest first)", () => {
-    const dirs = ["20260315", "20260316"];
-    const result = buildLocalDays(dirs, new Map());
-    expect(result.length).toBeGreaterThanOrEqual(2);
-    // Should be sorted descending
-    for (let i = 1; i < result.length; i++) {
-      expect(result[i - 1] >= result[i]).toBe(true);
-    }
-  });
-  it("uses session_start_utc when available", () => {
-    const s = session({ session_start_utc: 1700000000 });
-    const store = new Map<string, SessionEntry[]>();
-    store.set("2023-11-14", [s]);
-    const result = buildLocalDays([], store);
-    expect(result.length).toBeGreaterThanOrEqual(1);
-  });
-});
+// NOTE: secToUtcDir, localDayBounds, and buildLocalDays tests have been
+// moved to the Rust crate `skill-history` (crates/skill-history/src/local_days.rs)
+// which is now the single source of truth for all timezone/day-boundary logic.
+// Run them with: cargo test -p skill-history -- local_days
 
 // ── dateKey ───────────────────────────────────────────────────────────────────
 

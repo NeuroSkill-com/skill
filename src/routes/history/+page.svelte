@@ -60,10 +60,8 @@ import {
   LABEL_PROXIMITY_SECS,
   labelRelations,
   labelsForDay,
-  localDayBounds,
   SESSION_COLORS,
   type SessionEntry,
-  secToUtcDir,
   sessionColor,
   totalDurationSecs,
 } from "$lib/history-helpers";
@@ -74,8 +72,17 @@ import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { LabelRow, SleepStages } from "$lib/types";
 
 // ── Pagination state ────────────────────────────────────────────────────
-/** All recording day keys (YYYYMMDD UTC), newest first - used only for fetching. */
-let allUtcDays = $state<string[]>([]);
+/** The client's timezone offset in seconds east of UTC.
+ *  Passed to every Rust IPC call so all day-boundary logic lives in one place. */
+const tzOffsetSecs = new Date().getTimezoneOffset() * -60;
+
+/** Local day info returned from Rust - single source of truth. */
+interface LocalDayInfo {
+  key: string;
+  start_utc: number;
+  end_utc: number;
+}
+let allLocalDays = $state<LocalDayInfo[]>([]);
 let currentDayIdx = $state(0);
 let dayLoading = $state(false);
 let daysLoading = $state(true);
@@ -162,7 +169,7 @@ function writeMetricsCache(csvPath: string, result: CsvMetricsResult) {
 let sleepCache = $state<Record<string, SleepStages | "loading" | "short">>({});
 let metricsCache = $state<Record<string, SessionMetrics | "loading" | "none">>({});
 let tsCache = $state<Record<string, EpochRow[] | "loading">>({});
-/** GPS track per csv_path — "loading" while IPC is in flight; [] when no data. */
+/** GPS track per csv_path - "loading" while IPC is in flight; [] when no data. */
 let locationCache = $state<Record<string, GpsPoint[] | "loading">>({});
 /** HNSW+SQLite epoch count per csv_path. */
 let embedCountCache = $state<Record<string, number | "loading">>({});
@@ -207,11 +214,18 @@ async function healthFetch(path: string, body: Record<string, unknown>): Promise
   }
 }
 
+/** Look up pre-computed UTC bounds for a local day key.
+ *  Returns { startSec, endSec } or { startSec: 0, endSec: 0 } if not found. */
+function dayBoundsFor(localKey: string): { startSec: number; endSec: number } {
+  const info = allLocalDays.find((d) => d.key === localKey);
+  return info ? { startSec: info.start_utc, endSec: info.end_utc } : { startSec: 0, endSec: 0 };
+}
+
 async function loadHealthForDay(localKey: string) {
   if (localKey in healthCache) return;
   healthCache[localKey] = "loading";
   try {
-    const { startSec, endSec } = localDayBounds(localKey);
+    const { startSec, endSec } = dayBoundsFor(localKey);
     // biome-ignore lint/suspicious/noExplicitAny: opaque health API response
     const summary = (await healthFetch("/v1/health/summary", { start_utc: startSec, end_utc: endSec })) as any;
     if (!summary) {
@@ -438,83 +452,19 @@ async function loadEmbedCount(csvPath: string) {
 // ── Local-day helpers ────────────────────────────────────────────────────
 /** Convert a UTC Unix-seconds value to its UTC YYYYMMDD directory name. */
 
-/** Build a sorted (newest-first) list of unique LOCAL YYYY-MM-DD day keys
- *  from the UTC YYYYMMDD directory names.
- *
- *  Each UTC dir covers 00:00-23:59:59 UTC.  Depending on the local
- *  timezone offset that window may straddle two local calendar days, so we
- *  emit both endpoints and de-duplicate.
- *
- *  We cap at today's local date: a UTC dir whose *end* converts to a local
- *  day that hasn't started yet (e.g. UTC Mar 2 00:00 = local Mar 1 19:00 in
- *  EST) must not generate a future "Mar 2" tab - no sessions can be recorded
- *  there yet and it would become the default first page with 0 sessions. */
-function buildLocalDays(utcDirs: string[]): string[] {
-  const today = dateKey(Date.now() / 1000); // local today as YYYY-MM-DD
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const dir of utcDirs) {
-    const startUtc = Date.UTC(+dir.slice(0, 4), +dir.slice(4, 6) - 1, +dir.slice(6, 8)) / 1000;
-    const endUtc = startUtc + 86400 - 1;
-    for (const lk of [dateKey(startUtc), dateKey(endUtc)]) {
-      if (!seen.has(lk) && lk <= today) {
-        seen.add(lk);
-        result.push(lk);
-      }
-    }
-  }
-  result.sort((a, b) => b.localeCompare(a)); // newest first
-  return result;
-}
-
 // ── Day navigation ──────────────────────────────────────────────────────
 /** Monotonically increasing counter - incremented on every loadDay call so
  *  that stale responses from rapid navigation are silently discarded.    */
 let loadSeq = 0;
 
-/** Fetch sessions for a local day key and return the filtered list.
- *  Pure data function - touches no reactive state.                    */
+/** Fetch sessions for a local day key.
+ *  All UTC→local conversion, directory fan-out, de-duplication, and timestamp
+ *  filtering now happens in the Rust crate (single source of truth).        */
 async function fetchDaySessions(localKey: string): Promise<SessionEntry[]> {
-  const { startSec, endSec } = localDayBounds(localKey);
-  const dir1 = secToUtcDir(startSec);
-  const dir2 = secToUtcDir(endSec - 1);
-  const dirsToFetch = [...new Set([dir1, dir2])];
-
-  // Fetch all overlapping UTC dirs in parallel.
-  const results = await Promise.allSettled(
-    dirsToFetch.map((dir) => invoke<SessionEntry[]>("list_sessions_for_day", { day: dir })),
-  );
-
-  const seen = new Set<string>();
-  const merged: SessionEntry[] = [];
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue;
-    for (const s of r.value) {
-      if (seen.has(s.csv_path)) continue;
-      seen.add(s.csv_path);
-      merged.push(s);
-    }
-  }
-
-  // Keep only sessions whose start time falls within the local calendar day.
-  // Prefer session_start_utc for the comparison; fall back to session_end_utc only
-  // when start is absent (genuinely orphaned CSV whose timestamp couldn't be parsed).
-  // Sessions that have neither timestamp are excluded - they are corrupt/empty entries.
-  const { startSec: s0, endSec: s1 } = localDayBounds(localKey);
-  const filtered = merged.filter((s) => {
-    const t = s.session_start_utc ?? s.session_end_utc;
-    if (!t) return false; // no usable timestamp - exclude rather than show a ghost row
-    return t >= s0 && t < s1;
+  return invoke<SessionEntry[]>("list_sessions_for_local_day", {
+    localKey,
+    tzOffsetSecs: tzOffsetSecs,
   });
-
-  // Sort most-recent sessions first so the list reads newest → oldest.
-  filtered.sort((a, b) => {
-    const ta = a.session_start_utc ?? a.session_end_utc ?? 0;
-    const tb = b.session_start_utc ?? b.session_end_utc ?? 0;
-    return tb - ta;
-  });
-
-  return filtered;
 }
 
 /** Warm the localStorage + metrics caches for a day without touching any
@@ -613,7 +563,7 @@ async function loadDay(idx: number) {
   }
 
   // 3 Load screenshots + calendar events + health data for the day.
-  const { startSec } = localDayBounds(localKey);
+  const { startSec } = dayBoundsFor(localKey);
   void loadDayScreenshots(startSec);
   void loadDayCalendarEvents(startSec);
   void loadHealthForDay(localKey);
@@ -757,8 +707,8 @@ const filteredLabels = $derived.by(() => {
 /** Start in day view so the session list is visible immediately.
  *  Users can switch to month/week/year from the title-bar buttons. */
 let viewMode = $state<HistoryViewMode>("day");
-/** Anchor date for calendar navigation - updated to the most recent
- *  session date once allUtcDays has been loaded, so switching to the
+/** Anchor date for calendar navigation — updated to the most recent
+ *  session date once allLocalDays has been loaded, so switching to the
  *  month/year calendar always lands on a populated period. */
 let calendarAnchor = $state(new Date());
 
@@ -1216,10 +1166,9 @@ const timelineSessions = $derived.by(() =>
 
 // ── Derived stats ────────────────────────────────────────────────────────
 
-/** Sorted (newest-first) list of unique LOCAL YYYY-MM-DD day keys.
- *  Built from the raw UTC dirs by expanding each UTC dir to the local
- *  calendar days it overlaps (can be 1 or 2 depending on timezone offset). */
-const localDays = $derived(buildLocalDays(allUtcDays));
+/** Sorted (newest-first) list of local YYYY-MM-DD day keys.
+ *  Computed once from the Rust-supplied `allLocalDays`. */
+const localDays = $derived(allLocalDays.map((d) => d.key));
 
 /** The currently displayed local day key (YYYY-MM-DD). */
 const currentLocalKey = $derived(localDays[currentDayIdx] ?? null);
@@ -1230,7 +1179,7 @@ const currentDayKey = $derived(currentLocalKey ?? "");
 /** Local midnight (Unix seconds) for the 24h timeline bar. */
 const currentDayStart = $derived.by(() => {
   if (!currentDayKey) return 0;
-  return localDayBounds(currentDayKey).startSec;
+  return dayBoundsFor(currentDayKey).startSec;
 });
 
 // ── Calendar-derived state (depends on localDays) ────────────────────────
@@ -1511,8 +1460,11 @@ onMount(async () => {
   hCbs.calendarNext = () => calendarNav(1);
 
   try {
-    allUtcDays = await invoke<string[]>("list_session_days");
-  } catch (e) {}
+    allLocalDays = await invoke<LocalDayInfo[]>("list_local_session_days", { tzOffsetSecs: tzOffsetSecs });
+  } catch (e) {
+    // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
+    console.error("list_local_session_days failed:", e);
+  }
   daysLoading = false;
   // Anchor the calendar to the most recent session month so switching
   // to month/year view always shows a populated heatmap.
@@ -2043,7 +1995,7 @@ useWindowTitle("window.title.history");
                     {#if locationCache[session.csv_path] === "loading"}
                       <div class="flex items-center gap-2 py-1">
                         <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
-                        <span class="text-[0.55rem] text-muted-foreground/40">Loading location…</span>
+                        <span class="text-[0.55rem] text-muted-foreground/40">Loading location...</span>
                       </div>
                     {:else if session.csv_path in locationCache}
                       {@const gpsPoints = getLocation(session.csv_path) ?? []}

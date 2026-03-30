@@ -88,8 +88,9 @@ mod session_connect;
 /// Session history listing and streaming Tauri commands.
 mod history_cmds;
 use history_cmds::{
-    delete_session, get_history_stats, list_embedding_sessions, list_session_days, list_sessions,
-    list_sessions_for_day, open_history_window, stream_sessions,
+    delete_session, get_history_stats, list_embedding_sessions, list_local_session_days,
+    list_session_days, list_sessions, list_sessions_for_day, list_sessions_for_local_day,
+    open_history_window, stream_sessions,
 };
 
 /// Session metrics, time-series, sleep staging, UMAP and compare commands.
@@ -1456,6 +1457,8 @@ pub fn run() {
             list_sessions,
             list_session_days,
             list_sessions_for_day,
+            list_local_session_days,
+            list_sessions_for_local_day,
             stream_sessions,
             get_history_stats,
             delete_session,
