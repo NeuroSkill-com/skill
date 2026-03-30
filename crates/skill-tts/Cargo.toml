@@ -24,10 +24,10 @@ rodio      = { version = "0.22", default-features = false, features = ["playback
 sha2       = { version = "0.10", optional = true }
 hound      = { version = "3", optional = true }
 
-neutts     = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts     = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-neutts     = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts     = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [lints]
 workspace = true

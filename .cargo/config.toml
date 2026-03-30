@@ -4,8 +4,7 @@
 # workspace members share the same build configuration.
 #
 # `relative = true` paths are resolved relative to this file's parent
-# directory (the project root), so all espeak paths are prefixed with
-# `src-tauri/`.
+# directory (the project root).
 
 # ── Default build target ──────────────────────────────────────────────────────
 #
@@ -69,16 +68,8 @@ target-dir = "src-tauri/target"
 # Do NOT hardcode `rustc-wrapper = "sccache"` here — it breaks builds
 # for developers who don't have sccache installed.
 
-# ── espeak-ng static library ──────────────────────────────────────────────────
-#
-# These two env vars are injected into every build script in this workspace so
-# that both skill/build.rs and kittentts/build.rs find the static archive and,
-# if it is absent, know where to find the script that builds it.
-#
-# `relative = true` resolves paths relative to this file's parent (project root).
-
 [env]
-# Dynamic CRT for cmake-based -sys crates (llama-cpp-sys, espeak-ng, etc.).
+# Dynamic CRT for cmake-based -sys crates (llama-cpp-sys, etc.).
 # Several native dependencies (DirectML, ONNX Runtime, Vulkan loader) ship
 # as pre-built DLLs linked against the dynamic CRT (/MD).  Mixing /MT and
 # /MD in the same process causes heap corruption and "side-by-side
@@ -87,13 +78,6 @@ target-dir = "src-tauri/target"
 # so end users don't need a separate install.
 # On non-Windows platforms cmake ignores this variable.
 CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDLL"
-
-ESPEAK_LIB_DIR      = { value = "src-tauri/espeak-static/lib",   relative = true }
-# ESPEAK_BUILD_SCRIPT is read by kittentts/neutts build scripts to auto-build
-# the static archive when ESPEAK_LIB_DIR does not yet contain the library.
-# On macOS/Linux it points to the bash script; on Windows it points to the
-# PowerShell equivalent (overridden in the target-specific section below).
-ESPEAK_BUILD_SCRIPT = { value = "scripts/build-espeak-static.sh", relative = true }
 
 # ── macOS deployment target ───────────────────────────────────────────────────
 #
@@ -194,26 +178,8 @@ rustflags = ["-C", "link-args=/STACK:8388608"]
 
 # ── Windows MinGW (x86_64-pc-windows-gnu): MinGW bash build script ────────────
 #
-# The MinGW target uses a separate output directory (espeak-static-mingw/) so
-# the libespeak-ng.a cross-compiled for Windows never overwrites the native
-# libespeak-ng.a built for the host (Linux or macOS).
-#
-# NOTE: [target.*.env] only accepts plain strings, not { value, relative }
-# tables.  The paths below are relative to src-tauri/ (the package root),
-# which is the working directory when build.rs runs.  When building via
-# `npm run tauri`, tauri-build.js overrides ESPEAK_LIB_DIR with an absolute
-# path in the process environment, so these values are only used for direct
-# `cargo build --target x86_64-pc-windows-gnu` invocations.
 [target.x86_64-pc-windows-gnu]
 rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
 
-[target.x86_64-pc-windows-gnu.env]
-ESPEAK_LIB_DIR      = "src-tauri/espeak-static-mingw/lib"
-ESPEAK_BUILD_SCRIPT = "scripts/build-espeak-static-mingw.sh"
-
 [target.i686-pc-windows-gnu]
 rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
-
-[target.i686-pc-windows-gnu.env]
-ESPEAK_LIB_DIR      = "src-tauri/espeak-static-mingw/lib"
-ESPEAK_BUILD_SCRIPT = "scripts/build-espeak-static-mingw.sh"

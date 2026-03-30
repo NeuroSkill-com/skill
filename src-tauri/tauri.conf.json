@@ -47,7 +47,6 @@
       "infoPlist": "./Info.plist"
     },
     "resources": {
-      "resources/espeak-ng-data": "espeak-ng-data",
       "resources/neutts-samples": "neutts-samples"
     },
     "createUpdaterArtifacts": true
