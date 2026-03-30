@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::panic)]
 use iroh::endpoint::Connection;
 use iroh::Watcher;
 use std::sync::Arc;
@@ -76,7 +77,7 @@ fn secret_from_otpauth(otpauth_url: &str) -> anyhow::Result<Vec<u8>> {
         .find(|(k, _)| k == "secret")
         .map(|(_, v)| v.into_owned())
         .ok_or_else(|| anyhow::anyhow!("no secret in otpauth url"))?;
-    base32::decode(base32::Alphabet::RFC4648 { padding: false }, &secret_b32)
+    base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &secret_b32)
         .ok_or_else(|| anyhow::anyhow!("invalid base32"))
 }
 

@@ -26,7 +26,7 @@ fn secret_bytes_from_otpauth(otpauth_url: &str) -> anyhow::Result<Vec<u8>> {
         .find(|(k, _)| k == "secret")
         .map(|(_, v)| v.into_owned())
         .ok_or_else(|| anyhow::anyhow!("otpauth URL missing `secret` query parameter"))?;
-    base32::decode(base32::Alphabet::RFC4648 { padding: false }, &b32)
+    base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &b32)
         .ok_or_else(|| anyhow::anyhow!("invalid base32 in otpauth secret"))
 }
 
@@ -275,7 +275,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Verify the phone could use the decoded secret to generate a valid TOTP
     let phone_code = generate_totp(
-        &base32::decode(base32::Alphabet::RFC4648 { padding: false }, &decoded.secret_base32)
+        &base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &decoded.secret_base32)
             .ok_or_else(|| anyhow::anyhow!("bad base32"))?,
         &decoded.name,
     )?;

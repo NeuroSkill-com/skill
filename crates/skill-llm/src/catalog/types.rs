@@ -447,6 +447,7 @@ pub fn parse_catalog_json(json: &str) -> Result<LlmCatalog, serde_json::Error> {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::approx_constant)]
 mod tests {
     use super::*;
 

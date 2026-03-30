@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for ScreenshotConfig defaults, serde round-trip, and interval logic.
 

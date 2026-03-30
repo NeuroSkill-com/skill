@@ -394,6 +394,7 @@ pub(crate) fn maybe_start_lsl_auto_scanner(app: &AppHandle) {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

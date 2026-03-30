@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for LLM catalog persistence — load, save, merge.
 

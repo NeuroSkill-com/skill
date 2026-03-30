@@ -33,7 +33,7 @@ fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
     let mut buf = Vec::new();
     let encoder = PngEncoder::new(&mut buf);
     encoder
-        .write_image(&img, img_size, img_size, ColorType::L8)
+        .write_image(&img, img_size, img_size, ColorType::L8.into())
         .map_err(|e| format!("QR PNG encode error: {e}"))?;
     let b64 = general_purpose::STANDARD.encode(&buf);
     Ok(format!("data:image/png;base64,{b64}"))

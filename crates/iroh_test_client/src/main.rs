@@ -51,10 +51,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         let b32 = secret.ok_or_else(|| anyhow::anyhow!("otpauth url missing secret param"))?;
-        base32::decode(base32::Alphabet::RFC4648 { padding: false }, &b32)
+        base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &b32)
             .ok_or_else(|| anyhow::anyhow!("invalid base32 secret in otpauth url"))?
     } else if let Some(b32) = p.secret_base32.as_ref() {
-        base32::decode(base32::Alphabet::RFC4648 { padding: false }, b32)
+        base32::decode(base32::Alphabet::Rfc4648 { padding: false }, b32)
             .ok_or_else(|| anyhow::anyhow!("invalid base32 secret"))?
     } else {
         anyhow::bail!("payload must include otpauth_url or secret_base32");

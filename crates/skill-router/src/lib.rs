@@ -593,6 +593,7 @@ pub const COMMANDS: &[&str] = &[
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::approx_constant)]
 mod tests {
     use super::*;
 

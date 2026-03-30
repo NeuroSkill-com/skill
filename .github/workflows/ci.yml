@@ -107,19 +107,6 @@ jobs:
       - name: Setup Vulkan SDK
         uses: ./.github/actions/setup-vulkan-linux
 
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: |
-            src-tauri/espeak-static
-            src-tauri/resources/espeak-ng-data
-          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
-
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
         env:
@@ -134,7 +121,6 @@ jobs:
       # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
@@ -489,20 +475,6 @@ jobs:
           if ($failed) { exit 1 }
           Write-Host "[ok] All PowerShell scripts parse cleanly."
 
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: |
-            src-tauri/espeak-static
-            src-tauri/resources/espeak-ng-data
-          key: windows-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.ps1') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        shell: powershell
-        run: .\scripts\build-espeak-static.ps1
-
       # Cache the Vulkan SDK installation directory so the ~200 MB download
       # only happens once per change to the install script.  On cache hit the
       # install script detects the SDK via filesystem and skips the download.
@@ -587,7 +559,6 @@ jobs:
       - name: cargo clippy
         shell: bash
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
           VULKAN_SDK:    ${{ env.VULKAN_SDK }}
           LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}

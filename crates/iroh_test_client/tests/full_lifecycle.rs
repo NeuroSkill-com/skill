@@ -23,7 +23,7 @@ const ALPN: &[u8] = b"skill/http-ws/1";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn secret_from_b32(b32: &str) -> Vec<u8> {
-    base32::decode(base32::Alphabet::RFC4648 { padding: false }, b32).expect("valid base32")
+    base32::decode(base32::Alphabet::Rfc4648 { padding: false }, b32).expect("valid base32")
 }
 
 fn generate_totp(secret: &[u8], name: &str) -> String {
