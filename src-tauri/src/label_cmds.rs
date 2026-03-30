@@ -282,10 +282,10 @@ fn resolve_embedding_model(code: &str) -> Result<fastembed::EmbeddingModel, Stri
 
 fn build_embedder(
     model_code: &str,
-    skill_dir: &std::path::Path,
+    _skill_dir: &std::path::Path,
 ) -> Result<fastembed::TextEmbedding, String> {
     let model = resolve_embedding_model(model_code)?;
-    let cache = skill_dir.join("fastembed_cache");
+    let cache = skill_data::util::hf_cache_root();
     fastembed::TextEmbedding::try_new(
         fastembed::InitOptions::new(model)
             .with_cache_dir(cache)

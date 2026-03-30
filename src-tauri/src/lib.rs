@@ -296,6 +296,51 @@ pub(crate) use helpers::{
 // crates/skill-data/src/util.rs.
 pub(crate) use skill_data::util::MutexExt;
 
+// ── One-time migration: fastembed_cache → HuggingFace hub cache ──────────────
+
+/// Move model directories from `~/.skill/fastembed_cache/` into the shared
+/// HuggingFace hub cache (`~/.cache/huggingface/hub/`).  Idempotent —
+/// skips entries that already exist in the destination.
+fn migrate_fastembed_cache(skill_dir: &std::path::Path) {
+    let src = skill_dir.join("fastembed_cache");
+    if !src.is_dir() {
+        return;
+    }
+    let dst = skill_data::util::hf_cache_root();
+    if let Err(e) = std::fs::create_dir_all(&dst) {
+        eprintln!("[migrate] cannot create HF cache dir: {e}");
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(&src) else {
+        return;
+    };
+    let mut moved = 0usize;
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name();
+        let target = dst.join(&name);
+        if target.exists() {
+            // Already migrated or downloaded separately — remove the old copy.
+            let _ = std::fs::remove_dir_all(entry.path());
+            moved += 1;
+            continue;
+        }
+        if let Err(e) = std::fs::rename(entry.path(), &target) {
+            // rename fails across mount points; fall back to leaving in place
+            eprintln!("[migrate] cannot move {}: {e}", name.to_string_lossy());
+        } else {
+            moved += 1;
+        }
+    }
+    // Remove the now-empty fastembed_cache dir (best-effort).
+    if moved > 0 {
+        let _ = std::fs::remove_dir(&src);
+        eprintln!(
+            "[migrate] moved {moved} model(s) from fastembed_cache → {}",
+            dst.display()
+        );
+    }
+}
+
 // ── Quit confirmation dialog ──────────────────────────────────────────────────
 
 static EXIT_SHUTDOWN_STARTED: std::sync::atomic::AtomicBool =
@@ -539,6 +584,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             });
         }
     }
+
+    // Migrate fastembed_cache → HuggingFace hub cache (one-time, idempotent).
+    migrate_fastembed_cache(&skill_dir);
 
     {
         let skill_dir_emb = skill_dir.clone();
