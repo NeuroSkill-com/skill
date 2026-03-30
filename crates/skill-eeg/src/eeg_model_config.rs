@@ -51,6 +51,8 @@ pub enum ExgModelBackend {
     Sensorlm,
     /// OpenTSLM encoder (Stanford BDHG) — time-series + LLM.
     Opentslm,
+    /// TRIBE v2 encoder (Meta AI) — multimodal fMRI brain encoding (video + audio + text → cortical surface).
+    Tribev2,
 }
 
 impl std::fmt::Display for ExgModelBackend {
@@ -74,6 +76,7 @@ impl ExgModelBackend {
             "sleeplm" => Self::Sleeplm,
             "sensorlm" => Self::Sensorlm,
             "opentslm" => Self::Opentslm,
+            "tribev2" => Self::Tribev2,
             _ => Self::Zuna,
         }
     }
@@ -93,6 +96,7 @@ impl ExgModelBackend {
             Self::Sleeplm => "sleeplm",
             Self::Sensorlm => "sensorlm",
             Self::Opentslm => "opentslm",
+            Self::Tribev2 => "tribev2",
         }
     }
 }
@@ -571,6 +575,7 @@ mod tests {
         ExgModelBackend::Sleeplm,
         ExgModelBackend::Sensorlm,
         ExgModelBackend::Opentslm,
+        ExgModelBackend::Tribev2,
     ];
 
     #[test]
@@ -624,6 +629,8 @@ mod tests {
         assert_eq!(ExgModelBackend::from_str_loose("SleepLM"), ExgModelBackend::Sleeplm);
         assert_eq!(ExgModelBackend::from_str_loose("SensorLM"), ExgModelBackend::Sensorlm);
         assert_eq!(ExgModelBackend::from_str_loose("OpenTSLM"), ExgModelBackend::Opentslm);
+        assert_eq!(ExgModelBackend::from_str_loose("TRIBEv2"), ExgModelBackend::Tribev2);
+        assert_eq!(ExgModelBackend::from_str_loose("tribev2"), ExgModelBackend::Tribev2);
     }
 
     #[test]

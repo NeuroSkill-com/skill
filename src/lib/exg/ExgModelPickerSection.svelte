@@ -326,18 +326,20 @@ $effect(() => {
         class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden
                {!selectedFamily.weights_cached ? 'opacity-80' : ''}"
       >
-        <CardContent class="py-0 px-0 flex flex-col">
-          <!-- Preview image (optional, e.g. brain visualisation for TRIBE v2) -->
+        <CardContent class="py-0 px-0 flex flex-row">
+          <!-- Preview image on the left (optional, e.g. brain visualisation for TRIBE v2) -->
           {#if selectedFamily.preview_image}
-            <div class="w-full border-b border-border/40 dark:border-white/[0.04] bg-black/5 dark:bg-white/[0.03] overflow-hidden">
+            <div class="shrink-0 w-36 border-r border-border/40 dark:border-white/[0.04] bg-black/5 dark:bg-white/[0.03] overflow-hidden flex items-center justify-center">
               <img
                 src={selectedFamily.preview_image}
                 alt="{selectedFamily.name} preview"
-                class="w-full max-h-36 object-contain"
+                class="w-full h-full object-cover"
                 onerror={(e) => { const p = (e.currentTarget as HTMLElement).closest('div'); if (p) (p as HTMLElement).style.display = 'none'; }}
               />
             </div>
           {/if}
+          <!-- Right side content -->
+          <div class="flex flex-col flex-1 min-w-0">
           <!-- Description + tags -->
           <div class="px-4 pt-3.5 pb-3 flex flex-col gap-1.5">
             <div class="flex items-center gap-1.5">
@@ -491,6 +493,7 @@ $effect(() => {
               {/if}
             </div>
           </div>
+          </div><!-- end right side content -->
         </CardContent>
       </Card>
     {/if}

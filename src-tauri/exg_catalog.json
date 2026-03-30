@@ -267,7 +267,7 @@
     "tribev2": {
       "name": "TRIBE v2",
       "description": "Meta AI's multimodal fMRI brain encoding foundation model (177M params, hidden=1152). Predicts cortical fMRI responses to naturalistic stimuli from video, audio, and text. Combines LLaMA 3.2-3B (text), V-JEPA2 (video), and Wav2Vec-BERT (audio) features through an 8-layer 8-head Transformer encoder mapped onto the fsaverage5 cortical surface (~20,484 vertices). Pretrained on 4 fMRI datasets: Algonauts2025, Lahner2024, Lebel2023, Wen2017. d'Ascoli et al., 2026.",
-      "repo": "facebook/tribev2",
+      "repo": "eugenehp/tribev2",
       "tags": [
         "fmri",
         "brain-encoding",
@@ -282,8 +282,8 @@
       "config_file": "config.yaml",
       "params_m": 177,
       "embed_dim": 1152,
-      "paper": "https://arxiv.org/abs/2503.18013",
-      "doi": "10.48550/arXiv.2503.18013",
+      "paper": "https://github.com/facebookresearch/tribev2",
+      "doi": null,
       "preview_image": "/exg/tribev2-brain.png"
     },
     "cbramod": {
