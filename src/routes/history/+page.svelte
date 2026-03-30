@@ -134,36 +134,12 @@ function inview(node: HTMLElement, onEnter: () => void) {
   return { destroy: () => obs.disconnect() };
 }
 
-// ── Per-day localStorage cache ──────────────────────────────────────────
-const DAY_CACHE_PFX = "skill.history.day.v1.";
-const METRICS_CACHE_PFX = "skill.metrics.v1.";
-
-function readDayCache(day: string): SessionEntry[] | null {
-  try {
-    const raw = localStorage.getItem(DAY_CACHE_PFX + day);
-    return raw ? (JSON.parse(raw) as SessionEntry[]) : null;
-  } catch {
-    return null;
-  }
-}
-function writeDayCache(day: string, data: SessionEntry[]) {
-  try {
-    localStorage.setItem(DAY_CACHE_PFX + day, JSON.stringify(data));
-  } catch (e) {}
-}
-function readMetricsCache(csvPath: string): CsvMetricsResult | null {
-  try {
-    const raw = sessionStorage.getItem(METRICS_CACHE_PFX + csvPath);
-    return raw ? (JSON.parse(raw) as CsvMetricsResult) : null;
-  } catch {
-    return null;
-  }
-}
-function writeMetricsCache(csvPath: string, result: CsvMetricsResult) {
-  try {
-    sessionStorage.setItem(METRICS_CACHE_PFX + csvPath, JSON.stringify(result));
-  } catch (e) {}
-}
+// ── Per-day cache stubs ─────────────────────────────────────────────────
+// All caching removed — always fetch fresh from Rust.
+function readDayCache(_day: string): SessionEntry[] | null { return null; }
+function writeDayCache(_day: string, _data: SessionEntry[]) {}
+function readMetricsCache(_csvPath: string): CsvMetricsResult | null { return null; }
+function writeMetricsCache(_csvPath: string, _result: CsvMetricsResult) {}
 
 // ── Caches: sleep / metrics / timeseries / location / embeddings ─────────
 let sleepCache = $state<Record<string, SleepStages | "loading" | "short">>({});
