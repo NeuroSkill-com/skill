@@ -10,6 +10,7 @@ pub mod activity_cmds;
 pub mod device_cmds;
 pub mod dnd_cmds;
 pub mod hook_cmds;
+pub mod location_cmds;
 pub mod lsl_cmds;
 pub mod screenshot_cmds;
 pub mod skills_cmds;
@@ -32,6 +33,7 @@ pub use hook_cmds::{
     get_hook_log, get_hook_log_count, get_hook_statuses, get_hooks, sanitize_hook, set_hooks,
     suggest_hook_distances, suggest_hook_keywords, HookDistanceSuggestion,
 };
+pub use location_cmds::{get_location_enabled, set_location_enabled, test_location};
 pub use screenshot_cmds::{
     check_ocr_models_ready, download_ocr_models, estimate_screenshot_reembed,
     get_screenshot_config, get_screenshot_metrics, get_screenshots_around, get_screenshots_dir,
@@ -929,6 +931,10 @@ pub fn set_llm_config(
         let prev_port = server.allowed_tools.lock_or_recover().skill_api_port;
         let mut new_tools = config.tools.clone();
         new_tools.skill_api_port = prev_port;
+        // Gate location tool on the location_enabled setting.
+        if !state.lock_or_recover().location_enabled {
+            new_tools.location = false;
+        }
         *server.allowed_tools.lock_or_recover() = new_tools;
     }
 

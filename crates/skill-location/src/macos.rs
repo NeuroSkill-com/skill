@@ -74,7 +74,11 @@ pub fn fetch(timeout_secs: f64) -> Result<LocationFix, LocationError> {
         Ok(LocationFix {
             latitude: result.latitude,
             longitude: result.longitude,
-            altitude: if result.altitude.is_nan() { None } else { Some(result.altitude) },
+            altitude: if result.altitude.is_nan() {
+                None
+            } else {
+                Some(result.altitude)
+            },
             horizontal_accuracy: opt(result.horizontal_accuracy),
             vertical_accuracy: opt(result.vertical_accuracy),
             speed: opt(result.speed),

@@ -115,13 +115,13 @@ pub fn fetch_location(timeout_secs: f64) -> Result<LocationFix, LocationError> {
     #[cfg(target_os = "macos")]
     {
         match macos::fetch(timeout_secs) {
-            Ok(fix) => return Ok(fix),
+            Ok(fix) => Ok(fix),
             Err(e) => {
                 eprintln!("[location] CoreLocation failed ({e}), falling back to IP geolocation");
                 // On macOS we still have ureq available via the ip_fallback_stub
                 // which re-implements the same logic inline to avoid the cfg
                 // dependency split.
-                return ip_fallback_stub::fetch_ip_location();
+                ip_fallback_stub::fetch_ip_location()
             }
         }
     }

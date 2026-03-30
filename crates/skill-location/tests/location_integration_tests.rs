@@ -93,10 +93,7 @@ fn fetch_ip_location_timezone_is_iana() {
     let fix = fetch_ip_location().expect("IP geolocation should succeed");
     if let Some(tz) = &fix.timezone {
         // IANA timezone IDs contain a slash (e.g. "America/New_York")
-        assert!(
-            tz.contains('/'),
-            "timezone should be IANA format, got: {tz}"
-        );
+        assert!(tz.contains('/'), "timezone should be IANA format, got: {tz}");
     }
 }
 
@@ -143,7 +140,10 @@ mod macos_tests {
 
         let fix = fetch_location(10.0).expect("fetch should succeed when authorized");
         assert_eq!(fix.source, LocationSource::CoreLocation);
-        assert!(fix.horizontal_accuracy.is_some(), "CoreLocation should provide accuracy");
+        assert!(
+            fix.horizontal_accuracy.is_some(),
+            "CoreLocation should provide accuracy"
+        );
     }
 
     #[test]

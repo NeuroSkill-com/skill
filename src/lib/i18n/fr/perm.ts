@@ -80,7 +80,8 @@ const perm: Record<string, string> = {
   "perm.locationDesc":
     "Sur macOS, les services de localisation utilisent CoreLocation (GPS/Wi-Fi/cellulaire) pour un positionnement précis. Sur Linux et Windows, l’app utilise la géolocalisation IP sans autorisation nécessaire. Si la localisation est refusée, l’app bascule automatiquement sur la géolocalisation IP.",
   "perm.locationOk": "Autorisation de localisation accordée. CoreLocation sera utilisé pour une haute précision.",
-  "perm.locationFallback": "Localisation non autorisée — l’app utilisera la géolocalisation IP (précision au niveau de la ville).",
+  "perm.locationFallback":
+    "Localisation non autorisée — l’app utilisera la géolocalisation IP (précision au niveau de la ville).",
   "perm.locationStep1": "Ouvrez Réglages Système → Confidentialité et sécurité → Services de localisation",
   "perm.locationStep2": "Trouvez {app} dans la liste et activez-le",
   "perm.locationStep3": "Revenez ici — le statut se mettra à jour automatiquement",

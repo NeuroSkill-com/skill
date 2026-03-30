@@ -199,19 +199,18 @@ use window_cmds::{
     complete_onboarding, create_calibration_profile, delete_calibration_profile, dismiss_whats_new,
     emit_calibration_event, get_active_calibration, get_app_name, get_app_version,
     get_calendar_events, get_calendar_permission_status, get_calibration_config,
-    get_calibration_profile, get_data_dir, get_onboarding_complete,
+    get_calibration_profile, get_data_dir, get_location_permission_status, get_onboarding_complete,
     get_onboarding_model_download_order, get_whats_new_seen_version, get_ws_clients, get_ws_port,
     get_ws_request_log, is_session_live, list_calibration_profiles, open_accessibility_settings,
     open_and_start_calibration, open_api_window, open_bt_settings, open_calendar_settings,
     open_calibration_window, open_focus_settings, open_focus_timer_window, open_help_window,
     open_input_monitoring_settings, open_label_window, open_label_window_at, open_labels_window,
-    open_model_tab, open_notifications_settings, open_onboarding_window,
+    open_location_settings, open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
     open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
-    record_calibration_completed, request_calendar_permission, set_active_calibration,
-    set_calibration_config, set_data_dir, set_update_ready, show_main_window,
-    update_calibration_profile,
-    get_location_permission_status, request_location_permission, open_location_settings,
+    record_calibration_completed, request_calendar_permission, request_location_permission,
+    set_active_calibration, set_calibration_config, set_data_dir, set_update_ready,
+    show_main_window, update_calibration_profile,
 };
 
 mod label_cmds;
@@ -233,10 +232,10 @@ use settings_cmds::{
     get_embedding_overlap, get_exg_catalog, get_filter_config, get_goal_notified_date,
     get_gpu_stats, get_hook_log, get_hook_log_count, get_hook_statuses, get_hooks,
     get_input_activity_tracking, get_input_buckets, get_last_input_activity, get_latest_bands,
-    get_llm_config, get_log_config, get_main_window_auto_fit, get_neutts_config,
-    get_openbci_config, get_recent_active_windows, get_recent_input_activity, get_scanner_config,
-    get_screenshot_config, get_screenshot_metrics, get_screenshots_around, get_screenshots_dir,
-    get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
+    get_llm_config, get_location_enabled, get_log_config, get_main_window_auto_fit,
+    get_neutts_config, get_openbci_config, get_recent_active_windows, get_recent_input_activity,
+    get_scanner_config, get_screenshot_config, get_screenshot_metrics, get_screenshots_around,
+    get_screenshots_dir, get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
     get_skills_sync_on_launch, get_sleep_config, get_status, get_storage_format,
     get_supported_companies, get_theme_and_language, get_tts_preload, get_umap_config,
     get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports, list_skills,
@@ -246,14 +245,15 @@ use settings_cmds::{
     set_active_window_tracking, set_api_token, set_autostart_enabled, set_daily_goal,
     set_device_api_config, set_disabled_skills, set_dnd_config, set_eeg_model_config,
     set_embedding_overlap, set_filter_config, set_goal_notified_date, set_hooks,
-    set_input_activity_tracking, set_language, set_llm_config, set_log_config,
-    set_main_window_auto_fit, set_neutts_config, set_notch_preset, set_openbci_config,
-    set_preferred_device, set_scanner_config, set_screenshot_config, set_skills_refresh_interval,
-    set_skills_sync_on_launch, set_sleep_config, set_storage_format, set_theme, set_tts_preload,
-    set_umap_config, set_update_check_interval, set_ws_config, subscribe_eeg, subscribe_imu,
-    subscribe_ppg, suggest_hook_distances, suggest_hook_keywords, sync_skills_now, test_dnd,
-    trigger_reembed, trigger_weights_download, web_cache_clear, web_cache_list,
-    web_cache_remove_domain, web_cache_remove_entry, web_cache_stats,
+    set_input_activity_tracking, set_language, set_llm_config, set_location_enabled,
+    set_log_config, set_main_window_auto_fit, set_neutts_config, set_notch_preset,
+    set_openbci_config, set_preferred_device, set_scanner_config, set_screenshot_config,
+    set_skills_refresh_interval, set_skills_sync_on_launch, set_sleep_config, set_storage_format,
+    set_theme, set_tts_preload, set_umap_config, set_update_check_interval, set_ws_config,
+    subscribe_eeg, subscribe_imu, subscribe_ppg, suggest_hook_distances, suggest_hook_keywords,
+    sync_skills_now, test_dnd, test_location, trigger_reembed, trigger_weights_download,
+    web_cache_clear, web_cache_list, web_cache_remove_domain, web_cache_remove_entry,
+    web_cache_stats,
 };
 
 // LLM catalog commands (feature-gated)
@@ -478,12 +478,17 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         // Propagate the actual WS port to the Skill API tool so the LLM
         // can call back into the server via HTTP.
         let ws_port = serve_handle.port;
+        let location_enabled = app.app_state().lock_or_recover().location_enabled;
         std::thread::spawn(move || {
             // Wait briefly for the LLM server to initialise, then set the port.
             for _ in 0..60 {
                 if let Some(ref server) = *cell.lock_or_recover() {
                     let mut tools = server.allowed_tools.lock_or_recover();
                     tools.skill_api_port = ws_port;
+                    // Gate location tool on location_enabled setting.
+                    if !location_enabled {
+                        tools.location = false;
+                    }
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -1022,6 +1027,7 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.openbci_config = data.openbci;
         s.device_api_config = data.device_api;
         s.scanner_config = data.scanner;
+        s.location_enabled = data.location_enabled;
         s.lsl_auto_connect = data.lsl_auto_connect;
         s.lsl_paired_streams = data.lsl_paired_streams;
         s.neutts_config = data.neutts.clone();
@@ -1611,6 +1617,9 @@ pub fn run() {
             get_recent_active_windows,
             get_recent_input_activity,
             get_input_buckets,
+            get_location_enabled,
+            set_location_enabled,
+            test_location,
             get_dnd_config,
             set_dnd_config,
             get_dnd_active,

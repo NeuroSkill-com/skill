@@ -490,9 +490,12 @@ const settings: Record<string, string> = {
   "settings.geoProvider": "ספק מיקום גאוגרפי",
   "settings.geoProviderDesc":
     "בחרו כיצד האפליקציה מזהה את מיקומכם עבור מטא-נתוני הפגישה. «כבוי» משבית מיקום לחלוטין, «מקומי» משתמש ב-GPS של המכשיר ו-«מרוחק» פונה לשירות חיצוני.",
-  "settings.geoProviderOff": "כבוי",
-  "settings.geoProviderLocal": "מקומי",
+  "settings.geoProviderOff": "שירותי מיקום מושבתים. כלי המיקום של LLM לא יהיה זמין.",
+  "settings.geoProviderLocal": "הפעל שירותי מיקום",
   "settings.geoProviderRemote": "מרוחק",
+  "settings.geoProviderTesting": "מבקש הרשאה ובודק מיקום…",
+  "settings.geoProviderLocalOk": "CoreLocation עובד (דיוק גבוה).",
+  "settings.geoProviderRemoteOk": "גיאולוקציה לפי IP עובדת (דיוק ברמת עיר).",
 };
 
 export default settings;

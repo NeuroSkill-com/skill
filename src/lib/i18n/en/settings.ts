@@ -481,12 +481,15 @@ const settings: Record<string, string> = {
   "sleepSettings.info3": "Adjusting the schedule helps the app distinguish intentional naps from overnight sleep.",
 
   // ── Geo provider ──────────────────────────────────────────────────────────
-  "settings.geoProvider": "Geolocation Provider",
+  "settings.geoProvider": "Location Services",
   "settings.geoProviderDesc":
-    "Choose how the app resolves your location for session metadata. 'Off' disables geolocation entirely, 'Local' uses on-device GPS, and 'Remote' queries an external service.",
-  "settings.geoProviderOff": "Off",
-  "settings.geoProviderLocal": "Local",
+    "Enable location services to provide geographic context for sessions and LLM tools. On macOS this uses CoreLocation (GPS/Wi-Fi) for high accuracy; on other platforms it uses IP geolocation. Disabled by default — toggle on to request permission and test.",
+  "settings.geoProviderOff": "Location services are disabled. The LLM location tool will not be available.",
+  "settings.geoProviderLocal": "Enable Location Services",
   "settings.geoProviderRemote": "Remote",
+  "settings.geoProviderTesting": "Requesting permission and testing location…",
+  "settings.geoProviderLocalOk": "CoreLocation is working (high accuracy).",
+  "settings.geoProviderRemoteOk": "IP geolocation is working (city-level accuracy).",
 
   // ── Storage format ───────────────────────────────────────────────────────
   "settings.storageFormat": "Recording Format",

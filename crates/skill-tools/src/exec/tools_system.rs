@@ -48,33 +48,31 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
         // Then enrich with IP geolocation metadata (country/city/timezone) which
         // CoreLocation doesn't provide.
         let result: Result<Value, String> = retry_with_backoff(max_retries, base_delay, || {
-            let fix = skill_location::fetch_location(10.0)
-                .map_err(|e| e.to_string())?;
+            let fix = skill_location::fetch_location(10.0).map_err(|e| e.to_string())?;
 
             // On macOS we got a precise fix but no geo metadata — fetch IP
             // location too for country/city/timezone if the primary source
             // was CoreLocation.
-            let (country, region, city, timezone, ip) =
-                if fix.source == skill_location::LocationSource::CoreLocation {
-                    match skill_location::fetch_ip_location() {
-                        Ok(ip_fix) => (
-                            ip_fix.country.map(Value::String).unwrap_or(Value::Null),
-                            ip_fix.region.map(Value::String).unwrap_or(Value::Null),
-                            ip_fix.city.map(Value::String).unwrap_or(Value::Null),
-                            ip_fix.timezone.map(Value::String).unwrap_or(Value::Null),
-                            Value::Null,
-                        ),
-                        Err(_) => (Value::Null, Value::Null, Value::Null, Value::Null, Value::Null),
-                    }
-                } else {
-                    (
-                        fix.country.clone().map(Value::String).unwrap_or(Value::Null),
-                        fix.region.clone().map(Value::String).unwrap_or(Value::Null),
-                        fix.city.clone().map(Value::String).unwrap_or(Value::Null),
-                        fix.timezone.clone().map(Value::String).unwrap_or(Value::Null),
+            let (country, region, city, timezone, ip) = if fix.source == skill_location::LocationSource::CoreLocation {
+                match skill_location::fetch_ip_location() {
+                    Ok(ip_fix) => (
+                        ip_fix.country.map(Value::String).unwrap_or(Value::Null),
+                        ip_fix.region.map(Value::String).unwrap_or(Value::Null),
+                        ip_fix.city.map(Value::String).unwrap_or(Value::Null),
+                        ip_fix.timezone.map(Value::String).unwrap_or(Value::Null),
                         Value::Null,
-                    )
-                };
+                    ),
+                    Err(_) => (Value::Null, Value::Null, Value::Null, Value::Null, Value::Null),
+                }
+            } else {
+                (
+                    fix.country.clone().map(Value::String).unwrap_or(Value::Null),
+                    fix.region.clone().map(Value::String).unwrap_or(Value::Null),
+                    fix.city.clone().map(Value::String).unwrap_or(Value::Null),
+                    fix.timezone.clone().map(Value::String).unwrap_or(Value::Null),
+                    Value::Null,
+                )
+            };
 
             let mut result = json!({
                 "ok": true,

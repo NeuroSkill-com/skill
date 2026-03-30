@@ -705,6 +705,10 @@ pub struct UserSettings {
     /// Background scanner backend toggles.
     #[serde(default)]
     pub scanner: ScannerConfig,
+    /// Enable location services (CoreLocation on macOS, IP geolocation elsewhere).
+    /// Default: `false` — must be explicitly enabled by the user.
+    #[serde(default)]
+    pub location_enabled: bool,
     /// Auto-scan for LSL streams and connect paired ones automatically.
     #[serde(default)]
     pub lsl_auto_connect: bool,
@@ -875,6 +879,7 @@ impl Default for UserSettings {
             screenshot: ScreenshotConfig::default(),
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
+            location_enabled: false,
             lsl_auto_connect: false,
             lsl_paired_streams: vec![],
         }

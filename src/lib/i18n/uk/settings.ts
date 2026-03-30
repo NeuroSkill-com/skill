@@ -509,9 +509,12 @@ const settings: Record<string, string> = {
   "settings.geoProvider": "Постачальник геолокації",
   "settings.geoProviderDesc":
     "Оберіть, як застосунок визначає ваше місцезнаходження для метаданих сеансу. «Вимкнено» вимикає геолокацію, «Локально» використовує GPS пристрою, а «Віддалено» звертається до зовнішнього сервісу.",
-  "settings.geoProviderOff": "Вимкнено",
-  "settings.geoProviderLocal": "Локально",
+  "settings.geoProviderOff": "Служби місцезнаходження вимкнені. Інструмент місцезнаходження LLM не буде доступний.",
+  "settings.geoProviderLocal": "Увімкнути служби місцезнаходження",
   "settings.geoProviderRemote": "Віддалено",
+  "settings.geoProviderTesting": "Запит дозволу та тестування місцезнаходження…",
+  "settings.geoProviderLocalOk": "CoreLocation працює (висока точність).",
+  "settings.geoProviderRemoteOk": "IP-геолокація працює (точність на рівні міста).",
 };
 
 export default settings;
