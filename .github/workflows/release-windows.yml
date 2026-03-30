@@ -427,20 +427,6 @@ jobs:
       # Cache keyed on the build script; a script change busts the cache.
       # The PS1 script requires MSVC tools (lib.exe) — set up above via
       # ilammy/msvc-dev-cmd before this step runs.
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: |
-            src-tauri/espeak-static
-            src-tauri/resources/espeak-ng-data
-          key: windows-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.ps1') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        shell: powershell
-        run: .\scripts\build-espeak-static.ps1
-
       # ── Import Windows code-signing certificate (optional) ───────────────────
       # Skipped when WINDOWS_CERTIFICATE is not set (unsigned build).
       # When present: imports the .pfx into the Current User certificate store,
@@ -573,7 +559,6 @@ jobs:
       - name: Compile (Rust)
         shell: bash
         env:
-          ESPEAK_LIB_DIR:    ${{ github.workspace }}/src-tauri/espeak-static/lib
           VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
           # RUSTC_WRAPPER is set via GITHUB_ENV in the "Configure sccache"

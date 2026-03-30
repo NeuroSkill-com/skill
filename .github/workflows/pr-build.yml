@@ -246,18 +246,6 @@ jobs:
       - name: i18n locales check (all non-en locales)
         run: npm run -s check:i18n:locales
 
-      # ── espeak-ng static library ─────────────────────────────────────────────
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: src-tauri/espeak-static
-          key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: ESPEAK_ARCHS=arm64 bash scripts/build-espeak-static.sh
-
       # ── Validate Apple notarization credentials ──────────────────────────────
       - name: Validate Apple notarization credentials
         env:
@@ -316,7 +304,6 @@ jobs:
       # to the dev server (localhost:1420).
       - name: Compile (frontend + Rust)
         env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
@@ -341,8 +328,6 @@ jobs:
           cp "src-tauri/icons/icon.icns" \
              "$APP_BUNDLE/Contents/Resources/icon.icns"
 
-          cp -R "src-tauri/resources/espeak-ng-data" \
-                "$APP_BUNDLE/Contents/Resources/"
           cp -R "src-tauri/resources/neutts-samples" \
                 "$APP_BUNDLE/Contents/Resources/"
 
