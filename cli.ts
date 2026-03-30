@@ -49,7 +49,7 @@ const CLI_VERSION = "1.2.0";
  *   hooks update <name> [opts]     Update fields on an existing hook
  *   hooks suggest "kw1,kw2"        Suggest threshold from real EEG/label data
  *   hooks log [--limit N --offset M]  View paginated hook trigger audit log rows
- *   health                          HealthKit summary (last 24h) — sleep, workouts, steps, HR, metrics
+ *   health                          HealthKit summary (last 24h) — sleep, workouts, steps, HR, metrics, GPS
  *   health summary [--start --end] Aggregate counts for a time range
  *   health sleep [--start --end]   Query Apple Health sleep samples
  *   health workouts [--start --end] Query workout sessions
@@ -57,6 +57,7 @@ const CLI_VERSION = "1.2.0";
  *   health steps [--start --end]   Query step counts
  *   health metrics --metric-type <t> [--start --end] Query scalar health metrics
  *   health metric-types            List all stored metric types
+ *   health location [--start --end] [--limit N] Query GPS fixes from iOS CoreLocation
  *   health sync <json>             Push HealthKit data (iOS companion format)
  *   oura                           Oura Ring status — check token and connectivity
  *   oura sync [--start --end]      Sync Oura Ring data for a date range (default: last 30 days)
@@ -1100,6 +1101,7 @@ ${m("health hr [--start --end] [--limit N]",            "query heart rate sample
 ${m("health steps [--start --end] [--limit N]",         "query step counts")}
 ${m("health metrics --metric-type <t> [--start --end]", "query scalar health metrics (restingHeartRate, hrv, vo2Max, …)")}
 ${m("health metric-types",                              "list all stored metric types")}
+${m("health location [--start --end] [--limit N]",     "query GPS fixes from iOS CoreLocation (lat, lon, altitude, speed)")}
 ${m('health sync \'{"sleep":[...]}\'',                  "push HealthKit data from iOS companion (JSON payload)")}
 ${m("oura",                                            "Oura Ring status — check token and connectivity")}
 ${m("oura sync [--start YYYY-MM-DD --end YYYY-MM-DD]", "sync Oura Ring data for a date range (default: last 30 days)")}
@@ -1490,6 +1492,8 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}$${RESET} npx tsx cli.ts health metrics --metric-type restingHeartRate
   ${DIM}$${RESET} npx tsx cli.ts health metrics --metric-type hrv --json | jq '.results[].value'
   ${DIM}$${RESET} npx tsx cli.ts health metric-types                 ${DIM}# list all metric types${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health location                     ${DIM}# GPS fixes (last 24h)${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health location --limit 50 --json | jq '.results[] | {lat:.latitude,lon:.longitude,ts:.timestamp}'
   ${DIM}$${RESET} npx tsx cli.ts health sync '{"steps":[{"start_utc":1740000000,"end_utc":1740086400,"count":9500}]}'
 
   ${BOLD}oura${RESET} — Oura Ring cloud data sync
@@ -4012,6 +4016,7 @@ function progressBar(pct: number, width: number): string {
  * - `steps`          — query step counts
  * - `metrics`        — query scalar health metrics (requires `--metric-type`)
  * - `metric-types`   — list all stored metric types
+ * - `location`       — query GPS fixes from CoreLocation (lat, lon, altitude, speed, accuracy)
  * - `sync`           — push HealthKit data (JSON payload)
  */
 async function cmdHealth(args: Args): Promise<void> {
@@ -4040,6 +4045,7 @@ async function cmdHealth(args: Args): Promise<void> {
       if (r.steps_upserted)       print(`    steps:       ${CYAN}${r.steps_upserted}${RESET}`);
       if (r.mindfulness_upserted) print(`    mindfulness: ${CYAN}${r.mindfulness_upserted}${RESET}`);
       if (r.metrics_upserted)     print(`    metrics:     ${CYAN}${r.metrics_upserted}${RESET}`);
+      if (r.location_upserted)    print(`    location:    ${CYAN}${r.location_upserted}${RESET} fixes`);
     }
     printResult(r);
     return;
@@ -4065,7 +4071,7 @@ async function cmdHealth(args: Args): Promise<void> {
   }
 
   // ── summary ─────────────────────────────────────────────────────────────
-  if (sub === "summary" || !["sleep", "workouts", "hr", "steps", "metrics"].includes(sub)) {
+  if (sub === "summary" || !["sleep", "workouts", "hr", "steps", "metrics", "location"].includes(sub)) {
     const isDefault = args.start == null && args.end == null;
     print(`${BOLD}⚡ health${RESET}  ${DIM}${isDefault ? "last 24h" : `${startUtc}–${endUtc}`}${RESET}`);
 
@@ -4080,6 +4086,8 @@ async function cmdHealth(args: Args): Promise<void> {
     print(`    total steps      ${BOLD}${r.total_steps ?? 0}${RESET}`);
     print(`    mindfulness      ${BOLD}${r.mindfulness_sessions ?? 0}${RESET} sessions`);
     print(`    metrics          ${BOLD}${r.metric_entries ?? 0}${RESET} entries`);
+    if ((r.location_fixes ?? 0) > 0)
+      print(`    location fixes   ${BOLD}${r.location_fixes}${RESET}`);
     print("");
     if ((r.sleep_samples ?? 0) === 0 && (r.workouts ?? 0) === 0 && (r.total_steps ?? 0) === 0) {
       print(`  ${DIM}No HealthKit data found. Sync from the iOS companion app:${RESET}`);
@@ -4097,6 +4105,7 @@ async function cmdHealth(args: Args): Promise<void> {
     hr:       "heart_rate",
     steps:    "steps",
     metrics:  "metrics",
+    location: "location",
   };
   const dataType = typeMap[sub];
   if (!dataType) printError(`unknown health subcommand: "${sub}"`);
@@ -4172,6 +4181,21 @@ async function cmdHealth(args: Args): Promise<void> {
     for (const m of results) {
       const ts = new Date(m.timestamp * 1000).toLocaleString();
       print(`  ${BOLD}${m.value}${RESET} ${DIM}${m.unit}${RESET}  ${DIM}${ts}${RESET}`);
+    }
+  } else if (dataType === "location") {
+    print("");
+    for (const loc of results) {
+      const ts  = new Date(loc.timestamp * 1000).toLocaleString();
+      const lat = (loc.latitude  as number).toFixed(5);
+      const lon = (loc.longitude as number).toFixed(5);
+      const alt = loc.altitude != null
+        ? `  ${DIM}alt ${(loc.altitude as number).toFixed(0)}m${RESET}` : "";
+      const acc = loc.horizontal_accuracy != null && (loc.horizontal_accuracy as number) >= 0
+        ? `  ${DIM}±${(loc.horizontal_accuracy as number).toFixed(0)}m${RESET}` : "";
+      const spd = loc.speed != null && (loc.speed as number) >= 0
+        ? `  ${DIM}${((loc.speed as number) * 3.6).toFixed(1)} km/h${RESET}` : "";
+      const src = loc.source_id ? `  ${DIM}[${loc.source_id}]${RESET}` : "";
+      print(`  ${CYAN}${lat}, ${lon}${RESET}${alt}${acc}${spd}${src}  ${DIM}${ts}${RESET}`);
     }
   }
 
