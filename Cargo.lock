@@ -216,7 +216,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -227,7 +227,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -755,12 +755,6 @@ dependencies = [
  "rustc-demangle",
  "windows-link 0.2.1",
 ]
-
-[[package]]
-name = "base32"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
 
 [[package]]
 name = "base32"
@@ -1343,7 +1337,7 @@ dependencies = [
  "derive-new",
  "dirs",
  "gix-tempfile",
- "image 0.25.10",
+ "image",
  "r2d2",
  "r2d2_sqlite",
  "rand 0.9.2",
@@ -2099,7 +2093,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13152f74c48f78489423bb0d6bbe204e4ddc50e208c8e39db014ba69726b5b21"
 dependencies = [
  "anyhow",
- "env_logger 0.11.10",
+ "env_logger",
  "log",
  "serde",
  "serde_json",
@@ -2125,7 +2119,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -3540,7 +3534,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3895,7 +3889,7 @@ checksum = "2526ccb3c1e005d1117f0544786e8f0332bffa1a8384d6656eb604655dc54550"
 dependencies = [
  "anyhow",
  "chrono",
- "env_logger 0.11.10",
+ "env_logger",
  "futures-util",
  "log",
  "rand 0.8.5",
@@ -4014,19 +4008,6 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
-dependencies = [
- "humantime",
- "is-terminal",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.11.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0621c04f2196ac3f488dd583365b9c09be011a4ab8b9f37248ffcc8f6198b56a"
@@ -4082,7 +4063,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4265,7 +4246,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "hf-hub 0.4.3",
- "image 0.25.10",
+ "image",
  "ndarray 0.17.2",
  "ort",
  "safetensors 0.7.0",
@@ -5029,7 +5010,7 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.2.1",
+ "windows-link 0.1.3",
  "windows-result 0.4.1",
 ]
 
@@ -5115,16 +5096,6 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
-]
-
-[[package]]
-name = "gif"
-version = "0.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae047235e33e2829703574b54fdec96bfbad892062d97fed2f76022287de61b"
-dependencies = [
- "color_quant",
- "weezl",
 ]
 
 [[package]]
@@ -5674,7 +5645,7 @@ checksum = "d78d129e519fc86e171db6e4f899aae81f3b059a6a063e7328de901d59341151"
 dependencies = [
  "anyhow",
  "btleplug 0.12.0",
- "env_logger 0.11.10",
+ "env_logger",
  "futures",
  "log",
  "tokio",
@@ -5935,12 +5906,6 @@ name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
-
-[[package]]
-name = "humantime"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "135b12329e5e3ce057a9f972339ea52bc954fe1e9358ef27f95e89716fbc5424"
 
 [[package]]
 name = "hybrid-array"
@@ -6232,7 +6197,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "btleplug 0.11.8",
- "env_logger 0.11.10",
+ "env_logger",
  "futures",
  "log",
  "serde",
@@ -6291,24 +6256,6 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.24.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5690139d2f55868e080017335e4b94cb7414274c74f1669c84fb5feba2c9f69d"
-dependencies = [
- "bytemuck",
- "byteorder",
- "color_quant",
- "exr",
- "gif 0.13.3",
- "jpeg-decoder",
- "num-traits",
- "png 0.17.16",
- "qoi",
- "tiff 0.9.1",
-]
-
-[[package]]
-name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
@@ -6317,7 +6264,7 @@ dependencies = [
  "byteorder-lite",
  "color_quant",
  "exr",
- "gif 0.14.1",
+ "gif",
  "image-webp",
  "moxcms",
  "num-traits",
@@ -6326,7 +6273,7 @@ dependencies = [
  "ravif",
  "rayon",
  "rgb",
- "tiff 0.11.3",
+ "tiff",
  "zune-core",
  "zune-jpeg",
 ]
@@ -6571,7 +6518,7 @@ name = "iroh-example-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base32 0.4.0",
+ "base32",
  "iroh",
  "iroh-base",
  "serde",
@@ -6663,11 +6610,11 @@ name = "iroh_test_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base32 0.4.0",
- "env_logger 0.10.2",
+ "base32",
+ "env_logger",
  "iroh",
  "iroh-base",
- "rand 0.8.5",
+ "rand 0.10.0",
  "serde",
  "serde_json",
  "skill-iroh",
@@ -6695,7 +6642,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6866,15 +6813,6 @@ checksum = "9afb3de4395d6b3e67a780b6de64b51c978ecf11cb9a462c66be7d4ca9039d33"
 dependencies = [
  "getrandom 0.3.4",
  "libc",
-]
-
-[[package]]
-name = "jpeg-decoder"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
-dependencies = [
- "rayon",
 ]
 
 [[package]]
@@ -7225,7 +7163,7 @@ dependencies = [
  "drm",
  "gbm",
  "gl",
- "image 0.25.10",
+ "image",
  "khronos-egl",
  "memmap2",
  "rustix 1.1.4",
@@ -7665,7 +7603,7 @@ checksum = "e22f15003e7594bd1a24b0591408612d1b7bc191fe3f61e9191a18bd926fc03c"
 dependencies = [
  "anyhow",
  "btleplug 0.11.8",
- "env_logger 0.11.10",
+ "env_logger",
  "futures",
  "log",
  "prost",
@@ -7844,7 +7782,7 @@ checksum = "e8573c4cf142f2571ba34f5db2824003dcb6711fd9894b2a4fae4795cc041b4a"
 dependencies = [
  "anyhow",
  "btleplug 0.11.8",
- "env_logger 0.11.10",
+ "env_logger",
  "futures",
  "log",
  "serde",
@@ -7862,7 +7800,7 @@ dependencies = [
  "anyhow",
  "bluer",
  "btleplug 0.11.8",
- "env_logger 0.11.10",
+ "env_logger",
  "futures",
  "libc",
  "log",
@@ -8357,7 +8295,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c50f94c405726d3e0095e89e72f75ce7f6587b94a8bd8dc8054b73f65c0fd68c"
 dependencies = [
- "base32 0.5.1",
+ "base32",
  "document-features",
  "getrandom 0.2.17",
  "httpdate",
@@ -8372,7 +8310,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9694,7 +9632,7 @@ version = "5.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7bfb9143bbba379f246211eb68074d78db9cc048e4c5701f3b0e6cb1ec67ca2"
 dependencies = [
- "base32 0.5.1",
+ "base32",
  "bytes",
  "cfg_aliases",
  "document-features",
@@ -10174,7 +10112,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99530e45ded4640c0eab5420fc60f9a0ec1be51a22e49cc8578b9a0d8be70712"
 dependencies = [
  "base64 0.22.1",
- "image 0.25.10",
+ "image",
  "qrcodegen",
 ]
 
@@ -10943,7 +10881,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "clap 4.6.0",
- "env_logger 0.11.10",
+ "env_logger",
  "iroh",
  "log",
  "lz4_flex",
@@ -11201,7 +11139,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11269,7 +11207,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11516,7 +11454,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12004,7 +11942,7 @@ dependencies = [
  "gpu-fft",
  "hf-hub 0.5.0",
  "hound",
- "image 0.25.10",
+ "image",
  "jsonschema",
  "kittentts",
  "labram-rs",
@@ -12249,10 +12187,10 @@ name = "skill-iroh"
 version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
- "image 0.24.9",
+ "image",
  "iroh",
  "qrcodegen",
- "rand 0.9.2",
+ "rand 0.10.0",
  "serde",
  "serde_json",
  "tempfile",
@@ -12365,8 +12303,8 @@ dependencies = [
  "crossbeam-channel",
  "fast-hnsw",
  "fastembed",
- "gif 0.14.1",
- "image 0.25.10",
+ "gif",
+ "image",
  "objc2 0.6.4",
  "objc2-app-kit",
  "ocrs",
@@ -12464,7 +12402,7 @@ name = "skill-vision"
 version = "0.1.0"
 dependencies = [
  "cc",
- "image 0.25.10",
+ "image",
 ]
 
 [[package]]
@@ -12563,7 +12501,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -13262,7 +13200,7 @@ dependencies = [
  "gtk",
  "heck 0.5.0",
  "http 1.4.0",
- "image 0.25.10",
+ "image",
  "jni 0.21.1",
  "libc",
  "log",
@@ -13630,7 +13568,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -13767,17 +13705,6 @@ dependencies = [
  "byteorder",
  "integer-encoding",
  "ordered-float 2.10.1",
-]
-
-[[package]]
-name = "tiff"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba1310fcea54c6a9a4fd1aad794ecc02c31682f6bfbecdf460bf19533eed1e3e"
-dependencies = [
- "flate2",
- "jpeg-decoder",
- "weezl",
 ]
 
 [[package]]
@@ -14170,7 +14097,7 @@ version = "5.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2b36a9dd327e9f401320a2cb4572cc76ff43742bcfc3291f871691050f140ba"
 dependencies = [
- "base32 0.5.1",
+ "base32",
  "constant_time_eq 0.3.1",
  "hmac",
  "qrcodegen-image",
@@ -14540,7 +14467,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -15597,7 +15524,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -16255,7 +16182,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -16541,7 +16468,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "669eca0840c322f46ab68505a7e4328421b86127eeead1faed6bfc827dc77713"
 dependencies = [
  "dispatch2",
- "image 0.25.10",
+ "image",
  "libwayshot-xcap",
  "log",
  "objc2 0.6.4",
