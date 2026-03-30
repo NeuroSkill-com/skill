@@ -106,7 +106,7 @@ let labelCloud: Points | null = null;
 let linkGroup: Group | null = null;
 let curPoints: UmapPoint[] = [];
 let labeledIdx: number[] = [];
-let curPositions = new Float32Array(0);
+let curPositions: Float32Array<ArrayBufferLike> = new Float32Array(0);
 
 // Animation
 let fromPos: Float32Array | null = null;

@@ -239,7 +239,7 @@ let labelCloud: LabelCloudGroup | null = null;
 let linkGroups = new Map<string, { group: THREE_NS.Group; colorIdx: number }>();
 let curPoints = $state<UmapPoint[]>([]);
 let labeledIdx: number[] = [];
-let curPositions = new Float32Array(0);
+let curPositions: Float32Array<ArrayBufferLike> = new Float32Array(0);
 let baseColors: Float32Array | null = null;
 /** Saved dot/ring base colors for each labeled point (index matches labeledIdx). */
 let labelCloudBase: { dc: number; rr: number; rg: number; rb: number }[] = [];
