@@ -62,12 +62,6 @@ cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cub
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 
 
-# ── kittentts / neutts pre-release patches ───────────────────────────────────
-# Uncomment to test local changes before publishing.
-# Remove once those versions land on crates.io.
-# kittentts = { path = "kittentts-rs" }
-# neutts    = { path = "neutts-rs" }
-
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
 # Shared across multiple crates to ensure a single version + feature set.

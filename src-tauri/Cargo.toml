@@ -155,7 +155,7 @@ kittentts = { version = "0.3.0", features = ["espeak"], optional = true }
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -366,7 +366,7 @@ dispatch2        = "0.3.1"
 # `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
-neutts = { version = "0.1.0", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # ort-download-binaries-native-tls enables both ort/download-binaries and

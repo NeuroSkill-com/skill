@@ -151,39 +151,18 @@ impl TtsProgressEvent {
     }
 }
 
-// ─── espeak-ng data path ──────────────────────────────────────────────────────
+// ─── espeak-ng data path (legacy stubs) ───────────────────────────────────────
+//
+// kittentts 0.3.0+ and neutts 0.1.0+ bundle espeak-ng data as pure Rust
+// crates (espeak-ng-data-dicts, espeak-ng-data-phonemes).  No external
+// espeak-ng-data directory or C library is needed.
 
-/// Set espeak-ng data path from the bundled resource directory.
-pub fn init_espeak_bundled_data_path(resource_dir: &std::path::Path) {
-    let data_path = resource_dir.join("espeak-ng-data");
-    if data_path.is_dir() {
-        #[cfg(feature = "tts-kitten")]
-        kittentts::phonemize::set_data_path(&data_path);
-        #[cfg(feature = "tts-neutts")]
-        ::neutts::phonemize::set_data_path(&data_path);
-    }
-}
+/// No-op — espeak-ng data is now bundled in the Rust crate.
+pub fn init_espeak_bundled_data_path(_resource_dir: &std::path::Path) {}
 
-/// Resolve espeak-ng data path from environment or build-time baked path.
+/// No-op — espeak-ng data is now bundled in the Rust crate.
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-pub fn init_espeak_data_path() {
-    let explicit = std::env::var("ESPEAK_DATA_PATH").ok();
-    let dev_baked = option_env!("ESPEAK_DATA_PATH_DEV");
-
-    let resolved = explicit
-        .as_deref()
-        .into_iter()
-        .chain(dev_baked)
-        .find(|p| std::path::Path::new(p).is_dir());
-
-    if let Some(dir) = resolved {
-        let data_path = std::path::Path::new(dir);
-        #[cfg(feature = "tts-kitten")]
-        kittentts::phonemize::set_data_path(data_path);
-        #[cfg(feature = "tts-neutts")]
-        ::neutts::phonemize::set_data_path(data_path);
-    }
-}
+pub fn init_espeak_data_path() {}
 
 // ─── Shared audio output ──────────────────────────────────────────────────────
 

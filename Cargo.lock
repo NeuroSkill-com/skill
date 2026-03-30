@@ -8189,9 +8189,9 @@ dependencies = [
 
 [[package]]
 name = "neutts"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f7951ff820b71a8ff441c36ab1307bb7f23763abdba81600fec4dc9aa2f649"
+checksum = "95569110f3d2af0100f7d5094880c28827ab844a8f579bd2b8a9a9beef704073"
 dependencies = [
  "anyhow",
  "burn",
