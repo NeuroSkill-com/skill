@@ -709,7 +709,10 @@ mod tests {
             assert!(fam["params_m"].is_number(), "{id}: missing params_m");
             assert!(fam["embed_dim"].is_number(), "{id}: missing embed_dim");
             assert!(fam["paper"].is_string(), "{id}: missing paper");
-            assert!(fam["doi"].is_string(), "{id}: missing doi");
+            assert!(
+                fam["doi"].is_string() || fam["doi"].is_null(),
+                "{id}: doi must be a string or null"
+            );
         }
     }
 
@@ -765,8 +768,14 @@ mod tests {
         let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
         let families = catalog["families"].as_object().unwrap();
         for (id, fam) in families {
-            let doi = fam["doi"].as_str().unwrap();
-            assert!(!doi.is_empty(), "{id}: doi is empty");
+            // doi is optional — null is allowed when the paper has no DOI yet.
+            let Some(doi) = fam["doi"].as_str() else {
+                continue;
+            };
+            assert!(
+                !doi.is_empty(),
+                "{id}: doi is empty string (use null instead)"
+            );
             assert!(
                 doi.starts_with("10."),
                 "{id}: doi doesn't start with 10.: {doi}"

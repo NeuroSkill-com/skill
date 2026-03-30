@@ -208,6 +208,7 @@ fn parse_local_key(key: &str) -> Option<(i32, u32, u32)> {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -366,7 +367,7 @@ mod tests {
     fn session_before_local_day_pdt() {
         // Session at March 1 06:00 UTC → Feb 28 23:00 PDT → local Feb 28
         let ts = MAR01_MIDNIGHT_UTC + 6 * 3600;
-        let (s, e) = local_day_bounds_utc("2026-03-01", TZ_PDT).unwrap();
+        let (s, _e) = local_day_bounds_utc("2026-03-01", TZ_PDT).unwrap();
         assert!(ts < s, "session should be before local March 1");
         // But should be in local Feb 28
         let (s2, e2) = local_day_bounds_utc("2026-02-28", TZ_PDT).unwrap();
@@ -376,8 +377,8 @@ mod tests {
     #[test]
     fn session_at_exact_midnight_boundary() {
         // Session at exactly local midnight → belongs to the new day
-        let (s, e) = local_day_bounds_utc("2026-03-01", TZ_PDT).unwrap();
-        assert!(s < e && e - s == 86400);
+        let (start, end) = local_day_bounds_utc("2026-03-01", TZ_PDT).unwrap();
+        assert!(start < end && end - start == 86400);
     }
 
     // ── End-to-end with temp dir ─────────────────────────────────────────
