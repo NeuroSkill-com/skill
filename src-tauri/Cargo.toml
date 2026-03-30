@@ -32,7 +32,7 @@ license = "GPL-3.0-only"
 #                conflict; both features can be active simultaneously.
 #
 [features]
-default    = ["tts-kitten", "tts-neutts", "llm", "mw75-rfcomm", "screenshots"]
+default    = ["tts-kitten", "tts-neutts", "llm", "mw75-rfcomm", "screenshots", "gps"]
 gps        = ["skill-data/gps"]
 screenshots = ["skill-screenshots/capture"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
