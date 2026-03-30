@@ -276,6 +276,9 @@ export const EXEMPT_KEY_PREFIXES = [
 export const EXEMPT_KEYS = new Set([
   "lang.dir", // "ltr" / "rtl" — set per locale already
   "dashboard.skill", // "{app}" placeholder
+  "settings.deviceApi.ouraTitle", // brand name "Oura Ring" — same in all locales
+  "settings.supportedDevices.company.oura", // brand name "Ōura"
+  "settings.supportedDevices.device.ouraRing", // product name "Oura Ring (Gen 3 / Gen 4)"
 ]);
 
 /** Patterns for values that are inherently language-neutral. */

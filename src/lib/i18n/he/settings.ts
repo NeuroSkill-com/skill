@@ -322,6 +322,12 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.openbci": "OpenBCI",
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
+  "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
+  "settings.supportedDevices.instruction.oura1": "קבל טוקן גישה אישי מ-cloud.ouraring.com/personal-access-tokens.",
+  "settings.supportedDevices.instruction.oura2": "פתח API מכשיר → Oura Ring, הדבק את הטוקן ושמור.",
+  "settings.supportedDevices.instruction.oura3":
+    "לחץ על סנכרן עכשיו כדי לשלוף נתוני שינה, פעילות, מוכנות, קצב לב ו-SpO2.",
   "settings.supportedDevices.company.reak": "RE-AK",
   "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",

@@ -335,6 +335,13 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.openbci": "OpenBCI",
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
+  "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
+  "settings.supportedDevices.instruction.oura1":
+    "Отримайте персональний токен доступу з cloud.ouraring.com/personal-access-tokens.",
+  "settings.supportedDevices.instruction.oura2": "Відкрийте API пристрою → Oura Ring, вставте токен і збережіть.",
+  "settings.supportedDevices.instruction.oura3":
+    "Натисніть Синхронізувати зараз, щоб отримати дані сну, активності, готовності, пульсу та SpO2.",
   "settings.supportedDevices.company.reak": "RE-AK",
   "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",

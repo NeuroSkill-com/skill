@@ -60,6 +60,13 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.openbci": "OpenBCI",
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
+  "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
+  "settings.supportedDevices.instruction.oura1":
+    "Obtener un token de acceso personal desde cloud.ouraring.com/personal-access-tokens.",
+  "settings.supportedDevices.instruction.oura2": "Abrir API de dispositivo → Oura Ring, pegar el token y guardar.",
+  "settings.supportedDevices.instruction.oura3":
+    "Hacer clic en Sincronizar ahora para obtener datos de sueño, actividad, preparación, frecuencia cardíaca y SpO2.",
   "settings.supportedDevices.company.reak": "RE-AK",
   "settings.supportedDevices.company.cognionics": "Cognionics / CGX",
   "settings.supportedDevices.company.mendi": "Mendi",
