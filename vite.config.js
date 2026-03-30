@@ -77,6 +77,11 @@ function patchTailwindForSvelte() {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Pre-bundle map libraries so Vite's import-analysis pass never fails on
+  // a cold cache (dynamic imports are still analysed statically by Vite).
+  optimizeDeps: {
+    include: ["maplibre-gl", "pmtiles"],
+  },
   // Strip console.log / console.debug in production builds.
   // console.warn and console.error are preserved for diagnostics.
   build: {
