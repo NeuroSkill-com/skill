@@ -478,6 +478,58 @@ For full details, see [`docs/LINUX.md`](docs/LINUX.md).
 
 ### Pre-commit checks
 
+### Data Health Check
+
+Inspect your `~/.skill` data directory — sessions, databases, indices, models, screenshots, and data integrity:
+
+```bash
+npm run health
+```
+
+Sample output:
+
+```
+NeuroSkill™ Health Report
+/Users/eugene/.skill
+Timezone: America/Los_Angeles (UTC-7h)  Local: 3/30/2026, 12:58:44 AM
+
+── Overview ───────────────────────────────────────────────────────
+  Day directories                      29
+  Days with sessions                   16 / 29
+  Total sessions                       221
+  Date range (UTC dirs)                20260301 → 20260330
+  Recording data size                  4.44 GB
+
+── Per-Day Breakdown ─────────────────────────────────────────────
+  Local Day    Sessions   Duration       Time Range                     Files
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  2026-03-28   22         3h 15m 42s     Mar 28, 17:32 → Mar 29, 00:00  imu
+  2026-03-27   8          1h 45m 10s     Mar 27, 14:15 → Mar 27, 16:00  ppg imu
+  ...
+
+── Session Detail (all sessions, newest first) ───────────────────
+  #    UTC Dir    Local Day    Start                  Duration   Device    SNR    Data  Met  PPG  IMU  Size
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1    20260329   2026-03-29   Mar 29, 00:00          5m 30s     Muse S   14.2dB ✓     ✓    ✓    ✓    2.3 MB
+  2    20260329   2026-03-28   Mar 28, 23:45          8m 12s     Muse S   12.1dB ✓     ✓    —    ✓    1.8 MB
+  ...
+
+── Data Integrity ─────────────────────────────────────────────────
+  ✓  All sessions have timestamps
+  ⚠  3 session(s) with JSON sidecar but NO data file (CSV/Parquet)
+  Info  12 session(s) missing _metrics file
+
+── Summary ────────────────────────────────────────────────────────
+  Total ~/.skill size                  7.58 GB
+  Sessions                             221 across 16 days
+  Local days                           16 (from session timestamps)
+  Modalities                           EEG:184  PPG:49  IMU:106
+```
+
+Use `SKILL_DIR=/path/to/other/.skill npm run health` to inspect a different data directory.
+
+---
+
 A Git pre-commit hook runs two fast sanity checks:
 
 | Check | Command |
