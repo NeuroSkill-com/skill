@@ -2039,25 +2039,23 @@ useWindowTitle("window.title.history");
                       metrics={getMetrics(session.csv_path)}
                       timeseries={getTs(session.csv_path)} />
 
-                    <!-- GPS track map (PMTiles + MapLibre) -->
+                    <!-- Location map (GPS track or IP-based fallback) -->
                     {#if locationCache[session.csv_path] === "loading"}
                       <div class="flex items-center gap-2 py-1">
                         <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
-                        <span class="text-[0.55rem] text-muted-foreground/40">Loading GPS track…</span>
+                        <span class="text-[0.55rem] text-muted-foreground/40">Loading location…</span>
                       </div>
-                    {:else}
-                      {@const gpsPoints = getLocation(session.csv_path)}
-                      {#if gpsPoints && gpsPoints.length > 0}
-                        <div class="flex flex-col gap-1">
+                    {:else if session.csv_path in locationCache}
+                      {@const gpsPoints = getLocation(session.csv_path) ?? []}
+                      <div class="flex flex-col gap-1">
+                        {#if gpsPoints.length > 0}
                           <div class="flex items-center gap-1.5">
-                            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
-                              GPS Track
-                            </span>
-                            <span class="text-[0.48rem] text-muted-foreground/40">{gpsPoints.length} fixes</span>
+                            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">GPS Track</span>
+                            <span class="text-[0.48rem] text-muted-foreground/40">{gpsPoints.length} fix{gpsPoints.length === 1 ? "" : "es"}</span>
                           </div>
-                          <SessionMap points={gpsPoints} color={color} height="180px" />
-                        </div>
-                      {/if}
+                        {/if}
+                        <SessionMap points={gpsPoints} color={color} height="180px" />
+                      </div>
                     {/if}
 
                     <!-- HNSW / SQLite embedding count -->
