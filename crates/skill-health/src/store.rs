@@ -8,6 +8,7 @@
 //!
 //! All timestamps are stored as UTC unix seconds (i64).  The iOS app is
 //! expected to convert `HKSample.startDate`/`endDate` before sending.
+//! GPS coordinates use WGS-84 (the standard used by CoreLocation).
 //!
 //! # Sync protocol
 //!
@@ -109,6 +110,22 @@ CREATE TABLE IF NOT EXISTS health_metrics (
     UNIQUE(source_id, metric_type, timestamp)
 );
 CREATE INDEX IF NOT EXISTS idx_hm_type_ts ON health_metrics (metric_type, timestamp);
+
+CREATE TABLE IF NOT EXISTS location_samples (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id           TEXT    NOT NULL DEFAULT '',
+    timestamp           INTEGER NOT NULL,  -- UTC unix seconds
+    latitude            REAL    NOT NULL,  -- WGS-84 degrees
+    longitude           REAL    NOT NULL,  -- WGS-84 degrees
+    altitude            REAL,              -- metres above sea level
+    horizontal_accuracy REAL,              -- metres (negative = invalid)
+    vertical_accuracy   REAL,              -- metres (negative = invalid)
+    speed               REAL,              -- m/s (negative = invalid)
+    course              REAL,              -- degrees from true north (negative = invalid)
+    created_at          INTEGER NOT NULL,
+    UNIQUE(source_id, timestamp)
+);
+CREATE INDEX IF NOT EXISTS idx_loc_ts ON location_samples (timestamp);
 ";
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -177,6 +194,45 @@ pub struct HealthMetric {
     pub metadata: Option<serde_json::Value>,
 }
 
+/// A GPS fix recorded by the iOS companion app (CoreLocation / CLLocation).
+///
+/// All fields follow Apple's `CLLocation` conventions:
+/// - coordinates are WGS-84 degrees
+/// - `horizontal_accuracy` / `vertical_accuracy` are in metres; a negative
+///   value means the measurement is invalid
+/// - `speed` is metres-per-second; negative = invalid
+/// - `course` is degrees clockwise from true north; negative = invalid
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LocationSample {
+    #[serde(default)]
+    pub source_id: String,
+    /// UTC unix timestamp (seconds).
+    pub timestamp: i64,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude: Option<f64>,
+    pub horizontal_accuracy: Option<f64>,
+    pub vertical_accuracy: Option<f64>,
+    pub speed: Option<f64>,
+    pub course: Option<f64>,
+}
+
+/// A GPS location row returned from the database.
+#[derive(Clone, Debug, Serialize)]
+pub struct LocationRow {
+    pub id: i64,
+    pub source_id: String,
+    pub timestamp: i64,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude: Option<f64>,
+    pub horizontal_accuracy: Option<f64>,
+    pub vertical_accuracy: Option<f64>,
+    pub speed: Option<f64>,
+    pub course: Option<f64>,
+    pub created_at: i64,
+}
+
 /// Batch sync payload sent by the iOS companion app.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct HealthSyncPayload {
@@ -192,6 +248,10 @@ pub struct HealthSyncPayload {
     pub mindfulness: Vec<MindfulnessSample>,
     #[serde(default)]
     pub metrics: Vec<HealthMetric>,
+    /// GPS fixes from CoreLocation (optional — only sent when location
+    /// permission has been granted and fixes are available).
+    #[serde(default)]
+    pub location: Vec<LocationSample>,
 }
 
 /// Summary returned after a sync.
@@ -203,6 +263,7 @@ pub struct SyncResult {
     pub steps_upserted: usize,
     pub mindfulness_upserted: usize,
     pub metrics_upserted: usize,
+    pub location_upserted: usize,
 }
 
 /// Row returned by query endpoints (includes the DB id).
@@ -303,6 +364,7 @@ impl HealthStore {
             steps_upserted: 0,
             mindfulness_upserted: 0,
             metrics_upserted: 0,
+            location_upserted: 0,
         };
 
         if !payload.sleep.is_empty() {
@@ -426,6 +488,35 @@ impl HealthStore {
                         .is_ok()
                     {
                         result.metrics_upserted += 1;
+                    }
+                }
+            }
+        }
+
+        if !payload.location.is_empty() {
+            if let Ok(mut stmt) = conn.prepare_cached(
+                "INSERT OR IGNORE INTO location_samples
+                 (source_id, timestamp, latitude, longitude, altitude,
+                  horizontal_accuracy, vertical_accuracy, speed, course, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            ) {
+                for loc in &payload.location {
+                    if stmt
+                        .execute(params![
+                            loc.source_id,
+                            loc.timestamp,
+                            loc.latitude,
+                            loc.longitude,
+                            loc.altitude,
+                            loc.horizontal_accuracy,
+                            loc.vertical_accuracy,
+                            loc.speed,
+                            loc.course,
+                            now
+                        ])
+                        .is_ok()
+                    {
+                        result.location_upserted += 1;
                     }
                 }
             }
@@ -562,6 +653,36 @@ impl HealthStore {
         .unwrap_or_default()
     }
 
+    /// Query GPS location samples in the given UTC time range.
+    pub fn query_location(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<LocationRow> {
+        let conn = lock_or_recover(&self.conn);
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT id, source_id, timestamp, latitude, longitude, altitude,
+                    horizontal_accuracy, vertical_accuracy, speed, course, created_at
+             FROM location_samples WHERE timestamp >= ?1 AND timestamp <= ?2
+             ORDER BY timestamp DESC LIMIT ?3",
+        ) else {
+            return vec![];
+        };
+        stmt.query_map(params![start_utc, end_utc, limit], |row| {
+            Ok(LocationRow {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                timestamp: row.get(2)?,
+                latitude: row.get(3)?,
+                longitude: row.get(4)?,
+                altitude: row.get(5)?,
+                horizontal_accuracy: row.get(6)?,
+                vertical_accuracy: row.get(7)?,
+                speed: row.get(8)?,
+                course: row.get(9)?,
+                created_at: row.get(10)?,
+            })
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
     pub fn list_metric_types(&self) -> Vec<String> {
         let conn = lock_or_recover(&self.conn);
         let Ok(mut stmt) = conn.prepare("SELECT DISTINCT metric_type FROM health_metrics ORDER BY metric_type") else {
@@ -623,6 +744,14 @@ impl HealthStore {
             )
             .unwrap_or(0);
 
+        let location_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM location_samples WHERE timestamp >= ?1 AND timestamp <= ?2",
+                params![start_utc, end_utc],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
         serde_json::json!({
             "start_utc":            start_utc,
             "end_utc":              end_utc,
@@ -632,6 +761,7 @@ impl HealthStore {
             "total_steps":          total_steps,
             "mindfulness_sessions": mindful_count,
             "metric_entries":       metric_count,
+            "location_fixes":       location_count,
         })
     }
 }
@@ -790,6 +920,115 @@ mod tests {
         store.sync(&payload);
         let types = store.list_metric_types();
         assert_eq!(types, vec!["hrv", "restingHeartRate"]);
+    }
+
+    #[test]
+    fn sync_location_and_query() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![LocationSample {
+                source_id: "iphone".into(),
+                timestamp: 7000,
+                latitude: 37.3317,
+                longitude: -122.0307,
+                altitude: Some(25.0),
+                horizontal_accuracy: Some(5.0),
+                vertical_accuracy: Some(10.0),
+                speed: Some(1.4),
+                course: Some(270.0),
+            }],
+            ..Default::default()
+        };
+        let result = store.sync(&payload);
+        assert_eq!(result.location_upserted, 1);
+
+        let rows = store.query_location(0, 10000, 10);
+        assert_eq!(rows.len(), 1);
+        assert!((rows[0].latitude - 37.3317).abs() < 1e-6);
+        assert!((rows[0].longitude - -122.0307).abs() < 1e-6);
+        assert_eq!(rows[0].source_id, "iphone");
+    }
+
+    #[test]
+    fn sync_location_is_idempotent() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![LocationSample {
+                source_id: "iphone".into(),
+                timestamp: 7000,
+                latitude: 48.8566,
+                longitude: 2.3522,
+                altitude: None,
+                horizontal_accuracy: Some(8.0),
+                vertical_accuracy: None,
+                speed: None,
+                course: None,
+            }],
+            ..Default::default()
+        };
+        store.sync(&payload);
+        store.sync(&payload);
+        let rows = store.query_location(0, 10000, 100);
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn sync_location_optional_fields_nullable() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![LocationSample {
+                source_id: "".into(),
+                timestamp: 9000,
+                latitude: 51.5074,
+                longitude: -0.1278,
+                altitude: None,
+                horizontal_accuracy: None,
+                vertical_accuracy: None,
+                speed: None,
+                course: None,
+            }],
+            ..Default::default()
+        };
+        store.sync(&payload);
+        let rows = store.query_location(0, 10000, 10);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].altitude.is_none());
+        assert!(rows[0].speed.is_none());
+    }
+
+    #[test]
+    fn summary_includes_location_count() {
+        let (_dir, store) = temp_store();
+        let payload = HealthSyncPayload {
+            location: vec![
+                LocationSample {
+                    source_id: "".into(),
+                    timestamp: 100,
+                    latitude: 0.0,
+                    longitude: 0.0,
+                    altitude: None,
+                    horizontal_accuracy: None,
+                    vertical_accuracy: None,
+                    speed: None,
+                    course: None,
+                },
+                LocationSample {
+                    source_id: "".into(),
+                    timestamp: 200,
+                    latitude: 1.0,
+                    longitude: 1.0,
+                    altitude: None,
+                    horizontal_accuracy: None,
+                    vertical_accuracy: None,
+                    speed: None,
+                    course: None,
+                },
+            ],
+            ..Default::default()
+        };
+        store.sync(&payload);
+        let s = store.summary(0, 500);
+        assert_eq!(s["location_fixes"], 2);
     }
 
     #[test]

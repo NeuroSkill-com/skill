@@ -545,7 +545,7 @@ async fn root_get(
                 "DELETE /v1/calibrations/{id}":     "delete calibration profile",
                 "GET  /v1/dnd":                     "DND automation status",
                 "POST /v1/dnd":                     "force-enable/disable DND: { enabled: bool }",
-                "POST /v1/health/sync":             "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics? }",
+                "POST /v1/health/sync":             "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics?, location? }",
                 "POST /v1/health/query":            "query health data: { type, start_utc?, end_utc?, limit?, metric_type? }",
                 "GET  /v1/health/summary":          "aggregate health counts (last 24h default)",
                 "POST /v1/health/summary":          "aggregate health counts: { start_utc, end_utc }",

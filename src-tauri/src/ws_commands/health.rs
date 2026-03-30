@@ -21,13 +21,14 @@ pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let store = store.ok_or_else(|| "health store not available".to_string())?;
     let result = store.sync(&payload);
     eprintln!(
-        "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={}",
+        "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={} location={}",
         result.sleep_upserted,
         result.workouts_upserted,
         result.heart_rate_upserted,
         result.steps_upserted,
         result.mindfulness_upserted,
         result.metrics_upserted,
+        result.location_upserted,
     );
     serde_json::to_value(&result).map_err(|e| e.to_string())
 }
@@ -86,7 +87,11 @@ pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
             let rows = store.query_metrics(metric_type, start_utc, end_utc, limit);
             Ok(serde_json::json!({ "type": "metrics", "metric_type": metric_type, "count": rows.len(), "results": rows }))
         }
-        other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics")),
+        "location" => {
+            let rows = store.query_location(start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "location", "count": rows.len(), "results": rows }))
+        }
+        other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics|location")),
     }
 }
 
