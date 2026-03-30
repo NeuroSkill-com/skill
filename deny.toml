@@ -84,6 +84,11 @@ exceptions = [
     # so we allow both the deprecated alias and the canonical form.
     { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "mw75" },
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dicts" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dict-ru" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-phonemes" },
+    { allow = ["GPL-3.0-only"], crate = "skill-location" },
     { allow = ["GPL-3.0-only"], crate = "skill-iroh" },
     { allow = ["GPL-3.0-only"], crate = "skill-lsl" },
     { allow = ["GPL-3.0-only"], crate = "sleepfm" },
