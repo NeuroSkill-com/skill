@@ -471,88 +471,34 @@ pub fn label(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
 // ── sessions ──────────────────────────────────────────────────────────────────
 
-/// List all embedding sessions (contiguous recording ranges from the
-/// daily `eeg.sqlite` databases).  No parameters.
+/// List all recording sessions from JSON sidecars (newest first).
+///
+/// Delegates to `skill_history::list_all_sessions` — the single source of
+/// truth for session listing.  This replaced an inline SQLite scan of the
+/// embeddings table, which missed sessions whose embeddings hadn't been
+/// computed yet and duplicated logic from the history crate.
 pub fn sessions(app: &AppHandle) -> Result<Value, String> {
     let st = app.app_state();
-    // We can't call the #[tauri::command] directly, but we can replicate
-    // the same logic.  Use the state's skill_dir.
     let skill_dir = skill_dir(&st);
+    let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
+    let entries = skill_history::list_all_sessions(&skill_dir, label_store.as_ref());
 
-    const GAP_SECS: u64 = skill_constants::SESSION_GAP_SECS;
+    let out: Vec<serde_json::Value> = entries
+        .iter()
+        .filter_map(|s| {
+            let start = s.session_start_utc?;
+            let end = s.session_end_utc?;
+            Some(serde_json::json!({
+                "day": skill_history::utc_secs_to_dir(start),
+                "start_utc": start,
+                "end_utc": end,
+                "n_epochs": s.total_samples.map(|n| n / 1280).unwrap_or(0),
+                "duration_secs": end.saturating_sub(start),
+                "device_name": s.device_name,
+            }))
+        })
+        .collect();
 
-    let mut all_ts: Vec<(u64, String)> = Vec::new();
-
-    let Ok(entries) = std::fs::read_dir(&skill_dir) else {
-        return Ok(serde_json::json!({ "sessions": [] }));
-    };
-    for entry in entries.filter_map(std::result::Result::ok) {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let day_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_string();
-        if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) {
-            continue;
-        }
-        let db_path = path.join(crate::constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
-            continue;
-        };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp")
-        else {
-            continue;
-        };
-        let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
-        if let Ok(rows) = rows {
-            for row in rows.filter_map(std::result::Result::ok) {
-                let utc = crate::commands::ts_to_unix(row);
-                all_ts.push((utc, day_name.clone()));
-            }
-        }
-    }
-
-    if all_ts.is_empty() {
-        return Ok(serde_json::json!({ "sessions": [] }));
-    }
-
-    all_ts.sort_by_key(|(ts, _)| *ts);
-
-    let mut out: Vec<serde_json::Value> = Vec::new();
-    let mut start = all_ts[0].0;
-    let mut end = start;
-    let mut count: u64 = 1;
-    let mut day = all_ts[0].1.clone();
-
-    for &(ts, ref d) in &all_ts[1..] {
-        if ts.saturating_sub(end) > GAP_SECS {
-            out.push(serde_json::json!({
-                "start_utc": start, "end_utc": end,
-                "n_epochs": count,  "day": day,
-            }));
-            start = ts;
-            end = ts;
-            count = 1;
-            day = d.clone();
-        } else {
-            end = ts;
-            count += 1;
-        }
-    }
-    out.push(serde_json::json!({
-        "start_utc": start, "end_utc": end,
-        "n_epochs": count,  "day": day,
-    }));
-
-    out.reverse(); // newest first
     Ok(serde_json::json!({ "sessions": out }))
 }
 

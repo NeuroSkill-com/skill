@@ -124,6 +124,19 @@ pub(crate) async fn list_sessions_for_local_day(
     .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub(crate) async fn list_all_sessions(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<Vec<SessionEntry>, String> {
+    let skill_dir = crate::skill_dir(&state);
+    tokio::task::spawn_blocking(move || {
+        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
+        skill_history::list_all_sessions(&skill_dir, label_store.as_ref())
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Delete a session's CSV, sidecar JSON, and related artifacts.
 ///
 /// Runs on a blocking thread so file-system deletions don't stall IPC.

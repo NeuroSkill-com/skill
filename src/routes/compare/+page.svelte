@@ -416,39 +416,30 @@ async function loadSessions(autoSelect = false) {
   // Primary source: sessions that have embeddings computed.
   const embSessions = await invoke<EmbeddingSession[]>("list_embedding_sessions");
 
-  // Fallback: also pull from the raw session list so that sessions recorded
-  // today (whose embeddings haven't been computed yet) still appear in the
-  // compare timeline.  We fetch only the most recent days to keep it fast.
+  // Fallback: also pull from the unified session list (JSON sidecars) so that
+  // sessions recorded today (whose embeddings haven't been computed yet) still
+  // appear in the compare timeline.  Uses list_all_sessions — the single
+  // source of truth from the skill-history crate.
   try {
-    const days = await invoke<string[]>("list_session_days");
-    const recentDays = days.slice(0, Math.min(days.length, 7));
-    const dayResults = await Promise.allSettled(
-      recentDays.map((day) =>
-        invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions_for_day", {
-          day,
-        }),
-      ),
-    );
+    const allSessions =
+      await invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_all_sessions");
 
     // Build a lookup of already-covered ranges (rounded to nearest minute to
     // avoid floating-point / rounding mismatches between the two sources).
     const covered = new Set(embSessions.map((s) => `${Math.round(s.start_utc / 60)}-${Math.round(s.end_utc / 60)}`));
 
-    for (const result of dayResults) {
-      if (result.status !== "fulfilled") continue;
-      for (const sess of result.value) {
-        if (!sess.session_start_utc || !sess.session_end_utc) continue;
-        const key = `${Math.round(sess.session_start_utc / 60)}-${Math.round(sess.session_end_utc / 60)}`;
-        if (!covered.has(key)) {
-          covered.add(key);
-          const dur = sess.session_end_utc - sess.session_start_utc;
-          embSessions.push({
-            start_utc: sess.session_start_utc,
-            end_utc: sess.session_end_utc,
-            n_epochs: Math.floor(dur / 5), // assume 5-second epochs
-            day: localDateFromUtc(sess.session_start_utc),
-          });
-        }
+    for (const sess of allSessions) {
+      if (!sess.session_start_utc || !sess.session_end_utc) continue;
+      const key = `${Math.round(sess.session_start_utc / 60)}-${Math.round(sess.session_end_utc / 60)}`;
+      if (!covered.has(key)) {
+        covered.add(key);
+        const dur = sess.session_end_utc - sess.session_start_utc;
+        embSessions.push({
+          start_utc: sess.session_start_utc,
+          end_utc: sess.session_end_utc,
+          n_epochs: Math.floor(dur / 5),
+          day: localDateFromUtc(sess.session_start_utc),
+        });
       }
     }
   } catch (e) {}

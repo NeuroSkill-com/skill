@@ -195,6 +195,28 @@ pub fn list_sessions_for_local_day(
     merged
 }
 
+/// List ALL sessions across ALL days, newest first.
+///
+/// This is the single source of truth for the WS `sessions` command, the CLI
+/// `sessions` subcommand, and any other consumer that needs the global session
+/// list.  It reads from JSON sidecars (not SQLite embeddings), so sessions
+/// show up immediately — even before the embedding pipeline has processed them.
+pub fn list_all_sessions(skill_dir: &Path, label_store: Option<&label_store::LabelStore>) -> Vec<SessionEntry> {
+    let days = list_session_days(skill_dir);
+    let mut all = Vec::new();
+    for day in &days {
+        all.extend(list_sessions_for_day(day, skill_dir, label_store));
+    }
+    // Newest first (list_sessions_for_day already sorts per-day, but we need
+    // a global sort across all days).
+    all.sort_by(|a, b| {
+        let ta = a.session_start_utc.or(a.session_end_utc).unwrap_or(0);
+        let tb = b.session_start_utc.or(b.session_end_utc).unwrap_or(0);
+        tb.cmp(&ta)
+    });
+    all
+}
+
 // ── Internal ─────────────────────────────────────────────────────────────────
 
 fn parse_local_key(key: &str) -> Option<(i32, u32, u32)> {
@@ -527,5 +549,56 @@ mod tests {
         assert_eq!(info.end_utc - info.start_utc, 86400);
         // March 1 00:00 PDT = March 1 07:00 UTC
         assert_eq!(info.start_utc, MAR01_MIDNIGHT_UTC + 25200);
+    }
+
+    #[test]
+    fn list_all_sessions_across_days() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path();
+
+        // Day 1: two sessions
+        let dir1 = skill.join("20260301");
+        std::fs::create_dir_all(&dir1).unwrap();
+        std::fs::write(
+            dir1.join("exg_1772348400.json"),
+            r#"{"csv_file":"exg_1772348400.csv","session_start_utc":1772348400,"session_end_utc":1772352000}"#,
+        )
+        .unwrap();
+        std::fs::write(dir1.join("exg_1772348400.csv"), "t,v\n").unwrap();
+        std::fs::write(
+            dir1.join("muse_1772360000.json"),
+            r#"{"csv_file":"muse_1772360000.csv","session_start_utc":1772360000,"session_end_utc":1772363600}"#,
+        )
+        .unwrap();
+        std::fs::write(dir1.join("muse_1772360000.csv"), "t,v\n").unwrap();
+
+        // Day 2: one session
+        let dir2 = skill.join("20260302");
+        std::fs::create_dir_all(&dir2).unwrap();
+        std::fs::write(
+            dir2.join("exg_1772434800.json"),
+            r#"{"csv_file":"exg_1772434800.csv","session_start_utc":1772434800,"session_end_utc":1772438400}"#,
+        )
+        .unwrap();
+        std::fs::write(dir2.join("exg_1772434800.csv"), "t,v\n").unwrap();
+
+        // Directory with only logs (no sessions) - should not contribute
+        let dir3 = skill.join("20260303");
+        std::fs::create_dir_all(&dir3).unwrap();
+        std::fs::write(dir3.join("log_12345.txt"), "log").unwrap();
+
+        let sessions = list_all_sessions(skill, None);
+        assert_eq!(sessions.len(), 3, "expected 3 sessions across 2 days");
+        // Should be newest first
+        assert_eq!(sessions[0].session_start_utc, Some(1_772_434_800));
+        assert_eq!(sessions[1].session_start_utc, Some(1_772_360_000));
+        assert_eq!(sessions[2].session_start_utc, Some(1_772_348_400));
+    }
+
+    #[test]
+    fn list_all_sessions_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = list_all_sessions(tmp.path(), None);
+        assert!(sessions.is_empty());
     }
 }
