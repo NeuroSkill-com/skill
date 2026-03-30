@@ -520,9 +520,13 @@ const settings: Record<string, string> = {
   "settings.geoProvider": "Proveedor de geolocalización",
   "settings.geoProviderDesc":
     "Elija cómo la app resuelve su ubicación para los metadatos de sesión. «Desactivado» desactiva la geolocalización, «Local» usa el GPS del dispositivo y «Remoto» consulta un servicio externo.",
-  "settings.geoProviderOff": "Desactivado",
-  "settings.geoProviderLocal": "Local",
+  "settings.geoProviderOff":
+    "Los servicios de ubicación están desactivados. La herramienta de ubicación LLM no estará disponible.",
+  "settings.geoProviderLocal": "Activar servicios de ubicación",
   "settings.geoProviderRemote": "Remoto",
+  "settings.geoProviderTesting": "Solicitando permiso y probando ubicación…",
+  "settings.geoProviderLocalOk": "CoreLocation está funcionando (alta precisión).",
+  "settings.geoProviderRemoteOk": "Geolocalización IP está funcionando (precisión a nivel de ciudad).",
 };
 
 export default settings;

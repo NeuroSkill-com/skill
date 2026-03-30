@@ -29,10 +29,7 @@ pub fn fetch_ip_location() -> Result<LocationFix, LocationError> {
 
     let ok = v.get("success").and_then(Value::as_bool).unwrap_or(true);
     if !ok {
-        let msg = v
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown error");
+        let msg = v.get("message").and_then(Value::as_str).unwrap_or("unknown error");
         return Err(LocationError::Failed(msg.to_string()));
     }
 

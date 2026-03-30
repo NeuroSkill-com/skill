@@ -21,15 +21,11 @@ pub fn fetch_ip_location() -> Result<LocationFix, LocationError> {
     }
 
     let body = String::from_utf8_lossy(&output.stdout);
-    let v: Value = serde_json::from_str(&body)
-        .map_err(|e| LocationError::Failed(format!("invalid JSON: {e}")))?;
+    let v: Value = serde_json::from_str(&body).map_err(|e| LocationError::Failed(format!("invalid JSON: {e}")))?;
 
     let ok = v.get("success").and_then(Value::as_bool).unwrap_or(true);
     if !ok {
-        let msg = v
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown error");
+        let msg = v.get("message").and_then(Value::as_str).unwrap_or("unknown error");
         return Err(LocationError::Failed(msg.to_string()));
     }
 

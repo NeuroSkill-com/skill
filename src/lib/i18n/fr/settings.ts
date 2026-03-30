@@ -521,9 +521,13 @@ const settings: Record<string, string> = {
   "settings.geoProvider": "Fournisseur de géolocalisation",
   "settings.geoProviderDesc":
     "Choisissez comment l'application détermine votre position pour les métadonnées de session. « Désactivé » désactive la géolocalisation, « Local » utilise le GPS de l'appareil et « Distant » interroge un service externe.",
-  "settings.geoProviderOff": "Désactivé",
-  "settings.geoProviderLocal": "Local",
+  "settings.geoProviderOff":
+    "Les services de localisation sont désactivés. L’outil de localisation LLM ne sera pas disponible.",
+  "settings.geoProviderLocal": "Activer les services de localisation",
   "settings.geoProviderRemote": "Distant",
+  "settings.geoProviderTesting": "Demande d’autorisation et test de localisation…",
+  "settings.geoProviderLocalOk": "CoreLocation fonctionne (haute précision).",
+  "settings.geoProviderRemoteOk": "Géolocalisation IP fonctionne (précision au niveau de la ville).",
 };
 
 export default settings;

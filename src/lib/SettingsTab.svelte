@@ -42,18 +42,16 @@ interface GpuStats {
 }
 let gpuStats = $state<GpuStats | null>(null);
 
-// ── Geo Provider ───────────────────────────────────────────────────────────
-type GeoProvider = "off" | "local" | "remote";
-let geoProvider = $state<GeoProvider>("remote");
-
-// Persist geoProvider in localStorage (or use invoke for backend persistence if needed)
-onMount(() => {
-  const stored = localStorage.getItem("geoProvider");
-  if (stored === "off" || stored === "local" || stored === "remote") geoProvider = stored;
-});
-$effect(() => {
-  localStorage.setItem("geoProvider", geoProvider);
-});
+// ── Location Services ──────────────────────────────────────────────────────
+let locationEnabled = $state(false);
+let locationToggling = $state(false);
+let locationTestResult = $state<{
+  ok: boolean;
+  source?: string;
+  city?: string;
+  country?: string;
+  error?: string;
+} | null>(null);
 
 let storageFormat = $state<"csv" | "parquet" | "both">("csv");
 let logConfig = $state<LogConfig>({
@@ -157,6 +155,7 @@ onMount(async () => {
   currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
   trackInputActivity = await invoke<boolean>("get_input_activity_tracking");
   mainWindowAutoFit = await invoke<boolean>("get_main_window_auto_fit").catch(() => true);
+  locationEnabled = await invoke<boolean>("get_location_enabled").catch(() => false);
   lastInputActivity = await invoke<[number, number]>("get_last_input_activity");
   nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
 
@@ -176,7 +175,7 @@ onDestroy(() => {
 });
 </script>
 
-<!-- ── Geo Provider Toggle ────────────────────────────────────────────────── -->
+<!-- ── Location Services Toggle ──────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
     {t("settings.geoProvider")}
@@ -186,20 +185,66 @@ onDestroy(() => {
       <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
         {t("settings.geoProviderDesc")}
       </p>
-      <div class="flex gap-2">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="geoProvider" value="off" bind:group={geoProvider} />
-          <span>{t("settings.geoProviderOff")}</span>
-        </label>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="geoProvider" value="local" bind:group={geoProvider} />
-          <span>{t("settings.geoProviderLocal")}</span>
-        </label>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="geoProvider" value="remote" bind:group={geoProvider} />
-          <span>{t("settings.geoProviderRemote")}</span>
-        </label>
+
+      <!-- Toggle -->
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-[0.75rem] font-medium text-foreground">{t("settings.geoProviderLocal")}</span>
+        <button
+          class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors
+                 {locationEnabled ? 'bg-primary' : 'bg-muted'}
+                 {locationToggling ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}"
+          onclick={async () => {
+            locationToggling = true;
+            locationTestResult = null;
+            try {
+              const result = await invoke<Record<string, unknown>>("set_location_enabled", { enabled: !locationEnabled });
+              locationEnabled = !!result.enabled;
+              if (result.fix) {
+                const f = result.fix as Record<string, unknown>;
+                locationTestResult = {
+                  ok: true,
+                  source: f.source as string,
+                  city: (f.city as string) ?? undefined,
+                  country: (f.country as string) ?? undefined,
+                };
+              } else if (result.error) {
+                locationTestResult = { ok: false, error: result.error as string };
+              }
+            } catch (e) {
+              locationTestResult = { ok: false, error: String(e) };
+            } finally {
+              locationToggling = false;
+            }
+          }}
+        >
+          <span
+            class="inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform
+                   {locationEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}"
+          />
+        </button>
       </div>
+
+      <!-- Status / test result -->
+      {#if locationToggling}
+        <p class="text-[0.64rem] text-muted-foreground animate-pulse">{t("settings.geoProviderTesting")}</p>
+      {:else if locationTestResult}
+        {#if locationTestResult.ok}
+          <div class="rounded-lg bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30 px-3 py-2
+                      text-[0.66rem] text-green-800 dark:text-green-300 leading-relaxed">
+            ✅ {locationTestResult.source === "CoreLocation" ? t("settings.geoProviderLocalOk") : t("settings.geoProviderRemoteOk")}
+            {#if locationTestResult.city || locationTestResult.country}
+              — {[locationTestResult.city, locationTestResult.country].filter(Boolean).join(", ")}
+            {/if}
+          </div>
+        {:else}
+          <div class="rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 px-3 py-2
+                      text-[0.66rem] text-red-800 dark:text-red-300 leading-relaxed">
+            ❌ {locationTestResult.error}
+          </div>
+        {/if}
+      {:else if !locationEnabled}
+        <p class="text-[0.64rem] text-muted-foreground">{t("settings.geoProviderOff")}</p>
+      {/if}
     </CardContent>
   </Card>
 </section>

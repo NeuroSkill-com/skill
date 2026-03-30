@@ -571,6 +571,8 @@ pub struct AppState {
     /// rlsl-iroh sink endpoint ID (set when the sink is running).
     pub lsl_iroh_endpoint_id: Option<String>,
 
+    /// Location services enabled by the user (default false).
+    pub location_enabled: bool,
     /// Auto-scan for LSL streams and connect paired ones automatically.
     pub lsl_auto_connect: bool,
     /// LSL streams the user has "paired" for auto-connect.
@@ -733,6 +735,7 @@ impl Default for AppState {
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
+            location_enabled: false,
             lsl_iroh_endpoint_id: None,
             lsl_auto_connect: false,
             lsl_paired_streams: Vec::new(),

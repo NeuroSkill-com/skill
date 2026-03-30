@@ -272,6 +272,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         sleep: s.sleep_config.clone(),
         storage_format: s.settings_storage_format.clone(),
         scanner: s.scanner_config.clone(),
+        location_enabled: s.location_enabled,
         lsl_auto_connect: s.lsl_auto_connect,
         lsl_paired_streams: s.lsl_paired_streams.clone(),
     };
