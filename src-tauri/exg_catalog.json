@@ -327,6 +327,73 @@
         }
       }
     },
+    "neurorvq": {
+      "name": "NeuroRVQ",
+      "description": "NeuroRVQ biosignal tokenizer — residual vector quantization for EEG, ECG, and EMG. 4-branch encoder with patch-based FFT + RVQ codebooks. Modality-specific weights for tokenization and foundation model encoding. Burn 0.20 backend.",
+      "repo": "eugenehp/NeuroRVQ",
+      "tags": [
+        "eeg",
+        "ecg",
+        "emg",
+        "tokenizer",
+        "embedding",
+        "multimodal",
+        "small"
+      ],
+      "weights_file": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
+      "config_file": "flags/NeuroRVQ_EEG_v1.yml",
+      "params_m": 5,
+      "embed_dim": 256,
+      "paper": null,
+      "doi": null,
+      "components": {
+        "eeg-tokenizer": {
+          "name": "EEG Tokenizer",
+          "description": "NeuroRVQ EEG tokenizer — patch-based FFT encoder with 4-branch RVQ codebooks for EEG signals.",
+          "repo": "eugenehp/NeuroRVQ",
+          "weights_file": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
+          "config_file": "flags/NeuroRVQ_EEG_v1.yml",
+          "params_m": 5,
+          "required": true
+        },
+        "ecg-tokenizer": {
+          "name": "ECG Tokenizer",
+          "description": "NeuroRVQ ECG tokenizer — patch-based FFT encoder with 4-branch RVQ codebooks for ECG signals.",
+          "repo": "eugenehp/NeuroRVQ",
+          "weights_file": "NeuroRVQ_ECG_tokenizer_v1.safetensors",
+          "config_file": "flags/NeuroRVQ_ECG_v1.yml",
+          "params_m": 5,
+          "required": false
+        },
+        "emg-tokenizer": {
+          "name": "EMG Tokenizer",
+          "description": "NeuroRVQ EMG tokenizer — patch-based FFT encoder with 4-branch RVQ codebooks for EMG signals.",
+          "repo": "eugenehp/NeuroRVQ",
+          "weights_file": "NeuroRVQ_EMG_tokenizer_v1.safetensors",
+          "config_file": "flags/NeuroRVQ_EMG_v1.yml",
+          "params_m": 5,
+          "required": false
+        },
+        "eeg-foundation": {
+          "name": "EEG Foundation Model",
+          "description": "NeuroRVQ EEG foundation model — deeper encoder for representation learning and downstream tasks.",
+          "repo": "eugenehp/NeuroRVQ",
+          "weights_file": "NeuroRVQ_EEG_foundation_model_v1.safetensors",
+          "config_file": "flags/NeuroRVQ_EEG_v1.yml",
+          "params_m": 10,
+          "required": false
+        },
+        "emg-foundation": {
+          "name": "EMG Foundation Model",
+          "description": "NeuroRVQ EMG foundation model — deeper encoder for EMG representation learning.",
+          "repo": "eugenehp/NeuroRVQ",
+          "weights_file": "NeuroRVQ_EMG_foundation_model_v1.safetensors",
+          "config_file": "flags/NeuroRVQ_EMG_v1.yml",
+          "params_m": 10,
+          "required": false
+        }
+      }
+    },
     "cbramod": {
       "name": "CBraMod",
       "description": "Criss-Cross Brain Foundation Model (~4M params, d_model=200). Uses criss-cross attention to separately model spatial (channel) and temporal (patch) dependencies. Pretrained on Temple University Hospital EEG Corpus via masked patch reconstruction. ICLR 2025.",
@@ -489,6 +556,63 @@
       "size_mb": 20,
       "description": "OpenTSLM — ~5M trainable params, 128-dim encoder + frozen Qwen3 LLM backbone",
       "recommended": true
+    },
+    {
+      "family": "neurorvq",
+      "component": "eeg-tokenizer",
+      "filename": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
+      "size_mb": 20,
+      "description": "NeuroRVQ EEG tokenizer — 4-branch RVQ codebook encoder",
+      "recommended": true
+    },
+    {
+      "family": "neurorvq",
+      "component": "eeg-tokenizer",
+      "filename": "flags/NeuroRVQ_EEG_v1.yml",
+      "size_mb": 1,
+      "description": "NeuroRVQ EEG config flags"
+    },
+    {
+      "family": "neurorvq",
+      "component": "ecg-tokenizer",
+      "filename": "NeuroRVQ_ECG_tokenizer_v1.safetensors",
+      "size_mb": 20,
+      "description": "NeuroRVQ ECG tokenizer — 4-branch RVQ codebook encoder"
+    },
+    {
+      "family": "neurorvq",
+      "component": "ecg-tokenizer",
+      "filename": "flags/NeuroRVQ_ECG_v1.yml",
+      "size_mb": 1,
+      "description": "NeuroRVQ ECG config flags"
+    },
+    {
+      "family": "neurorvq",
+      "component": "emg-tokenizer",
+      "filename": "NeuroRVQ_EMG_tokenizer_v1.safetensors",
+      "size_mb": 20,
+      "description": "NeuroRVQ EMG tokenizer — 4-branch RVQ codebook encoder"
+    },
+    {
+      "family": "neurorvq",
+      "component": "emg-tokenizer",
+      "filename": "flags/NeuroRVQ_EMG_v1.yml",
+      "size_mb": 1,
+      "description": "NeuroRVQ EMG config flags"
+    },
+    {
+      "family": "neurorvq",
+      "component": "eeg-foundation",
+      "filename": "NeuroRVQ_EEG_foundation_model_v1.safetensors",
+      "size_mb": 40,
+      "description": "NeuroRVQ EEG foundation model — deeper encoder for representation learning"
+    },
+    {
+      "family": "neurorvq",
+      "component": "emg-foundation",
+      "filename": "NeuroRVQ_EMG_foundation_model_v1.safetensors",
+      "size_mb": 40,
+      "description": "NeuroRVQ EMG foundation model — deeper encoder for EMG representation learning"
     }
   ]
 }
