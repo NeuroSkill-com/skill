@@ -338,12 +338,12 @@
         "tokenizer",
         "embedding",
         "multimodal",
-        "small"
+        "medium"
       ],
       "weights_file": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
       "config_file": "flags/NeuroRVQ_EEG_v1.yml",
-      "params_m": 5,
-      "embed_dim": 256,
+      "params_m": 76,
+      "embed_dim": 200,
       "paper": null,
       "doi": null,
       "components": {
@@ -353,7 +353,7 @@
           "repo": "eugenehp/NeuroRVQ",
           "weights_file": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
           "config_file": "flags/NeuroRVQ_EEG_v1.yml",
-          "params_m": 5,
+          "params_m": 76,
           "required": true
         },
         "ecg-tokenizer": {
@@ -362,7 +362,7 @@
           "repo": "eugenehp/NeuroRVQ",
           "weights_file": "NeuroRVQ_ECG_tokenizer_v1.safetensors",
           "config_file": "flags/NeuroRVQ_ECG_v1.yml",
-          "params_m": 5,
+          "params_m": 68,
           "required": false
         },
         "emg-tokenizer": {
@@ -371,7 +371,7 @@
           "repo": "eugenehp/NeuroRVQ",
           "weights_file": "NeuroRVQ_EMG_tokenizer_v1.safetensors",
           "config_file": "flags/NeuroRVQ_EMG_v1.yml",
-          "params_m": 5,
+          "params_m": 144,
           "required": false
         },
         "eeg-foundation": {
@@ -380,7 +380,7 @@
           "repo": "eugenehp/NeuroRVQ",
           "weights_file": "NeuroRVQ_EEG_foundation_model_v1.safetensors",
           "config_file": "flags/NeuroRVQ_EEG_v1.yml",
-          "params_m": 10,
+          "params_m": 76,
           "required": false
         },
         "emg-foundation": {
@@ -389,7 +389,7 @@
           "repo": "eugenehp/NeuroRVQ",
           "weights_file": "NeuroRVQ_EMG_foundation_model_v1.safetensors",
           "config_file": "flags/NeuroRVQ_EMG_v1.yml",
-          "params_m": 10,
+          "params_m": 144,
           "required": false
         }
       }
@@ -561,7 +561,7 @@
       "family": "neurorvq",
       "component": "eeg-tokenizer",
       "filename": "NeuroRVQ_EEG_tokenizer_v1.safetensors",
-      "size_mb": 20,
+      "size_mb": 304,
       "description": "NeuroRVQ EEG tokenizer — 4-branch RVQ codebook encoder",
       "recommended": true
     },
@@ -576,7 +576,7 @@
       "family": "neurorvq",
       "component": "ecg-tokenizer",
       "filename": "NeuroRVQ_ECG_tokenizer_v1.safetensors",
-      "size_mb": 20,
+      "size_mb": 272,
       "description": "NeuroRVQ ECG tokenizer — 4-branch RVQ codebook encoder"
     },
     {
@@ -590,7 +590,7 @@
       "family": "neurorvq",
       "component": "emg-tokenizer",
       "filename": "NeuroRVQ_EMG_tokenizer_v1.safetensors",
-      "size_mb": 20,
+      "size_mb": 574,
       "description": "NeuroRVQ EMG tokenizer — 4-branch RVQ codebook encoder"
     },
     {
@@ -604,14 +604,14 @@
       "family": "neurorvq",
       "component": "eeg-foundation",
       "filename": "NeuroRVQ_EEG_foundation_model_v1.safetensors",
-      "size_mb": 40,
+      "size_mb": 304,
       "description": "NeuroRVQ EEG foundation model — deeper encoder for representation learning"
     },
     {
       "family": "neurorvq",
       "component": "emg-foundation",
       "filename": "NeuroRVQ_EMG_foundation_model_v1.safetensors",
-      "size_mb": 40,
+      "size_mb": 574,
       "description": "NeuroRVQ EMG foundation model — deeper encoder for EMG representation learning"
     }
   ]
