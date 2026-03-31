@@ -7249,9 +7249,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llama-cpp-4"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "668a2b786458fadbd5fb694c2d8afaf257bf24a95ff91f3cc7eae0db426ce478"
+checksum = "82effefac65e180bbf815652041909095dab7fb8b8060d22153f2fadcd34dcbd"
 dependencies = [
  "enumflags2",
  "llama-cpp-sys-4",
@@ -10572,6 +10572,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "realfft"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f821338fddb99d089116342c46e9f1fbf3828dba077674613e734e01d6ea8677"
+dependencies = [
+ "rustfft",
+]
+
+[[package]]
 name = "reborrow"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11092,6 +11101,18 @@ checksum = "9574ddebf5671bc08ceb76e2e1638fadc57fdeff318634eab2c29e9a803cff64"
 dependencies = [
  "rten-base",
  "rten-simd",
+]
+
+[[package]]
+name = "rubato"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5258099699851cfd0082aeb645feb9c084d9a5e1f1b8d5372086b989fc5e56a1"
+dependencies = [
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "realfft",
 ]
 
 [[package]]
@@ -12020,6 +12041,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "serde_yaml",
  "serialport",
  "sha2 0.10.9",
  "signaljepa",
@@ -12065,6 +12087,8 @@ dependencies = [
  "tokio-util",
  "tower-http",
  "tribev2",
+ "tribev2-audio",
+ "tribev2-video",
  "ureq 3.3.0",
  "wgpu",
  "zuna-rs",
@@ -14402,9 +14426,9 @@ dependencies = [
 
 [[package]]
 name = "tribev2"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83b72d9ca4a73539040570b41e57de10b0a7b3616bffac820b3e58bb32a8b247"
+checksum = "5e6ba9cf5c2d94d5e3a0ff05cfaee5e0f23f1a7a3bc3ed88d6f859bb91d62322"
 dependencies = [
  "anyhow",
  "burn",
@@ -14419,6 +14443,38 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "tribev2-audio"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "661e72dcef4e41fc6024da0e4f5613d7036e2fd31ba88bdb4d48c151fc07013d"
+dependencies = [
+ "anyhow",
+ "burn",
+ "half",
+ "hound",
+ "rubato",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "tribev2-video"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1684e0d56261c9cc09f87978bdf7fe7789979b8620c558b29660d57dd83a498"
+dependencies = [
+ "anyhow",
+ "burn",
+ "half",
+ "image",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

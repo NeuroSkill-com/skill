@@ -484,6 +484,14 @@ pub(super) fn embed_worker(
                 let hf_repo = cache.repo(Repo::model(repo.to_string()));
                 let w = hf_repo.get(wf)?;
                 let c = hf_repo.get(cf)?;
+                // Also fetch any extra_files (e.g. build_args.json for tribev2).
+                if let Some(extras) = fam.get("extra_files").and_then(|v| v.as_array()) {
+                    for ef in extras {
+                        if let Some(fname) = ef.as_str() {
+                            let _ = hf_repo.get(fname); // best-effort
+                        }
+                    }
+                }
                 Some((w, c))
             }
         }
@@ -549,6 +557,77 @@ pub(super) fn embed_worker(
                 false,
                 &logger,
             ) {
+                // Fetch extra_files and component weights from the catalog.
+                {
+                    use hf_hub::{Cache, Repo};
+                    let catalog: serde_json::Value =
+                        serde_json::from_str(include_str!("../../exg_catalog.json"))
+                            .unwrap_or_default();
+                    let fam_val = catalog
+                        .get("families")
+                        .and_then(|f| f.get(active_backend.as_str()));
+
+                    // Extra files from the primary repo (e.g. build_args.json).
+                    if let Some(extras) = fam_val
+                        .and_then(|f| f.get("extra_files"))
+                        .and_then(|v| v.as_array())
+                    {
+                        let cache = Cache::from_env();
+                        let hf_repo = cache.repo(Repo::model(download_repo.clone()));
+                        for ef in extras {
+                            if let Some(fname) = ef.as_str() {
+                                match hf_repo.get(fname) {
+                                    Some(p) => skill_log!(
+                                        logger,
+                                        "embedder",
+                                        "extra file {fname} → {}",
+                                        p.display()
+                                    ),
+                                    None => skill_log!(
+                                        logger,
+                                        "embedder",
+                                        "extra file {fname} not in cache — will re-fetch"
+                                    ),
+                                }
+                            }
+                        }
+                    }
+
+                    // Component weights from other repos (audio/video encoders).
+                    if let Some(comps) = fam_val
+                        .and_then(|f| f.get("components"))
+                        .and_then(|c| c.as_object())
+                    {
+                        for (comp_name, comp) in comps {
+                            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                                skill_log!(logger, "embedder", "component download cancelled");
+                                break;
+                            }
+                            let c_repo = comp.get("repo").and_then(|r| r.as_str()).unwrap_or("");
+                            let c_wf = comp
+                                .get("weights_file")
+                                .and_then(|w| w.as_str())
+                                .unwrap_or("");
+                            let c_cf = comp
+                                .get("config_file")
+                                .and_then(|c| c.as_str())
+                                .unwrap_or("config.json");
+                            // Skip the primary repo (already downloaded) and
+                            // entries without a weights file.
+                            if c_repo.is_empty() || c_wf.is_empty() || c_repo == download_repo {
+                                continue;
+                            }
+                            skill_log!(
+                                logger,
+                                "embedder",
+                                "downloading {comp_name} component: {c_repo}/{c_wf}"
+                            );
+                            let _ = download_hf_weights(
+                                c_repo, c_wf, c_cf, &status, &cancel, false, &logger,
+                            );
+                        }
+                    }
+                }
                 let mut st = status.lock_or_recover();
                 st.download_retry_attempt = 0;
                 st.download_retry_in_secs = 0;
@@ -726,6 +805,15 @@ pub(super) fn embed_worker(
         Luna(Box<luna_rs::LunaEncoder<Wgpu>>),
         Reve(Box<reve_rs::ReveEncoder<Wgpu>>),
         Osf(Box<osf_rs::OsfEncoder<Wgpu>>),
+        Tribev2(Box<Tribev2Encoder>),
+    }
+
+    /// Holds the loaded TRIBE v2 brain encoder plus cached model dimensions.
+    struct Tribev2Encoder {
+        model: tribev2::model_burn::tribe::TribeV2Burn<Wgpu>,
+        hidden: usize,
+        n_outputs: usize,
+        n_output_timesteps: usize,
     }
 
     impl LoadedEncoder {
@@ -735,6 +823,10 @@ pub(super) fn embed_worker(
                 Self::Luna(e) => e.describe(),
                 Self::Reve(e) => e.describe(),
                 Self::Osf(e) => e.describe(),
+                Self::Tribev2(e) => format!(
+                    "TRIBEv2  hidden={}  vertices={}  timesteps={}",
+                    e.hidden, e.n_outputs, e.n_output_timesteps
+                ),
             }
         }
     }
@@ -776,6 +868,56 @@ pub(super) fn embed_worker(
                         osf_rs::OsfEncoder::<Wgpu>::load(&c, &w, device.clone())
                             .map(|(enc, ms)| (LoadedEncoder::Osf(Box::new(enc)), ms))
                             .map_err(|e| format!("{e:#}"))
+                    }
+                    ExgModelBackend::Tribev2 => {
+                        let start = Instant::now();
+                        // config.yaml is the config_file; weights is model.safetensors.
+                        // build_args.json lives next to config.yaml.
+                        let build_args_path = c.parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .join("build_args.json");
+                        let cfg_str = std::fs::read_to_string(&c)
+                            .map_err(|e| format!("read config.yaml: {e}"))?;
+                        let tribe_cfg: tribev2::TribeV2Config = serde_yaml::from_str(&cfg_str)
+                            .map_err(|e| format!("parse config.yaml: {e}"))?;
+
+                        let build_args = if build_args_path.exists() {
+                            tribev2::ModelBuildArgs::from_json(
+                                build_args_path.to_str().unwrap_or("build_args.json")
+                            ).map_err(|e| format!("parse build_args.json: {e}"))?
+                        } else {
+                            // Fallback: use pretrained defaults
+                            tribev2::ModelBuildArgs {
+                                feature_dims: ["text", "audio", "video"].iter().map(|&name| {
+                                    let md = tribev2::ModalityDims::pretrained();
+                                    let d = md.iter().find(|m| m.name == name)
+                                    .expect("pretrained modality not found");
+                                    (name.to_string(), d.dims.map(|(l, f)| vec![l, f]))
+                                }).collect(),
+                                n_outputs: 20484,
+                                n_output_timesteps: 100,
+                            }
+                        };
+                        let feature_dims = build_args.to_modality_dims();
+                        let n_outputs = build_args.n_outputs;
+                        let n_output_timesteps = build_args.n_output_timesteps;
+                        let hidden = tribe_cfg.brain_model_config.hidden;
+
+                        let mut model = tribev2::model_burn::tribe::TribeV2Burn::<Wgpu>::new(
+                            &feature_dims, n_outputs, n_output_timesteps,
+                            &tribe_cfg.brain_model_config, &device.clone(),
+                        );
+
+                        // Load safetensors weights
+                        let mut ws = tribev2::model_burn::weights::BurnWeightStore
+                            ::from_safetensors(w.to_str().unwrap_or(""))
+                            .map_err(|e| format!("load safetensors: {e}"))?;
+                        tribev2::model_burn::weights::load_burn_weights(&mut ws, &mut model, &device.clone())
+                            .map_err(|e| format!("load weights: {e}"))?;
+
+                        let ms = start.elapsed().as_secs_f64() * 1000.0;
+                        let enc = Tribev2Encoder { model, hidden, n_outputs, n_output_timesteps };
+                        Ok((LoadedEncoder::Tribev2(Box::new(enc)), ms))
                     }
                     // Crates with raw model API only (no high-level Encoder
                     // wrapper yet) or incompatible burn version.
@@ -1134,6 +1276,57 @@ pub(super) fn embed_worker(
                             return Err("empty osf output".into());
                         }
                         Ok(result.cls_emb)
+                    }
+                    // TRIBE v2: EEG epoch → text-only forward pass → cortical
+                    // predictions → spatial-mean embedding.
+                    //
+                    // The brain encoder expects feature tensors [1, dim, T] for
+                    // text/audio/video.  In EEG-only mode we zero-pad all three
+                    // modalities and let the encoder produce a cortical map.
+                    // We then mean-pool the 20 484 vertices into a compact
+                    // embedding vector.
+                    LoadedEncoder::Tribev2(tribe_enc) => {
+                        let n_timesteps = tribe_enc.n_output_timesteps;
+                        let _hidden = tribe_enc.hidden;
+                        let _n_verts = tribe_enc.n_outputs;
+
+                        // Build zero feature tensors for each modality.
+                        // Dimensions from pretrained: text=[1,6144,T], audio=[1,2048,T], video=[1,2816,T]
+                        let modalities = tribev2::ModalityDims::pretrained();
+                        let features: Vec<(&str, burn::tensor::Tensor<Wgpu, 3>)> = modalities
+                            .iter()
+                            .map(|md| {
+                                let dim = md.num_layers() * md.feature_dim();
+                                let t = burn::tensor::Tensor::<Wgpu, 3>::zeros(
+                                    [1, dim, n_timesteps],
+                                    &device,
+                                );
+                                (md.name.as_str(), t)
+                            })
+                            .collect();
+
+                        // Forward pass → [1, n_verts, n_timesteps]
+                        let output = tribe_enc.model.forward(features);
+                        let [_b, v, ts] = output.dims();
+
+                        // Mean-pool across vertices → [n_timesteps]
+                        let flat: Vec<f32> = output
+                            .into_data()
+                            .to_vec()
+                            .expect("tribev2 output tensor conversion");
+                        let mut emb = vec![0f32; ts];
+                        for t in 0..ts {
+                            let mut sum = 0f64;
+                            for vi in 0..v {
+                                sum += flat[vi * ts + t] as f64;
+                            }
+                            emb[t] = (sum / v as f64) as f32;
+                        }
+
+                        if emb.is_empty() {
+                            return Err("empty tribev2 output".into());
+                        }
+                        Ok(emb)
                     }
                 }
             }));

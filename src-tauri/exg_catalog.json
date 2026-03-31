@@ -278,13 +278,54 @@
         "cortical",
         "large"
       ],
-      "weights_file": "best.ckpt",
+      "weights_file": "model.safetensors",
       "config_file": "config.yaml",
+      "extra_files": ["build_args.json"],
       "params_m": 177,
       "embed_dim": 1152,
       "paper": "https://github.com/facebookresearch/tribev2",
       "doi": null,
-      "preview_image": "/exg/tribev2-brain.png"
+      "preview_image": "/exg/tribev2-brain.png",
+      "components": {
+        "brain": {
+          "name": "Brain Encoder",
+          "description": "8-layer Transformer encoder with ScaleNorm + RoPE, projects multimodal features onto fsaverage5 cortical surface (20,484 vertices).",
+          "repo": "eugenehp/tribev2",
+          "weights_file": "model.safetensors",
+          "config_file": "config.yaml",
+          "extra_files": ["build_args.json"],
+          "params_m": 177,
+          "required": true
+        },
+        "text": {
+          "name": "Text Encoder — LLaMA 3.2-3B",
+          "description": "LLaMA 3.2-3B text feature extractor. Extracts per-token hidden states at selected layers, resampled to 2 Hz. Runs via llama.cpp (GGUF). Output: [2, 3072, T].",
+          "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+          "weights_file": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+          "config_file": null,
+          "params_m": 3000,
+          "required": false,
+          "note": "Any LLaMA-3.2-3B GGUF quantisation works. Shared with the LLM engine when the llm feature is enabled."
+        },
+        "audio": {
+          "name": "Audio Encoder — Wav2Vec-BERT 2.0",
+          "description": "24-layer Conformer (600M params, hidden=1024). Extracts intermediate hidden states from raw 16 kHz audio, resampled to 2 Hz. Output: [2, 1024, T].",
+          "repo": "facebook/w2v-bert-2.0",
+          "weights_file": "model.safetensors",
+          "config_file": "config.json",
+          "params_m": 600,
+          "required": false
+        },
+        "video": {
+          "name": "Video Encoder — V-JEPA2 ViT-G",
+          "description": "40-layer ViT-Giant (1.1B params, hidden=1408). Processes 64-frame clips at 16 FPS (4s), extracts hidden states at selected layers, mean-pools spatial tokens, resampled to 2 Hz. Output: [2, 1408, T].",
+          "repo": "facebook/vjepa2-vitg-fpc64-256",
+          "weights_file": "model.safetensors",
+          "config_file": "config.json",
+          "params_m": 1100,
+          "required": false
+        }
+      }
     },
     "cbramod": {
       "name": "CBraMod",
@@ -401,10 +442,46 @@
     },
     {
       "family": "tribev2",
-      "filename": "best.ckpt",
+      "component": "brain",
+      "filename": "model.safetensors",
       "size_mb": 676,
-      "description": "TRIBE v2 pretrained checkpoint — requires safetensors conversion before Rust inference (see eugenehp/tribev2-rs)",
+      "description": "TRIBE v2 brain encoder — safetensors, ready for Rust inference",
       "recommended": true
+    },
+    {
+      "family": "tribev2",
+      "component": "brain",
+      "filename": "config.yaml",
+      "size_mb": 1,
+      "description": "TRIBE v2 model hyperparameters (hidden dim, depth, heads, modalities)"
+    },
+    {
+      "family": "tribev2",
+      "component": "brain",
+      "filename": "build_args.json",
+      "size_mb": 1,
+      "description": "Feature-extractor build arguments used at training time"
+    },
+    {
+      "family": "tribev2",
+      "component": "text",
+      "filename": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+      "size_mb": 2130,
+      "description": "LLaMA 3.2-3B Instruct Q4_K_M — text feature extractor for TRIBE v2 (shared with LLM engine)"
+    },
+    {
+      "family": "tribev2",
+      "component": "audio",
+      "filename": "model.safetensors",
+      "size_mb": 2400,
+      "description": "Wav2Vec-BERT 2.0 — 600M param audio feature extractor (facebook/w2v-bert-2.0)"
+    },
+    {
+      "family": "tribev2",
+      "component": "video",
+      "filename": "model.safetensors",
+      "size_mb": 4400,
+      "description": "V-JEPA2 ViT-G — 1.1B param video feature extractor (facebook/vjepa2-vitg-fpc64-256)"
     },
     {
       "family": "opentslm",

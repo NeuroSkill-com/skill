@@ -303,6 +303,53 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     // Clear any previous cancellation so the new attempt actually runs.
     cancel.store(false, Ordering::Relaxed);
 
+    // Collect component downloads for composite models (e.g. tribev2).
+    let backend_key = config.model_backend.as_str().to_string();
+    let component_downloads: Vec<(String, String, String)> = {
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../exg_catalog.json")).unwrap_or_default();
+        let mut downloads = Vec::new();
+        if let Some(comps) = catalog
+            .get("families")
+            .and_then(|f| f.get(&backend_key))
+            .and_then(|f| f.get("components"))
+            .and_then(|c| c.as_object())
+        {
+            for (_name, comp) in comps {
+                let c_repo = comp.get("repo").and_then(|r| r.as_str()).unwrap_or("");
+                let c_wf = comp
+                    .get("weights_file")
+                    .and_then(|w| w.as_str())
+                    .unwrap_or("");
+                let c_cf = comp
+                    .get("config_file")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
+                // Skip the primary repo (already handled by the main download)
+                // and entries without a weights file.
+                if c_repo.is_empty() || c_wf.is_empty() || c_repo == hf_repo {
+                    continue;
+                }
+                downloads.push((c_repo.to_string(), c_wf.to_string(), c_cf.to_string()));
+            }
+        }
+        // Also fetch extra_files from the primary repo.
+        if let Some(extras) = catalog
+            .get("families")
+            .and_then(|f| f.get(&backend_key))
+            .and_then(|f| f.get("extra_files"))
+            .and_then(|v| v.as_array())
+        {
+            for ef in extras {
+                if let Some(fname) = ef.as_str() {
+                    // extra_files are small metadata; download via hf_hub cache.
+                    downloads.push((hf_repo.clone(), fname.to_string(), String::new()));
+                }
+            }
+        }
+        downloads
+    };
+
     std::thread::Builder::new()
         .name("hf-download".into())
         .spawn(move || {
@@ -319,6 +366,30 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
             )
             .is_some()
             {
+                // Download component weights (audio/video encoders, extra files).
+                for (c_repo, c_wf, c_cf) in &component_downloads {
+                    if cancel.load(Ordering::Relaxed) {
+                        skill_log!(logger, "embedder", "component download cancelled");
+                        break;
+                    }
+                    // For extra_files (no config), use the weights file as both.
+                    let cf = if c_cf.is_empty() {
+                        c_wf.as_str()
+                    } else {
+                        c_cf.as_str()
+                    };
+                    skill_log!(logger, "embedder", "downloading component: {c_repo}/{c_wf}");
+                    let _ = download_hf_weights(
+                        c_repo,
+                        c_wf,
+                        cf,
+                        &model_status,
+                        &cancel,
+                        false,
+                        &logger,
+                    );
+                }
+
                 // Signal the running embed worker (if any) to exit and respawn
                 // so it picks up the freshly downloaded encoder immediately.
                 reload_requested.store(true, Ordering::Relaxed);
@@ -384,6 +455,52 @@ pub fn get_exg_catalog() -> serde_json::Value {
             let cached = hf_repo.get(weights).is_some();
             fam.as_object_mut()
                 .map(|o| o.insert("weights_cached".into(), serde_json::Value::Bool(cached)));
+
+            // For families with components, probe each component's weights
+            // and add per-component availability + an overall readiness flag.
+            if let Some(components) = fam.get("components").cloned() {
+                if let Some(comps) = components.as_object() {
+                    let mut comp_status = serde_json::Map::new();
+                    let mut all_required_cached = true;
+                    for (comp_name, comp) in comps {
+                        let c_repo = comp.get("repo").and_then(|r| r.as_str()).unwrap_or("");
+                        let c_wf = comp
+                            .get("weights_file")
+                            .and_then(|w| w.as_str())
+                            .unwrap_or("");
+                        let required = comp
+                            .get("required")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        let c_cached = if !c_repo.is_empty() && !c_wf.is_empty() {
+                            let c_hf = cache.repo(Repo::model(c_repo.to_string()));
+                            c_hf.get(c_wf).is_some()
+                        } else {
+                            false
+                        };
+                        if required && !c_cached {
+                            all_required_cached = false;
+                        }
+                        comp_status.insert(
+                            comp_name.clone(),
+                            serde_json::json!({
+                                "cached": c_cached,
+                                "required": required,
+                            }),
+                        );
+                    }
+                    if let Some(obj) = fam.as_object_mut() {
+                        obj.insert(
+                            "components_status".into(),
+                            serde_json::Value::Object(comp_status),
+                        );
+                        obj.insert(
+                            "all_required_cached".into(),
+                            serde_json::Value::Bool(all_required_cached),
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1272,6 +1389,14 @@ fn reembed_worker(
             let cf = fam["config_file"].as_str().unwrap_or("config.json");
             let cache = Cache::from_env();
             let hf = cache.repo(Repo::model(repo.to_string()));
+            // Also fetch extra_files (e.g. build_args.json for tribev2).
+            if let Some(extras) = fam.get("extra_files").and_then(|v| v.as_array()) {
+                for ef in extras {
+                    if let Some(fname) = ef.as_str() {
+                        let _ = hf.get(fname);
+                    }
+                }
+            }
             hf.get(wf).and_then(|w| hf.get(cf).map(|c| (w, c)))
         }
     };
@@ -1295,6 +1420,12 @@ fn reembed_worker(
     enum Enc {
         Zuna(Box<zuna_rs::ZunaEncoder<Wgpu>>),
         Luna(Box<luna_rs::LunaEncoder<Wgpu>>),
+        Tribev2 {
+            model: Box<tribev2::model_burn::tribe::TribeV2Burn<Wgpu>>,
+            #[allow(dead_code)]
+            n_outputs: usize,
+            n_output_timesteps: usize,
+        },
     }
 
     let encoder = match backend {
@@ -1326,6 +1457,93 @@ fn reembed_worker(
                 }
                 Err(e) => {
                     skill_log!(logger, "reembed", "LUNA load failed: {e:#}");
+                    emit(&ReembedProgress {
+                        done: 0,
+                        total: 0,
+                        date: String::new(),
+                        status: "error_load".into(),
+                    });
+                    return;
+                }
+            }
+        }
+        skill_eeg::eeg_model_config::ExgModelBackend::Tribev2 => {
+            let build_args_path = c_path
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("build_args.json");
+            let cfg_str = match std::fs::read_to_string(&c_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    skill_log!(logger, "reembed", "read config.yaml failed: {e}");
+                    emit(&ReembedProgress {
+                        done: 0,
+                        total: 0,
+                        date: String::new(),
+                        status: "error_load".into(),
+                    });
+                    return;
+                }
+            };
+            let tribe_cfg: tribev2::TribeV2Config = match serde_yaml::from_str(&cfg_str) {
+                Ok(c) => c,
+                Err(e) => {
+                    skill_log!(logger, "reembed", "parse config.yaml failed: {e}");
+                    emit(&ReembedProgress {
+                        done: 0,
+                        total: 0,
+                        date: String::new(),
+                        status: "error_load".into(),
+                    });
+                    return;
+                }
+            };
+            let (feature_dims, n_outputs, n_output_timesteps) = if build_args_path.exists() {
+                match tribev2::ModelBuildArgs::from_json(build_args_path.to_str().unwrap_or("")) {
+                    Ok(ba) => (ba.to_modality_dims(), ba.n_outputs, ba.n_output_timesteps),
+                    Err(e) => {
+                        skill_log!(logger, "reembed", "parse build_args.json failed: {e}");
+                        (tribev2::ModalityDims::pretrained(), 20484, 100)
+                    }
+                }
+            } else {
+                (tribev2::ModalityDims::pretrained(), 20484, 100)
+            };
+
+            let mut model = tribev2::model_burn::tribe::TribeV2Burn::<Wgpu>::new(
+                &feature_dims,
+                n_outputs,
+                n_output_timesteps,
+                &tribe_cfg.brain_model_config,
+                &device.clone(),
+            );
+            match tribev2::model_burn::weights::BurnWeightStore::from_safetensors(
+                w_path.to_str().unwrap_or(""),
+            ) {
+                Ok(mut ws) => {
+                    if let Err(e) = tribev2::model_burn::weights::load_burn_weights(
+                        &mut ws,
+                        &mut model,
+                        &device.clone(),
+                    ) {
+                        skill_log!(logger, "reembed", "tribev2 weight load failed: {e:#}");
+                        emit(&ReembedProgress {
+                            done: 0,
+                            total: 0,
+                            date: String::new(),
+                            status: "error_load".into(),
+                        });
+                        return;
+                    }
+                    skill_log!(logger, "reembed", "TRIBEv2 encoder loaded");
+                    Enc::Tribev2 {
+                        model: Box::new(model),
+                        n_outputs,
+                        n_output_timesteps,
+                    }
+                }
+                Err(e) => {
+                    skill_log!(logger, "reembed", "tribev2 safetensors load failed: {e:#}");
                     emit(&ReembedProgress {
                         done: 0,
                         total: 0,
@@ -1715,6 +1933,45 @@ fn reembed_worker(
                         } else {
                             Ok(out.clone())
                         }
+                    }
+                    Enc::Tribev2 {
+                        model,
+                        n_outputs: _,
+                        n_output_timesteps,
+                    } => {
+                        let modalities = tribev2::ModalityDims::pretrained();
+                        let features: Vec<(&str, burn::tensor::Tensor<Wgpu, 3>)> = modalities
+                            .iter()
+                            .map(|md| {
+                                let dim = md.num_layers() * md.feature_dim();
+                                let t = burn::tensor::Tensor::<Wgpu, 3>::zeros(
+                                    [1, dim, *n_output_timesteps],
+                                    &device,
+                                );
+                                (md.name.as_str(), t)
+                            })
+                            .collect();
+
+                        let output = model.forward(features);
+                        let [_b, v, ts] = output.dims();
+                        let flat: Vec<f32> = output
+                            .into_data()
+                            .to_vec()
+                            .expect("tribev2 output tensor conversion");
+
+                        // Mean-pool across vertices → [ts]-dim embedding.
+                        let mut emb = vec![0f32; ts];
+                        for t in 0..ts {
+                            let mut sum = 0f64;
+                            for vi in 0..v {
+                                sum += flat[vi * ts + t] as f64;
+                            }
+                            emb[t] = (sum / v as f64) as f32;
+                        }
+                        if emb.is_empty() {
+                            return Err("empty tribev2 output".into());
+                        }
+                        Ok(emb)
                     }
                 }
             })();
