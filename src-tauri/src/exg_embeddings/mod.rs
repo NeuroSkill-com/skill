@@ -686,6 +686,7 @@ mod tests {
             "sleeplm",
             "sensorlm",
             "opentslm",
+            "neurorvq",
         ];
         for name in &expected {
             assert!(families.contains_key(*name), "missing family: {name}");
@@ -709,7 +710,10 @@ mod tests {
             );
             assert!(fam["params_m"].is_number(), "{id}: missing params_m");
             assert!(fam["embed_dim"].is_number(), "{id}: missing embed_dim");
-            assert!(fam["paper"].is_string(), "{id}: missing paper");
+            assert!(
+                fam["paper"].is_string() || fam["paper"].is_null(),
+                "{id}: paper must be a string or null"
+            );
             assert!(
                 fam["doi"].is_string() || fam["doi"].is_null(),
                 "{id}: doi must be a string or null"
@@ -790,11 +794,12 @@ mod tests {
         let catalog: serde_json::Value = serde_json::from_str(json).unwrap();
         let families = catalog["families"].as_object().unwrap();
         for (id, fam) in families {
-            let paper = fam["paper"].as_str().unwrap();
-            assert!(
-                paper.starts_with("https://"),
-                "{id}: paper is not https URL: {paper}"
-            );
+            if let Some(paper) = fam["paper"].as_str() {
+                assert!(
+                    paper.starts_with("https://"),
+                    "{id}: paper is not https URL: {paper}"
+                );
+            }
         }
     }
 

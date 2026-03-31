@@ -325,9 +325,12 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
                     .get("config_file")
                     .and_then(|c| c.as_str())
                     .unwrap_or("");
-                // Skip the primary repo (already handled by the main download)
-                // and entries without a weights file.
-                if c_repo.is_empty() || c_wf.is_empty() || c_repo == hf_repo {
+                // Skip entries without a weights file, and skip the exact
+                // repo+file combo already handled by the main download.
+                if c_repo.is_empty()
+                    || c_wf.is_empty()
+                    || (c_repo == hf_repo && c_wf == weights_file)
+                {
                     continue;
                 }
                 downloads.push((c_repo.to_string(), c_wf.to_string(), c_cf.to_string()));

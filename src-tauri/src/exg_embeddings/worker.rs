@@ -612,9 +612,12 @@ pub(super) fn embed_worker(
                                 .get("config_file")
                                 .and_then(|c| c.as_str())
                                 .unwrap_or("config.json");
-                            // Skip the primary repo (already downloaded) and
+                            // Skip the exact repo+file already downloaded and
                             // entries without a weights file.
-                            if c_repo.is_empty() || c_wf.is_empty() || c_repo == download_repo {
+                            if c_repo.is_empty()
+                                || c_wf.is_empty()
+                                || (c_repo == download_repo && c_wf == download_weights_file)
+                            {
                                 continue;
                             }
                             skill_log!(

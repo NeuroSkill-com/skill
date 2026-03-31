@@ -53,6 +53,8 @@ pub enum ExgModelBackend {
     Opentslm,
     /// TRIBE v2 encoder (Meta AI) — multimodal fMRI brain encoding (video + audio + text → cortical surface).
     Tribev2,
+    /// NeuroRVQ tokenizer — residual vector quantization for EEG/ECG/EMG.
+    Neurorvq,
 }
 
 impl std::fmt::Display for ExgModelBackend {
@@ -77,6 +79,7 @@ impl ExgModelBackend {
             "sensorlm" => Self::Sensorlm,
             "opentslm" => Self::Opentslm,
             "tribev2" => Self::Tribev2,
+            "neurorvq" => Self::Neurorvq,
             _ => Self::Zuna,
         }
     }
@@ -97,6 +100,7 @@ impl ExgModelBackend {
             Self::Sensorlm => "sensorlm",
             Self::Opentslm => "opentslm",
             Self::Tribev2 => "tribev2",
+            Self::Neurorvq => "neurorvq",
         }
     }
 }
@@ -577,6 +581,7 @@ mod tests {
         ExgModelBackend::Sensorlm,
         ExgModelBackend::Opentslm,
         ExgModelBackend::Tribev2,
+        ExgModelBackend::Neurorvq,
     ];
 
     #[test]
