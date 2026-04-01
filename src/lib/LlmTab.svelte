@@ -66,6 +66,9 @@ interface LlmConfig {
   verbose: boolean;
   gpu_memory_threshold: number;
   gpu_memory_gen_threshold: number;
+  cache_type_k: string;
+  cache_type_v: string;
+  attn_rot_disabled: boolean;
 }
 
 interface ModelHardwareFit {
@@ -115,6 +118,9 @@ let config = $state<LlmConfig>({
   verbose: false,
   gpu_memory_threshold: 0.5,
   gpu_memory_gen_threshold: 0.3,
+  cache_type_k: "f16",
+  cache_type_v: "f16",
+  attn_rot_disabled: false,
 });
 
 let configSaving = $state(false);
@@ -353,6 +359,9 @@ onDestroy(() => {
   onToggleVerbose={async () => { config = { ...config, verbose: !config.verbose }; await saveConfig(); }}
   onSetGpuMemoryThreshold={async (val) => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
   onSetGpuMemoryGenThreshold={async (val) => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
+  onSetCacheTypeK={async (val) => { config = { ...config, cache_type_k: val }; await saveConfig(); }}
+  onSetCacheTypeV={async (val) => { config = { ...config, cache_type_v: val }; await saveConfig(); }}
+  onToggleAttnRotDisabled={async () => { config = { ...config, attn_rot_disabled: !config.attn_rot_disabled }; await saveConfig(); }}
 />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->

@@ -24,6 +24,14 @@ const llm: Record<string, string> = {
     "זיכרון GPU/מאוחד מינימלי נדרש לפני הסקה. מונע קריסות Metal/CUDA כשהזיכרון נמוך. לא מומלץ לכבות.",
   "llm.inference.gpuMemDecode": "לפני פענוח",
   "llm.inference.gpuMemGen": "במהלך יצירה",
+  "llm.inference.kvCacheType": "כמת זיכרון KV (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "דיוק אחסון של טנסורי מטמון KV. סוגים כמותים (Q8_0/Q5_0/Q4_0) מפחיתים באופן משמעותי את שימוש VRAM. סיבוב הקשב TurboQuant (להלן) שומר על איכות גם בעת כמות.",
+  "llm.inference.kvCacheK": "מטמון K",
+  "llm.inference.kvCacheV": "מטמון V",
+  "llm.inference.attnRot": "סיבוב קשב TurboQuant",
+  "llm.inference.attnRotDesc":
+    "סיבוב Hadamard שמוחל על טנסורי Q/K/V לפני כתיבה למטמון KV (llama.cpp PR #21038). משפר באופן משמעותי את איכות מטמוני KV כמותים בעלות מוגבלת. השאר פעיל אלא אם יש בעיות תאימות עם המודל.",
   "llm.noFeature": "תמיכת LLM לא קומפלה.",
   "llm.noFeatureHint": "בנה מחדש עם --features llm כדי להפעיל את השרת המוטמע התואם OpenAI.",
   "llm.endpoints.title": "נקודות קצה תואמות OpenAI",

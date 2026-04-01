@@ -44,6 +44,7 @@ members = [
     "crates/skill-vision",
     "crates/iroh_test_client",
     "crates/iroh-example-client",
+    "crates/skill-neurorvq",
 ]
 
 # ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────

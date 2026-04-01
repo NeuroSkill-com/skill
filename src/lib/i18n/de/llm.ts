@@ -248,6 +248,14 @@ const llm: Record<string, string> = {
     "Mindestens freier GPU-/Unified-Speicher vor der Inferenz. Verhindert Metal/CUDA-Abstürze bei niedrigem Speicher. Deaktivieren wird nicht empfohlen.",
   "llm.inference.gpuMemDecode": "Vor dem Dekodieren",
   "llm.inference.gpuMemGen": "Während der Generierung",
+  "llm.inference.kvCacheType": "KV-Cache-Quantisierung (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "Speicherpräzision für KV-Cache-Tensoren. Quantisierte Typen (Q8_0/Q5_0/Q4_0) reduzieren den VRAM-Bedarf erheblich. Die TurboQuant-Aufmerksamkeitsrotation (unten) hält die Qualität auch bei Quantisierung hoch.",
+  "llm.inference.kvCacheK": "K-Cache",
+  "llm.inference.kvCacheV": "V-Cache",
+  "llm.inference.attnRot": "TurboQuant-Aufmerksamkeitsrotation",
+  "llm.inference.attnRotDesc":
+    "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben (llama.cpp PR #21038). Verbessert die Qualität quantisierter KV-Caches erheblich bei nahezu null Overhead. Aktiviert lassen, außer bei Modellkompatibilitätsproblemen.",
   "llm.noFeature": "LLM-Unterstützung ist nicht einkompiliert.",
   "llm.noFeatureHint":
     "Mit --features llm neu erstellen, um den eingebetteten OpenAI-kompatiblen Server zu aktivieren.",

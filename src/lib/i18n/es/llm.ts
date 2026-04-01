@@ -263,6 +263,14 @@ const llm: Record<string, string> = {
     "Se requiere una GPU/memoria unificada libre mínima antes de ejecutar la inferencia. Previene fallos de Metal/CUDA cuando hay poca memoria. Configúrelo en Desactivado para desactivarlo (no recomendado).",
   "llm.inference.gpuMemDecode": "antes de decodificar",
   "llm.inference.gpuMemGen": "Durante la generación",
+  "llm.inference.kvCacheType": "Cuantización de caché KV (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "Precisión de almacenamiento de los tensores de caché KV. Los tipos cuantizados (Q8_0/Q5_0/Q4_0) reducen significativamente el uso de VRAM. La rotación de atención TurboQuant (abajo) mantiene la calidad incluso al cuantizar.",
+  "llm.inference.kvCacheK": "Caché K",
+  "llm.inference.kvCacheV": "Caché V",
+  "llm.inference.attnRot": "Rotación de atención TurboQuant",
+  "llm.inference.attnRotDesc":
+    "Rotación de Hadamard aplicada a los tensores Q/K/V antes de escribir en el caché KV (llama.cpp PR #21038). Mejora significativamente la calidad de los cachés KV cuantizados con costo casi nulo. Mantener habilitado salvo problemas de compatibilidad con el modelo.",
 
   "chat.status.running": "Correr",
   "chat.status.loading": "Cargando modelo…",

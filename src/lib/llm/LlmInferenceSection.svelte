@@ -14,6 +14,9 @@ interface LlmConfigView {
   verbose: boolean;
   gpu_memory_threshold: number;
   gpu_memory_gen_threshold: number;
+  cache_type_k: string;
+  cache_type_v: string;
+  attn_rot_disabled: boolean;
 }
 
 interface Props {
@@ -32,6 +35,9 @@ interface Props {
   onToggleVerbose: () => void | Promise<void>;
   onSetGpuMemoryThreshold: (val: number) => void | Promise<void>;
   onSetGpuMemoryGenThreshold: (val: number) => void | Promise<void>;
+  onSetCacheTypeK: (val: string) => void | Promise<void>;
+  onSetCacheTypeV: (val: string) => void | Promise<void>;
+  onToggleAttnRotDisabled: () => void | Promise<void>;
 }
 
 let {
@@ -50,7 +56,17 @@ let {
   onToggleVerbose,
   onSetGpuMemoryThreshold,
   onSetGpuMemoryGenThreshold,
+  onSetCacheTypeK,
+  onSetCacheTypeV,
+  onToggleAttnRotDisabled,
 }: Props = $props();
+
+const KV_TYPES = [
+  { tag: "f16", label: "F16" },
+  { tag: "q8_0", label: "Q8_0" },
+  { tag: "q5_0", label: "Q5_0" },
+  { tag: "q4_0", label: "Q4_0" },
+] as const;
 
 let showAdvanced = $state(false);
 let apiKeyVisible = $state(false);
@@ -245,6 +261,57 @@ const curlSnippet = $derived(
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- TurboQuant KV-cache types ──────────────────────────────────────── -->
+        <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.kvCacheType")}</span>
+            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.kvCacheTypeDesc")}</span>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="flex flex-col gap-1 flex-1">
+              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.kvCacheK")}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                {#each KV_TYPES as { tag, label }}
+                  <button onclick={() => onSetCacheTypeK(tag)}
+                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.cache_type_k === tag
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 flex-1">
+              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.kvCacheV")}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                {#each KV_TYPES as { tag, label }}
+                  <button onclick={() => onSetCacheTypeV(tag)}
+                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.cache_type_v === tag
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TurboQuant attention rotation toggle ────────────────────────────── -->
+        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.attnRot")}</span>
+            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.attnRotDesc")}</span>
+          </div>
+          <button role="switch" aria-checked={!config.attn_rot_disabled} aria-label={t("llm.inference.attnRot")}
+            onclick={onToggleAttnRotDisabled}
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {!config.attn_rot_disabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {!config.attn_rot_disabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+          </button>
         </div>
 
         <div class="flex flex-col gap-1.5 px-4 py-3 bg-slate-50 dark:bg-[#111118]">

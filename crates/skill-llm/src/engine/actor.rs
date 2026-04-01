@@ -18,6 +18,7 @@ use llama_cpp_4::{
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
     model::{params::LlamaModelParams, AddBos, LlamaModel},
+    quantize::GgmlType,
 };
 
 use super::generation::{run_generation, GpuMemoryGuard};
@@ -25,6 +26,19 @@ use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferRequest, InferToken};
 use crate::config::LlmConfig;
 use crate::event::LlmEventEmitter;
+
+/// Map a human-readable KV-cache type tag from [`LlmConfig`] to a [`GgmlType`].
+///
+/// Accepted tags (case-insensitive): `"f16"`, `"q8_0"`, `"q5_0"`, `"q4_0"`.
+/// Unknown tags fall back to `GgmlType::F16`.
+fn cache_ggml_type(tag: &str) -> GgmlType {
+    match tag.to_ascii_lowercase().as_str() {
+        "q4_0" => GgmlType::Q4_0,
+        "q5_0" => GgmlType::Q5_0,
+        "q8_0" => GgmlType::Q8_0,
+        _ => GgmlType::F16,
+    }
+}
 
 #[cfg(feature = "llm-mtmd")]
 use super::generation::run_generation_multimodal;
@@ -145,22 +159,31 @@ pub(super) fn run_actor(
         "llm:status",
         json!({"status":"loading","detail":"creating_context","model":model_file_name}),
     );
+    let kv_type_k = cache_ggml_type(&config.cache_type_k);
+    let kv_type_v = cache_ggml_type(&config.cache_type_v);
     llm_info!(
         &app,
         &log_buf,
         log_file,
-        "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={})",
+        "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={}, \
+         cache_k={:?}, cache_v={:?}, attn_rot_disabled={})",
         ctx_size.map_or(0, std::num::NonZero::get),
         config.n_gpu_layers,
         config.flash_attention,
-        config.offload_kqv
+        config.offload_kqv,
+        kv_type_k,
+        kv_type_v,
+        config.attn_rot_disabled
     );
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
         .with_n_threads(-1)
         .with_n_threads_batch(-1)
         .with_flash_attention(config.flash_attention)
-        .with_offload_kqv(config.offload_kqv);
+        .with_offload_kqv(config.offload_kqv)
+        .with_cache_type_k(kv_type_k)
+        .with_cache_type_v(kv_type_v)
+        .with_attn_rot_disabled(config.attn_rot_disabled);
 
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(c) => c,
@@ -633,7 +656,10 @@ pub(super) fn run_actor(
                                     .with_n_threads(-1)
                                     .with_n_threads_batch(-1)
                                     .with_flash_attention(config.flash_attention)
-                                    .with_offload_kqv(config.offload_kqv);
+                                    .with_offload_kqv(config.offload_kqv)
+                                    .with_cache_type_k(kv_type_k)
+                                    .with_cache_type_v(kv_type_v)
+                                    .with_attn_rot_disabled(config.attn_rot_disabled);
 
                                 match model.new_context(backend, new_ctx_params) {
                                     Ok(new_c) => {

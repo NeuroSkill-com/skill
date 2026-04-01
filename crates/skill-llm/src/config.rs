@@ -116,6 +116,33 @@ pub struct LlmConfig {
     /// The runtime context size is never grown beyond this value.
     #[serde(default, skip_serializing)]
     pub max_context_length: u32,
+
+    // ── TurboQuant KV-cache settings (llama-cpp-4 ≥ 0.2.20) ──────────────────
+    /// Storage type for the **K** (key) KV-cache tensors.
+    ///
+    /// Options: `"f16"` (default, highest quality), `"q8_0"` (saves ~47% VRAM,
+    /// near-lossless with TurboQuant), `"q5_0"` (saves ~69%), `"q4_0"` (saves
+    /// ~75%).  Combining quantized types with `attn_rot_disabled = false`
+    /// (default) keeps output quality high at reduced memory.
+    #[serde(default = "default_cache_type_k")]
+    pub cache_type_k: String,
+
+    /// Storage type for the **V** (value) KV-cache tensors.
+    ///
+    /// Same options as `cache_type_k`.  V-cache quantization is generally
+    /// lossier than K-cache quantization; `"f16"` is the safest choice.
+    #[serde(default = "default_cache_type_v")]
+    pub cache_type_v: String,
+
+    /// Disable the TurboQuant attention rotation (llama.cpp PR #21038).
+    ///
+    /// When `false` (the default), llama.cpp applies a Hadamard rotation to
+    /// Q/K/V tensors before writing them to the KV cache.  This significantly
+    /// improves the quality of quantized KV caches at near-zero overhead.
+    /// Set to `true` only if you experience compatibility issues with a
+    /// particular model.
+    #[serde(default)]
+    pub attn_rot_disabled: bool,
 }
 
 fn default_llm_parallel() -> usize {
@@ -138,6 +165,12 @@ fn default_gpu_memory_threshold() -> f64 {
 }
 fn default_gpu_memory_gen_threshold() -> f64 {
     0.3
+}
+fn default_cache_type_k() -> String {
+    "f16".into()
+}
+fn default_cache_type_v() -> String {
+    "f16".into()
 }
 
 impl Default for LlmConfig {
@@ -163,6 +196,9 @@ impl Default for LlmConfig {
             params_b: 0.0,
             quant: String::new(),
             max_context_length: 0,
+            cache_type_k: default_cache_type_k(),
+            cache_type_v: default_cache_type_v(),
+            attn_rot_disabled: false,
         }
     }
 }

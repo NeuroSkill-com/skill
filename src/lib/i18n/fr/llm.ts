@@ -252,6 +252,14 @@ const llm: Record<string, string> = {
     "Mémoire GPU/unifiée minimale requise avant l'inférence. Empêche les plantages Metal/CUDA en cas de mémoire insuffisante. Désactiver n'est pas recommandé.",
   "llm.inference.gpuMemDecode": "Avant le décodage",
   "llm.inference.gpuMemGen": "Pendant la génération",
+  "llm.inference.kvCacheType": "Quantification du cache KV (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "Précision de stockage des tenseurs du cache KV. Les types quantifiés (Q8_0/Q5_0/Q4_0) réduisent considérablement l’utilisation de la VRAM. La rotation d’attention TurboQuant (ci-dessous) maintient la qualité même avec quantification.",
+  "llm.inference.kvCacheK": "Cache K",
+  "llm.inference.kvCacheV": "Cache V",
+  "llm.inference.attnRot": "Rotation d’attention TurboQuant",
+  "llm.inference.attnRotDesc":
+    "Rotation de Hadamard appliquée aux tenseurs Q/K/V avant écriture dans le cache KV (llama.cpp PR #21038). Améliore significativement la qualité des caches KV quantifiés à coût quasi nul. Laisser activé sauf en cas de problèmes de compatibilité avec un modèle.",
   "llm.noFeature": "Le support LLM n'est pas compilé.",
   "llm.noFeatureHint": "Reconstruisez avec --features llm pour activer le serveur intégré compatible OpenAI.",
   "llm.endpoints.title": "Points de terminaison compatibles OpenAI",

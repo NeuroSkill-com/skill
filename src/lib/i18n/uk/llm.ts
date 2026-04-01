@@ -244,6 +244,14 @@ const llm: Record<string, string> = {
     "Мінімальний вільний об'єм GPU/уніфікованої пам'яті перед інференсом. Запобігає збоям Metal/CUDA при нестачі пам'яті. Вимикати не рекомендується.",
   "llm.inference.gpuMemDecode": "Перед декодуванням",
   "llm.inference.gpuMemGen": "Під час генерації",
+  "llm.inference.kvCacheType": "Квантизація KV-кешу (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "Точність зберігання тензорів KV-кешу. Квантизовані типи (Q8_0/Q5_0/Q4_0) значно зменшують використання VRAM. Обертання уваги TurboQuant (нижче) зберігає якість навіть при квантизації.",
+  "llm.inference.kvCacheK": "K-кеш",
+  "llm.inference.kvCacheV": "V-кеш",
+  "llm.inference.attnRot": "Обертання уваги TurboQuant",
+  "llm.inference.attnRotDesc":
+    "Перетворення Гадамара застосовується до тензорів Q/K/V перед записом у KV-кеш (llama.cpp PR #21038). Значно поліпшує якість квантизованих KV-кешів при майже нульових витратах. Залишайте увімкненим, якщо немає проблем сумісності з моделлю.",
   "llm.noFeature": "Підтримка LLM не скомпільована.",
   "llm.noFeatureHint": "Перезберіть з --features llm, щоб увімкнути вбудований OpenAI-сумісний сервер.",
   "llm.endpoints.title": "OpenAI-сумісні ендпоїнти",

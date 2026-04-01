@@ -1668,6 +1668,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "c2rust-bitfields"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46dc7d2bffa0d0b3d47eb2dc69973466858281446c2ac9f6d8a10e92ab1017df"
+dependencies = [
+ "c2rust-bitfields-derive",
+]
+
+[[package]]
+name = "c2rust-bitfields-derive"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebe1117afa5937ce280034e31fa1e84ed1824a252f75380327eed438535333f8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "cairo-rs"
 version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2955,6 +2975,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cubecl-spirv"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7d7d68a3e09d4782098f82b0b7347f3a9e54a9977b3b5a23145464a84cf14dc"
+dependencies = [
+ "bitflags 2.11.0",
+ "cubecl-common",
+ "cubecl-core",
+ "cubecl-opt",
+ "cubecl-runtime",
+ "half",
+ "hashbrown 0.15.5",
+ "tracel-rspirv",
+]
+
+[[package]]
 name = "cubecl-std"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2978,20 +3014,24 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29787364632fc7ec6a11cf3d95187f82f6fcce17d6bb4f0fb0dde580b837631d"
 dependencies = [
+ "ash",
  "async-channel",
  "bytemuck",
  "cfg-if",
  "cfg_aliases",
  "cubecl-common",
  "cubecl-core",
+ "cubecl-cpp",
  "cubecl-ir",
  "cubecl-runtime",
+ "cubecl-spirv",
  "derive-new",
  "derive_more 2.1.1",
  "half",
  "hashbrown 0.15.5",
  "log",
  "sanitize-filename",
+ "tracel-ash",
  "tracing",
  "wgpu",
 ]
@@ -7249,9 +7289,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llama-cpp-4"
-version = "0.2.19"
+version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82effefac65e180bbf815652041909095dab7fb8b8060d22153f2fadcd34dcbd"
+checksum = "97c14780f71e01f095b0db6f97c585f717221c352c48984a1805ae9ea79acb00"
 dependencies = [
  "enumflags2",
  "llama-cpp-sys-4",
@@ -7261,9 +7301,9 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-4"
-version = "0.2.18"
+version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34b8672c5a367fb3ce58a9b7b6dbc0b7093ea8defefc8d1517db8e990b367370"
+checksum = "f08678bf2ba9d3b6c632ce82404b34a30b2b93009dcd37edd6726d754f83eac7"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -8123,6 +8163,23 @@ dependencies = [
  "windows 0.62.2",
  "windows-result 0.4.1",
  "wmi",
+]
+
+[[package]]
+name = "neurorvq"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "burn",
+ "burn-ndarray",
+ "burn-wgpu",
+ "bytemuck",
+ "clap 4.6.0",
+ "half",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -12348,6 +12405,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-neurorvq"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "burn",
+ "burn-ndarray",
+ "burn-wgpu",
+ "hf-hub 0.5.0",
+ "log",
+ "neurorvq",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "skill-oura"
 version = "0.0.1"
 dependencies = [
@@ -14240,6 +14312,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 
 [[package]]
+name = "tracel-ash"
+version = "0.38.0+1.3.296"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7318626319ea7b43d20b9c374f273b1b25600b8d8ddd103e209751f67fee67ad"
+dependencies = [
+ "ash",
+ "c2rust-bitfields",
+]
+
+[[package]]
 name = "tracel-llvm"
 version = "20.1.4-7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14303,6 +14385,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02f26d31af0c225a6d2e3d65d012fd6de848c9fc776897b152ee83b7d1bd15c4"
 dependencies = [
  "tracel-llvm-bundler",
+]
+
+[[package]]
+name = "tracel-rspirv"
+version = "0.12.1+sdk-1.4.341.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1653aa21b867351f48c51f1063a2f872f8e82931951cae469d8a53aa4d7d72e8"
+dependencies = [
+ "bitflags 2.11.0",
+ "rustc-hash 2.1.2",
 ]
 
 [[package]]
@@ -14426,15 +14518,16 @@ dependencies = [
 
 [[package]]
 name = "tribev2"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e6ba9cf5c2d94d5e3a0ff05cfaee5e0f23f1a7a3bc3ed88d6f859bb91d62322"
+checksum = "4b1eee4f03c9961e4bbae9d08f0a55ea35ff67e9dae6da005f7636058d8a5688"
 dependencies = [
  "anyhow",
  "burn",
  "bytemuck",
  "cc",
  "clap 4.6.0",
+ "flate2",
  "half",
  "llama-cpp-4",
  "safetensors 0.7.0",
@@ -14447,9 +14540,9 @@ dependencies = [
 
 [[package]]
 name = "tribev2-audio"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "661e72dcef4e41fc6024da0e4f5613d7036e2fd31ba88bdb4d48c151fc07013d"
+checksum = "56a8ba08d9d31c9f94f9d51c9803349704dda349c6627210479f3a77c5438fd0"
 dependencies = [
  "anyhow",
  "burn",
@@ -14464,9 +14557,9 @@ dependencies = [
 
 [[package]]
 name = "tribev2-video"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1684e0d56261c9cc09f87978bdf7fe7789979b8620c558b29660d57dd83a498"
+checksum = "e12b42d7a07a55218d858cfda54ae9ee5d4bf92869a4bda15fd4a050ab55ffb5"
 dependencies = [
  "anyhow",
  "burn",

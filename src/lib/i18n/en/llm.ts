@@ -249,6 +249,14 @@ const llm: Record<string, string> = {
     "Minimum free GPU/unified memory required before running inference. Prevents Metal/CUDA crashes when memory is low. Set to Off to disable (not recommended).",
   "llm.inference.gpuMemDecode": "Before decode",
   "llm.inference.gpuMemGen": "During generation",
+  "llm.inference.kvCacheType": "KV-cache quantization (TurboQuant)",
+  "llm.inference.kvCacheTypeDesc":
+    "Storage precision for the KV-cache tensors. Quantized types (Q8_0/Q5_0/Q4_0) cut VRAM use significantly. TurboQuant attention rotation (below) keeps quality high when quantized.",
+  "llm.inference.kvCacheK": "K cache",
+  "llm.inference.kvCacheV": "V cache",
+  "llm.inference.attnRot": "TurboQuant attention rotation",
+  "llm.inference.attnRotDesc":
+    "Hadamard rotation applied to Q/K/V tensors before KV-cache write (llama.cpp PR #21038). Significantly improves quality of quantized KV caches at near-zero cost. Keep enabled unless you hit model compatibility issues.",
 
   "chat.status.running": "Running",
   "chat.status.loading": "Loading model…",
