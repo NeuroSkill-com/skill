@@ -404,23 +404,32 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
                 emit(TtsProgressEvent::ready(3));
                 return Ok(());
             }
-            if neutts::LOADING.load(Ordering::Relaxed) {
+            // Atomically claim the loading slot to prevent multiple concurrent
+            // callers from each queuing a Cmd::Init before the worker sets
+            // LOADING=true (TOCTOU race).
+            if neutts::LOADING
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+            {
                 anyhow::bail!("NeuTTS is already loading")
             }
             let (backbone, gguf, preset, wav, text) = neutts::read_cfg();
             let (tx, rx) = tokio::sync::oneshot::channel();
             let emit_c = emit.clone();
-            neutts::get_tx()
-                .send(neutts::Cmd::Init {
-                    backbone_repo: backbone,
-                    gguf_file: gguf,
-                    voice_preset: preset,
-                    ref_wav_path: wav,
-                    ref_text: text,
-                    cb: Box::new(move |p| emit_c(neutts::progress_to_event(p))),
-                    done: tx,
-                })
-                .map_err(|e| anyhow::anyhow!("neutts init channel send: {e}"))?;
+            let send_result = neutts::get_tx().send(neutts::Cmd::Init {
+                backbone_repo: backbone,
+                gguf_file: gguf,
+                voice_preset: preset,
+                ref_wav_path: wav,
+                ref_text: text,
+                cb: Box::new(move |p| emit_c(neutts::progress_to_event(p))),
+                done: tx,
+            });
+            if let Err(e) = send_result {
+                // Channel closed before the send — clear the flag we just set.
+                neutts::LOADING.store(false, Ordering::Release);
+                return Err(anyhow::anyhow!("neutts init channel send: {e}"));
+            }
             let result = rx.await.context("neutts init channel recv").and_then(|r| r);
             match &result {
                 Ok(_) => emit(TtsProgressEvent::ready(3)),
