@@ -67,6 +67,10 @@ let lastScanTime = $state<number | null>(null);
 let autoConnect = $state(false);
 let pairedStreams = $state<LslPairedStream[]>([]);
 
+// Idle timeout
+let idleTimeoutSecs = $state<number | null>(15); // null = disabled
+let idleTimeoutSaving = $state(false);
+
 // Live session status
 let sessionState = $state<string>("disconnected");
 let sessionDeviceKind = $state<string>("");
@@ -248,6 +252,17 @@ async function unpairById(sourceId: string) {
   streams = streams.map((s) => (s.source_id === sourceId ? { ...s, paired: false } : s));
 }
 
+async function setIdleTimeout(secs: number | null) {
+  if (idleTimeoutSaving) return;
+  idleTimeoutSaving = true;
+  idleTimeoutSecs = secs;
+  try {
+    await invoke("lsl_set_idle_timeout", { secs: secs ?? null });
+  } finally {
+    idleTimeoutSaving = false;
+  }
+}
+
 async function toggleAutoConnect() {
   autoConnect = !autoConnect;
   await invoke("lsl_set_auto_connect", { enabled: autoConnect });
@@ -310,6 +325,13 @@ onMount(async () => {
     const cfg = await invoke<LslConfig>("lsl_get_config");
     autoConnect = cfg.auto_connect;
     pairedStreams = cfg.paired_streams;
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const t = await invoke<number | null>("lsl_get_idle_timeout");
+    idleTimeoutSecs = t;
   } catch {
     /* ignore */
   }
@@ -536,6 +558,64 @@ onDestroy(() => {
           </div>
         </div>
       {/if}
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ── Idle Timeout ──────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("lsl.idleTimeout")}
+    </span>
+    {#if idleTimeoutSaving}
+      <span class="text-[0.52rem] text-muted-foreground/60">saving…</span>
+    {/if}
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+      <div class="flex flex-col gap-3 px-4 py-3.5">
+        <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+          {t("lsl.idleTimeoutDesc")}
+        </p>
+
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button
+            onclick={() => setIdleTimeout(null)}
+            class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer select-none
+                   {idleTimeoutSecs === null
+                     ? 'border-slate-400/50 bg-slate-500/10 text-slate-600 dark:text-slate-300'
+                     : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+            {t("lsl.idleTimeoutDisabled")}
+          </button>
+          {#each ([[10, "10 s"], [15, "15 s"], [30, "30 s"], [60, "60 s"], [120, "2 min"]] as [number, string][]) as [secs, label]}
+            <button
+              onclick={() => setIdleTimeout(secs)}
+              class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer select-none
+                     {idleTimeoutSecs === secs
+                       ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+              {label}
+            </button>
+          {/each}
+        </div>
+
+        <div class="flex items-center gap-1.5 text-[0.58rem]">
+          {#if idleTimeoutSecs === null}
+            <span class="text-muted-foreground/60">
+              {t("lsl.idleTimeoutDisabled")} — stream will never auto-stop due to silence.
+            </span>
+          {:else}
+            <span class="text-[0.52rem] font-bold tracking-widest uppercase text-violet-500">
+              {t("lsl.idleTimeoutEnabled")}
+            </span>
+            <span class="text-muted-foreground/60">
+              — stops after {idleTimeoutSecs}s of silence
+            </span>
+          {/if}
+        </div>
+      </div>
     </CardContent>
   </Card>
 </section>

@@ -716,6 +716,12 @@ pub struct UserSettings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lsl_paired_streams: Vec<LslPairedStream>,
 
+    /// Stop an LSL session automatically when no samples arrive for this many
+    /// seconds.  `None` disables the idle watchdog for LSL streams entirely.
+    /// Default: `Some(15)` — matches the built-in data watchdog.
+    #[serde(default = "default_lsl_idle_timeout_secs")]
+    pub lsl_idle_timeout_secs: Option<u64>,
+
     // ── Inference device preference ────────────────────────────────────────
     /// High-level inference device preference: `"gpu"` (default) or `"cpu"`.
     ///
@@ -774,6 +780,9 @@ pub fn default_storage_format() -> String {
 
 pub fn default_tts_preload() -> bool {
     true
+}
+pub fn default_lsl_idle_timeout_secs() -> Option<u64> {
+    Some(15)
 }
 pub fn default_inference_device() -> String {
     "gpu".into()
@@ -916,6 +925,7 @@ impl Default for UserSettings {
             location_enabled: false,
             lsl_auto_connect: false,
             lsl_paired_streams: vec![],
+            lsl_idle_timeout_secs: default_lsl_idle_timeout_secs(),
             inference_device: default_inference_device(),
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
             exg_inference_device: default_exg_inference_device(),

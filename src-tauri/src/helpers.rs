@@ -275,6 +275,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         location_enabled: s.location_enabled,
         lsl_auto_connect: s.lsl_auto_connect,
         lsl_paired_streams: s.lsl_paired_streams.clone(),
+        lsl_idle_timeout_secs: s.lsl_idle_timeout_secs,
         inference_device: s.inference_device.clone(),
         llm_gpu_layers_saved: s.llm_gpu_layers_saved,
         exg_inference_device: s.exg_inference_device.clone(),

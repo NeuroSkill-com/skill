@@ -101,12 +101,17 @@ pub(crate) async fn run_device_session(
     let mut battery_ema = BatteryEma::new(0.1);
 
     // ── Event loop ───────────────────────────────────────────────────────────
-    // Use extended watchdog for iroh-remote sessions — the phone may be
-    // reconnecting its QUIC tunnel while BLE data accumulates locally.
-    let watchdog = if kind == "iroh-remote" {
-        DATA_WATCHDOG_TIMEOUT_IROH
+    // Determine watchdog: LSL sessions use the user-configured idle timeout
+    // (None = disabled), iroh-remote uses a longer default, everything else
+    // uses the standard 15-second watchdog.
+    let watchdog: Option<Duration> = if kind.starts_with("lsl") {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.lsl_idle_timeout_secs.map(Duration::from_secs)
+    } else if kind == "iroh-remote" {
+        Some(DATA_WATCHDOG_TIMEOUT_IROH)
     } else {
-        DATA_WATCHDOG_TIMEOUT
+        Some(DATA_WATCHDOG_TIMEOUT)
     };
 
     let mut user_cancelled = false;
@@ -119,11 +124,18 @@ pub(crate) async fn run_device_session(
                 user_cancelled = true;
                 break;
             }
-            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + watchdog)) => {
-                // No event received for DATA_WATCHDOG_TIMEOUT — treat as
-                // silent disconnect.  This catches scenarios where the BLE
-                // link stays up but GATT notifications stop (radio
-                // interference, device sleep, firmware hang).
+            _ = async {
+                match watchdog {
+                    Some(d) => tokio::time::sleep_until(
+                        tokio::time::Instant::from_std(last_event_at + d)
+                    ).await,
+                    // Watchdog disabled — sleep forever so the arm never fires.
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                // No event received within watchdog duration — treat as
+                // silent disconnect.  Catches BLE link-up-but-no-GATT,
+                // LSL streams that stopped publishing, etc.
                 let elapsed = last_event_at.elapsed();
                 let watchdog_msg = format!(
                     "[{kind}] Data watchdog: no events for {:.1}s — treating as disconnected",

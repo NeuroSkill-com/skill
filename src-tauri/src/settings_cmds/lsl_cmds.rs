@@ -198,6 +198,31 @@ pub fn lsl_unpair_stream(
     crate::save_settings(&app);
 }
 
+/// Get the LSL idle-timeout setting.
+///
+/// Returns `None` when the watchdog is disabled, or `Some(secs)` when active.
+#[tauri::command]
+pub fn lsl_get_idle_timeout(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<u64> {
+    state.lock_or_recover().lsl_idle_timeout_secs
+}
+
+/// Set the LSL idle-timeout.
+///
+/// Pass `None` to disable (stream never times out), or `Some(secs)` to stop
+/// the session after that many seconds of silence.
+#[tauri::command]
+pub fn lsl_set_idle_timeout(
+    secs: Option<u64>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    {
+        let mut s = state.lock_or_recover();
+        s.lsl_idle_timeout_secs = secs;
+    }
+    crate::save_settings(&app);
+}
+
 /// Get LSL auto-connect config.
 #[tauri::command]
 pub fn lsl_get_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> LslConfig {

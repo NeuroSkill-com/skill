@@ -1031,6 +1031,7 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.location_enabled = data.location_enabled;
         s.lsl_auto_connect = data.lsl_auto_connect;
         s.lsl_paired_streams = data.lsl_paired_streams;
+        s.lsl_idle_timeout_secs = data.lsl_idle_timeout_secs;
         s.inference_device = data.inference_device.clone();
         s.llm_gpu_layers_saved = data.llm_gpu_layers_saved;
         s.exg_inference_device = data.exg_inference_device.clone();
@@ -1745,6 +1746,8 @@ pub fn run() {
             settings_cmds::lsl_cmds::lsl_unpair_stream,
             settings_cmds::lsl_cmds::lsl_get_config,
             settings_cmds::lsl_cmds::lsl_set_auto_connect,
+            settings_cmds::lsl_cmds::lsl_get_idle_timeout,
+            settings_cmds::lsl_cmds::lsl_set_idle_timeout,
             settings_cmds::lsl_cmds::lsl_switch_session,
             settings_cmds::lsl_cmds::lsl_start_secondary,
             settings_cmds::lsl_cmds::lsl_cancel_secondary,

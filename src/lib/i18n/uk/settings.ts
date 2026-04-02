@@ -530,6 +530,13 @@ const settings: Record<string, string> = {
   "settings.geoProviderTesting": "Запит дозволу та тестування місцезнаходження…",
   "settings.geoProviderLocalOk": "CoreLocation працює (висока точність).",
   "settings.geoProviderRemoteOk": "IP-геолокація працює (точність на рівні міста).",
+
+  // ── Auto-synced from en/ (2026-04-02) ──
+  "lsl.idleTimeout": "Тайм-аут простою",
+  "lsl.idleTimeoutDesc":
+    "Автоматично завершувати сеанс, якщо цей час не надходить жодного зразка. Корисно, якщо LSL-джерело зависло або призупинилось без відключення.",
+  "lsl.idleTimeoutDisabled": "Ніколи",
+  "lsl.idleTimeoutEnabled": "Увімкнено",
 };
 
 export default settings;

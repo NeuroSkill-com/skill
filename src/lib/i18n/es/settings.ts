@@ -542,6 +542,13 @@ const settings: Record<string, string> = {
   "settings.geoProviderTesting": "Solicitando permiso y probando ubicación…",
   "settings.geoProviderLocalOk": "CoreLocation está funcionando (alta precisión).",
   "settings.geoProviderRemoteOk": "Geolocalización IP está funcionando (precisión a nivel de ciudad).",
+
+  // ── Auto-synced from en/ (2026-04-02) ──
+  "lsl.idleTimeout": "Tiempo de inactividad",
+  "lsl.idleTimeoutDesc":
+    "Detener la sesión automáticamente si no llegan muestras durante este tiempo. Útil cuando la fuente LSL se bloquea o se pausa sin desconectarse.",
+  "lsl.idleTimeoutDisabled": "Nunca",
+  "lsl.idleTimeoutEnabled": "Activado",
 };
 
 export default settings;

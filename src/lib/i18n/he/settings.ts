@@ -511,6 +511,13 @@ const settings: Record<string, string> = {
   "settings.geoProviderTesting": "מבקש הרשאה ובודק מיקום…",
   "settings.geoProviderLocalOk": "CoreLocation עובד (דיוק גבוה).",
   "settings.geoProviderRemoteOk": "גיאולוקציה לפי IP עובדת (דיוק ברמת עיר).",
+
+  // ── Auto-synced from en/ (2026-04-02) ──
+  "lsl.idleTimeout": "זמן אין-פעילות",
+  "lsl.idleTimeoutDesc":
+    "סיים את הסשנה אוטומטית אם לא מגיעים דוגמאות בפרק זמן זה. שימושי כשמקור LSL קורס או מושהה בלי נתיקת חיבור.",
+  "lsl.idleTimeoutDisabled": "לעולם לא",
+  "lsl.idleTimeoutEnabled": "מופעל",
 };
 
 export default settings;

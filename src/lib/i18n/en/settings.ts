@@ -430,6 +430,11 @@ const settings: Record<string, string> = {
     "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source.",
   "lsl.autoConnect": "Auto-Connect",
   "lsl.autoConnectToggle": "Auto-connect paired LSL streams",
+  "lsl.idleTimeout": "Idle Timeout",
+  "lsl.idleTimeoutDesc":
+    "Stop the session automatically when no samples arrive for this long. Useful when the LSL source crashes or is paused without disconnecting.",
+  "lsl.idleTimeoutDisabled": "Never",
+  "lsl.idleTimeoutEnabled": "Enabled",
   "lsl.autoConnectDesc":
     "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed.",
   "lsl.pairedStreams": "Paired Streams",

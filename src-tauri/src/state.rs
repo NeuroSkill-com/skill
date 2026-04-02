@@ -577,6 +577,9 @@ pub struct AppState {
     pub lsl_auto_connect: bool,
     /// LSL streams the user has "paired" for auto-connect.
     pub lsl_paired_streams: Vec<skill_settings::LslPairedStream>,
+    /// Idle watchdog for LSL sessions: stop after this many seconds of silence.
+    /// `None` disables the watchdog for LSL entirely.
+    pub lsl_idle_timeout_secs: Option<u64>,
 
     /// High-level inference device preference: `"gpu"` or `"cpu"`.
     pub inference_device: String,
@@ -746,6 +749,7 @@ impl Default for AppState {
             lsl_iroh_endpoint_id: None,
             lsl_auto_connect: false,
             lsl_paired_streams: Vec::new(),
+            lsl_idle_timeout_secs: skill_settings::default_lsl_idle_timeout_secs(),
             inference_device: skill_settings::default_inference_device(),
             llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
             exg_inference_device: skill_settings::default_exg_inference_device(),
