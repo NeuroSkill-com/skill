@@ -62,6 +62,13 @@ members = [
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+# Override llama-cpp-rs crates with the git source that ships the q1 patch file.
+# The published crates.io 0.2.21 has the --features q1 build infrastructure but
+# omits patches/0001-q1-quantization.patch from the package (so q1 is a no-op).
+# The git repo includes that file; with --features q1 the patch is applied at
+# build time, adding Q1_0 / Q1_0_g128 1-bit quant support for Bonsai models.
+llama-cpp-4     = { git = "https://github.com/eugenehp/llama-cpp-rs", package = "llama-cpp-4" }
+llama-cpp-sys-4 = { git = "https://github.com/eugenehp/llama-cpp-rs", package = "llama-cpp-sys-4" }
 
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
