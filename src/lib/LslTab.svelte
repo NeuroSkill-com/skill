@@ -76,6 +76,8 @@ let sessionState = $state<string>("disconnected");
 let sessionDeviceKind = $state<string>("");
 let sessionDeviceName = $state<string | null>(null);
 let sessionSampleCount = $state(0);
+let sessionChannelNames = $state<string[]>([]);
+let sessionSampleRate = $state(0);
 
 let secondarySessions = $state<SecondarySession[]>([]);
 
@@ -343,6 +345,8 @@ onMount(async () => {
     sessionDeviceKind = s.device_kind;
     sessionDeviceName = s.device_name;
     sessionSampleCount = s.sample_count;
+    sessionChannelNames = s.channel_names ?? [];
+    sessionSampleRate = s.eeg_sample_rate_hz ?? 0;
   } catch {
     /* ignore */
   }
@@ -369,6 +373,8 @@ onMount(async () => {
       sessionDeviceKind = ev.payload.device_kind;
       sessionDeviceName = ev.payload.device_name;
       sessionSampleCount = ev.payload.sample_count;
+      sessionChannelNames = ev.payload.channel_names ?? [];
+      sessionSampleRate = ev.payload.eeg_sample_rate_hz ?? 0;
     }),
     await listen<SecondarySession[]>("secondary-sessions", (ev) => {
       secondarySessions = ev.payload;
@@ -438,6 +444,36 @@ onDestroy(() => {
       </span>
     </CardContent>
   </Card>
+{/if}
+
+<!-- ── Channel Inspector (shown while LSL session is active) ─────────────────── -->
+{#if isLslSessionActive && sessionChannelNames.length > 0}
+  <section class="flex flex-col gap-2">
+    <div class="flex items-center gap-2 px-0.5">
+      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+        Channels
+      </span>
+      <span class="text-[0.52rem] text-muted-foreground/50">
+        {sessionChannelNames.length} × {fmtRate(sessionSampleRate)} Hz
+      </span>
+    </div>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="py-0 px-0">
+        <div
+          class="grid gap-px bg-border/30 dark:bg-white/[0.04]"
+          style="grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr))"
+        >
+          {#each sessionChannelNames as ch, i}
+            <div class="flex flex-col gap-0.5 px-3 py-2 bg-white dark:bg-[#14141e]">
+              <span class="text-[0.52rem] tabular-nums text-muted-foreground/40 font-mono">#{i + 1}</span>
+              <span class="text-[0.72rem] font-semibold text-foreground truncate">{ch}</span>
+            </div>
+          {/each}
+        </div>
+      </CardContent>
+    </Card>
+  </section>
 {/if}
 
 <!-- ── Secondary Sessions Strip ────────────────────────────────────────── -->
