@@ -96,35 +96,53 @@ pub(super) fn run_actor(
         // Non-Windows: no special Vulkan path handling needed
     }
 
-    let (mut backend_md, we_own_backend) = match LlamaBackend::init() {
-        Ok(b) => {
+    // ── LlamaBackend init ─────────────────────────────────────────────────────
+    //
+    // `LlamaBackend` is a ZST (zero-sized type) — a proof-of-init token.  The
+    // actual backend state lives in C globals initialised by llama_backend_init.
+    //
+    // When WE initialise (Ok branch): store in a plain `Option<LlamaBackend>`.
+    // Dropping it at actor shutdown calls llama_backend_free() and resets the
+    // LLAMA_BACKEND_INITIALIZED atomic, so neutts TTS can re-claim the backend
+    // after the LLM server stops.
+    //
+    // When someone ELSE (neutts) already initialised (Err branch): create a
+    // ManuallyDrop placeholder so we never call llama_backend_free() on a
+    // backend we don't own.
+    let mut _owned_backend: Option<LlamaBackend>;
+    // SAFETY: LlamaBackend is a ZST; zeroed() is a valid instance used only as
+    // a borrowed token when we don't own the backend.  ManuallyDrop prevents
+    // the Drop impl from calling llama_backend_free() in that case.
+    let mut _unowned_backend: std::mem::ManuallyDrop<LlamaBackend> =
+        std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() });
+    let backend: &mut LlamaBackend;
+
+    match LlamaBackend::init() {
+        Ok(mut b) => {
             llm_info!(&app, &log_buf, log_file, "llama backend initialised");
-            (std::mem::ManuallyDrop::new(b), true)
+            if !config.verbose {
+                b.void_logs();
+            }
+            _owned_backend = Some(b);
+            #[allow(clippy::unwrap_used)] // always Some — set one line above
+            {
+                backend = _owned_backend.as_mut().unwrap();
+            }
         }
         Err(_) => {
             llm_info!(
                 &app,
                 &log_buf,
                 log_file,
-                "llama backend already initialised (shared with neutts)"
+                "llama backend already initialised (shared with neutts TTS)"
             );
-            // SAFETY: `LlamaBackend` is effectively a ZST handle (no heap
-            // pointers, no Drop). When we don't own the backend (neutts already
-            // initialised it), we create a zero-filled placeholder that is never
-            // dropped (ManuallyDrop) and never used for initialization.
-            // SAFETY: `LlamaBackend` is a plain struct of integer handles /
-            // pointers with no Drop impl. A zeroed instance is valid (null
-            // handles) and is wrapped in ManuallyDrop so it is never dropped.
-            (
-                std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }),
-                false,
-            )
+            _owned_backend = None;
+            if !config.verbose {
+                _unowned_backend.void_logs();
+            }
+            backend = &mut *_unowned_backend;
         }
-    };
-    if !config.verbose {
-        backend_md.void_logs();
     }
-    let backend: &LlamaBackend = &backend_md;
 
     // ── load model ──
     let model_file_name = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("model");
@@ -854,16 +872,14 @@ pub(super) fn run_actor(
     }
 
     // ── Ordered teardown ──────────────────────────────────────────────────────
+    // Drop ctx and model before the backend so llama.cpp contexts are fully
+    // released before llama_backend_free() is called.
     drop(ctx);
     drop(model);
-    if we_own_backend {
-        // SAFETY: `backend_md` was created by `LlamaBackend::init()` (not
-        // zeroed). `ctx` and `model` have already been dropped above, so no
-        // live references to the backend remain. We drop exactly once.
-        unsafe {
-            std::mem::ManuallyDrop::drop(&mut backend_md);
-        }
-    }
+    // _owned_backend (Option<LlamaBackend>) drops here naturally, calling
+    // llama_backend_free() and resetting LLAMA_BACKEND_INITIALIZED so that
+    // neutts TTS can re-claim the backend on the next init.
+    // _unowned_backend is ManuallyDrop and is never freed (we don't own it).
 
     llm_info!(&app, &log_buf, log_file, "actor exiting — GPU resources released");
     app.emit_event("llm:status", json!({"status":"stopped"}));

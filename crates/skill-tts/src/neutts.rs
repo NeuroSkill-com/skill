@@ -227,7 +227,12 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                         Err(e) => {
                             LOADING.store(false, Ordering::Relaxed);
-                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}"))).ok();
+                            // Use {e:#} to include the full anyhow cause chain
+                            // (e.g. "failed to load NeuTTS: Failed to load backbone:
+                            // Failed to initialise llama.cpp backend") so the
+                            // root cause is visible in logs and the UI error banner.
+                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e:#}")))
+                                .ok();
                             continue;
                         }
                     }
@@ -268,7 +273,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                             READY.store(true, Ordering::Relaxed);
                         }
                         Err(e) => {
-                            tts_log!("neutts", "lazy init failed: {e}");
+                            tts_log!("neutts", "lazy init failed: {e:#}");
                             done.send(()).ok();
                             continue;
                         }
