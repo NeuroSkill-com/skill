@@ -1108,6 +1108,35 @@ pub fn set_inference_device(
     save_settings(&app);
 }
 
+// ── EXG inference device commands ───────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_exg_inference_device(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().exg_inference_device.clone()
+}
+
+/// Set the EXG inference device preference and persist it.
+///
+/// * `"gpu"` → wgpu backend (default, faster).
+/// * `"cpu"` → burn NdArray backend (no GPU required, slower).
+///
+/// The EXG embed worker must be restarted for the change to take effect.
+#[tauri::command]
+pub fn set_exg_inference_device(
+    device: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut st = state.lock_or_recover();
+    st.exg_inference_device = if device == "cpu" {
+        "cpu".into()
+    } else {
+        "gpu".into()
+    };
+    drop(st);
+    save_settings(&app);
+}
+
 // ── Web cache commands ────────────────────────────────────────────────────────
 
 #[tauri::command]

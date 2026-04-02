@@ -370,6 +370,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "Usa GPU / Metal / CUDA para inferencia rápida (recomendado).",
   "settings.inferenceDeviceCpuDesc": "Se ejecuta completamente en CPU — más lento pero funciona sin GPU.",
   "settings.inferenceDeviceRestartHint": "Reinicia el servidor LLM para aplicar.",
+  "settings.inferenceDeviceExgRestartHint": "Reconecta tu casco para aplicar.",
   "settings.gpuSection": "GPU / Memoria",
   "settings.gpuName": "Dispositivo",
   "settings.gpuVram": "Memoria",

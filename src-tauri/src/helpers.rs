@@ -277,6 +277,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         lsl_paired_streams: s.lsl_paired_streams.clone(),
         inference_device: s.inference_device.clone(),
         llm_gpu_layers_saved: s.llm_gpu_layers_saved,
+        exg_inference_device: s.exg_inference_device.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);

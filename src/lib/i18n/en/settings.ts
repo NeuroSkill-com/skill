@@ -355,6 +355,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "Uses GPU / Metal / CUDA for fast inference (recommended).",
   "settings.inferenceDeviceCpuDesc": "Runs fully on CPU — slower but works without a GPU.",
   "settings.inferenceDeviceRestartHint": "Restart the LLM server to apply.",
+  "settings.inferenceDeviceExgRestartHint": "Reconnect your headset to apply.",
   "settings.gpuSection": "GPU / Memory",
   "settings.gpuName": "Device",
   "settings.gpuVram": "Memory",
