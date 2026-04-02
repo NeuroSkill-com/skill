@@ -12,7 +12,7 @@ metal      = ["neurorvq-rs/metal", "dep:burn-wgpu", "burn-wgpu/metal"]
 vulkan     = ["neurorvq-rs/vulkan", "dep:burn-wgpu", "burn-wgpu/vulkan"]
 
 [dependencies]
-neurorvq-rs  = { package = "neurorvq", path = "/Users/Shared/neurorvq-rs" }
+neurorvq-rs  = { package = "neurorvq", version = "0.1.0" }
 burn         = { version = "0.20.1", default-features = false, features = ["std"] }
 burn-ndarray = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 burn-wgpu    = { version = "0.20.1", default-features = true, optional = true }
