@@ -350,6 +350,53 @@ jobs:
           $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "[ok] NSIS_DIR=$nsisDir"
 
+      - name: Download prebuilt llama libs (Windows, optional)
+        shell: powershell
+        run: |
+          $url = "https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-windows-x86_64-pc-windows-msvc-q1-vulkan.tar.gz"
+          $archive = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows.tar.gz"
+          $dest = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows"
+          $expectedTarget = "x86_64-pc-windows-msvc"
+          $expectedFeature = "vulkan"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $archive
+            tar -xzf $archive -C $dest
+
+            $root = $dest
+            if (-not (Test-Path (Join-Path $root "lib")) -and -not (Test-Path (Join-Path $root "lib64")) -and -not (Test-Path (Join-Path $root "bin"))) {
+              $candidate = Get-ChildItem $dest -Directory | Select-Object -First 1
+              if ($candidate) { $root = $candidate.FullName }
+            }
+
+            if (-not $root -or -not (Test-Path $root)) {
+              Write-Host "[warn] prebuilt llama archive layout invalid; fallback to source build"
+              exit 0
+            }
+
+            $libs = Get-ChildItem -Path $root -Recurse -File -Include *.lib,*.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $libs) {
+              Write-Host "[warn] prebuilt llama archive contains no windows libs; fallback to source build"
+              exit 0
+            }
+
+            $metadataPath = Join-Path $root "metadata.json"
+            if (Test-Path $metadataPath) {
+              $meta = Get-Content $metadataPath -Raw | ConvertFrom-Json
+              if ($meta.target -ne $expectedTarget -or -not ($meta.features -like "*$expectedFeature*")) {
+                Write-Host "[warn] prebuilt metadata mismatch (target=$($meta.target) features=$($meta.features)); fallback to source build"
+                exit 0
+              }
+            }
+
+            "LLAMA_PREBUILT_DIR=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "LLAMA_PREBUILT_SHARED=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "[ok] LLAMA_PREBUILT_DIR=$root"
+          } catch {
+            Write-Host "[warn] prebuilt llama artifact unavailable or invalid; fallback to source build"
+          }
+
       # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
       # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
       # DLLs app-locally alongside skill.exe.  This step ensures they exist on
@@ -589,7 +636,20 @@ jobs:
           fi
           sccache --show-stats || true
 
-          cargo build -p skill --release --locked --features custom-protocol,llm-vulkan,screenshots --timings
+          run_cmd() {
+            cargo build -p skill --release --locked --features custom-protocol,llm-vulkan,screenshots --timings
+          }
+
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::Windows release compile failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
+
           sccache --show-stats || true
 
       # Make sure NSIS packaging can always find onnxruntime.dll next to the

@@ -81,6 +81,51 @@ jobs:
       - name: Install protoc (macOS)
         run: brew install protobuf
 
+      - name: Download prebuilt llama libs (macOS, optional)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-macos-aarch64-apple-darwin-q1-metal.tar.gz"
+          ARCHIVE="$RUNNER_TEMP/llama-prebuilt-macos.tar.gz"
+          DEST="$RUNNER_TEMP/llama-prebuilt-macos"
+          EXPECTED_TARGET="aarch64-apple-darwin"
+          EXPECTED_FEATURE="metal"
+          mkdir -p "$DEST"
+
+          if ! curl -fL "$URL" -o "$ARCHIVE"; then
+            echo "[warn] prebuilt llama artifact unavailable; fallback to source build"
+            exit 0
+          fi
+
+          tar -xzf "$ARCHIVE" -C "$DEST"
+          ROOT="$DEST"
+          if [[ ! -d "$ROOT/lib" && ! -d "$ROOT/lib64" && ! -d "$ROOT/bin" ]]; then
+            ROOT="$(find "$DEST" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
+          fi
+
+          if [[ -z "${ROOT:-}" ]]; then
+            echo "[warn] prebuilt llama archive layout invalid; fallback to source build"
+            exit 0
+          fi
+
+          if ! find "$ROOT" -type f \( -name '*.a' -o -name '*.dylib' \) | head -n1 >/dev/null; then
+            echo "[warn] prebuilt llama archive contains no static/shared libs; fallback to source build"
+            exit 0
+          fi
+
+          if [[ -f "$ROOT/metadata.json" ]]; then
+            TARGET="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("target",""))' "$ROOT/metadata.json")"
+            FEATURES="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("features",""))' "$ROOT/metadata.json")"
+            if [[ "$TARGET" != "$EXPECTED_TARGET" || "$FEATURES" != *"$EXPECTED_FEATURE"* ]]; then
+              echo "[warn] prebuilt metadata mismatch (target=$TARGET features=$FEATURES); fallback to source build"
+              exit 0
+            fi
+          fi
+
+          echo "LLAMA_PREBUILT_DIR=$ROOT" >> "$GITHUB_ENV"
+          echo "LLAMA_PREBUILT_SHARED=0" >> "$GITHUB_ENV"
+          echo "[ok] LLAMA_PREBUILT_DIR=$ROOT"
+
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
       # build.  Each variable is checked for non-empty; none of the values are
@@ -207,6 +252,7 @@ jobs:
       # CLI (`npx tauri build`) injects this feature automatically, but we
       # bypass the CLI here to avoid its post-compilation SIGILL.
       - name: Compile (frontend + Rust)
+        shell: bash
         env:
           RUSTC_WRAPPER: sccache
           # Let sccache cache C/C++ compilations from cmake-based -sys crates
@@ -216,9 +262,21 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
+          set -euo pipefail
           npm run build
           npm run -s verify:tauri:frontend
-          cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol,llm-metal --timings
+          run_cmd() {
+            cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol,llm-metal --timings
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::macOS release compile failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile

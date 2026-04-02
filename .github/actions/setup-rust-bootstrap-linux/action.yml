@@ -27,3 +27,12 @@ runs:
     - name: Setup sccache
       if: inputs.use-sccache == 'true'
       uses: Mozilla-Actions/sccache-action@v0.0.9
+
+    - name: Configure sccache (GitHub Actions backend)
+      if: inputs.use-sccache == 'true'
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
+        # Bump to invalidate all remote sccache entries after major toolchain changes.
+        echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
