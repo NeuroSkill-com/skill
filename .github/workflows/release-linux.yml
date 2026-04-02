@@ -100,6 +100,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          shared-key: linux-release-x86_64-unknown-linux-gnu-v1
           cache-targets: false
           cache-on-failure: false
 
@@ -143,6 +144,51 @@ jobs:
       # Cached and installed via reusable setup action.
       - name: Setup Vulkan SDK
         uses: ./.github/actions/setup-vulkan-linux
+
+      - name: Download prebuilt llama libs (Linux, optional)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-linux-x86_64-unknown-linux-gnu-q1-vulkan.tar.gz"
+          ARCHIVE="$RUNNER_TEMP/llama-prebuilt-linux.tar.gz"
+          DEST="$RUNNER_TEMP/llama-prebuilt-linux"
+          EXPECTED_TARGET="x86_64-unknown-linux-gnu"
+          EXPECTED_FEATURE="vulkan"
+          mkdir -p "$DEST"
+
+          if ! curl -fL "$URL" -o "$ARCHIVE"; then
+            echo "[warn] prebuilt llama artifact unavailable; fallback to source build"
+            exit 0
+          fi
+
+          tar -xzf "$ARCHIVE" -C "$DEST"
+          ROOT="$DEST"
+          if [[ ! -d "$ROOT/lib" && ! -d "$ROOT/lib64" && ! -d "$ROOT/bin" ]]; then
+            ROOT="$(find "$DEST" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
+          fi
+
+          if [[ -z "${ROOT:-}" ]]; then
+            echo "[warn] prebuilt llama archive layout invalid; fallback to source build"
+            exit 0
+          fi
+
+          if ! find "$ROOT" -type f \( -name '*.a' -o -name '*.so' \) | head -n1 >/dev/null; then
+            echo "[warn] prebuilt llama archive contains no static/shared libs; fallback to source build"
+            exit 0
+          fi
+
+          if [[ -f "$ROOT/metadata.json" ]]; then
+            TARGET="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("target",""))' "$ROOT/metadata.json")"
+            FEATURES="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("features",""))' "$ROOT/metadata.json")"
+            if [[ "$TARGET" != "$EXPECTED_TARGET" || "$FEATURES" != *"$EXPECTED_FEATURE"* ]]; then
+              echo "[warn] prebuilt metadata mismatch (target=$TARGET features=$FEATURES); fallback to source build"
+              exit 0
+            fi
+          fi
+
+          echo "LLAMA_PREBUILT_DIR=$ROOT" >> "$GITHUB_ENV"
+          echo "LLAMA_PREBUILT_SHARED=0" >> "$GITHUB_ENV"
+          echo "[ok] LLAMA_PREBUILT_DIR=$ROOT"
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Build frontend ────────────────────────────────────────────────────────
@@ -190,7 +236,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots --timings
+          run_cmd() {
+            cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots --timings
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::Linux release compile failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile
