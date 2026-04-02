@@ -72,10 +72,10 @@ fi
 # ── Build reverse-dep graph from cargo metadata ──────────────────────────────
 # For each workspace crate, list the workspace crates that depend on it.
 # Output: one "dependent depname" pair per line.
-RDEP_MAP="$(cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 - <<'PY'
+if ! RDEP_MAP="$(cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c '
 import json, sys
 meta = json.load(sys.stdin)
-ws_ids  = set(meta["workspace_members"])
+ws_ids = set(meta["workspace_members"])
 ws_pkgs = {p["id"]: p["name"] for p in meta["packages"] if p["id"] in ws_ids}
 for pkg in meta["packages"]:
     if pkg["id"] not in ws_ids:
@@ -84,9 +84,13 @@ for pkg in meta["packages"]:
         # find if this dep resolves to a workspace member by name
         for pid, pname in ws_pkgs.items():
             if dep["name"] == pname and pid != pkg["id"]:
-                print(f'{pname} {pkg["name"]}')
-PY
-)"
+                print(pname + " " + pkg["name"])
+')"; then
+  # If metadata resolution fails for any reason, fail open by testing all
+  # crates rather than hard-failing CI in change detection.
+  for c in $ALL_TESTABLE; do printf -- "-p %s " "$c"; done
+  exit 0
+fi
 
 # ── Compute transitive closure of affected crates ────────────────────────────
 AFFECTED="$CHANGED_CRATES"
