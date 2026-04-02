@@ -163,7 +163,10 @@ onMount(async () => {
   locationEnabled = await invoke<boolean>("get_location_enabled").catch(() => false);
   lastInputActivity = await invoke<[number, number]>("get_last_input_activity");
   inferenceDevice = (await invoke<string>("get_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
-  nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
+  nowTimer = setInterval(async () => {
+    now = Math.floor(Date.now() / 1000);
+    gpuStats = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
+  }, 1000);
 
   unlisteners.push(
     await listen<ActiveWindowInfo | null>("active-window-changed", (ev) => {

@@ -244,6 +244,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "משתמש ב-GPU / Metal / CUDA להסקה מהירה (מומלץ).",
   "settings.inferenceDeviceCpuDesc": "פועל לגמרי על ה-CPU — איטי יותר אך עובד בלי GPU.",
   "settings.inferenceDeviceRestartHint": "הפעל מחדש את שרת ה-LLM כדי להחיל.",
+  "settings.inferenceDeviceExgRestartHint": "חבר מחדש את האוזניות כדי להחיל.",
   "settings.gpuSection": "GPU / זיכרון",
   "settings.gpuName": "מכשיר",
   "settings.gpuVram": "זיכרון",

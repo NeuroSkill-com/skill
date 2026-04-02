@@ -731,6 +731,15 @@ pub struct UserSettings {
     /// Default: `u32::MAX` (all layers on GPU).
     #[serde(default = "default_llm_gpu_layers_saved")]
     pub llm_gpu_layers_saved: u32,
+
+    /// High-level inference device preference for EXG embeddings: `"gpu"`
+    /// (default) or `"cpu"`.
+    ///
+    /// When set to `"gpu"`, the wgpu backend is used for all model inference
+    /// (faster, recommended).  When set to `"cpu"`, burn's NdArray backend
+    /// is used instead (no GPU required, slower).
+    #[serde(default = "default_exg_inference_device")]
+    pub exg_inference_device: String,
 }
 
 /// A remembered LSL stream for auto-connect.
@@ -767,6 +776,9 @@ pub fn default_tts_preload() -> bool {
     true
 }
 pub fn default_inference_device() -> String {
+    "gpu".into()
+}
+pub fn default_exg_inference_device() -> String {
     "gpu".into()
 }
 pub fn default_llm_gpu_layers_saved() -> u32 {
@@ -906,6 +918,7 @@ impl Default for UserSettings {
             lsl_paired_streams: vec![],
             inference_device: default_inference_device(),
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
+            exg_inference_device: default_exg_inference_device(),
         }
     }
 }

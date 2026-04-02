@@ -286,6 +286,45 @@
       "is_mmproj": false,
       "params_b": 456.0,
       "max_context_length": 131072
+    },
+    "bonsai-8b": {
+      "name": "Bonsai 8B",
+      "description": "Ultra-efficient 1-bit Qwen3-8B — 14× smaller than FP16, competitive with full-precision 8B models. Runs on low-end GPUs and Apple Silicon.",
+      "repo": "prism-ml/Bonsai-8B-gguf",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small"
+      ],
+      "is_mmproj": false,
+      "params_b": 8.19,
+      "max_context_length": 65536
+    },
+    "bonsai-4b": {
+      "name": "Bonsai 4B",
+      "description": "1-bit Qwen3-4B — strong chat and reasoning at extreme compression. Fits in under 1 GB of memory.",
+      "repo": "prism-ml/Bonsai-4B-gguf",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small"
+      ],
+      "is_mmproj": false,
+      "params_b": 4.02,
+      "max_context_length": 32768
+    },
+    "bonsai-1.7b": {
+      "name": "Bonsai 1.7B",
+      "description": "1-bit Qwen3-1.7B — 13.9× smaller than FP16, runs on any device including CPU-only hardware.",
+      "repo": "prism-ml/Bonsai-1.7B-gguf",
+      "tags": [
+        "chat",
+        "reasoning",
+        "tiny"
+      ],
+      "is_mmproj": false,
+      "params_b": 1.72,
+      "max_context_length": 32768
     }
   },
   "models": [
@@ -3398,6 +3437,30 @@
         "Q8_0/MiniMax-M2.5-Q8_0-00005-of-00006.gguf",
         "Q8_0/MiniMax-M2.5-Q8_0-00006-of-00006.gguf"
       ]
+    },
+    {
+      "family": "bonsai-8b",
+      "filename": "Bonsai-8B.gguf",
+      "quant": "Q1_0_G128",
+      "size_gb": 1.08,
+      "description": "1-bit quantization — 14× smaller than FP16, 6× faster on GPU",
+      "recommended": true
+    },
+    {
+      "family": "bonsai-4b",
+      "filename": "Bonsai-4B.gguf",
+      "quant": "Q1_0_G128",
+      "size_gb": 0.53,
+      "description": "1-bit quantization — fits in under 1 GB of memory",
+      "recommended": true
+    },
+    {
+      "family": "bonsai-1.7b",
+      "filename": "Bonsai-1.7B.gguf",
+      "quant": "Q1_0_G128",
+      "size_gb": 0.24,
+      "description": "1-bit quantization — 13.9× smaller than FP16, runs on any device",
+      "recommended": true
     }
   ]
 }

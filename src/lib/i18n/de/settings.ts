@@ -206,6 +206,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "Nutzt GPU / Metal / CUDA für schnelle Inferenz (empfohlen).",
   "settings.inferenceDeviceCpuDesc": "Läuft vollständig auf der CPU — langsamer, aber ohne GPU nutzbar.",
   "settings.inferenceDeviceRestartHint": "LLM-Server neu starten, um die Änderung anzuwenden.",
+  "settings.inferenceDeviceExgRestartHint": "Headset erneut verbinden, um die Änderung anzuwenden.",
   "settings.gpuSection": "GPU / Arbeitsspeicher",
   "settings.gpuName": "Gerät",
   "settings.gpuVram": "Speicher",

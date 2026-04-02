@@ -582,6 +582,8 @@ pub struct AppState {
     pub inference_device: String,
     /// Last-saved `llm.n_gpu_layers` before a CPU override was applied.
     pub llm_gpu_layers_saved: u32,
+    /// Inference device preference for EXG embeddings: `"gpu"` or `"cpu"`.
+    pub exg_inference_device: String,
 
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
@@ -746,6 +748,7 @@ impl Default for AppState {
             lsl_paired_streams: Vec::new(),
             inference_device: skill_settings::default_inference_device(),
             llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
+            exg_inference_device: skill_settings::default_exg_inference_device(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),

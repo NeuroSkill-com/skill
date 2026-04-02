@@ -208,6 +208,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "Utilise le GPU / Metal / CUDA pour une inférence rapide (recommandé).",
   "settings.inferenceDeviceCpuDesc": "S’exécute entièrement sur le CPU — plus lent mais fonctionne sans GPU.",
   "settings.inferenceDeviceRestartHint": "Redémarrez le serveur LLM pour appliquer.",
+  "settings.inferenceDeviceExgRestartHint": "Reconnectez votre casque pour appliquer.",
   "settings.gpuSection": "GPU / Mémoire",
   "settings.gpuName": "Périphérique",
   "settings.gpuVram": "Mémoire",

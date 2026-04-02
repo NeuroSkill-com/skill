@@ -206,6 +206,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceGpuDesc": "Використовує GPU / Metal / CUDA для швидкого виведення (рекомендовано).",
   "settings.inferenceDeviceCpuDesc": "Працює повністю на CPU — повільніше, але без GPU.",
   "settings.inferenceDeviceRestartHint": "Перезапустіть LLM-сервер для застосування.",
+  "settings.inferenceDeviceExgRestartHint": "Перепідкнайте гарнітуру, щоб застосувати.",
   "settings.gpuSection": "GPU / Пам’ять",
   "settings.gpuName": "Пристрій",
   "settings.gpuVram": "Пам’ять",
