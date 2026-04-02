@@ -83,6 +83,11 @@ serde_json = "1"
 # consumers onto ring instead.  Crates that depend on rustls (directly or
 # transitively) should use this workspace dep.
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+# Force the `deflate` feature on zip 4.x so tauri-plugin-updater can extract
+# Deflate-compressed entries. Without this, zip 4.6.1 is compiled without
+# flate2 and produces "unsupported compression method" when the updater tries
+# to unpack a .nsis.zip built with standard Deflate (method 8).
+zip = { version = "4", features = ["deflate"] }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
