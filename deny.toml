@@ -51,6 +51,9 @@ allow = [
     "CDLA-Permissive-2.0",
     "NCSA",
     "LicenseRef-AI100",
+    # bzip2/libbz2 license (BSD-like permissive, valid SPDX identifier).
+    # Used by libbz2-rs-sys, pulled transitively via the zip crate.
+    "bzip2-1.0.6",
 ]
 exceptions = [
     # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
@@ -91,6 +94,7 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-location" },
     { allow = ["GPL-3.0-only"], crate = "skill-iroh" },
     { allow = ["GPL-3.0-only"], crate = "skill-lsl" },
+    { allow = ["GPL-3.0-only"], crate = "skill-neurorvq" },
     { allow = ["GPL-3.0-only"], crate = "sleepfm" },
     { allow = ["GPL-3.0-only"], crate = "iroh-example-client" },
     { allow = ["GPL-3.0-only"], crate = "iroh_test_client" },
