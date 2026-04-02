@@ -4,13 +4,14 @@
 
 use serde_json::{json, Value};
 
-use super::helpers::resolve_tool_path;
+use super::helpers::{enforce_path_integrity, resolve_tool_path};
 use super::safety::{check_path_safety, request_tool_approval};
 use super::truncate::truncate_tool_output_head;
+use crate::types::LlmToolConfig;
 
 // ── read_file ─────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_read_file(args: &Value) -> Value {
+pub(crate) async fn exec_read_file(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
     let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "read_file", "error": "missing path" });
@@ -23,6 +24,22 @@ pub(crate) async fn exec_read_file(args: &Value) -> Value {
         .get("limit")
         .and_then(serde_json::Value::as_u64)
         .map(|v| v as usize);
+
+    let resolved_check = resolve_tool_path(&path);
+    if allowed_tools.strict_path_safety {
+        if let Err(reason) = enforce_path_integrity(&resolved_check) {
+            return json!({ "ok": false, "tool": "read_file", "error": reason });
+        }
+    }
+    if let Some(reason) = check_path_safety(&resolved_check) {
+        crate::tool_log!("tool:read_file", "[safety] approval required: {}", reason);
+        let detail = format!("Read: {}", resolved_check.display());
+        let approved = request_tool_approval("read_file", &reason, &detail).await;
+        if !approved {
+            crate::tool_log!("tool:read_file", "[safety] user denied read");
+            return json!({ "ok": false, "tool": "read_file", "error": "operation denied by user" });
+        }
+    }
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_tool_path(&path);
@@ -83,7 +100,7 @@ pub(crate) async fn exec_read_file(args: &Value) -> Value {
 
 // ── write_file ────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_write_file(args: &Value) -> Value {
+pub(crate) async fn exec_write_file(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
     let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
@@ -92,6 +109,11 @@ pub(crate) async fn exec_write_file(args: &Value) -> Value {
 
     // Safety check: require approval for sensitive paths
     let resolved_check = resolve_tool_path(&path);
+    if allowed_tools.strict_path_safety {
+        if let Err(reason) = enforce_path_integrity(&resolved_check) {
+            return json!({ "ok": false, "tool": "write_file", "error": reason });
+        }
+    }
     if let Some(reason) = check_path_safety(&resolved_check) {
         crate::tool_log!("tool:write_file", "[safety] approval required: {}", reason);
         let detail = format!("Write to: {}", resolved_check.display());
@@ -127,7 +149,7 @@ pub(crate) async fn exec_write_file(args: &Value) -> Value {
 
 // ── edit_file ─────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_edit_file(args: &Value) -> Value {
+pub(crate) async fn exec_edit_file(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
     let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let old_text = args.get("old_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let new_text = args.get("new_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -140,6 +162,11 @@ pub(crate) async fn exec_edit_file(args: &Value) -> Value {
 
     // Safety check: require approval for sensitive paths
     let resolved_check = resolve_tool_path(&path);
+    if allowed_tools.strict_path_safety {
+        if let Err(reason) = enforce_path_integrity(&resolved_check) {
+            return json!({ "ok": false, "tool": "edit_file", "error": reason });
+        }
+    }
     if let Some(reason) = check_path_safety(&resolved_check) {
         crate::tool_log!("tool:edit_file", "[safety] approval required: {}", reason);
         let detail = format!("Edit: {}", resolved_check.display());
@@ -211,7 +238,7 @@ pub(crate) async fn exec_edit_file(args: &Value) -> Value {
 
 // ── search_output ─────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_search_output(args: &Value) -> Value {
+pub(crate) async fn exec_search_output(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
     let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "search_output", "error": "missing path" });
@@ -238,6 +265,13 @@ pub(crate) async fn exec_search_output(args: &Value) -> Value {
         .get("max_matches")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(50) as usize;
+
+    let resolved_check = resolve_tool_path(&path);
+    if allowed_tools.strict_path_safety {
+        if let Err(reason) = enforce_path_integrity(&resolved_check) {
+            return json!({ "ok": false, "tool": "search_output", "error": reason });
+        }
+    }
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_tool_path(&path);

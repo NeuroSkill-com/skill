@@ -17,8 +17,11 @@ use crate::tools;
 
 use anyhow::Context;
 use skill_tools::context::trim_messages_to_fit;
-use skill_tools::defs::{enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled};
+use skill_tools::defs::{
+    enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled, rerank_tools_for_prompt,
+};
 use skill_tools::exec::execute_builtin_tool_call;
+use skill_tools::types::ChatMode;
 
 // ── Stream sanitizer ──────────────────────────────────────────────────────────
 
@@ -93,6 +96,114 @@ where
     }
 
     Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))
+}
+
+// ── Prompt helpers ────────────────────────────────────────────────────────────
+
+fn message_text_content(msg: &Value) -> String {
+    if let Some(s) = msg.get("content").and_then(|c| c.as_str()) {
+        return s.to_string();
+    }
+    let mut out = String::new();
+    if let Some(parts) = msg.get("content").and_then(|c| c.as_array()) {
+        for p in parts {
+            if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
+                if !out.is_empty() {
+                    out.push('\n');
+                }
+                out.push_str(t);
+            }
+        }
+    }
+    out
+}
+
+fn latest_user_prompt(messages: &[Value]) -> Option<String> {
+    messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .map(message_text_content)
+        .filter(|s| !s.trim().is_empty())
+}
+
+fn apply_runtime_prompt_variables(
+    messages: &mut [Value],
+    state: &LlmServerState,
+    allowed_tools: &config::LlmToolConfig,
+) {
+    use std::collections::HashMap;
+
+    fn expand(s: &str, vars: &HashMap<String, String>) -> String {
+        let mut out = String::with_capacity(s.len());
+        let bytes = s.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i] == b'{' {
+                if let Some(close_rel) = s[i + 1..].find('}') {
+                    let end = i + 1 + close_rel;
+                    let key = &s[i + 1..end];
+                    if let Some(v) = vars.get(key) {
+                        out.push_str(v);
+                        i = end + 1;
+                        continue;
+                    }
+                }
+            }
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+        out
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut vars = HashMap::<String, String>::new();
+    vars.insert("time".into(), now.to_string());
+    vars.insert("date".into(), now.to_string());
+    vars.insert("datetime".into(), now.to_string());
+    vars.insert("os".into(), std::env::consts::OS.to_string());
+    vars.insert("arch".into(), std::env::consts::ARCH.to_string());
+    vars.insert(
+        "home".into(),
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| "~".into()),
+    );
+    vars.insert(
+        "cwd".into(),
+        std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+    );
+    vars.insert("llm.model".into(), state.model_name.clone());
+    vars.insert("llm.n_ctx".into(), state.n_ctx.load(Ordering::Relaxed).to_string());
+
+    for (k, v) in &allowed_tools.prompt_variables {
+        vars.insert(k.clone(), v.clone());
+    }
+
+    for msg in messages.iter_mut() {
+        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+        if !matches!(role, "system" | "user") {
+            continue;
+        }
+
+        if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
+            msg["content"] = Value::String(expand(content, &vars));
+            continue;
+        }
+
+        if let Some(parts) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+            for p in parts {
+                if let Some(text) = p.get("text").and_then(|t| t.as_str()) {
+                    p["text"] = Value::String(expand(text, &vars));
+                }
+            }
+        }
+    }
 }
 
 // ── Callback types ────────────────────────────────────────────────────────────
@@ -170,13 +281,36 @@ where
     let tool_thinking_budget = allowed_tools.thinking_budget;
 
     let mut messages = base_messages;
+    apply_runtime_prompt_variables(&mut messages, state, &allowed_tools);
+
     if tools_from_req.is_empty() {
         tools_from_req = enabled_builtin_llm_tools(&allowed_tools);
     } else {
         tools_from_req = filter_allowed_tool_defs(tools_from_req, &allowed_tools);
     }
+
+    // Intelligent skill selection: rerank and keep only top-N most relevant tools.
+    if allowed_tools.intelligent_selection_enabled {
+        if let Some(prompt) = latest_user_prompt(&messages) {
+            tools_from_req =
+                rerank_tools_for_prompt(&prompt, tools_from_req, allowed_tools.intelligent_selection_top_n);
+        }
+    }
+
     let n_ctx = state.n_ctx.load(Ordering::Relaxed);
-    tools::inject_tools_into_system_prompt(&mut messages, &tools_from_req, n_ctx);
+    let prompt_opts = skill_tools::parse::ToolPromptOptions {
+        prefer_native_tool_calling: allowed_tools.prefer_native_tool_calling,
+        chat_mode: Some(
+            match allowed_tools.chat_mode {
+                ChatMode::Automatic => "automatic",
+                ChatMode::Chat => "chat",
+                ChatMode::Query => "query",
+            }
+            .to_string(),
+        ),
+        query_refusal_response: Some(allowed_tools.query_refusal_response.clone()),
+    };
+    tools::inject_tools_into_system_prompt_with_options(&mut messages, &tools_from_req, n_ctx, &prompt_opts);
 
     // Inject discovered Agent Skills into the system prompt so the LLM knows
     // which specialised instruction files it can load via read_file.
@@ -215,6 +349,7 @@ where
     // Track last successful tool result so we can surface it if the model
     // never produces a text response.
     let mut last_tool_result: Option<String> = None;
+    let mut had_successful_tool_result = false;
     let mut dedup_nudge_count = 0u32;
     let mut self_heal_count = 0u32;
     let mut cumulative_prompt_tokens = 0usize;
@@ -287,6 +422,18 @@ where
                     return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
                 }
             }
+
+            // Strict query mode: refuse if we have no tool-backed evidence yet.
+            if matches!(allowed_tools.chat_mode, ChatMode::Query) && !had_successful_tool_result {
+                return Ok((
+                    allowed_tools.query_refusal_response.clone(),
+                    "no_evidence".into(),
+                    prompt_tokens,
+                    completion_tokens,
+                    n_ctx,
+                ));
+            }
+
             return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
         }
 
@@ -435,8 +582,17 @@ where
         for msg in messages[tool_results_start..].iter().rev() {
             if msg.get("role").and_then(|r| r.as_str()) == Some("tool") {
                 if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
-                    last_tool_result = Some(content.to_string());
-                    break;
+                    if let Ok(v) = serde_json::from_str::<Value>(content) {
+                        if v.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+                            had_successful_tool_result = true;
+                            last_tool_result = Some(content.to_string());
+                            break;
+                        }
+                    }
+                    // Keep last output even if not parseable/successful for fallback/debug.
+                    if last_tool_result.is_none() {
+                        last_tool_result = Some(content.to_string());
+                    }
                 }
             }
         }

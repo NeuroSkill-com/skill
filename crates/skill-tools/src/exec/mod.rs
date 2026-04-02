@@ -31,7 +31,7 @@ use crate::parse::ToolCall;
 use crate::types::LlmToolConfig;
 
 // Re-export public API items that were previously accessible from `exec`.
-pub use helpers::{resolve_tool_path, retry_with_backoff};
+pub use helpers::{enforce_path_integrity, resolve_tool_path, retry_with_backoff};
 pub use safety::{check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook};
 pub use truncate::truncate_text;
 
@@ -85,10 +85,10 @@ pub async fn execute_builtin_tool_call(
         "skill" => tools_system::exec_skill(&args, allowed_tools).await,
         "web_search" => tools_web::exec_web_search(&args, allowed_tools).await,
         "web_fetch" => tools_web::exec_web_fetch(&args, allowed_tools).await,
-        "read_file" => tools_fs::exec_read_file(&args).await,
-        "write_file" => tools_fs::exec_write_file(&args).await,
-        "edit_file" => tools_fs::exec_edit_file(&args).await,
-        "search_output" => tools_fs::exec_search_output(&args).await,
+        "read_file" => tools_fs::exec_read_file(&args, allowed_tools).await,
+        "write_file" => tools_fs::exec_write_file(&args, allowed_tools).await,
+        "edit_file" => tools_fs::exec_edit_file(&args, allowed_tools).await,
+        "search_output" => tools_fs::exec_search_output(&args, allowed_tools).await,
         other => {
             tool_log!("tool", "[error] tool={} unsupported", other);
             json!({ "ok": false, "tool": other, "error": "unsupported tool" })

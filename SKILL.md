@@ -3198,26 +3198,50 @@ ws.send(JSON.stringify({
 
 When the LLM server is running, `llm_chat` supports **automatic tool calling** — the
 model can invoke built-in tools to perform actions and return results within the
-conversation.  Tools are injected into the system prompt automatically when enabled.
+conversation. Tools are injected into the system prompt automatically when enabled.
 
 | Tool | Description |
 |---|---|
 | `bash` | Execute shell commands (with safety approval for dangerous operations) |
-| `read` | Read file contents from disk |
-| `write` | Write / create files |
-| `edit` | Surgical find-and-replace edits in files |
-| `web_search` | Search the web (DuckDuckGo JSON + HTML fallback) |
+| `read_file` | Read file contents from disk |
+| `write_file` | Write / create files |
+| `edit_file` | Surgical find-and-replace edits in files |
+| `web_search` | Search the web (DuckDuckGo/Brave/SearXNG + fallback handling) |
 | `web_fetch` | Fetch a URL and return its content |
 | `search_output` | Navigate large tool outputs (paginated) |
 | `skill` | Query the NeuroSkill™ API — status, sessions, search, labels, screenshots, sleep, hooks, DND |
 
 Tool calls are detected in the model's output, executed server-side, and results are
-fed back into the conversation automatically.  The CLI's `llm chat` command handles
+fed back into the conversation automatically. The CLI's `llm chat` command handles
 this transparently — you'll see tool-call cards in the interactive REPL and results
 streamed back inline.
 
-**The `skill` tool** lets the LLM query and control NeuroSkill™ directly.  Commands
-are sent as `{ "command": "<ws_command>", "args": { ... } }` objects.  Supported
+##### Tool policy settings (LLM → Tools)
+
+The following runtime settings control tool behavior:
+
+| Field | Type | Default | Meaning |
+|---|---:|---:|---|
+| `chat_mode` | `automatic \| chat \| query` | `automatic` | `automatic`: use tools when relevant; `chat`: free-form responses allowed; `query`: strict grounded mode (requires tool evidence). |
+| `query_refusal_response` | string | built-in sentence | Response returned in `query` mode when no relevant tool evidence is available. |
+| `intelligent_selection_enabled` | bool | `true` | Enables per-prompt tool reranking to reduce tool injection bloat. |
+| `intelligent_selection_top_n` | number | `8` | Max tools kept after reranking. |
+| `prefer_native_tool_calling` | bool | `true` | Prompts models to prefer OpenAI-style native `tool_calls` JSON, with `[TOOL_CALL]...` fallback. |
+| `strict_path_safety` | bool | `true` | Enforces trusted-root path integrity checks (`cwd`, `home`, `tmp`) for file tools. |
+| `prompt_variables` | object | `{}` | Runtime `{key}` replacements for system/user prompts before inference. |
+
+Built-in prompt variables include: `{time}`, `{date}`, `{datetime}`, `{os}`,
+`{arch}`, `{home}`, `{cwd}`, `{llm.model}`, `{llm.n_ctx}`. Custom keys from
+`prompt_variables` are merged on top.
+
+##### Query mode behavior
+
+When `chat_mode = query`, the assistant is prevented from answering with ungrounded
+free-text if no successful tool-backed evidence was produced in the turn. In that
+case, it returns `query_refusal_response` exactly.
+
+**The `skill` tool** lets the LLM query and control NeuroSkill™ directly. Commands
+are sent as `{ "command": "<ws_command>", "args": { ... } }` objects. Supported
 commands include: `status`, `sessions`, `session_metrics`, `search`, `compare`,
 `sleep`, `sleep_schedule`, `sleep_schedule_set`, `label`, `search_labels`,
 `interactive_search`, `search_screenshots`, `screenshots_around`,
@@ -3232,8 +3256,10 @@ commands include: `status`, `sessions`, `session_metrics`, `search`, `compare`,
 `llm_refresh_catalog`, `llm_logs`, `llm_delete`, `run_calibration`, `timer`.
 
 **Safety:** Dangerous operations (e.g. `rm -rf`, writing to system paths) trigger an
-approval dialog before execution.  The tool system also enforces output size limits
-and automatic history trimming to stay within the model's context window.
+approval dialog before execution. With `strict_path_safety` enabled, file tools also
+reject paths outside trusted roots (`cwd`/`home`/`tmp`) before execution. The tool
+system enforces output size limits and automatic history trimming to stay within the
+model's context window.
 
 ---
 

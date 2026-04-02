@@ -15,13 +15,58 @@ pub fn resolve_tool_path(path: &str) -> std::path::PathBuf {
         std::path::PathBuf::from(path)
     };
 
-    if expanded.is_absolute() {
+    let raw = if expanded.is_absolute() {
         expanded
     } else {
         dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("/"))
             .join(expanded)
+    };
+
+    // Lexical normalization to collapse ./ and ../ without requiring existence.
+    let mut normalized = std::path::PathBuf::new();
+    for comp in raw.components() {
+        match comp {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                let _ = normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
     }
+    normalized
+}
+
+fn path_within(path: &std::path::Path, root: &std::path::Path) -> bool {
+    let p = path.components().collect::<Vec<_>>();
+    let r = root.components().collect::<Vec<_>>();
+    p.len() >= r.len() && p.iter().zip(r.iter()).all(|(a, b)| a == b)
+}
+
+/// Strict path integrity check for file tools.
+///
+/// Allows paths under: current working directory, home directory, and temp dir.
+/// Set `SKILL_DISABLE_STRICT_PATH_SAFETY=1` to disable this guard globally.
+pub fn enforce_path_integrity(path: &std::path::Path) -> Result<(), String> {
+    if std::env::var("SKILL_DISABLE_STRICT_PATH_SAFETY")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"));
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
+    let tmp = std::env::temp_dir();
+
+    if path_within(path, &cwd) || path_within(path, &home) || path_within(path, &tmp) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "path `{}` is outside trusted roots (cwd/home/tmp)",
+        path.display()
+    ))
 }
 
 /// Retry a fallible closure with exponential backoff.
