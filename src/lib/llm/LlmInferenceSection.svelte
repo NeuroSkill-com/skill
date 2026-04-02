@@ -32,7 +32,6 @@ interface Props {
   onSetApiKey: (val: string | null) => void | Promise<void>;
   onToggleAutoloadMmproj: () => void | Promise<void>;
   onToggleNoMmprojGpu: () => void | Promise<void>;
-  onToggleVerbose: () => void | Promise<void>;
   onSetGpuMemoryThreshold: (val: number) => void | Promise<void>;
   onSetGpuMemoryGenThreshold: (val: number) => void | Promise<void>;
   onSetCacheTypeK: (val: string) => void | Promise<void>;
@@ -53,7 +52,6 @@ let {
   onSetApiKey,
   onToggleAutoloadMmproj,
   onToggleNoMmprojGpu,
-  onToggleVerbose,
   onSetGpuMemoryThreshold,
   onSetGpuMemoryGenThreshold,
   onSetCacheTypeK,
@@ -213,18 +211,6 @@ const curlSnippet = $derived(
             </div>
           {/if}
         {/if}
-
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.verbose")}</span>
-            <span class="text-[0.65rem] text-muted-foreground">{t("llm.verboseDesc")}</span>
-          </div>
-          <button role="switch" aria-checked={config.verbose} aria-label={t("llm.verbose")}
-            onclick={onToggleVerbose}
-            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.verbose ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.verbose ? 'translate-x-4' : 'translate-x-0'}"></span>
-          </button>
-        </div>
 
         <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
           <div class="flex flex-col gap-0.5">

@@ -223,6 +223,42 @@ pub fn lsl_set_idle_timeout(
     crate::save_settings(&app);
 }
 
+/// Start a virtual LSL EEG source (32 ch, 256 Hz, standard 10-20 montage).
+///
+/// The outlet pushes synthetic sine-wave data continuously so the LSL
+/// pipeline can be tested without real hardware.  Returns `true` if the
+/// source was started, `false` if it was already running.
+#[tauri::command]
+pub fn lsl_start_virtual_source(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<bool, String> {
+    let mut s = state.lock_or_recover();
+    if s.lsl_virtual_source.is_some() {
+        return Ok(false); // already running
+    }
+    let src = skill_lsl::VirtualLslSource::start()?;
+    s.lsl_virtual_source = Some(src);
+    Ok(true)
+}
+
+/// Stop the virtual LSL EEG source.
+///
+/// Returns `true` if it was running and has been stopped, `false` if it
+/// was not running.
+#[tauri::command]
+pub fn lsl_stop_virtual_source(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
+    let mut s = state.lock_or_recover();
+    let was_running = s.lsl_virtual_source.is_some();
+    s.lsl_virtual_source = None; // drops VirtualLslSource → signals shutdown
+    was_running
+}
+
+/// Return whether the virtual LSL EEG source is currently running.
+#[tauri::command]
+pub fn lsl_virtual_source_running(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
+    state.lock_or_recover().lsl_virtual_source.is_some()
+}
+
 /// Get LSL auto-connect config.
 #[tauri::command]
 pub fn lsl_get_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> LslConfig {

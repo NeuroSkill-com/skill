@@ -9,6 +9,7 @@ import { t } from "$lib/i18n/index.svelte";
 interface Props {
   enabled: boolean;
   autostart: boolean;
+  verbose: boolean;
   hasActive: boolean;
   activeModel: string;
   serverStatus: "stopped" | "loading" | "running";
@@ -19,6 +20,7 @@ interface Props {
   startError: string;
   onToggleEnabled: () => void | Promise<void>;
   onToggleAutostart: () => void | Promise<void>;
+  onToggleVerbose: () => void | Promise<void>;
   onStart: () => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onOpenChat: () => void | Promise<void>;
@@ -27,6 +29,7 @@ interface Props {
 let {
   enabled,
   autostart,
+  verbose,
   hasActive,
   activeModel,
   serverStatus,
@@ -37,6 +40,7 @@ let {
   startError,
   onToggleEnabled,
   onToggleAutostart,
+  onToggleVerbose,
   onStart,
   onStop,
   onOpenChat,
@@ -82,6 +86,22 @@ let {
           <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
                         transform transition-transform duration-200
                         {autostart ? 'translate-x-4' : 'translate-x-0'}"></span>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between gap-4 px-4 py-3">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.verbose")}</span>
+          <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.verboseDesc")}</span>
+        </div>
+        <button role="switch" aria-checked={verbose} aria-label={t("llm.verbose")}
+          onclick={onToggleVerbose}
+          class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                 border-transparent transition-colors duration-200
+                 {verbose ? 'bg-emerald-500' : 'bg-muted dark:bg-white/10'}">
+          <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                        transform transition-transform duration-200
+                        {verbose ? 'translate-x-4' : 'translate-x-0'}"></span>
         </button>
       </div>
 

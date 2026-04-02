@@ -310,6 +310,7 @@ onDestroy(() => {
 <LlmServerSection
   enabled={config.enabled}
   autostart={config.autostart}
+  verbose={config.verbose}
   hasActive={hasActive}
   activeModel={catalog.active_model}
   serverStatus={serverStatus}
@@ -320,6 +321,17 @@ onDestroy(() => {
   startError={startError}
   onToggleEnabled={async () => { config = { ...config, enabled: !config.enabled }; await saveConfig(); }}
   onToggleAutostart={async () => { config = { ...config, autostart: !config.autostart }; await saveConfig(); }}
+  onToggleVerbose={async () => {
+    const shouldRestart = serverStatus === "running";
+    config = { ...config, verbose: !config.verbose };
+    await saveConfig();
+    // llama.cpp backend log-verbosity is configured at actor init time.
+    // If the server is running, restart it so the new verbose flag applies.
+    if (shouldRestart) {
+      await stopServer();
+      await startServer();
+    }
+  }}
   onStart={startServer}
   onStop={stopServer}
   onOpenChat={openChat}
@@ -356,7 +368,6 @@ onDestroy(() => {
   onSetApiKey={async (val) => { config = { ...config, api_key: val }; await saveConfig(); }}
   onToggleAutoloadMmproj={async () => { config = { ...config, autoload_mmproj: !config.autoload_mmproj }; await saveConfig(); }}
   onToggleNoMmprojGpu={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
-  onToggleVerbose={async () => { config = { ...config, verbose: !config.verbose }; await saveConfig(); }}
   onSetGpuMemoryThreshold={async (val) => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
   onSetGpuMemoryGenThreshold={async (val) => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
   onSetCacheTypeK={async (val) => { config = { ...config, cache_type_k: val }; await saveConfig(); }}

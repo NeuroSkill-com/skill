@@ -87,6 +87,10 @@ let irohError = $state("");
 let irohCopied = $state(false);
 let irohExpanded = $state(false);
 
+let virtualSourceRunning = $state(false);
+let virtualSourceBusy = $state(false);
+let virtualSourceError = $state("");
+
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unlisteners: UnlistenFn[] = [];
@@ -306,6 +310,44 @@ async function refreshIrohStatus() {
   }
 }
 
+async function refreshVirtualSourceStatus() {
+  try {
+    virtualSourceRunning = await invoke<boolean>("lsl_virtual_source_running");
+  } catch {
+    /* ignore */
+  }
+}
+
+async function startVirtualSource() {
+  if (virtualSourceBusy) return;
+  virtualSourceBusy = true;
+  virtualSourceError = "";
+  try {
+    await invoke<boolean>("lsl_start_virtual_source");
+    virtualSourceRunning = true;
+    await scanStreams();
+  } catch (e: unknown) {
+    virtualSourceError = String(e);
+  } finally {
+    virtualSourceBusy = false;
+  }
+}
+
+async function stopVirtualSource() {
+  if (virtualSourceBusy) return;
+  virtualSourceBusy = true;
+  virtualSourceError = "";
+  try {
+    await invoke<boolean>("lsl_stop_virtual_source");
+    virtualSourceRunning = false;
+    await scanStreams();
+  } catch (e: unknown) {
+    virtualSourceError = String(e);
+  } finally {
+    virtualSourceBusy = false;
+  }
+}
+
 async function copyEndpointId() {
   if (!irohStatus.endpoint_id) return;
   try {
@@ -351,7 +393,7 @@ onMount(async () => {
     /* ignore */
   }
 
-  await refreshIrohStatus();
+  await Promise.all([refreshIrohStatus(), refreshVirtualSourceStatus()]);
   await scanStreams();
 
   // Load initial secondary sessions
@@ -361,7 +403,10 @@ onMount(async () => {
     /* ignore */
   }
 
-  pollTimer = setInterval(refreshIrohStatus, 5000);
+  pollTimer = setInterval(() => {
+    refreshIrohStatus();
+    refreshVirtualSourceStatus();
+  }, 5000);
   manageAutoScanTimer();
 
   unlisteners.push(
@@ -653,6 +698,58 @@ onDestroy(() => {
         </div>
       </div>
     </CardContent>
+  </Card>
+</section>
+
+<!-- ── Virtual LSL Test Source ───────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      Virtual test source
+    </span>
+    <span class="ml-auto text-[0.5rem] text-muted-foreground/40">
+      SkillVirtualEEG · 32ch · 256 Hz
+    </span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex items-center gap-3 px-4 py-3.5">
+      <span class="relative flex h-2 w-2 shrink-0">
+        <span class="relative inline-flex rounded-full h-2 w-2 {virtualSourceRunning ? 'bg-emerald-500' : 'bg-muted-foreground/30'}"></span>
+      </span>
+      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+        <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
+          {virtualSourceRunning ? "Running" : "Stopped"}
+        </span>
+        <span class="text-[0.58rem] text-muted-foreground leading-tight">
+          Emits synthetic EEG for LSL testing. Start it, then click Scan Network below.
+        </span>
+      </div>
+      {#if virtualSourceRunning}
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7 text-[0.58rem] px-3 border-red-500/30 text-red-500 hover:bg-red-500/10"
+          disabled={virtualSourceBusy}
+          onclick={stopVirtualSource}
+        >
+          Stop
+        </Button>
+      {:else}
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7 text-[0.58rem] px-3"
+          disabled={virtualSourceBusy}
+          onclick={startVirtualSource}
+        >
+          Start
+        </Button>
+      {/if}
+    </CardContent>
+    {#if virtualSourceError}
+      <div class="px-4 pb-3 text-[0.58rem] text-red-500 leading-relaxed">{virtualSourceError}</div>
+    {/if}
   </Card>
 </section>
 

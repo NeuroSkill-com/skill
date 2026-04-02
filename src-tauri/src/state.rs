@@ -570,6 +570,9 @@ pub struct AppState {
 
     /// rlsl-iroh sink endpoint ID (set when the sink is running).
     pub lsl_iroh_endpoint_id: Option<String>,
+    /// Running virtual LSL EEG source (32 ch, 256 Hz) for testing.
+    /// `None` when stopped, `Some` while the outlet thread is live.
+    pub lsl_virtual_source: Option<skill_lsl::VirtualLslSource>,
 
     /// Location services enabled by the user (default false).
     pub location_enabled: bool,
@@ -747,6 +750,7 @@ impl Default for AppState {
             openbci_config: crate::settings::OpenBciConfig::default(),
             location_enabled: false,
             lsl_iroh_endpoint_id: None,
+            lsl_virtual_source: None,
             lsl_auto_connect: false,
             lsl_paired_streams: Vec::new(),
             lsl_idle_timeout_secs: skill_settings::default_lsl_idle_timeout_secs(),
