@@ -16,6 +16,10 @@ on:
         description: "Run LLM E2E integration test"
         type: boolean
         default: false
+      run_lsl_e2e:
+        description: "Run LSL E2E integration test (32-ch 256 Hz pipeline, ~30 s)"
+        type: boolean
+        default: false
 
 # Cancel superseded runs on the same branch / PR — avoids wasting runner
 # minutes when multiple commits are pushed in quick succession.
@@ -683,6 +687,85 @@ jobs:
           path: llm-e2e-report.txt
           retention-days: 30
 
+  # ── LSL end-to-end integration test ───────────────────────────────────────────
+  lsl-e2e:
+    name: LSL — E2E integration test
+    runs-on: ubuntu-latest
+    needs: rust-check
+    # Optional — only runs on manual dispatch with run_lsl_e2e checked.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_lsl_e2e == true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Rust bootstrap (Linux)
+        uses: ./.github/actions/setup-rust-bootstrap-linux
+
+      # Reuse rust-check's cached artifacts (save-if: false — only rust-check writes).
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: ". -> src-tauri/target"
+          save-if: false
+          cache-targets: false
+          cache-on-failure: false
+
+      # rlsl is pure Rust (no liblsl system dependency) so only the minimal
+      # set of packages is needed: mold+clang for the fast linker, and the
+      # basic dev headers shared with the workspace build.
+      - name: Cache + install system deps
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: >-
+            libssl-dev pkg-config cmake binutils
+            libespeak-ng-dev libasound2-dev
+            libpipewire-0.3-dev mold clang
+            protobuf-compiler
+          version: lsl-e2e-v1
+
+      - name: Run LSL E2E test
+        env:
+          RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
+        run: |
+          cargo test -p skill-lsl --locked --target x86_64-unknown-linux-gnu \
+            --test lsl_e2e -- --nocapture 2>&1 | tee lsl-e2e-report.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          FILE=lsl-e2e-report.txt
+          [ -f "$FILE" ] || { echo "No report file found" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+
+          echo "## LSL E2E Integration Test" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo '### Report' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -n '/LSL E2E INTEGRATION TEST REPORT/,/^╔/{ /^╔/{ p; d }; p }' "$FILE" \
+            || sed -n '/LSL E2E INTEGRATION TEST REPORT/,/^╚/p' "$FILE" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if grep -q 'ALL STEPS PASSED' "$FILE"; then
+            echo "### Result: ALL STEPS PASSED ✅" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Result: SOME STEPS FAILED ❌" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsl-e2e-report
+          path: lsl-e2e-report.txt
+          retention-days: 30
+
   # ── Security audit ────────────────────────────────────────────────────────────
   #
   # Merged the previous separate cargo-audit + audit jobs into one.
@@ -725,7 +808,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, windows-check, frontend-check, audit, llm-e2e]
+    needs: [rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e]
     if: always()
     steps:
       - uses: actions/checkout@v6
@@ -741,6 +824,7 @@ jobs:
           FRONTEND="${{ needs.frontend-check.result }}"
           AUDIT="${{ needs.audit.result }}"
           LLM_E2E="${{ needs.llm-e2e.result }}"
+          LSL_E2E="${{ needs.lsl-e2e.result }}"
 
           # Determine overall status — Rust (Linux), Windows, and Frontend are
           # required gates.  Audit and LLM E2E are advisory.
@@ -757,6 +841,7 @@ jobs:
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
           EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || ([ "$AUDIT" = "skipped" ] && echo "⏭️" || echo "⚠️"))
           EMOJI_LLM=$([ "$LLM_E2E" = "success" ] && echo "✅" || ([ "$LLM_E2E" = "skipped" ] && echo "⏭️" || echo "⚠️"))
+          EMOJI_LSL=$([ "$LSL_E2E" = "success" ] && echo "✅" || ([ "$LSL_E2E" = "skipped" ] && echo "⏭️" || echo "⚠️"))
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           REF="${{ github.ref_name }}"
@@ -780,7 +865,8 @@ jobs:
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
                   {\"name\": \"Frontend\", \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\", \"value\": \"$EMOJI_AUDIT $AUDIT\", \"inline\": true},
-                  {\"name\": \"LLM E2E\", \"value\": \"$EMOJI_LLM $LLM_E2E\", \"inline\": true}
+                  {\"name\": \"LLM E2E\", \"value\": \"$EMOJI_LLM $LLM_E2E\", \"inline\": true},
+                  {\"name\": \"LSL E2E\", \"value\": \"$EMOJI_LSL $LSL_E2E\", \"inline\": true}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]
