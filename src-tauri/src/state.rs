@@ -558,6 +558,7 @@ pub struct AppState {
     pub ws_host: String,
     pub ws_port: u16,
     pub api_token: String,
+    pub hf_endpoint: String,
     pub update_check_interval_secs: u64,
     /// Set by the frontend when an update has been downloaded and is ready
     /// to install on next restart / relaunch.
@@ -745,6 +746,7 @@ impl Default for AppState {
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
             api_token: String::new(),
+            hf_endpoint: skill_settings::default_hf_endpoint(),
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),

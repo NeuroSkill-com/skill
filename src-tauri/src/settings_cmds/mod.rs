@@ -784,6 +784,38 @@ pub fn set_api_token(token: String, app: AppHandle, state: tauri::State<'_, Mute
     crate::save_settings(&app);
 }
 
+// ── HuggingFace endpoint ───────────────────────────────────────────────────────
+
+/// Return the configured HuggingFace endpoint URL.
+#[tauri::command]
+pub fn get_hf_endpoint(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().hf_endpoint.clone()
+}
+
+/// Set the HuggingFace endpoint URL used by model download code.
+///
+/// Empty input resets to the default endpoint (`https://huggingface.co`) or
+/// to the process-level `HF_ENDPOINT` if that env var is set.
+#[tauri::command]
+pub fn set_hf_endpoint(
+    endpoint: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let endpoint = if endpoint.trim().is_empty() {
+        skill_settings::default_hf_endpoint()
+    } else {
+        endpoint.trim().to_string()
+    };
+
+    {
+        state.lock_or_recover().hf_endpoint = endpoint.clone();
+    }
+
+    std::env::set_var("HF_ENDPOINT", &endpoint);
+    crate::save_settings(&app);
+}
+
 // ── Autostart (launch at login) ────────────────────────────────────────────────
 
 /// Returns `true` if the app is registered to launch at login.

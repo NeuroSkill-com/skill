@@ -469,6 +469,16 @@ pub fn default_ws_host() -> String {
 pub fn default_ws_port() -> u16 {
     skill_constants::WS_DEFAULT_PORT
 }
+
+/// Default HuggingFace endpoint used by model download code.
+///
+/// Resolution order:
+/// 1) `HF_ENDPOINT` environment variable (if set)
+/// 2) `https://huggingface.co`
+pub fn default_hf_endpoint() -> String {
+    std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://huggingface.co".into())
+}
+
 pub fn default_update_check_interval() -> u64 {
     skill_constants::UPDATER_CHECK_INTERVAL_SECS
 }
@@ -660,6 +670,11 @@ pub struct UserSettings {
     /// one-time migration of existing plaintext values.
     #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub api_token: String,
+    /// HuggingFace endpoint URL used for model downloads.
+    ///
+    /// Example: `https://huggingface.co` (default) or a mirror endpoint.
+    #[serde(default = "default_hf_endpoint")]
+    pub hf_endpoint: String,
     /// Seconds between automatic background update checks (0 = disabled).
     #[serde(default = "default_update_check_interval")]
     pub update_check_interval_secs: u64,
@@ -906,6 +921,7 @@ impl Default for UserSettings {
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
             api_token: String::new(),
+            hf_endpoint: default_hf_endpoint(),
             update_check_interval_secs: default_update_check_interval(),
             openbci: OpenBciConfig::default(),
             device_api: DeviceApiConfig::default(),

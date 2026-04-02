@@ -546,6 +546,10 @@ const settings: Record<string, string> = {
     "Sitzung automatisch beenden, wenn für diese Dauer keine Daten eintreffen. Nützlich, wenn die LSL-Quelle abstürzt oder pausiert, ohne die Verbindung zu trennen.",
   "lsl.idleTimeoutDisabled": "Nie",
   "lsl.idleTimeoutEnabled": "Aktiviert",
+  "settings.hfEndpoint": "HuggingFace-Endpunkt",
+  "settings.hfEndpointDesc":
+    "Optionale Mirror-/Basis-URL für Model-Downloads (LLM + EXG + TTS). Standard folgt HF_ENDPOINT oder https://huggingface.co.",
+  "settings.hfEndpointCurrent": "Aktuell",
 };
 
 export default settings;

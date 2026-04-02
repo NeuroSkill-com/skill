@@ -519,6 +519,11 @@ const settings: Record<string, string> = {
   "settings.storageFormatCsvDesc": "Human-readable, universal",
   "settings.storageFormatParquetDesc": "Columnar, compressed",
   "settings.storageFormatBothDesc": "CSV + Parquet simultaneously",
+
+  "settings.hfEndpoint": "HuggingFace Endpoint",
+  "settings.hfEndpointDesc":
+    "Optional mirror/base URL for model downloads (LLM + EXG + TTS). Default follows HF_ENDPOINT or https://huggingface.co.",
+  "settings.hfEndpointCurrent": "Current",
 };
 
 export default settings;

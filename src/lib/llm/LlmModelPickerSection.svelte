@@ -360,6 +360,8 @@ function fitBadgeLabel(level: string): string {
                   {#if entry.status_msg}<p class="text-[0.58rem] text-blue-500 truncate">{entry.status_msg}</p>{/if}
                 {/if}
 
+                <p class="text-[0.5rem] text-muted-foreground/70 font-mono break-all">🤗 hf download {entry.repo} {entry.filename}</p>
+
                 {#if failed && entry.status_msg}
                   <p class="text-[0.6rem] text-destructive/80 font-mono break-all leading-relaxed rounded bg-destructive/5 border border-destructive/10 px-2 py-1">{entry.status_msg}</p>
                 {/if}
@@ -428,6 +430,7 @@ function fitBadgeLabel(level: string): string {
                       </div>
                       {#if mp.status_msg}<p class="text-[0.56rem] text-amber-600 truncate">{mp.status_msg}</p>{/if}
                     {/if}
+                    <p class="text-[0.5rem] text-muted-foreground/70 font-mono break-all">🤗 hf download {mp.repo} {mp.filename}</p>
                   </div>
                 {/each}
               </div>

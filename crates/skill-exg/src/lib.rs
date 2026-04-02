@@ -223,7 +223,7 @@ pub fn download_hf_weights_files(
     use std::io::{Read, Write};
     use std::sync::atomic::Ordering;
 
-    const ENDPOINT: &str = "https://huggingface.co";
+    let endpoint = std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://huggingface.co".into());
 
     eprintln!("[embedder] weights not in cache — downloading from HuggingFace: {hf_repo}/{weights_file}");
 
@@ -306,7 +306,7 @@ pub fn download_hf_weights_files(
         .build()
         .into();
 
-    let api_url = format!("{ENDPOINT}/api/models/{hf_repo}?blobs=1");
+    let api_url = format!("{endpoint}/api/models/{hf_repo}?blobs=1");
     let meta_req = meta_agent.get(&api_url);
     let meta_req = if let Some(tok) = &hf_token {
         meta_req.header("Authorization", format!("Bearer {tok}"))
@@ -431,7 +431,7 @@ pub fn download_hf_weights_files(
         });
     }
 
-    let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{weights_file}");
+    let file_url = format!("{endpoint}/{hf_repo}/resolve/main/{weights_file}");
     let dl_req = dl_agent.get(&file_url);
     let dl_req = if let Some(tok) = &hf_token {
         dl_req.header("Authorization", format!("Bearer {tok}"))

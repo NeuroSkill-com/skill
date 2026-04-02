@@ -550,6 +550,10 @@ const settings: Record<string, string> = {
     "Arrêter la session automatiquement si aucun échantillon n'arrive pendant ce délai. Utile si la source LSL plante ou est mise en pause sans se déconnecter.",
   "lsl.idleTimeoutDisabled": "Jamais",
   "lsl.idleTimeoutEnabled": "Activé",
+  "settings.hfEndpoint": "Point de terminaison HuggingFace",
+  "settings.hfEndpointDesc":
+    "URL miroir/base optionnelle pour les téléchargements de modèles (LLM + EXG + TTS). Par défaut, suit HF_ENDPOINT ou https://huggingface.co.",
+  "settings.hfEndpointCurrent": "Actuel",
 };
 
 export default settings;
