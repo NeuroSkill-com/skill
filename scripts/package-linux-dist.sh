@@ -70,11 +70,6 @@ if [[ ! -f "$binary_path" ]]; then
   exit 1
 fi
 
-if [[ ! -d "$resources_dir/espeak-ng-data" ]]; then
-  echo "Missing resources/espeak-ng-data. Build likely incomplete." >&2
-  exit 1
-fi
-
 if [[ ! -d "$resources_dir/neutts-samples" ]]; then
   echo "Missing resources/neutts-samples." >&2
   exit 1
@@ -112,7 +107,6 @@ else
   echo "⚠ ONNX Runtime shared library not found in build output — binary may fail to start" >&2
 fi
 
-cp -R "$resources_dir/espeak-ng-data" "$package_root/resources/"
 cp -R "$resources_dir/neutts-samples" "$package_root/resources/"
 
 cp "$ROOT_DIR/LICENSE" "$package_root/"
@@ -124,7 +118,6 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export ESPEAK_DATA_PATH="$APP_DIR/resources/espeak-ng-data"
 export NEUTTS_SAMPLES_DIR="$APP_DIR/resources/neutts-samples"
 
 cd "$APP_DIR"

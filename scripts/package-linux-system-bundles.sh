@@ -93,11 +93,6 @@ if [[ ! -f "$binary_path" ]]; then
   exit 1
 fi
 
-if [[ ! -d "$resources_dir/espeak-ng-data" ]]; then
-  echo "Missing resources/espeak-ng-data. Build likely incomplete." >&2
-  exit 1
-fi
-
 if [[ ! -d "$resources_dir/neutts-samples" ]]; then
   echo "Missing resources/neutts-samples. Build likely incomplete." >&2
   exit 1
@@ -134,7 +129,6 @@ else
   echo "⚠ ONNX Runtime shared library not found in build output — binary may fail to start" >&2
 fi
 
-cp -R "$resources_dir/espeak-ng-data" "$stage_root/opt/neuroskill/resources/"
 cp -R "$resources_dir/neutts-samples" "$stage_root/opt/neuroskill/resources/"
 cp "$ROOT_DIR/LICENSE" "$stage_root/opt/neuroskill/LICENSE"
 cp "$ROOT_DIR/docs/LINUX.md" "$stage_root/opt/neuroskill/LINUX.md"
@@ -145,7 +139,6 @@ cat > "$stage_root/usr/bin/neuroskill" <<'EOF'
 set -euo pipefail
 
 APP_DIR="/opt/neuroskill"
-export ESPEAK_DATA_PATH="$APP_DIR/resources/espeak-ng-data"
 export NEUTTS_SAMPLES_DIR="$APP_DIR/resources/neutts-samples"
 
 exec "$APP_DIR/skill" "$@"
