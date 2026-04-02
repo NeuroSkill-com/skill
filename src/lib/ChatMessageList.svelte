@@ -15,6 +15,8 @@ interface Props {
   messages: Message[];
   status: ServerStatus;
   loadingDetail?: string;
+  /** True when the server was started with an mmproj — shows the vision loading step. */
+  hasMmproj?: boolean;
   generating: boolean;
   streamStartMs: number;
   streamTokens: number;
@@ -32,6 +34,7 @@ let {
   messages,
   status,
   loadingDetail = "",
+  hasMmproj = false,
   generating,
   streamStartMs,
   streamTokens,
@@ -47,19 +50,23 @@ let msgsEl = $state<HTMLElement | null>(null);
 let pinned = $state(true);
 let copiedMsgId = $state<number | null>(null);
 
-const LOADING_STEPS: {
+const ALL_LOADING_STEPS: {
   key: string;
   i18n: "chat.loading.model" | "chat.loading.context" | "chat.loading.vision" | "chat.loading.warmup";
+  visionOnly?: boolean;
 }[] = [
   { key: "loading_model", i18n: "chat.loading.model" },
   { key: "creating_context", i18n: "chat.loading.context" },
-  { key: "loading_vision", i18n: "chat.loading.vision" },
+  { key: "loading_vision", i18n: "chat.loading.vision", visionOnly: true },
   { key: "warming_up", i18n: "chat.loading.warmup" },
 ];
-const loadingSteps = $derived(LOADING_STEPS.map((s) => ({ key: s.key, label: t(s.i18n) })));
-const loadingActiveIdx = $derived(LOADING_STEPS.findIndex((s) => s.key === loadingDetail));
+// Only show the vision step when the server was started with an mmproj.
+const loadingSteps = $derived(
+  ALL_LOADING_STEPS.filter((s) => !s.visionOnly || hasMmproj).map((s) => ({ key: s.key, label: t(s.i18n) })),
+);
+const loadingActiveIdx = $derived(loadingSteps.findIndex((s) => s.key === loadingDetail));
 const loadingProgress = $derived(
-  loadingActiveIdx < 0 ? 5 : Math.min(95, ((loadingActiveIdx + 0.5) / LOADING_STEPS.length) * 100),
+  loadingActiveIdx < 0 ? 5 : Math.min(95, ((loadingActiveIdx + 0.5) / loadingSteps.length) * 100),
 );
 
 const SNAP_PX = 48;

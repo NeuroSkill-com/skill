@@ -65,6 +65,7 @@ let modelName = $state("");
 let nCtx = $state(0);
 let supportsVision = $state(false);
 let supportsTools = $state(false);
+let hasMmproj = $state(false);
 let toolConfig = $state<ToolConfig>({ ...DEFAULT_TOOL_CONFIG });
 let messages = $state<Message[]>([]);
 let sessionId = $state(0);
@@ -1081,6 +1082,24 @@ onMount(async () => {
     supportsTools = s.supports_tools ?? false;
   } catch (e) {}
 
+  // Auto-start the server when the chat opens and a downloaded model is
+  // already selected but the server isn't running yet.
+  if (status === "stopped") {
+    try {
+      const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+      const hasDownloaded = catalog.entries.some((e) => !e.is_mmproj && e.state === "downloaded");
+      if (hasDownloaded) {
+        // start_llm_server uses the active model (or auto-selects the first
+        // downloaded one if no active model is set) — no front-end selection needed.
+        status = "loading";
+        invoke("start_llm_server").catch(() => {
+          status = "stopped";
+        });
+        startStatusPoll();
+      }
+    } catch (e) {}
+  }
+
   // Load tool config
   try {
     // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
@@ -1124,6 +1143,10 @@ onMount(async () => {
       if ((ev.payload as any).n_ctx !== undefined) nCtx = (ev.payload as any).n_ctx;
       // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
       if ((ev.payload as any).error) startError = (ev.payload as any).error;
+      // has_mmproj is emitted in the initial loading event so the UI can
+      // show/hide the "Loading vision projector" step from the start.
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic payload field access
+      if ((ev.payload as any).has_mmproj !== undefined) hasMmproj = (ev.payload as any).has_mmproj;
       if (status === "running") {
         // biome-ignore lint/style/noNonNullAssertion: pollTimer always set before clearInterval
         clearInterval(pollTimer!);
@@ -1132,6 +1155,7 @@ onMount(async () => {
       if (status === "stopped") {
         supportsVision = false;
         supportsTools = false;
+        hasMmproj = false;
         nCtx = 0;
       }
     });
@@ -1293,6 +1317,7 @@ onDestroy(() => {
         {messages}
         {status}
         {loadingDetail}
+        {hasMmproj}
         {generating}
         {streamStartMs}
         {streamTokens}
