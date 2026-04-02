@@ -8168,6 +8168,8 @@ dependencies = [
 [[package]]
 name = "neurorvq"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94cbbb93c9a21e0c9d15b318d85aee5df10b6c898bf67e380b387d2e2ade7b88"
 dependencies = [
  "anyhow",
  "burn",

@@ -205,7 +205,14 @@ pub fn init(
         })
         .expect("failed to spawn llm-actor thread");
 
-    app.emit_event("llm:status", json!({"status":"loading","model":model_name}));
+    app.emit_event(
+        "llm:status",
+        json!({
+            "status":    "loading",
+            "model":     model_name,
+            "has_mmproj": mmproj_path.is_some(),
+        }),
+    );
 
     // Base scripts directory — subdirectories created lazily per tool invocation.
     let scripts_dir = skill_dir.join("chats").join("scripts");
