@@ -1064,6 +1064,50 @@ pub fn set_llm_config(
     save_settings(&app);
 }
 
+// ── Inference device preference ──────────────────────────────────────────────
+
+/// Return the current inference device preference (`"gpu"` or `"cpu"`).
+#[tauri::command]
+pub fn get_inference_device(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().inference_device.clone()
+}
+
+/// Set the inference device preference and persist it.
+///
+/// * `"gpu"` → restores the saved `llm_gpu_layers_saved` value (default
+///   `u32::MAX` = all layers on GPU).
+/// * `"cpu"` → saves the current `llm.n_gpu_layers` (unless it is already 0)
+///   then forces `llm.n_gpu_layers = 0`.
+///
+/// The LLM server must be restarted for the change to take effect.
+#[tauri::command]
+pub fn set_inference_device(
+    device: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let is_cpu = device == "cpu";
+
+    let mut st = state.lock_or_recover();
+    st.inference_device = if is_cpu { "cpu".into() } else { "gpu".into() };
+
+    if is_cpu {
+        // Save the current GPU layer count before zeroing it.
+        let cur_layers = st.llm.lock_or_recover().config.n_gpu_layers;
+        if cur_layers != 0 {
+            st.llm_gpu_layers_saved = cur_layers;
+        }
+        st.llm.lock_or_recover().config.n_gpu_layers = 0;
+    } else {
+        // Restore the saved GPU layer count.
+        let saved = st.llm_gpu_layers_saved;
+        st.llm.lock_or_recover().config.n_gpu_layers = saved;
+    }
+
+    drop(st);
+    save_settings(&app);
+}
+
 // ── Web cache commands ────────────────────────────────────────────────────────
 
 #[tauri::command]

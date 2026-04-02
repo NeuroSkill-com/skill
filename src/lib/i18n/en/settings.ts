@@ -347,6 +347,20 @@ const settings: Record<string, string> = {
 
   "settingsTabs.tts": "Voice",
 
+  "settings.inferenceDevice": "Inference Device",
+  "settings.inferenceDeviceDesc":
+    "Where AI inference runs. GPU is faster; CPU works on any machine and avoids VRAM pressure. Restart the LLM server after changing.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "Uses GPU / Metal / CUDA for fast inference (recommended).",
+  "settings.inferenceDeviceCpuDesc": "Runs fully on CPU — slower but works without a GPU.",
+  "settings.inferenceDeviceRestartHint": "Restart the LLM server to apply.",
+  "settings.gpuSection": "GPU / Memory",
+  "settings.gpuName": "Device",
+  "settings.gpuVram": "Memory",
+  "settings.gpuVramUnified": "Unified",
+  "settings.gpuUsage": "GPU Usage",
+
   "settings.mainWindow": "Main Window",
   "settings.autoFitToggle": "Auto-fit dashboard height",
   "settings.autoFitToggleDesc":

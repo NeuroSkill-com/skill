@@ -198,6 +198,20 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Калібрування",
   "settingsTabs.updates": "Оновлення",
 
+  "settings.inferenceDevice": "Пристрій виведення",
+  "settings.inferenceDeviceDesc":
+    "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "Використовує GPU / Metal / CUDA для швидкого виведення (рекомендовано).",
+  "settings.inferenceDeviceCpuDesc": "Працює повністю на CPU — повільніше, але без GPU.",
+  "settings.inferenceDeviceRestartHint": "Перезапустіть LLM-сервер для застосування.",
+  "settings.gpuSection": "GPU / Пам’ять",
+  "settings.gpuName": "Пристрій",
+  "settings.gpuVram": "Пам’ять",
+  "settings.gpuVramUnified": "Спільна",
+  "settings.gpuUsage": "Використання GPU",
+
   "settings.mainWindow": "Головне вікно",
   "settings.autoFitToggle": "Автопідбір висоти панелі",
   "settings.autoFitToggleDesc":

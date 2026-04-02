@@ -715,6 +715,22 @@ pub struct UserSettings {
     /// LSL streams the user has "paired" for auto-connect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lsl_paired_streams: Vec<LslPairedStream>,
+
+    // ── Inference device preference ────────────────────────────────────────
+    /// High-level inference device preference: `"gpu"` (default) or `"cpu"`.
+    ///
+    /// When set to `"cpu"`, `llm.n_gpu_layers` is forced to 0 so the LLM
+    /// server runs entirely on CPU.  When set to `"gpu"` (the default), the
+    /// last-known `llm.n_gpu_layers` value (stored in `llm_gpu_layers_saved`)
+    /// is restored, defaulting to `u32::MAX` (all layers on GPU).
+    #[serde(default = "default_inference_device")]
+    pub inference_device: String,
+
+    /// Last user-configured `llm.n_gpu_layers` value before the CPU override
+    /// was applied.  Restored when the user switches back to GPU mode.
+    /// Default: `u32::MAX` (all layers on GPU).
+    #[serde(default = "default_llm_gpu_layers_saved")]
+    pub llm_gpu_layers_saved: u32,
 }
 
 /// A remembered LSL stream for auto-connect.
@@ -749,6 +765,12 @@ pub fn default_storage_format() -> String {
 
 pub fn default_tts_preload() -> bool {
     true
+}
+pub fn default_inference_device() -> String {
+    "gpu".into()
+}
+pub fn default_llm_gpu_layers_saved() -> u32 {
+    u32::MAX
 }
 pub fn default_track_active_window() -> bool {
     true
@@ -882,6 +904,8 @@ impl Default for UserSettings {
             location_enabled: false,
             lsl_auto_connect: false,
             lsl_paired_streams: vec![],
+            inference_device: default_inference_device(),
+            llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
         }
     }
 }

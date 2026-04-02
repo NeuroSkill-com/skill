@@ -578,6 +578,11 @@ pub struct AppState {
     /// LSL streams the user has "paired" for auto-connect.
     pub lsl_paired_streams: Vec<skill_settings::LslPairedStream>,
 
+    /// High-level inference device preference: `"gpu"` or `"cpu"`.
+    pub inference_device: String,
+    /// Last-saved `llm.n_gpu_layers` before a CPU override was applied.
+    pub llm_gpu_layers_saved: u32,
+
     /// Emotiv Cortex WebSocket connection state for the UI.
     /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
     pub cortex_ws_state: String,
@@ -739,6 +744,8 @@ impl Default for AppState {
             lsl_iroh_endpoint_id: None,
             lsl_auto_connect: false,
             lsl_paired_streams: Vec::new(),
+            inference_device: skill_settings::default_inference_device(),
+            llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),

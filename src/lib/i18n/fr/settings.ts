@@ -200,6 +200,20 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Calibration",
   "settingsTabs.updates": "Mises à jour",
 
+  "settings.inferenceDevice": "Périphérique d’inférence",
+  "settings.inferenceDeviceDesc":
+    "Où l’inférence IA s’exécute. Le GPU est plus rapide ; le CPU fonctionne sur n’importe quelle machine sans pression sur la VRAM. Redémarrez le serveur LLM après modification.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "Utilise le GPU / Metal / CUDA pour une inférence rapide (recommandé).",
+  "settings.inferenceDeviceCpuDesc": "S’exécute entièrement sur le CPU — plus lent mais fonctionne sans GPU.",
+  "settings.inferenceDeviceRestartHint": "Redémarrez le serveur LLM pour appliquer.",
+  "settings.gpuSection": "GPU / Mémoire",
+  "settings.gpuName": "Périphérique",
+  "settings.gpuVram": "Mémoire",
+  "settings.gpuVramUnified": "Unifiée",
+  "settings.gpuUsage": "Utilisation GPU",
+
   "settings.mainWindow": "Fenêtre principale",
   "settings.autoFitToggle": "Ajuster automatiquement la hauteur du tableau de bord",
   "settings.autoFitToggleDesc":

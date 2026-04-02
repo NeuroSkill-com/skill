@@ -50,6 +50,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuStats {
+    /// Human-readable GPU model name (e.g. `"Apple M3 Pro"`, `"NVIDIA RTX 4090"`).
+    ///
+    /// `None` when the name could not be determined.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_name: Option<String>,
     /// Render engine utilisation, 0.0–1.0 (Apple Silicon `Renderer Utilization %`).
     /// Always 0.0 on Linux / Windows (IOKit not available).
     pub render: f32,
@@ -545,6 +550,58 @@ mod macos {
 
     // ── Instantaneous read (used only by the background poller) ──────────
 
+    /// Read the Apple chip / GPU model name from `sysctl`.
+    ///
+    /// `hw.product.name` → e.g. `"MacBook Pro"` is not what we want;
+    /// the chip name lives in `machdep.cpu.brand_string` on Intel or
+    /// `hw.targettype` / `hw.model` on Apple Silicon.  We use the model
+    /// identifier (e.g. `"Mac14,9"`) and derive a short label.
+    fn apple_chip_name() -> Option<String> {
+        // hw.model gives identifiers like "Mac14,9" (M2 Pro MacBook Pro) or
+        // "MacBookPro18,1" (Intel).  sysctl(3) returns a C string.
+        let c_name = CString::new("hw.model").ok()?;
+        let mut size: usize = 0;
+        // First call: get the buffer length.
+        // SAFETY: `c_name` is a valid NUL-terminated C string; null data ptr is
+        // allowed on the first (size-query) sysctlbyname call.
+        let ret = unsafe {
+            libc::sysctlbyname(
+                c_name.as_ptr(),
+                std::ptr::null_mut(),
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if ret != 0 || size == 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; size];
+        // Second call: read the value.
+        // SAFETY: `buf` has exactly `size` bytes of valid writable memory;
+        // `c_name` is still a valid NUL-terminated C string.
+        let ret = unsafe {
+            libc::sysctlbyname(
+                c_name.as_ptr(),
+                buf.as_mut_ptr() as *mut _,
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if ret != 0 {
+            return None;
+        }
+        // Strip trailing NUL bytes and convert to a String.
+        let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        let s = String::from_utf8_lossy(&buf[..end]).into_owned();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
     fn raw_read() -> Option<super::GpuStats> {
         let accs = read_accelerators();
 
@@ -559,8 +616,10 @@ mod macos {
             // Unified memory — GPU and CPU share system RAM.
             let total = system_ram_bytes();
             let free = unified_free_bytes();
+            let gpu_name = apple_chip_name();
 
             Some(super::GpuStats {
+                gpu_name,
                 render,
                 tiler,
                 overall,
@@ -580,6 +639,7 @@ mod macos {
             };
 
             Some(super::GpuStats {
+                gpu_name: None, // Intel/AMD name not available via IOAccelerator
                 render,
                 tiler,
                 overall,
@@ -623,6 +683,8 @@ mod non_macos {
         total_bytes: Option<u64>,
         /// True for Apple Silicon, AMD Ryzen AI APUs, NVIDIA Grace, etc.
         unified_memory: bool,
+        /// Human-readable GPU model name from llmfit-core.
+        gpu_name: Option<String>,
     }
 
     static GPU_STATIC: OnceLock<Option<StaticGpuInfo>> = OnceLock::new();
@@ -651,6 +713,7 @@ mod non_macos {
             Some(StaticGpuInfo {
                 total_bytes,
                 unified_memory: specs.unified_memory,
+                gpu_name: specs.gpu_name.clone(),
             })
         }
     }
@@ -730,6 +793,7 @@ mod non_macos {
         };
 
         Some(super::GpuStats {
+            gpu_name: static_info.gpu_name.clone(),
             // Utilisation is not available outside macOS IOKit.
             render: 0.0,
             tiler: 0.0,
@@ -751,6 +815,7 @@ mod tests {
     #[test]
     fn gpu_stats_struct_default_values() {
         let stats = GpuStats {
+            gpu_name: None,
             render: 0.0,
             tiler: 0.0,
             overall: 0.0,
@@ -766,6 +831,7 @@ mod tests {
     #[test]
     fn gpu_stats_serializes_to_json() {
         let stats = GpuStats {
+            gpu_name: Some("Apple M3 Pro".into()),
             render: 0.75,
             tiler: 0.50,
             overall: 0.60,

@@ -236,6 +236,20 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "כיול",
   "settingsTabs.updates": "עדכונים",
 
+  "settings.inferenceDevice": "מכשיר הסקה",
+  "settings.inferenceDeviceDesc":
+    "היכן מופעלת ההסקה. ה-GPU מהיר יותר; ה-CPU עובד על כל מכשיר בלי לחוץ על VRAM. הפעל מחדש את שרת ה-LLM לאחר השינוי.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "משתמש ב-GPU / Metal / CUDA להסקה מהירה (מומלץ).",
+  "settings.inferenceDeviceCpuDesc": "פועל לגמרי על ה-CPU — איטי יותר אך עובד בלי GPU.",
+  "settings.inferenceDeviceRestartHint": "הפעל מחדש את שרת ה-LLM כדי להחיל.",
+  "settings.gpuSection": "GPU / זיכרון",
+  "settings.gpuName": "מכשיר",
+  "settings.gpuVram": "זיכרון",
+  "settings.gpuVramUnified": "מאוחד",
+  "settings.gpuUsage": "שימוש GPU",
+
   "settings.mainWindow": "חלון ראשי",
   "settings.autoFitToggle": "התאמה אוטומטית של גובה לוח המחוונים",
   "settings.autoFitToggleDesc": "מרחיב או מכווץ את החלון הראשי בהתאם לתוכן לוח המחוונים, מוגבל לגובה המסך.",

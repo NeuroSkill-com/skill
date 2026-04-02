@@ -33,6 +33,7 @@ interface LogConfig {
 }
 
 interface GpuStats {
+  gpuName?: string | null;
   render: number;
   tiler: number;
   overall: number;
@@ -41,6 +42,10 @@ interface GpuStats {
   freeMemoryBytes: number | null;
 }
 let gpuStats = $state<GpuStats | null>(null);
+
+// ── Inference device preference ──────────────────────────────────────────
+let inferenceDevice = $state<"gpu" | "cpu">("gpu");
+let inferenceDeviceSaving = $state(false);
 
 // ── Location Services ──────────────────────────────────────────────────────
 let locationEnabled = $state(false);
@@ -157,6 +162,7 @@ onMount(async () => {
   mainWindowAutoFit = await invoke<boolean>("get_main_window_auto_fit").catch(() => true);
   locationEnabled = await invoke<boolean>("get_location_enabled").catch(() => false);
   lastInputActivity = await invoke<[number, number]>("get_last_input_activity");
+  inferenceDevice = (await invoke<string>("get_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
   nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
 
   unlisteners.push(
@@ -288,6 +294,59 @@ onDestroy(() => {
   </Card>
 </section>
 
+<!-- ── Inference Device preference ─────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("settings.inferenceDevice")}
+  </span>
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+      <p class="px-4 py-2.5 text-[0.62rem] text-muted-foreground leading-relaxed">
+        {t("settings.inferenceDeviceDesc")}
+      </p>
+      <div class="flex items-stretch divide-x divide-border dark:divide-white/[0.05]">
+        {#each (["gpu", "cpu"] as ("gpu" | "cpu")[]) as dev}
+          {@const isActive = inferenceDevice === dev}
+          <button
+            onclick={async () => {
+              if (inferenceDevice === dev || inferenceDeviceSaving) return;
+              inferenceDeviceSaving = true;
+              inferenceDevice = dev;
+              await invoke("set_inference_device", { device: dev }).catch(() => {});
+              inferenceDeviceSaving = false;
+            }}
+            class="flex-1 flex flex-col gap-0.5 items-start px-4 py-3 text-left transition-colors cursor-pointer
+                   {isActive
+                     ? 'bg-violet-50 dark:bg-violet-500/[0.08]'
+                     : 'hover:bg-slate-50 dark:hover:bg-white/[0.02]'}">
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[0.72rem] font-semibold
+                       {isActive ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
+                {dev === "gpu" ? t("settings.inferenceDeviceGpu") : t("settings.inferenceDeviceCpu")}
+              </span>
+              {#if isActive}
+                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-violet-500"
+                  >Active</span
+                >
+              {/if}
+              {#if inferenceDeviceSaving && isActive}
+                <span class="text-[0.52rem] text-muted-foreground">saving…</span>
+              {/if}
+            </div>
+            <span class="text-[0.6rem] text-muted-foreground leading-snug">
+              {dev === "gpu" ? t("settings.inferenceDeviceGpuDesc") : t("settings.inferenceDeviceCpuDesc")}
+            </span>
+          </button>
+        {/each}
+      </div>
+      <p class="px-4 py-2 text-[0.58rem] text-amber-500/80 dark:text-amber-400/70">
+        ⚠️ {t("settings.inferenceDeviceRestartHint")}
+      </p>
+    </CardContent>
+  </Card>
+</section>
+
 <!-- ── GPU / Memory ─────────────────────────────────────────────────────────── -->
 {#if gpuStats}
   {@const fmtBytes = (b: number | null) => {
@@ -303,11 +362,19 @@ onDestroy(() => {
 
   <section class="flex flex-col gap-2">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-      GPU · {memLabel}
+      {t("settings.gpuSection")} · {memLabel}
     </span>
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
       <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+        <!-- GPU device name row -->
+        {#if gpuStats.gpuName}
+          <div class="flex items-center justify-between px-4 py-2.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("settings.gpuName")}</span>
+            <span class="text-[0.68rem] text-muted-foreground font-mono">{gpuStats.gpuName}</span>
+          </div>
+        {/if}
 
         <!-- Memory bar -->
         {#if gpuStats.totalMemoryBytes}

@@ -231,29 +231,29 @@ use settings_cmds::{
     get_dnd_config, get_dnd_status, get_eeg_model_config, get_eeg_model_status,
     get_embedding_overlap, get_exg_catalog, get_filter_config, get_goal_notified_date,
     get_gpu_stats, get_hook_log, get_hook_log_count, get_hook_statuses, get_hooks,
-    get_input_activity_tracking, get_input_buckets, get_last_input_activity, get_latest_bands,
-    get_llm_config, get_location_enabled, get_log_config, get_main_window_auto_fit,
-    get_neutts_config, get_openbci_config, get_recent_active_windows, get_recent_input_activity,
-    get_scanner_config, get_screenshot_config, get_screenshot_metrics, get_screenshots_around,
-    get_screenshots_dir, get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
-    get_skills_sync_on_launch, get_sleep_config, get_status, get_storage_format,
-    get_supported_companies, get_theme_and_language, get_tts_preload, get_umap_config,
-    get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports, list_skills,
-    open_session_for_timestamp, pair_device, pick_exg_weights_file, pick_gguf_file,
+    get_inference_device, get_input_activity_tracking, get_input_buckets, get_last_input_activity,
+    get_latest_bands, get_llm_config, get_location_enabled, get_log_config,
+    get_main_window_auto_fit, get_neutts_config, get_openbci_config, get_recent_active_windows,
+    get_recent_input_activity, get_scanner_config, get_screenshot_config, get_screenshot_metrics,
+    get_screenshots_around, get_screenshots_dir, get_skills_last_sync, get_skills_license,
+    get_skills_refresh_interval, get_skills_sync_on_launch, get_sleep_config, get_status,
+    get_storage_format, get_supported_companies, get_theme_and_language, get_tts_preload,
+    get_umap_config, get_update_check_interval, get_ws_config, list_focus_modes, list_serial_ports,
+    list_skills, open_session_for_timestamp, pair_device, pick_exg_weights_file, pick_gguf_file,
     pick_ref_wav_file, rebuild_screenshot_embeddings, retry_connect, search_screenshots_by_image,
     search_screenshots_by_text, search_screenshots_by_vector, set_accent_color,
     set_active_window_tracking, set_api_token, set_autostart_enabled, set_daily_goal,
     set_device_api_config, set_disabled_skills, set_dnd_config, set_eeg_model_config,
     set_embedding_overlap, set_filter_config, set_goal_notified_date, set_hooks,
-    set_input_activity_tracking, set_language, set_llm_config, set_location_enabled,
-    set_log_config, set_main_window_auto_fit, set_neutts_config, set_notch_preset,
-    set_openbci_config, set_preferred_device, set_scanner_config, set_screenshot_config,
-    set_skills_refresh_interval, set_skills_sync_on_launch, set_sleep_config, set_storage_format,
-    set_theme, set_tts_preload, set_umap_config, set_update_check_interval, set_ws_config,
-    subscribe_eeg, subscribe_imu, subscribe_ppg, suggest_hook_distances, suggest_hook_keywords,
-    sync_skills_now, test_dnd, test_location, trigger_reembed, trigger_weights_download,
-    web_cache_clear, web_cache_list, web_cache_remove_domain, web_cache_remove_entry,
-    web_cache_stats,
+    set_inference_device, set_input_activity_tracking, set_language, set_llm_config,
+    set_location_enabled, set_log_config, set_main_window_auto_fit, set_neutts_config,
+    set_notch_preset, set_openbci_config, set_preferred_device, set_scanner_config,
+    set_screenshot_config, set_skills_refresh_interval, set_skills_sync_on_launch,
+    set_sleep_config, set_storage_format, set_theme, set_tts_preload, set_umap_config,
+    set_update_check_interval, set_ws_config, subscribe_eeg, subscribe_imu, subscribe_ppg,
+    suggest_hook_distances, suggest_hook_keywords, sync_skills_now, test_dnd, test_location,
+    trigger_reembed, trigger_weights_download, web_cache_clear, web_cache_list,
+    web_cache_remove_domain, web_cache_remove_entry, web_cache_stats,
 };
 
 // LLM catalog commands (feature-gated)
@@ -1030,6 +1030,8 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.location_enabled = data.location_enabled;
         s.lsl_auto_connect = data.lsl_auto_connect;
         s.lsl_paired_streams = data.lsl_paired_streams;
+        s.inference_device = data.inference_device.clone();
+        s.llm_gpu_layers_saved = data.llm_gpu_layers_saved;
         s.neutts_config = data.neutts.clone();
         s.tts_preload = data.tts_preload;
         s.input.track_active_window = data.track_active_window;
@@ -1630,6 +1632,8 @@ pub fn run() {
             set_sleep_config,
             get_llm_config,
             set_llm_config,
+            get_inference_device,
+            set_inference_device,
             pick_exg_weights_file,
             pick_gguf_file,
             web_cache_stats,

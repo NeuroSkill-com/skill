@@ -198,6 +198,20 @@ const settings: Record<string, string> = {
   "settingsTabs.calibration": "Kalibrierung",
   "settingsTabs.updates": "Aktualisierungen",
 
+  "settings.inferenceDevice": "Inferenzgerät",
+  "settings.inferenceDeviceDesc":
+    "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "Nutzt GPU / Metal / CUDA für schnelle Inferenz (empfohlen).",
+  "settings.inferenceDeviceCpuDesc": "Läuft vollständig auf der CPU — langsamer, aber ohne GPU nutzbar.",
+  "settings.inferenceDeviceRestartHint": "LLM-Server neu starten, um die Änderung anzuwenden.",
+  "settings.gpuSection": "GPU / Arbeitsspeicher",
+  "settings.gpuName": "Gerät",
+  "settings.gpuVram": "Speicher",
+  "settings.gpuVramUnified": "Gemeinsam",
+  "settings.gpuUsage": "GPU-Auslastung",
+
   "settings.mainWindow": "Hauptfenster",
   "settings.autoFitToggle": "Dashboard-Höhe automatisch anpassen",
   "settings.autoFitToggleDesc":

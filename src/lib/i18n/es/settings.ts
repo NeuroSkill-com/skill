@@ -362,6 +362,20 @@ const settings: Record<string, string> = {
 
   "settingsTabs.tts": "Voz",
 
+  "settings.inferenceDevice": "Dispositivo de inferencia",
+  "settings.inferenceDeviceDesc":
+    "Dónde se ejecuta la inferencia de IA. La GPU es más rápida; la CPU funciona en cualquier máquina sin presionar la VRAM. Reinicia el servidor LLM tras cambiar.",
+  "settings.inferenceDeviceGpu": "GPU",
+  "settings.inferenceDeviceCpu": "CPU",
+  "settings.inferenceDeviceGpuDesc": "Usa GPU / Metal / CUDA para inferencia rápida (recomendado).",
+  "settings.inferenceDeviceCpuDesc": "Se ejecuta completamente en CPU — más lento pero funciona sin GPU.",
+  "settings.inferenceDeviceRestartHint": "Reinicia el servidor LLM para aplicar.",
+  "settings.gpuSection": "GPU / Memoria",
+  "settings.gpuName": "Dispositivo",
+  "settings.gpuVram": "Memoria",
+  "settings.gpuVramUnified": "Unificada",
+  "settings.gpuUsage": "Uso de GPU",
+
   "settings.mainWindow": "Ventana principal",
   "settings.autoFitToggle": "Ajustar automáticamente la altura del panel",
   "settings.autoFitToggleDesc":
