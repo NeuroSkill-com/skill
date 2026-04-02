@@ -9,8 +9,40 @@
 use super::types::Tool;
 use serde_json::Value;
 
+/// Prompt-injection options for tool calling behavior.
+#[derive(Clone, Debug)]
+pub struct ToolPromptOptions {
+    /// Prefer OpenAI-style `tool_calls` JSON when possible.
+    pub prefer_native_tool_calling: bool,
+    /// Chat behavior mode (`automatic`, `chat`, `query`).
+    pub chat_mode: Option<String>,
+    /// Refusal response in strict query mode when evidence is missing.
+    pub query_refusal_response: Option<String>,
+}
+
+impl Default for ToolPromptOptions {
+    fn default() -> Self {
+        Self {
+            prefer_native_tool_calling: true,
+            chat_mode: None,
+            query_refusal_response: None,
+        }
+    }
+}
+
 /// Inject tool definitions and calling instructions into the system prompt.
 pub fn inject_tools_into_system_prompt(messages: &mut Vec<Value>, tools: &[Tool], n_ctx: usize) {
+    inject_tools_into_system_prompt_with_options(messages, tools, n_ctx, &ToolPromptOptions::default());
+}
+
+/// Inject tool definitions and calling instructions into the system prompt
+/// with advanced behavior options.
+pub fn inject_tools_into_system_prompt_with_options(
+    messages: &mut Vec<Value>,
+    tools: &[Tool],
+    n_ctx: usize,
+    options: &ToolPromptOptions,
+) {
     if tools.is_empty() {
         return;
     }
@@ -18,9 +50,9 @@ pub fn inject_tools_into_system_prompt(messages: &mut Vec<Value>, tools: &[Tool]
     let compact = n_ctx > 0 && n_ctx <= 2048;
 
     let mut tool_block = if compact {
-        build_compact_tool_block(tools)
+        build_compact_tool_block(tools, options)
     } else {
-        build_full_tool_block(tools)
+        build_full_tool_block(tools, options)
     };
 
     tool_block.push_str(&build_os_context(tools));
@@ -46,7 +78,7 @@ pub fn inject_tools_into_system_prompt(messages: &mut Vec<Value>, tools: &[Tool]
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /// Build a compact tool block for very small context windows (<= 2048 tokens).
-fn build_compact_tool_block(tools: &[Tool]) -> String {
+fn build_compact_tool_block(tools: &[Tool], options: &ToolPromptOptions) -> String {
     let mut names = Vec::new();
     for t in tools {
         let name = &t.function.name;
@@ -64,22 +96,42 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
             names.push(format!("{name}({})", params.join(",")));
         }
     }
+    let mode_hint = match options.chat_mode.as_deref() {
+        Some("query") => format!(
+            "\nMode: query (strict grounding). If you cannot get evidence from tools, reply exactly with: {}",
+            options
+                .query_refusal_response
+                .as_deref()
+                .unwrap_or("I can’t answer that reliably without tool-backed evidence for this query.")
+        ),
+        Some("chat") => "\nMode: chat (free-form). Tools are optional when not needed.".to_string(),
+        _ => "\nMode: automatic. Use tools when they materially improve correctness.".to_string(),
+    };
+
+    let call_format = if options.prefer_native_tool_calling {
+        "Preferred format: {\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"<tool>\",\"arguments\":{...}}}]}\nFallback accepted: [TOOL_CALL]{\"name\":\"<tool>\",\"arguments\":{...}}[/TOOL_CALL]"
+    } else {
+        "Format: [TOOL_CALL]{\"name\":\"<tool>\",\"arguments\":{...}}[/TOOL_CALL]"
+    };
+
     format!(
         r#"Tools: {}
 ALWAYS use tools when applicable. Do NOT show commands in code blocks — call them.
-Format: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
+{}
 Examples:
 [TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
 [TOOL_CALL]{{"name":"bash","arguments":{{"command":"ls ~/Desktop/"}}}}[/TOOL_CALL]
 [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
 For the "skill" tool, pass the command name inside arguments. Do NOT call command names like "status" directly — always use {{"name":"skill","arguments":{{"command":"..."}}}}.
-Wait for results. Do NOT fabricate results."#,
-        names.join(", ")
+Wait for results. Do NOT fabricate results.{}"#,
+        names.join(", "),
+        call_format,
+        mode_hint
     )
 }
 
 /// Build the full tool block with descriptions, parameter docs, and examples.
-fn build_full_tool_block(tools: &[Tool]) -> String {
+fn build_full_tool_block(tools: &[Tool], options: &ToolPromptOptions) -> String {
     let mut tool_lines = String::new();
     for t in tools {
         let name = &t.function.name;
@@ -106,6 +158,24 @@ fn build_full_tool_block(tools: &[Tool]) -> String {
             }
         }
     }
+
+    let mode_policy = match options.chat_mode.as_deref() {
+        Some("query") => format!(
+            "\n## Query mode policy (strict grounding)\n- Only answer using tool-backed evidence from this turn.\n- If no relevant tool evidence is available, reply exactly with:\n\"{}\"\n- Do not use unstated prior knowledge in this mode.",
+            options
+                .query_refusal_response
+                .as_deref()
+                .unwrap_or("I can’t answer that reliably without tool-backed evidence for this query.")
+        ),
+        Some("chat") => "\n## Chat mode policy\n- You may answer conversationally without tools when appropriate.\n- Use tools when they improve correctness or provide requested actions.".to_string(),
+        _ => "\n## Automatic mode policy\n- Prefer tool use for actions and factual verification.\n- You may answer directly when no tool is needed.".to_string(),
+    };
+
+    let native_hint = if options.prefer_native_tool_calling {
+        "\n## Native + fallback tool-call formats\nPreferred: OpenAI-style `tool_calls` JSON object.\nFallback: `[TOOL_CALL]{...}[/TOOL_CALL]` blocks.\nIf one format fails, immediately retry the other."
+    } else {
+        ""
+    };
 
     format!(
         r#"# Tools
@@ -156,7 +226,9 @@ Assistant: [TOOL_CALL]{{"name":"web_search","arguments":{{"query":"weather <city
 
 User: "How do I feel?" / "What's my brain state?"
 Assistant: [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
-(Use the "skill" tool for ALL EEG/brain/device queries. Pass the command name inside "arguments", e.g. {{"command":"status"}}. Do NOT call "status" or any other command name directly as a tool — always wrap it with the "skill" tool.)"#
+(Use the "skill" tool for ALL EEG/brain/device queries. Pass the command name inside "arguments", e.g. {{"command":"status"}}. Do NOT call "status" or any other command name directly as a tool — always wrap it with the "skill" tool.)
+{mode_policy}
+{native_hint}"#
     )
 }
 

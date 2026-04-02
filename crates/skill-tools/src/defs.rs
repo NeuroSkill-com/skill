@@ -499,6 +499,73 @@ pub fn filter_allowed_tool_defs(tool_defs: Vec<Tool>, config: &LlmToolConfig) ->
         .collect()
 }
 
+/// Rerank tools for a prompt using lightweight lexical relevance.
+///
+/// This is intentionally fast and dependency-light: it scores overlap between
+/// prompt tokens and each tool's name/description/parameter names.
+pub fn rerank_tools_for_prompt(prompt: &str, tools: Vec<Tool>, top_n: usize) -> Vec<Tool> {
+    if tools.is_empty() || top_n == 0 || tools.len() <= top_n {
+        return tools;
+    }
+
+    fn tokens(s: &str) -> std::collections::HashSet<String> {
+        s.split(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+            .filter(|t| !t.is_empty())
+            .map(str::to_ascii_lowercase)
+            .filter(|t| t.len() > 1)
+            .collect()
+    }
+
+    let prompt_tokens = tokens(prompt);
+    if prompt_tokens.is_empty() {
+        return tools.into_iter().take(top_n).collect();
+    }
+
+    let mut scored: Vec<(usize, i32, Tool)> = tools
+        .into_iter()
+        .enumerate()
+        .map(|(idx, tool)| {
+            let mut score = 0i32;
+            let name_tokens = tokens(&tool.function.name);
+            let desc_tokens = tokens(tool.function.description.as_deref().unwrap_or(""));
+            let param_tokens = tool
+                .function
+                .parameters
+                .as_ref()
+                .and_then(|p| p.get("properties"))
+                .and_then(|p| p.as_object())
+                .map(|o| {
+                    o.keys()
+                        .map(|k| k.to_ascii_lowercase())
+                        .collect::<std::collections::HashSet<_>>()
+                })
+                .unwrap_or_default();
+
+            for t in &prompt_tokens {
+                if name_tokens.contains(t) {
+                    score += 6;
+                }
+                if desc_tokens.contains(t) {
+                    score += 3;
+                }
+                if param_tokens.contains(t) {
+                    score += 2;
+                }
+            }
+
+            // Small preference for common utility tools only when no strong signal exists.
+            if score == 0 && matches!(tool.function.name.as_str(), "skill" | "web_search") {
+                score = 1;
+            }
+
+            (idx, score, tool)
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    scored.into_iter().take(top_n).map(|(_, _, tool)| tool).collect()
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -554,6 +621,14 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(before, names.len(), "duplicate tool names found");
+    }
+
+    #[test]
+    fn reranker_prioritizes_matching_tools() {
+        let tools = builtin_llm_tools();
+        let top = rerank_tools_for_prompt("read the config file from disk", tools, 3);
+        let names: Vec<String> = top.iter().map(|t| t.function.name.clone()).collect();
+        assert!(names.contains(&"read_file".to_string()));
     }
 
     // ── is_builtin_tool_enabled ───────────────────────────────────────────

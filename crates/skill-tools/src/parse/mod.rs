@@ -27,7 +27,7 @@ pub use types::{ChatMessage, ContentPart, ImageUrl, MessageContent, Tool, ToolCa
 
 pub use coerce::{coerce_tool_call_arguments, coerce_value};
 pub use extract::{build_self_healing_message, detect_garbled_tool_call, extract_tool_calls};
-pub use inject::inject_tools_into_system_prompt;
+pub use inject::{inject_tools_into_system_prompt, inject_tools_into_system_prompt_with_options, ToolPromptOptions};
 pub use strip::{strip_tool_call_blocks, strip_tool_call_blocks_preserve};
 pub use validate::validate_tool_arguments;
 

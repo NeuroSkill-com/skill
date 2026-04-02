@@ -5,6 +5,32 @@
 
 use serde::{Deserialize, Serialize};
 
+// ── Chat mode / grounding policy ─────────────────────────────────────────────
+
+/// How strictly the assistant should ground answers in tool evidence.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatMode {
+    /// Use tools when relevant, but allow normal model answers.
+    Automatic,
+    /// Free-form assistant chat; tool usage is optional.
+    Chat,
+    /// Grounded mode: if no relevant tool evidence is available, refuse.
+    Query,
+}
+
+fn default_chat_mode() -> ChatMode {
+    ChatMode::Automatic
+}
+
+fn default_query_refusal_response() -> String {
+    "I can’t answer that reliably without tool-backed evidence for this query.".into()
+}
+
+fn default_intelligent_selection_top_n() -> usize {
+    8
+}
+
 // ── Tool configuration ────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,6 +89,27 @@ pub struct LlmToolConfig {
     #[serde(default = "default_tool_execution_mode")]
     pub execution_mode: ToolExecutionMode,
 
+    /// Grounding/chat behavior mode.
+    #[serde(default = "default_chat_mode")]
+    pub chat_mode: ChatMode,
+
+    /// Response used in `chat_mode = "query"` when no tool evidence exists.
+    #[serde(default = "default_query_refusal_response")]
+    pub query_refusal_response: String,
+
+    /// Intelligent tool selection: rerank tools per user prompt and keep top-N.
+    #[serde(default = "default_true")]
+    pub intelligent_selection_enabled: bool,
+
+    /// Number of top tools to keep after reranking.
+    #[serde(default = "default_intelligent_selection_top_n")]
+    pub intelligent_selection_top_n: usize,
+
+    /// Prefer native OpenAI-style tool-calling JSON (`tool_calls`) when models
+    /// support it, while still accepting fallback `[TOOL_CALL]...` markup.
+    #[serde(default = "default_true")]
+    pub prefer_native_tool_calling: bool,
+
     /// Maximum number of tool-calling rounds per chat turn.
     #[serde(default = "default_max_tool_rounds")]
     pub max_rounds: usize,
@@ -109,6 +156,17 @@ pub struct LlmToolConfig {
     /// 429/5xx and connection failures).
     #[serde(default)]
     pub retry: ToolRetryConfig,
+
+    /// Strict filesystem/path safety mode. When enabled, file tools reject
+    /// paths outside trusted roots (cwd, home, temp) in addition to existing
+    /// sensitive-path checks.
+    #[serde(default = "default_true")]
+    pub strict_path_safety: bool,
+
+    /// Runtime prompt variables available as `{key}` replacements in system
+    /// and user messages before inference.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub prompt_variables: std::collections::HashMap<String, String>,
 
     /// Persistent disk cache for web tool results (web_search, web_fetch).
     /// Avoids redundant network calls when the model re-fetches the same URL
@@ -357,6 +415,11 @@ impl Default for LlmToolConfig {
             skill_api: true,
             skill_api_port: 0,
             execution_mode: default_tool_execution_mode(),
+            chat_mode: default_chat_mode(),
+            query_refusal_response: default_query_refusal_response(),
+            intelligent_selection_enabled: true,
+            intelligent_selection_top_n: default_intelligent_selection_top_n(),
+            prefer_native_tool_calling: true,
             max_rounds: 15,
             max_calls_per_round: default_max_tool_calls_per_round(),
             thinking_budget: None,
@@ -365,6 +428,8 @@ impl Default for LlmToolConfig {
             skills_sync_on_launch: false,
             disabled_skills: Vec::new(),
             retry: ToolRetryConfig::default(),
+            strict_path_safety: true,
+            prompt_variables: std::collections::HashMap::new(),
             web_cache: WebCacheConfig::default(),
         }
     }
@@ -408,6 +473,13 @@ mod tests {
     }
 
     #[test]
+    fn default_intelligent_selection_is_enabled() {
+        let cfg = LlmToolConfig::default();
+        assert!(cfg.intelligent_selection_enabled);
+        assert!(cfg.intelligent_selection_top_n > 0);
+    }
+
+    #[test]
     fn default_skills_refresh_interval_is_24h() {
         assert_eq!(LlmToolConfig::default().skills_refresh_interval_secs, 86_400);
     }
@@ -435,6 +507,7 @@ mod tests {
         assert!(cfg.enabled);
         assert!(!cfg.bash);
         assert_eq!(cfg.execution_mode, ToolExecutionMode::Parallel);
+        assert_eq!(cfg.chat_mode, ChatMode::Automatic);
     }
 
     #[test]
