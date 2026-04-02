@@ -36,6 +36,7 @@ interface CalibrationProfile {
 }
 type DownloadState = "not_downloaded" | "downloading" | "downloaded" | "failed" | "cancelled";
 interface LlmModelEntry {
+  repo?: string;
   filename: string;
   quant: string;
   size_gb: number;
@@ -994,6 +995,9 @@ useWindowTitle("window.title.onboarding");
                 </span>
               </div>
               <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
+              {#if llmTarget?.repo}
+                <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download {llmTarget.repo} {llmTarget.filename}</p>
+              {/if}
               {#if llmIsDownloading}
                 <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                   <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{llmProgressPct.toFixed(1)}%"></div>
@@ -1013,6 +1017,7 @@ useWindowTitle("window.title.onboarding");
                 <span class="text-[0.66rem] font-semibold">{t("onboarding.models.zunaTitle")}</span>
               </div>
               <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.zunaDesc")}</p>
+              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download Zyphra/ZUNA model-00001-of-00001.safetensors</p>
               {#if zunaIsDownloading}
                 <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                   <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{zunaProgressPct.toFixed(1)}%"></div>
@@ -1032,6 +1037,7 @@ useWindowTitle("window.title.onboarding");
                 <span class="text-[0.66rem] font-semibold">{t("onboarding.models.neuttsTitle")}</span>
               </div>
               <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.neuttsDesc")}</p>
+              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download neuphonic/neutts-nano-q4-gguf --include "*.gguf"</p>
               {#if neuttsDlState === "error" && neuttsDlError}
                 <p class="text-[0.55rem] text-destructive leading-relaxed">{neuttsDlError}</p>
               {/if}
@@ -1049,6 +1055,7 @@ useWindowTitle("window.title.onboarding");
                 <span class="text-[0.66rem] font-semibold">{t("onboarding.models.kittenTitle")}</span>
               </div>
               <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.kittenDesc")}</p>
+              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download KittenML/kitten-tts-mini-0.8</p>
               {#if kittenDlState === "error" && kittenDlError}
                 <p class="text-[0.55rem] text-destructive leading-relaxed">{kittenDlError}</p>
               {/if}

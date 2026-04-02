@@ -109,6 +109,11 @@ let apiToken = $state("");
 let apiTokenInput = $state("");
 let apiTokenDirty = $derived(apiTokenInput !== apiToken);
 
+// ── HuggingFace endpoint override ──────────────────────────────────────────
+let hfEndpoint = $state("https://huggingface.co");
+let hfEndpointInput = $state("https://huggingface.co");
+let hfEndpointDirty = $derived(hfEndpointInput !== hfEndpoint);
+
 const OVERLAP_PRESETS: [string, number][] = [
   ["0 s — none", 0],
   ["1.25 s — 25%", 1.25],
@@ -156,6 +161,8 @@ onMount(async () => {
   }
   apiToken = await invoke<string>("get_api_token");
   apiTokenInput = apiToken;
+  hfEndpoint = await invoke<string>("get_hf_endpoint").catch(() => "https://huggingface.co");
+  hfEndpointInput = hfEndpoint;
   trackActiveWindow = await invoke<boolean>("get_active_window_tracking");
   currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
   trackInputActivity = await invoke<boolean>("get_input_activity_tracking");
@@ -844,6 +851,41 @@ onDestroy(() => {
         </div>
       {/if}
 
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ── HuggingFace endpoint ───────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("settings.hfEndpoint")}
+  </span>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-3 py-3">
+      <p class="text-[0.58rem] text-muted-foreground leading-relaxed">
+        {t("settings.hfEndpointDesc")}
+      </p>
+      <div class="flex items-center gap-2">
+        <input type="text"
+               bind:value={hfEndpointInput}
+               placeholder="https://huggingface.co"
+               class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
+                      font-mono text-foreground placeholder:text-muted-foreground/40
+                      focus:outline-none focus:ring-1 focus:ring-ring" />
+        {#if hfEndpointDirty}
+          <Button variant="outline" size="sm"
+                  class="h-7 text-[0.58rem] px-3"
+                  onclick={async () => {
+                    await invoke("set_hf_endpoint", { endpoint: hfEndpointInput.trim() });
+                    hfEndpoint = await invoke<string>("get_hf_endpoint").catch(() => "https://huggingface.co");
+                    hfEndpointInput = hfEndpoint;
+                  }}>
+            {t("common.save")}
+          </Button>
+        {/if}
+      </div>
+      <p class="text-[0.52rem] text-muted-foreground/70 font-mono">{t("settings.hfEndpointCurrent")}: {hfEndpoint}</p>
     </CardContent>
   </Card>
 </section>

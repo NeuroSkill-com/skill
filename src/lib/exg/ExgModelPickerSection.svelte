@@ -428,6 +428,9 @@ $effect(() => {
               {/if}
             </div>
           </div>
+          <div class="px-4 pb-2">
+            <p class="text-[0.5rem] text-muted-foreground/70 font-mono break-all">🤗 hf download {selectedFamily.repo} {selectedFamily.weights_file}</p>
+          </div>
 
           <!-- Actions -->
           <div

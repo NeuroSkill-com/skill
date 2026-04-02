@@ -549,6 +549,10 @@ const settings: Record<string, string> = {
     "Detener la sesión automáticamente si no llegan muestras durante este tiempo. Útil cuando la fuente LSL se bloquea o se pausa sin desconectarse.",
   "lsl.idleTimeoutDisabled": "Nunca",
   "lsl.idleTimeoutEnabled": "Activado",
+  "settings.hfEndpoint": "Endpoint de HuggingFace",
+  "settings.hfEndpointDesc":
+    "URL base/espejo opcional para descargas de modelos (LLM + EXG + TTS). Por defecto usa HF_ENDPOINT o https://huggingface.co.",
+  "settings.hfEndpointCurrent": "Actual",
 };
 
 export default settings;

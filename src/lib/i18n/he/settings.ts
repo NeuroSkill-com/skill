@@ -518,6 +518,10 @@ const settings: Record<string, string> = {
     "סיים את הסשנה אוטומטית אם לא מגיעים דוגמאות בפרק זמן זה. שימושי כשמקור LSL קורס או מושהה בלי נתיקת חיבור.",
   "lsl.idleTimeoutDisabled": "לעולם לא",
   "lsl.idleTimeoutEnabled": "מופעל",
+  "settings.hfEndpoint": "נקודת קצה של HuggingFace",
+  "settings.hfEndpointDesc":
+    "כתובת בסיס/מראה אופציונלית להורדת מודלים (LLM + EXG + TTS). ברירת מחדל לפי HF_ENDPOINT או https://huggingface.co.",
+  "settings.hfEndpointCurrent": "נוכחי",
 };
 
 export default settings;

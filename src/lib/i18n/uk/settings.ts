@@ -537,6 +537,10 @@ const settings: Record<string, string> = {
     "Автоматично завершувати сеанс, якщо цей час не надходить жодного зразка. Корисно, якщо LSL-джерело зависло або призупинилось без відключення.",
   "lsl.idleTimeoutDisabled": "Ніколи",
   "lsl.idleTimeoutEnabled": "Увімкнено",
+  "settings.hfEndpoint": "Ендпоінт HuggingFace",
+  "settings.hfEndpointDesc":
+    "Необов'язкова дзеркальна/базова URL-адреса для завантаження моделей (LLM + EXG + TTS). Типово використовується HF_ENDPOINT або https://huggingface.co.",
+  "settings.hfEndpointCurrent": "Поточний",
 };
 
 export default settings;

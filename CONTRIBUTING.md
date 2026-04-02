@@ -107,6 +107,24 @@ cargo audit
 cargo deny check
 ```
 
+### Faster local `cargo check`
+
+`cargo check -p skill` can be slow on a cold cache because it compiles many heavy deps.
+Use these faster options during day-to-day work:
+
+```bash
+# Check only crates affected by your branch (same idea as CI)
+BASE=origin/main
+FLAGS=$(bash scripts/changed-crates.sh "$BASE")
+cargo check $FLAGS
+
+# Or check only core app lib target
+cargo check -p skill --lib
+
+# Optional: speed up rebuilds with sccache
+export RUSTC_WRAPPER=sccache
+```
+
 ### Commit Checklist
 
 The pre-commit hook automatically checks:
