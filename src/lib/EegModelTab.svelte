@@ -57,8 +57,6 @@ interface ReembedProgress {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let exgInferenceDevice = $state<"gpu" | "cpu">("gpu");
-let exgInferenceDeviceSaving = $state(false);
 
 let modelConfig = $state<ExgModelConfig>({
   hf_repo: "Zyphra/ZUNA",
@@ -127,14 +125,6 @@ async function cancelDownload() {
   await invoke("cancel_weights_download");
 }
 
-async function setExgInferenceDevice(dev: "gpu" | "cpu") {
-  if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
-  exgInferenceDeviceSaving = true;
-  exgInferenceDevice = dev;
-  await invoke("set_exg_inference_device", { device: dev }).catch(() => {});
-  exgInferenceDeviceSaving = false;
-}
-
 async function restartApp() {
   restarting = true;
   try {
@@ -199,7 +189,6 @@ let unlistenReembed: (() => void) | undefined;
 onMount(async () => {
   modelConfig = await invoke<ExgModelConfig>("get_eeg_model_config");
   modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
-  exgInferenceDevice = (await invoke<string>("get_exg_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
   statusTimer = setInterval(refreshStatus, 2000);
   loadReembedEstimate();
 
@@ -225,51 +214,6 @@ onDestroy(() => {
   onStartDownload={startDownload}
   onCancelDownload={cancelDownload}
 />
-
-<!-- ── Inference Device ───────────────────────────────────────────────────────────── -->
-<section class="flex flex-col gap-2">
-  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-    {t("settings.inferenceDevice")}
-  </span>
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
-      <p class="px-4 py-2.5 text-[0.62rem] text-muted-foreground leading-relaxed">
-        {t("settings.inferenceDeviceDesc")}
-      </p>
-      <div class="flex items-stretch divide-x divide-border dark:divide-white/[0.05]">
-        {#each (["gpu", "cpu"] as ("gpu" | "cpu")[]) as dev}
-          {@const isActive = exgInferenceDevice === dev}
-          <button
-            onclick={() => setExgInferenceDevice(dev)}
-            class="flex-1 flex flex-col gap-0.5 items-start px-4 py-3 text-left transition-colors cursor-pointer
-                   {isActive
-                     ? 'bg-violet-50 dark:bg-violet-500/[0.08]'
-                     : 'hover:bg-slate-50 dark:hover:bg-white/[0.02]'}">
-            <div class="flex items-center gap-2">
-              <span
-                class="text-[0.72rem] font-semibold
-                       {isActive ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
-                {dev === "gpu" ? t("settings.inferenceDeviceGpu") : t("settings.inferenceDeviceCpu")}
-              </span>
-              {#if isActive}
-                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-violet-500">Active</span>
-              {/if}
-              {#if exgInferenceDeviceSaving && isActive}
-                <span class="text-[0.52rem] text-muted-foreground">saving…</span>
-              {/if}
-            </div>
-            <span class="text-[0.6rem] text-muted-foreground leading-snug">
-              {dev === "gpu" ? t("settings.inferenceDeviceGpuDesc") : t("settings.inferenceDeviceCpuDesc")}
-            </span>
-          </button>
-        {/each}
-      </div>
-      <p class="px-4 py-2 text-[0.58rem] text-amber-500/80 dark:text-amber-400/70">
-        ⚠️ {t("settings.inferenceDeviceExgRestartHint")}
-      </p>
-    </CardContent>
-  </Card>
-</section>
 
 <!-- Embedding speed (shown when data is available) -->
 {#if modelStatus.avg_embed_ms > 0}
