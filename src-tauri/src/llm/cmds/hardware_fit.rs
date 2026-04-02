@@ -145,6 +145,7 @@ fn catalog_entry_to_llm_model(
         capabilities: vec![],
         num_attention_heads: None,
         num_key_value_heads: None,
+        license: None,
     }
 }
 
