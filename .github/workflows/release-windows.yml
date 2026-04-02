@@ -752,15 +752,10 @@ jobs:
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
           if (Test-Path $sigPath) { Remove-Item $sigPath -Force }
 
-          # Use Store (NoCompression) for the updater zip.
-          #
-          # tauri-plugin-updater uses `zip 4.6.1` compiled without the
-          # `deflate` feature (no flate2 dep in the lockfile), so it can
-          # only extract Store (method 0) entries.  Deflate (method 8) or
-          # Deflate64 (method 9) both produce "unsupported compression
-          # method" at update time.  NoCompression avoids this entirely,
-          # and has no meaningful size impact because NSIS installers are
-          # already self-compressed internally.
+          # Use Deflate (CompressionLevel.Optimal) for the updater zip.
+          # zip 4.6.1 now has flate2 + deflate64 enabled via the workspace
+          # dependency in Cargo.toml, so both method 8 (Deflate) and method
+          # 9 (Deflate64) are supported by tauri-plugin-updater at extract time.
           Add-Type -AssemblyName System.IO.Compression
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::Open(
@@ -771,10 +766,10 @@ jobs:
             $zip,
             $installer.FullName,
             $installer.Name,
-            [System.IO.Compression.CompressionLevel]::NoCompression
+            [System.IO.Compression.CompressionLevel]::Optimal
           ) | Out-Null
           $zip.Dispose()
-          Write-Host "[ok] created updater zip (Store/NoCompression): $zipPath"
+          Write-Host "[ok] created updater zip (Deflate): $zipPath"
 
           & npx tauri signer sign $zipPath
           if ($LASTEXITCODE -ne 0) {

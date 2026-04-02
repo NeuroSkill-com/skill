@@ -84,6 +84,9 @@ dirs = "6"
 log = "0.4"
 regex = "1"
 stacker = "0.1"
+# Ensure zip is compiled with deflate support so tauri-plugin-updater can
+# extract Deflate-compressed (method 8) entries from .nsis.zip update packages.
+zip = { workspace = true }
 
 # rustls is pulled transitively by reqwest (tauri-plugin-updater), emotiv
 # (tokio-tungstenite), hf-hub (fastembed) etc.  Because *both* the `ring`
