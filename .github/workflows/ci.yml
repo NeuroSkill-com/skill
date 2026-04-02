@@ -84,6 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           cache-targets: false
           cache-on-failure: false
 
@@ -111,16 +112,74 @@ jobs:
       - name: Setup Vulkan SDK
         uses: ./.github/actions/setup-vulkan-linux
 
+      - name: Download prebuilt llama libs (Linux, optional)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-linux-x86_64-unknown-linux-gnu-q1-vulkan.tar.gz"
+          ARCHIVE="$RUNNER_TEMP/llama-prebuilt-linux.tar.gz"
+          DEST="$RUNNER_TEMP/llama-prebuilt-linux"
+          EXPECTED_TARGET="x86_64-unknown-linux-gnu"
+          EXPECTED_FEATURE="vulkan"
+          mkdir -p "$DEST"
+
+          if ! curl -fL "$URL" -o "$ARCHIVE"; then
+            echo "[warn] prebuilt llama artifact unavailable; fallback to source build"
+            exit 0
+          fi
+
+          tar -xzf "$ARCHIVE" -C "$DEST"
+          ROOT="$DEST"
+          if [[ ! -d "$ROOT/lib" && ! -d "$ROOT/lib64" && ! -d "$ROOT/bin" ]]; then
+            ROOT="$(find "$DEST" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
+          fi
+
+          if [[ -z "${ROOT:-}" ]]; then
+            echo "[warn] prebuilt llama archive layout invalid; fallback to source build"
+            exit 0
+          fi
+
+          if ! find "$ROOT" -type f \( -name '*.a' -o -name '*.so' \) | head -n1 >/dev/null; then
+            echo "[warn] prebuilt llama archive contains no static/shared libs; fallback to source build"
+            exit 0
+          fi
+
+          if [[ -f "$ROOT/metadata.json" ]]; then
+            TARGET="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("target",""))' "$ROOT/metadata.json")"
+            FEATURES="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("features",""))' "$ROOT/metadata.json")"
+            if [[ "$TARGET" != "$EXPECTED_TARGET" || "$FEATURES" != *"$EXPECTED_FEATURE"* ]]; then
+              echo "[warn] prebuilt metadata mismatch (target=$TARGET features=$FEATURES); fallback to source build"
+              exit 0
+            fi
+          fi
+
+          echo "LLAMA_PREBUILT_DIR=$ROOT" >> "$GITHUB_ENV"
+          echo "LLAMA_PREBUILT_SHARED=0" >> "$GITHUB_ENV"
+          echo "[ok] LLAMA_PREBUILT_DIR=$ROOT"
+
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
         env:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-        run: >
-          cargo clippy --locked --target x86_64-unknown-linux-gnu
-          --workspace --exclude skill
-          -- -D warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_cmd() {
+            cargo clippy --locked --target x86_64-unknown-linux-gnu \
+              --workspace --exclude skill \
+              -- -D warnings
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::clippy failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
 
       # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
@@ -131,7 +190,21 @@ jobs:
           # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
-        run: cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots -- -D warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_cmd() {
+            cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots -- -D warnings
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::app clippy failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
 
       # Determine which crates need testing based on changed files.
       # On PRs: compare against the base branch.
@@ -201,9 +274,20 @@ jobs:
         run: |
           set -euo pipefail
           start_ts="$(date +%s)"
-          cargo test --locked --target x86_64-unknown-linux-gnu \
-            ${{ steps.changed.outputs.crate_flags }} \
-            --lib
+          run_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              ${{ steps.changed.outputs.crate_flags }} \
+              --lib
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::unit tests failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -218,9 +302,20 @@ jobs:
         run: |
           set -euo pipefail
           start_ts="$(date +%s)"
-          cargo test --locked --target x86_64-unknown-linux-gnu \
-            ${{ steps.changed.outputs.int_flags }} \
-            --test '*'
+          run_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              ${{ steps.changed.outputs.int_flags }} \
+              --test '*'
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::integration tests failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -253,6 +348,25 @@ jobs:
         run: |
           mkdir -p ci-metrics
           sccache --show-stats > ci-metrics/rust-sccache-stats.txt || true
+
+      - name: Summarize sccache hit rate (Rust job)
+        if: always()
+        shell: bash
+        run: |
+          STATS=ci-metrics/rust-sccache-stats.txt
+          if [[ ! -f "$STATS" ]]; then
+            echo "- sccache stats: unavailable" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          TOTAL_HIT_RATE="$(awk '/^Cache hits rate[[:space:]]/{print $(NF-1)" "$NF; exit}' "$STATS")"
+          RUST_HIT_RATE="$(awk '/^Cache hits rate \(Rust\)/{print $(NF-1)" "$NF; exit}' "$STATS")"
+          CACHE_LOCATION="$(awk -F'Cache location[[:space:]]+' '/^Cache location/{print $2; exit}' "$STATS")"
+          {
+            echo "## sccache metrics (Rust job)"
+            echo "- Cache location: ${CACHE_LOCATION:-unknown}"
+            echo "- Total hit rate: ${TOTAL_HIT_RATE:-unknown}"
+            echo "- Rust hit rate: ${RUST_HIT_RATE:-unknown}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Rust health metrics
         if: always()
@@ -430,6 +544,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          shared-key: windows-ci-x86_64-pc-windows-msvc-v1
           cache-targets: false
           cache-on-failure: false
 
@@ -441,6 +556,33 @@ jobs:
       # ── Build cache (sccache) ───────────────────────────────────────────────
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
+
+      - name: Configure sccache for GitHub Actions cache
+        shell: bash
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
+
+          # Ensure cargo.exe can always resolve sccache on Windows.
+          if [ -n "${SCCACHE_PATH:-}" ]; then
+            SCCACHE_DIR="$(dirname "$SCCACHE_PATH")"
+            if [ -f "$SCCACHE_DIR/sccache.exe" ]; then
+              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_DIR/sccache.exe")"
+              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
+              echo "$SCCACHE_DIR" >> "$GITHUB_PATH"
+              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
+            elif [ -f "$SCCACHE_PATH.exe" ]; then
+              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_PATH.exe")"
+              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
+              echo "$(dirname "$SCCACHE_PATH.exe")" >> "$GITHUB_PATH"
+              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
+            else
+              echo "[warn] sccache binary not found via SCCACHE_PATH=$SCCACHE_PATH"
+            fi
+          else
+            echo "[warn] SCCACHE_PATH not set; relying on PATH resolution"
+          fi
 
       - name: Install protoc (Windows)
         shell: powershell
@@ -503,6 +645,53 @@ jobs:
           "VULKAN_SDK=$env:VULKAN_SDK" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
+
+      - name: Download prebuilt llama libs (Windows, optional)
+        shell: powershell
+        run: |
+          $url = "https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-windows-x86_64-pc-windows-msvc-q1-vulkan.tar.gz"
+          $archive = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows.tar.gz"
+          $dest = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows"
+          $expectedTarget = "x86_64-pc-windows-msvc"
+          $expectedFeature = "vulkan"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $archive
+            tar -xzf $archive -C $dest
+
+            $root = $dest
+            if (-not (Test-Path (Join-Path $root "lib")) -and -not (Test-Path (Join-Path $root "lib64")) -and -not (Test-Path (Join-Path $root "bin"))) {
+              $candidate = Get-ChildItem $dest -Directory | Select-Object -First 1
+              if ($candidate) { $root = $candidate.FullName }
+            }
+
+            if (-not $root -or -not (Test-Path $root)) {
+              Write-Host "[warn] prebuilt llama archive layout invalid; fallback to source build"
+              exit 0
+            }
+
+            $libs = Get-ChildItem -Path $root -Recurse -File -Include *.lib,*.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $libs) {
+              Write-Host "[warn] prebuilt llama archive contains no windows libs; fallback to source build"
+              exit 0
+            }
+
+            $metadataPath = Join-Path $root "metadata.json"
+            if (Test-Path $metadataPath) {
+              $meta = Get-Content $metadataPath -Raw | ConvertFrom-Json
+              if ($meta.target -ne $expectedTarget -or -not ($meta.features -like "*$expectedFeature*")) {
+                Write-Host "[warn] prebuilt metadata mismatch (target=$($meta.target) features=$($meta.features)); fallback to source build"
+                exit 0
+              }
+            }
+
+            "LLAMA_PREBUILT_DIR=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "LLAMA_PREBUILT_SHARED=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "[ok] LLAMA_PREBUILT_DIR=$root"
+          } catch {
+            Write-Host "[warn] prebuilt llama artifact unavailable or invalid; fallback to source build"
+          }
 
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
@@ -568,12 +757,44 @@ jobs:
           LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
           CC:            ${{ env.CC }}
           CXX:           ${{ env.CXX }}
-          RUSTC_WRAPPER: sccache
-        run: >
-          cargo clippy -p skill
-          --target x86_64-pc-windows-msvc
-          --features llm-vulkan,screenshots
-          -- -D warnings
+        run: |
+          set -euo pipefail
+          run_cmd() {
+            cargo clippy -p skill \
+              --target x86_64-pc-windows-msvc \
+              --features llm-vulkan,screenshots \
+              -- -D warnings
+          }
+          if ! run_cmd; then
+            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
+              echo "::warning::windows clippy failed with prebuilt llama; retrying with source build"
+              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              run_cmd
+            else
+              exit 1
+            fi
+          fi
+
+      - name: Capture + summarize sccache hit rate (Windows job)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-metrics
+          sccache --show-stats > ci-metrics/windows-sccache-stats.txt || true
+          STATS=ci-metrics/windows-sccache-stats.txt
+          if [[ ! -f "$STATS" ]]; then
+            echo "- sccache stats: unavailable" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          TOTAL_HIT_RATE="$(awk '/^Cache hits rate[[:space:]]/{print $(NF-1)" "$NF; exit}' "$STATS")"
+          RUST_HIT_RATE="$(awk '/^Cache hits rate \(Rust\)/{print $(NF-1)" "$NF; exit}' "$STATS")"
+          CACHE_LOCATION="$(awk -F'Cache location[[:space:]]+' '/^Cache location/{print $2; exit}' "$STATS")"
+          {
+            echo "## sccache metrics (Windows job)"
+            echo "- Cache location: ${CACHE_LOCATION:-unknown}"
+            echo "- Total hit rate: ${TOTAL_HIT_RATE:-unknown}"
+            echo "- Rust hit rate: ${RUST_HIT_RATE:-unknown}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── LLM end-to-end integration test ──────────────────────────────────────────
   llm-e2e:
@@ -601,6 +822,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           save-if: false
           cache-targets: false
           cache-on-failure: false
@@ -707,6 +929,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
+          shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           save-if: false
           cache-targets: false
           cache-on-failure: false

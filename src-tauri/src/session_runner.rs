@@ -114,6 +114,17 @@ pub(crate) async fn run_device_session(
         Some(DATA_WATCHDOG_TIMEOUT)
     };
 
+    // iroh-remote sessions are source-driven by the phone tunnel and should
+    // not enter BLE-style auto-reconnect loops on desktop disconnect.
+    if kind == "iroh-remote" {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.pending_reconnect = false;
+        s.retry_attempt = 0;
+        s.status.retry_attempt = 0;
+        s.status.retry_countdown_secs = 0;
+    }
+
     let mut user_cancelled = false;
     let mut last_event_at = Instant::now();
     loop {
@@ -296,7 +307,7 @@ pub(crate) async fn run_device_session(
 
     // ── Finalise ─────────────────────────────────────────────────────────────
     if let Some(ref mut c) = csv {
-        finalize_session(&app, c, &csv_path, user_cancelled);
+        finalize_session(&app, c, &csv_path, user_cancelled, kind);
     } else {
         // CSV was never opened (disconnect before first EEG frame, or
         // adapter never emitted Eeg events).  Still need to clean up
@@ -1337,6 +1348,7 @@ fn finalize_session(
     csv: &mut SessionWriter,
     csv_path: &Path,
     user_cancelled: bool,
+    kind: &str,
 ) {
     csv.flush();
     write_session_meta(app, csv_path);
@@ -1345,7 +1357,10 @@ fn finalize_session(
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         if s.status.sample_count > 0 {
-            s.pending_reconnect = true;
+            // iroh-remote reconnects are phone-driven (watcher starts a new
+            // session when remote events arrive). Enabling desktop
+            // auto-reconnect here causes wrong routing (e.g. as attentivu).
+            s.pending_reconnect = kind != "iroh-remote";
         }
     }
     let error_msg = if user_cancelled {

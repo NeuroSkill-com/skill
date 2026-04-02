@@ -473,9 +473,19 @@ pub(crate) fn start_iroh_remote_session(app: &AppHandle, peer_id: String) {
         s.session_start_utc = Some(unix_secs());
         s.snr_sum = 0.0;
         s.snr_count = 0;
+
+        // Remote iroh sessions are source-driven by incoming tunnel data.
+        // Disable BLE-style auto-reconnect loops so pending retry tasks from
+        // a previously preferred local device (e.g. AttentivU) stop
+        // immediately and don't race with iroh session startup.
+        s.pending_reconnect = false;
+        s.retry_attempt = 0;
+
         s.status
             .reset_for_scanning("iroh-remote", &csv, Some(&peer_id));
         s.status.device_id = Some(peer_id.clone());
+        s.status.retry_attempt = 0;
+        s.status.retry_countdown_secs = 0;
 
         // Look up the registered client name for this peer so the dashboard
         // can display it (e.g. "Mario's iPhone").
