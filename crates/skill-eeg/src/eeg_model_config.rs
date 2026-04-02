@@ -55,6 +55,8 @@ pub enum ExgModelBackend {
     Tribev2,
     /// NeuroRVQ tokenizer — residual vector quantization for EEG/ECG/EMG.
     Neurorvq,
+    /// ST-EEGFormer — ViT-based EEG foundation model (NeurIPS 2025 winner, ICLR 2026).
+    Steegformer,
 }
 
 impl std::fmt::Display for ExgModelBackend {
@@ -80,6 +82,7 @@ impl ExgModelBackend {
             "opentslm" => Self::Opentslm,
             "tribev2" => Self::Tribev2,
             "neurorvq" => Self::Neurorvq,
+            "steegformer" => Self::Steegformer,
             _ => Self::Zuna,
         }
     }
@@ -101,6 +104,7 @@ impl ExgModelBackend {
             Self::Opentslm => "opentslm",
             Self::Tribev2 => "tribev2",
             Self::Neurorvq => "neurorvq",
+            Self::Steegformer => "steegformer",
         }
     }
 }
@@ -582,6 +586,7 @@ mod tests {
         ExgModelBackend::Opentslm,
         ExgModelBackend::Tribev2,
         ExgModelBackend::Neurorvq,
+        ExgModelBackend::Steegformer,
     ];
 
     #[test]

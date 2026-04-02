@@ -280,7 +280,9 @@
       ],
       "weights_file": "model.safetensors",
       "config_file": "config.yaml",
-      "extra_files": ["build_args.json"],
+      "extra_files": [
+        "build_args.json"
+      ],
       "params_m": 177,
       "embed_dim": 1152,
       "paper": "https://github.com/facebookresearch/tribev2",
@@ -293,7 +295,9 @@
           "repo": "eugenehp/tribev2",
           "weights_file": "model.safetensors",
           "config_file": "config.yaml",
-          "extra_files": ["build_args.json"],
+          "extra_files": [
+            "build_args.json"
+          ],
           "params_m": 177,
           "required": true
         },
@@ -409,6 +413,54 @@
       "embed_dim": 200,
       "paper": "https://arxiv.org/abs/2412.07236",
       "doi": "10.48550/arXiv.2412.07236"
+    },
+    "steegformer-small": {
+      "name": "ST-EEGFormer Small",
+      "description": "ST-EEGFormer: ViT-based EEG foundation model pre-trained via Masked Autoencoder (MAE) reconstruction. Winner of NeurIPS 2025 EEG Foundation Challenge, accepted at ICLR 2026. Input: 128 Hz, up to 142 channels, ≤6 s segments.",
+      "repo": "eugenehp/ST-EEGFormer",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic"
+      ],
+      "weights_file": "ST-EEGFormer_small_encoder.safetensors",
+      "config_file": "config.json",
+      "params_m": 30,
+      "embed_dim": 512,
+      "paper": "https://arxiv.org/abs/2502.12048",
+      "doi": "10.48550/arXiv.2502.12048"
+    },
+    "steegformer-base": {
+      "name": "ST-EEGFormer Base",
+      "description": "ST-EEGFormer: ViT-based EEG foundation model pre-trained via Masked Autoencoder (MAE) reconstruction. Winner of NeurIPS 2025 EEG Foundation Challenge, accepted at ICLR 2026. Input: 128 Hz, up to 142 channels, ≤6 s segments.",
+      "repo": "eugenehp/ST-EEGFormer",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic"
+      ],
+      "weights_file": "ST-EEGFormer_base_encoder.safetensors",
+      "config_file": "config.json",
+      "params_m": 86,
+      "embed_dim": 768,
+      "paper": "https://arxiv.org/abs/2502.12048",
+      "doi": "10.48550/arXiv.2502.12048"
+    },
+    "steegformer-large": {
+      "name": "ST-EEGFormer Large",
+      "description": "ST-EEGFormer: ViT-based EEG foundation model pre-trained via Masked Autoencoder (MAE) reconstruction. Winner of NeurIPS 2025 EEG Foundation Challenge, accepted at ICLR 2026. Input: 128 Hz, up to 142 channels, ≤6 s segments.",
+      "repo": "eugenehp/ST-EEGFormer",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic"
+      ],
+      "weights_file": "ST-EEGFormer_large_encoder.safetensors",
+      "config_file": "config.json",
+      "params_m": 300,
+      "embed_dim": 1024,
+      "paper": "https://arxiv.org/abs/2502.12048",
+      "doi": "10.48550/arXiv.2502.12048"
     }
   },
   "models": [
@@ -613,6 +665,27 @@
       "filename": "NeuroRVQ_EMG_foundation_model_v1.safetensors",
       "size_mb": 574,
       "description": "NeuroRVQ EMG foundation model — deeper encoder for EMG representation learning"
+    },
+    {
+      "family": "steegformer-small",
+      "filename": "ST-EEGFormer_small_encoder.safetensors",
+      "size_mb": 98,
+      "description": "ST-EEGFormer small encoder weights — 30M params, 512-dim embeddings",
+      "recommended": false
+    },
+    {
+      "family": "steegformer-base",
+      "filename": "ST-EEGFormer_base_encoder.safetensors",
+      "size_mb": 326,
+      "description": "ST-EEGFormer base encoder weights — 86M params, 768-dim embeddings",
+      "recommended": true
+    },
+    {
+      "family": "steegformer-large",
+      "filename": "ST-EEGFormer_large_encoder.safetensors",
+      "size_mb": 1156,
+      "description": "ST-EEGFormer large encoder weights — 300M params, 1024-dim embeddings",
+      "recommended": false
     }
   ]
 }

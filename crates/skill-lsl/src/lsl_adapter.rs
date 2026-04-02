@@ -103,6 +103,8 @@ impl LslAdapter {
         let (tx, rx) = mpsc::channel(256);
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         let info_clone = info.clone();
+        // Clone for the thread so the log can reference names after `desc` takes ownership.
+        let thread_channel_names = desc.channel_names.clone();
 
         std::thread::Builder::new()
             .name(format!("lsl-inlet-{name}"))
@@ -113,6 +115,25 @@ impl LslAdapter {
                 // dejitter + monotonize.  This replaces manual time_correction()
                 // and also smooths jittery timestamps from network sources.
                 inlet.set_postprocessing(rlsl::types::PROC_ALL);
+
+                // Connect to the outlet's TCP server.  Without this call the
+                // inlet's internal sample channel is never fed and pull_chunk_d
+                // always returns empty regardless of how many samples the
+                // outlet pushes.  Timeout of 10 s covers slow network discovery;
+                // if the outlet vanishes the adapter will disconnect gracefully.
+                if let Err(e) = inlet.open_stream(10.0) {
+                    eprintln!("[lsl] open_stream failed for '{name}': {e}");
+                    return;
+                }
+
+                // Log channel layout for visual inspection and log dump.
+                eprintln!(
+                    "[lsl] connected to '{}' — {} ch @ {} Hz | channels: [{}]",
+                    name,
+                    channel_count,
+                    sample_rate,
+                    thread_channel_names.join(", "),
+                );
 
                 let _ = tx.blocking_send(DeviceEvent::Connected(DeviceInfo {
                     name: name.clone(),

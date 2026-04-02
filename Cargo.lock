@@ -7311,9 +7311,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llama-cpp-4"
-version = "0.2.20"
+version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97c14780f71e01f095b0db6f97c585f717221c352c48984a1805ae9ea79acb00"
+checksum = "1a6db7f37414db9699d9b43aa41730cc87512d891ef7793edde100e96e3da24b"
 dependencies = [
  "enumflags2",
  "llama-cpp-sys-4",
@@ -7323,9 +7323,9 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-4"
-version = "0.2.20"
+version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f08678bf2ba9d3b6c632ce82404b34a30b2b93009dcd37edd6726d754f83eac7"
+checksum = "82d8d27cea29d6c57be2845a53d1e5524c8d96375c79ffb4195e91b84cbb32e5"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -12442,6 +12442,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-devices",
+ "tempfile",
  "tokio",
 ]
 

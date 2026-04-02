@@ -410,15 +410,38 @@ fn on_connected(
 
     dsp.accumulator
         .update_device(Some(dev_id.clone()), Some(info.name.clone()));
+    // For LSL sessions, include the channel layout in the connect log so it
+    // appears in the device log and is easy to inspect visually.
+    let ch_summary = if kind.starts_with("lsl") {
+        let r = app.app_state();
+        let g = r.lock_or_recover();
+        let names = &g.status.channel_names;
+        let rate = g.status.eeg_sample_rate_hz;
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " | {} ch @ {} Hz | [{}]",
+                names.len(),
+                rate,
+                names.join(", ")
+            )
+        }
+    } else {
+        String::new()
+    };
     app_log!(
         app,
         "devices",
-        "[{kind}] connected: {} (id={dev_id})",
+        "[{kind}] connected: {}{ch_summary}",
         info.name
     );
     crate::device_scanner::device_log(
         "session",
-        &format!("[{kind}] Connected: {} (id={dev_id})", info.name),
+        &format!(
+            "[{kind}] Connected: {} (id={dev_id}){ch_summary}",
+            info.name
+        ),
     );
     // Auto-pair ONLY on first launch (no paired devices at all) so the user
     // can test immediately.  Otherwise, only update existing paired entries

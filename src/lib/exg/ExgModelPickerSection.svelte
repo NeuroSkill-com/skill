@@ -88,6 +88,7 @@ function familyToBackend(id: string): string {
   if (id === "sleeplm") return "sleeplm";
   if (id === "sensorlm") return "sensorlm";
   if (id === "opentslm") return "opentslm";
+  if (id.startsWith("steegformer-")) return "steegformer";
   return id;
 }
 
