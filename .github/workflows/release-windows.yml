@@ -275,7 +275,16 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          if (Get-Command protoc -ErrorAction SilentlyContinue) {
+          function Test-Protoc {
+            try {
+              $null = & protoc --version
+              return ($LASTEXITCODE -eq 0)
+            } catch {
+              return $false
+            }
+          }
+
+          if (Test-Protoc) {
             protoc --version
             exit 0
           }
@@ -288,7 +297,7 @@ jobs:
               Write-Host "[warn] choco protoc install attempt $i failed: $($_.Exception.Message)"
             }
 
-            if (Get-Command protoc -ErrorAction SilentlyContinue) {
+            if (Test-Protoc) {
               $installed = $true
               break
             }
@@ -309,9 +318,13 @@ jobs:
               throw "protoc fallback install failed: protoc.exe not found"
             }
             $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $env:PATH = "$bin;$env:PATH"
             Write-Host "[ok] Installed protoc via direct download"
           }
 
+          if (-not (Test-Protoc)) {
+            throw "protoc installation failed after Chocolatey + fallback"
+          }
           protoc --version
 
       - name: Build frontend
