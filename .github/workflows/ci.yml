@@ -36,6 +36,27 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  changelog-gate:
+    name: Changelog fragments gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Require changelog fragment for code changes
+        run: |
+          node scripts/check-changelog-fragments.js \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --require-on-code-changes
+
   # ── Rust backend ─────────────────────────────────────────────────────────────
   #
   # clippy is a strict superset of `cargo check` — it performs the same

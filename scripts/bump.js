@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
-import { closeSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { archiveEmptyRelease, compileChangelog } from "./compile-changelog.js";
+import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -459,6 +459,10 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function releaseFilePath(version) {
+  return `changes/releases/${version}.md`;
+}
+
 // ── CLI flags ────────────────────────────────────────────────────────────────
 
 function parseArgs() {
@@ -496,8 +500,20 @@ async function main() {
 
   const newVersion = versionArg ? validateVersion(versionArg) : bumpPatch(currentVersion);
 
-  if (dryRun) {
-  } else {
+  // ── Prevent accidental overwrite of an existing archived release ───────────
+
+  const existingReleasePath = releaseFilePath(newVersion);
+  if (existsSync(existingReleasePath)) {
+    throw new Error(`Bump aborted: ${existingReleasePath} already exists.`);
+  }
+
+  // ── Validate changelog fragments early (fast fail) ─────────────────────────
+
+  const validated = validateUnreleasedFragments();
+  if (validated.files.length === 0) {
+    throw new Error(
+      "Bump aborted: changes/unreleased is empty. Add at least one .md changelog fragment before running npm run bump.",
+    );
   }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
@@ -541,9 +557,19 @@ async function main() {
   const date = todayIsoDate();
   const result = compileChangelog(newVersion, date);
 
-  if (result.entryCount > 0) {
-  } else {
-    archiveEmptyRelease(newVersion, date);
+  if (result.entryCount === 0) {
+    throw new Error(
+      "Bump aborted: no changelog entries were compiled. Ensure changes/unreleased contains valid markdown fragments.",
+    );
+  }
+
+  console.log(`\n[bump] Compiled ${result.entryCount} changelog entr${result.entryCount === 1 ? "y" : "ies"} from ${result.consumedFiles.length} fragment${result.consumedFiles.length === 1 ? "" : "s"}:`);
+  for (const file of result.consumedFiles) {
+    console.log(`[bump]   - ${file}`);
+  }
+  console.log("[bump] Category counts:");
+  for (const [category, count] of Object.entries(result.categoryCounts)) {
+    console.log(`[bump]   - ${category}: ${count}`);
   }
   execSync("cargo generate-lockfile", { stdio: "inherit" });
 
@@ -552,6 +578,14 @@ async function main() {
   if (clean) {
     execSync("npm run clean:rust", { stdio: "inherit" });
   }
+
+  // ── create bump commit ──────────────────────────────────────────────────────
+
+  execSync(
+    "git add -A package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml Cargo.lock CHANGELOG.md changes/releases changes/unreleased",
+    { stdio: "inherit" },
+  );
+  execSync(`git commit --no-verify -m "${newVersion}"`, { stdio: "inherit" });
 }
 
 main().catch((_err) => {
