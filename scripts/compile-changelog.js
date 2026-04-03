@@ -109,9 +109,7 @@ function parseFragment(file, content) {
     const rawCategory = rawSection.slice(0, newlineIdx).trim();
     const category = CATEGORY_CANONICAL.get(rawCategory.toLowerCase());
     if (!category) {
-      errors.push(
-        `${file}: unknown category \`${rawCategory}\`. Allowed: ${CATEGORY_ORDER.join(", ")}`,
-      );
+      errors.push(`${file}: unknown category \`${rawCategory}\`. Allowed: ${CATEGORY_ORDER.join(", ")}`);
       continue;
     }
 

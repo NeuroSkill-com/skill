@@ -563,7 +563,9 @@ async function main() {
     );
   }
 
-  console.log(`\n[bump] Compiled ${result.entryCount} changelog entr${result.entryCount === 1 ? "y" : "ies"} from ${result.consumedFiles.length} fragment${result.consumedFiles.length === 1 ? "" : "s"}:`);
+  console.log(
+    `\n[bump] Compiled ${result.entryCount} changelog entr${result.entryCount === 1 ? "y" : "ies"} from ${result.consumedFiles.length} fragment${result.consumedFiles.length === 1 ? "" : "s"}:`,
+  );
   for (const file of result.consumedFiles) {
     console.log(`[bump]   - ${file}`);
   }

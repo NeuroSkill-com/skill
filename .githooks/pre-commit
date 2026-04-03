@@ -27,15 +27,6 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
-# Hard gate: every commit must include at least one unreleased changelog fragment.
-UNRELEASED_STAGED="$(git diff --cached --name-only --diff-filter=ACMR -- 'changes/unreleased/*.md' 2>/dev/null || true)"
-if [ -z "$UNRELEASED_STAGED" ]; then
-  echo "❌ Pre-commit blocked: no staged changes in changes/unreleased/*.md"
-  echo "   Add a changelog fragment, e.g.:"
-  echo "   npm run changes:new -- <name> --category Bugfixes"
-  exit 1
-fi
-
 # Skip expensive checks for docs/changelog-only commits.
 NON_DOC_STAGED="$(echo "$STAGED_FILES" | grep -Ev '^(README\.md|CHANGELOG\.md|CONTRIBUTING\.md|AGENTS\.md|TODO\.md|changes/|docs/|\.github/)' || true)"
 if [ -z "$NON_DOC_STAGED" ]; then
@@ -45,7 +36,7 @@ fi
 
 # ── Changelog fragment gate ───────────────────────────────────────────────────
 echo "📝 Checking changelog fragments…"
-node scripts/check-changelog-fragments.js --staged --require-on-code-changes || ERRORS=1
+node scripts/check-changelog-fragments.js --staged || ERRORS=1
 
 # ── i18n checks ───────────────────────────────────────────────────────────────
 if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/'; then

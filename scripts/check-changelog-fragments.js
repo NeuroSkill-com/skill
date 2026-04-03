@@ -70,9 +70,7 @@ function main() {
   const changedFragments = changed.filter((f) => /^changes\/unreleased\/.*\.md$/.test(f));
 
   if (opts.requireOnCodeChanges && nonDocChanged.length > 0 && changedFragments.length === 0) {
-    throw new Error(
-      "Missing changelog fragment: code changes detected but no changes/unreleased/*.md file changed.",
-    );
+    throw new Error("Missing changelog fragment: code changes detected but no changes/unreleased/*.md file changed.");
   }
 
   if (!existsSync("changes/unreleased")) {

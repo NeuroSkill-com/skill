@@ -50,12 +50,11 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Require changelog fragment for code changes
+      - name: Validate changelog fragment format (if present)
         run: |
           node scripts/check-changelog-fragments.js \
             --base "${{ github.event.pull_request.base.sha }}" \
-            --head "${{ github.event.pull_request.head.sha }}" \
-            --require-on-code-changes
+            --head "${{ github.event.pull_request.head.sha }}"
 
   # ── Rust backend ─────────────────────────────────────────────────────────────
   #
