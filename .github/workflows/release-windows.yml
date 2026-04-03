@@ -284,13 +284,15 @@ jobs:
           for ($i = 1; $i -le 3; $i++) {
             try {
               choco install protoc --no-progress -y
-              if ($LASTEXITCODE -eq 0) {
-                $installed = $true
-                break
-              }
             } catch {
               Write-Host "[warn] choco protoc install attempt $i failed: $($_.Exception.Message)"
             }
+
+            if (Get-Command protoc -ErrorAction SilentlyContinue) {
+              $installed = $true
+              break
+            }
+
             Start-Sleep -Seconds (5 * $i)
           }
 
