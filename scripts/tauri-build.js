@@ -220,6 +220,17 @@ if (isMingwTarget) {
     platformFlags = [...platformFlags, "--no-bundle"];
   }
 } else if (isWin) {
+  // ── Windows: ensure Git Unix tools (patch, etc.) are on PATH ───────────────
+  //
+  // llama-cpp-sys applies .patch files during its build script.  The `patch`
+  // utility ships with Git for Windows at Git\usr\bin\patch.exe but is not
+  // added to PATH by default.  Inject it here so Cargo child processes can
+  // find it without requiring a manual PATH change.
+  const gitUsrBin = "C:\\Program Files\\Git\\usr\\bin";
+  if (existsSync(gitUsrBin) && !(process.env.PATH || "").includes(gitUsrBin)) {
+    process.env.PATH = `${gitUsrBin};${process.env.PATH || ""}`;
+  }
+
   execSync("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\install-vulkan-sdk.ps1", {
     cwd: root,
     stdio: "inherit",
