@@ -8,21 +8,121 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.85] — 2026-04-03
+
+### Docs
+
+- **Add changelog fragment scaffold**: create an unreleased entry so `changes/unreleased` is no longer empty.
+
 ## [0.0.84] — 2026-04-03
+
+### Bugfixes
+
+- **Windows CI lockfile stability**: pinned `Cargo.lock` to prevent intermittent Windows CI breakage.
+
+### Docs
+
+- **Release archive correction**: rebuilt archived release notes to replace previously empty entries with history-derived notes.
 
 ## [0.0.83] — 2026-04-03
 
+### Build
+
+- **Prebuilt llama fallback in CI/release**: added prebuilt llama artifact usage with safe source-build fallback in CI and mac release flows.
+
+### Bugfixes
+
+- **iroh-remote reconnect fixes**: corrected reconnect routing and prevented unwanted BLE reconnect loops during iroh-remote session startup.
+
 ## [0.0.82] — 2026-04-02
+
+### Build
+
+- **Linux release packaging fix**: stopped requiring removed espeak-ng resource bundle in Linux release path.
+
+### CLI
+
+- **Changed-crates detection hardening**: fixed metadata parsing with safer fallback behavior for crate change detection.
 
 ## [0.0.81] — 2026-04-02
 
+### Features
+
+- **EXG/LLM model catalog expansion**: added NeuroRVQ integration and restored Bonsai model options with related inference controls.
+- **LSL and EXG UX updates**: added LSL idle-timeout configurability, virtual test source controls, and channel inspector/stream handling improvements.
+- **Inference/device settings growth**: expanded CPU/GPU preference and runtime tuning paths for llama-cpp-based inference.
+
+### Bugfixes
+
+- **Updater packaging fixes**: corrected ZIP compression behavior across Windows/desktop updater flows.
+- **Location + backend stability**: fixed location-enable hangs and improved Neutts backend init/lifetime reliability.
+- **Dependency/runtime fixes**: resolved llama-cpp source/version mismatches and related runtime integration issues.
+
+### Dependencies
+
+- **Dependency alignment**: moved to newer llama-cpp stack revisions and fixed metadata/licensing fields required by dependency checks.
+
+### Docs
+
+- **Backfilled release notes**: reconstructed from Git history because archived fragment entries were missing for this version.
+
 ## [0.0.80] — 2026-03-30
+
+### Build
+
+- **Release metadata update**: version/tag release step (`v0.0.80`) with no additional feature-level deltas beyond changes already landed before tagging.
+
+### Docs
+
+- **Backfilled release notes**: reconstructed from Git history because archived fragment entries were missing for this version.
 
 ## [0.0.79] — 2026-03-30
 
+### Test
+
+- **Playwright E2E expansion**: added broad E2E coverage for static pages plus `/chat`, `/settings`, `/search`, `/compare`, calibration/labels/API flows.
+
+### Build
+
+- **CI release workflow cleanup**: removed stale espeak C build steps and fixed invalid empty `env:` blocks in release-linux workflow.
+
+### Docs
+
+- **Backfilled release notes**: reconstructed from Git history because archived fragment entries were missing for this version.
+
 ## [0.0.78] — 2026-03-30
 
+### Features
+
+- **Location permission + gating flow**: added `location_enabled` setting with permission handling and LLM tool gating.
+- **Health diagnostics**: introduced deeper `npm run health`/session integrity inspection support.
+
+### Build
+
+- **TTS/espeak build simplification**: removed legacy espeak C build infrastructure and aligned build scripts with newer Neutts/Kittentts flow.
+
+### Bugfixes
+
+- **Stability pass**: resolved clippy + svelte-check issues and fixed dependabot/CI breakages impacting release readiness.
+
+### Docs
+
+- **Backfilled release notes**: reconstructed from Git history because archived fragment entries were missing for this version.
+
 ## [0.0.77] — 2026-03-30
+
+### Features
+
+- **History map pipeline**: added unified history aggregation for GPS/HNSW/embeddings and PMTiles-based map rendering in history views.
+- **GPS support path hardening**: enabled GPS sampling pipeline with feature gating and improved location tooling docs/CLI wiring.
+
+### Bugfixes
+
+- **History reliability fixes**: unified session listing/day-boundary behavior and fixed stale cache/deserialization issues causing empty or inconsistent history views.
+
+### Docs
+
+- **Backfilled release notes**: reconstructed from Git history because archived fragment entries were missing for this version.
 
 ## [0.0.76] — 2026-03-30
 ### Features

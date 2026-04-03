@@ -19,6 +19,13 @@ fi
 if [ "$FULL_MODE" = "1" ]; then
   echo "🔎 Pre-push: full mode enabled (PREPUSH_FULL=1)"
 
+  echo "🔎 Pre-push: changelog fragments"
+  if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+    node scripts/check-changelog-fragments.js --base "HEAD~1" --head HEAD --require-on-code-changes
+  else
+    node scripts/check-changelog-fragments.js --quiet
+  fi
+
   echo "🔎 Pre-push: frontend checks"
   npm run -s check
   npm test
@@ -58,6 +65,9 @@ fi
 
 echo "🔎 Pre-push: scoped mode on branch '$CURRENT_BRANCH'"
 echo "Changed files baseline: $BASE_REF"
+
+echo "🔎 Pre-push: changelog fragments"
+node scripts/check-changelog-fragments.js --base "$BASE_REF" --head HEAD --require-on-code-changes
 
 FRONTEND_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)' || true)"
 if [ -n "$FRONTEND_CHANGED" ]; then

@@ -4,15 +4,8 @@
  *
  * Usage:
  *   node scripts/compile-changelog.js <version> [date]   # compile unreleased + rebuild
- *   node scripts/compile-changelog.js --rebuild           # rebuild from archived releases only
- *
- * - Reads all .md files from changes/unreleased/
- * - Groups entries by category (### heading)
- * - Writes changes/releases/<version>.md
- * - Deletes consumed fragment files
- * - Rebuilds CHANGELOG.md from all archived releases
- *
- * Can also be imported and called from bump.js.
+ *   node scripts/compile-changelog.js --rebuild          # rebuild from archived releases only
+ *   node scripts/compile-changelog.js --check            # validate unreleased fragments only
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,7 +26,7 @@ Past releases are archived in [\`changes/releases/\`](changes/releases/).
 `;
 
 // Canonical category order
-const CATEGORY_ORDER = [
+export const CATEGORY_ORDER = [
   "Features",
   "Performance",
   "Bugfixes",
@@ -47,6 +40,8 @@ const CATEGORY_ORDER = [
   "Docs",
   "Dependencies",
 ];
+
+const CATEGORY_CANONICAL = new Map(CATEGORY_ORDER.map((c) => [c.toLowerCase(), c]));
 
 function categoryRank(name) {
   const idx = CATEGORY_ORDER.findIndex((c) => c.toLowerCase() === name.toLowerCase());
@@ -87,15 +82,71 @@ export function rebuildChangelog() {
   return releases.length;
 }
 
+function parseFragment(file, content) {
+  const errors = [];
+  const trimmed = content.trim();
+  if (!trimmed) {
+    errors.push(`${file}: file is empty`);
+    return { errors, sections: [], bulletCount: 0 };
+  }
+
+  const rawSections = trimmed.split(/^### /m).filter(Boolean);
+  if (rawSections.length === 0) {
+    errors.push(`${file}: missing category heading(s). Use \`### <Category>\`.`);
+    return { errors, sections: [], bulletCount: 0 };
+  }
+
+  const sections = [];
+  let bulletCount = 0;
+
+  for (const rawSection of rawSections) {
+    const newlineIdx = rawSection.indexOf("\n");
+    if (newlineIdx === -1) {
+      errors.push(`${file}: section has heading but no body: \`${rawSection.trim()}\``);
+      continue;
+    }
+
+    const rawCategory = rawSection.slice(0, newlineIdx).trim();
+    const category = CATEGORY_CANONICAL.get(rawCategory.toLowerCase());
+    if (!category) {
+      errors.push(
+        `${file}: unknown category \`${rawCategory}\`. Allowed: ${CATEGORY_ORDER.join(", ")}`,
+      );
+      continue;
+    }
+
+    const body = rawSection.slice(newlineIdx + 1).trim();
+    if (!body) {
+      errors.push(`${file}: category \`${category}\` is empty`);
+      continue;
+    }
+
+    const bullets = body.split("\n").filter((l) => l.trimStart().startsWith("- "));
+    if (bullets.length === 0) {
+      errors.push(`${file}: category \`${category}\` must contain at least one \`- \` bullet`);
+      continue;
+    }
+
+    bulletCount += bullets.length;
+    sections.push({ category, body, bulletCount: bullets.length });
+  }
+
+  if (sections.length === 0 || bulletCount === 0) {
+    errors.push(`${file}: no valid changelog bullet entries found`);
+  }
+
+  return { errors, sections, bulletCount };
+}
+
 /**
- * Compile unreleased fragments, archive them, and rebuild CHANGELOG.md.
- * @param {string} version  — semver string, e.g. "0.0.38"
- * @param {string} date     — ISO date string, e.g. "2026-03-15"
- * @returns {{ entryCount: number, categories: string[] }}
+ * Validate all unreleased changelog fragments.
+ *
+ * @returns {{ files: string[], entryCount: number, categoryCounts: Record<string, number> }}
+ * @throws {Error} if any fragment is invalid.
  */
-export function compileChangelog(version, date) {
+export function validateUnreleasedFragments() {
   if (!existsSync(UNRELEASED_DIR)) {
-    return { entryCount: 0, categories: [] };
+    return { files: [], entryCount: 0, categoryCounts: {} };
   }
 
   const files = readdirSync(UNRELEASED_DIR)
@@ -103,32 +154,102 @@ export function compileChangelog(version, date) {
     .sort();
 
   if (files.length === 0) {
-    return { entryCount: 0, categories: [] };
+    return { files: [], entryCount: 0, categoryCounts: {} };
+  }
+
+  const categoryCounts = new Map();
+  const errors = [];
+  let entryCount = 0;
+
+  for (const file of files) {
+    const content = readFileSync(join(UNRELEASED_DIR, file), "utf8");
+    const parsed = parseFragment(file, content);
+    if (parsed.errors.length > 0) {
+      errors.push(...parsed.errors);
+      continue;
+    }
+
+    entryCount += parsed.bulletCount;
+    for (const section of parsed.sections) {
+      categoryCounts.set(section.category, (categoryCounts.get(section.category) || 0) + section.bulletCount);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Invalid changelog fragment(s):\n- ${errors.join("\n- ")}`);
+  }
+
+  return {
+    files,
+    entryCount,
+    categoryCounts: Object.fromEntries(categoryCounts.entries()),
+  };
+}
+
+/**
+ * Normalize `### Category` heading casing in changes/unreleased/*.md fragments.
+ *
+ * Example fixed heading:
+ *   ### bugfixes  ->  ### Bugfixes
+ *
+ * Unknown categories are left untouched (validation will still fail for them).
+ *
+ * @returns {{ changedFiles: string[] }}
+ */
+export function normalizeUnreleasedFragmentCategoryCasing() {
+  if (!existsSync(UNRELEASED_DIR)) {
+    return { changedFiles: [] };
+  }
+
+  const files = readdirSync(UNRELEASED_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+
+  const changedFiles = [];
+
+  for (const file of files) {
+    const path = join(UNRELEASED_DIR, file);
+    const original = readFileSync(path, "utf8");
+    const normalized = original.replace(/^###\s+(.+)$/gm, (full, heading) => {
+      const canonical = CATEGORY_CANONICAL.get(String(heading).trim().toLowerCase());
+      if (!canonical) return full;
+      return `### ${canonical}`;
+    });
+
+    if (normalized !== original) {
+      writeFileSync(path, normalized, "utf8");
+      changedFiles.push(file);
+    }
+  }
+
+  return { changedFiles };
+}
+
+/**
+ * Compile unreleased fragments, archive them, and rebuild CHANGELOG.md.
+ * @param {string} version  — semver string, e.g. "0.0.38"
+ * @param {string} date     — ISO date string, e.g. "2026-03-15"
+ * @returns {{ entryCount: number, categories: string[], consumedFiles: string[], categoryCounts: Record<string, number> }}
+ */
+export function compileChangelog(version, date) {
+  const validation = validateUnreleasedFragments();
+  const files = validation.files;
+
+  if (files.length === 0) {
+    return { entryCount: 0, categories: [], consumedFiles: [], categoryCounts: {} };
   }
 
   // Parse fragments and group by category
   const categories = new Map();
-  let entryCount = 0;
 
   for (const file of files) {
     const content = readFileSync(join(UNRELEASED_DIR, file), "utf8").trim();
-    const sections = content.split(/^### /m).filter(Boolean);
-
-    for (const section of sections) {
-      const newlineIdx = section.indexOf("\n");
-      if (newlineIdx === -1) continue;
-
-      const category = section.slice(0, newlineIdx).trim();
-      const body = section.slice(newlineIdx).trim();
-      if (!body) continue;
-
-      if (!categories.has(category)) {
-        categories.set(category, []);
+    const parsed = parseFragment(file, content);
+    for (const section of parsed.sections) {
+      if (!categories.has(section.category)) {
+        categories.set(section.category, []);
       }
-      categories.get(category).push(body);
-
-      const bullets = body.split("\n").filter((l) => l.startsWith("- "));
-      entryCount += bullets.length;
+      categories.get(section.category).push(section.body);
     }
   }
 
@@ -158,27 +279,34 @@ export function compileChangelog(version, date) {
   rebuildChangelog();
 
   return {
-    entryCount,
+    entryCount: validation.entryCount,
     categories: sortedCategories.map(([c]) => c),
+    consumedFiles: files,
+    categoryCounts: validation.categoryCounts,
   };
-}
-
-/**
- * Archive a release with no fragment entries and rebuild CHANGELOG.md.
- */
-export function archiveEmptyRelease(version, date) {
-  mkdirSync(RELEASES_DIR, { recursive: true });
-  const releaseSection = `## [${version}] — ${date}\n`;
-  writeFileSync(join(RELEASES_DIR, `${version}.md`), releaseSection, "utf8");
-  rebuildChangelog();
 }
 
 // CLI mode
 const scriptName = "compile-changelog.js";
 if (process.argv[1]?.endsWith(scriptName)) {
   if (process.argv[2] === "--rebuild") {
-    const _count = rebuildChangelog();
+    rebuildChangelog();
     process.exit(0);
+  }
+
+  if (process.argv[2] === "--check") {
+    try {
+      const result = validateUnreleasedFragments();
+      if (result.files.length === 0) {
+        console.log("[changelog] No unreleased fragments found.");
+      } else {
+        console.log(`[changelog] OK: ${result.entryCount} entries across ${result.files.length} fragment(s).`);
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
   }
 
   const version = process.argv[2];
@@ -188,9 +316,17 @@ if (process.argv[1]?.endsWith(scriptName)) {
     process.exit(1);
   }
 
-  const result = compileChangelog(version, date);
-
-  if (result.entryCount === 0) {
-  } else {
+  try {
+    const result = compileChangelog(version, date);
+    if (result.entryCount === 0) {
+      console.log("[changelog] No unreleased fragments to compile.");
+    } else {
+      console.log(
+        `[changelog] Compiled ${result.entryCount} entries from ${result.consumedFiles.length} fragment(s): ${result.consumedFiles.join(", ")}`,
+      );
+    }
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
   }
 }

@@ -11,6 +11,9 @@ Create a `.md` file in `changes/unreleased/`:
 changes/unreleased/feat-screenshot-ocr.md
 changes/unreleased/fix-copy-paste-macos.md
 changes/unreleased/refactor-extract-skill-eeg.md
+
+# or use the scaffold command
+npm run changes:new -- fix-copy-paste-macos --category Bugfixes
 ```
 
 ### Fragment format
@@ -30,6 +33,15 @@ Each file contains one or more `### Category` sections:
 ### Valid categories (in display order)
 
 `Features` · `Performance` · `Bugfixes` · `Refactor` · `Build` · `CLI` · `UI` · `LLM` · `Server` · `i18n` · `Docs` · `Dependencies`
+
+Validation rules (enforced by hooks/CI/bump):
+- fragment must contain at least one `### Category`
+- category must be one of the valid categories above
+- each category section must contain at least one `- ` bullet
+
+Helper commands:
+- `npm run check:changelog` — validate unreleased fragments
+- `npm run check:changelog:fix` — auto-normalize category heading casing (e.g. `### bugfixes` → `### Bugfixes`)
 
 ## Compiling a release
 

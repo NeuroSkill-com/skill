@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.0.84",
+  "version": "0.0.85",
   "description": "",
   "type": "module",
   "scripts": {
@@ -50,6 +50,9 @@
     "sync:llm:catalog:check": "node scripts/sync-llm-catalog.js --check",
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
     "compile:changelog": "node scripts/compile-changelog.js",
+    "check:changelog": "node scripts/check-changelog-fragments.js",
+    "check:changelog:fix": "node scripts/check-changelog-fragments.js --fix",
+    "changes:new": "node scripts/new-changelog-fragment.js",
     "screenshots": "node scripts/screenshots/take-screenshots.mjs",
     "gifs": "node scripts/screenshots/take-gifs.mjs",
     "bump": "node scripts/bump.js",
