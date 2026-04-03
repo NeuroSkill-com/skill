@@ -163,6 +163,16 @@ export function compileChangelog(version, date) {
   };
 }
 
+/**
+ * Archive a release with no fragment entries and rebuild CHANGELOG.md.
+ */
+export function archiveEmptyRelease(version, date) {
+  mkdirSync(RELEASES_DIR, { recursive: true });
+  const releaseSection = `## [${version}] — ${date}\n`;
+  writeFileSync(join(RELEASES_DIR, `${version}.md`), releaseSection, "utf8");
+  rebuildChangelog();
+}
+
 // CLI mode
 const scriptName = "compile-changelog.js";
 if (process.argv[1]?.endsWith(scriptName)) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
 import { closeSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { compileChangelog } from "./compile-changelog.js";
+import { archiveEmptyRelease, compileChangelog } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -459,19 +459,6 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function bumpChangelogUnreleased(changelogPath, version, date) {
-  const changelog = readText(changelogPath);
-  const unreleasedHeader = /^## \[Unreleased\]\s*$/m;
-
-  if (!unreleasedHeader.test(changelog)) {
-    throw new Error(`Could not find "## [Unreleased]" in ${changelogPath}`);
-  }
-
-  const replacement = `## [Unreleased]\n\n## [${version}] — ${date}`;
-  const updated = changelog.replace(unreleasedHeader, replacement);
-  writeText(changelogPath, updated);
-}
-
 // ── CLI flags ────────────────────────────────────────────────────────────────
 
 function parseArgs() {
@@ -556,7 +543,7 @@ async function main() {
 
   if (result.entryCount > 0) {
   } else {
-    bumpChangelogUnreleased("CHANGELOG.md", newVersion, date);
+    archiveEmptyRelease(newVersion, date);
   }
   execSync("cargo generate-lockfile", { stdio: "inherit" });
 
