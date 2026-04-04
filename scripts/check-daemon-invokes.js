@@ -165,6 +165,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "create_auth_token",
   "revoke_auth_token",
   "delete_auth_token",
+  "refresh_default_token",
 
   // bulk-migrated via daemonInvoke proxy
   "abort_llm_stream",

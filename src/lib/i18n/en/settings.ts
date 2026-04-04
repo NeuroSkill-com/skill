@@ -454,6 +454,10 @@ const settings: Record<string, string> = {
   "tokens.copyWarning": "Copy this token now — it won't be shown again.",
   "tokens.copied": "Copied!",
   "tokens.empty": "No API tokens yet. Create one to authenticate external apps.",
+  "tokens.defaultToken": "Default Token",
+  "tokens.defaultTokenDesc":
+    "Built-in admin token used by the app. Cannot be deleted. Refresh to generate a new one — the app will pick it up automatically.",
+  "tokens.refresh": "Refresh",
   "settingsTabs.lsl": "LSL",
 
   // ── LSL tab ──────────────────────────────────────────────────────────────

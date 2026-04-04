@@ -95,6 +95,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/tokens", get(list_tokens).post(create_token))
         .route("/auth/tokens/revoke", axum::routing::post(revoke_token))
         .route("/auth/tokens/delete", axum::routing::post(delete_token))
+        .route(
+            "/auth/default-token/refresh",
+            axum::routing::post(refresh_default_token),
+        )
         .route("/events", get(ws_events))
         .route("/events/push", axum::routing::post(push_event))
         .merge(routes::labels::router())
@@ -534,11 +538,44 @@ async fn revoke_token(State(state): State<AppState>, Json(req): Json<TokenIdRequ
 }
 
 async fn delete_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
+    if req.id == "default" {
+        return Json(
+            serde_json::json!({ "ok": false, "error": "cannot delete the default token — use refresh instead" }),
+        );
+    }
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let mut store = state.token_store.lock().unwrap();
     let ok = store.delete(&req.id);
     let _ = store.save(&skill_dir);
     Json(serde_json::json!({ "ok": ok }))
+}
+
+async fn refresh_default_token(State(state): State<AppState>) -> Json<serde_json::Value> {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    let new_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+
+    match token_path() {
+        Ok(path) => {
+            if let Err(e) = std::fs::write(&path, format!("{new_token}\n")) {
+                return Json(serde_json::json!({ "ok": false, "error": format!("write error: {e}") }));
+            }
+            #[cfg(unix)]
+            {
+                let _ = tighten_file_permissions(&path);
+            }
+        }
+        Err(e) => {
+            return Json(serde_json::json!({ "ok": false, "error": format!("path error: {e}") }));
+        }
+    }
+
+    // Return new token so caller can update immediately.
+    // Note: the daemon's in-memory Arc<String> is not updated —
+    // the new token takes full effect on next daemon restart.
+    // But the auth middleware also checks the file, so it works.
+    Json(serde_json::json!({ "ok": true, "token": new_token }))
 }
 
 async fn push_event(State(state): State<AppState>, Json(envelope): Json<EventEnvelope>) -> Json<serde_json::Value> {
@@ -1025,9 +1062,18 @@ fn is_authorized(headers: &HeaderMap, request: &axum::extract::Request, state: &
         return false;
     };
 
-    // Check legacy single token first (fast path)
+    // Check in-memory default token first (fast path)
     if token == *state.auth_token {
         return true;
+    }
+
+    // Check on-disk default token (handles refresh without restart)
+    if let Ok(path) = token_path() {
+        if let Ok(file_token) = std::fs::read_to_string(path) {
+            if token == file_token.trim() {
+                return true;
+            }
+        }
     }
 
     // Check multi-token store

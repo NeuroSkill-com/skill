@@ -585,6 +585,9 @@ const settings: Record<string, string> = {
   "tokens.copyWarning": "Copy this token now.",
   "tokens.copied": "Copied!",
   "tokens.empty": "No API tokens yet.",
+  "tokens.defaultToken": "Default Token",
+  "tokens.defaultTokenDesc": "Built-in admin token used by the app. Cannot be deleted.",
+  "tokens.refresh": "Refresh",
 };
 
 export default settings;

@@ -176,6 +176,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   create_auth_token: [P, "/v1/auth/tokens"],
   revoke_auth_token: [P, "/v1/auth/tokens/revoke"],
   delete_auth_token: [P, "/v1/auth/tokens/delete"],
+  refresh_default_token: [P, "/v1/auth/default-token/refresh"],
 
   // Misc
   get_gpu_stats: [G, "/v1/settings/gpu-stats"],

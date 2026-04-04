@@ -42,6 +42,9 @@ const EXPIRY_OPTIONS: { key: Expiry; label: string }[] = [
 
 let tokens = $state<ApiToken[]>([]);
 let loading = $state(true);
+let defaultToken = $state<string>("");
+let defaultTokenRevealed = $state(false);
+let refreshing = $state(false);
 let creating = $state(false);
 let newName = $state("");
 let newAcl = $state<Acl>("admin");
@@ -58,6 +61,24 @@ async function refresh() {
     tokens = [];
   }
   loading = false;
+}
+
+async function refreshDefaultToken() {
+  refreshing = true;
+  try {
+    const r = await daemonInvoke<{ ok: boolean; token?: string }>("refresh_default_token");
+    if (r.ok && r.token) {
+      defaultToken = r.token;
+      defaultTokenRevealed = true;
+      // Invalidate the cached bootstrap so Tauri picks up the new token
+      const { invalidateDaemonBootstrap } = await import("$lib/daemon/http");
+      invalidateDaemonBootstrap();
+    }
+  } catch (e) {
+    console.error("refresh default token error:", e);
+  } finally {
+    refreshing = false;
+  }
 }
 
 async function createToken() {
@@ -85,6 +106,7 @@ async function revokeToken(id: string) {
 }
 
 async function deleteToken(id: string) {
+  if (id === "default") return; // safety: never delete default
   await daemonInvoke("delete_auth_token", { id });
   justCreated = null;
   await refresh();
@@ -127,6 +149,38 @@ onMount(refresh);
     <h2 class="text-[0.72rem] font-bold tracking-tight text-foreground">{t("tokens.title")}</h2>
     <p class="text-[0.58rem] text-muted-foreground leading-relaxed">{t("tokens.desc")}</p>
   </div>
+
+  <!-- Default token -->
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-2 py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-[0.62rem] font-semibold text-foreground">{t("tokens.defaultToken")}</span>
+          <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">admin</span>
+          <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">{t("tokens.expiryNever")}</span>
+        </div>
+        <Button variant="outline" size="sm" class="h-6 text-[0.52rem] px-2" disabled={refreshing}
+          onclick={refreshDefaultToken}>
+          {refreshing ? "…" : t("tokens.refresh")}
+        </Button>
+      </div>
+      <p class="text-[0.5rem] text-muted-foreground">{t("tokens.defaultTokenDesc")}</p>
+      {#if defaultTokenRevealed && defaultToken}
+        <div class="flex flex-col gap-1">
+          <span class="text-[0.5rem] font-semibold text-amber-600 dark:text-amber-400">{t("tokens.copyWarning")}</span>
+          <div class="flex items-center gap-2">
+            <code class="flex-1 text-[0.58rem] font-mono bg-black/5 dark:bg-white/5 px-2 py-1 rounded select-all break-all">{defaultToken}</code>
+            <Button variant="outline" size="sm" class="h-6 text-[0.52rem] shrink-0"
+              onclick={() => copyToken(defaultToken)}>
+              {copied ? t("tokens.copied") : "Copy"}
+            </Button>
+          </div>
+        </div>
+      {/if}
+    </CardContent>
+  </Card>
+
+  <Separator class="bg-border dark:bg-white/[0.06]" />
 
   <!-- Create form -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
@@ -227,16 +281,18 @@ onMount(refresh);
               <code class="text-[0.5rem] font-mono text-muted-foreground/40">{tok.token}</code>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              {#if !tok.revoked}
+              {#if !tok.revoked && tok.id !== "default"}
                 <Button variant="ghost" size="sm" class="h-6 text-[0.52rem] px-2 text-amber-600 hover:text-amber-700"
                   onclick={() => revokeToken(tok.id)}>
                   {t("tokens.revoke")}
                 </Button>
               {/if}
-              <Button variant="ghost" size="sm" class="h-6 text-[0.52rem] px-2 text-red-600 hover:text-red-700"
-                onclick={() => deleteToken(tok.id)}>
-                {t("tokens.delete")}
-              </Button>
+              {#if tok.id !== "default"}
+                <Button variant="ghost" size="sm" class="h-6 text-[0.52rem] px-2 text-red-600 hover:text-red-700"
+                  onclick={() => deleteToken(tok.id)}>
+                  {t("tokens.delete")}
+                </Button>
+              {/if}
             </div>
           </CardContent>
         </Card>
