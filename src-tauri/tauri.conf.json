@@ -46,6 +46,7 @@
       "entitlements": "./entitlements.plist",
       "infoPlist": "./Info.plist"
     },
+
     "resources": {
       "resources/neutts-samples": "neutts-samples"
     },

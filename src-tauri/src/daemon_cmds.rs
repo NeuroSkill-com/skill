@@ -118,13 +118,33 @@ pub(crate) fn ensure_daemon_running() {
 
     // Try to spawn the daemon binary.
     let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
-        // In production, the daemon binary is next to the app binary.
         if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
+                // Production: sidecar next to app binary (Tauri bundles it)
                 let candidate = dir.join("skill-daemon");
                 if candidate.exists() {
                     return candidate.display().to_string();
                 }
+                // macOS .app bundle: inside Contents/MacOS/
+                let mac_candidate = dir.join("../MacOS/skill-daemon");
+                if mac_candidate.exists() {
+                    return mac_candidate
+                        .canonicalize()
+                        .unwrap_or(mac_candidate)
+                        .display()
+                        .to_string();
+                }
+            }
+        }
+        // Dev: look in target dir
+        let target_candidates = [
+            "src-tauri/target/debug/skill-daemon",
+            "src-tauri/target/aarch64-apple-darwin/debug/skill-daemon",
+            "target/debug/skill-daemon",
+        ];
+        for c in &target_candidates {
+            if std::path::Path::new(c).exists() {
+                return c.to_string();
             }
         }
         "skill-daemon".to_string()
@@ -829,6 +849,23 @@ fn fetch_json_with_auth<T: serde::de::DeserializeOwned>(
         .body_mut()
         .read_json::<T>()
         .map_err(|err| err.to_string())
+}
+
+/// Forward an EEG sample batch to the daemon for WS broadcast.
+pub(crate) fn push_eeg_samples_to_daemon(electrode: usize, samples: &[f64], timestamp: f64) {
+    push_event_to_daemon(
+        "EegSample",
+        &serde_json::json!({
+            "electrode": electrode,
+            "samples": samples,
+            "timestamp": timestamp,
+        }),
+    );
+}
+
+/// Forward band power snapshot to the daemon for WS broadcast.
+pub(crate) fn push_bands_to_daemon(bands: &impl serde::Serialize) {
+    push_event_to_daemon("EegBands", bands);
 }
 
 pub(crate) fn push_event_to_daemon(event_type: &str, payload: &impl serde::Serialize) {

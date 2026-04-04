@@ -37,7 +37,7 @@ pub struct UpdateLabelRequest {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/labels", get(list_labels).post(create_label))
-        .route("/labels/:id", put(update_label).delete(delete_label))
+        .route("/labels/{id}", put(update_label).delete(delete_label))
 }
 
 async fn list_labels(State(state): State<AppState>) -> Json<Vec<LabelEntry>> {

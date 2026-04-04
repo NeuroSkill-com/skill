@@ -739,7 +739,15 @@ function assembleMacOsApp() {
   return true;
 }
 
-// ── Daemon: build + spawn for dev mode ────────────────────────────────────────
+// ── Daemon: build for release / build+spawn for dev ────────────────────────────
+if (subcommand === "build") {
+  console.log("\n🔧 Building daemon sidecar for release…");
+  try {
+    execSync("bash scripts/prepare-daemon-sidecar.sh", { cwd: root, stdio: "inherit", env: process.env });
+  } catch (e) {
+    console.warn(`⚠ Daemon sidecar build failed: ${e.message}`);
+  }
+}
 let daemonChild = null;
 if (subcommand === "dev") {
   console.log("\n🔧 Building skill-daemon…");
@@ -748,8 +756,8 @@ if (subcommand === "dev") {
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
     execSync(["cargo", ...daemonBuildArgs].join(" "), { cwd: root, stdio: "inherit", env: process.env });
 
-    // Find the built binary
-    const targetDir = resolve(root, "target");
+    // Find the built binary (target-dir = src-tauri/target per .cargo/config.toml)
+    const targetDir = resolve(root, "src-tauri", "target");
     const triple = explicitTarget || "";
     const candidates = [
       resolve(targetDir, triple, "debug", "skill-daemon"),
