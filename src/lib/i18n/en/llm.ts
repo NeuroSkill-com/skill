@@ -258,6 +258,18 @@ const llm: Record<string, string> = {
   "llm.inference.attnRotDesc":
     "Hadamard rotation applied to Q/K/V tensors before KV-cache write (llama.cpp PR #21038). Significantly improves quality of quantized KV caches at near-zero cost. Keep enabled unless you hit model compatibility issues.",
 
+  "llm.inference.prefill": "Prefill batch size",
+  "llm.inference.prefillDesc":
+    "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 2048).",
+  "llm.inference.nBatch": "n_batch (prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
+  "llm.inference.flashAttn": "Flash attention",
+  "llm.inference.flashAttnDesc":
+    "Use flash attention for faster, more memory-efficient self-attention. Supported on Metal, CUDA, and Vulkan backends. Disable only if you experience compatibility issues.",
+  "llm.inference.offloadKqv": "Offload KQV to GPU",
+  "llm.inference.offloadKqvDesc":
+    "Offload K/Q/V tensor operations to the GPU even when not all transformer layers are GPU-offloaded. Recommended for hybrid CPU+GPU setups.",
+
   "chat.status.running": "Running",
   "chat.status.loading": "Loading model…",
   "chat.status.stopped": "Server stopped",

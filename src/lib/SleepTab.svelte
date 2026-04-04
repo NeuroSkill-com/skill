@@ -6,9 +6,9 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Sleep tab — configure sleeping hours with presets. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
 interface SleepConfig {
@@ -95,7 +95,7 @@ function timeToAngle(hhmm: string): number {
 async function save() {
   saving = true;
   try {
-    await invoke("set_sleep_config", { config });
+    await daemonInvoke("set_sleep_config", { config });
   } catch (e) {}
   saving = false;
 }
@@ -117,7 +117,7 @@ function setWakeTime(val: string) {
 
 onMount(async () => {
   try {
-    config = await invoke<SleepConfig>("get_sleep_config");
+    config = await daemonInvoke<SleepConfig>("get_sleep_config");
   } catch (e) {}
 });
 

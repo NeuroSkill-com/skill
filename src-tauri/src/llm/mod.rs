@@ -131,6 +131,7 @@ use tauri::Emitter as _;
 
 /// Wrapper that implements `LlmEventEmitter` for `tauri::AppHandle`.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct TauriEmitter(pub tauri::AppHandle);
 
 impl skill_llm::LlmEventEmitter for TauriEmitter {

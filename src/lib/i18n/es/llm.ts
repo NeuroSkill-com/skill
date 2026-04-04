@@ -270,7 +270,19 @@ const llm: Record<string, string> = {
   "llm.inference.kvCacheV": "Caché V",
   "llm.inference.attnRot": "Rotación de atención TurboQuant",
   "llm.inference.attnRotDesc":
-    "Rotación de Hadamard aplicada a los tensores Q/K/V antes de escribir en el caché KV (llama.cpp PR #21038). Mejora significativamente la calidad de los cachés KV cuantizados con costo casi nulo. Mantener habilitado salvo problemas de compatibilidad con el modelo.",
+    "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. a menos que haya problemas de compatibilidad con el modelo.",
+
+  "llm.inference.prefill": "Tamaño de lote de prefill",
+  "llm.inference.prefillDesc":
+    "Controla cuántos tokens se procesan por llamada de decodificación durante la ingesta del prompt.",
+  "llm.inference.nBatch": "n_batch (prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
+  "llm.inference.flashAttn": "Flash attention",
+  "llm.inference.flashAttnDesc":
+    "Usar flash attention para self-attention más rápida y eficiente en memoria. Compatible con Metal, CUDA y Vulkan.",
+  "llm.inference.offloadKqv": "Descargar KQV a GPU",
+  "llm.inference.offloadKqvDesc":
+    "Descargar operaciones de tensores K/Q/V a la GPU incluso cuando no todas las capas están en GPU.",
 
   "chat.status.running": "Correr",
   "chat.status.loading": "Cargando modelo…",

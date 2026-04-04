@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtDateTimeLocale, fmtGB } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -35,29 +35,29 @@ const totalDownloadsSizeGb = $derived.by(() =>
 
 async function load() {
   try {
-    items = await invoke<DownloadItem[]>("get_llm_downloads");
+    items = await daemonInvoke<DownloadItem[]>("get_llm_downloads");
   } finally {
     loading = false;
   }
 }
 
 async function cancelItem(filename: string) {
-  await invoke("cancel_llm_download", { filename });
+  await daemonInvoke("cancel_llm_download", { filename });
   await load();
 }
 
 async function pauseItem(filename: string) {
-  await invoke("pause_llm_download", { filename });
+  await daemonInvoke("pause_llm_download", { filename });
   await load();
 }
 
 async function resumeItem(filename: string) {
-  await invoke("resume_llm_download", { filename });
+  await daemonInvoke("resume_llm_download", { filename });
   await load();
 }
 
 async function deleteItem(filename: string) {
-  await invoke("delete_llm_model", { filename });
+  await daemonInvoke("delete_llm_model", { filename });
   await load();
 }
 

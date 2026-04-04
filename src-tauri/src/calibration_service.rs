@@ -2,9 +2,8 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Shared calibration profile CRUD operations.
 //!
-//! Both the Tauri IPC commands (`window_cmds`) and the WebSocket/HTTP API
-//! (`ws_commands`) delegate to the functions in this module so the state
-//! mutation logic is defined exactly once.
+//! Both the Tauri IPC commands and daemon-facing adapters delegate to the
+//! functions in this module so mutation logic is defined exactly once.
 
 use tauri::AppHandle;
 
@@ -64,22 +63,4 @@ pub(crate) fn delete_profile(app: &AppHandle, id: &str) -> Result<(), String> {
     drop(s);
     save_settings(app);
     Ok(())
-}
-
-/// List all calibration profiles.
-pub(crate) fn list_profiles(app: &AppHandle) -> Vec<CalibrationProfile> {
-    let st = app.app_state();
-    let guard = st.lock_or_recover();
-    guard.calibration_profiles.clone()
-}
-
-/// Get a single calibration profile by ID.
-pub(crate) fn get_profile(app: &AppHandle, id: &str) -> Option<CalibrationProfile> {
-    let st = app.app_state();
-    let guard = st.lock_or_recover();
-    guard
-        .calibration_profiles
-        .iter()
-        .find(|p| p.id == id)
-        .cloned()
 }

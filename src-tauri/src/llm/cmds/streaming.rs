@@ -6,7 +6,6 @@ use std::sync::Mutex;
 use tauri::AppHandle;
 
 use crate::AppState;
-use crate::MutexExt;
 
 // ── Chat chunk types ──────────────────────────────────────────────────────────
 
@@ -21,6 +20,7 @@ use crate::MutexExt;
 /// An `"error"` with `message == "aborted"` means the caller invoked
 /// `abort_llm_stream` — the frontend should treat partial content as the
 /// final answer rather than showing an error.
+#[allow(dead_code)]
 #[derive(serde::Serialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatChunk {
@@ -77,109 +77,40 @@ pub async fn chat_completions_ipc(
     messages: Vec<serde_json::Value>,
     params: crate::llm::GenParams,
     channel: tauri::ipc::Channel<ChatChunk>,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let cell = {
-        let __a = state.lock_or_recover().llm.clone();
-        let __r = __a.lock_or_recover().state_cell.clone();
-        __r
-    };
-    let srv = cell
-        .lock_or_recover()
-        .clone()
-        .ok_or_else(|| "LLM server not running — start it in Settings → LLM".to_string())?;
-
-    // Subscribe to the abort watch and mark the current value as "seen" so
-    // that only a *new* increment (from `abort_llm_stream`) wakes us up.
-    let mut abort_rx = srv.abort_tx.subscribe();
-    abort_rx.borrow_and_update();
-
-    let tool_channel = channel.clone();
-    let gen_fut = crate::llm::run_chat_with_builtin_tools(
-        &srv,
+    let body = crate::daemon_cmds::llm_chat_completions(
         messages,
-        params,
-        Vec::new(),
-        |delta| {
-            let _ = channel.send(ChatChunk::Delta {
-                content: delta.to_string(),
-            });
-        },
-        move |event: crate::llm::ToolEvent| {
-            match event {
-                crate::llm::ToolEvent::Status {
-                    tool_name,
-                    status,
-                    detail,
-                } => {
-                    if status.as_str() == "cancelled" {
-                        let _ = tool_channel.send(ChatChunk::ToolCancelled {
-                            tool_call_id: String::new(),
-                            tool_name: tool_name.clone(),
-                        });
-                    }
-                    let _ = tool_channel.send(ChatChunk::ToolUse {
-                        tool: tool_name,
-                        status,
-                        detail,
-                    });
-                }
-                crate::llm::ToolEvent::ExecutionStart {
-                    tool_call_id,
-                    tool_name,
-                    args,
-                } => {
-                    let _ = tool_channel.send(ChatChunk::ToolExecutionStart {
-                        tool_call_id,
-                        tool_name,
-                        args,
-                    });
-                }
-                crate::llm::ToolEvent::ExecutionEnd {
-                    tool_call_id,
-                    tool_name,
-                    result,
-                    is_error,
-                } => {
-                    let _ = tool_channel.send(ChatChunk::ToolExecutionEnd {
-                        tool_call_id,
-                        tool_name,
-                        result,
-                        is_error,
-                    });
-                }
-                crate::llm::ToolEvent::RoundComplete { .. } => {
-                    // Per-round usage tracking — logged at the orchestration layer.
-                }
-            }
-        },
-    );
-    tokio::pin!(gen_fut);
+        serde_json::to_value(params).unwrap_or_default(),
+    )?;
 
-    tokio::select! {
-        biased;
-
-        // Abort signal — higher priority than completion so we stop fast.
-        Ok(()) = abort_rx.changed() => {
-            let _ = channel.send(ChatChunk::Error { message: "aborted".into() });
-        }
-
-        result = &mut gen_fut => {
-            match result {
-                Ok((_text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
-                    let _ = channel.send(ChatChunk::Done {
-                        finish_reason,
-                        prompt_tokens,
-                        completion_tokens,
-                        n_ctx,
-                    });
-                }
-                Err(msg) => {
-                    let _ = channel.send(ChatChunk::Error { message: msg.to_string() });
-                }
-            }
-        }
+    let content = body
+        .get("content")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !content.is_empty() {
+        let _ = channel.send(ChatChunk::Delta { content });
     }
+    let _ = channel.send(ChatChunk::Done {
+        finish_reason: body
+            .get("finish_reason")
+            .and_then(|x| x.as_str())
+            .unwrap_or("stop")
+            .to_string(),
+        prompt_tokens: body
+            .get("prompt_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
+        completion_tokens: body
+            .get("completion_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
+        n_ctx: body
+            .get("n_ctx")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
+    });
 
     Ok(())
 }
@@ -195,16 +126,8 @@ pub async fn chat_completions_ipc(
 /// Safe to call even when no generation is in progress — it is a no-op if
 /// the server is stopped or idle.
 #[tauri::command]
-pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    let cell = {
-        let __a = state.lock_or_recover().llm.clone();
-        let __r = __a.lock_or_recover().state_cell.clone();
-        __r
-    };
-    let guard = cell.lock_or_recover();
-    if let Some(srv) = guard.as_ref() {
-        srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
-    }
+pub fn abort_llm_stream(_state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    let _ = crate::daemon_cmds::llm_abort_stream();
 }
 
 // ── Tool-call cancellation ────────────────────────────────────────────────────
@@ -220,19 +143,8 @@ pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
 /// Safe to call even when no generation is in progress — it is a no-op if
 /// the server is stopped or the ID doesn't match any pending call.
 #[tauri::command]
-pub fn cancel_tool_call(tool_call_id: String, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    let cell = {
-        let __a = state.lock_or_recover().llm.clone();
-        let __r = __a.lock_or_recover().state_cell.clone();
-        __r
-    };
-    let guard = cell.lock_or_recover();
-    if let Some(srv) = guard.as_ref() {
-        srv.cancelled_tool_calls
-            .lock_or_recover()
-            .insert(tool_call_id);
-    }
-    // Also cancel any in-progress external page fetch (headless webview).
+pub fn cancel_tool_call(tool_call_id: String, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    let _ = crate::daemon_cmds::llm_cancel_tool_call(tool_call_id);
     skill_headless::cancel_current_fetch();
 }
 

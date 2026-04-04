@@ -12,6 +12,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
@@ -56,6 +57,8 @@ interface LlmConfig {
   model_path: string | null;
   n_gpu_layers: number;
   ctx_size: number | null;
+  n_batch: number | null;
+  n_ubatch: number | null;
   parallel: number;
   api_key: string | null;
   tools: LlmToolsConfig;
@@ -64,6 +67,8 @@ interface LlmConfig {
   no_mmproj_gpu: boolean;
   autoload_mmproj: boolean;
   verbose: boolean;
+  flash_attention: boolean;
+  offload_kqv: boolean;
   gpu_memory_threshold: number;
   gpu_memory_gen_threshold: number;
   cache_type_k: string;
@@ -93,6 +98,8 @@ let config = $state<LlmConfig>({
   model_path: null,
   n_gpu_layers: 4294967295,
   ctx_size: null,
+  n_batch: null,
+  n_ubatch: null,
   parallel: 1,
   api_key: null,
   tools: {
@@ -116,6 +123,8 @@ let config = $state<LlmConfig>({
   no_mmproj_gpu: false,
   autoload_mmproj: true,
   verbose: false,
+  flash_attention: true,
+  offload_kqv: true,
   gpu_memory_threshold: 0.5,
   gpu_memory_gen_threshold: 0.3,
   cache_type_k: "f16",
@@ -146,13 +155,13 @@ const activeEntry = $derived(catalog.entries.find((e) => !e.is_mmproj && e.filen
 
 async function loadCatalog() {
   try {
-    catalog = await invoke<LlmCatalog>("get_llm_catalog");
+    catalog = await daemonInvoke<LlmCatalog>("get_llm_catalog");
   } catch (e) {}
 }
 
 async function loadHardwareFit() {
   try {
-    const fits = await invoke<ModelHardwareFit[]>("get_model_hardware_fit");
+    const fits = await daemonInvoke<ModelHardwareFit[]>("get_model_hardware_fit");
     const map = new Map<string, ModelHardwareFit>();
     for (const f of fits) map.set(f.filename, f);
     hardwareFits = map;
@@ -161,10 +170,10 @@ async function loadHardwareFit() {
 
 async function loadConfig() {
   try {
-    config = await invoke<LlmConfig>("get_llm_config");
+    config = await daemonInvoke<LlmConfig>("get_llm_config");
   } catch (e) {}
   try {
-    const [, port] = await invoke<[string, number]>("get_ws_config");
+    const [, port] = await daemonInvoke<[string, number]>("get_ws_config");
     wsPort = port;
   } catch (e) {}
 }
@@ -172,7 +181,7 @@ async function loadConfig() {
 async function saveConfig() {
   configSaving = true;
   try {
-    await invoke("set_llm_config", { config });
+    await daemonInvoke("set_llm_config", { config });
   } finally {
     configSaving = false;
   }
@@ -181,7 +190,7 @@ async function saveConfig() {
 // ── Actions ────────────────────────────────────────────────────────────────
 
 async function download(filename: string) {
-  await invoke("download_llm_model", { filename });
+  await daemonInvoke("download_llm_model", { filename });
   // Immediately refresh the catalog so the frontend state flips to
   // "downloading" before the poll timer fires.  Without this the timer
   // condition `catalog.entries.some(e => e.state === "downloading")` would
@@ -190,18 +199,18 @@ async function download(filename: string) {
 }
 
 async function cancelDownload(filename: string) {
-  await invoke("cancel_llm_download", { filename });
+  await daemonInvoke("cancel_llm_download", { filename });
 }
 
 async function deleteModel(filename: string) {
-  await invoke("delete_llm_model", { filename });
+  await daemonInvoke("delete_llm_model", { filename });
   await loadCatalog();
 }
 
 async function selectModel(filename: string) {
   startError = "";
   // Atomic switch: stop → set model → start in one backend call.
-  invoke("switch_llm_model", { filename }).catch((e: unknown) => {
+  daemonInvoke("switch_llm_model", { filename }).catch((e: unknown) => {
     startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Failed to switch model";
   });
   await loadCatalog();
@@ -213,14 +222,14 @@ async function selectMmproj(filename: string) {
   // Atomic switch: set mmproj → stop → start in one backend call (mirrors
   // selectModel / switch_llm_model behaviour so the server restarts with the
   // new projector immediately).
-  invoke("switch_llm_mmproj", { filename: next }).catch((e: unknown) => {
+  daemonInvoke("switch_llm_mmproj", { filename: next }).catch((e: unknown) => {
     startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Failed to switch mmproj";
   });
   await loadCatalog();
 }
 
 async function refreshCache() {
-  await invoke("refresh_llm_catalog");
+  await daemonInvoke("refresh_llm_catalog");
   await loadCatalog();
 }
 
@@ -229,7 +238,7 @@ async function startServer() {
   // start_llm_server is fire-and-forget on the Rust side — returns immediately
   // with "starting"; the 2-second poll picks up Loading → Running transitions
   // and surfaces any start_error from the background task.
-  invoke("start_llm_server").catch((e: unknown) => {
+  daemonInvoke("start_llm_server").catch((e: unknown) => {
     startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Unknown error";
   });
 }
@@ -237,7 +246,7 @@ async function startServer() {
 async function stopServer() {
   startError = "";
   // stop_llm_server is also fire-and-forget — actor join runs in background.
-  invoke("stop_llm_server").catch((_e) => {});
+  daemonInvoke("stop_llm_server").catch((_e) => {});
 }
 
 async function openChat() {
@@ -257,7 +266,7 @@ async function openDownloads() {
 onMount(async () => {
   await Promise.all([loadCatalog(), loadConfig(), loadHardwareFit()]);
   try {
-    const s = await invoke<{
+    const s = await daemonInvoke<{
       status: "stopped" | "loading" | "running";
       start_error: string | null;
     }>("get_llm_server_status");
@@ -271,7 +280,7 @@ onMount(async () => {
     });
   } catch (e) {}
   try {
-    logs = await invoke<LlmLogEntry[]>("get_llm_logs");
+    logs = await daemonInvoke<LlmLogEntry[]>("get_llm_logs");
   } catch (e) {}
   try {
     unlistenLog = await listen<LlmLogEntry>("llm:log", async (ev) => {
@@ -287,7 +296,7 @@ onMount(async () => {
     // Poll server status so Loading → Running and start_error are reflected
     // without relying solely on push events.
     try {
-      const s = await invoke<{
+      const s = await daemonInvoke<{
         status: "stopped" | "loading" | "running";
         start_error: string | null;
       }>("get_llm_server_status");
@@ -373,6 +382,10 @@ onDestroy(() => {
   onSetCacheTypeK={async (val) => { config = { ...config, cache_type_k: val }; await saveConfig(); }}
   onSetCacheTypeV={async (val) => { config = { ...config, cache_type_v: val }; await saveConfig(); }}
   onToggleAttnRotDisabled={async () => { config = { ...config, attn_rot_disabled: !config.attn_rot_disabled }; await saveConfig(); }}
+  onSetNBatch={async (val) => { config = { ...config, n_batch: val }; await saveConfig(); }}
+  onSetNUbatch={async (val) => { config = { ...config, n_ubatch: val }; await saveConfig(); }}
+  onToggleFlashAttention={async () => { config = { ...config, flash_attention: !config.flash_attention }; await saveConfig(); }}
+  onToggleOffloadKqv={async () => { config = { ...config, offload_kqv: !config.offload_kqv }; await saveConfig(); }}
 />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->

@@ -67,31 +67,25 @@ struct TrayDownloadItem {
 }
 
 #[cfg(feature = "llm")]
-fn tray_download_items(app: &AppHandle) -> Vec<TrayDownloadItem> {
-    use crate::llm::catalog::DownloadState;
+#[derive(serde::Deserialize)]
+struct DaemonDownloadItem {
+    filename: String,
+    state: String,
+    progress: f32,
+    status_msg: Option<String>,
+}
 
-    let downloads = {
-        let r = app.app_state();
-        let g = r.lock_or_recover();
-        {
-            let __a = g.llm.clone();
-            let __r = __a.lock_or_recover().downloads.clone();
-            __r
-        }
-    };
-
-    let mut items = downloads
+#[cfg(feature = "llm")]
+fn tray_download_items(_app: &AppHandle) -> Vec<TrayDownloadItem> {
+    let raw = crate::daemon_cmds::llm_get_downloads().unwrap_or_default();
+    let mut items = raw
         .into_iter()
-        .filter_map(|(filename, prog_arc)| {
-            let prog = prog_arc.lock().ok()?;
-            if prog.state != DownloadState::Downloading {
-                return None;
-            }
-            Some(TrayDownloadItem {
-                filename,
-                progress: prog.progress.clamp(0.0, 1.0),
-                status_msg: prog.status_msg.clone(),
-            })
+        .filter_map(|v| serde_json::from_value::<DaemonDownloadItem>(v).ok())
+        .filter(|d| d.state.eq_ignore_ascii_case("downloading"))
+        .map(|d| TrayDownloadItem {
+            filename: d.filename,
+            progress: d.progress.clamp(0.0, 1.0),
+            status_msg: d.status_msg,
         })
         .collect::<Vec<_>>();
     items.sort_unstable_by(|a, b| a.filename.cmp(&b.filename));

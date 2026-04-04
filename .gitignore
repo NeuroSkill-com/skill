@@ -30,3 +30,4 @@ AGENTS.md
 .gitrub_activity
 # Rust lock files — Cargo.lock is committed (application, not library)
 test-results/
+.llama-prebuilt/

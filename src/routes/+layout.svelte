@@ -26,6 +26,7 @@ import "$lib/stores/app-name.svelte";
 import CommandPalette from "$lib/CommandPalette.svelte";
 import CustomTitleBar from "$lib/CustomTitleBar.svelte";
 import { ToastContainer } from "$lib/components/ui/toast";
+import { ensureDaemonCompatible } from "$lib/daemon/http";
 import KeyboardShortcuts from "$lib/KeyboardShortcuts.svelte";
 import { addToast, type ToastLevel } from "$lib/stores/toast.svelte";
 import WhatsNew from "$lib/WhatsNew.svelte";
@@ -52,6 +53,11 @@ onMount(async () => {
 
   // Restore theme & language from settings.json (overrides localStorage)
   await Promise.all([initThemeFromSettings(), initLocaleFromSettings()]);
+
+  // Fail fast on daemon protocol mismatch before user starts interacting.
+  ensureDaemonCompatible().catch((e: unknown) => {
+    addToast("error", "Backend", e instanceof Error ? e.message : String(e));
+  });
 
   unlisteners.push(
     await listen<{ level: ToastLevel; title: string; message: string }>("toast", (ev) =>

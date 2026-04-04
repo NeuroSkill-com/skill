@@ -6,10 +6,10 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Goals tab — daily recording goal configuration + 30-day history chart. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Daily Goal ─────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ async function testDnd() {
   dndTesting = true;
   // Only ever sends enabled=false — activation is data-only.
   try {
-    await invoke("test_dnd", { enabled: false });
+    await daemonInvoke("test_dnd", { enabled: false });
   } catch (e) {}
   dndTesting = false;
 }
@@ -99,7 +99,7 @@ async function testDnd() {
 async function saveDnd() {
   dndSaving = true;
   try {
-    await invoke("set_dnd_config", { config: dndConfig });
+    await daemonInvoke("set_dnd_config", { config: dndConfig });
   } catch (e) {}
   dndSaving = false;
   // Mark "set a DND threshold" onboarding step when the user saves with DND enabled.
@@ -172,8 +172,8 @@ async function refreshDndState() {
     // get_dnd_active  → app-controlled flag
     // get_dnd_status  → full pipeline snapshot (os_active, avg_score, …)
     const [appActive, status] = await Promise.all([
-      invoke<boolean>("get_dnd_active"),
-      invoke<{
+      daemonInvoke<boolean>("get_dnd_active"),
+      daemonInvoke<{
         dnd_active: boolean;
         os_active: boolean | null;
         last_error?: string | null;
@@ -195,20 +195,20 @@ async function refreshDndState() {
 
 onMount(async () => {
   try {
-    const v = await invoke<number>("get_daily_goal");
+    const v = await daemonInvoke<number>("get_daily_goal");
     if (v > 0) dailyGoalMin = v;
   } catch (e) {}
   await loadChart();
 
   // Load DND config + current active state
   try {
-    dndConfig = await invoke<DndConfig>("get_dnd_config");
+    dndConfig = await daemonInvoke<DndConfig>("get_dnd_config");
   } catch (e) {}
   await refreshDndState();
 
   // Load available Focus modes from the OS (macOS full list, Linux/Windows default DND option).
   try {
-    focusModes = await invoke<FocusModeOption[]>("list_focus_modes");
+    focusModes = await daemonInvoke<FocusModeOption[]>("list_focus_modes");
   } catch (e) {}
   focusModesLoaded = true;
 
@@ -280,7 +280,7 @@ onDestroy(() => {
 async function save() {
   saving = true;
   try {
-    await invoke("set_daily_goal", { minutes: dailyGoalMin });
+    await daemonInvoke("set_daily_goal", { minutes: dailyGoalMin });
   } catch (e) {}
   saving = false;
   await loadChart(); // refresh chart after goal change
@@ -312,7 +312,7 @@ let loading = $state(false);
 async function loadChart() {
   loading = true;
   try {
-    const raw = await invoke<[string, number][]>("get_daily_recording_mins", { days: 30 });
+    const raw = await daemonInvoke<[string, number][]>("get_daily_recording_mins", { days: 30 });
     const days: DayEntry[] = raw.map(([iso, mins]) => {
       const d = new Date(`${iso}T00:00:00Z`);
       const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });

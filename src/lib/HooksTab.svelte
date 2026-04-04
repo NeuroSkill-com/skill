@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -150,7 +151,7 @@ const LOG_PAGE = 20;
 async function loadHooks() {
   loading = true;
   try {
-    hooks = await invoke<HookRule[]>("get_hooks");
+    hooks = await daemonInvoke<HookRule[]>("get_hooks");
     keywordDrafts = hooks.map(() => "");
     suggestions = {};
     keywordSuggestions = {};
@@ -168,7 +169,7 @@ async function loadHooks() {
 
 async function loadStatuses() {
   try {
-    const rows = await invoke<HookStatus[]>("get_hook_statuses");
+    const rows = await daemonInvoke<HookStatus[]>("get_hook_statuses");
     const next: Record<string, HookLastTrigger | null> = {};
     for (const row of rows) next[row.hook.name] = row.last_trigger;
     statuses = next;
@@ -180,8 +181,8 @@ async function loadStatuses() {
 async function loadLog() {
   logLoading = true;
   try {
-    logTotal = await invoke<number>("get_hook_log_count");
-    logRows = await invoke<HookLogRow[]>("get_hook_log", { limit: LOG_PAGE, offset: logOffset });
+    logTotal = await daemonInvoke<number>("get_hook_log_count");
+    logRows = await daemonInvoke<HookLogRow[]>("get_hook_log", { limit: LOG_PAGE, offset: logOffset });
   } catch {
     logRows = [];
   } finally {
@@ -194,7 +195,7 @@ async function suggestDistances(i: number) {
   if (kws.length === 0) return;
   suggestingIdx = i;
   try {
-    const result = await invoke<HookDistanceSuggestion>("suggest_hook_distances", { keywords: kws });
+    const result = await daemonInvoke<HookDistanceSuggestion>("suggest_hook_distances", { keywords: kws });
     suggestions = { ...suggestions, [i]: result };
   } catch {
     suggestions = { ...suggestions, [i]: null };
@@ -334,7 +335,7 @@ async function fetchKeywordSuggestions(i: number) {
   }
   keywordSuggesting = { ...keywordSuggesting, [i]: true };
   try {
-    const rows = await invoke<HookKeywordSuggestion[]>("suggest_hook_keywords", { draft, limit: 8 });
+    const rows = await daemonInvoke<HookKeywordSuggestion[]>("suggest_hook_keywords", { draft, limit: 8 });
     const existing = new Set((hooks[i]?.keywords ?? []).map((x) => x.toLowerCase()));
     keywordSuggestions = {
       ...keywordSuggestions,
@@ -419,7 +420,7 @@ async function saveHooks() {
   saving = true;
   saved = false;
   try {
-    await invoke("set_hooks", { hooks });
+    await daemonInvoke("set_hooks", { hooks });
     saved = true;
     setTimeout(() => {
       saved = false;

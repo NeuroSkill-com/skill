@@ -19,6 +19,7 @@ import {
   UMAP_POLL_INTERVAL_MS,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   dateToCompactKey,
   fmtDate,
@@ -123,7 +124,7 @@ onMount(() => {
   emitSearchMode(initialMode);
 
   // Load screenshot server port for image URLs
-  invoke<[string, number]>("get_screenshots_dir")
+  daemonInvoke<[string, number]>("get_screenshots_dir")
     .then(([, port]) => {
       imgPort = port;
     })
@@ -225,7 +226,7 @@ function fireUmap() {
   umapTimer = setInterval(() => {
     umapElapsed = Math.floor((performance.now() - t0) / 1000);
   }, 250);
-  invoke<JobTicket>("enqueue_umap_compare", {
+  daemonInvoke<JobTicket>("enqueue_umap_compare", {
     aStartUtc: result.start_utc,
     aEndUtc: result.end_utc,
     bStartUtc: nbMin,
@@ -275,7 +276,7 @@ async function pollUmap(jobId: number) {
   while (true) {
     await new Promise((r) => setTimeout(r, UMAP_POLL_INTERVAL_MS));
     try {
-      const r = await invoke<JobPollResult>("poll_job", { jobId });
+      const r = await daemonInvoke<JobPollResult>("poll_job", { jobId });
       if (r.status === "complete") {
         const res = r.result as UmapResult | undefined;
         let raw: UmapResult | null = res?.points?.length ? res : null;
@@ -336,16 +337,19 @@ async function searchEeg() {
     results: [],
   };
   try {
-    const { Channel } = await import("@tauri-apps/api/core");
-    const ch = new Channel<{
-      kind: string;
-      query_count?: number;
-      searched_days?: string[];
-      entry?: QueryEntry;
-      done_count?: number;
-      total?: number;
-      error?: string;
-    }>();
+    const ch = {
+      onmessage: null as
+        | ((msg: {
+            kind: string;
+            query_count?: number;
+            searched_days?: string[];
+            entry?: QueryEntry;
+            done_count?: number;
+            total?: number;
+            error?: string;
+          }) => void)
+        | null,
+    };
     ch.onmessage = (msg) => {
       if (searchCancelled) return;
       if (msg.kind === "started") {
@@ -364,7 +368,7 @@ async function searchEeg() {
         error = msg.error ?? "Unknown error";
       }
     };
-    await invoke("stream_search_embeddings", {
+    await daemonInvoke("stream_search_embeddings", {
       startUtc,
       endUtc,
       k: kVal || undefined,
@@ -497,28 +501,31 @@ async function searchInteractive() {
   svgError = "";
   ixStatus = t("search.interactiveStep1");
   try {
-    const res = await invoke<{ nodes: GraphNode[]; edges: GraphEdge[]; dot: string; svg: string; svg_col: string }>(
-      "interactive_search",
-      {
-        query: ixQuery.trim(),
-        kText: ixKText,
-        kEeg: ixKEeg,
-        kLabels: ixKLabels,
-        reachMinutes: ixReachMinutes,
-        usePca: ixUsePca,
-        svgLabels: {
-          layerQuery: t("svg.layerQuery"),
-          layerTextMatches: t("svg.layerTextMatches"),
-          layerEegNeighbors: t("svg.layerEegNeighbors"),
-          layerFoundLabels: t("svg.layerFoundLabels"),
-          legendQuery: t("svg.legendQuery"),
-          legendText: t("svg.legendText"),
-          legendEeg: t("svg.legendEeg"),
-          legendFound: t("svg.legendFound"),
-          generatedBy: t("svg.generatedBy", { app: getAppName() }),
-        },
+    const res = await daemonInvoke<{
+      nodes: GraphNode[];
+      edges: GraphEdge[];
+      dot: string;
+      svg: string;
+      svg_col: string;
+    }>("interactive_search", {
+      query: ixQuery.trim(),
+      kText: ixKText,
+      kEeg: ixKEeg,
+      kLabels: ixKLabels,
+      reachMinutes: ixReachMinutes,
+      usePca: ixUsePca,
+      svgLabels: {
+        layerQuery: t("svg.layerQuery"),
+        layerTextMatches: t("svg.layerTextMatches"),
+        layerEegNeighbors: t("svg.layerEegNeighbors"),
+        layerFoundLabels: t("svg.layerFoundLabels"),
+        legendQuery: t("svg.legendQuery"),
+        legendText: t("svg.legendText"),
+        legendEeg: t("svg.legendEeg"),
+        legendFound: t("svg.legendFound"),
+        generatedBy: t("svg.generatedBy", { app: getAppName() }),
       },
-    );
+    });
     ixNodes = res.nodes;
     ixEdges = res.edges;
     ixDot = res.dot;
@@ -575,7 +582,7 @@ async function fetchIxScreenshots() {
   promises.push(
     (async () => {
       try {
-        const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
+        const hits = await daemonInvoke<SsResult[]>("search_screenshots_by_text", {
           query: ixQuery.trim(),
           k: 5,
           mode: "semantic",
@@ -593,7 +600,7 @@ async function fetchIxScreenshots() {
     promises.push(
       (async () => {
         try {
-          const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
+          const hits = await daemonInvoke<SsResult[]>("search_screenshots_by_text", {
             // biome-ignore lint/style/noNonNullAssertion: text always set on label nodes
             query: tl.text!,
             k: 2,
@@ -613,7 +620,7 @@ async function fetchIxScreenshots() {
     promises.push(
       (async () => {
         try {
-          const around = await invoke<SsResult[]>("get_screenshots_around", {
+          const around = await daemonInvoke<SsResult[]>("get_screenshots_around", {
             // biome-ignore lint/style/noNonNullAssertion: timestamp_unix always set on eeg nodes
             timestamp: Math.floor(node.timestamp_unix!),
             windowSecs: 1800,
@@ -659,7 +666,7 @@ async function downloadDot() {
     const disp = ixDisplayGraph;
     const hasScreenshots = disp.nodes.some((n) => n.kind === "screenshot");
     if (hasScreenshots) {
-      dotData = await invoke<string>("regenerate_interactive_dot", {
+      dotData = await daemonInvoke<string>("regenerate_interactive_dot", {
         nodes: disp.nodes.map((n) => ({
           id: n.id,
           kind: n.kind,
@@ -684,7 +691,7 @@ async function downloadDot() {
         })),
       });
     }
-    dotSavedPath = await invoke<string>("save_dot_file", { dot: dotData, query: ixQuery.trim() });
+    dotSavedPath = await daemonInvoke<string>("save_dot_file", { dot: dotData, query: ixQuery.trim() });
   } catch (e) {
     error = String(e);
   } finally {
@@ -703,7 +710,7 @@ async function downloadSvg() {
 
     if (hasScreenshots) {
       // Re-generate SVG on the backend with screenshot nodes included
-      svgData = await invoke<string>("regenerate_interactive_svg", {
+      svgData = await daemonInvoke<string>("regenerate_interactive_svg", {
         nodes: disp.nodes.map((n) => ({
           id: n.id,
           kind: n.kind,
@@ -747,7 +754,7 @@ async function downloadSvg() {
       svgError = "No SVG data";
       return;
     }
-    svgSavedPath = await invoke<string>("save_svg_file", { svg: svgData, query: ixQuery.trim() });
+    svgSavedPath = await daemonInvoke<string>("save_svg_file", { svg: svgData, query: ixQuery.trim() });
   } catch (e) {
     svgError = String(e);
   } finally {
@@ -760,7 +767,7 @@ const ixTimeHeatmap = $derived.by(() => computeIxTimeHeatmap(ixNodes));
 
 async function openSession(nb: NeighborEntry) {
   try {
-    const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", {
+    const ref = await daemonInvoke<{ csv_path: string } | null>("find_session_for_timestamp", {
       timestampUnix: nb.timestamp_unix,
       date: nb.date,
     });
@@ -807,7 +814,7 @@ async function searchText() {
   page = 0;
   textFilter = "";
   try {
-    textResults = await invoke<LabelNeighbor[]>("search_labels_by_text", { query: textQuery.trim(), k: kVal });
+    textResults = await daemonInvoke<LabelNeighbor[]>("search_labels_by_text", { query: textQuery.trim(), k: kVal });
     textSearched = true;
   } catch (e) {
     error = String(e);
@@ -837,7 +844,7 @@ const textTotalPages = $derived(Math.ceil(textFiltered.length / SEARCH_PAGE_SIZE
 async function openSessionForLabel(nb: LabelNeighbor) {
   try {
     const dateStr = dateToCompactKey(fromUnix(nb.eeg_start));
-    const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", {
+    const ref = await daemonInvoke<{ csv_path: string } | null>("find_session_for_timestamp", {
       timestampUnix: nb.eeg_start,
       date: dateStr,
     });
@@ -864,7 +871,7 @@ async function searchImages() {
   imgSearching = true;
   imgSearched = false;
   try {
-    imgResults = await invoke<ImgResult[]>("search_screenshots_by_text", {
+    imgResults = await daemonInvoke<ImgResult[]>("search_screenshots_by_text", {
       query: imgQuery.trim(),
       k: 20,
       mode: imgSearchMode,

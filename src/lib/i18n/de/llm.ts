@@ -256,6 +256,18 @@ const llm: Record<string, string> = {
   "llm.inference.attnRot": "TurboQuant-Aufmerksamkeitsrotation",
   "llm.inference.attnRotDesc":
     "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben (llama.cpp PR #21038). Verbessert die Qualität quantisierter KV-Caches erheblich bei nahezu null Overhead. Aktiviert lassen, außer bei Modellkompatibilitätsproblemen.",
+
+  "llm.inference.prefill": "Prefill-Batchgröße",
+  "llm.inference.prefillDesc":
+    "Steuert, wie viele Token pro Decode-Aufruf während der Prompt-Verarbeitung verarbeitet werden.",
+  "llm.inference.nBatch": "n_batch (Prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU-Kernel)",
+  "llm.inference.flashAttn": "Flash Attention",
+  "llm.inference.flashAttnDesc":
+    "Flash Attention für schnellere, speichereffizientere Self-Attention verwenden. Unterstützt auf Metal, CUDA und Vulkan.",
+  "llm.inference.offloadKqv": "KQV auf GPU auslagern",
+  "llm.inference.offloadKqvDesc":
+    "K/Q/V-Tensoroperationen auf die GPU auslagern, auch wenn nicht alle Schichten GPU-offloaded sind.",
   "llm.noFeature": "LLM-Unterstützung ist nicht einkompiliert.",
   "llm.noFeatureHint":
     "Mit --features llm neu erstellen, um den eingebetteten OpenAI-kompatiblen Server zu aktivieren.",

@@ -14,6 +14,29 @@ import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
+import {
+  getActiveWindow,
+  getActiveWindowTracking,
+  getApiToken,
+  getGpuStats,
+  getHfEndpoint,
+  getInferenceDevice,
+  getInputActivityTracking,
+  getLastInputActivity,
+  getLocationEnabled,
+  getMainWindowAutoFit,
+  getStorageFormat,
+  getWsConfig,
+  setActiveWindowTracking,
+  setApiToken,
+  setHfEndpoint,
+  setInferenceDevice,
+  setInputActivityTracking,
+  setLocationEnabled,
+  setMainWindowAutoFit,
+  setStorageFormat,
+  setWsConfig,
+} from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -144,8 +167,8 @@ let unlisteners: UnlistenFn[] = [];
 let nowTimer: ReturnType<typeof setInterval>;
 
 onMount(async () => {
-  gpuStats = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
-  storageFormat = (await invoke<string>("get_storage_format").catch(() => "csv")) as "csv" | "parquet" | "both";
+  gpuStats = await getGpuStats().catch(() => null);
+  storageFormat = (await getStorageFormat().catch(() => "csv")) as "csv" | "parquet" | "both";
   logConfig = await invoke<LogConfig>("get_log_config");
   {
     const [cur, def] = await invoke<[string, string]>("get_data_dir");
@@ -154,25 +177,25 @@ onMount(async () => {
     dataDirInput = cur;
   }
   {
-    const [h, p] = await invoke<[string, number]>("get_ws_config");
+    const [h, p] = await getWsConfig();
     wsHost = h;
     wsPort = p;
     wsPortInput = String(p);
   }
-  apiToken = await invoke<string>("get_api_token");
+  apiToken = await getApiToken();
   apiTokenInput = apiToken;
-  hfEndpoint = await invoke<string>("get_hf_endpoint").catch(() => "https://huggingface.co");
+  hfEndpoint = await getHfEndpoint().catch(() => "https://huggingface.co");
   hfEndpointInput = hfEndpoint;
-  trackActiveWindow = await invoke<boolean>("get_active_window_tracking");
-  currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
-  trackInputActivity = await invoke<boolean>("get_input_activity_tracking");
-  mainWindowAutoFit = await invoke<boolean>("get_main_window_auto_fit").catch(() => true);
-  locationEnabled = await invoke<boolean>("get_location_enabled").catch(() => false);
-  lastInputActivity = await invoke<[number, number]>("get_last_input_activity");
-  inferenceDevice = (await invoke<string>("get_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
+  trackActiveWindow = await getActiveWindowTracking();
+  currentActiveWindow = await getActiveWindow();
+  trackInputActivity = await getInputActivityTracking();
+  mainWindowAutoFit = await getMainWindowAutoFit().catch(() => true);
+  locationEnabled = await getLocationEnabled().catch(() => false);
+  lastInputActivity = await getLastInputActivity();
+  inferenceDevice = (await getInferenceDevice().catch(() => "gpu")) as "gpu" | "cpu";
   nowTimer = setInterval(async () => {
     now = Math.floor(Date.now() / 1000);
-    gpuStats = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
+    gpuStats = await getGpuStats().catch(() => null);
   }, 1000);
 
   unlisteners.push(
@@ -214,7 +237,7 @@ onDestroy(() => {
             locationToggling = true;
             locationTestResult = null;
             try {
-              const result = await invoke<Record<string, unknown>>("set_location_enabled", { enabled: !locationEnabled });
+              const result = await setLocationEnabled(!locationEnabled);
               locationEnabled = !!result.enabled;
               if (result.fix) {
                 const f = result.fix as Record<string, unknown>;
@@ -279,7 +302,7 @@ onDestroy(() => {
       </p>
       <div class="flex gap-2">
         {#each (["csv", "parquet", "both"] as const) as fmt}
-          <button onclick={async () => { storageFormat = fmt; await invoke("set_storage_format", { format: fmt }); }}
+          <button onclick={async () => { storageFormat = fmt; await setStorageFormat(fmt); }}
             class="flex flex-col items-center gap-1 rounded-xl border px-4 py-3 flex-1
                    transition-all cursor-pointer select-none
                    {storageFormat === fmt
@@ -322,7 +345,7 @@ onDestroy(() => {
               if (inferenceDevice === dev || inferenceDeviceSaving) return;
               inferenceDeviceSaving = true;
               inferenceDevice = dev;
-              await invoke("set_inference_device", { device: dev }).catch(() => {});
+              await setInferenceDevice(dev).catch(() => {});
               inferenceDeviceSaving = false;
             }}
             class="flex-1 flex flex-col gap-0.5 items-start px-4 py-3 text-left transition-colors cursor-pointer
@@ -474,7 +497,7 @@ onDestroy(() => {
         role="switch" aria-checked={mainWindowAutoFit}
         onclick={async () => {
           mainWindowAutoFit = !mainWindowAutoFit;
-          await invoke("set_main_window_auto_fit", { enabled: mainWindowAutoFit });
+          await setMainWindowAutoFit(mainWindowAutoFit);
         }}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]">
@@ -517,7 +540,7 @@ onDestroy(() => {
         role="switch" aria-checked={trackActiveWindow}
         onclick={async () => {
           trackActiveWindow = !trackActiveWindow;
-          await invoke("set_active_window_tracking", { enabled: trackActiveWindow });
+          await setActiveWindowTracking(trackActiveWindow);
           if (!trackActiveWindow) currentActiveWindow = null;
         }}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
@@ -574,7 +597,7 @@ onDestroy(() => {
         role="switch" aria-checked={trackInputActivity}
         onclick={async () => {
           trackInputActivity = !trackInputActivity;
-          await invoke("set_input_activity_tracking", { enabled: trackInputActivity });
+          await setInputActivityTracking(trackInputActivity);
           if (!trackInputActivity) lastInputActivity = [0, 0];
         }}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
@@ -835,7 +858,7 @@ onDestroy(() => {
                     if (isNaN(port) || port < 1024 || port > 65535) return;
                     wsSaving = true;
                     try {
-                      const newPort = await invoke<number>("set_ws_config", { host: wsHost, port });
+                      const newPort = await setWsConfig(wsHost, port);
                       wsPort = newPort;
                       wsPortInput = String(newPort);
                       wsHostChanged = false;
@@ -877,8 +900,8 @@ onDestroy(() => {
           <Button variant="outline" size="sm"
                   class="h-7 text-[0.58rem] px-3"
                   onclick={async () => {
-                    await invoke("set_hf_endpoint", { endpoint: hfEndpointInput.trim() });
-                    hfEndpoint = await invoke<string>("get_hf_endpoint").catch(() => "https://huggingface.co");
+                    await setHfEndpoint(hfEndpointInput.trim());
+                    hfEndpoint = await getHfEndpoint().catch(() => "https://huggingface.co");
                     hfEndpointInput = hfEndpoint;
                   }}>
             {t("common.save")}
@@ -911,7 +934,7 @@ onDestroy(() => {
             <Button variant="outline" size="sm"
                     class="h-7 text-[0.58rem] px-3"
                     onclick={async () => {
-                      await invoke("set_api_token", { token: apiTokenInput });
+                      await setApiToken(apiTokenInput);
                       apiToken = apiTokenInput;
                     }}>
               {t("common.save")}

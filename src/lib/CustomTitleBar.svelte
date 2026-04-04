@@ -5,9 +5,9 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
 import { openHelp, openHistory, openLabel } from "$lib/navigation";
@@ -83,7 +83,7 @@ function modelDisplayLabel(entry: LlmModelEntry): string {
 async function openModelPicker() {
   if (modelSwitching) return;
   try {
-    const catalog = await invoke<LlmCatalog>("get_llm_catalog");
+    const catalog = await daemonInvoke<LlmCatalog>("get_llm_catalog");
     downloadedModels = catalog.entries.filter((e) => e.state === "downloaded" && !e.is_mmproj);
     activeFilename = catalog.active_model;
     // Collect repos that have a downloaded vision projector
@@ -111,7 +111,7 @@ async function switchToModel(filename: string) {
   modelSwitching = true;
   modelPickerOpen = false;
   try {
-    await invoke("switch_llm_model", { filename });
+    await daemonInvoke("switch_llm_model", { filename });
   } catch (e) {
   } finally {
     modelSwitching = false;

@@ -3,15 +3,9 @@
 //
 //! Core shared types: `AppState`, `DeviceStatus`, IPC packet structs, handles.
 
-#[cfg(not(feature = "llm"))]
-use std::sync::Mutex;
-
 use serde::Serialize;
-use tauri::ipc::Channel;
 
-use crate::active_window::ActiveWindowInfo;
 use crate::constants::{EEG_CHANNELS, EMBEDDING_OVERLAP_SECS};
-use crate::screenshot;
 use crate::settings::{
     default_accent_color, default_api_shortcut, default_calibration_shortcut,
     default_daily_goal_min, default_embedding_model, default_focus_timer_shortcut,
@@ -25,9 +19,6 @@ use crate::settings::{
 use crate::skill_log::SkillLogger;
 use crate::tts::init_tts_dirs;
 use crate::{unix_secs, yyyymmdd_utc};
-use skill_data::activity_store::ActivityStore;
-use skill_data::label_store;
-use skill_data::screenshot_store;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_filter::FilterConfig;
 use skill_eeg::eeg_model_config::{load_model_config, EegModelStatus, ExgModelConfig};
@@ -51,65 +42,20 @@ pub struct DiscoveredDevice {
     pub is_paired: bool,
     pub is_preferred: bool,
     /// How this device was discovered (ble, usb_serial, wifi, cortex).
-    pub transport: crate::device_scanner::Transport,
+    pub transport: skill_daemon_common::DeviceTransport,
 }
 
 // ── EEG / PPG / IMU IPC packets ───────────────────────────────────────────────
 
-/// EEG packet forwarded to the frontend for live visualisation.
-#[derive(Clone, Serialize)]
-pub struct EegPacket {
-    pub electrode: usize,
-    pub samples: Vec<f64>,
-    pub timestamp: f64,
-}
-
-/// PPG packet forwarded to the frontend for live visualisation.
-#[derive(Clone, Serialize)]
-pub struct PpgPacket {
-    pub channel: usize,
-    pub samples: Vec<f64>,
-    pub timestamp: f64,
-}
-
-/// IMU packet forwarded to the frontend via Tauri IPC channel.
-#[derive(Clone, Serialize)]
-pub struct ImuPacket {
-    pub sensor: String,
-    pub samples: [[f32; 3]; 3],
-    pub timestamp: f64,
-}
-
 // ── Session / scanner handles ─────────────────────────────────────────────────
 
 pub struct StreamHandle {
+    #[allow(dead_code)]
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 pub struct ScannerHandle {
+    #[allow(dead_code)]
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
-}
-
-// ── Secondary (concurrent) sessions ──────────────────────────────────────────
-
-/// A lightweight concurrent session that records to its own CSV while
-/// the primary session owns the dashboard and embedding pipeline.
-#[derive(Clone, Serialize)]
-pub struct SecondarySessionInfo {
-    pub id: String,
-    pub device_name: String,
-    pub device_kind: String,
-    pub channels: usize,
-    pub sample_rate: f64,
-    pub sample_count: u64,
-    pub csv_path: String,
-    pub started_at: u64,
-    pub battery: f32,
-}
-
-/// Cancel handle for a secondary session (not serialisable).
-pub struct SecondarySessionHandle {
-    pub cancel: tokio_util::sync::CancellationToken,
-    pub info: SecondarySessionInfo,
 }
 
 // ── Shared frontend-visible status ────────────────────────────────────────────
@@ -261,6 +207,7 @@ impl DeviceStatus {
     /// Sets the state string and clears all device identity, telemetry, and
     /// error fields.  Call this instead of manually zeroing 15+ fields in
     /// `go_disconnected` / reconnect paths.
+    #[allow(dead_code)]
     pub fn reset_disconnected(&mut self, new_state: &str) {
         self.state = new_state.into();
         self.device_name = None;
@@ -306,6 +253,7 @@ impl DeviceStatus {
     }
 
     /// Reset transient fields for a new scanning cycle.
+    #[allow(dead_code)]
     pub fn reset_for_scanning(
         &mut self,
         device_kind: &str,
@@ -356,6 +304,7 @@ impl DeviceStatus {
     }
 
     /// Derive and set capability booleans from the current `device_kind` string.
+    #[allow(dead_code)]
     pub fn apply_capabilities_from_kind(&mut self) {
         use skill_data::device::DeviceKind;
         let kind = DeviceKind::from_kind_str(&self.device_kind);
@@ -440,34 +389,22 @@ impl Default for UiPrefsState {
 
 /// Keyboard, mouse and active-window tracking state.
 ///
-/// The `Arc<Atomic*>` fields are shared with background threads (input
-/// monitor, active-window poller) that update them without locking `AppState`.
+/// Daemon is authoritative for activity workers and persistence; these fields
+/// are local UI mirrors only.
 pub struct InputTrackingState {
     pub track_active_window: bool,
-    pub current_active_window: Option<ActiveWindowInfo>,
     pub track_input_activity: bool,
     pub input_activity_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub last_keyboard_ts: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub last_mouse_ts: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub kbd_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub mouse_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub activity_store: Option<std::sync::Arc<ActivityStore>>,
 }
 
 impl Default for InputTrackingState {
     fn default() -> Self {
         Self {
             track_active_window: default_track_active_window(),
-            current_active_window: None,
             track_input_activity: default_track_input_activity(),
             input_activity_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 default_track_input_activity(),
             )),
-            last_keyboard_ts: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            last_mouse_ts: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            kbd_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            activity_store: None,
         }
     }
 }
@@ -478,7 +415,7 @@ impl Default for InputTrackingState {
 pub struct EmbeddingModelState {
     pub model_config: ExgModelConfig,
     pub model_status: std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
-    pub download_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    #[allow(dead_code)]
     pub encoder_reload_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -487,7 +424,6 @@ impl EmbeddingModelState {
         Self {
             model_config: load_model_config(skill_dir),
             model_status: std::sync::Arc::new(std::sync::Mutex::new(EegModelStatus::default())),
-            download_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             encoder_reload_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
@@ -498,6 +434,7 @@ impl EmbeddingModelState {
 // ── Full app state (Mutex-managed) ────────────────────────────────────────────
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct FnirsRuntime {
     pub baseline_ir_left: Option<f64>,
     pub baseline_red_left: Option<f64>,
@@ -511,12 +448,10 @@ pub struct AppState {
     // ── Device session ────────────────────────────────────────────────────
     pub status: DeviceStatus,
     pub stream: Option<StreamHandle>,
+    #[allow(dead_code)]
     pub scanner: Option<ScannerHandle>,
     pub discovered: Vec<DiscoveredDevice>,
     pub preferred_id: Option<String>,
-    pub eeg_channel: Option<Channel<EegPacket>>,
-    pub ppg_channel: Option<Channel<PpgPacket>>,
-    pub imu_channel: Option<Channel<ImuPacket>>,
     pub battery_ema: Option<f32>,
     pub latest_bands: Option<BandSnapshot>,
     pub fnirs_runtime: FnirsRuntime,
@@ -529,14 +464,9 @@ pub struct AppState {
     pub snr_sum: f64,
     pub snr_count: u64,
 
-    /// Concurrent secondary sessions recording in the background.
-    /// Key is the session id (e.g. "lsl:OpenBCI", "ble:Muse-1234").
-    pub secondary_sessions: std::collections::HashMap<String, SecondarySessionHandle>,
-
     // ── Infrastructure ────────────────────────────────────────────────────
     pub skill_dir: std::path::PathBuf,
     pub logger: std::sync::Arc<SkillLogger>,
-    pub label_store: Option<label_store::LabelStore>,
 
     // ── Grouped sub-states ────────────────────────────────────────────────
     pub shortcuts: ShortcutState,
@@ -547,10 +477,12 @@ pub struct AppState {
     // ── Calibration ───────────────────────────────────────────────────────
     pub calibration_profiles: Vec<CalibrationProfile>,
     pub active_calibration_id: String,
+    #[allow(dead_code)]
     pub umap_config: UmapUserConfig,
 
     // ── Hooks ─────────────────────────────────────────────────────────────
     pub hooks: Vec<HookRule>,
+    #[allow(dead_code)]
     pub hook_runtime:
         std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
 
@@ -569,21 +501,8 @@ pub struct AppState {
     pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config: crate::settings::ScannerConfig,
 
-    /// rlsl-iroh sink endpoint ID (set when the sink is running).
-    pub lsl_iroh_endpoint_id: Option<String>,
-    /// Running virtual LSL EEG source (32 ch, 256 Hz) for testing.
-    /// `None` when stopped, `Some` while the outlet thread is live.
-    pub lsl_virtual_source: Option<skill_lsl::VirtualLslSource>,
-
     /// Location services enabled by the user (default false).
     pub location_enabled: bool,
-    /// Auto-scan for LSL streams and connect paired ones automatically.
-    pub lsl_auto_connect: bool,
-    /// LSL streams the user has "paired" for auto-connect.
-    pub lsl_paired_streams: Vec<skill_settings::LslPairedStream>,
-    /// Idle watchdog for LSL sessions: stop after this many seconds of silence.
-    /// `None` disables the watchdog for LSL entirely.
-    pub lsl_idle_timeout_secs: Option<u64>,
 
     /// High-level inference device preference: `"gpu"` or `"cpu"`.
     pub inference_device: String,
@@ -597,7 +516,6 @@ pub struct AppState {
     pub cortex_ws_state: String,
 
     // ── Smart alarm ────────────────────────────────────────────────────────
-    pub alarm_config: Option<crate::ws_commands::dnd_sleep::AlarmConfig>,
 
     // ── TTS ───────────────────────────────────────────────────────────────
     pub neutts_config: NeuttsConfig,
@@ -609,15 +527,8 @@ pub struct AppState {
 
     // ── Storage / recording ───────────────────────────────────────────────
     pub settings_storage_format: String,
-    /// Maximum number of EEG channels to process through the DSP pipeline.
-    /// Channels beyond this limit are still recorded to CSV but not processed.
-    /// Range: 2–1024.  Default: 24.  Capped at `EEG_CHANNELS` (24) for DSP arrays.
-    pub max_pipeline_channels: usize,
     pub sleep_config: crate::settings::SleepConfig,
     pub screenshot_config: ScreenshotConfig,
-    pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
-    pub screenshot_metrics: std::sync::Arc<screenshot::ScreenshotMetrics>,
-    pub health_store: Option<std::sync::Arc<skill_data::health_store::HealthStore>>,
 }
 
 // ── DND runtime state (independently locked) ──────────────────────────────────
@@ -630,10 +541,13 @@ pub struct DndRuntimeState {
     pub config: DoNotDisturbConfig,
     pub active: bool,
     pub os_active: Option<bool>,
+    #[allow(dead_code)]
     pub last_error: Option<String>,
     pub focus_samples: std::collections::VecDeque<f64>,
     pub below_ticks: u32,
+    #[allow(dead_code)]
     pub score_history: std::collections::VecDeque<f64>,
+    #[allow(dead_code)]
     pub snr_low_ticks: u32,
 }
 
@@ -644,22 +558,14 @@ pub struct LlmState {
     #[cfg(feature = "llm")]
     pub catalog: crate::llm::catalog::LlmCatalog,
     #[cfg(feature = "llm")]
-    pub downloads: std::collections::HashMap<
-        String,
-        std::sync::Arc<std::sync::Mutex<crate::llm::catalog::DownloadProgress>>,
-    >,
-    #[cfg(feature = "llm")]
+    #[allow(dead_code)]
     pub logs: crate::llm::LlmLogBuffer,
     #[cfg(feature = "llm")]
-    pub state_cell: crate::llm::LlmStateCell,
-    #[cfg(not(feature = "llm"))]
-    pub state_cell: std::sync::Arc<Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
-    #[cfg(feature = "llm")]
+    #[allow(dead_code)]
     pub loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
     #[cfg(feature = "llm")]
+    #[allow(dead_code)]
     pub start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
-    #[cfg(feature = "llm")]
-    pub chat_store: Option<crate::llm::chat_store::ChatStore>,
 }
 
 impl LlmState {
@@ -668,13 +574,10 @@ impl LlmState {
     pub fn new(skill_dir: &std::path::Path) -> Self {
         Self {
             config: crate::settings::LlmConfig::default(),
-            downloads: std::collections::HashMap::new(),
             logs: crate::llm::new_log_buffer(),
-            state_cell: crate::llm::new_state_cell(),
             loading: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             start_error: std::sync::Arc::new(std::sync::Mutex::new(None)),
             catalog: crate::llm::catalog::LlmCatalog::load(skill_dir),
-            chat_store: crate::llm::chat_store::ChatStore::open(skill_dir),
         }
     }
 
@@ -683,7 +586,6 @@ impl LlmState {
     pub fn new(_skill_dir: &std::path::Path) -> Self {
         Self {
             config: crate::settings::LlmConfig::default(),
-            state_cell: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }
@@ -695,9 +597,6 @@ impl Default for AppState {
 
         init_tts_dirs(&skill_dir);
 
-        let health_store =
-            skill_data::health_store::HealthStore::open(&skill_dir).map(std::sync::Arc::new);
-
         let log_config = crate::skill_log::load_log_config(&skill_dir);
         crate::skill_log::ensure_log_config(&skill_dir);
         let today_dir = skill_dir.join(yyyymmdd_utc());
@@ -706,10 +605,7 @@ impl Default for AppState {
         let logger = std::sync::Arc::new(SkillLogger::new(log_config));
         logger.write("logger", &format!("session log: {}", log_path.display()));
 
-        let input = InputTrackingState {
-            activity_store: ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
-            ..Default::default()
-        };
+        let input = InputTrackingState::default();
 
         Self {
             status: DeviceStatus::default(),
@@ -717,9 +613,6 @@ impl Default for AppState {
             scanner: None,
             discovered: Vec::new(),
             preferred_id: None,
-            eeg_channel: None,
-            ppg_channel: None,
-            imu_channel: None,
             battery_ema: None,
             latest_bands: None,
             fnirs_runtime: FnirsRuntime::default(),
@@ -728,8 +621,6 @@ impl Default for AppState {
             session_start_utc: None,
             snr_sum: 0.0,
             snr_count: 0,
-            secondary_sessions: std::collections::HashMap::new(),
-            label_store: label_store::LabelStore::open(&skill_dir),
 
             shortcuts: ShortcutState::default(),
             ui: UiPrefsState::default(),
@@ -751,18 +642,12 @@ impl Default for AppState {
             update_ready_to_install: false,
             openbci_config: crate::settings::OpenBciConfig::default(),
             location_enabled: false,
-            lsl_iroh_endpoint_id: None,
-            lsl_virtual_source: None,
-            lsl_auto_connect: false,
-            lsl_paired_streams: Vec::new(),
-            lsl_idle_timeout_secs: skill_settings::default_lsl_idle_timeout_secs(),
             inference_device: skill_settings::default_inference_device(),
             llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
             exg_inference_device: skill_settings::default_exg_inference_device(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             cortex_ws_state: "disconnected".into(),
-            alarm_config: None,
             neutts_config: NeuttsConfig::default(),
             tts_preload: true,
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),
@@ -770,12 +655,8 @@ impl Default for AppState {
             logger,
             dnd: std::sync::Arc::new(std::sync::Mutex::new(DndRuntimeState::default())),
             settings_storage_format: "csv".into(),
-            max_pipeline_channels: skill_constants::EEG_CHANNELS, // 32
             sleep_config: crate::settings::SleepConfig::default(),
             screenshot_config: ScreenshotConfig::default(),
-            screenshot_store: None,
-            screenshot_metrics: std::sync::Arc::new(screenshot::ScreenshotMetrics::new()),
-            health_store,
         }
     }
 }
@@ -794,11 +675,6 @@ impl AppState {
             .expect("[appstate] failed to spawn init thread")
             .join()
             .expect("[appstate] init thread panicked")
-    }
-
-    /// Obtain a clone of the `LlmState` arc for independent locking.
-    pub fn llm_arc(&self) -> std::sync::Arc<std::sync::Mutex<LlmState>> {
-        self.llm.clone()
     }
 
     /// Obtain a clone of the `DndRuntimeState` arc for independent locking.

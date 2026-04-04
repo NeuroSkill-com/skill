@@ -21,6 +21,7 @@ import search from "./search";
 import settings from "./settings";
 import tts from "./tts";
 import ui from "./ui";
+import virtualEeg from "./virtual-eeg";
 
 const all: Record<string, string> = {
   ...common,
@@ -38,6 +39,7 @@ const all: Record<string, string> = {
   ...help,
   ...helpRef,
   ...ui,
+  ...virtualEeg,
 };
 
 export default all;

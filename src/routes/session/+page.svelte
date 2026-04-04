@@ -6,10 +6,10 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Standalone Session Detail view — opened from search results or history. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { SessionDetail } from "$lib/dashboard";
 import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import { fmtDateIso as fmtDate, fmtDuration, fmtTime } from "$lib/format";
@@ -50,7 +50,7 @@ onMount(async () => {
 
   // Load metrics from CSV
   try {
-    const result = await invoke<CsvMetricsResult>("get_csv_metrics", { csvPath });
+    const result = await daemonInvoke<CsvMetricsResult>("get_csv_metrics", { csvPath });
     if (result && result.n_rows > 0) {
       metrics = result.summary;
       timeseries = result.timeseries;
@@ -62,7 +62,7 @@ onMount(async () => {
 
   // Try loading session metadata
   try {
-    const sessions = await invoke<Array<Record<string, unknown>>>("list_sessions");
+    const sessions = await daemonInvoke<Array<Record<string, unknown>>>("list_sessions");
     const match = sessions.find((s) => s.csv_path === csvPath);
     if (match) sessionMeta = match;
   } catch (e) {}
@@ -74,7 +74,7 @@ onMount(async () => {
     const dur = sessionMeta.session_end_utc - sessionMeta.session_start_utc;
     if (dur >= 1800) {
       try {
-        const sleep = await invoke<SleepStages>("get_sleep_stages", {
+        const sleep = await daemonInvoke<SleepStages>("get_sleep_stages", {
           startUtc: sessionMeta.session_start_utc,
           endUtc: sessionMeta.session_end_utc,
         });

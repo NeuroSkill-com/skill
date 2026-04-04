@@ -11,6 +11,7 @@ import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Card, CardContent } from "$lib/components/ui/card";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtTime } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -27,12 +28,29 @@ interface WsRequestLog {
   ok: boolean;
 }
 
+interface DaemonVersion {
+  daemon: string;
+  protocol_version: number;
+  daemon_version: string;
+}
+
+interface DaemonStatus {
+  base_url: string;
+  reachable: boolean;
+  authenticated: boolean;
+  compatible_protocol: boolean;
+  daemon_required: boolean;
+  version: DaemonVersion | null;
+  error: string | null;
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let port = $state(0);
 let clients = $state<WsClient[]>([]);
 let requests = $state<WsRequestLog[]>([]);
 let now = $state(Math.floor(Date.now() / 1000));
 let copied = $state("");
+let daemon = $state<DaemonStatus | null>(null);
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmtAgo(utc: number): string {
@@ -62,10 +80,11 @@ async function copyText(text: string, label: string) {
 
 // ── Data fetching ──────────────────────────────────────────────────────────
 async function refresh() {
-  [port, clients, requests] = await Promise.all([
-    invoke<number>("get_ws_port"),
-    invoke<WsClient[]>("get_ws_clients"),
-    invoke<WsRequestLog[]>("get_ws_request_log"),
+  [port, clients, requests, daemon] = await Promise.all([
+    daemonInvoke<number>("get_ws_port"),
+    daemonInvoke<WsClient[]>("get_ws_clients"),
+    daemonInvoke<WsRequestLog[]>("get_ws_request_log"),
+    invoke<DaemonStatus>("get_daemon_status"),
   ]);
   requests = [...requests].reverse();
 }
@@ -94,6 +113,7 @@ onDestroy(() => {
 });
 
 let wsUrl = $derived(`ws://localhost:${port}`);
+let daemonState = $derived(daemon?.reachable ? "Online" : "Offline");
 
 // ── CLI docs ───────────────────────────────────────────────────────────────
 let activeTab = $state<"overview" | "cli_tool" | "websocket" | "python" | "node">("overview");
@@ -183,6 +203,7 @@ avahi-browse -r _skill._tcp`,
 # pip install websockets
 import asyncio, json, websockets
 
+
 async def main():
     async with websockets.connect("ws://localhost:{port}") as ws:
         # Get device status
@@ -251,20 +272,39 @@ useWindowTitle("window.title.api");
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden shrink-0">
     <CardContent class="px-4 py-2.5 flex flex-col gap-1.5">
       <div class="flex items-center gap-2 flex-wrap">
-        <div class="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
-        <span class="text-[0.72rem] font-semibold text-foreground">{t("apiStatus.serverRunning")}</span>
+        <div class="w-2 h-2 rounded-full {daemon?.reachable ? 'bg-green-500' : 'bg-amber-500'} shrink-0"></div>
+        <span class="text-[0.72rem] font-semibold text-foreground">{daemonState}</span>
         <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           WebSocket
         </Badge>
         <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
-          mDNS
+          Daemon
         </Badge>
+        {#if daemon?.daemon_required}
+          <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+            Strict
+          </Badge>
+        {/if}
         <span class="ml-auto text-[0.6rem] text-muted-foreground">{t("apiStatus.port")}</span>
         <kbd class="font-mono text-[0.65rem] font-bold text-foreground bg-muted dark:bg-white/[0.06]
                     border border-border dark:border-white/[0.1] rounded px-1.5 py-0.5">
           {port}
         </kbd>
       </div>
+      {#if daemon && !daemon.reachable}
+        <div class="flex items-center gap-2 text-[0.6rem] text-amber-600 dark:text-amber-400">
+          <span>Daemon unavailable{daemon.error ? `: ${daemon.error}` : ""}</span>
+          <button
+            class="rounded border border-border dark:border-white/[0.08] px-1.5 py-0.5 hover:bg-muted/40"
+            onclick={async () => {
+              await invoke("start_daemon_dev").catch(() => {});
+              await refresh();
+            }}
+          >
+            start (dev)
+          </button>
+        </div>
+      {/if}
       <!-- Quick connect row -->
       <div class="flex items-center gap-2 flex-wrap">
         <button

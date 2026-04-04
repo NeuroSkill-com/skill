@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Textarea } from "$lib/components/ui/textarea";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtElapsed } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
@@ -55,7 +56,7 @@ async function submit() {
   saving = true;
   error = "";
   try {
-    await invoke("submit_label", {
+    await daemonInvoke("submit_label", {
       labelStartUtc: effectiveTimestamp(),
       text: text.trim(),
       context: context.trim(),
@@ -69,7 +70,7 @@ async function submit() {
 
 async function loadRecentLabels() {
   try {
-    recentLabels = await invoke<string[]>("get_recent_labels", { limit: 12 });
+    recentLabels = await daemonInvoke<string[]>("get_recent_labels", { limit: 12 });
   } catch {
     recentLabels = [];
   }

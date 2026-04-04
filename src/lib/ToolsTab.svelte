@@ -11,11 +11,31 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Card, CardContent } from "$lib/components/ui/card";
+import {
+  getLlmConfig,
+  getSkillsLastSync,
+  getSkillsLicense,
+  getSkillsRefreshInterval,
+  getSkillsSyncOnLaunch,
+  listSkills,
+  setDisabledSkills,
+  setLlmConfig,
+  setSkillsRefreshInterval,
+  setSkillsSyncOnLaunch,
+  syncSkillsNow,
+  webCacheClear,
+  webCacheList,
+  webCacheRemoveDomain,
+  webCacheRemoveEntry,
+  webCacheStats,
+} from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 import AgentSkillsSection from "$lib/tools/AgentSkillsSection.svelte";
 import ChatToolsSection from "$lib/tools/ChatToolsSection.svelte";
 import SkillsRefreshSection from "$lib/tools/SkillsRefreshSection.svelte";
 import SuggestSkillCta from "$lib/tools/SuggestSkillCta.svelte";
+import { formatPrefixedError } from "$lib/utils/error";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -163,25 +183,25 @@ let cacheEntries = $state<CacheEntryInfo[]>([]);
 
 async function refreshCache() {
   try {
-    cacheStats = await invoke<typeof cacheStats>("web_cache_stats");
-    cacheEntries = await invoke<CacheEntryInfo[]>("web_cache_list");
+    cacheStats = await webCacheStats<typeof cacheStats>();
+    cacheEntries = await webCacheList<CacheEntryInfo>();
   } catch {
     /* cache not initialised yet */
   }
 }
 
 async function clearCache() {
-  await invoke("web_cache_clear");
+  await webCacheClear();
   await refreshCache();
 }
 
 async function removeDomain(domain: string) {
-  await invoke("web_cache_remove_domain", { domain });
+  await webCacheRemoveDomain(domain);
   await refreshCache();
 }
 
 async function removeEntry(key: string) {
-  await invoke("web_cache_remove_entry", { key });
+  await webCacheRemoveEntry(key);
   await refreshCache();
 }
 
@@ -247,7 +267,7 @@ let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; h
 
 async function loadConfig() {
   try {
-    config = await invoke<LlmConfig>("get_llm_config");
+    config = await getLlmConfig<LlmConfig>();
     skillsRefreshInterval = config.tools.skills_refresh_interval_secs ?? 86400;
   } catch (e) {}
 }
@@ -255,7 +275,7 @@ async function loadConfig() {
 async function saveConfig() {
   configSaving = true;
   try {
-    await invoke("set_llm_config", { config });
+    await setLlmConfig(config);
   } finally {
     configSaving = false;
   }
@@ -263,23 +283,30 @@ async function saveConfig() {
 
 async function loadSkillsMeta() {
   try {
-    skillsRefreshInterval = await invoke<number>("get_skills_refresh_interval");
-    skillsSyncOnLaunch = await invoke<boolean>("get_skills_sync_on_launch");
-    skillsLastSync = await invoke<number | null>("get_skills_last_sync");
+    skillsRefreshInterval = await getSkillsRefreshInterval();
+    skillsSyncOnLaunch = await getSkillsSyncOnLaunch();
+    skillsLastSync = await getSkillsLastSync();
   } catch (e) {}
 }
 
 async function setSkillsInterval(secs: number) {
+  const prev = skillsRefreshInterval;
   skillsRefreshInterval = secs;
   config = { ...config, tools: { ...config.tools, skills_refresh_interval_secs: secs } };
-  await invoke("set_skills_refresh_interval", { secs });
-  await saveConfig();
+  try {
+    await setSkillsRefreshInterval(secs);
+    await saveConfig();
+  } catch (e) {
+    skillsRefreshInterval = prev;
+    config = { ...config, tools: { ...config.tools, skills_refresh_interval_secs: prev } };
+    addToast("error", t("llm.tools.skillsSection"), formatPrefixedError(t("common.error"), e));
+  }
 }
 
 async function syncNow() {
   skillsSyncing = true;
   try {
-    await invoke("sync_skills_now");
+    await syncSkillsNow();
     await loadSkillsMeta();
     await loadSkills();
   } catch (e) {
@@ -296,7 +323,7 @@ function formatLastSync(ts: number | null): string {
 async function loadSkills() {
   skillsLoading = true;
   try {
-    skills = await invoke<SkillInfo[]>("list_skills");
+    skills = await listSkills();
   } catch {
     skills = [];
   } finally {
@@ -306,7 +333,7 @@ async function loadSkills() {
 
 async function loadSkillsLicense() {
   try {
-    skillsLicense = (await invoke<string | null>("get_skills_license")) ?? "";
+    skillsLicense = (await getSkillsLicense()) ?? "";
   } catch {
     skillsLicense = "";
   }
@@ -341,16 +368,28 @@ async function testCalendarFetch() {
 }
 
 async function toggleSkill(name: string, enabled: boolean) {
+  const prev = skills;
   // Update local state immediately for responsiveness.
   skills = skills.map((s) => (s.name === name ? { ...s, enabled } : s));
   const disabled = skills.filter((s) => !s.enabled).map((s) => s.name);
-  await invoke("set_disabled_skills", { names: disabled });
+  try {
+    await setDisabledSkills(disabled);
+  } catch (e) {
+    skills = prev;
+    addToast("error", t("llm.tools.skillsSection"), formatPrefixedError(t("common.error"), e));
+  }
 }
 
 async function setAllSkills(enabled: boolean) {
+  const prev = skills;
   skills = skills.map((s) => ({ ...s, enabled }));
   const disabled = enabled ? [] : skills.map((s) => s.name);
-  await invoke("set_disabled_skills", { names: disabled });
+  try {
+    await setDisabledSkills(disabled);
+  } catch (e) {
+    skills = prev;
+    addToast("error", t("llm.tools.skillsSection"), formatPrefixedError(t("common.error"), e));
+  }
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -467,8 +506,14 @@ onMount(async () => {
   {formatLastSync}
   onSetSkillsInterval={setSkillsInterval}
   onToggleSyncOnLaunch={async () => {
+    const prev = skillsSyncOnLaunch;
     skillsSyncOnLaunch = !skillsSyncOnLaunch;
-    await invoke("set_skills_sync_on_launch", { enabled: skillsSyncOnLaunch });
+    try {
+      await setSkillsSyncOnLaunch(skillsSyncOnLaunch);
+    } catch (e) {
+      skillsSyncOnLaunch = prev;
+      addToast("error", t("llm.tools.skillsSection"), formatPrefixedError(t("common.error"), e));
+    }
   }}
   onSyncNow={syncNow}
 />

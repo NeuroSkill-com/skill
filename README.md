@@ -467,6 +467,27 @@ npm run setup:build-cache
 
 To disable temporarily: `SKILL_NO_SCCACHE=1` or `SKILL_NO_MOLD=1`.
 
+### Prebuilt llama.cpp (optional, recommended)
+
+Skip the full llama.cpp cmake rebuild (~5 min) by downloading prebuilt static libraries from the [llama-cpp-rs](https://github.com/eugenehp/llama-cpp-rs) GitHub release. Build time drops to **~3.5 seconds**.
+
+```bash
+# One-time download (~4 MB, auto-detects platform)
+npm run setup:llama-prebuilt
+```
+
+The `.envrc` auto-sets `LLAMA_PREBUILT_DIR` when the `.llama-prebuilt/` directory exists. After setup, all `cargo build/check` commands with `--features llm` will link prebuilt libs instead of rebuilding from source.
+
+| Platform | Features | Libraries |
+|---|---|---|
+| macOS arm64 | q1, metal | libllama, libggml, libggml-base, libggml-cpu, libggml-metal, libcommon |
+| Linux x64 | q1, vulkan, blas | libllama, libggml, libggml-base, libggml-cpu, libcommon |
+| Windows x64 | q1, vulkan | llama, ggml, ggml-base, ggml-cpu, common |
+
+To override the variant: `LLAMA_PREBUILT_SUFFIX=metal npm run setup:llama-prebuilt`
+
+To disable and force cmake: `unset LLAMA_PREBUILT_DIR`
+
 ### Linux packaging quickstart
 
 ```bash

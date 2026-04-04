@@ -42,6 +42,8 @@ pub(crate) fn emit_status(app: &AppHandle) {
     // Renamed from "muse-status" to "status" — device-agnostic.
     let _ = app.emit("status", &st);
     app.state::<WsBroadcaster>().send("status", &st);
+    crate::daemon_cmds::mirror_status_to_daemon(&st);
+    crate::daemon_cmds::push_event_to_daemon("status", &st);
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {
@@ -51,6 +53,7 @@ pub(crate) fn emit_devices(app: &AppHandle) {
         g.discovered.clone()
     };
     let _ = app.emit("devices-updated", &d);
+    crate::daemon_cmds::mirror_devices_to_daemon(&d);
 }
 
 /// Emit the Cortex WebSocket connection state to the frontend.
@@ -65,6 +68,7 @@ pub(crate) fn emit_cortex_ws_state(app: &AppHandle) {
 
 /// Update the Cortex WS state in AppState and emit it to the frontend.
 /// Sends a toast notification on meaningful transitions (connected ↔ disconnected).
+#[allow(dead_code)]
 pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
     let prev = {
         let s_ref = app.app_state();
@@ -109,6 +113,7 @@ pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
 // ── Toast / notification helpers ──────────────────────────────────────────────
 
 /// Toast severity levels — serialised to the frontend as lowercase strings.
+#[allow(dead_code)]
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum ToastLevel {
@@ -158,17 +163,6 @@ pub(crate) trait AppStateExt: Manager<tauri::Wry> {
 
 impl<T: Manager<tauri::Wry>> AppStateExt for T {}
 
-/// Read `skill_dir` from `AppState` without keeping the lock.
-pub(crate) fn skill_dir(state: &Mutex<Box<AppState>>) -> std::path::PathBuf {
-    state.lock_or_recover().skill_dir.clone()
-}
-
-/// Read a value from `AppState` via a short-lived lock.
-pub(crate) fn read_state<T>(state: &Mutex<Box<AppState>>, f: impl FnOnce(&AppState) -> T) -> T {
-    let g = state.lock_or_recover();
-    f(&g)
-}
-
 /// Mutate `AppState` via a short-lived lock.
 #[allow(dead_code)]
 pub(crate) fn mutate_state(state: &Mutex<Box<AppState>>, f: impl FnOnce(&mut AppState)) {
@@ -195,6 +189,7 @@ const SETTINGS_DEBOUNCE_MS: u64 = 500;
 /// Atomic flag: `true` while a debounce timer is already pending.
 static SAVE_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[allow(dead_code)]
 pub fn save_settings_handle(app: &AppHandle) {
     save_settings(app);
 }
@@ -222,7 +217,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
 pub(crate) fn save_settings_now(app: &AppHandle) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
-    let data = UserSettings {
+    let mut data = UserSettings {
         paired: s.status.paired_devices.clone(),
         preferred_id: s.preferred_id.clone(),
         filter_config: s.status.filter_config,
@@ -274,15 +269,43 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         storage_format: s.settings_storage_format.clone(),
         scanner: s.scanner_config.clone(),
         location_enabled: s.location_enabled,
-        lsl_auto_connect: s.lsl_auto_connect,
-        lsl_paired_streams: s.lsl_paired_streams.clone(),
-        lsl_idle_timeout_secs: s.lsl_idle_timeout_secs,
+        lsl_auto_connect: false,
+        lsl_paired_streams: Vec::new(),
+        lsl_idle_timeout_secs: skill_settings::default_lsl_idle_timeout_secs(),
         inference_device: s.inference_device.clone(),
         llm_gpu_layers_saved: s.llm_gpu_layers_saved,
         exg_inference_device: s.exg_inference_device.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
+
+    // Preserve daemon-owned settings fields so Tauri UI saves don't overwrite
+    // daemon authority. Pull from daemon first; if unavailable, keep current
+    // in-memory values.
+    data.hooks = crate::daemon_cmds::fetch_hooks().unwrap_or_else(|_| data.hooks.clone());
+
+    if let Ok(lsl_cfg) = crate::daemon_cmds::fetch_lsl_config() {
+        data.lsl_auto_connect = lsl_cfg
+            .get("auto_connect")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(data.lsl_auto_connect);
+        data.lsl_paired_streams =
+            serde_json::from_value(lsl_cfg.get("paired_streams").cloned().unwrap_or_default())
+                .unwrap_or_else(|_| data.lsl_paired_streams.clone());
+    }
+    if let Ok(idle) = crate::daemon_cmds::get_lsl_idle_timeout() {
+        data.lsl_idle_timeout_secs = idle;
+    }
+
+    if let Ok(secs) = crate::daemon_cmds::fetch_skills_refresh_interval() {
+        data.llm.tools.skills_refresh_interval_secs = secs;
+    }
+    if let Ok(enabled) = crate::daemon_cmds::fetch_skills_sync_on_launch() {
+        data.llm.tools.skills_sync_on_launch = enabled;
+    }
+    if let Ok(disabled) = crate::daemon_cmds::get_disabled_skills() {
+        data.llm.tools.disabled_skills = disabled;
+    }
 
     // Persist secrets to the system keychain (encrypted, survives updates).
     save_secrets_from_settings(&data);
@@ -302,19 +325,20 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
 /// * `usb:<port>`   → USB serial
 /// * `cortex:<id>`  → Emotiv Cortex WebSocket
 /// * anything else  → BLE (the default / legacy format)
-pub(crate) fn transport_from_id(id: &str) -> crate::device_scanner::Transport {
-    use crate::device_scanner::Transport;
+pub(crate) fn transport_from_id(id: &str) -> skill_daemon_common::DeviceTransport {
+    use skill_daemon_common::DeviceTransport;
     if id.starts_with("usb:") {
-        Transport::UsbSerial
+        DeviceTransport::UsbSerial
     } else if id.starts_with("cortex:") {
-        Transport::Cortex
+        DeviceTransport::Cortex
     } else {
-        Transport::Ble
+        DeviceTransport::Ble
     }
 }
 
 // ── Paired device upsert ──────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     let now = unix_secs();
     let transport = transport_from_id(id);
@@ -356,6 +380,7 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
 }
 
 /// Update a discovered device entry (called from device scanner backends).
+#[allow(dead_code)]
 pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16) {
     let now = unix_secs();
     let transport = transport_from_id(id);
@@ -398,6 +423,7 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
 /// Remove all discovered devices whose id starts with `prefix`.
 /// Used when a scanner backend goes offline (e.g. Cortex Launcher disconnects)
 /// so stale entries don't linger in the device list with green badges.
+#[allow(dead_code)]
 pub(crate) fn remove_discovered_by_prefix(app: &AppHandle, prefix: &str) {
     let changed = {
         let s_ref = app.app_state();

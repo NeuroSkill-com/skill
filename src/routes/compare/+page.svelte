@@ -7,7 +7,6 @@ the Free Software Foundation, version 3 only. -->
 <!-- Session Compare — side-by-side band-power & score comparison of two sessions. -->
 
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import {
   drawBandDiffHeatmap,
@@ -47,6 +46,7 @@ import { Button } from "$lib/components/ui/button";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { TimeSeriesChart } from "$lib/dashboard";
 import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import type { Series } from "$lib/dashboard/TimeSeriesChart.svelte";
@@ -414,7 +414,7 @@ let refreshing = $state(false);
 
 async function loadSessions(autoSelect = false) {
   // Primary source: sessions that have embeddings computed.
-  const embSessions = await invoke<EmbeddingSession[]>("list_embedding_sessions");
+  const embSessions = await daemonInvoke<EmbeddingSession[]>("list_embedding_sessions");
 
   // Fallback: also pull from the unified session list (JSON sidecars) so that
   // sessions recorded today (whose embeddings haven't been computed yet) still
@@ -422,7 +422,7 @@ async function loadSessions(autoSelect = false) {
   // source of truth from the skill-history crate.
   try {
     const allSessions =
-      await invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_all_sessions");
+      await daemonInvoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_all_sessions");
 
     // Build a lookup of already-covered ranges (rounded to nearest minute to
     // avoid floating-point / rounding mismatches between the two sources).
@@ -546,10 +546,10 @@ async function compare() {
   sleepB = null;
 
   const [ma, mb, sa, sb] = await Promise.all([
-    invoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
-    invoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
-    invoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
-    invoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
+    daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
+    daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
+    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
+    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
   ]);
 
   metricsA = ma;
@@ -571,8 +571,8 @@ async function compare() {
 
   // Load time-series for charts (non-blocking).
   Promise.all([
-    invoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
-    invoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
+    daemonInvoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
+    daemonInvoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
   ])
     .then(([ta, tb]) => {
       tsA = ta;
@@ -607,7 +607,7 @@ async function calculateUmap() {
 
   // Try the job queue first (enqueue_umap_compare); if the backend doesn't
   // support it yet, fall back to the synchronous compute_umap_compare.
-  invoke<JobTicket>("enqueue_umap_compare", umapArgs)
+  daemonInvoke<JobTicket>("enqueue_umap_compare", umapArgs)
     .then((ticket) => {
       umapReadyUtc = ticket.estimated_ready_utc;
       startUmapTimer(ticket.estimated_secs);
@@ -640,7 +640,7 @@ async function calculateUmap() {
       umapQueuePosition = 0;
       umapWaitSecs = 0;
       startUmapTimer(10); // rough estimate for direct call
-      invoke<UmapResult>("compute_umap_compare", umapArgs)
+      daemonInvoke<UmapResult>("compute_umap_compare", umapArgs)
         .then((r) => {
           umapResult = r?.points && r.points.length > 0 ? r : null;
           umapComputeMs = r?.elapsed_ms ?? null;
@@ -666,7 +666,7 @@ function finishUmap() {
 async function pollUmapJob(jobId: number) {
   const poll = async () => {
     try {
-      const r = await invoke<JobPollResult>("poll_job", { jobId });
+      const r = await daemonInvoke<JobPollResult>("poll_job", { jobId });
       if (r.status === "complete") {
         const res = r.result as UmapResult | undefined;
         umapResult = res?.points && res.points.length > 0 ? res : null;

@@ -6,7 +6,6 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Labels List — browse, search, edit, and delete all EEG annotations. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -14,6 +13,7 @@ import { ConfirmAction } from "$lib/components/ui/confirm-action";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtElapsed, fmtDateTimeLocale as formatDate } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { openHistory } from "$lib/navigation";
@@ -69,7 +69,7 @@ async function searchSemantic() {
   semanticSearching = true;
   semanticError = "";
   try {
-    semanticResults = await invoke<LabelNeighbor[]>("search_labels_by_text", { query: q, k: 50 });
+    semanticResults = await daemonInvoke<LabelNeighbor[]>("search_labels_by_text", { query: q, k: 50 });
   } catch (e) {
     semanticError = String(e);
     semanticResults = [];
@@ -160,7 +160,7 @@ function formatDuration(start: number, end: number): string {
 async function loadLabels() {
   loading = true;
   try {
-    labels = await invoke<LabelRow[]>("query_annotations", {
+    labels = await daemonInvoke<LabelRow[]>("query_annotations", {
       startUtc: undefined,
       endUtc: undefined,
     });
@@ -187,7 +187,7 @@ async function saveEdit(labelId: number) {
   if (!editText.trim() || savingId !== null) return;
   savingId = labelId;
   try {
-    await invoke("update_label", { labelId, text: editText.trim(), context: editContext.trim() });
+    await daemonInvoke("update_label", { labelId, text: editText.trim(), context: editContext.trim() });
     // Update in-place
     const idx = labels.findIndex((l) => l.id === labelId);
     if (idx !== -1) labels[idx] = { ...labels[idx], text: editText.trim(), context: editContext.trim() };
@@ -210,7 +210,7 @@ function cancelDelete() {
 async function doDelete(labelId: number) {
   deletingId = labelId;
   try {
-    await invoke("delete_label", { labelId });
+    await daemonInvoke("delete_label", { labelId });
     labels = labels.filter((l) => l.id !== labelId);
   } catch (e) {
   } finally {

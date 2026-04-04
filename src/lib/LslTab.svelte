@@ -6,15 +6,37 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- LSL tab — discover local LSL streams, pair for auto-connect, and manage rlsl-iroh remote sink. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
+import {
+  getStatus,
+  listSecondarySessions,
+  lslCancelSecondary,
+  lslConnect,
+  lslDiscover,
+  lslGetConfig,
+  lslGetIdleTimeout,
+  lslIrohStart,
+  lslIrohStatus,
+  lslIrohStop,
+  lslPairStream,
+  lslSetAutoConnect,
+  lslSetIdleTimeout,
+  lslStartSecondary,
+  lslStartVirtualSource,
+  lslStopVirtualSource,
+  lslSwitchSession,
+  lslUnpairStream,
+  lslVirtualSourceRunning,
+} from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 import type { DeviceStatus } from "$lib/types";
+import { formatPrefixedError } from "$lib/utils/error";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface LslStream {
@@ -123,7 +145,7 @@ async function scanStreams() {
   scanning = true;
   scanError = "";
   try {
-    streams = await invoke<LslStream[]>("lsl_discover");
+    streams = await lslDiscover<LslStream>();
     lastScanTime = Date.now();
   } catch (e: unknown) {
     scanError = String(e);
@@ -135,7 +157,7 @@ async function scanStreams() {
 async function connectStream(stream: LslStream) {
   connecting = stream.name;
   try {
-    await invoke("lsl_connect", { name: stream.name });
+    await lslConnect(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
   } finally {
@@ -146,7 +168,7 @@ async function connectStream(stream: LslStream) {
 async function switchToStream(stream: LslStream) {
   connecting = stream.name;
   try {
-    await invoke("lsl_switch_session", { name: stream.name });
+    await lslSwitchSession(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
   } finally {
@@ -157,7 +179,7 @@ async function switchToStream(stream: LslStream) {
 async function startSecondary(stream: LslStream) {
   connecting = stream.name;
   try {
-    await invoke("lsl_start_secondary", { name: stream.name });
+    await lslStartSecondary(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
   } finally {
@@ -166,13 +188,13 @@ async function startSecondary(stream: LslStream) {
 }
 
 async function cancelSecondary(sessionId: string) {
-  await invoke("lsl_cancel_secondary", { sessionId });
+  await lslCancelSecondary(sessionId);
 }
 
 async function connectOrSwitch(stream: LslStream) {
   if (!stream.paired) {
     // Pair first
-    await invoke("lsl_pair_stream", {
+    await lslPairStream({
       sourceId: stream.source_id,
       name: stream.name,
       streamType: stream.type,
@@ -202,7 +224,7 @@ async function connectOrSwitch(stream: LslStream) {
 async function pairAndConnect(stream: LslStream) {
   // Pair if not already
   if (!stream.paired) {
-    await invoke("lsl_pair_stream", {
+    await lslPairStream({
       sourceId: stream.source_id,
       name: stream.name,
       streamType: stream.type,
@@ -227,11 +249,11 @@ async function pairAndConnect(stream: LslStream) {
 
 async function togglePair(stream: LslStream) {
   if (stream.paired) {
-    await invoke("lsl_unpair_stream", { sourceId: stream.source_id });
+    await lslUnpairStream(stream.source_id);
     pairedStreams = pairedStreams.filter((p) => p.source_id !== stream.source_id);
     streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: false } : s));
   } else {
-    await invoke("lsl_pair_stream", {
+    await lslPairStream({
       sourceId: stream.source_id,
       name: stream.name,
       streamType: stream.type,
@@ -253,7 +275,7 @@ async function togglePair(stream: LslStream) {
 }
 
 async function unpairById(sourceId: string) {
-  await invoke("lsl_unpair_stream", { sourceId });
+  await lslUnpairStream(sourceId);
   pairedStreams = pairedStreams.filter((p) => p.source_id !== sourceId);
   streams = streams.map((s) => (s.source_id === sourceId ? { ...s, paired: false } : s));
 }
@@ -261,18 +283,28 @@ async function unpairById(sourceId: string) {
 async function setIdleTimeout(secs: number | null) {
   if (idleTimeoutSaving) return;
   idleTimeoutSaving = true;
+  const prev = idleTimeoutSecs;
   idleTimeoutSecs = secs;
   try {
-    await invoke("lsl_set_idle_timeout", { secs: secs ?? null });
+    await lslSetIdleTimeout(secs ?? null);
+  } catch (e) {
+    idleTimeoutSecs = prev;
+    addToast("error", t("settingsTabs.lsl"), formatPrefixedError(t("common.error"), e));
   } finally {
     idleTimeoutSaving = false;
   }
 }
 
 async function toggleAutoConnect() {
+  const prev = autoConnect;
   autoConnect = !autoConnect;
-  await invoke("lsl_set_auto_connect", { enabled: autoConnect });
-  manageAutoScanTimer();
+  try {
+    await lslSetAutoConnect(autoConnect);
+    manageAutoScanTimer();
+  } catch (e) {
+    autoConnect = prev;
+    addToast("error", t("settingsTabs.lsl"), formatPrefixedError(t("common.error"), e));
+  }
 }
 
 function manageAutoScanTimer() {
@@ -289,7 +321,7 @@ async function startIroh() {
   irohStarting = true;
   irohError = "";
   try {
-    irohStatus = await invoke<LslIrohStatus>("lsl_iroh_start");
+    irohStatus = await lslIrohStart<LslIrohStatus>();
   } catch (e: unknown) {
     irohError = String(e);
   } finally {
@@ -298,13 +330,13 @@ async function startIroh() {
 }
 
 async function stopIroh() {
-  await invoke("lsl_iroh_stop");
+  await lslIrohStop();
   irohStatus = { running: false, endpoint_id: null };
 }
 
 async function refreshIrohStatus() {
   try {
-    irohStatus = await invoke<LslIrohStatus>("lsl_iroh_status");
+    irohStatus = await lslIrohStatus<LslIrohStatus>();
   } catch {
     /* ignore */
   }
@@ -312,7 +344,7 @@ async function refreshIrohStatus() {
 
 async function refreshVirtualSourceStatus() {
   try {
-    virtualSourceRunning = await invoke<boolean>("lsl_virtual_source_running");
+    virtualSourceRunning = await lslVirtualSourceRunning();
   } catch {
     /* ignore */
   }
@@ -323,7 +355,7 @@ async function startVirtualSource() {
   virtualSourceBusy = true;
   virtualSourceError = "";
   try {
-    await invoke<boolean>("lsl_start_virtual_source");
+    await lslStartVirtualSource();
     virtualSourceRunning = true;
     await scanStreams();
   } catch (e: unknown) {
@@ -338,7 +370,7 @@ async function stopVirtualSource() {
   virtualSourceBusy = true;
   virtualSourceError = "";
   try {
-    await invoke<boolean>("lsl_stop_virtual_source");
+    await lslStopVirtualSource();
     virtualSourceRunning = false;
     await scanStreams();
   } catch (e: unknown) {
@@ -366,7 +398,7 @@ function fmtRate(hz: number): string {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 onMount(async () => {
   try {
-    const cfg = await invoke<LslConfig>("lsl_get_config");
+    const cfg = await lslGetConfig<LslConfig>();
     autoConnect = cfg.auto_connect;
     pairedStreams = cfg.paired_streams;
   } catch {
@@ -374,7 +406,7 @@ onMount(async () => {
   }
 
   try {
-    const t = await invoke<number | null>("lsl_get_idle_timeout");
+    const t = await lslGetIdleTimeout();
     idleTimeoutSecs = t;
   } catch {
     /* ignore */
@@ -382,7 +414,7 @@ onMount(async () => {
 
   // Get initial session status
   try {
-    const s = await invoke<DeviceStatus>("get_status");
+    const s = await getStatus<DeviceStatus>();
     sessionState = s.state;
     sessionDeviceKind = s.device_kind;
     sessionDeviceName = s.device_name;
@@ -398,7 +430,7 @@ onMount(async () => {
 
   // Load initial secondary sessions
   try {
-    secondarySessions = await invoke<SecondarySession[]>("list_secondary_sessions");
+    secondarySessions = await listSecondarySessions<SecondarySession>();
   } catch {
     /* ignore */
   }

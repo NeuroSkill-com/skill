@@ -6,13 +6,13 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- EEG Model tab — Encoder status · HNSW index · Model source -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import ExgModelPickerSection from "$lib/exg/ExgModelPickerSection.svelte";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -103,26 +103,26 @@ const encoderName = $derived(
 
 // ── Actions ────────────────────────────────────────────────────────────────
 async function refreshStatus() {
-  modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
+  modelStatus = await daemonInvoke<EegModelStatus>("get_eeg_model_status");
 }
 
 async function saveModelConfig(patch: Partial<ExgModelConfig>) {
   modelConfig = { ...modelConfig, ...patch };
   modelConfigSaving = true;
   try {
-    await invoke("set_eeg_model_config", { config: modelConfig });
+    await daemonInvoke("set_eeg_model_config", { config: modelConfig });
   } finally {
     modelConfigSaving = false;
   }
 }
 
 async function startDownload() {
-  await invoke("trigger_weights_download");
+  await daemonInvoke("trigger_weights_download");
   // Status updates will arrive via the 2-second poll.
 }
 
 async function cancelDownload() {
-  await invoke("cancel_weights_download");
+  await daemonInvoke("cancel_weights_download");
 }
 
 async function restartApp() {
@@ -135,13 +135,13 @@ async function restartApp() {
 }
 
 async function loadReembedEstimate() {
-  reembedEstimate = await invoke<ReembedEstimate>("estimate_reembed");
+  reembedEstimate = await daemonInvoke<ReembedEstimate>("estimate_reembed");
 }
 
 async function startReembed() {
   reembedRunning = true;
   reembedProgress = null;
-  await invoke("trigger_reembed");
+  await daemonInvoke("trigger_reembed");
 }
 
 // Derived state helpers
@@ -187,8 +187,8 @@ let statusTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenReembed: (() => void) | undefined;
 
 onMount(async () => {
-  modelConfig = await invoke<ExgModelConfig>("get_eeg_model_config");
-  modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
+  modelConfig = await daemonInvoke<ExgModelConfig>("get_eeg_model_config");
+  modelStatus = await daemonInvoke<EegModelStatus>("get_eeg_model_status");
   statusTimer = setInterval(refreshStatus, 2000);
   loadReembedEstimate();
 

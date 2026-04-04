@@ -13,6 +13,7 @@ import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -228,7 +229,7 @@ async function startCalibration() {
       const actionStart = Math.floor(Date.now() / 1000);
       if (!(await runCountdown(action.duration_secs))) break;
       try {
-        await invoke("submit_label", { labelStartUtc: actionStart, text: action.label });
+        await daemonInvoke("submit_label", { labelStartUtc: actionStart, text: action.label });
       } catch (e) {}
 
       // BREAK phase — skip only after the very last action of the very last loop
@@ -363,7 +364,7 @@ onMount(async () => {
 
   // Electrode signal quality
   try {
-    const s = await invoke<DeviceStatus>("get_status");
+    const s = await daemonInvoke<DeviceStatus>("get_status");
     elecQuality = s.channel_quality;
     museConnected = s.state === "connected";
   } catch (e) {}

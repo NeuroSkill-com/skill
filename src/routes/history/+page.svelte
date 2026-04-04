@@ -16,6 +16,7 @@ import { ConfirmAction } from "$lib/components/ui/confirm-action";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { SessionDetail } from "$lib/dashboard";
 import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import {
@@ -186,7 +187,7 @@ let healthApiPort = $state<number | null>(null);
 async function healthFetch(path: string, body: Record<string, unknown>): Promise<unknown> {
   if (!healthApiPort) {
     try {
-      healthApiPort = await invoke<number>("get_ws_port");
+      healthApiPort = await daemonInvoke<number>("get_ws_port");
     } catch {
       return null;
     }
@@ -362,7 +363,7 @@ async function loadMetricsFallback(csvPath: string) {
     return;
   }
   try {
-    metricsCache[csvPath] = await invoke<SessionMetrics>("get_session_metrics", {
+    metricsCache[csvPath] = await daemonInvoke<SessionMetrics>("get_session_metrics", {
       startUtc: session.session_start_utc,
       endUtc: session.session_end_utc,
     });
@@ -370,7 +371,7 @@ async function loadMetricsFallback(csvPath: string) {
     metricsCache[csvPath] = "none";
   }
   try {
-    tsCache[csvPath] = await invoke<EpochRow[]>("get_session_timeseries", {
+    tsCache[csvPath] = await daemonInvoke<EpochRow[]>("get_session_timeseries", {
       startUtc: session.session_start_utc,
       endUtc: session.session_end_utc,
     });
@@ -395,7 +396,7 @@ async function loadSleep(csvPath: string) {
   }
   sleepCache[csvPath] = "loading";
   try {
-    sleepCache[csvPath] = await invoke<SleepStages>("get_sleep_stages", {
+    sleepCache[csvPath] = await daemonInvoke<SleepStages>("get_sleep_stages", {
       startUtc: session.session_start_utc,
       endUtc: session.session_end_utc,
     });
@@ -416,7 +417,7 @@ async function loadLocation(csvPath: string) {
   if (!session?.session_start_utc || !session?.session_end_utc) return;
   locationCache[csvPath] = "loading";
   try {
-    locationCache[csvPath] = await invoke<GpsPoint[]>("get_session_location", {
+    locationCache[csvPath] = await daemonInvoke<GpsPoint[]>("get_session_location", {
       csvPath,
       startUtc: session.session_start_utc,
       endUtc: session.session_end_utc,
@@ -433,7 +434,7 @@ async function loadEmbedCount(csvPath: string) {
   if (!session?.session_start_utc || !session?.session_end_utc) return;
   embedCountCache[csvPath] = "loading";
   try {
-    embedCountCache[csvPath] = await invoke<number>("get_session_embedding_count", {
+    embedCountCache[csvPath] = await daemonInvoke<number>("get_session_embedding_count", {
       startUtc: session.session_start_utc,
       endUtc: session.session_end_utc,
     });
@@ -454,7 +455,7 @@ let loadSeq = 0;
  *  All UTC→local conversion, directory fan-out, de-duplication, and timestamp
  *  filtering now happens in the Rust crate (single source of truth).        */
 async function fetchDaySessions(localKey: string): Promise<SessionEntry[]> {
-  return invoke<SessionEntry[]>("list_sessions_for_local_day", {
+  return daemonInvoke<SessionEntry[]>("list_sessions_for_local_day", {
     localKey,
     tzOffsetSecs: tzOffsetSecs,
   });
@@ -572,7 +573,7 @@ async function loadDay(idx: number) {
 
 // ── Session actions ─────────────────────────────────────────────────────
 async function deleteSession(csvPath: string) {
-  await invoke("delete_session", { csvPath });
+  await daemonInvoke("delete_session", { csvPath });
   confirmDelete = null;
   delete expanded[csvPath];
   sessions = sessions.filter((s) => s.csv_path !== csvPath);
@@ -651,7 +652,7 @@ function screenshotUrl(filename: string): string {
 async function loadDayScreenshots(dayStart: number) {
   try {
     const midpoint = dayStart + 43200; // noon
-    const results = await invoke<ScreenshotInfo[]>("get_screenshots_around", {
+    const results = await daemonInvoke<ScreenshotInfo[]>("get_screenshots_around", {
       timestamp: midpoint,
       windowSecs: 43200,
     });
@@ -682,14 +683,14 @@ let labelSearchQuery = $state("");
 async function loadLabels() {
   try {
     // biome-ignore lint/suspicious/noExplicitAny: opaque annotation records from backend
-    allLabels = await invoke<any[]>("query_annotations", { startUtc: null, endUtc: null });
+    allLabels = await daemonInvoke<any[]>("query_annotations", { startUtc: null, endUtc: null });
   } catch {
     allLabels = [];
   }
 }
 async function removeLabel(id: number) {
   try {
-    await invoke("delete_label", { labelId: id });
+    await daemonInvoke("delete_label", { labelId: id });
     allLabels = allLabels.filter((l) => l.id !== id);
   } catch (e) {}
 }
@@ -1478,7 +1479,7 @@ onMount(async () => {
   hCbs.calendarNext = () => calendarNav(1);
 
   try {
-    allLocalDays = await invoke<LocalDayInfo[]>("list_local_session_days", { tzOffsetSecs: tzOffsetSecs });
+    allLocalDays = await daemonInvoke<LocalDayInfo[]>("list_local_session_days", { tzOffsetSecs: tzOffsetSecs });
     // biome-ignore lint/suspicious/noConsole: temporary diagnostic — remove after confirming fix
     console.warn(`[history] ${allLocalDays.length} local days, tzOffset=${tzOffsetSecs}`);
   } catch (e) {
@@ -1494,13 +1495,13 @@ onMount(async () => {
   }
   if (localDays.length > 0) await loadDay(0);
   // Load screenshot port
-  invoke<[string, number]>("get_screenshots_dir")
+  daemonInvoke<[string, number]>("get_screenshots_dir")
     .then(([, port]) => {
       screenshotPort = port;
     })
     .catch((_e) => {});
   // Load aggregate stats lazily - not needed for initial render
-  invoke<HistoryStatsData>("get_history_stats")
+  daemonInvoke<HistoryStatsData>("get_history_stats")
     .then((s) => {
       historyStats = s;
     })

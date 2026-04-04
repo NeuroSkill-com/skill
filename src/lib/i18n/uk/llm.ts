@@ -251,7 +251,19 @@ const llm: Record<string, string> = {
   "llm.inference.kvCacheV": "V-кеш",
   "llm.inference.attnRot": "Обертання уваги TurboQuant",
   "llm.inference.attnRotDesc":
-    "Перетворення Гадамара застосовується до тензорів Q/K/V перед записом у KV-кеш (llama.cpp PR #21038). Значно поліпшує якість квантизованих KV-кешів при майже нульових витратах. Залишайте увімкненим, якщо немає проблем сумісності з моделлю.",
+    "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. якщо немає проблем сумісності з моделлю.",
+
+  "llm.inference.prefill": "Розмір пакету попереднього заповнення",
+  "llm.inference.prefillDesc":
+    "Керує кількістю токенів, що обробляються за один виклик декодування під час обробки промпту.",
+  "llm.inference.nBatch": "n_batch (prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
+  "llm.inference.flashAttn": "Flash attention",
+  "llm.inference.flashAttnDesc":
+    "Використовувати flash attention для швидшої та ефективнішої self-attention. Підтримується на Metal, CUDA та Vulkan.",
+  "llm.inference.offloadKqv": "Вивантажити KQV на GPU",
+  "llm.inference.offloadKqvDesc": "Вивантажити тензорні операції K/Q/V на GPU, навіть якщо не всі шари вивантажені.",
+
   "llm.noFeature": "Підтримка LLM не скомпільована.",
   "llm.noFeatureHint": "Перезберіть з --features llm, щоб увімкнути вбудований OpenAI-сумісний сервер.",
   "llm.endpoints.title": "OpenAI-сумісні ендпоїнти",
