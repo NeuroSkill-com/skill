@@ -1097,13 +1097,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
       - name: cargo deny
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          # `cargo deny check` already evaluates the workspace from the root
-          # manifest. `--workspace` is a top-level cargo-deny flag and cannot
-          # be passed after the `check` subcommand.
-          command: check
+        run: cargo deny check
 
   # ── Discord notification ──────────────────────────────────────────────────
   notify:
