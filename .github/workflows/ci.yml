@@ -441,6 +441,9 @@ jobs:
       - name: Biome lint
         run: npx biome lint src/ scripts/
 
+      - name: Daemon thin-client invoke guard
+        run: npm run -s check:daemon-invokes
+
       - name: svelte-check
         id: frontend_svelte_check
         shell: bash

@@ -16,8 +16,8 @@ the Free Software Foundation, version 3 only. -->
   All colours via theme.ts — no hex literals here.
 -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
+import { getGpuStats } from "$lib/daemon/client";
 import { colorForLoad } from "$lib/theme";
 
 interface GpuStats {
@@ -65,7 +65,7 @@ const col = $derived(gpuStats ? colorForLoad(gpuStats.overall) : "#94a3b8");
 // ── Polling ─────────────────────────────────────────────────────────────────
 async function poll() {
   try {
-    const s = await invoke<GpuStats | null>("get_gpu_stats");
+    const s = await getGpuStats();
     gpuStats = s;
     if (s !== null) {
       history = [...history.slice(-(MAX_PTS - 1)), s.overall];

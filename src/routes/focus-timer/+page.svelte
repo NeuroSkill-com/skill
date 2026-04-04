@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { dateToCompactKey, fmtCountdown, fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { openLabel } from "$lib/navigation";
@@ -270,7 +271,7 @@ async function onPhaseComplete() {
     if (autoLabel) {
       try {
         const label = `${t("focusTimer.workPhase")} — ${workMins}min`;
-        await invoke("submit_label", {
+        await daemonInvoke("submit_label", {
           labelStartUtc: phaseStartUtc,
           text: label,
         });

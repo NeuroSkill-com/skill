@@ -85,7 +85,9 @@ pub struct GenParams {
 impl Default for GenParams {
     fn default() -> Self {
         Self {
-            temperature: 0.8,
+            // Greedy decoding (t=0) for deterministic, highest-quality output.
+            // Users can override via the chat settings panel.
+            temperature: 0.0,
             top_k: 40,
             top_p: 0.9,
             repeat_penalty: 1.1,

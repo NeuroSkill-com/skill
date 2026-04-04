@@ -24,8 +24,10 @@ pub use skill_data::session_csv::*;
 ///
 /// Legacy sessions used `muse_<ts>.csv`; new sessions use `exg_<ts>.csv`
 /// regardless of device.  The history loader accepts both prefixes.
+#[allow(dead_code)]
 pub(crate) const CSV_PREFIX: &str = "exg";
 
+#[allow(dead_code)]
 pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
     let skill_dir = app
         .try_state::<std::sync::Mutex<Box<crate::AppState>>>()
@@ -40,6 +42,7 @@ pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
 // ── Session metadata sidecar ──────────────────────────────────────────────────
 
 /// Write (or overwrite) a JSON sidecar file next to the CSV recording.
+#[allow(dead_code)]
 pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();

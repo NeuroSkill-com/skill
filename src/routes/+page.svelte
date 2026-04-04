@@ -5,7 +5,7 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { onDestroy, onMount } from "svelte";
@@ -33,6 +33,7 @@ import {
   MW75_COLOR,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   ArtifactEvents,
   BrainStateScores,
@@ -77,7 +78,7 @@ let modelDlTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshModelDl() {
   try {
-    const s = await invoke<ModelDownloadStatus>("get_eeg_model_status");
+    const s = await daemonInvoke<ModelDownloadStatus>("get_eeg_model_status");
     modelDl = s;
     // Stop polling once encoder is loaded.
     if (s.encoder_loaded && modelDlTimer) {
@@ -405,7 +406,7 @@ let todayRecordedSecs = $state(0); // from past sessions today
 async function fetchTodayRecording() {
   try {
     const sessions =
-      await invoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions");
+      await daemonInvoke<{ session_start_utc: number | null; session_end_utc: number | null }[]>("list_sessions");
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const cutoff = Math.floor(todayStart.getTime() / 1000);
@@ -428,12 +429,12 @@ let dailyGoalMin = $state(60);
 let goalNotified = false; // true once notification fired this session
 
 // Load persisted goal + today's notification state from Rust on mount
-invoke<number>("get_daily_goal")
+daemonInvoke<number>("get_daily_goal")
   .then((v) => {
     if (v > 0) dailyGoalMin = v;
   })
   .catch((_e) => {});
-invoke<string>("get_goal_notified_date")
+daemonInvoke<string>("get_goal_notified_date")
   .then((stored) => {
     const today = new Date().toISOString().slice(0, 10);
     if (stored === today) goalNotified = true;
@@ -447,7 +448,7 @@ $effect(() => {
   if (goalReached && !goalNotified && status.state === "connected") {
     goalNotified = true;
     const today = new Date().toISOString().slice(0, 10);
-    invoke("set_goal_notified_date", { date: today }).catch((_e) => {});
+    daemonInvoke("set_goal_notified_date", { date: today }).catch((_e) => {});
     try {
       sendNotification({
         title: "🎯 Daily Goal Reached!",
@@ -712,7 +713,7 @@ async function checkOnboardingAsync() {
   // LLM: any model already downloaded?
   if (!onboardDone.llmDownloaded) {
     try {
-      const catalog = await invoke<{ entries: { state: string }[] }>("get_llm_catalog");
+      const catalog = await daemonInvoke<{ entries: { state: string }[] }>("get_llm_catalog");
       if (catalog.entries.some((e) => e.state === "downloaded")) {
         onboardDone.llmDownloaded = true;
         saveOnboarding();
@@ -722,7 +723,7 @@ async function checkOnboardingAsync() {
   // DND: focus-threshold automation enabled by the user?
   if (!onboardDone.dndConfigured) {
     try {
-      const cfg = await invoke<{ enabled: boolean }>("get_dnd_config");
+      const cfg = await daemonInvoke<{ enabled: boolean }>("get_dnd_config");
       if (cfg.enabled) {
         onboardDone.dndConfigured = true;
         saveOnboarding();
@@ -747,23 +748,23 @@ let onboardSteps = $derived([
 const knownUnpairedIds = new Set<string>();
 
 async function retryConnect() {
-  await invoke("retry_connect");
+  await daemonInvoke("retry_connect");
 }
 async function cancelRetry() {
-  await invoke("cancel_retry");
+  await daemonInvoke("cancel_retry");
 }
 async function forgetDevice(id: string) {
-  status = await invoke<DeviceStatus>("forget_device", { id });
+  status = await daemonInvoke<DeviceStatus>("forget_device", { id });
 }
 async function connectDevice(id: string) {
   // If currently connected or scanning, cancel first before switching
   if (status.state === "connected" || status.state === "scanning") {
-    await invoke("cancel_retry");
+    await daemonInvoke("cancel_retry");
     // Small delay so the backend finishes teardown before starting a new session
     await new Promise((r) => setTimeout(r, 200));
   }
-  await invoke("set_preferred_device", { id });
-  await invoke("retry_connect");
+  await daemonInvoke("set_preferred_device", { id });
+  await daemonInvoke("retry_connect");
 }
 
 // ── Event markers (labels, calibration, search) ────────────────────────────
@@ -823,7 +824,7 @@ async function fitMainWindowHeight() {
 const unlisteners: UnlistenFn[] = [];
 async function refreshStatus() {
   const prev = status.state;
-  status = await invoke<DeviceStatus>("get_status");
+  status = await daemonInvoke<DeviceStatus>("get_status");
   if (prev !== "connected" && status.state === "connected") startUptime();
   if (prev === "connected" && status.state !== "connected") stopUptime();
 }
@@ -862,21 +863,15 @@ onMount(async () => {
     /* notification plugin unavailable or denied — non-fatal */
   }
 
-  const eegChannel = new Channel<EegPacket>();
-  eegChannel.onmessage = (pkt) => chartEl?.pushSamples(pkt.electrode, pkt.samples);
-  await invoke("subscribe_eeg", { onEvent: eegChannel });
-
-  const ppgChannel = new Channel<PpgPacket>();
-  ppgChannel.onmessage = (pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples);
-  await invoke("subscribe_ppg", { onEvent: ppgChannel });
-
-  const imuChannel = new Channel<ImuPacket>();
-  imuChannel.onmessage = (pkt) => imuChartEl?.pushPacket(pkt);
-  await invoke("subscribe_imu", { onEvent: imuChannel });
+  // EEG/PPG/IMU streaming via daemon WebSocket
+  const { subscribeEeg, subscribePpg, subscribeImu } = await import("$lib/daemon/eeg-stream");
+  unlisteners.push(subscribeEeg((pkt) => chartEl?.pushSamples(pkt.electrode, pkt.samples)));
+  unlisteners.push(subscribePpg((pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples)));
+  unlisteners.push(subscribeImu((pkt) => imuChartEl?.pushPacket(pkt)));
 
   await refreshStatus();
   appVersion = await invoke<string>("get_app_version");
-  mainWindowAutoFit = await invoke<boolean>("get_main_window_auto_fit").catch(() => true);
+  mainWindowAutoFit = await daemonInvoke<boolean>("get_main_window_auto_fit").catch(() => true);
 
   // Auto-fit window height to dashboard content as cards expand/collapse.
   autoHeightRo = new ResizeObserver(() => scheduleAutoHeightFit());
@@ -894,7 +889,8 @@ onMount(async () => {
 
   // Seed the band chart with whatever the backend already has (may be null
   // on a fresh start or before the 2-second warmup period completes).
-  const latestBands = await invoke<BandSnapshot | null>("get_latest_bands");
+  const { getLatestBands, subscribeBands } = await import("$lib/daemon/eeg-stream");
+  const latestBands = await getLatestBands();
   if (latestBands) {
     bandChartEl?.update(latestBands);
     updateScores(latestBands);
@@ -945,7 +941,7 @@ onMount(async () => {
 
   // Secondary (background) sessions
   try {
-    secondarySessions = await invoke<SecondarySession[]>("list_secondary_sessions");
+    secondarySessions = await daemonInvoke<SecondarySession[]>("list_secondary_sessions");
   } catch {
     /* ignore — command may not exist in older builds */
   }
@@ -977,11 +973,11 @@ onMount(async () => {
     }),
   );
 
-  // Live band power updates (4 Hz, broadcast event).
+  // Live band power updates (4 Hz, via daemon WebSocket).
   unlisteners.push(
-    await listen<BandSnapshot>("eeg-bands", (ev) => {
-      bandChartEl?.update(ev.payload);
-      updateScores(ev.payload);
+    subscribeBands((snap) => {
+      bandChartEl?.update(snap);
+      updateScores(snap);
     }),
   );
 
@@ -2095,7 +2091,7 @@ useWindowTitle("window.title.main");
             <!-- Stop -->
             <button
               class="text-muted-foreground/30 hover:text-red-500 transition-colors cursor-pointer text-[0.65rem] shrink-0"
-              onclick={() => invoke("lsl_cancel_secondary", { sessionId: sess.id })}
+              onclick={() => daemonInvoke("lsl_cancel_secondary", { sessionId: sess.id })}
               title={t("dashboard.stopSecondary")}
             >
               ✕

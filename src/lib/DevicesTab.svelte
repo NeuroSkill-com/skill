@@ -13,6 +13,22 @@ import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
+import {
+  forgetDevice,
+  getCortexWsState,
+  getDeviceApiConfig,
+  getDeviceLog,
+  getDevices,
+  getOpenbciConfig,
+  getScannerConfig,
+  getWsPort,
+  listSerialPorts,
+  pairDevice as pairDeviceCmd,
+  setDeviceApiConfig,
+  setOpenbciConfig,
+  setPreferredDevice,
+  setScannerConfig,
+} from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
 import { getSupportedCompanies, loadSupportedCompanies, type SupportedCompanyId } from "$lib/supported-devices";
 import { colorForRssi } from "$lib/theme";
@@ -168,7 +184,7 @@ const filteredCompanies = $derived(
 );
 
 async function saveScannerConfig() {
-  await invoke("set_scanner_config", { config: scannerConfig });
+  await setScannerConfig(scannerConfig);
   scannerChanged = false;
   scannerSaved = true;
   setTimeout(() => {
@@ -178,7 +194,7 @@ async function saveScannerConfig() {
 
 async function refreshDeviceLog() {
   try {
-    deviceLog = await invoke<DeviceLogEntry[]>("get_device_log");
+    deviceLog = await getDeviceLog();
   } catch {
     /* noop */
   }
@@ -187,7 +203,7 @@ async function refreshDeviceLog() {
 async function loadSerialPorts() {
   portsLoading = true;
   try {
-    serialPorts = await invoke<string[]>("list_serial_ports");
+    serialPorts = await listSerialPorts();
   } catch {
     serialPorts = [];
   }
@@ -195,7 +211,7 @@ async function loadSerialPorts() {
 }
 
 async function saveOpenbci() {
-  await invoke("set_openbci_config", { config: openbci });
+  await setOpenbciConfig(openbci);
   openbciChanged = false;
   openbciSaved = true;
   setTimeout(() => {
@@ -219,7 +235,7 @@ async function connectOpenbci() {
 async function saveEmotivApi() {
   emotivApiError = "";
   try {
-    await invoke("set_device_api_config", { config: deviceApi });
+    await setDeviceApiConfig(deviceApi);
     emotivApiChanged = false;
     emotivApiSaved = true;
     setTimeout(() => {
@@ -233,7 +249,7 @@ async function saveEmotivApi() {
 async function saveIdunApi() {
   idunApiError = "";
   try {
-    await invoke("set_device_api_config", { config: deviceApi });
+    await setDeviceApiConfig(deviceApi);
     idunApiChanged = false;
     idunApiSaved = true;
     setTimeout(() => {
@@ -247,7 +263,7 @@ async function saveIdunApi() {
 async function saveOuraApi() {
   ouraApiError = "";
   try {
-    await invoke("set_device_api_config", { config: deviceApi });
+    await setDeviceApiConfig(deviceApi);
     ouraApiChanged = false;
     ouraApiSaved = true;
     setTimeout(() => {
@@ -265,7 +281,7 @@ async function ouraSync() {
     const now = new Date();
     const end = now.toISOString().split("T")[0];
     const start = new Date(now.getTime() - 30 * 86400 * 1000).toISOString().split("T")[0];
-    const port = await invoke<number>("get_ws_port");
+    const port = await getWsPort();
     const resp = await fetch(`http://127.0.0.1:${port}/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -540,14 +556,14 @@ const discoveredDevices = $derived(devices.filter((d) => !d.is_paired));
 // ── Device actions ─────────────────────────────────────────────────────────
 async function setPreferred(id: string) {
   const cur = devices.find((d) => d.id === id);
-  devices = await invoke<DiscoveredDevice[]>("set_preferred_device", { id: cur?.is_preferred ? "" : id });
+  devices = await setPreferredDevice<DiscoveredDevice>(cur?.is_preferred ? "" : id);
 }
 async function forget(id: string) {
-  await invoke("forget_device", { id });
+  await forgetDevice(id);
   devices = devices.map((d) => (d.id === id ? { ...d, is_paired: false } : d));
 }
 async function pairDevice(id: string) {
-  devices = await invoke<DiscoveredDevice[]>("pair_device", { id });
+  devices = await pairDeviceCmd<DiscoveredDevice>(id);
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -556,11 +572,11 @@ let nowTimer: ReturnType<typeof setInterval>;
 
 onMount(async () => {
   supportedCompanies = await loadSupportedCompanies();
-  devices = await invoke<DiscoveredDevice[]>("get_devices");
-  openbci = await invoke<OpenBciConfig>("get_openbci_config");
-  deviceApi = await invoke<DeviceApiConfig>("get_device_api_config");
-  scannerConfig = await invoke<ScannerConfig>("get_scanner_config");
-  cortexWsState = await invoke<CortexWsState>("get_cortex_ws_state");
+  devices = await getDevices();
+  openbci = await getOpenbciConfig();
+  deviceApi = await getDeviceApiConfig();
+  scannerConfig = await getScannerConfig();
+  cortexWsState = await getCortexWsState<CortexWsState>();
   await loadSerialPorts();
   await refreshDeviceLog();
   deviceLogInterval = setInterval(refreshDeviceLog, 3000);

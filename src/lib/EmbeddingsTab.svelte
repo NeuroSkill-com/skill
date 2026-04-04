@@ -5,10 +5,10 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ const grouped = $derived.by(() => {
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
   [models, currentCode, staleCount] = await Promise.all([
-    invoke<ModelInfo[]>("list_embedding_models"),
-    invoke<string>("get_embedding_model"),
-    invoke<number>("get_stale_label_count"),
+    daemonInvoke<ModelInfo[]>("list_embedding_models"),
+    daemonInvoke<string>("get_embedding_model"),
+    daemonInvoke<number>("get_stale_label_count"),
   ]);
   // Sort: put default (bge-small-en) first, then alphabetically
   models.sort((a, b) => {
@@ -59,7 +59,7 @@ async function load() {
 async function applyModel() {
   saving = true;
   try {
-    await invoke("set_embedding_model", { modelCode: currentCode });
+    await daemonInvoke("set_embedding_model", { modelCode: currentCode });
     staleCount = 0; // backfill runs in background after set_embedding_model
   } finally {
     saving = false;
@@ -71,7 +71,7 @@ async function reembed() {
   reembedding = true;
   progress = null;
   try {
-    await invoke("reembed_all_labels");
+    await daemonInvoke("reembed_all_labels");
     staleCount = 0;
   } finally {
     reembedding = false;

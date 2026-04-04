@@ -7,11 +7,15 @@ import { t } from "$lib/i18n/index.svelte";
 interface LlmConfigView {
   n_gpu_layers: number;
   ctx_size: number | null;
+  n_batch: number | null;
+  n_ubatch: number | null;
   parallel: number;
   api_key: string | null;
   autoload_mmproj: boolean;
   no_mmproj_gpu: boolean;
   verbose: boolean;
+  flash_attention: boolean;
+  offload_kqv: boolean;
   gpu_memory_threshold: number;
   gpu_memory_gen_threshold: number;
   cache_type_k: string;
@@ -37,6 +41,10 @@ interface Props {
   onSetCacheTypeK: (val: string) => void | Promise<void>;
   onSetCacheTypeV: (val: string) => void | Promise<void>;
   onToggleAttnRotDisabled: () => void | Promise<void>;
+  onSetNBatch: (val: number | null) => void | Promise<void>;
+  onSetNUbatch: (val: number | null) => void | Promise<void>;
+  onToggleFlashAttention: () => void | Promise<void>;
+  onToggleOffloadKqv: () => void | Promise<void>;
 }
 
 let {
@@ -57,6 +65,10 @@ let {
   onSetCacheTypeK,
   onSetCacheTypeV,
   onToggleAttnRotDisabled,
+  onSetNBatch,
+  onSetNUbatch,
+  onToggleFlashAttention,
+  onToggleOffloadKqv,
 }: Props = $props();
 
 const KV_TYPES = [
@@ -297,6 +309,69 @@ const curlSnippet = $derived(
             onclick={onToggleAttnRotDisabled}
             class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {!config.attn_rot_disabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
             <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {!config.attn_rot_disabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+          </button>
+        </div>
+
+        <!-- Prefill batch sizes ─────────────────────────────────────── -->
+        <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.prefill")}</span>
+            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.prefillDesc")}</span>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="flex flex-col gap-1 flex-1">
+              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nBatch")}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                {#each [[null, "auto"], [512, "512"], [1024, "1K"], [2048, "2K"], [4096, "4K"]] as [val, label]}
+                  <button onclick={() => onSetNBatch(val as number | null)}
+                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.n_batch === val
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 flex-1">
+              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nUbatch")}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                {#each [[null, "auto"], [128, "128"], [256, "256"], [512, "512"]] as [val, label]}
+                  <button onclick={() => onSetNUbatch(val as number | null)}
+                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.n_ubatch === val
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flash attention + Offload KQV ──────────────────────────────── -->
+        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.flashAttn")}</span>
+            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.flashAttnDesc")}</span>
+          </div>
+          <button role="switch" aria-checked={config.flash_attention} aria-label={t("llm.inference.flashAttn")}
+            onclick={onToggleFlashAttention}
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.flash_attention ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.flash_attention ? 'translate-x-4' : 'translate-x-0'}"></span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.offloadKqv")}</span>
+            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.offloadKqvDesc")}</span>
+          </div>
+          <button role="switch" aria-checked={config.offload_kqv} aria-label={t("llm.inference.offloadKqv")}
+            onclick={onToggleOffloadKqv}
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.offload_kqv ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.offload_kqv ? 'translate-x-4' : 'translate-x-0'}"></span>
           </button>
         </div>
 

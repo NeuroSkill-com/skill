@@ -1,11 +1,11 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Clients tab — pair phones via QR, manage connected devices and their permissions. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { getApiToken, getWsPort } from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
@@ -113,7 +113,14 @@ async function api(path: string, method = "GET", body?: any) {
   return j;
 }
 
-let phoneInfo = $state<any>(null);
+type PhoneInfo = {
+  iroh_endpoint_id: string;
+  phone_marketing_name?: string | null;
+  phone_model?: string | null;
+  os_version?: string | null;
+};
+
+let phoneInfo = $state<PhoneInfo | null>(null);
 
 async function refresh() {
   err = "";
@@ -122,14 +129,19 @@ async function refresh() {
     irohInfo = info;
     totp = t.totp || [];
     clients = c.clients || [];
-    // Fetch phone info from session status (if a phone is connected)
-    try {
-      const status = await invoke("ws_command", { msg: JSON.stringify({ command: "status" }) });
-      const s = typeof status === "string" ? JSON.parse(status) : status;
-      if (s?.phone_info) phoneInfo = s.phone_info;
-    } catch {
-      /* phone info is optional */
-    }
+
+    // Thin-client migration: resolve connected-phone badge data from daemon
+    // iroh client rows instead of legacy in-process `ws_command` IPC.
+    const connected = clients
+      .filter((row) => !row.revoked_at)
+      .sort((a, b) => (b.last_connected_at || 0) - (a.last_connected_at || 0))[0];
+    phoneInfo = connected
+      ? {
+          iroh_endpoint_id: connected.endpoint_id,
+          phone_model: connected.device_model || connected.name,
+          os_version: null,
+        }
+      : null;
   } catch (e: any) {
     err = String(e?.message || e);
   } finally {
@@ -284,7 +296,7 @@ async function savePermissions() {
 }
 
 onMount(async () => {
-  [port, token] = await Promise.all([invoke<number>("get_ws_port"), invoke<string>("get_api_token").catch(() => "")]);
+  [port, token] = await Promise.all([getWsPort(), getApiToken().catch(() => "")]);
   await Promise.all([refresh(), loadScopeGroups()]);
 });
 

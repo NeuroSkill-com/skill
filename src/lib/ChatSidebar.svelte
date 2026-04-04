@@ -10,20 +10,22 @@
       (used for the auto-title applied when the first message is sent)
 -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount, tick } from "svelte";
+import {
+  archiveChatSession,
+  type ChatSessionSummary,
+  deleteChatSession,
+  listArchivedChatSessions,
+  listChatSessions,
+  renameChatSession,
+  unarchiveChatSession,
+} from "$lib/daemon/client";
 import { fmtDate } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface SessionSummary {
-  id: number;
-  title: string;
-  preview: string;
-  created_at: number;
-  message_count: number;
-}
+type SessionSummary = ChatSessionSummary;
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -53,11 +55,11 @@ let editEl = $state<HTMLInputElement | null>(null);
 /** Reload the session list from the backend. */
 export async function refresh() {
   try {
-    sessions = await invoke<SessionSummary[]>("list_chat_sessions");
+    sessions = await listChatSessions();
   } catch (e) {}
   if (showArchive) {
     try {
-      archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
+      archived = await listArchivedChatSessions();
     } catch (e) {}
   }
 }
@@ -85,7 +87,7 @@ async function commitEdit() {
   const title = editTitle.trim();
   if (!title) return;
   try {
-    await invoke("rename_chat_session", { id, title });
+    await renameChatSession(id, title);
     sessions = sessions.map((s) => (s.id === id ? { ...s, title } : s));
   } catch (e) {}
 }
@@ -103,7 +105,7 @@ async function doArchive(id: number, e: MouseEvent) {
   sessions = sessions.filter((s) => s.id !== id);
   if (session) archived = [session, ...archived];
   try {
-    await invoke("archive_chat_session", { id });
+    await archiveChatSession(id);
   } catch (e) {}
   onDelete(id);
 }
@@ -114,7 +116,7 @@ async function doUnarchive(id: number, e: MouseEvent) {
   archived = archived.filter((s) => s.id !== id);
   if (session) sessions = [session, ...sessions];
   try {
-    await invoke("unarchive_chat_session", { id });
+    await unarchiveChatSession(id);
   } catch (e) {}
 }
 
@@ -122,7 +124,7 @@ async function doDelete(id: number, e: MouseEvent) {
   e.stopPropagation();
   archived = archived.filter((s) => s.id !== id);
   try {
-    await invoke("delete_chat_session", { id });
+    await deleteChatSession(id);
   } catch (e) {}
 }
 
@@ -130,7 +132,7 @@ async function toggleArchive() {
   showArchive = !showArchive;
   if (showArchive) {
     try {
-      archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
+      archived = await listArchivedChatSessions();
     } catch (e) {}
   }
 }

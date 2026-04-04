@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import ScreenshotCaptureSettingsSection from "$lib/screenshots/ScreenshotCaptureSettingsSection.svelte";
 import ScreenshotOcrSection from "$lib/screenshots/ScreenshotOcrSection.svelte";
@@ -123,14 +124,14 @@ const recommendedSize = $derived.by(() => {
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
-  config = await invoke<ScreenshotConfig>("get_screenshot_config");
+  config = await daemonInvoke<ScreenshotConfig>("get_screenshot_config");
   try {
-    estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
+    estimate = await daemonInvoke<ReembedEstimate | null>("estimate_screenshot_reembed");
   } catch {
     estimate = null;
   }
   try {
-    sharedTextModel = await invoke<string>("get_embedding_model");
+    sharedTextModel = await daemonInvoke<string>("get_embedding_model");
   } catch {
     sharedTextModel = "";
   }
@@ -148,12 +149,12 @@ async function load() {
 async function save() {
   saving = true;
   try {
-    const result = await invoke<ConfigChangeResult>("set_screenshot_config", { config });
+    const result = await daemonInvoke<ConfigChangeResult>("set_screenshot_config", { config });
     modelChanged = result.model_changed;
     staleCount = result.stale_count;
     if (result.model_changed) {
       try {
-        estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
+        estimate = await daemonInvoke<ReembedEstimate | null>("estimate_screenshot_reembed");
       } catch (e) {}
     }
   } finally {
@@ -184,11 +185,11 @@ async function reembed() {
   reembedding = true;
   progress = null;
   try {
-    await invoke("rebuild_screenshot_embeddings");
+    await daemonInvoke("rebuild_screenshot_embeddings");
     modelChanged = false;
     staleCount = 0;
     try {
-      estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
+      estimate = await daemonInvoke<ReembedEstimate | null>("estimate_screenshot_reembed");
     } catch (e) {}
   } finally {
     reembedding = false;
@@ -198,7 +199,7 @@ async function reembed() {
 
 async function refreshMetrics() {
   try {
-    const m = await invoke<PipelineMetrics>("get_screenshot_metrics");
+    const m = await daemonInvoke<PipelineMetrics>("get_screenshot_metrics");
     pipeMetrics = m;
     // Push to rolling history (convert µs → ms)
     captureHistory = pushHistory(captureHistory, m.capture_total_us / 1000);

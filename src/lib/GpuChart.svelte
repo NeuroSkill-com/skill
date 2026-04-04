@@ -18,8 +18,8 @@ the Free Software Foundation, version 3 only. -->
     giving smooth colour transitions with zero patching.
 -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import { getResolved } from "$lib/stores/theme.svelte";
 import { C_NEUTRAL, colorForLoad, rgba as toRgba } from "$lib/theme";
@@ -186,7 +186,7 @@ function draw(ctx: CanvasRenderingContext2D, W: number, H: number) {
 let gpuErrCount = 0;
 async function pollGpu() {
   try {
-    const gpu = await invoke<GpuStats | null>("get_gpu_stats");
+    const gpu = await daemonInvoke<GpuStats | null>("get_gpu_stats");
     gpuErrCount = 0;
     gpuStats = gpu;
     if (gpu !== null) {
@@ -207,7 +207,7 @@ async function pollGpu() {
 
 async function pollModel() {
   try {
-    const m = await invoke<ModelStatus>("get_eeg_model_status");
+    const m = await daemonInvoke<ModelStatus>("get_eeg_model_status");
     modelActive = m.encoder_loaded;
   } catch {
     modelActive = false;

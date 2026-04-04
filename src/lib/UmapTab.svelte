@@ -6,11 +6,11 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- UMAP projection settings — repulsion, epochs, timeout -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ let loaded = $state(false);
 async function save() {
   saving = true;
   try {
-    await invoke("set_umap_config", { config: cfg });
+    await daemonInvoke("set_umap_config", { config: cfg });
     dirty = false;
   } finally {
     saving = false;
@@ -66,7 +66,7 @@ async function resetDefaults() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 onMount(async () => {
-  cfg = await invoke<UmapConfig>("get_umap_config");
+  cfg = await daemonInvoke<UmapConfig>("get_umap_config");
   loaded = true;
 });
 
