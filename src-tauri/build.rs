@@ -110,7 +110,6 @@ fn setup_vulkan_sdk_windows() {
     let _ = std::fs::remove_file(&installer_path);
 }
 
-#[cfg(target_os = "macos")]
 fn link_openmp_runtime_macos() {
     // llama-cpp / ggml may enable OpenMP internally depending on feature
     // combinations across transitive deps (e.g., NeuTTS backbone).  Ensure
