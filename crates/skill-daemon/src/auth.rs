@@ -80,15 +80,6 @@ impl TokenExpiry {
             Self::Never => None,
         }
     }
-
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Week => "1 week",
-            Self::Month => "30 days",
-            Self::Quarter => "90 days",
-            Self::Never => "never",
-        }
-    }
 }
 
 /// A single API token with metadata.
@@ -178,11 +169,7 @@ impl TokenStore {
         std::fs::write(&path, json).map_err(|e| format!("write error: {e}"))
     }
 
-    /// Maximum tokens allowed (rate limit).
-    pub const MAX_TOKENS: usize = 50;
-
     /// Create a new token. Returns the full token (including secret).
-    /// Returns None if the maximum number of active tokens is reached.
     pub fn create(&mut self, name: String, acl: TokenAcl, expiry: TokenExpiry) -> ApiToken {
         let created_at = now_unix();
         let token = ApiToken {

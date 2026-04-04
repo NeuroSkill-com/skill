@@ -523,7 +523,10 @@ async fn list_tokens(State(state): State<AppState>) -> Json<Vec<auth::ApiToken>>
 
 async fn create_token(State(state): State<AppState>, Json(req): Json<CreateTokenRequest>) -> Json<auth::ApiToken> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state.token_store.lock().unwrap();
+    let mut store = state
+        .token_store
+        .lock()
+        .expect("token_store mutex poisoned in create_token");
     let token = store.create(req.name, req.acl, req.expiry);
     let _ = store.save(&skill_dir);
     Json(token) // Full token returned (secret visible) on creation only
@@ -531,7 +534,10 @@ async fn create_token(State(state): State<AppState>, Json(req): Json<CreateToken
 
 async fn revoke_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state.token_store.lock().unwrap();
+    let mut store = state
+        .token_store
+        .lock()
+        .expect("token_store mutex poisoned in revoke_token");
     let ok = store.revoke(&req.id);
     let _ = store.save(&skill_dir);
     Json(serde_json::json!({ "ok": ok }))
@@ -544,13 +550,16 @@ async fn delete_token(State(state): State<AppState>, Json(req): Json<TokenIdRequ
         );
     }
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state.token_store.lock().unwrap();
+    let mut store = state
+        .token_store
+        .lock()
+        .expect("token_store mutex poisoned in delete_token");
     let ok = store.delete(&req.id);
     let _ = store.save(&skill_dir);
     Json(serde_json::json!({ "ok": ok }))
 }
 
-async fn refresh_default_token(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn refresh_default_token(State(_state): State<AppState>) -> Json<serde_json::Value> {
     use rand::RngCore;
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
