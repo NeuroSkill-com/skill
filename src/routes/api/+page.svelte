@@ -291,6 +291,15 @@ useWindowTitle("window.title.api");
           {port}
         </kbd>
       </div>
+      {#if daemon?.version}
+        <div class="flex items-center gap-2 text-[0.54rem] text-muted-foreground/60">
+          <span>v{daemon.version.daemon_version}</span>
+          <span>·</span>
+          <span>protocol {daemon.version.protocol_version}</span>
+          <span>·</span>
+          <span>auth ✓</span>
+        </div>
+      {/if}
       {#if daemon && !daemon.reachable}
         <div class="flex items-center gap-2 text-[0.6rem] text-amber-600 dark:text-amber-400">
           <span>Daemon unavailable{daemon.error ? `: ${daemon.error}` : ""}</span>

@@ -44,7 +44,7 @@ export async function connectDaemonWs(): Promise<void> {
   _ws = new WebSocket(url);
 
   _ws.onopen = () => {
-    // Auth token is sent as query parameter on the URL.
+    import("./status").then(({ setDaemonConnected }) => setDaemonConnected()).catch(() => {});
   };
 
   _ws.onmessage = (msg) => {
@@ -64,10 +64,12 @@ export async function connectDaemonWs(): Promise<void> {
 
   _ws.onclose = () => {
     _ws = null;
+    import("./status").then(({ setDaemonDisconnected }) => setDaemonDisconnected()).catch(() => {});
     scheduleReconnect();
   };
 
   _ws.onerror = () => {
+    import("./status").then(({ notifyDaemonError }) => notifyDaemonError("WebSocket error")).catch(() => {});
     _ws?.close();
   };
 }

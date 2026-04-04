@@ -48,7 +48,16 @@ export async function daemonPost<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-  const { port, token } = await getBootstrap();
+  let port: number;
+  let token: string;
+  try {
+    const b = await getBootstrap();
+    port = b.port;
+    token = b.token;
+  } catch (e) {
+    import("./status").then(({ notifyDaemonError }) => notifyDaemonError("bootstrap failed")).catch(() => {});
+    throw e;
+  }
   const url = `http://127.0.0.1:${port}${path.startsWith("/") ? path : `/${path}`}`;
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -65,8 +74,14 @@ async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unk
 
   if (!resp.ok) {
     const msg = json?.error || json?.message || `${resp.status} ${resp.statusText}`;
+    if (resp.status === 401) {
+      import("./status").then(({ notifyDaemonError }) => notifyDaemonError("authentication failed")).catch(() => {});
+    }
     throw new Error(msg);
   }
+
+  // Mark connected on success
+  import("./status").then(({ setDaemonConnected }) => setDaemonConnected()).catch(() => {});
 
   if (json && typeof json === "object" && json.ok === false) {
     throw new Error(json.error || json.message || "Request failed");
