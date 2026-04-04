@@ -12238,6 +12238,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialport",
+ "sha2 0.10.9",
  "skill-commands",
  "skill-constants",
  "skill-daemon-common",

@@ -206,6 +206,59 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
 // ── Session lifecycle ─────────────────────────────────────────────────────────
 
+/// Best-effort device-kind detection from daemon identifier and/or display name.
+///
+/// This keeps UI routing resilient when the daemon can only provide partial
+/// identity metadata (for example: name without id, or vice versa).
+#[allow(dead_code)]
+pub(crate) fn detect_device_kind(
+    device_id: Option<&str>,
+    device_name: Option<&str>,
+) -> &'static str {
+    if let Some(id) = device_id.map(str::to_ascii_lowercase) {
+        if id.starts_with("cortex:") {
+            return "emotiv";
+        }
+        if id.starts_with("usb:") {
+            return "ganglion";
+        }
+        if id.starts_with("cgx:") {
+            return "cognionics";
+        }
+    }
+
+    let name = device_name.map(str::to_ascii_lowercase).unwrap_or_default();
+
+    if name.starts_with("ganglion") || name.starts_with("simblee") {
+        return "ganglion";
+    }
+    if name.contains("mw75") || name.contains("neurable") {
+        return "mw75";
+    }
+    if name.starts_with("hermes") {
+        return "hermes";
+    }
+    if name.starts_with("emotiv")
+        || name.starts_with("epoc-x")
+        || name.starts_with("insight")
+        || name.starts_with("flex")
+        || name.starts_with("mn8")
+    {
+        return "emotiv";
+    }
+    if name.starts_with("idun") || name.starts_with("guardian") || name.starts_with("ige") {
+        return "idun";
+    }
+    if name.starts_with("mendi") {
+        return "mendi";
+    }
+    if name.contains("cgx") || name.contains("cognionics") || name.contains("quick-20r") {
+        return "cognionics";
+    }
+
+    "muse"
+}
+
 // ── Secondary session management ─────────────────────────────────────────────
 
 // ── Unit tests ────────────────────────────────────────────────────────────────

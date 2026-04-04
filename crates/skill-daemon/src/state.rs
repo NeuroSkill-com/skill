@@ -23,7 +23,7 @@ use crate::tracker::DaemonTracker;
 /// Shared application state threaded through all axum handlers.
 #[derive(Clone)]
 pub struct AppState {
-    pub auth_token: Arc<String>,
+    pub auth_token: Arc<Mutex<String>>,
     pub events_tx: broadcast::Sender<EventEnvelope>,
     pub tracker: Arc<Mutex<DaemonTracker>>,
     pub status: Arc<Mutex<StatusResponse>>,
@@ -75,7 +75,7 @@ impl AppState {
         #[cfg(feature = "llm")]
         let llm_config = settings.llm.clone();
         Self {
-            auth_token: Arc::new(auth_token),
+            auth_token: Arc::new(Mutex::new(auth_token)),
             events_tx,
             tracker: Arc::new(Mutex::new(DaemonTracker::default())),
             status: Arc::new(Mutex::new(StatusResponse {

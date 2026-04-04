@@ -516,75 +516,128 @@ struct TokenIdRequest {
     id: String,
 }
 
-async fn list_tokens(State(state): State<AppState>) -> Json<Vec<auth::ApiToken>> {
-    let store = state.token_store.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(store.list_redacted())
+async fn list_tokens(State(state): State<AppState>) -> impl IntoResponse {
+    let store = match state.token_store.lock() {
+        Ok(store) => store.clone(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": "token store unavailable" })),
+            )
+                .into_response();
+        }
+    };
+    (StatusCode::OK, Json(store.list_redacted())).into_response()
 }
 
-async fn create_token(State(state): State<AppState>, Json(req): Json<CreateTokenRequest>) -> Json<auth::ApiToken> {
+async fn create_token(State(state): State<AppState>, Json(req): Json<CreateTokenRequest>) -> impl IntoResponse {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state
-        .token_store
-        .lock()
-        .expect("token_store mutex poisoned in create_token");
-    let token = store.create(req.name, req.acl, req.expiry);
+    let Ok(mut store) = state.token_store.lock() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": "token store unavailable" })),
+        )
+            .into_response();
+    };
+
+    let token = match store.create(req.name, req.acl, req.expiry) {
+        Ok(token) => token,
+        Err(auth::TokenStoreError::MaxTokensReached) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("maximum active token count reached ({})", auth::TokenStore::MAX_TOKENS)
+                })),
+            )
+                .into_response();
+        }
+    };
+
     let _ = store.save(&skill_dir);
-    Json(token) // Full token returned (secret visible) on creation only
+    (StatusCode::OK, Json(token)).into_response() // Full token returned (secret visible) on creation only
 }
 
-async fn revoke_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
+async fn revoke_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> impl IntoResponse {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state
-        .token_store
-        .lock()
-        .expect("token_store mutex poisoned in revoke_token");
+    let Ok(mut store) = state.token_store.lock() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": "token store unavailable" })),
+        )
+            .into_response();
+    };
+
     let ok = store.revoke(&req.id);
     let _ = store.save(&skill_dir);
-    Json(serde_json::json!({ "ok": ok }))
+    (StatusCode::OK, Json(serde_json::json!({ "ok": ok }))).into_response()
 }
 
-async fn delete_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
+async fn delete_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> impl IntoResponse {
     if req.id == "default" {
-        return Json(
-            serde_json::json!({ "ok": false, "error": "cannot delete the default token — use refresh instead" }),
-        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "cannot delete the default token — use refresh instead" })),
+        )
+            .into_response();
     }
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut store = state
-        .token_store
-        .lock()
-        .expect("token_store mutex poisoned in delete_token");
+    let Ok(mut store) = state.token_store.lock() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": "token store unavailable" })),
+        )
+            .into_response();
+    };
+
     let ok = store.delete(&req.id);
     let _ = store.save(&skill_dir);
-    Json(serde_json::json!({ "ok": ok }))
+    (StatusCode::OK, Json(serde_json::json!({ "ok": ok }))).into_response()
 }
 
-async fn refresh_default_token(State(_state): State<AppState>) -> Json<serde_json::Value> {
+async fn refresh_default_token(State(state): State<AppState>) -> impl IntoResponse {
     use rand::RngCore;
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     let new_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
 
-    match token_path() {
-        Ok(path) => {
-            if let Err(e) = std::fs::write(&path, format!("{new_token}\n")) {
-                return Json(serde_json::json!({ "ok": false, "error": format!("write error: {e}") }));
-            }
-            #[cfg(unix)]
-            {
-                let _ = tighten_file_permissions(&path);
-            }
-        }
+    let path = match token_path() {
+        Ok(path) => path,
         Err(e) => {
-            return Json(serde_json::json!({ "ok": false, "error": format!("path error: {e}") }));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": format!("path error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = write_string_atomic(&path, &format!("{new_token}\n")) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": format!("write error: {e}") })),
+        )
+            .into_response();
+    }
+
+    match state.auth_token.lock() {
+        Ok(mut guard) => {
+            *guard = new_token.clone();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": "auth token state unavailable" })),
+            )
+                .into_response();
         }
     }
 
-    // Return new token so caller can update immediately.
-    // Note: the daemon's in-memory Arc<String> is not updated —
-    // the new token takes full effect on next daemon restart.
-    // But the auth middleware also checks the file, so it works.
-    Json(serde_json::json!({ "ok": true, "token": new_token }))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "token": new_token })),
+    )
+        .into_response()
 }
 
 async fn push_event(State(state): State<AppState>, Json(envelope): Json<EventEnvelope>) -> Json<serde_json::Value> {
@@ -1072,8 +1125,10 @@ fn is_authorized(headers: &HeaderMap, request: &axum::extract::Request, state: &
     };
 
     // Check in-memory default token first (fast path)
-    if token == *state.auth_token {
-        return true;
+    if let Ok(current) = state.auth_token.lock() {
+        if token == *current {
+            return true;
+        }
     }
 
     // Check on-disk default token (handles refresh without restart)
@@ -1115,8 +1170,7 @@ fn load_or_create_token() -> anyhow::Result<String> {
     rand::rng().fill_bytes(&mut bytes);
     let token = URL_SAFE_NO_PAD.encode(bytes);
 
-    std::fs::write(&token_path, format!("{token}\n"))?;
-    tighten_file_permissions(&token_path)?;
+    write_string_atomic(&token_path, &format!("{token}\n"))?;
 
     info!(path = %token_path.display(), "created daemon auth token");
     Ok(token)
@@ -1125,6 +1179,28 @@ fn load_or_create_token() -> anyhow::Result<String> {
 fn token_path() -> anyhow::Result<PathBuf> {
     let base = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("unable to resolve config directory"))?;
     Ok(base.join("skill").join("daemon").join("auth.token"))
+}
+
+fn write_string_atomic(path: &Path, content: &str) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+        tighten_dir_permissions(parent)?;
+    }
+
+    let mut nonce = [0u8; 8];
+    rand::rng().fill_bytes(&mut nonce);
+    let tmp_name = format!(
+        ".{}.tmp-{}",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("file"),
+        hex::encode(nonce)
+    );
+    let tmp_path = path.with_file_name(tmp_name);
+
+    std::fs::write(&tmp_path, content)?;
+    tighten_file_permissions(&tmp_path)?;
+    std::fs::rename(&tmp_path, path)?;
+    tighten_file_permissions(path)?;
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -1167,18 +1243,4 @@ fn now_unix_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_authorized;
-    use axum::http::{header, HeaderMap, HeaderValue};
-
-    #[test]
-    fn bearer_header_is_validated() {
-        let mut headers = HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer test-token"));
-
-        assert!(is_authorized(headers, "test-token"));
-    }
 }

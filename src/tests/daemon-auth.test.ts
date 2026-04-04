@@ -42,9 +42,10 @@ describe("daemon auth module (auth.rs)", () => {
     expect(src).toContain("pub fn list_redacted(");
   });
 
-  it("redacts token secrets in list", () => {
-    expect(src).toContain("redacted.token = format!");
-    expect(src).toContain("…");
+  it("hashes token secrets for storage", () => {
+    expect(src).toContain("token_hash");
+    expect(src).toContain("token_salt");
+    expect(src).toContain("Sha256");
   });
 
   it("checks expiration", () => {

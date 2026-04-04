@@ -2,6 +2,7 @@
 //! Multi-token authentication with names, ACLs, and expiration.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -89,8 +90,20 @@ pub struct ApiToken {
     pub id: String,
     /// Human-readable name.
     pub name: String,
-    /// The secret token string (shown once at creation, then redacted).
+    /// Secret token string.
+    /// - Returned once at creation.
+    /// - For persisted store entries this is intentionally blank.
+    #[serde(default)]
     pub token: String,
+    /// SHA-256(secret + per-token salt) hex digest.
+    #[serde(default)]
+    pub token_hash: String,
+    /// Random per-token salt used for hashing.
+    #[serde(default)]
+    pub token_salt: String,
+    /// Non-sensitive preview shown in token list.
+    #[serde(default)]
+    pub token_preview: String,
     /// Access control level.
     pub acl: TokenAcl,
     /// Unix timestamp of creation.
@@ -119,6 +132,25 @@ impl ApiToken {
     pub fn is_valid(&self) -> bool {
         !self.revoked && !self.is_expired()
     }
+
+    fn for_api_response(mut self) -> Self {
+        self.token_hash.clear();
+        self.token_salt.clear();
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenStoreError {
+    MaxTokensReached,
+}
+
+impl std::fmt::Display for TokenStoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MaxTokensReached => write!(f, "maximum number of active tokens reached"),
+        }
+    }
 }
 
 /// Token store — persisted as JSON in the skill data dir.
@@ -140,10 +172,38 @@ fn generate_token_secret() -> String {
     format!("sk-{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
 }
 
-fn generate_id() -> String {
-    let mut bytes = [0u8; 8];
+fn generate_token_salt() -> String {
+    let mut bytes = [0u8; 16];
     rand::rng().fill_bytes(&mut bytes);
-    hex::encode(bytes)
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn hash_secret(secret: &str, salt: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(salt.as_bytes());
+    hasher.update(secret.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    let max_len = a.len().max(b.len());
+    let mut diff = a.len() ^ b.len();
+
+    for i in 0..max_len {
+        let av = *a.get(i).unwrap_or(&0);
+        let bv = *b.get(i).unwrap_or(&0);
+        diff |= usize::from(av ^ bv);
+    }
+
+    diff == 0
+}
+
+fn token_preview(secret: &str) -> String {
+    if secret.len() > 10 {
+        format!("{}…{}", &secret[..6], &secret[secret.len() - 4..])
+    } else {
+        "hidden".to_string()
+    }
 }
 
 fn store_path(skill_dir: &Path) -> PathBuf {
@@ -151,10 +211,33 @@ fn store_path(skill_dir: &Path) -> PathBuf {
 }
 
 impl TokenStore {
+    /// Maximum active tokens allowed.
+    pub const MAX_TOKENS: usize = 50;
+
     pub fn load(skill_dir: &Path) -> Self {
         let path = store_path(skill_dir);
         if let Ok(data) = std::fs::read_to_string(&path) {
-            serde_json::from_str(&data).unwrap_or_default()
+            let mut store: Self = serde_json::from_str(&data).unwrap_or_default();
+
+            // One-time migration: legacy plaintext tokens -> salted hashes.
+            for t in &mut store.tokens {
+                if t.token_hash.is_empty() && !t.token.is_empty() {
+                    t.token_preview = token_preview(&t.token);
+                    t.token_salt = generate_token_salt();
+                    t.token_hash = hash_secret(&t.token, &t.token_salt);
+                    t.token.clear();
+                } else if t.token_preview.is_empty() {
+                    t.token_preview = if !t.token.is_empty() {
+                        token_preview(&t.token)
+                    } else if !t.token_hash.is_empty() {
+                        format!("hash:{}", &t.token_hash[..8.min(t.token_hash.len())])
+                    } else {
+                        "hidden".to_string()
+                    };
+                }
+            }
+
+            store
         } else {
             Self::default()
         }
@@ -169,27 +252,54 @@ impl TokenStore {
         std::fs::write(&path, json).map_err(|e| format!("write error: {e}"))
     }
 
-    /// Create a new token. Returns the full token (including secret).
-    pub fn create(&mut self, name: String, acl: TokenAcl, expiry: TokenExpiry) -> ApiToken {
+    /// Create a new token. Returns the full token only once.
+    pub fn create(&mut self, name: String, acl: TokenAcl, expiry: TokenExpiry) -> Result<ApiToken, TokenStoreError> {
+        let active_count = self.tokens.iter().filter(|t| t.is_valid()).count();
+        if active_count >= Self::MAX_TOKENS {
+            return Err(TokenStoreError::MaxTokensReached);
+        }
+
         let created_at = now_unix();
-        let token = ApiToken {
+        let secret = generate_token_secret();
+        let salt = generate_token_salt();
+        let digest = hash_secret(&secret, &salt);
+        let preview = token_preview(&secret);
+
+        let stored = ApiToken {
             id: generate_id(),
             name,
-            token: generate_token_secret(),
+            token: String::new(),
+            token_hash: digest,
+            token_salt: salt,
+            token_preview: preview,
             acl,
             created_at,
             expires_at: expiry.to_unix(created_at),
             last_used_at: None,
             revoked: false,
         };
-        self.tokens.push(token.clone());
-        token
+
+        self.tokens.push(stored.clone());
+
+        let mut created = stored.for_api_response();
+        created.token = secret;
+        Ok(created)
     }
 
     /// Validate a token string. Returns the token if valid, updates last_used_at.
     pub fn validate(&mut self, secret: &str) -> Option<&ApiToken> {
         let now = now_unix();
-        let idx = self.tokens.iter().position(|t| t.token == secret && t.is_valid())?;
+        let idx = self.tokens.iter().position(|t| {
+            t.is_valid()
+                && if !t.token_hash.is_empty() {
+                    let expected = hash_secret(secret, &t.token_salt);
+                    constant_time_eq(expected.as_bytes(), t.token_hash.as_bytes())
+                } else {
+                    // Legacy plaintext fallback.
+                    constant_time_eq(secret.as_bytes(), t.token.as_bytes())
+                }
+        })?;
+
         self.tokens[idx].last_used_at = Some(now);
         Some(&self.tokens[idx])
     }
@@ -220,17 +330,25 @@ impl TokenStore {
         self.tokens.len() < len
     }
 
-    /// List all tokens (secrets redacted for display).
+    /// List all tokens with secrets hidden.
     pub fn list_redacted(&self) -> Vec<ApiToken> {
         self.tokens
             .iter()
-            .map(|t| {
-                let mut redacted = t.clone();
-                if redacted.token.len() > 10 {
-                    redacted.token = format!("{}…{}", &t.token[..6], &t.token[t.token.len() - 4..]);
+            .cloned()
+            .map(|mut t| {
+                if !t.token_preview.is_empty() {
+                    t.token = t.token_preview.clone();
+                } else {
+                    t.token = "stored_as_hash".to_string();
                 }
-                redacted
+                t.for_api_response()
             })
             .collect()
     }
+}
+
+fn generate_id() -> String {
+    let mut bytes = [0u8; 8];
+    rand::rng().fill_bytes(&mut bytes);
+    hex::encode(bytes)
 }

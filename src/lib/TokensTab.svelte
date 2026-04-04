@@ -14,6 +14,7 @@ interface ApiToken {
   id: string;
   name: string;
   token: string;
+  token_preview?: string;
   acl: string;
   created_at: number;
   expires_at: number | null;
@@ -278,7 +279,7 @@ onMount(refresh);
                 {/if}
                 <span>{t("tokens.lastUsed")}: {fmtRelative(tok.last_used_at)}</span>
               </div>
-              <code class="text-[0.5rem] font-mono text-muted-foreground/40">{tok.token}</code>
+              <code class="text-[0.5rem] font-mono text-muted-foreground/40">{tok.token_preview || tok.token || "stored_as_hash"}</code>
             </div>
             <div class="flex items-center gap-1 shrink-0">
               {#if !tok.revoked && tok.id !== "default"}
