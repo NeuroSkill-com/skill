@@ -1076,7 +1076,6 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
-      checks: write   # required by rustsec/audit-check to post Check Run results
     env:
       RUSTC_WRAPPER: ""
     steps:
@@ -1094,13 +1093,14 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
 
-      - name: cargo audit
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+
+      - name: cargo audit
+        run: cargo audit --deny warnings
 
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
