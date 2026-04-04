@@ -193,8 +193,18 @@ pub(super) fn run_actor(
         kv_type_v,
         config.attn_rot_disabled
     );
+    // n_batch: max tokens per decode call (prompt prefill).
+    // Larger = faster prefill at the cost of more peak memory.
+    let n_batch = config
+        .n_batch
+        .unwrap_or_else(|| ctx_size.map_or(2048, |n| n.get().min(2048)));
+    // n_ubatch: micro-batch for BLAS/GPU kernel dispatch.
+    let n_ubatch = config.n_ubatch.unwrap_or_else(|| n_batch.min(512));
+
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
+        .with_n_batch(n_batch)
+        .with_n_ubatch(n_ubatch)
         .with_n_threads(-1)
         .with_n_threads_batch(-1)
         .with_flash_attention(config.flash_attention)
@@ -669,8 +679,12 @@ pub(super) fn run_actor(
                                     max_ctx
                                 );
 
+                                let resize_n_batch = config.n_batch.unwrap_or_else(|| new_ctx.min(2048));
+                                let resize_n_ubatch = config.n_ubatch.unwrap_or_else(|| resize_n_batch.min(512));
                                 let new_ctx_params = LlamaContextParams::default()
                                     .with_n_ctx(NonZeroU32::new(new_ctx))
+                                    .with_n_batch(resize_n_batch)
+                                    .with_n_ubatch(resize_n_ubatch)
                                     .with_n_threads(-1)
                                     .with_n_threads_batch(-1)
                                     .with_flash_attention(config.flash_attention)

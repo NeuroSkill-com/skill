@@ -259,7 +259,20 @@ const llm: Record<string, string> = {
   "llm.inference.kvCacheV": "Cache V",
   "llm.inference.attnRot": "Rotation d’attention TurboQuant",
   "llm.inference.attnRotDesc":
-    "Rotation de Hadamard appliquée aux tenseurs Q/K/V avant écriture dans le cache KV (llama.cpp PR #21038). Améliore significativement la qualité des caches KV quantifiés à coût quasi nul. Laisser activé sauf en cas de problèmes de compatibilité avec un modèle.",
+    "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. sauf en cas de problèmes de compatibilité avec le modèle.",
+
+  "llm.inference.prefill": "Taille du lot de préremplissage",
+  "llm.inference.prefillDesc":
+    "Contrôle le nombre de tokens traités par appel de décodage pendant le traitement du prompt.",
+  "llm.inference.nBatch": "n_batch (prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
+  "llm.inference.flashAttn": "Flash attention",
+  "llm.inference.flashAttnDesc":
+    "Utiliser flash attention pour une self-attention plus rapide et économe en mémoire. Supporté sur Metal, CUDA et Vulkan.",
+  "llm.inference.offloadKqv": "Décharger KQV sur GPU",
+  "llm.inference.offloadKqvDesc":
+    "Décharger les opérations tensorielles K/Q/V sur le GPU même si toutes les couches ne sont pas sur GPU.",
+
   "llm.noFeature": "Le support LLM n'est pas compilé.",
   "llm.noFeatureHint": "Reconstruisez avec --features llm pour activer le serveur intégré compatible OpenAI.",
   "llm.endpoints.title": "Points de terminaison compatibles OpenAI",

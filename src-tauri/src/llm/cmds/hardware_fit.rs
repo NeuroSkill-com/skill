@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Per-model hardware fit prediction.

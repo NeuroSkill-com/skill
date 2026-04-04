@@ -4,10 +4,10 @@
   Chat window — Ollama-style interface for the embedded LLM server.
 
   Architecture:
-  • Token streaming goes through `invoke("chat_completions_ipc", {channel})` —
+  • Token streaming goes through `daemonInvoke("chat_completions_ipc", {channel})` —
     a Tauri IPC Channel — instead of a raw HTTP fetch, avoiding CORS entirely.
-  • `invoke("get_llm_server_status")` polls server state.
-  • `invoke("start_llm_server")` / `invoke("stop_llm_server")` control the actor.
+  • `daemonInvoke("get_llm_server_status")` polls server state.
+  • `daemonInvoke("start_llm_server")` / `daemonInvoke("stop_llm_server")` control the actor.
   • `listen("llm:status")` gives real-time loading → running → stopped events.
 
   Components:
@@ -18,7 +18,7 @@
   • ChatInputBar — textarea, image attachments, prompt library
 -->
 <script lang="ts">
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount, tick } from "svelte";
 import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
@@ -53,6 +53,7 @@ import {
   type UsageInfo,
 } from "$lib/chat-types";
 import { parseAssistantOutput } from "$lib/chat-utils";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
 
@@ -113,9 +114,9 @@ async function updateToolConfig(patch: Partial<ToolConfig>) {
   toolConfig = { ...toolConfig, ...patch };
   try {
     // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
-    const cfg = await invoke<any>("get_llm_config");
+    const cfg = await daemonInvoke<any>("get_llm_config");
     cfg.tools = { ...toolConfig };
-    await invoke("set_llm_config", { config: cfg });
+    await daemonInvoke("set_llm_config", { config: cfg });
   } catch (e) {}
 }
 
@@ -158,7 +159,7 @@ let showSettings = $state(false);
 let showTools = $state(false);
 let showContextBreakdown = $state(false);
 let showContextViewer = $state(false);
-let temperature = $state(0.8);
+let temperature = $state(0.0);
 let maxTokens = $state(2048);
 let topK = $state(40);
 let topP = $state(0.9);
@@ -177,13 +178,13 @@ async function saveSessionParams() {
   if (sessionId <= 0) return;
   const p = { temperature, maxTokens, topK, topP, thinkingLevel };
   try {
-    await invoke("set_session_params", { id: sessionId, paramsJson: JSON.stringify(p) });
+    await daemonInvoke("set_session_params", { id: sessionId, paramsJson: JSON.stringify(p) });
   } catch (e) {}
 }
 
 async function loadSessionParams(id: number): Promise<boolean> {
   try {
-    const json = await invoke<string>("get_session_params", { id });
+    const json = await daemonInvoke<string>("get_session_params", { id });
     if (!json) return false;
     const p = JSON.parse(json);
     if (p.temperature !== undefined) temperature = p.temperature;
@@ -350,7 +351,7 @@ function autoResizeInput() {
 async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
   if (!toolCallId) return;
   try {
-    await invoke("cancel_tool_call", { toolCallId });
+    await daemonInvoke("cancel_tool_call", { toolCallId });
   } catch (e) {}
   messages = messages.map((m) => {
     if (m.id !== msgId) return m;
@@ -461,7 +462,7 @@ function startStatusPoll() {
     }
     if (status === "running") ranAfterRunning = true;
     try {
-      const s = await invoke<{
+      const s = await daemonInvoke<{
         status: ServerStatus;
         model_name: string;
         n_ctx: number;
@@ -527,7 +528,7 @@ async function waitForModelDownload(filename: string, timeoutMs = 1000 * 60 * 60
   while (Date.now() - t0 < timeoutMs) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+      const catalog = await daemonInvoke<LlmCatalogLite>("get_llm_catalog");
       const e = catalog.entries.find((item) => item.filename === filename);
       const state = e?.state ?? "not_found";
       if (state === "downloaded" || state === "failed" || state === "cancelled") return state;
@@ -543,7 +544,7 @@ async function startServer() {
   startError = "";
 
   try {
-    const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+    const catalog = await daemonInvoke<LlmCatalogLite>("get_llm_catalog");
     const target = pickBootstrapModel(catalog.entries);
     if (!target) {
       startError = "No downloadable LLM model found in catalog.";
@@ -553,7 +554,7 @@ async function startServer() {
 
     if (target.state !== "downloaded") {
       if (target.state !== "downloading") {
-        await invoke("download_llm_model", { filename: target.filename });
+        await daemonInvoke("download_llm_model", { filename: target.filename });
       }
 
       startError = `Downloading default model first: ${target.filename}`;
@@ -566,7 +567,7 @@ async function startServer() {
       startError = "";
     }
 
-    await invoke("start_llm_server");
+    await daemonInvoke("start_llm_server");
   } catch (e) {
     status = "stopped";
     return;
@@ -581,7 +582,7 @@ async function stopServer() {
     abort();
     await new Promise((r) => setTimeout(r, 100));
   }
-  await invoke("stop_llm_server");
+  await daemonInvoke("stop_llm_server");
   status = "stopped";
   modelName = "";
 }
@@ -589,7 +590,7 @@ async function stopServer() {
 function abort() {
   if (aborting) return;
   aborting = true;
-  invoke("abort_llm_stream")
+  daemonInvoke("abort_llm_stream")
     .catch((_e) => {})
     .finally(() => {
       aborting = false;
@@ -619,13 +620,13 @@ async function sendMessage() {
   const isFirstUserMsg = !messages.some((m) => m.role === "user" && m.content.trim());
   if (isFirstUserMsg && text && sessionId > 0) {
     const autoTitle = text.slice(0, 60).replace(/\n+/g, " ").trim();
-    invoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch((_e) => {});
+    daemonInvoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch((_e) => {});
     sidebarRef?.updateTitle(sessionId, autoTitle);
   }
 
   messages = [...messages, userMsg];
   if (sessionId > 0 && text) {
-    invoke("save_chat_message", { sessionId, role: "user", content: text, thinking: null }).catch((_e) => {});
+    daemonInvoke("save_chat_message", { sessionId, role: "user", content: text, thinking: null }).catch((_e) => {});
   }
 
   const assistantMsg: Message = { id: ++msgId, role: "assistant", content: "", pending: true };
@@ -674,7 +675,7 @@ async function sendMessage() {
   }
 
   // ── IPC Channel ──
-  const channel = new Channel<ChatChunk>();
+  const channel = { onmessage: null as ((chunk: ChatChunk) => void) | null };
   channel.onmessage = async (chunk: ChatChunk) => {
     if (chunk.type === "delta") {
       if (ttft === undefined) {
@@ -797,7 +798,7 @@ async function sendMessage() {
   };
 
   try {
-    await invoke("chat_completions_ipc", {
+    await daemonInvoke("chat_completions_ipc", {
       messages: apiMessages,
       params: { temperature, max_tokens: maxTokens, top_k: topK, top_p: topP, thinking_budget: thinkingBudget },
       channel,
@@ -826,7 +827,7 @@ async function sendMessage() {
       if (finalAssistant.content?.trim()) parts.push(finalAssistant.content.trim());
       const fullContent = parts.join("\n\n");
       if (fullContent || (finalAssistant.toolUses?.length ?? 0) > 0) {
-        invoke<number>("save_chat_message", {
+        daemonInvoke<number>("save_chat_message", {
           sessionId,
           role: "assistant",
           content: fullContent || "",
@@ -845,7 +846,7 @@ async function sendMessage() {
                 result: tu.result ?? null,
                 created_at: 0,
               }));
-              invoke("save_chat_tool_calls", { messageId, toolCalls }).catch((_e) => {});
+              daemonInvoke("save_chat_tool_calls", { messageId, toolCalls }).catch((_e) => {});
             }
           })
           .catch((_e) => {});
@@ -861,7 +862,7 @@ async function newChat() {
   histIdx = -1;
   histDraft = "";
   try {
-    sessionId = await invoke<number>("new_chat_session");
+    sessionId = await daemonInvoke<number>("new_chat_session");
     await sidebarRef?.refresh();
   } catch (e) {}
   await tick();
@@ -877,7 +878,7 @@ async function loadSession(id: number) {
   histIdx = -1;
   histDraft = "";
   try {
-    const resp = await invoke<ChatSessionResponse>("load_chat_session", { id });
+    const resp = await daemonInvoke<ChatSessionResponse>("load_chat_session", { id });
     sessionId = resp.session_id;
     const idCounter = { value: msgId };
     messages = resp.messages.map((sm) => storedToMessage(sm, idCounter));
@@ -895,7 +896,7 @@ async function handleSidebarDelete(deletedId: number) {
   messages = [];
   sessionId = 0;
   try {
-    const resp = await invoke<ChatSessionResponse>("get_last_chat_session");
+    const resp = await daemonInvoke<ChatSessionResponse>("get_last_chat_session");
     sessionId = resp.session_id;
     if (resp.messages.length > 0) {
       const idCounter = { value: msgId };
@@ -1019,7 +1020,7 @@ async function commitTypingLabel() {
   });
 
   try {
-    await invoke("submit_label", { labelStartUtc, text: rendered.join(" "), context: buildSessionContext() });
+    await daemonInvoke("submit_label", { labelStartUtc, text: rendered.join(" "), context: buildSessionContext() });
   } catch (e) {}
 }
 
@@ -1068,7 +1069,7 @@ let pollTimer: ReturnType<typeof setInterval> | undefined;
 onMount(async () => {
   // Initial status
   try {
-    const s = await invoke<{
+    const s = await daemonInvoke<{
       status: ServerStatus;
       model_name: string;
       n_ctx: number;
@@ -1086,13 +1087,13 @@ onMount(async () => {
   // already selected but the server isn't running yet.
   if (status === "stopped") {
     try {
-      const catalog = await invoke<LlmCatalogLite>("get_llm_catalog");
+      const catalog = await daemonInvoke<LlmCatalogLite>("get_llm_catalog");
       const hasDownloaded = catalog.entries.some((e) => !e.is_mmproj && e.state === "downloaded");
       if (hasDownloaded) {
         // start_llm_server uses the active model (or auto-selects the first
         // downloaded one if no active model is set) — no front-end selection needed.
         status = "loading";
-        invoke("start_llm_server").catch(() => {
+        daemonInvoke("start_llm_server").catch(() => {
           status = "stopped";
         });
         startStatusPoll();
@@ -1103,7 +1104,7 @@ onMount(async () => {
   // Load tool config
   try {
     // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
-    const cfg = await invoke<any>("get_llm_config");
+    const cfg = await daemonInvoke<any>("get_llm_config");
     if (cfg?.tools) {
       toolConfig = {
         enabled: cfg.tools.enabled ?? true,
@@ -1164,20 +1165,20 @@ onMount(async () => {
   // Poll while loading
   startStatusPoll();
 
-  // EEG bands
+  // EEG bands via daemon WebSocket
   try {
-    const b = await invoke<BandSnapshot | null>("get_latest_bands");
+    const { getLatestBands, subscribeBands } = await import("$lib/daemon/eeg-stream");
+    const b = await getLatestBands();
     if (b) latestBands = b;
-  } catch (e) {}
-  try {
-    unlistenBands = await listen<BandSnapshot>("eeg-bands", (ev) => {
-      latestBands = ev.payload;
+    const unsub = subscribeBands((snap) => {
+      latestBands = snap;
     });
+    unlistenBands = unsub;
   } catch (e) {}
 
   // Load persisted chat history
   try {
-    const resp = await invoke<ChatSessionResponse>("get_last_chat_session");
+    const resp = await daemonInvoke<ChatSessionResponse>("get_last_chat_session");
     sessionId = resp.session_id;
     if (resp.messages.length > 0) {
       const idCounter = { value: msgId };
@@ -1198,7 +1199,7 @@ onDestroy(() => {
   unlistenBands?.();
   clearInterval(pollTimer);
   stopTypingLabelTimer();
-  if (generating) invoke("abort_llm_stream").catch((_e) => {});
+  if (generating) daemonInvoke("abort_llm_stream").catch((_e) => {});
 });
 </script>
 

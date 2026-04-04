@@ -120,6 +120,12 @@ export const EXEMPT_KEY_PREFIXES = [
   "ttsTab.kittenModel", // model spec string
   "calibration.preset.", // preset names used as identifiers
   "focusTimer.preset.", // preset names
+  "llm.inference.nBatch", // technical parameter name
+  "llm.inference.nUbatch", // technical parameter name
+  "llm.inference.prefill", // technical term
+  "llm.inference.flashAttn", // technical feature name
+  "llm.inference.offloadKqv", // technical feature name
+  "veeg.", // virtual EEG — technical UI, English terms acceptable
   "sd.delta",
   "sd.theta",
   "sd.alpha",

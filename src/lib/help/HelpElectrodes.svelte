@@ -9,9 +9,9 @@ the Free Software Foundation, version 3 only. -->
   Interactive 3D electrode guide with live signal quality from the device.
 -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
+import { getDeviceStatus } from "$lib/daemon/client";
 import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import type { DeviceStatus } from "$lib/types";
@@ -22,7 +22,7 @@ let connected = $state(false);
 const unsubs: UnlistenFn[] = [];
 onMount(async () => {
   try {
-    const s = await invoke<DeviceStatus>("get_status");
+    const s = await getDeviceStatus<DeviceStatus>();
     quality = s.channel_quality;
     connected = s.state === "connected";
   } catch (e) {}

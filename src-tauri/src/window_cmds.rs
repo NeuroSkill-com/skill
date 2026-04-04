@@ -1193,22 +1193,3 @@ pub fn open_skill_dir() {
 }
 
 // ── WebSocket API status ───────────────────────────────────────────────────────
-
-#[tauri::command]
-pub fn get_ws_clients(
-    broadcaster: tauri::State<'_, WsBroadcaster>,
-) -> Vec<crate::ws_server::WsClient> {
-    broadcaster.tracker.lock_or_recover().clients.clone()
-}
-
-#[tauri::command]
-pub fn get_ws_request_log(
-    broadcaster: tauri::State<'_, WsBroadcaster>,
-) -> Vec<crate::ws_server::WsRequestLog> {
-    broadcaster.tracker.lock_or_recover().requests.clone()
-}
-
-#[tauri::command]
-pub fn get_ws_port(broadcaster: tauri::State<'_, WsBroadcaster>) -> u16 {
-    broadcaster.tracker.lock_or_recover().port
-}

@@ -11,6 +11,7 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -279,10 +280,10 @@ onMount(async () => {
     logConfig = await invoke<LogConfig>("get_log_config");
   } catch (e) {}
   try {
-    neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config");
+    neuttsConfig = await daemonInvoke<NeuttsConfig>("get_neutts_config");
   } catch (e) {}
   try {
-    ttsPreload = await invoke<boolean>("get_tts_preload");
+    ttsPreload = await daemonInvoke<boolean>("get_tts_preload");
   } catch (e) {}
   try {
     const voices = await invoke<string[]>("tts_list_voices");
@@ -363,7 +364,7 @@ async function setKittenVoice(v: string) {
 
 async function saveNeutts() {
   try {
-    await invoke("set_neutts_config", { config: neuttsConfig });
+    await daemonInvoke("set_neutts_config", { config: neuttsConfig });
     neuttsDirty = false;
     neuttsSaved = true;
     if (saveTimer !== null) clearTimeout(saveTimer);
@@ -805,7 +806,7 @@ async function toggleTtsLog() {
           role="switch" aria-checked={ttsPreload}
           onclick={() => {
             ttsPreload = !ttsPreload;
-            invoke("set_tts_preload", { preload: ttsPreload }).catch(e => console.warn("[tts] set_tts_preload failed:", e));
+            daemonInvoke("set_tts_preload", { preload: ttsPreload }).catch(e => console.warn("[tts] set_tts_preload failed:", e));
           }}
           class="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors
                  hover:bg-slate-50 dark:hover:bg-white/[0.02]">

@@ -29,6 +29,7 @@ import ToolsTab from "$lib/ToolsTab.svelte";
 import TtsTab from "$lib/TtsTab.svelte";
 import UmapTab from "$lib/UmapTab.svelte";
 import UpdatesTab from "$lib/UpdatesTab.svelte";
+import VirtualEegTab from "$lib/VirtualEegTab.svelte";
 
 type Tab =
   | "goals"
@@ -49,7 +50,8 @@ type Tab =
   | "llm"
   | "tools"
   | "clients"
-  | "screenshots";
+  | "screenshots"
+  | "virtual_eeg";
 let tab = $state<Tab>("goals");
 
 const TAB_IDS: Tab[] = [
@@ -72,6 +74,7 @@ const TAB_IDS: Tab[] = [
   "umap",
   "updates",
   "permissions",
+  "virtual_eeg",
 ];
 const TAB_LABELS: Record<Tab, () => string> = {
   goals: () => t("settingsTabs.goals"),
@@ -94,6 +97,7 @@ const TAB_LABELS: Record<Tab, () => string> = {
   updates: () => t("settingsTabs.updates"),
   permissions: () => t("settingsTabs.permissions"),
   screenshots: () => t("settingsTabs.screenshots"),
+  virtual_eeg: () => t("settingsTabs.virtualEeg"),
 };
 
 // ── Icons per tab (16×16 stroked) ────────────────────────────────────────
@@ -117,6 +121,7 @@ const TAB_ICONS: Record<Tab, string> = {
   updates: `<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>`,
   permissions: `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   screenshots: `<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>`,
+  virtual_eeg: `<path d="M2 12h4l2-8 3 16 3-12 2 4h4"/><circle cx="20" cy="12" r="1.5" fill="currentColor"/>`,
 };
 
 const tabLabel = (id: Tab) => TAB_LABELS[id]();
@@ -391,6 +396,8 @@ $effect(() => {
         <ScreenshotsTab />
       {:else if tab === "permissions"}
         <PermissionsTab />
+      {:else if tab === "virtual_eeg"}
+        <VirtualEegTab />
       {/if}
 
       <DisclaimerFooter />

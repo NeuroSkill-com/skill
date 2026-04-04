@@ -1,0 +1,13 @@
+[Unit]
+Description=Skill Daemon (user service)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/skill-daemon
+Restart=on-failure
+RestartSec=2
+Environment=SKILL_DAEMON_ADDR=127.0.0.1:18444
+
+[Install]
+WantedBy=default.target

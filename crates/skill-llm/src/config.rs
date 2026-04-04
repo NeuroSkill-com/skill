@@ -77,6 +77,17 @@ pub struct LlmConfig {
     #[serde(default)]
     pub autostart: bool,
 
+    /// Maximum tokens per decode call during prompt prefill.
+    /// Larger = faster prefill at the cost of more peak memory.
+    /// `None` = auto (min(n_ctx, 2048)).  Default: `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_batch: Option<u32>,
+
+    /// Micro-batch size for GPU kernel dispatch during prefill.
+    /// `None` = auto (min(n_batch, 512)).  Default: `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_ubatch: Option<u32>,
+
     /// Enable flash attention (KV cache in f16 instead of f32, faster on
     /// GPU backends that support it — Metal, CUDA, Vulkan).  Default: `true`.
     #[serde(default = "default_flash_attention")]
@@ -189,6 +200,8 @@ impl Default for LlmConfig {
             autoload_mmproj: default_autoload_mmproj(),
             verbose: false,
             autostart: false,
+            n_batch: None,
+            n_ubatch: None,
             flash_attention: default_flash_attention(),
             offload_kqv: default_offload_kqv(),
             gpu_memory_threshold: default_gpu_memory_threshold(),

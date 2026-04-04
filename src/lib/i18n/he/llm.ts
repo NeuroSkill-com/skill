@@ -31,7 +31,18 @@ const llm: Record<string, string> = {
   "llm.inference.kvCacheV": "מטמון V",
   "llm.inference.attnRot": "סיבוב קשב TurboQuant",
   "llm.inference.attnRotDesc":
-    "סיבוב Hadamard שמוחל על טנסורי Q/K/V לפני כתיבה למטמון KV (llama.cpp PR #21038). משפר באופן משמעותי את איכות מטמוני KV כמותים בעלות מוגבלת. השאר פעיל אלא אם יש בעיות תאימות עם המודל.",
+    "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. אלא אם יש בעיות תאימות עם המודל.",
+
+  "llm.inference.prefill": "גודל אצווה מילוי מקדים",
+  "llm.inference.prefillDesc": "שולט בכמה אסימונים מעובדים בכל קריאת פענוח במהלך עיבוד הפרומפט.",
+  "llm.inference.nBatch": "n_batch (prompt)",
+  "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
+  "llm.inference.flashAttn": "Flash attention",
+  "llm.inference.flashAttnDesc":
+    "שימוש ב-flash attention לביצועים מהירים וחסכוניים יותר בזיכרון. נתמך ב-Metal, CUDA ו-Vulkan.",
+  "llm.inference.offloadKqv": "העברת KQV ל-GPU",
+  "llm.inference.offloadKqvDesc": "העברת פעולות טנזור K/Q/V ל-GPU גם כאשר לא כל השכבות מועברות.",
+
   "llm.noFeature": "תמיכת LLM לא קומפלה.",
   "llm.noFeatureHint": "בנה מחדש עם --features llm כדי להפעיל את השרת המוטמע התואם OpenAI.",
   "llm.endpoints.title": "נקודות קצה תואמות OpenAI",

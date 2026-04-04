@@ -7,6 +7,7 @@ import { onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ async function pickLocalWeights() {
 async function refreshCatalog() {
   loading = true;
   try {
-    catalog = await invoke<ExgCatalog>("get_exg_catalog");
+    catalog = await daemonInvoke<ExgCatalog>("get_exg_catalog");
   } finally {
     loading = false;
   }

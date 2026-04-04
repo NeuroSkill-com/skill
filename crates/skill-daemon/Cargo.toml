@@ -1,0 +1,59 @@
+[package]
+name = "skill-daemon"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[features]
+default = []
+llm = ["skill-llm/llm"]
+llm-metal = ["llm", "skill-llm/llm-metal"]
+llm-cuda = ["llm", "skill-llm/llm-cuda"]
+llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
+llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
+
+[[bin]]
+name = "skill-daemon"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { version = "0.8", features = ["ws"] }
+base64 = { workspace = true }
+btleplug = "0.11"
+cognionics = { version = "0.0.1", default-features = false }
+dirs = "6"
+rand = "0.9"
+rusqlite = { workspace = true }
+fast-hnsw = { version = "1.0.1" }
+fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+serialport = "4"
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+skill-daemon-common = { path = "../skill-daemon-common" }
+skill-lsl           = { path = "../skill-lsl" }
+skill-devices       = { path = "../skill-devices" }
+skill-data          = { path = "../skill-data" }
+skill-settings      = { path = "../skill-settings" }
+skill-constants     = { path = "../skill-constants" }
+skill-history       = { path = "../skill-history" }
+skill-label-index   = { path = "../skill-label-index" }
+skill-jobs          = { path = "../skill-jobs" }
+skill-commands      = { path = "../skill-commands" }
+skill-health        = { path = "../skill-health" }
+skill-screenshots   = { path = "../skill-screenshots", default-features = false }
+skill-router        = { path = "../skill-router" }
+skill-skills        = { path = "../skill-skills", features = ["sync"] }
+skill-tools         = { path = "../skill-tools" }
+skill-oura          = { path = "../skill-oura" }
+skill-eeg           = { path = "../skill-eeg" }
+skill-location      = { path = "../skill-location" }
+skill-llm           = { path = "../skill-llm" }
+
+[lints]
+workspace = true

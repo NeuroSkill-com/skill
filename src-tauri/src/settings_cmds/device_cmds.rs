@@ -7,25 +7,65 @@
 //! Device discovery, pairing, and connection Tauri commands.
 
 use crate::MutexExt;
-use std::sync::Mutex;
 use tauri::AppHandle;
 
 use crate::tray::refresh_tray;
-use crate::{
-    cancel_session, emit_devices, emit_status, save_settings, start_session, AppState, AppStateExt,
-    DeviceStatus, DiscoveredDevice,
-};
+use crate::{emit_devices, emit_status, AppStateExt, DeviceStatus, DiscoveredDevice};
 
 // ── Device commands ────────────────────────────────────────────────────────────
 
-#[tauri::command]
-pub fn get_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DeviceStatus {
-    state.lock_or_recover().status.clone()
+fn map_daemon_device(d: skill_daemon_common::DiscoveredDeviceResponse) -> DiscoveredDevice {
+    DiscoveredDevice {
+        id: d.id,
+        name: d.name,
+        last_seen: d.last_seen,
+        last_rssi: d.last_rssi,
+        is_paired: d.is_paired,
+        is_preferred: d.is_preferred,
+        transport: skill_daemon_common::DeviceTransport::from_wire(&d.transport),
+    }
 }
 
-#[tauri::command]
-pub fn get_devices(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<DiscoveredDevice> {
-    state.lock_or_recover().discovered.clone()
+fn apply_daemon_devices_to_local(
+    app: &AppHandle,
+    daemon_devices: Vec<skill_daemon_common::DiscoveredDeviceResponse>,
+) {
+    let mapped: Vec<DiscoveredDevice> = daemon_devices.into_iter().map(map_daemon_device).collect();
+    let preferred = mapped.iter().find(|d| d.is_preferred).map(|d| d.id.clone());
+
+    let r = app.app_state();
+    let mut s = r.lock_or_recover();
+    s.discovered = mapped;
+    s.preferred_id = preferred;
+}
+
+fn apply_daemon_status_to_local(app: &AppHandle, daemon: skill_daemon_common::StatusResponse) {
+    let r = app.app_state();
+    let mut s = r.lock_or_recover();
+    s.status.state = daemon.state;
+    s.status.device_name = daemon.device_name;
+    s.status.sample_count = daemon.sample_count;
+    s.status.battery = daemon.battery;
+    s.status.device_error = daemon.device_error;
+    s.status.target_name = daemon.target_name;
+    s.status.retry_attempt = daemon.retry_attempt;
+    s.status.retry_countdown_secs = daemon.retry_countdown_secs;
+    s.status.paired_devices = daemon
+        .paired_devices
+        .into_iter()
+        .map(|d| crate::PairedDevice {
+            id: d.id,
+            name: d.name,
+            last_seen: d.last_seen,
+        })
+        .collect();
+}
+
+fn mark_daemon_unavailable(app: &AppHandle, err: &str) {
+    let r = app.app_state();
+    let mut s = r.lock_or_recover();
+    s.status.state = "disconnected".into();
+    s.status.device_error = Some(format!("daemon unavailable: {err}"));
 }
 
 #[tauri::command]
@@ -43,78 +83,40 @@ pub fn get_device_capabilities(
 
 #[tauri::command]
 pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.preferred_id = if id.is_empty() {
-            None
-        } else {
-            Some(id.clone())
-        };
-        let pref = s.preferred_id.clone();
-        for d in s.discovered.iter_mut() {
-            d.is_preferred = pref.as_deref() == Some(&d.id);
+    let daemon_devices = match crate::daemon_cmds::set_preferred_device(id) {
+        Ok(v) => v,
+        Err(err) => {
+            mark_daemon_unavailable(&app, &err);
+            emit_status(&app);
+            return app.app_state().lock_or_recover().discovered.clone();
         }
-    }
-    save_settings(&app);
-    emit_devices(&app);
-    app.app_state().lock_or_recover().discovered.clone()
-}
+    };
 
-/// Explicitly pair a discovered device so it is trusted for future connections.
-///
-/// Adds the device to `paired_devices`, marks it as `is_paired` in the
-/// discovered list, persists settings, and broadcasts updated state.
-#[tauri::command]
-pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        // Look up the name from the discovered list.
-        let name = s
-            .discovered
-            .iter()
-            .find(|d| d.id == id)
-            .map(|d| d.name.clone())
-            .unwrap_or_else(|| id.clone());
-        let now = crate::unix_secs();
-        // Insert into paired list if not already there.
-        if !s.status.paired_devices.iter().any(|d| d.id == id) {
-            s.status.paired_devices.push(crate::PairedDevice {
-                id: id.clone(),
-                name: name.clone(),
-                last_seen: now,
-            });
-        }
-        // Mark as paired in the discovered/settings list.
-        for d in s.discovered.iter_mut() {
-            if d.id == id {
-                d.is_paired = true;
-                d.name = name.clone();
-            }
-        }
+    apply_daemon_devices_to_local(&app, daemon_devices);
+    if let Ok(status) = crate::daemon_cmds::fetch_daemon_status() {
+        apply_daemon_status_to_local(&app, status);
     }
-    save_settings(&app);
-    refresh_tray(&app);
-    emit_status(&app);
+
     emit_devices(&app);
     app.app_state().lock_or_recover().discovered.clone()
 }
 
 #[tauri::command]
 pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.status.paired_devices.retain(|d| d.id != id);
-        for d in s.discovered.iter_mut() {
-            if d.id == id {
-                d.is_paired = false;
-            }
+    let daemon_devices = match crate::daemon_cmds::forget_device(id) {
+        Ok(v) => v,
+        Err(err) => {
+            mark_daemon_unavailable(&app, &err);
+            emit_status(&app);
+            return app.app_state().lock_or_recover().status.clone();
         }
-        drop(s);
-        save_settings(&app);
+    };
+
+    apply_daemon_devices_to_local(&app, daemon_devices);
+    if let Ok(status) = crate::daemon_cmds::fetch_daemon_status() {
+        apply_daemon_status_to_local(&app, status);
     }
+
     refresh_tray(&app);
     emit_status(&app);
     emit_devices(&app);
@@ -123,31 +125,40 @@ pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
 
 #[tauri::command]
 pub fn cancel_retry(app: AppHandle) {
-    let r = app.app_state();
-    let mut s = r.lock_or_recover();
-    s.pending_reconnect = false;
-    s.retry_attempt = 0;
-    s.status.retry_attempt = 0;
-    s.status.retry_countdown_secs = 0;
-    s.status.state = "disconnected".into();
-    s.status.device_error = None;
-    drop(s);
-    cancel_session(&app);
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.pending_reconnect = false;
+    }
+
+    match crate::daemon_cmds::cancel_retry() {
+        Ok(daemon_status) => apply_daemon_status_to_local(&app, daemon_status),
+        Err(err) => {
+            mark_daemon_unavailable(&app, &err);
+            emit_status(&app);
+            return;
+        }
+    }
+
     emit_status(&app);
 }
 
 #[tauri::command]
 pub fn retry_connect(app: AppHandle) {
-    let preferred = {
+    {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.pending_reconnect = true;
-        s.retry_attempt = 0;
-        s.status.retry_attempt = 0;
-        s.status.retry_countdown_secs = 0;
-        s.preferred_id
-            .clone()
-            .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
-    };
-    start_session(&app, preferred);
+    }
+
+    match crate::daemon_cmds::retry_connect() {
+        Ok(daemon_status) => apply_daemon_status_to_local(&app, daemon_status),
+        Err(err) => {
+            mark_daemon_unavailable(&app, &err);
+            emit_status(&app);
+            return;
+        }
+    }
+
+    emit_status(&app);
 }

@@ -10,9 +10,9 @@ the Free Software Foundation, version 3 only. -->
   Supports fuzzy text filtering and keyboard navigation.
 -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
+import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
 import { t } from "$lib/i18n/index.svelte";
 import * as nav from "$lib/navigation";
 import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
@@ -100,7 +100,7 @@ function commands(): Command[] {
       section: t("cmdK.sectionDevice"),
       label: t("cmdK.retryConnect"),
       keywords: t("cmdK.kw.retryConnect"),
-      action: () => invoke("retry_connect"),
+      action: () => retryConnect(),
     },
     {
       id: "open-bt-settings",
@@ -119,7 +119,7 @@ function commands(): Command[] {
       label: t("cmdK.lslScan"),
       keywords: "lsl scan discover streams network eeg exg brainflow openbci pylsl",
       action: async () => {
-        const streams = await invoke<{ name: string }[]>("lsl_discover");
+        const streams = await lslDiscover<{ name: string }>();
         if (streams.length === 0) {
           addToast("info", "LSL Scan", "No LSL streams found on the network.");
         } else {
@@ -148,7 +148,7 @@ function commands(): Command[] {
       keywords: "lsl iroh remote quic sink accept tunnel phone",
       action: async () => {
         try {
-          const r = await invoke<{ endpoint_id: string }>("lsl_iroh_start");
+          const r = await lslIrohStart<{ endpoint_id: string }>();
           addToast("success", "iroh Sink", `Endpoint: ${r.endpoint_id.slice(0, 16)}…`);
           nav.openSettingsTab("lsl");
         } catch (e) {
@@ -163,7 +163,7 @@ function commands(): Command[] {
       label: t("cmdK.lslIrohStop"),
       keywords: "lsl iroh stop sink cancel disconnect",
       action: async () => {
-        await invoke("lsl_iroh_stop");
+        await lslIrohStop();
         addToast("info", "iroh Sink", "Stopped.");
       },
     },

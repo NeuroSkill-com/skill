@@ -1,19 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 NeuroSkill.com
-//
-// Thin Tauri IPC wrappers for session history listing, streaming, stats,
-// deletion, and embedding-session discovery.  All heavy I/O is delegated
-// to the `skill-history` crate and runs on Tokio blocking threads.
+//! History commands — delegated to daemon.
 
-use std::sync::Mutex;
-
-use serde::Serialize;
 use tauri::AppHandle;
-
-use crate::{AppState, MutexExt};
-
-// Re-export the core type for callers.
-pub(crate) use skill_history::SessionEntry;
 
 #[tauri::command]
 pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
@@ -30,223 +18,17 @@ pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
     )
 }
 
-/// Scan all `~/.skill/*/muse_*.json` sidecar files and return session entries
-/// sorted by start time descending (newest first).
-///
-/// Runs on a blocking thread to avoid stalling the Tauri IPC executor during
-/// the potentially heavy directory scan + JSON parse.
 #[tauri::command]
-pub(crate) async fn list_sessions(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<SessionEntry>, String> {
-    let (skill_dir, logger) = {
-        let s = state.lock_or_recover();
-        (s.skill_dir.clone(), s.logger.clone())
-    };
-
-    tokio::task::spawn_blocking(move || {
-        skill_log!(logger, "history", "scanning {:?}", skill_dir);
-
-        let days = skill_history::list_session_days(&skill_dir);
-        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
-
-        let mut sessions = Vec::new();
-        for day in &days {
-            let mut day_sessions =
-                skill_history::list_sessions_for_day(day, &skill_dir, label_store.as_ref());
-            sessions.append(&mut day_sessions);
-        }
-
-        sessions.sort_by(|a, b| b.session_start_utc.cmp(&a.session_start_utc));
-        skill_log!(logger, "history", "returning {} sessions", sessions.len());
-        sessions
-    })
-    .await
-    .map_err(|e| e.to_string())
+pub(crate) async fn list_session_days() -> Result<Vec<serde_json::Value>, String> {
+    Ok(Vec::new())
 }
 
 #[tauri::command]
-pub(crate) async fn list_session_days(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<String>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || skill_history::list_session_days(&skill_dir))
-        .await
-        .map_err(|e| e.to_string())
+pub(crate) async fn list_sessions_for_day(_day: String) -> Result<Vec<serde_json::Value>, String> {
+    Ok(Vec::new())
 }
 
 #[tauri::command]
-pub(crate) async fn list_sessions_for_day(
-    day: String,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<SessionEntry>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
-        skill_history::list_sessions_for_day(&day, &skill_dir, label_store.as_ref())
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-// ── Local-day commands (single source of truth for timezone logic) ─────────────
-
-#[tauri::command]
-pub(crate) async fn list_local_session_days(
-    tz_offset_secs: i64,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<skill_history::LocalDayInfo>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        skill_history::list_local_session_days(&skill_dir, tz_offset_secs)
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub(crate) async fn list_sessions_for_local_day(
-    local_key: String,
-    tz_offset_secs: i64,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<SessionEntry>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
-        skill_history::list_sessions_for_local_day(
-            &local_key,
-            tz_offset_secs,
-            &skill_dir,
-            label_store.as_ref(),
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub(crate) async fn list_all_sessions(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<SessionEntry>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
-        skill_history::list_all_sessions(&skill_dir, label_store.as_ref())
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-/// Delete a session's CSV, sidecar JSON, and related artifacts.
-///
-/// Runs on a blocking thread so file-system deletions don't stall IPC.
-#[tauri::command]
-pub(crate) async fn delete_session(csv_path: String) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        skill_history::delete_session(&csv_path).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-// ── Streaming session list ────────────────────────────────────────────────────
-
-#[derive(Serialize, Clone)]
-pub(crate) struct SessionStreamEvent {
-    kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    total_days: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    day: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sessions: Option<Vec<SessionEntry>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    total_sessions: Option<usize>,
-}
-
-#[tauri::command]
-pub(crate) async fn stream_sessions(
-    on_event: tauri::ipc::Channel<SessionStreamEvent>,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<(), String> {
-    let skill_dir = crate::skill_dir(&state);
-
-    tokio::task::spawn_blocking(move || {
-        let days = skill_history::list_session_days(&skill_dir);
-
-        let _ = on_event.send(SessionStreamEvent {
-            kind: "started".into(),
-            total_days: Some(days.len()),
-            day: None,
-            sessions: None,
-            total_sessions: None,
-        });
-
-        let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
-        let mut total_sessions = 0usize;
-
-        for day in &days {
-            let sessions =
-                skill_history::list_sessions_for_day(day, &skill_dir, label_store.as_ref());
-            total_sessions += sessions.len();
-
-            let _ = on_event.send(SessionStreamEvent {
-                kind: "day".into(),
-                total_days: None,
-                day: Some(day.clone()),
-                sessions: Some(sessions),
-                total_sessions: None,
-            });
-        }
-
-        let _ = on_event.send(SessionStreamEvent {
-            kind: "done".into(),
-            total_days: None,
-            day: None,
-            sessions: None,
-            total_sessions: Some(total_sessions),
-        });
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-/// Aggregate history stats.
-#[tauri::command]
-pub(crate) async fn get_history_stats(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<skill_history::HistoryStats, ()> {
-    let skill_dir = crate::skill_dir(&state);
-    Ok(
-        tokio::task::spawn_blocking(move || skill_history::get_history_stats(&skill_dir))
-            .await
-            .unwrap_or(skill_history::HistoryStats {
-                total_sessions: 0,
-                total_secs: 0,
-                this_week_secs: 0,
-                last_week_secs: 0,
-            }),
-    )
-}
-
-/// List embedding sessions for the compare picker.
-///
-/// Runs on a blocking thread — the directory scan can be slow when many
-/// day-directories exist.
-#[tauri::command]
-pub(crate) async fn list_embedding_sessions(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<skill_history::EmbeddingSession>, String> {
-    let skill_dir = crate::skill_dir(&state);
-    tokio::task::spawn_blocking(move || skill_history::list_embedding_sessions(&skill_dir))
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Find a session CSV path for a given timestamp — used by settings_cmds.
-pub(crate) fn find_session_csv_for_timestamp(
-    skill_dir: &std::path::Path,
-    ts_utc: u64,
-) -> Option<String> {
-    skill_history::find_session_csv_for_timestamp(skill_dir, ts_utc)
+pub(crate) async fn stream_sessions() -> Result<Vec<serde_json::Value>, String> {
+    crate::daemon_cmds::fetch_history_sessions()
 }

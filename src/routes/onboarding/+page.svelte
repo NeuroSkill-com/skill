@@ -14,6 +14,7 @@ import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { openSettings } from "$lib/navigation";
@@ -256,9 +257,9 @@ function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
 async function refreshModelDownloads() {
   try {
     const [catalog, eeg, ocrReady] = await Promise.all([
-      invoke<LlmCatalogLite>("get_llm_catalog"),
-      invoke<EegModelStatusLite>("get_eeg_model_status"),
-      invoke<boolean>("check_ocr_models_ready"),
+      daemonInvoke<LlmCatalogLite>("get_llm_catalog"),
+      daemonInvoke<EegModelStatusLite>("get_eeg_model_status"),
+      daemonInvoke<boolean>("check_ocr_models_ready"),
     ]);
     llmTarget = pickLlmTarget(catalog.entries);
     zunaStatus = eeg;
@@ -271,13 +272,13 @@ async function refreshModelDownloads() {
 
 async function downloadLlm() {
   if (!llmTarget || llmTarget.state === "downloading" || llmTarget.state === "downloaded") return;
-  await invoke("download_llm_model", { filename: llmTarget.filename });
+  await daemonInvoke("download_llm_model", { filename: llmTarget.filename });
   await refreshModelDownloads();
 }
 
 async function downloadZuna() {
   if (zunaStatus?.downloading_weights || zunaStatus?.weights_found) return;
-  await invoke("trigger_weights_download");
+  await daemonInvoke("trigger_weights_download");
   await refreshModelDownloads();
 }
 
@@ -294,7 +295,7 @@ async function downloadTtsBackend(target: "neutts" | "kitten") {
 
   let previous: NeuttsConfig | null = null;
   try {
-    previous = await invoke<NeuttsConfig>("get_neutts_config");
+    previous = await daemonInvoke<NeuttsConfig>("get_neutts_config");
     const nextCfg: NeuttsConfig =
       target === "neutts"
         ? {
@@ -306,7 +307,7 @@ async function downloadTtsBackend(target: "neutts" | "kitten") {
           }
         : { ...previous, enabled: false };
 
-    await invoke("set_neutts_config", { config: nextCfg });
+    await daemonInvoke("set_neutts_config", { config: nextCfg });
     await invoke("tts_init");
 
     if (target === "neutts") neuttsDlState = "ready";
@@ -321,7 +322,7 @@ async function downloadTtsBackend(target: "neutts" | "kitten") {
     }
   } finally {
     if (previous) {
-      invoke("set_neutts_config", { config: previous }).catch((_e) => {});
+      daemonInvoke("set_neutts_config", { config: previous }).catch((_e) => {});
     }
     ttsActionBusy = false;
   }
@@ -332,7 +333,7 @@ async function downloadOcrModels() {
   ocrDlState = "downloading";
   ocrDlError = "";
   try {
-    const ok = await invoke<boolean>("download_ocr_models");
+    const ok = await daemonInvoke<boolean>("download_ocr_models");
     ocrDlState = ok ? "ready" : "error";
     if (!ok) ocrDlError = "OCR model download failed";
   } catch (e) {
@@ -476,7 +477,7 @@ async function startCalibration() {
       const actionStart = Math.floor(Date.now() / 1000);
       if (!(await runCountdown(action.duration_secs))) break;
       try {
-        await invoke("submit_label", { labelStartUtc: actionStart, text: action.label });
+        await daemonInvoke("submit_label", { labelStartUtc: actionStart, text: action.label });
       } catch (e) {}
 
       const isLast = loop === p.loop_count && ai === p.actions.length - 1;
@@ -517,7 +518,7 @@ async function cancelCalibration() {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 const unsubs: UnlistenFn[] = [];
 onMount(async () => {
-  status = await invoke<DeviceStatus>("get_status");
+  status = await daemonInvoke<DeviceStatus>("get_status");
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {
       status = ev.payload;
@@ -641,7 +642,7 @@ function prev() {
   if (i > 0) step = STEPS[i - 1];
 }
 async function startScan() {
-  await invoke("retry_connect");
+  await daemonInvoke("retry_connect");
 }
 async function finish() {
   await invoke("complete_onboarding");

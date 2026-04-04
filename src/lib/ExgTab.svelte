@@ -6,11 +6,11 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- EXG tab — signal processing filters, EEG embedding config, model backend. -->
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { DEFAULT_FILTER_CONFIG, EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS } from "$lib/constants";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import EegModelTab from "$lib/EegModelTab.svelte";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -37,7 +37,7 @@ async function applyFilter(patch: Partial<FilterConfig>) {
   filter = { ...filter, ...patch };
   filterSaving = true;
   try {
-    await invoke("set_filter_config", { config: filter });
+    await daemonInvoke("set_filter_config", { config: filter });
   } finally {
     filterSaving = false;
   }
@@ -59,7 +59,7 @@ async function setOverlap(secs: number) {
   overlapSecs = secs;
   overlapSaving = true;
   try {
-    await invoke("set_embedding_overlap", { overlapSecs: secs });
+    await daemonInvoke("set_embedding_overlap", { overlapSecs: secs });
   } finally {
     overlapSaving = false;
   }
@@ -70,14 +70,14 @@ async function setExgInferenceDevice(dev: "gpu" | "cpu") {
   if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
   exgInferenceDeviceSaving = true;
   exgInferenceDevice = dev;
-  await invoke("set_exg_inference_device", { device: dev }).catch(() => {});
+  await daemonInvoke("set_exg_inference_device", { device: dev }).catch(() => {});
   exgInferenceDeviceSaving = false;
 }
 
 onMount(async () => {
-  filter = await invoke<FilterConfig>("get_filter_config");
-  overlapSecs = await invoke<number>("get_embedding_overlap");
-  exgInferenceDevice = (await invoke<string>("get_exg_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
+  filter = await daemonInvoke<FilterConfig>("get_filter_config");
+  overlapSecs = await daemonInvoke<number>("get_embedding_overlap");
+  exgInferenceDevice = (await daemonInvoke<string>("get_exg_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
 });
 </script>
 
