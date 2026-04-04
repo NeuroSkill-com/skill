@@ -852,6 +852,10 @@ fn fetch_json_with_auth<T: serde::de::DeserializeOwned>(
 }
 
 /// Forward an EEG sample batch to the daemon for WS broadcast.
+#[allow(
+    dead_code,
+    reason = "reserved for upcoming direct EEG fan-out integration"
+)]
 pub(crate) fn push_eeg_samples_to_daemon(electrode: usize, samples: &[f64], timestamp: f64) {
     push_event_to_daemon(
         "EegSample",
@@ -864,6 +868,10 @@ pub(crate) fn push_eeg_samples_to_daemon(electrode: usize, samples: &[f64], time
 }
 
 /// Forward band power snapshot to the daemon for WS broadcast.
+#[allow(
+    dead_code,
+    reason = "reserved for upcoming direct EEG fan-out integration"
+)]
 pub(crate) fn push_bands_to_daemon(bands: &impl serde::Serialize) {
     push_event_to_daemon("EegBands", bands);
 }

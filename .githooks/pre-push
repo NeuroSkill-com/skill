@@ -127,15 +127,15 @@ EOP
 
   if [ "${#CRATES[@]}" -gt 0 ]; then
     cargo clippy --locked "${CRATES[@]}" -- -D warnings
-    cargo test --locked "${CRATES[@]}" --lib
+    cargo test --locked "${CRATES[@]}"
   else
     cargo clippy --locked --workspace --exclude skill -- -D warnings
-    cargo test --locked --workspace --exclude skill --lib
+    cargo test --locked --workspace --exclude skill
   fi
 
   if [ "$NEED_SKILL" -eq 1 ]; then
     cargo clippy -p skill --locked -- -D warnings
-    cargo test -p skill --locked --lib
+    cargo test -p skill --locked
   fi
 fi
 
