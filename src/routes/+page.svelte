@@ -2111,9 +2111,9 @@ useWindowTitle("window.title.main");
       </p>
       <div class="flex items-center gap-2 shrink-0">
         {#await import('$lib/daemon/status') then { daemonStatus }}
-          <span class="flex items-center gap-1" title="Daemon: {daemonStatus.state}">
+          <span class="flex items-center gap-1" title="{t('daemon.titlePrefix')}: {daemonStatus.state}">
             <span class="inline-block h-1.5 w-1.5 rounded-full {daemonStatus.state === 'connected' ? 'bg-green-500' : daemonStatus.state === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'}"></span>
-            <span class="text-[0.48rem] text-muted-foreground/30">{daemonStatus.state === 'connected' ? 'daemon' : daemonStatus.state}</span>
+            <span class="text-[0.48rem] text-muted-foreground/30">{daemonStatus.state === 'connected' ? t('daemon.stateConnected') : daemonStatus.state === 'connecting' ? t('daemon.stateConnecting') : daemonStatus.state === 'error' ? t('daemon.stateError') : t('daemon.stateDisconnected')}</span>
           </span>
         {/await}
         <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>

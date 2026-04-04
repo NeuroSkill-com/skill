@@ -458,6 +458,18 @@ const settings: Record<string, string> = {
   "tokens.defaultTokenDesc":
     "Built-in admin token used by the app. Cannot be deleted. Refresh to generate a new one — the app will pick it up automatically.",
   "tokens.refresh": "Refresh",
+
+  "daemon.connection": "Daemon connection",
+  "daemon.unreachable": "Unable to reach the daemon: {error}. Some features may be unavailable.",
+  "daemon.authFailed": "Daemon authentication failed. Token may have been refreshed.",
+  "daemon.wsError": "Daemon WebSocket connection lost.",
+  "daemon.stateConnected": "daemon",
+  "daemon.stateConnecting": "connecting",
+  "daemon.stateError": "error",
+  "daemon.stateDisconnected": "offline",
+  "daemon.titlePrefix": "Daemon",
+  "daemon.auth": "auth ✓",
+  "daemon.protocol": "protocol",
   "settingsTabs.lsl": "LSL",
 
   // ── LSL tab ──────────────────────────────────────────────────────────────

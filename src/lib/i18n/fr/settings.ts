@@ -588,6 +588,18 @@ const settings: Record<string, string> = {
   "tokens.defaultToken": "Default Token",
   "tokens.defaultTokenDesc": "Built-in admin token used by the app. Cannot be deleted.",
   "tokens.refresh": "Refresh",
+
+  "daemon.connection": "Daemon connection",
+  "daemon.unreachable": "Unable to reach the daemon: {error}. Some features may be unavailable.",
+  "daemon.authFailed": "Daemon authentication failed.",
+  "daemon.wsError": "Daemon WebSocket connection lost.",
+  "daemon.stateConnected": "daemon",
+  "daemon.stateConnecting": "connecting",
+  "daemon.stateError": "error",
+  "daemon.stateDisconnected": "offline",
+  "daemon.titlePrefix": "Daemon",
+  "daemon.auth": "auth ✓",
+  "daemon.protocol": "protocol",
 };
 
 export default settings;

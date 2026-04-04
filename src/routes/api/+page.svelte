@@ -295,9 +295,9 @@ useWindowTitle("window.title.api");
         <div class="flex items-center gap-2 text-[0.54rem] text-muted-foreground/60">
           <span>v{daemon.version.daemon_version}</span>
           <span>·</span>
-          <span>protocol {daemon.version.protocol_version}</span>
+          <span>{t("daemon.protocol")} {daemon.version.protocol_version}</span>
           <span>·</span>
-          <span>auth ✓</span>
+          <span>{t("daemon.auth")}</span>
         </div>
       {/if}
       {#if daemon && !daemon.reachable}

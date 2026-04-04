@@ -128,6 +128,7 @@ export const EXEMPT_KEY_PREFIXES = [
   "veeg.", // virtual EEG — technical UI, English terms acceptable
   "tokens.", // API token management — technical terms
   "settingsTabs.tokens", // tab name
+  "daemon.", // daemon status — technical terms (protocol, auth ✓)
   "sd.delta",
   "sd.theta",
   "sd.alpha",

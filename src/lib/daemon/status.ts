@@ -47,12 +47,7 @@ export function notifyDaemonError(error: string): void {
 
   setDaemonDisconnected(error);
 
-  import("$lib/stores/toast.svelte").then(({ addToast }) => {
-    addToast(
-      "warning",
-      "Daemon connection",
-      `Unable to reach the daemon: ${error}. Some features may be unavailable.`,
-      8_000,
-    );
+  Promise.all([import("$lib/stores/toast.svelte"), import("$lib/i18n/index.svelte")]).then(([{ addToast }, { t }]) => {
+    addToast("warning", t("daemon.connection"), t("daemon.unreachable", { error }), 8_000);
   });
 }
