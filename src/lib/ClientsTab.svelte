@@ -169,9 +169,21 @@ async function createInvite() {
   linkCopied = false;
   try {
     clientCountBeforeQr = activeClients.length;
+
+    // Create a scoped API token for the paired device so it can
+    // authenticate directly with the daemon HTTP/WS endpoints.
+    const { daemonInvoke } = await import("$lib/daemon/invoke-proxy");
+    const acl = inviteScope === "full" ? "admin" : inviteScope === "read" ? "read_only" : "data";
+    const deviceToken = await daemonInvoke<{ token: string }>("create_auth_token", {
+      name: `Phone (${new Date().toLocaleDateString()})`,
+      acl,
+      expiry: "quarter",
+    });
+
     const r = await api("/v1/iroh/phone-invite", "POST", {
       name: "Invite",
       scope: inviteScope,
+      api_token: deviceToken.token,
     });
     qr = r.qr_png_base64;
     // Build a deep link from the invite payload so users can copy/paste

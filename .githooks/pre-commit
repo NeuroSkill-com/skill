@@ -66,6 +66,9 @@ fi
 
 # ── Rust checks (targeted by touched crate) ───────────────────────────────────
 if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lock|src-tauri/Cargo.toml|crates/.*/Cargo.toml)'; then
+  echo "🔒 Running cargo deny (license/advisory check)…"
+  cargo deny check 2>/dev/null || ERRORS=1
+
   echo "🦀 Running Rust format/clippy/tests…"
   cargo fmt --check || ERRORS=1
 
