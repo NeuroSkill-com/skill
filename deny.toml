@@ -62,6 +62,8 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
     { allow = ["GPL-3.0-only"], crate = "skill-commands" },
     { allow = ["GPL-3.0-only"], crate = "skill-constants" },
+    { allow = ["GPL-3.0-only"], crate = "skill-daemon" },
+    { allow = ["GPL-3.0-only"], crate = "skill-daemon-common" },
     { allow = ["GPL-3.0-only"], crate = "skill-data" },
     { allow = ["GPL-3.0-only"], crate = "skill-devices" },
     { allow = ["GPL-3.0-only"], crate = "skill-eeg" },
