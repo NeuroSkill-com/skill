@@ -1077,6 +1077,8 @@ jobs:
     permissions:
       contents: read
       checks: write   # required by rustsec/audit-check to post Check Run results
+    env:
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v6
         with:
