@@ -701,19 +701,28 @@ async fn auth_middleware(
         .unwrap_or_else(|| "unknown".to_string());
     let command = request.uri().path().to_string();
 
-    if is_authorized(&headers, &request, &state) {
-        record_request(&state, peer, command, true);
-        return next.run(request).await;
+    match auth_decision(&headers, &request, &state) {
+        AuthDecision::Allowed => {
+            record_request(&state, peer, command, true);
+            next.run(request).await
+        }
+        AuthDecision::MissingOrInvalid => {
+            record_request(&state, peer, command, false);
+            let body = Json(ApiError {
+                code: "unauthorized",
+                message: "missing or invalid bearer token".to_string(),
+            });
+            (StatusCode::UNAUTHORIZED, body).into_response()
+        }
+        AuthDecision::Forbidden => {
+            record_request(&state, peer, command, false);
+            let body = Json(ApiError {
+                code: "forbidden",
+                message: "token does not have permission for this endpoint".to_string(),
+            });
+            (StatusCode::FORBIDDEN, body).into_response()
+        }
     }
-
-    record_request(&state, peer, command, false);
-
-    let body = Json(ApiError {
-        code: "unauthorized",
-        message: "missing or invalid bearer token".to_string(),
-    });
-
-    (StatusCode::UNAUTHORIZED, body).into_response()
 }
 
 fn detect_openbci_serial_ports() -> Vec<(String, String)> {
@@ -1119,15 +1128,21 @@ fn extract_bearer_token(headers: &HeaderMap, request: &axum::extract::Request) -
     None
 }
 
-fn is_authorized(headers: &HeaderMap, request: &axum::extract::Request, state: &AppState) -> bool {
+enum AuthDecision {
+    Allowed,
+    MissingOrInvalid,
+    Forbidden,
+}
+
+fn auth_decision(headers: &HeaderMap, request: &axum::extract::Request, state: &AppState) -> AuthDecision {
     let Some(token) = extract_bearer_token(headers, request) else {
-        return false;
+        return AuthDecision::MissingOrInvalid;
     };
 
     // Check in-memory default token first (fast path)
     if let Ok(current) = state.auth_token.lock() {
         if token == *current {
-            return true;
+            return AuthDecision::Allowed;
         }
     }
 
@@ -1135,19 +1150,25 @@ fn is_authorized(headers: &HeaderMap, request: &axum::extract::Request, state: &
     if let Ok(path) = token_path() {
         if let Ok(file_token) = std::fs::read_to_string(path) {
             if token == file_token.trim() {
-                return true;
+                return AuthDecision::Allowed;
             }
         }
     }
 
-    // Check multi-token store
+    // Check multi-token store and distinguish invalid token vs ACL denied.
     let method = request.method().as_str();
     let path = request.uri().path();
     if let Ok(mut store) = state.token_store.lock() {
-        return store.authorize(&token, method, path);
+        if store.authorize(&token, method, path) {
+            return AuthDecision::Allowed;
+        }
+        if store.validate(&token).is_some() {
+            return AuthDecision::Forbidden;
+        }
+        return AuthDecision::MissingOrInvalid;
     }
 
-    false
+    AuthDecision::MissingOrInvalid
 }
 
 fn load_or_create_token() -> anyhow::Result<String> {

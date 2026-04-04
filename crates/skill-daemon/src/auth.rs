@@ -37,22 +37,32 @@ impl std::fmt::Display for TokenAcl {
 impl TokenAcl {
     /// Check if this ACL permits the given HTTP method + path.
     pub fn allows(&self, method: &str, path: &str) -> bool {
+        let method = method.to_ascii_uppercase();
+        let is_read = matches!(method.as_str(), "GET" | "HEAD");
+
         match self {
             Self::Admin => true,
-            Self::ReadOnly => method == "GET",
+            Self::ReadOnly => is_read,
             Self::Data => {
-                method == "GET"
-                    || path.starts_with("/v1/labels")
+                // Data-scope tokens can use data namespaces only.
+                // This intentionally excludes auth/control/settings/admin routes.
+                path.starts_with("/v1/labels")
                     || path.starts_with("/v1/history")
                     || path.starts_with("/v1/search")
                     || path.starts_with("/v1/analysis")
                     || path.starts_with("/v1/llm/chat")
+                    || (is_read
+                        && (path == "/v1/version"
+                            || path.starts_with("/v1/status")
+                            || path.starts_with("/v1/activity/latest-bands")))
             }
             Self::Stream => {
-                path.starts_with("/v1/events")
-                    || path.starts_with("/v1/status")
-                    || path == "/v1/version"
-                    || path.starts_with("/v1/activity/latest-bands")
+                // Stream tokens are read-only and limited to live status/event feeds.
+                is_read
+                    && (path.starts_with("/v1/events")
+                        || path.starts_with("/v1/status")
+                        || path == "/v1/version"
+                        || path.starts_with("/v1/activity/latest-bands"))
             }
         }
     }
@@ -218,6 +228,7 @@ impl TokenStore {
         let path = store_path(skill_dir);
         if let Ok(data) = std::fs::read_to_string(&path) {
             let mut store: Self = serde_json::from_str(&data).unwrap_or_default();
+            let mut migrated = false;
 
             // One-time migration: legacy plaintext tokens -> salted hashes.
             for t in &mut store.tokens {
@@ -226,6 +237,7 @@ impl TokenStore {
                     t.token_salt = generate_token_salt();
                     t.token_hash = hash_secret(&t.token, &t.token_salt);
                     t.token.clear();
+                    migrated = true;
                 } else if t.token_preview.is_empty() {
                     t.token_preview = if !t.token.is_empty() {
                         token_preview(&t.token)
@@ -234,7 +246,12 @@ impl TokenStore {
                     } else {
                         "hidden".to_string()
                     };
+                    migrated = true;
                 }
+            }
+
+            if migrated {
+                let _ = store.save(skill_dir);
             }
 
             store
@@ -351,4 +368,75 @@ fn generate_id() -> String {
     let mut bytes = [0u8; 8];
     rand::rng().fill_bytes(&mut bytes);
     hex::encode(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TokenAcl, TokenStore};
+    use rand::RngCore;
+
+    #[test]
+    fn data_acl_does_not_allow_control_or_auth_routes() {
+        assert!(!TokenAcl::Data.allows("POST", "/v1/control/start-session"));
+        assert!(!TokenAcl::Data.allows("POST", "/v1/auth/tokens"));
+        assert!(!TokenAcl::Data.allows("GET", "/v1/settings/notch-preset"));
+    }
+
+    #[test]
+    fn data_acl_allows_data_namespaces() {
+        assert!(TokenAcl::Data.allows("GET", "/v1/history/sessions"));
+        assert!(TokenAcl::Data.allows("POST", "/v1/labels"));
+        assert!(TokenAcl::Data.allows("POST", "/v1/analysis/recompute"));
+    }
+
+    #[test]
+    fn stream_acl_is_read_only() {
+        assert!(TokenAcl::Stream.allows("GET", "/v1/events"));
+        assert!(TokenAcl::Stream.allows("GET", "/v1/status"));
+        assert!(TokenAcl::Stream.allows("GET", "/v1/version"));
+
+        assert!(!TokenAcl::Stream.allows("POST", "/v1/events/push"));
+        assert!(!TokenAcl::Stream.allows("POST", "/v1/control/start-session"));
+    }
+
+    #[test]
+    fn load_migrates_legacy_plaintext_tokens_and_persists() {
+        let mut nonce = [0u8; 8];
+        rand::rng().fill_bytes(&mut nonce);
+        let base = std::env::temp_dir().join(format!("skill-daemon-auth-test-{}", hex::encode(nonce)));
+        let daemon_dir = base.join("daemon");
+        std::fs::create_dir_all(&daemon_dir).expect("create temp daemon dir");
+
+        let tokens_path = daemon_dir.join("tokens.json");
+        let legacy = serde_json::json!({
+            "tokens": [{
+                "id": "legacy-1",
+                "name": "legacy",
+                "token": "sk-legacy-secret",
+                "acl": "admin",
+                "created_at": 0,
+                "expires_at": null,
+                "last_used_at": null,
+                "revoked": false
+            }]
+        });
+        std::fs::write(&tokens_path, serde_json::to_string_pretty(&legacy).unwrap()).expect("write legacy tokens");
+
+        let store = TokenStore::load(&base);
+        assert_eq!(store.tokens.len(), 1);
+        let t = &store.tokens[0];
+        assert!(t.token.is_empty(), "legacy plaintext token should be cleared");
+        assert!(!t.token_hash.is_empty(), "token_hash should be populated");
+        assert!(!t.token_salt.is_empty(), "token_salt should be populated");
+        assert!(!t.token_preview.is_empty(), "token_preview should be populated");
+
+        let persisted = std::fs::read_to_string(&tokens_path).expect("read persisted tokens");
+        let parsed: serde_json::Value = serde_json::from_str(&persisted).expect("parse persisted tokens");
+        let p = &parsed["tokens"][0];
+        assert_eq!(p["token"], "");
+        assert!(p["token_hash"].as_str().is_some_and(|v| !v.is_empty()));
+        assert!(p["token_salt"].as_str().is_some_and(|v| !v.is_empty()));
+
+        let _ = std::fs::remove_dir_all(base);
+    }
 }
