@@ -9,6 +9,7 @@ import { t } from "$lib/i18n/index.svelte";
 import {
   createRuntime,
   DEFAULT_CONFIG,
+  estimateBandPowers,
   generateSamples,
   getChannelLabels,
   type LineNoise,
@@ -60,16 +61,41 @@ const RATE_OPTIONS = [128, 256, 512, 1000];
 function start() {
   if (running) return;
   const rt = createRuntime(config);
+  let bandCounter = 0;
   rt.onSamples = (electrode, samples, timestamp) => {
-    // Inject samples into the daemon WS event pipeline so the
-    // dashboard EEG chart renders them in real time.
     import("$lib/daemon/ws")
       .then(({ injectDaemonEvent }) => {
+        // EEG waveform samples
         injectDaemonEvent({
           type: "EegSample",
           ts_unix_ms: Math.round(timestamp * 1000),
           payload: { electrode, samples, timestamp },
         });
+        // Band power snapshot at ~4 Hz (every 8th batch on channel 0)
+        bandCounter++;
+        if (electrode === 0 && bandCounter % 8 === 0) {
+          const bands = estimateBandPowers(config, rt.sampleIndex);
+          const labels = getChannelLabels(config.channels);
+          const channels = Array.from({ length: Math.min(config.channels, 4) }, (_, ch) => ({
+            channel: labels[ch] ?? `Ch${ch + 1}`,
+            ...bands,
+            high_gamma: bands.gamma * 0.5,
+            rel_delta: 0.15,
+            rel_theta: 0.15,
+            rel_alpha: 0.4,
+            rel_beta: 0.15,
+            rel_gamma: 0.1,
+            rel_high_gamma: 0.05,
+            dominant: "alpha",
+            dominant_symbol: "\u03b1",
+            dominant_color: "#22c55e",
+          }));
+          injectDaemonEvent({
+            type: "EegBands",
+            ts_unix_ms: Math.round(timestamp * 1000),
+            payload: { timestamp: Math.round(timestamp * 1000), channels, faa: 0.1 },
+          });
+        }
       })
       .catch(() => {});
   };

@@ -234,3 +234,69 @@ export function stopRuntime(rt: VirtualEegRuntime): void {
     rt.timer = null;
   }
 }
+
+// ── Band power estimation (simple FFT-free approximation) ──────────────────
+
+/** Estimate band powers from recent samples using sine-component energy. */
+export function estimateBandPowers(config: VirtualEegConfig, sampleIndex: number): Record<string, number> {
+  const t = sampleIndex / config.sampleRate;
+  const snr = QUALITY_SNR[config.quality];
+  const amp = config.amplitudeUv;
+
+  // Approximate band energies based on the template
+  let delta = 0,
+    theta = 0,
+    alpha = 0,
+    beta = 0,
+    gamma = 0;
+
+  switch (config.template) {
+    case "sine":
+      delta = 0.4 * amp;
+      theta = 0.3 * amp;
+      alpha = 0.5 * amp;
+      beta = 0.2 * amp;
+      gamma = 0.1 * amp;
+      break;
+    case "good_quality":
+      delta = 0.1 * amp;
+      theta = 0.15 * amp;
+      alpha = (0.6 * amp * snr) / 5;
+      beta = 0.1 * amp;
+      gamma = 0.05 * amp;
+      break;
+    case "bad_quality":
+      delta = 0.3 * amp;
+      theta = 0.2 * amp;
+      alpha = 0.1 * amp;
+      beta = 0.5 * amp;
+      gamma = 0.4 * amp; // muscle artefacts
+      break;
+    case "interruptions": {
+      const cycleLen = 10;
+      const inDropout = t % cycleLen > cycleLen - 1.5;
+      if (inDropout) {
+        delta = theta = alpha = beta = gamma = 0.01 * amp;
+      } else {
+        delta = 0.1 * amp;
+        theta = 0.2 * amp;
+        alpha = 0.5 * amp;
+        beta = 0.1 * amp;
+        gamma = 0.05 * amp;
+      }
+      break;
+    }
+    default:
+      delta = theta = alpha = beta = gamma = 0.1 * amp;
+  }
+
+  // Add some noise-driven variation
+  const jitter = () => 1 + (Math.random() - 0.5) * 0.2;
+  return {
+    delta: delta * jitter(),
+    theta: theta * jitter(),
+    alpha: alpha * jitter(),
+    beta: beta * jitter(),
+    gamma: gamma * jitter(),
+  };
+}

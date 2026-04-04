@@ -6,6 +6,7 @@ import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { getApiToken, getWsPort } from "$lib/daemon/client";
+import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { t } from "$lib/i18n/index.svelte";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
@@ -100,17 +101,9 @@ function ago(ts?: number | null) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-async function api(path: string, method = "GET", body?: any) {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(`http://127.0.0.1:${port}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const j = await r.json();
-  if (!r.ok || j?.ok === false) throw new Error(j?.error || `HTTP ${r.status}`);
-  return j;
+async function api<T = any>(path: string, method = "GET", body?: any): Promise<T> {
+  if (method === "GET") return daemonGet<T>(path);
+  return daemonPost<T>(path, body);
 }
 
 type PhoneInfo = {

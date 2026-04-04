@@ -44,6 +44,23 @@ use tracing::{error, info};
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
+    // Write PID file for process management
+    let pid_path = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("skill")
+        .join("daemon")
+        .join("daemon.pid");
+    if let Some(parent) = pid_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&pid_path, std::process::id().to_string());
+
+    // Graceful shutdown on SIGTERM/SIGINT
+    let shutdown = async {
+        let _ = tokio::signal::ctrl_c().await;
+        info!("received shutdown signal");
+    };
+
     let skill_dir = skill_data_dir();
     let state = AppState::new(load_or_create_token()?, skill_dir);
     activity::start_workers(state.clone());
@@ -101,7 +118,13 @@ async fn main() -> anyhow::Result<()> {
     info!(%addr, "skill daemon listening");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown)
+        .await?;
+
+    // Clean up PID file
+    let _ = std::fs::remove_file(&pid_path);
+    info!("daemon shut down cleanly");
     Ok(())
 }
 

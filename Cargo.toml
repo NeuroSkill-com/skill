@@ -19,6 +19,8 @@ members = [
     "crates/skill-calendar",
     "crates/skill-commands",
     "crates/skill-constants",
+    "crates/skill-daemon",
+    "crates/skill-daemon-common",
     "crates/skill-data",
     "crates/skill-devices",
     "crates/skill-eeg",

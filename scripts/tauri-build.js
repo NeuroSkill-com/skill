@@ -739,6 +739,66 @@ function assembleMacOsApp() {
   return true;
 }
 
+// ── Daemon: build + spawn for dev mode ────────────────────────────────────────
+let daemonChild = null;
+if (subcommand === "dev") {
+  console.log("\n🔧 Building skill-daemon…");
+  try {
+    const daemonBuildArgs = ["build", "-p", "skill-daemon"];
+    if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
+    execSync(["cargo", ...daemonBuildArgs].join(" "), { cwd: root, stdio: "inherit", env: process.env });
+
+    // Find the built binary
+    const targetDir = resolve(root, "target");
+    const triple = explicitTarget || "";
+    const candidates = [
+      resolve(targetDir, triple, "debug", "skill-daemon"),
+      resolve(targetDir, "debug", "skill-daemon"),
+      resolve(targetDir, triple, "debug", "skill-daemon.exe"),
+      resolve(targetDir, "debug", "skill-daemon.exe"),
+    ];
+    const daemonBin = candidates.find((c) => existsSync(c));
+
+    if (daemonBin) {
+      console.log(`\n🚀 Starting daemon: ${daemonBin}`);
+      const { spawn } = await import("node:child_process");
+      daemonChild = spawn(daemonBin, [], {
+        env: { ...process.env, SKILL_DAEMON_ADDR: "127.0.0.1:18444", RUST_LOG: "skill_daemon=info,info" },
+        stdio: ["ignore", "inherit", "inherit"],
+        detached: false,
+      });
+      daemonChild.on("error", (e) => console.error(`[daemon] spawn error: ${e.message}`));
+      daemonChild.on("exit", (code) => console.log(`[daemon] exited with code ${code}`));
+      // Give daemon time to bind the port
+      await new Promise((r) => setTimeout(r, 1000));
+      console.log("[daemon] started, launching Tauri…\n");
+    } else {
+      console.warn("⚠ skill-daemon binary not found after build — Tauri will attempt auto-launch");
+    }
+  } catch (e) {
+    console.warn(`⚠ Failed to build/start daemon: ${e.message}`);
+  }
+}
+
+// Clean up daemon on exit
+process.on("exit", () => {
+  if (daemonChild) {
+    daemonChild.kill();
+  }
+});
+process.on("SIGINT", () => {
+  if (daemonChild) {
+    daemonChild.kill();
+  }
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  if (daemonChild) {
+    daemonChild.kill();
+  }
+  process.exit(0);
+});
+
 try {
   runTauriWithArgs(finalArgs);
 } catch (error) {
