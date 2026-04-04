@@ -98,6 +98,74 @@ pub fn get_daemon_token_path() -> String {
         .unwrap_or_else(|_| "<unresolved>".to_string())
 }
 
+/// Ensure the daemon process is running.  If it's not reachable, attempt to
+/// spawn it.  Called once during `setup_app`.
+pub(crate) fn ensure_daemon_running() {
+    let base_url = daemon_base_url();
+    // Quick health check — if the daemon is already up, nothing to do.
+    let reachable = std::net::TcpStream::connect_timeout(
+        &std::env::var("SKILL_DAEMON_ADDR")
+            .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
+            .parse()
+            .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 18444))),
+        Duration::from_millis(300),
+    )
+    .is_ok();
+    if reachable {
+        eprintln!("[daemon] already running at {base_url}");
+        return;
+    }
+
+    // Try to spawn the daemon binary.
+    let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
+        // In production, the daemon binary is next to the app binary.
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let candidate = dir.join("skill-daemon");
+                if candidate.exists() {
+                    return candidate.display().to_string();
+                }
+            }
+        }
+        "skill-daemon".to_string()
+    });
+
+    eprintln!("[daemon] not reachable at {base_url}, spawning: {bin}");
+    match std::process::Command::new(&bin)
+        .env(
+            "SKILL_DAEMON_ADDR",
+            std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string()),
+        )
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+    {
+        Ok(_) => {
+            eprintln!("[daemon] spawned, waiting for readiness...");
+            // Wait up to 5 seconds for the daemon to become ready.
+            for _ in 0..50 {
+                std::thread::sleep(Duration::from_millis(100));
+                if std::net::TcpStream::connect_timeout(
+                    &std::env::var("SKILL_DAEMON_ADDR")
+                        .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
+                        .parse()
+                        .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 18444))),
+                    Duration::from_millis(200),
+                )
+                .is_ok()
+                {
+                    eprintln!("[daemon] ready");
+                    return;
+                }
+            }
+            eprintln!("[daemon] spawned but not ready after 5 s — continuing anyway");
+        }
+        Err(e) => {
+            eprintln!("[daemon] failed to spawn: {e} — features requiring daemon will degrade");
+        }
+    }
+}
+
 #[tauri::command]
 pub fn start_daemon_dev() -> Result<(), String> {
     let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| "skill-daemon".to_string());

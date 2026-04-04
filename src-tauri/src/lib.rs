@@ -355,6 +355,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         // LLM inference server ownership moved to daemon.
     }
 
+    // ── Auto-start daemon if not already running ───────────────────────
+    crate::daemon_cmds::ensure_daemon_running();
+
     let ws_port = crate::daemon_cmds::fetch_daemon_ws_port().unwrap_or(18444);
 
     // NAT-traversing P2P bridge — proxies iroh peers to the single API port.

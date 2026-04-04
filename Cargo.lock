@@ -12232,6 +12232,7 @@ dependencies = [
  "dirs",
  "fast-hnsw",
  "fastembed",
+ "hex",
  "rand 0.9.2",
  "rusqlite",
  "serde",
@@ -12260,6 +12261,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]

@@ -171,6 +171,12 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_umap_config: [G, "/v1/settings/umap-config"],
   set_umap_config: [P, "/v1/settings/umap-config"],
 
+  // Auth tokens
+  list_auth_tokens: [G, "/v1/auth/tokens"],
+  create_auth_token: [P, "/v1/auth/tokens"],
+  revoke_auth_token: [P, "/v1/auth/tokens/revoke"],
+  delete_auth_token: [P, "/v1/auth/tokens/delete"],
+
   // Misc
   get_gpu_stats: [G, "/v1/settings/gpu-stats"],
   get_main_window_auto_fit: [G, "/v1/ui/main-window-auto-fit"],

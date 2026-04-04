@@ -258,6 +258,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/activity/current-window", get(get_current_active_window))
         .route("/activity/last-input", get(get_last_input_activity))
+        .route("/activity/latest-bands", get(get_latest_bands))
         .route("/settings/api-token", get(get_api_token).post(set_api_token))
         .route("/settings/hf-endpoint", get(get_hf_endpoint).post(set_hf_endpoint))
         .route(
@@ -776,6 +777,14 @@ async fn get_last_input_activity(State(state): State<AppState>) -> Json<serde_js
     .await
     .unwrap_or((0, 0));
     Json(serde_json::json!({"keyboard": keyboard, "mouse": mouse}))
+}
+
+async fn get_latest_bands(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let bands = state.latest_bands.lock().map(|g| g.clone()).unwrap_or(None);
+    match bands {
+        Some(b) => Json(serde_json::to_value(b).unwrap_or(serde_json::Value::Null)),
+        None => Json(serde_json::Value::Null),
+    }
 }
 
 fn load_user_settings(state: &AppState) -> skill_settings::UserSettings {

@@ -21,7 +21,8 @@ let _token: string | null = null;
 
 async function getWsUrl(): Promise<string> {
   const port = await getDaemonPort();
-  return `ws://127.0.0.1:${port}/v1/events`;
+  const tokenParam = _token ? `?token=${encodeURIComponent(_token)}` : "";
+  return `ws://127.0.0.1:${port}/v1/events${tokenParam}`;
 }
 
 /** Connect to the daemon WebSocket event stream. */
@@ -43,10 +44,7 @@ export async function connectDaemonWs(): Promise<void> {
   _ws = new WebSocket(url);
 
   _ws.onopen = () => {
-    // Send auth token as first message if available
-    if (_token && _ws) {
-      _ws.send(JSON.stringify({ type: "auth", token: _token }));
-    }
+    // Auth token is sent as query parameter on the URL.
   };
 
   _ws.onmessage = (msg) => {
@@ -77,8 +75,16 @@ export async function connectDaemonWs(): Promise<void> {
 function scheduleReconnect() {
   if (_reconnectTimer) return;
   if (_handlers.size === 0 && _globalHandlers.size === 0) return;
-  _reconnectTimer = setTimeout(() => {
+  _reconnectTimer = setTimeout(async () => {
     _reconnectTimer = null;
+    // Health-check before reconnecting
+    try {
+      const port = await getDaemonPort();
+      const resp = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000) });
+      if (!resp.ok) return scheduleReconnect();
+    } catch {
+      return scheduleReconnect();
+    }
     connectDaemonWs().catch(() => {});
   }, 3000);
 }
@@ -117,4 +123,13 @@ export function disconnectDaemonWs(): void {
 /** Check if the WebSocket is connected. */
 export function isDaemonWsConnected(): boolean {
   return _ws?.readyState === WebSocket.OPEN;
+}
+
+/** Inject a synthetic event into the dispatch pipeline (used by Virtual EEG). */
+export function injectDaemonEvent(event: DaemonEvent): void {
+  const handlers = _handlers.get(event.type);
+  if (handlers) {
+    for (const h of handlers) h(event);
+  }
+  for (const h of _globalHandlers) h(event);
 }

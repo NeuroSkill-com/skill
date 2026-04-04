@@ -126,6 +126,8 @@ export const EXEMPT_KEY_PREFIXES = [
   "llm.inference.flashAttn", // technical feature name
   "llm.inference.offloadKqv", // technical feature name
   "veeg.", // virtual EEG — technical UI, English terms acceptable
+  "tokens.", // API token management — technical terms
+  "settingsTabs.tokens", // tab name
   "sd.delta",
   "sd.theta",
   "sd.alpha",

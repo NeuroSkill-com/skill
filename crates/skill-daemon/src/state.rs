@@ -45,6 +45,10 @@ pub struct AppState {
     pub lsl_virtual_source: Arc<Mutex<Option<skill_lsl::VirtualLslSource>>>,
     pub track_active_window: Arc<AtomicBool>,
     pub track_input_activity: Arc<AtomicBool>,
+    /// Latest EEG band power snapshot (~4 Hz update from session runner).
+    pub latest_bands: Arc<Mutex<Option<serde_json::Value>>>,
+    /// Multi-token auth store.
+    pub token_store: Arc<Mutex<crate::auth::TokenStore>>,
     pub llm_status: Arc<Mutex<String>>,
     pub llm_model_name: Arc<Mutex<String>>,
     #[cfg(not(feature = "llm"))]
@@ -65,6 +69,7 @@ impl AppState {
     pub fn new(auth_token: String, skill_dir: PathBuf) -> Self {
         let (events_tx, _) = broadcast::channel(256);
         let settings = skill_settings::load_settings(&skill_dir);
+        let token_store = crate::auth::TokenStore::load(&skill_dir);
         let hooks = settings.hooks.clone();
         let llm_catalog = skill_llm::catalog::LlmCatalog::load(&skill_dir);
         #[cfg(feature = "llm")]
@@ -105,6 +110,8 @@ impl AppState {
             lsl_virtual_source: Arc::new(Mutex::new(None)),
             track_active_window: Arc::new(AtomicBool::new(settings.track_active_window)),
             track_input_activity: Arc::new(AtomicBool::new(settings.track_input_activity)),
+            latest_bands: Arc::new(Mutex::new(None)),
+            token_store: Arc::new(Mutex::new(token_store)),
             llm_status: Arc::new(Mutex::new("stopped".to_string())),
             llm_model_name: Arc::new(Mutex::new(String::new())),
             #[cfg(not(feature = "llm"))]

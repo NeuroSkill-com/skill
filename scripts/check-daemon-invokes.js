@@ -160,6 +160,12 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "save_dot_file",
   "save_svg_file",
 
+  // auth tokens
+  "list_auth_tokens",
+  "create_auth_token",
+  "revoke_auth_token",
+  "delete_auth_token",
+
   // bulk-migrated via daemonInvoke proxy
   "abort_llm_stream",
   "cancel_llm_download",

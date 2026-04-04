@@ -61,10 +61,15 @@ function start() {
   if (running) return;
   const rt = createRuntime(config);
   rt.onSamples = (electrode, samples, timestamp) => {
-    // Push to daemon WS event stream
+    // Inject samples into the daemon WS event pipeline so the
+    // dashboard EEG chart renders them in real time.
     import("$lib/daemon/ws")
-      .then(({ onDaemonEvent }) => {
-        // The daemon would normally push these — here we simulate locally
+      .then(({ injectDaemonEvent }) => {
+        injectDaemonEvent({
+          type: "EegSample",
+          ts_unix_ms: Math.round(timestamp * 1000),
+          payload: { electrode, samples, timestamp },
+        });
       })
       .catch(() => {});
   };

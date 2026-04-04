@@ -1,4 +1,5 @@
 mod activity;
+mod auth;
 mod routes;
 mod service_installer;
 mod state;
@@ -74,6 +75,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/ws-port", get(ws_port))
         .route("/ws-clients", get(ws_clients))
         .route("/ws-request-log", get(ws_request_log))
+        .route("/auth/tokens", get(list_tokens).post(create_token))
+        .route("/auth/tokens/revoke", axum::routing::post(revoke_token))
+        .route("/auth/tokens/delete", axum::routing::post(delete_token))
         .route("/events", get(ws_events))
         .route("/events/push", axum::routing::post(push_event))
         .merge(routes::labels::router())
@@ -471,6 +475,49 @@ async fn ws_events(
     })
 }
 
+// ── Token management ────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct CreateTokenRequest {
+    name: String,
+    acl: auth::TokenAcl,
+    expiry: auth::TokenExpiry,
+}
+
+#[derive(serde::Deserialize)]
+struct TokenIdRequest {
+    id: String,
+}
+
+async fn list_tokens(State(state): State<AppState>) -> Json<Vec<auth::ApiToken>> {
+    let store = state.token_store.lock().map(|g| g.clone()).unwrap_or_default();
+    Json(store.list_redacted())
+}
+
+async fn create_token(State(state): State<AppState>, Json(req): Json<CreateTokenRequest>) -> Json<auth::ApiToken> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut store = state.token_store.lock().unwrap();
+    let token = store.create(req.name, req.acl, req.expiry);
+    let _ = store.save(&skill_dir);
+    Json(token) // Full token returned (secret visible) on creation only
+}
+
+async fn revoke_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut store = state.token_store.lock().unwrap();
+    let ok = store.revoke(&req.id);
+    let _ = store.save(&skill_dir);
+    Json(serde_json::json!({ "ok": ok }))
+}
+
+async fn delete_token(State(state): State<AppState>, Json(req): Json<TokenIdRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut store = state.token_store.lock().unwrap();
+    let ok = store.delete(&req.id);
+    let _ = store.save(&skill_dir);
+    Json(serde_json::json!({ "ok": ok }))
+}
+
 async fn push_event(State(state): State<AppState>, Json(envelope): Json<EventEnvelope>) -> Json<serde_json::Value> {
     let _ = state.events_tx.send(envelope);
     Json(serde_json::json!({ "ok": true }))
@@ -532,7 +579,7 @@ async fn auth_middleware(
         .unwrap_or_else(|| "unknown".to_string());
     let command = request.uri().path().to_string();
 
-    if is_authorized(headers, state.auth_token.as_str()) {
+    if is_authorized(&headers, &request, &state) {
         record_request(&state, peer, command, true);
         return next.run(request).await;
     }
@@ -927,20 +974,47 @@ fn push_device_log(state: &AppState, tag: &str, msg: &str) {
     }
 }
 
-fn is_authorized(headers: HeaderMap, expected_token: &str) -> bool {
-    let Some(value) = headers.get(header::AUTHORIZATION) else {
+fn extract_bearer_token(headers: &HeaderMap, request: &axum::extract::Request) -> Option<String> {
+    // 1. Authorization: Bearer <token> header
+    if let Some(value) = headers.get(header::AUTHORIZATION) {
+        if let Ok(value) = value.to_str() {
+            if let Some(token) = value.strip_prefix("Bearer ") {
+                return Some(token.to_string());
+            }
+        }
+    }
+
+    // 2. ?token=<token> query parameter (for WebSocket — browsers can't set headers)
+    if let Some(query) = request.uri().query() {
+        for pair in query.split('&') {
+            if let Some(val) = pair.strip_prefix("token=") {
+                let decoded = urlencoding::decode(val).unwrap_or_default();
+                return Some(decoded.into_owned());
+            }
+        }
+    }
+
+    None
+}
+
+fn is_authorized(headers: &HeaderMap, request: &axum::extract::Request, state: &AppState) -> bool {
+    let Some(token) = extract_bearer_token(headers, request) else {
         return false;
     };
 
-    let Ok(value) = value.to_str() else {
-        return false;
-    };
+    // Check legacy single token first (fast path)
+    if token == *state.auth_token {
+        return true;
+    }
 
-    let Some(token) = value.strip_prefix("Bearer ") else {
-        return false;
-    };
+    // Check multi-token store
+    let method = request.method().as_str();
+    let path = request.uri().path();
+    if let Ok(mut store) = state.token_store.lock() {
+        return store.authorize(&token, method, path);
+    }
 
-    token == expected_token
+    false
 }
 
 fn load_or_create_token() -> anyhow::Result<String> {
