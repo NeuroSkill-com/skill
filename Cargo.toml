@@ -136,6 +136,9 @@ incremental = false
 
 [profile.dev]
 codegen-units = 8
+# Local/dev checks are CPU-bound and do not need full debug symbols.
+# This cuts compile time and disk I/O significantly.
+debug = 0
 
 # ── Release profile ──────────────────────────────────────────────────────────
 #

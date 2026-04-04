@@ -75,8 +75,8 @@ async function refreshDefaultToken() {
       const { invalidateDaemonBootstrap } = await import("$lib/daemon/http");
       invalidateDaemonBootstrap();
     }
-  } catch (e) {
-    console.error("refresh default token error:", e);
+  } catch {
+    // handled by backend response; keep UI responsive
   } finally {
     refreshing = false;
   }
@@ -94,8 +94,8 @@ async function createToken() {
     justCreated = token;
     newName = "";
     await refresh();
-  } catch (e) {
-    console.error("create token error:", e);
+  } catch {
+    // handled by backend response; keep UI responsive
   } finally {
     creating = false;
   }

@@ -126,7 +126,7 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
     const version = await api<{ daemon: string }>("/v1/version", created.token);
     expect(version.daemon).toBe("skill-daemon");
 
-    // POST should be rejected (403 or 401)
+    // POST should be rejected for ACL (403)
     const r = await fetch(`${BASE}/v1/auth/tokens`, {
       method: "POST",
       headers: {
@@ -139,7 +139,61 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
         expiry: "week",
       }),
     });
-    expect(r.status).toBe(401);
+    expect(r.status).toBe(403);
+  });
+
+  it("scoped data token cannot access auth/control routes", async () => {
+    const created = await api<{ token: string }>("/v1/auth/tokens", token, "POST", {
+      name: "DataOnly",
+      acl: "data",
+      expiry: "week",
+    });
+
+    // Data route should work
+    const sessions = await api<unknown[]>("/v1/history/sessions", created.token);
+    expect(Array.isArray(sessions)).toBe(true);
+
+    // Auth route should fail
+    const authResp = await fetch(`${BASE}/v1/auth/tokens`, {
+      headers: { Authorization: `Bearer ${created.token}` },
+    });
+    expect(authResp.status).toBe(403);
+
+    // Control route should fail
+    const controlResp = await fetch(`${BASE}/v1/control/retry-connect`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${created.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(controlResp.status).toBe(403);
+  });
+
+  it("scoped stream token cannot push events", async () => {
+    const created = await api<{ token: string }>("/v1/auth/tokens", token, "POST", {
+      name: "StreamOnly",
+      acl: "stream",
+      expiry: "week",
+    });
+
+    // Read stream/status endpoints should work
+    const versionResp = await fetch(`${BASE}/v1/version`, {
+      headers: { Authorization: `Bearer ${created.token}` },
+    });
+    expect(versionResp.status).toBe(200);
+
+    // Mutation should fail
+    const pushResp = await fetch(`${BASE}/v1/events/push`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${created.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ type: "Test", payload: {} }),
+    });
+    expect(pushResp.status).toBe(403);
   });
 
   it("revokes a token", async () => {
