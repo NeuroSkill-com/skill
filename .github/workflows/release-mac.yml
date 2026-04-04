@@ -78,8 +78,8 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Install protoc (macOS)
-        run: brew install protobuf
+      - name: Install protoc + OpenMP runtime (macOS)
+        run: brew install protobuf libomp
 
       - name: Download prebuilt llama libs (macOS, optional)
         shell: bash
