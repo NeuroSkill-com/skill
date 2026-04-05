@@ -63,6 +63,8 @@ pub struct AppState {
     pub llm_log_buffer: LlmLogBuffer,
     #[cfg(feature = "llm")]
     pub llm_state_cell: LlmStateCell,
+    /// Active OpenBCI session handle (cancel sender).
+    pub session_handle: Arc<Mutex<Option<crate::session_runner::SessionHandle>>>,
 }
 
 impl AppState {
@@ -126,6 +128,7 @@ impl AppState {
             llm_log_buffer: skill_llm::new_log_buffer(),
             #[cfg(feature = "llm")]
             llm_state_cell: skill_llm::new_state_cell(),
+            session_handle: Arc::new(Mutex::new(None)),
         }
     }
 }

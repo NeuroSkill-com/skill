@@ -713,6 +713,52 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // ── Daemon status poll ───────────────────────────────────────────────
+    // The daemon's session runner updates status asynchronously (e.g.
+    // connecting → connected).  Poll the daemon every 2 s and mirror
+    // changes into the local Tauri AppState so the frontend receives
+    // real-time status events.
+    let app_poll = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        // Wait for daemon to be ready before polling.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        loop {
+            interval.tick().await;
+            let poll_result = tokio::task::spawn_blocking(crate::daemon_cmds::fetch_daemon_status)
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()));
+            match poll_result {
+                Ok(daemon_status) => {
+                    let changed = {
+                        let r = app_poll.state::<Mutex<Box<AppState>>>();
+                        let s = r.lock_or_recover();
+                        s.status.state != daemon_status.state
+                            || s.status.device_name != daemon_status.device_name
+                            || s.status.sample_count != daemon_status.sample_count
+                            || s.status.device_error != daemon_status.device_error
+                    };
+                    if changed {
+                        {
+                            let r = app_poll.state::<Mutex<Box<AppState>>>();
+                            let mut s = r.lock_or_recover();
+                            s.status.state = daemon_status.state;
+                            s.status.device_name = daemon_status.device_name;
+                            s.status.sample_count = daemon_status.sample_count;
+                            s.status.battery = daemon_status.battery;
+                            s.status.device_error = daemon_status.device_error;
+                            s.status.target_name = daemon_status.target_name;
+                            s.status.retry_attempt = daemon_status.retry_attempt;
+                            s.status.retry_countdown_secs = daemon_status.retry_countdown_secs;
+                        }
+                        emit_status(&app_poll);
+                    }
+                }
+                Err(_) => { /* daemon unreachable — skip this tick */ }
+            }
+        }
+    });
+
     let app_cal = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(1200)).await;

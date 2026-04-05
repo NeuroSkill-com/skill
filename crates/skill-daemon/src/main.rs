@@ -2,6 +2,7 @@ mod activity;
 mod auth;
 mod routes;
 mod service_installer;
+mod session_runner;
 mod state;
 mod tracker;
 
@@ -135,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
 fn skill_data_dir() -> PathBuf {
     std::env::var("SKILL_DATA_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".skill"))
+        .unwrap_or_else(|_| skill_settings::default_skill_dir())
 }
 
 fn init_tracing() {
@@ -308,19 +309,45 @@ fn default_status(state: &str) -> StatusResponse {
 }
 
 async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResponse> {
-    let mut out = default_status("scanning");
+    let mut out = default_status("connecting");
+
+    // Cancel any existing session before retrying.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+
+    // Check if we have a preferred/target device to reconnect to.
+    let target = state.status.lock().ok().and_then(|s| s.target_name.clone());
 
     if let Ok(mut status) = state.status.lock() {
-        status.state = "scanning".to_string();
+        status.state = "connecting".to_string();
         status.retry_attempt = 0;
         status.retry_countdown_secs = 0;
+        status.device_error = None;
         out = status.clone();
+    }
+
+    // Spawn session runner if target is openbci.
+    if target.as_deref() == Some("openbci") {
+        let handle = session_runner::spawn_openbci_session(state.clone());
+        if let Ok(mut slot) = state.session_handle.lock() {
+            *slot = Some(handle);
+        }
     }
 
     Json(out)
 }
 
 async fn control_cancel_retry(State(state): State<AppState>) -> Json<StatusResponse> {
+    // Cancel any running session.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+
     let mut out = default_status("disconnected");
 
     if let Ok(mut status) = state.status.lock() {
@@ -340,11 +367,27 @@ async fn control_start_session(
 ) -> Json<StatusResponse> {
     let mut out = default_status("connecting");
 
+    let target = req.target.clone();
     if let Ok(mut status) = state.status.lock() {
         status.state = "connecting".to_string();
         status.target_name = req.target;
         status.device_error = None;
         out = status.clone();
+    }
+
+    // If the target is "openbci", spawn the session runner that actually
+    // opens the board, calls prepare()/start_stream(), and pumps events.
+    if target.as_deref() == Some("openbci") {
+        // Cancel any existing session before starting a new one.
+        if let Ok(mut slot) = state.session_handle.lock() {
+            if let Some(handle) = slot.take() {
+                let _ = handle.cancel_tx.send(());
+            }
+        }
+        let handle = session_runner::spawn_openbci_session(state.clone());
+        if let Ok(mut slot) = state.session_handle.lock() {
+            *slot = Some(handle);
+        }
     }
 
     Json(out)
@@ -354,7 +397,15 @@ async fn control_switch_session(
     State(state): State<AppState>,
     Json(req): Json<SessionControlRequest>,
 ) -> Json<StatusResponse> {
+    // Cancel any existing session before switching.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+
     let mut out = default_status("connecting");
+    let target = req.target.clone();
 
     if let Ok(mut status) = state.status.lock() {
         status.state = "connecting".to_string();
@@ -363,10 +414,24 @@ async fn control_switch_session(
         out = status.clone();
     }
 
+    if target.as_deref() == Some("openbci") {
+        let handle = session_runner::spawn_openbci_session(state.clone());
+        if let Ok(mut slot) = state.session_handle.lock() {
+            *slot = Some(handle);
+        }
+    }
+
     Json(out)
 }
 
 async fn control_cancel_session(State(state): State<AppState>) -> Json<StatusResponse> {
+    // Cancel any running session task.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+
     let mut out = default_status("disconnected");
 
     if let Ok(mut status) = state.status.lock() {
@@ -737,18 +802,53 @@ fn detect_openbci_serial_ports() -> Vec<(String, String)> {
 
         let is_openbci = match &port.port_type {
             serialport::SerialPortType::UsbPort(usb) => {
-                let vid_match = usb.vid == 0x0403 && usb.pid == 0x6015;
+                // FTDI chips used across OpenBCI dongle revisions:
+                //   0x6015 = FT231X  (current Cyton dongle)
+                //   0x6001 = FT232R  (older Cyton/Ganglion dongles)
+                //   0x6014 = FT232H  (rare but seen in some kits)
+                let vid_match = usb.vid == 0x0403 && matches!(usb.pid, 0x6015 | 0x6001 | 0x6014);
+
                 let product_match = usb
                     .product
                     .as_deref()
                     .map(|p| {
                         let pl = p.to_lowercase();
-                        pl.contains("ft231x") || pl.contains("openbci") || pl.contains("ftdi")
+                        pl.contains("ft231x") || pl.contains("ft232") || pl.contains("openbci") || pl.contains("ftdi")
                     })
                     .unwrap_or(false);
-                vid_match || product_match
+
+                let manufacturer_match = usb
+                    .manufacturer
+                    .as_deref()
+                    .map(|m| {
+                        let ml = m.to_lowercase();
+                        ml.contains("ftdi") || ml.contains("openbci")
+                    })
+                    .unwrap_or(false);
+
+                vid_match || product_match || manufacturer_match
             }
+            // Linux/macOS path-based fallback
+            #[cfg(not(target_os = "windows"))]
             _ => lower.contains("ttyusb") || lower.contains("usbserial"),
+            // Windows: FTDI dongles appear as generic COM ports when the
+            // driver supplies no USB metadata.  Accept any COM port that
+            // the system reports as PnP (non-built-in).  This is broader
+            // than the USB branch above, but on Windows the fallback arm
+            // only fires when `serialport` classifies the port as
+            // `Unknown` — built-in COM0/COM1 are typically `PciPort`.
+            #[cfg(target_os = "windows")]
+            serialport::SerialPortType::Unknown => {
+                // Heuristic: COM3 and above are almost always USB/PnP
+                // adapters; COM1/COM2 are legacy motherboard UARTs.
+                let port_num = lower
+                    .strip_prefix("com")
+                    .and_then(|n| n.parse::<u32>().ok())
+                    .unwrap_or(0);
+                port_num >= 3
+            }
+            #[cfg(target_os = "windows")]
+            _ => false,
         };
 
         if is_openbci {
@@ -958,9 +1058,18 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
         tokio::select! {
             _ = &mut stop_rx => break,
             _ = tick.tick() => {
-                let ports = tokio::task::spawn_blocking(detect_openbci_serial_ports)
-                    .await
-                    .unwrap_or_default();
+                // Timeout serial port enumeration — on Windows the FTDI
+                // driver can occasionally stall `serialport::available_ports()`
+                // for 10+ seconds when a dongle is mid-reset.  Without a
+                // timeout this blocks the entire scanner tick.
+                let ports = tokio::time::timeout(
+                    Duration::from_secs(3),
+                    tokio::task::spawn_blocking(detect_openbci_serial_ports),
+                )
+                .await
+                .ok()
+                .and_then(std::result::Result::ok)
+                .unwrap_or_default();
 
                 let mut usb_discovered: Vec<DiscoveredDeviceResponse> = ports.into_iter().map(|(port, display)| {
                     DiscoveredDeviceResponse {
@@ -974,9 +1083,14 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                     }
                 }).collect();
 
-                let cgx_ports = tokio::task::spawn_blocking(detect_cgx_serial_ports)
-                    .await
-                    .unwrap_or_default();
+                let cgx_ports = tokio::time::timeout(
+                    Duration::from_secs(3),
+                    tokio::task::spawn_blocking(detect_cgx_serial_ports),
+                )
+                .await
+                .ok()
+                .and_then(std::result::Result::ok)
+                .unwrap_or_default();
 
                 let cgx_discovered: Vec<DiscoveredDeviceResponse> = cgx_ports.into_iter().map(|(port, display)| {
                     DiscoveredDeviceResponse {
@@ -1234,8 +1348,8 @@ fn tighten_file_permissions(path: &Path) -> anyhow::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn tighten_file_permissions(_path: &Path) -> anyhow::Result<()> {
-    Ok(())
+fn tighten_file_permissions(path: &Path) -> anyhow::Result<()> {
+    restrict_windows_acl(path)
 }
 
 #[cfg(unix)]
@@ -1248,8 +1362,55 @@ fn tighten_dir_permissions(path: &Path) -> anyhow::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn tighten_dir_permissions(_path: &Path) -> anyhow::Result<()> {
-    Ok(())
+fn tighten_dir_permissions(path: &Path) -> anyhow::Result<()> {
+    restrict_windows_acl(path)
+}
+
+/// On Windows, reset the DACL so only the current user has access.
+///
+/// Uses `icacls` which is available on all supported Windows versions.
+/// If `icacls` is missing or fails we log a warning but do not abort —
+/// the daemon should still start even if we cannot restrict permissions.
+#[cfg(not(unix))]
+fn restrict_windows_acl(path: &Path) -> anyhow::Result<()> {
+    let path_str = path.to_string_lossy();
+
+    // Retrieve the current user's name (e.g. "DESKTOP-X\\Alice").
+    let user = std::env::var("USERNAME").unwrap_or_else(|_| "*S-1-5-32-544".into());
+
+    // 1. Disable inheritance and remove inherited ACEs.
+    let _ = std::process::Command::new("icacls")
+        .args([path_str.as_ref(), "/inheritance:r"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    // 2. Grant full control only to the current user.
+    let status = std::process::Command::new("icacls")
+        .args([path_str.as_ref(), "/grant:r", &format!("{user}:(F)")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        Ok(s) => {
+            tracing::warn!(
+                path = %path_str,
+                code = ?s.code(),
+                "icacls returned non-zero — auth token may be world-readable"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            tracing::warn!(
+                path = %path_str,
+                err = %e,
+                "could not run icacls — auth token may be world-readable"
+            );
+            Ok(())
+        }
+    }
 }
 
 fn now_unix_ms() -> u64 {

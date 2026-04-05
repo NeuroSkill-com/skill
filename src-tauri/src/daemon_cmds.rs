@@ -117,13 +117,19 @@ pub(crate) fn ensure_daemon_running() {
     }
 
     // Try to spawn the daemon binary.
+    //
+    // On Windows executables must end in `.exe`; the candidates below
+    // include both the bare name and the `.exe` variant so the lookup
+    // works on all platforms.
     let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
         if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
                 // Production: sidecar next to app binary (Tauri bundles it)
-                let candidate = dir.join("skill-daemon");
-                if candidate.exists() {
-                    return candidate.display().to_string();
+                for name in &["skill-daemon", "skill-daemon.exe"] {
+                    let candidate = dir.join(name);
+                    if candidate.exists() {
+                        return candidate.display().to_string();
+                    }
                 }
                 // macOS .app bundle: inside Contents/MacOS/
                 let mac_candidate = dir.join("../MacOS/skill-daemon");
@@ -139,15 +145,22 @@ pub(crate) fn ensure_daemon_running() {
         // Dev: look in target dir
         let target_candidates = [
             "src-tauri/target/debug/skill-daemon",
+            "src-tauri/target/debug/skill-daemon.exe",
             "src-tauri/target/aarch64-apple-darwin/debug/skill-daemon",
+            "src-tauri/target/x86_64-pc-windows-msvc/debug/skill-daemon.exe",
             "target/debug/skill-daemon",
+            "target/debug/skill-daemon.exe",
         ];
         for c in &target_candidates {
             if std::path::Path::new(c).exists() {
                 return c.to_string();
             }
         }
-        "skill-daemon".to_string()
+        if cfg!(target_os = "windows") {
+            "skill-daemon.exe".to_string()
+        } else {
+            "skill-daemon".to_string()
+        }
     });
 
     eprintln!("[daemon] not reachable at {base_url}, spawning: {bin}");
@@ -188,7 +201,13 @@ pub(crate) fn ensure_daemon_running() {
 
 #[tauri::command]
 pub fn start_daemon_dev() -> Result<(), String> {
-    let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| "skill-daemon".to_string());
+    let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
+        if cfg!(target_os = "windows") {
+            "skill-daemon.exe".to_string()
+        } else {
+            "skill-daemon".to_string()
+        }
+    });
     let addr = std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string());
 
     std::process::Command::new(bin)

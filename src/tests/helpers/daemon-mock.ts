@@ -86,8 +86,16 @@ export function buildDaemonMockScript(commands: CommandMap): string {
       "/v1/activity/latest-bands": "get_latest_bands",
       "/v1/control/retry-connect": "retry_connect",
       "/v1/control/cancel-retry": "cancel_retry",
+      "/v1/control/start-session": "start_session",
+      "/v1/control/cancel-session": "cancel_session",
       "/v1/devices/forget": "forget_device",
       "/v1/devices/set-preferred": "set_preferred_device",
+      "/v1/settings/openbci-config": "get_openbci_config",
+      "/v1/settings/scanner-config": "get_scanner_config",
+      "/v1/settings/device-api-config": "get_device_api_config",
+      "/v1/settings/device-log": "get_device_log",
+      "/v1/device/serial-ports": "list_serial_ports",
+      "/v1/devices": "get_devices",
     };
 
     // ── Tauri invoke mock ──

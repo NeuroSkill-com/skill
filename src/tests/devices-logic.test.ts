@@ -59,6 +59,21 @@ describe("deviceImage", () => {
   });
 });
 
+describe("deviceImage — OpenBCI boards", () => {
+  it("detects Cyton by name", () => {
+    expect(deviceImage("Cyton-1234")).toContain("cyton");
+    expect(deviceImage("OpenBCI Cyton")).toContain("cyton");
+  });
+  it("detects Ganglion by name", () => {
+    expect(deviceImage("Ganglion-5678")).toContain("ganglion");
+    expect(deviceImage("OpenBCI Ganglion")).toContain("ganglion");
+  });
+  it("returns null for generic OpenBCI display name", () => {
+    // "OpenBCI (COM3)" doesn't contain cyton or ganglion
+    expect(deviceImage("OpenBCI (COM3)")).toBeNull();
+  });
+});
+
 describe("openbciChannelLabel", () => {
   it("returns 10-20 labels for standard indices", () => {
     expect(openbciChannelLabel(0)).toBe("Fp1");

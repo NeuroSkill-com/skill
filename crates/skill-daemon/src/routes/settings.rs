@@ -2834,13 +2834,25 @@ async fn llm_set_autoload_mmproj(
 }
 
 async fn list_serial_ports() -> Json<Vec<String>> {
-    Json(
-        serialport::available_ports()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|p| p.port_name)
-            .collect(),
+    // `serialport::available_ports()` performs blocking I/O (Windows registry
+    // queries / Linux sysfs reads) and can stall for several seconds if a
+    // USB driver is misbehaving.  Run it off the async runtime with a timeout.
+    let ports = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::task::spawn_blocking(|| {
+            serialport::available_ports()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|p| p.port_name)
+                .collect::<Vec<String>>()
+        }),
     )
+    .await
+    .ok()
+    .and_then(std::result::Result::ok)
+    .unwrap_or_default();
+
+    Json(ports)
 }
 
 fn persist_lsl_settings(state: &AppState) {

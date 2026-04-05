@@ -143,6 +143,59 @@
       "params_b": 0.27,
       "max_context_length": 32768
     },
+    "gemma4-31b": {
+      "name": "Gemma 4 31B Instruct",
+      "description": "Google's flagship Gemma 4 instruction model in GGUF format. High-quality chat and reasoning; needs high-memory hardware.",
+      "repo": "unsloth/gemma-4-31B-it-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 31.0,
+      "max_context_length": 131072
+    },
+    "gemma4-26b-a4b": {
+      "name": "Gemma 4 26B-A4B Instruct",
+      "description": "Gemma 4 MoE variant (26B total / ~4B active). Strong quality with lower active compute than dense models.",
+      "repo": "unsloth/gemma-4-26B-A4B-it-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 26.0,
+      "max_context_length": 131072
+    },
+    "gemma4-e4b": {
+      "name": "Gemma 4 E4B Instruct",
+      "description": "Compact Gemma 4 E4B instruct model. A lighter option for Gemma 4-class quality on more modest hardware.",
+      "repo": "unsloth/gemma-4-E4B-it-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small"
+      ],
+      "is_mmproj": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
+    },
+    "gemma4-e2b": {
+      "name": "Gemma 4 E2B Instruct",
+      "description": "Ultra-compact Gemma 4 E2B instruct model. Best for low-memory systems while keeping modern Gemma 4 behavior.",
+      "repo": "unsloth/gemma-4-E2B-it-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "tiny"
+      ],
+      "is_mmproj": false,
+      "params_b": 2.0,
+      "max_context_length": 131072
+    },
     "phi4-reasoning-plus": {
       "name": "Phi-4 Reasoning Plus",
       "description": "Microsoft's Phi-4 fine-tuned for reasoning. Punches above its weight at math and science.",
@@ -2484,6 +2537,123 @@
       "quant": "Q8_K_XL",
       "size_gb": 0.2,
       "description": "Q8_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 17.8,
+      "description": "Legacy 4-bit quant; broad compatibility"
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 19.1,
+      "description": "Recommended — best quality/size tradeoff",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 24.7,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 31.3,
+      "description": "Effectively lossless; very large",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 15.2,
+      "description": "Recommended — best quality/size tradeoff",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 20.1,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 25.8,
+      "description": "Effectively lossless; very large",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 2.9,
+      "description": "Legacy 4-bit quant; broad compatibility"
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 3.2,
+      "description": "Recommended — best quality/size tradeoff",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 4.2,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 5.5,
+      "description": "Effectively lossless",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 1.7,
+      "description": "Legacy 4-bit quant; broad compatibility"
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 1.9,
+      "description": "Recommended — best quality/size tradeoff",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 2.4,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 3.2,
+      "description": "Effectively lossless",
       "advanced": true
     },
     {

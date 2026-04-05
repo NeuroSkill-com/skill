@@ -220,7 +220,19 @@ pub(crate) fn detect_device_kind(
             return "emotiv";
         }
         if id.starts_with("usb:") {
-            return "ganglion";
+            // USB serial is used by both Ganglion and Cyton boards.
+            // Check the display name to distinguish; fall through to
+            // the name-based heuristics below when a name is available.
+            let n = device_name.map(str::to_ascii_lowercase).unwrap_or_default();
+            if n.contains("cyton") {
+                return "cyton";
+            }
+            if n.contains("ganglion") || n.contains("simblee") {
+                return "ganglion";
+            }
+            // Default to "openbci" — the caller can inspect the user's
+            // board setting to decide whether this is Cyton or Ganglion.
+            return "openbci";
         }
         if id.starts_with("cgx:") {
             return "cognionics";
@@ -231,6 +243,12 @@ pub(crate) fn detect_device_kind(
 
     if name.starts_with("ganglion") || name.starts_with("simblee") {
         return "ganglion";
+    }
+    if name.contains("cyton") {
+        return "cyton";
+    }
+    if name.contains("openbci") {
+        return "openbci";
     }
     if name.contains("mw75") || name.contains("neurable") {
         return "mw75";
@@ -360,11 +378,88 @@ mod tests {
             detect_device_kind(Some("cortex:EPOCX-1234"), Some("unknown")),
             "emotiv"
         );
-        // USB prefix → ganglion (OpenBCI serial).
+        // USB prefix without name → generic openbci (could be Cyton or Ganglion).
         assert_eq!(
             detect_device_kind(Some("usb:/dev/ttyUSB0"), None),
+            "openbci"
+        );
+        // USB prefix + Cyton name → cyton.
+        assert_eq!(
+            detect_device_kind(Some("usb:COM3"), Some("OpenBCI (COM3)")),
+            "openbci"
+        );
+        assert_eq!(
+            detect_device_kind(Some("usb:/dev/ttyUSB0"), Some("Cyton-1234")),
+            "cyton"
+        );
+        // USB prefix + Ganglion name → ganglion.
+        assert_eq!(
+            detect_device_kind(Some("usb:/dev/ttyUSB0"), Some("Ganglion-5678")),
             "ganglion"
         );
+    }
+
+    // ── Cyton / OpenBCI device kind tests ─────────────────────────────────
+
+    #[test]
+    fn detect_device_kind_cyton_by_name() {
+        assert_eq!(detect_device_kind(None, Some("Cyton-1234")), "cyton");
+        assert_eq!(detect_device_kind(None, Some("cyton_daisy")), "cyton");
+        assert_eq!(detect_device_kind(None, Some("My Cyton Board")), "cyton");
+    }
+
+    #[test]
+    fn detect_device_kind_openbci_generic_name() {
+        assert_eq!(detect_device_kind(None, Some("OpenBCI (COM3)")), "openbci");
+        assert_eq!(detect_device_kind(None, Some("OpenBCI Device")), "openbci");
+    }
+
+    #[test]
+    fn detect_device_kind_usb_cyton_name() {
+        // USB prefix + "cyton" in name → cyton
+        assert_eq!(
+            detect_device_kind(Some("usb:COM3"), Some("Cyton-1234")),
+            "cyton"
+        );
+        assert_eq!(
+            detect_device_kind(Some("usb:COM5"), Some("CytonDaisy Board")),
+            "cyton"
+        );
+    }
+
+    #[test]
+    fn detect_device_kind_usb_no_name_returns_openbci() {
+        // USB prefix without name → generic openbci
+        assert_eq!(detect_device_kind(Some("usb:COM3"), None), "openbci");
+        assert_eq!(detect_device_kind(Some("usb:COM5"), Some("")), "openbci");
+    }
+
+    #[test]
+    fn detect_device_kind_usb_openbci_display_name() {
+        // Scanner-generated display names like "OpenBCI (COM3)"
+        assert_eq!(
+            detect_device_kind(Some("usb:COM3"), Some("OpenBCI (COM3)")),
+            "openbci"
+        );
+    }
+
+    #[test]
+    fn detect_device_kind_usb_ganglion_name() {
+        assert_eq!(
+            detect_device_kind(Some("usb:/dev/ttyUSB0"), Some("Ganglion")),
+            "ganglion"
+        );
+        assert_eq!(
+            detect_device_kind(Some("usb:COM4"), Some("Simblee-1234")),
+            "ganglion"
+        );
+    }
+
+    #[test]
+    fn detect_device_kind_windows_com_port() {
+        // COM port IDs should route to openbci, not ganglion
+        assert_eq!(detect_device_kind(Some("usb:COM3"), None), "openbci");
+        assert_eq!(detect_device_kind(Some("usb:COM10"), None), "openbci");
     }
 
     #[test]
