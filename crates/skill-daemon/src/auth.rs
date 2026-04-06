@@ -420,7 +420,11 @@ mod tests {
                 "revoked": false
             }]
         });
-        std::fs::write(&tokens_path, serde_json::to_string_pretty(&legacy).unwrap()).expect("write legacy tokens");
+        std::fs::write(
+            &tokens_path,
+            serde_json::to_string_pretty(&legacy).expect("serialize legacy token fixture"),
+        )
+        .expect("write legacy tokens");
 
         let store = TokenStore::load(&base);
         assert_eq!(store.tokens.len(), 1);

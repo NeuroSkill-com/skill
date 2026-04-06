@@ -1,113 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Generic device session runner — drives any `DeviceAdapter` through the
-//! full daemon pipeline: CSV recording, DSP band power, EXG embeddings,
-//! hook triggers, WS event broadcast.
+//! full daemon pipeline: EEG filter, band power DSP, quality monitor,
+//! artifact detection, CSV/Parquet recording, EXG embeddings, hooks, WS events.
 
 use std::path::{Path, PathBuf};
 
 use skill_daemon_common::EventEnvelope;
 use skill_data::session_writer::{SessionWriter, StorageFormat};
 use skill_devices::session::{DeviceAdapter, DeviceEvent};
+use skill_eeg::artifact_detection::ArtifactDetector;
 use skill_eeg::eeg_bands::BandAnalyzer;
+use skill_eeg::eeg_filter::EegFilter;
+use skill_eeg::eeg_quality::QualityMonitor;
 use skill_settings::HookRule;
 use tokio::sync::{broadcast, oneshot};
 use tracing::{error, info};
 
+use super::shared::{
+    broadcast_event, enrich_band_snapshot, unix_secs, unix_secs_f64, utc_date_dir,
+    write_session_meta,
+};
 use crate::embed::{EmbedWorkerHandle, EpochAccumulator};
 use crate::state::AppState;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-fn unix_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-fn unix_secs_f64() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
-}
-
-fn utc_date_dir(skill_dir: &Path) -> PathBuf {
-    let secs = unix_secs();
-    let days = secs / 86400;
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    let dir = skill_dir.join(format!("{y:04}{m:02}{d:02}"));
-    let _ = std::fs::create_dir_all(&dir);
-    dir
-}
-
-fn write_session_meta(
-    csv_path: &Path,
-    device_name: &str,
-    channel_names: &[String],
-    sample_rate: f64,
-    start_utc: u64,
-    total_samples: u64,
-) {
-    let meta = serde_json::json!({
-        "session_start_utc": start_utc,
-        "session_end_utc": unix_secs(),
-        "device_name": device_name,
-        "channel_names": channel_names,
-        "sample_rate": sample_rate,
-        "total_samples": total_samples,
-        "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
-        "daemon": true,
-    });
-    let meta_path = csv_path.with_extension("json");
-    if let Ok(json) = serde_json::to_string_pretty(&meta) {
-        let _ = std::fs::write(meta_path, json);
-    }
-}
-
-fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, payload: &serde_json::Value) {
-    let _ = tx.send(EventEnvelope {
-        r#type: event_type.to_string(),
-        ts_unix_ms: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0),
-        correlation_id: None,
-        payload: payload.clone(),
-    });
-}
-
-fn enrich_band_snapshot(snap: &skill_eeg::eeg_bands::BandSnapshot) -> serde_json::Value {
-    let mut val = serde_json::to_value(snap).unwrap_or_default();
-    if let Some(obj) = val.as_object_mut() {
-        let engage_raw = skill_devices::compute_engagement_raw(snap);
-        let focus = skill_devices::focus_score(engage_raw);
-        let nch = snap.channels.len().max(1) as f64;
-        let avg_alpha = snap.channels.iter().map(|c| c.rel_alpha as f64).sum::<f64>() / nch;
-        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
-        let relaxation = if (avg_alpha + avg_beta) > 0.0 {
-            (avg_alpha / (avg_alpha + avg_beta)) * 100.0
-        } else {
-            0.0
-        };
-        let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
-        obj.insert("focus".into(), serde_json::json!(focus));
-        obj.insert("relaxation".into(), serde_json::json!(relaxation));
-        obj.insert("engagement".into(), serde_json::json!(engagement));
-    }
-    val
-}
-
-// ── Epoch store (metrics-only SQLite fallback) ──────────────────────────────
+// ── Epoch metrics store ──────────────────────────────────────────────────────
 
 struct EpochStore {
     conn: rusqlite::Connection,
@@ -132,18 +48,22 @@ impl EpochStore {
         let json = serde_json::to_string(metrics).unwrap_or_default();
         let empty: &[u8] = &[];
         let _ = self.conn.execute(
-            "INSERT INTO embeddings (timestamp, device_name, hnsw_id, eeg_embedding, metrics_json) VALUES (?1, ?2, 0, ?3, ?4)",
+            "INSERT INTO embeddings (timestamp, device_name, hnsw_id, eeg_embedding, metrics_json)
+             VALUES (?1, ?2, 0, ?3, ?4)",
             rusqlite::params![ts_ms, device_name, empty, json],
         );
     }
 }
 
-// ── Session pipeline ────────────────────────────────────────────────────────
+// ── Session pipeline ──────────────────────────────────────────────────────────
 
 struct Pipeline {
     writer: SessionWriter,
     csv_path: PathBuf,
+    filter: EegFilter,
     band_analyzer: BandAnalyzer,
+    quality: QualityMonitor,
+    artifacts: ArtifactDetector,
     epoch_store: Option<EpochStore>,
     epoch_accumulator: Option<EpochAccumulator>,
     _embed_worker: Option<EmbedWorkerHandle>,
@@ -169,42 +89,69 @@ impl Pipeline {
         let start_utc = unix_secs();
         let csv_path = day_dir.join(format!("exg_{start_utc}.csv"));
 
-        let labels: Vec<&str> = channel_names.iter().map(String::as_str).collect();
-        let default_labels: Vec<String> = (0..eeg_channels).map(|i| format!("Ch{}", i + 1)).collect();
-        let refs: Vec<&str> = if labels.is_empty() {
-            default_labels.iter().map(String::as_str).collect()
-        } else {
-            labels
-        };
-
-        // Read user's storage format preference (csv / parquet / both).
+        // Storage format (csv/parquet/both) from settings.
         let storage_format = {
             let settings = skill_settings::load_settings(skill_dir);
             StorageFormat::parse(&settings.storage_format)
         };
-        let writer =
-            SessionWriter::open(&csv_path, &refs, storage_format).map_err(|e| format!("SessionWriter open: {e}"))?;
+        let default_labels: Vec<String> = (0..eeg_channels).map(|i| format!("Ch{}", i + 1)).collect();
+        let labels: Vec<&str> = if channel_names.is_empty() {
+            default_labels.iter().map(String::as_str).collect()
+        } else {
+            channel_names.iter().map(String::as_str).collect()
+        };
+        let writer = SessionWriter::open(&csv_path, &labels, storage_format)
+            .map_err(|e| format!("SessionWriter open: {e}"))?;
+
+        // DSP pipeline: filter → bands → quality → artifacts.
+        let filter_config = {
+            let settings = skill_settings::load_settings(skill_dir);
+            let mut cfg = settings.filter_config;
+            cfg.sample_rate = sample_rate as f32;
+            cfg
+        };
+        let filter = EegFilter::new(filter_config);
         let band_analyzer = BandAnalyzer::new_with_rate(sample_rate as f32);
+        let quality = QualityMonitor::with_window(eeg_channels, sample_rate.max(1.0) as usize);
+        let ch_refs: Vec<&str> = channel_names.iter().map(String::as_str).collect();
+        let artifacts = ArtifactDetector::with_channels(sample_rate, &ch_refs);
+
+        // Epoch metrics store.
         let epoch_store = EpochStore::open(&day_dir);
 
+        // EXG embedding pipeline.
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
-        let embed_worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
-        let mut epoch_acc = EpochAccumulator::new(
+        let embed_worker = EmbedWorkerHandle::spawn(
+            skill_dir.to_path_buf(),
+            model_config,
+            events_tx,
+            hooks,
+        );
+        let mut acc = EpochAccumulator::new(
             embed_worker.tx.clone(),
             eeg_channels,
             sample_rate as f32,
             channel_names.clone(),
         );
-        epoch_acc.set_device_name(device_name.clone());
+        acc.set_device_name(device_name.clone());
 
-        info!(path = %csv_path.display(), ch = eeg_channels, rate = sample_rate, "session opened");
+        info!(
+            path = %csv_path.display(),
+            ch = eeg_channels,
+            rate = sample_rate,
+            format = ?storage_format,
+            "session pipeline opened"
+        );
 
         Ok(Self {
             writer,
             csv_path,
+            filter,
             band_analyzer,
+            quality,
+            artifacts,
             epoch_store,
-            epoch_accumulator: Some(epoch_acc),
+            epoch_accumulator: Some(acc),
             _embed_worker: Some(embed_worker),
             channel_names,
             sample_rate,
@@ -215,10 +162,17 @@ impl Pipeline {
         })
     }
 
-    fn push_eeg(&mut self, channels: &[f64], ts: f64) -> Option<skill_eeg::eeg_bands::BandSnapshot> {
+    /// Push one EEG frame through the full DSP pipeline.
+    /// Returns enriched band snapshot JSON if the band analyzer fired.
+    fn push_eeg(
+        &mut self,
+        channels: &[f64],
+        ts: f64,
+    ) -> Option<serde_json::Value> {
         self.total_samples += 1;
         self.flush_counter += 1;
 
+        // 1. Record raw samples to file.
         for (el, &v) in channels.iter().enumerate() {
             self.writer.push_eeg(el, &[v], ts, self.sample_rate);
         }
@@ -227,37 +181,79 @@ impl Pipeline {
             self.flush_counter = 0;
         }
 
-        // Feed epoch accumulator
+        // 2. Feed epoch accumulator (for EXG embeddings).
         if let Some(ref mut acc) = self.epoch_accumulator {
             for (el, &v) in channels.iter().enumerate() {
                 acc.push(el, &[v as f32]);
             }
         }
 
-        // DSP
-        let mut new_snap = false;
+        // 3. EEG filter (notch + bandpass).
+        let mut filter_fired = false;
         for (ch, &v) in channels.iter().enumerate() {
-            if self.band_analyzer.push(ch, &[v]) {
-                new_snap = true;
+            if self.filter.push(ch, &[v]) {
+                filter_fired = true;
             }
         }
 
-        if new_snap {
-            if let Some(ref snap) = self.band_analyzer.latest {
-                self.writer.push_metrics(&self.csv_path, snap);
-                if let Some(ref store) = self.epoch_store {
-                    let ts_ms = (snap.timestamp * 1000.0) as i64;
-                    let metrics = skill_exg::EpochMetrics::from_snapshot(snap);
-                    store.insert_metrics(ts_ms, Some(&self.device_name), &metrics);
-                }
-                if let Some(ref mut acc) = self.epoch_accumulator {
-                    acc.update_bands(snap.clone());
+        // 4. Quality monitor (on raw samples — before filter).
+        for (ch, &v) in channels.iter().enumerate() {
+            self.quality.push(ch, &[v]);
+        }
+
+        // 5. Artifact detector (on raw samples — blink detection needs pre-filter).
+        for (ch, &v) in channels.iter().enumerate() {
+            self.artifacts.push(ch, &[v]);
+        }
+
+        // 6. Band analyzer (on filtered samples when available, else raw).
+        let mut band_fired = false;
+        if filter_fired {
+            for ch in 0..channels.len() {
+                let drained = self.filter.drain(ch);
+                if !drained.is_empty() && self.band_analyzer.push(ch, &drained) {
+                    band_fired = true;
                 }
             }
-            self.band_analyzer.latest.clone()
         } else {
-            None
+            for (ch, &v) in channels.iter().enumerate() {
+                if self.band_analyzer.push(ch, &[v]) {
+                    band_fired = true;
+                }
+            }
         }
+
+        if !band_fired {
+            return None;
+        }
+
+        // 7. Enrich snapshot with composite scores + artifacts.
+        let artifact_metrics = self.artifacts.metrics();
+        if let Some(ref mut snap) = self.band_analyzer.latest {
+            let enriched = enrich_band_snapshot(snap, Some(&artifact_metrics));
+
+            // Write metrics row to file.
+            self.writer.push_metrics(&self.csv_path, snap);
+
+            // Store epoch metrics in SQLite.
+            if let Some(ref store) = self.epoch_store {
+                let ts_ms = (snap.timestamp * 1000.0) as i64;
+                let metrics = skill_exg::EpochMetrics::from_snapshot(snap);
+                store.insert_metrics(ts_ms, Some(&self.device_name), &metrics);
+            }
+
+            // Update epoch accumulator's band snapshot.
+            if let Some(ref mut acc) = self.epoch_accumulator {
+                acc.update_bands(snap.clone());
+            }
+
+            return Some(enriched);
+        }
+        None
+    }
+
+    fn channel_quality(&self) -> Vec<skill_eeg::eeg_quality::SignalQuality> {
+        self.quality.all_qualities()
     }
 
     fn finalize(&mut self) {
@@ -270,16 +266,20 @@ impl Pipeline {
             self.start_utc,
             self.total_samples,
         );
-        info!(path = %self.csv_path.display(), samples = self.total_samples, "session finalized");
+        info!(
+            path = %self.csv_path.display(),
+            samples = self.total_samples,
+            "session finalized"
+        );
     }
 }
 
-// ── Generic session runner ──────────────────────────────────────────────────
+// ── Generic session runner ────────────────────────────────────────────────────
 
 /// Run a device session using any `DeviceAdapter`.
 ///
-/// This is the daemon equivalent of the old Tauri `run_device_session`.
-/// Drives the full pipeline: CSV, DSP, embeddings, hooks, WS events.
+/// Drives the full pipeline: EEG filter → DSP → quality → artifacts →
+/// CSV/Parquet → embeddings → hooks → WS events.
 pub(crate) async fn run_adapter_session(
     state: AppState,
     mut cancel_rx: oneshot::Receiver<()>,
@@ -287,6 +287,7 @@ pub(crate) async fn run_adapter_session(
 ) {
     let desc = adapter.descriptor().clone();
     let sample_rate = desc.eeg_sample_rate;
+    let device_kind = desc.kind.to_string();
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
 
@@ -306,6 +307,7 @@ pub(crate) async fn run_adapter_session(
                     info!("event stream ended");
                     if let Ok(mut s) = state.status.lock() {
                         s.state = "disconnected".into();
+                        s.device_kind.clear();
                     }
                     broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                     break;
@@ -313,20 +315,26 @@ pub(crate) async fn run_adapter_session(
 
                 match ev {
                     DeviceEvent::Connected(info) => {
-                        info!(name = %info.name, "device connected");
+                        info!(name = %info.name, kind = %device_kind, "device connected");
                         if let Ok(mut s) = state.status.lock() {
                             s.state = "connected".into();
                             s.device_name = Some(info.name.clone());
+                            s.device_kind = device_kind.clone();
                             s.device_error = None;
                         }
-                        broadcast_event(&state.events_tx, "DeviceConnected", &serde_json::json!({ "name": info.name }));
+                        broadcast_event(&state.events_tx, "DeviceConnected", &serde_json::json!({
+                            "name": info.name,
+                            "kind": device_kind,
+                        }));
 
-                        // Open pipeline
-                        let ch_names = desc.channel_names.clone();
-                        let eeg_ch = desc.eeg_channels;
                         match Pipeline::open(
-                            &skill_dir, eeg_ch, sample_rate, ch_names,
-                            info.name.clone(), state.events_tx.clone(), hooks.clone(),
+                            &skill_dir,
+                            desc.eeg_channels,
+                            sample_rate,
+                            desc.channel_names.clone(),
+                            info.name.clone(),
+                            state.events_tx.clone(),
+                            hooks.clone(),
                         ) {
                             Ok(p) => pipeline = Some(p),
                             Err(e) => error!(%e, "pipeline open failed"),
@@ -340,25 +348,44 @@ pub(crate) async fn run_adapter_session(
                         }
 
                         if let Some(ref mut pipe) = pipeline {
-                            if let Some(snap) = pipe.push_eeg(&frame.channels, frame.timestamp_s) {
-                                let enriched = enrich_band_snapshot(&snap);
+                            if let Some(enriched) = pipe.push_eeg(&frame.channels, frame.timestamp_s) {
+                                // Update latest_bands and broadcast.
                                 if let Ok(mut bands) = state.latest_bands.lock() {
                                     *bands = Some(enriched.clone());
                                 }
                                 broadcast_event(&state.events_tx, "EegBands", &enriched);
+
+                                // Broadcast signal quality (~4 Hz cadence, same as bands).
+                                let qualities = pipe.channel_quality();
+                                let q_vals: Vec<String> = qualities.iter()
+                                    .map(|q| format!("{q:?}").to_lowercase())
+                                    .collect();
+                                broadcast_event(&state.events_tx, "SignalQuality",
+                                    &serde_json::json!({ "quality": q_vals }));
                             }
                         }
 
                         for (el, &v) in frame.channels.iter().enumerate() {
                             broadcast_event(&state.events_tx, "EegSample", &serde_json::json!({
-                                "electrode": el, "samples": [v], "timestamp": frame.timestamp_s,
+                                "electrode": el,
+                                "samples": [v],
+                                "timestamp": frame.timestamp_s,
                             }));
+                        }
+
+                        // Emit full status once per second.
+                        let rate = sample_rate.max(1.0) as u64;
+                        if sample_count.is_multiple_of(rate) {
+                            if let Ok(status) = state.status.lock() {
+                                if let Ok(val) = serde_json::to_value(&*status) {
+                                    broadcast_event(&state.events_tx, "StatusUpdate", &val);
+                                }
+                            }
                         }
                     }
 
                     DeviceEvent::Imu(frame) => {
                         let ts = unix_secs_f64();
-                        // Record IMU to file.
                         if let Some(ref mut pipe) = pipeline {
                             pipe.writer.push_imu(
                                 &pipe.csv_path, ts,
@@ -378,7 +405,9 @@ pub(crate) async fn run_adapter_session(
                     DeviceEvent::Ppg(frame) => {
                         let ts = unix_secs_f64();
                         broadcast_event(&state.events_tx, "PpgSample", &serde_json::json!({
-                            "channel": frame.channel, "samples": frame.samples, "timestamp": ts,
+                            "channel": frame.channel,
+                            "samples": frame.samples,
+                            "timestamp": ts,
                         }));
                     }
 
@@ -395,12 +424,13 @@ pub(crate) async fn run_adapter_session(
                         info!("device disconnected");
                         if let Ok(mut s) = state.status.lock() {
                             s.state = "disconnected".into();
+                            s.device_kind.clear();
                         }
                         broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                         break;
                     }
 
-                    _ => {} // fNIRS, Meta, etc.
+                    _ => {}
                 }
             }
         }

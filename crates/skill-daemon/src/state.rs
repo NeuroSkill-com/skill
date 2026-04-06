@@ -82,14 +82,7 @@ impl AppState {
             tracker: Arc::new(Mutex::new(DaemonTracker::default())),
             status: Arc::new(Mutex::new(StatusResponse {
                 state: "disconnected".to_string(),
-                device_name: None,
-                sample_count: 0,
-                battery: 0.0,
-                device_error: None,
-                target_name: None,
-                retry_attempt: 0,
-                retry_countdown_secs: 0,
-                paired_devices: Vec::new(),
+                ..Default::default()
             })),
             devices: Arc::new(Mutex::new(Vec::new())),
             scanner_running: Arc::new(Mutex::new(false)),

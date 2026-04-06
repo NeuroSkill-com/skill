@@ -62,11 +62,14 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower.starts_with("lsl:") || lower == "lsl" {
         return connect_lsl(target).await;
     }
+    if lower.starts_with("brainmaster:") || lower.contains("brainmaster") {
+        return connect_brainmaster(state, target).await;
+    }
     if lower.starts_with("brainbit:") || lower.contains("brainbit") {
         return connect_brainbit(target).await;
     }
-    if lower.starts_with("brainmaster:") || lower.contains("brainmaster") {
-        return connect_brainmaster(state, target).await;
+    if lower.starts_with("neurofield:") || lower.contains("neurofield") {
+        return connect_neurofield(target).await;
     }
     if lower.starts_with("gtec:") || lower.contains("unicorn") {
         return connect_gtec(target).await;
@@ -281,6 +284,115 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
     Ok(adapter)
 }
 
+// ── NeuroField Q21 (PCAN-USB) ────────────────────────────────────────────
+
+async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use crate::session_runner::parse_neurofield_bus;
+    use neurofield::prelude::*;
+
+    let bus = parse_neurofield_bus(target);
+    info!(?bus, %target, "connecting to NeuroField Q21");
+
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<neurofield::q21_api::EegSample>(512);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let mut api = Q21Api::new(bus).map_err(|e| format!("Q21 connect: {e}"))?;
+        let name = format!("NeuroField Q21 ({:?} #{})", api.eeg_device_type(), api.eeg_device_serial());
+        api.start_receiving_eeg().map_err(|e| format!("start: {e}"))?;
+
+        let tx = sample_tx;
+        let read_thread = std::thread::Builder::new()
+            .name("neurofield-read".to_string())
+            .spawn(move || {
+                loop {
+                    if stop_rx.try_recv().is_ok() {
+                        break;
+                    }
+                    match api.get_single_sample() {
+                        Ok(s) => {
+                            if tx.blocking_send(s).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                let _ = api.abort_receiving_eeg();
+                api.release();
+            })
+            .map_err(|e| format!("spawn: {e}"))?;
+
+        Ok((name, read_thread))
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking: {e}"))??;
+
+    info!(name = %device_name, "NeuroField Q21 connected");
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "neurofield",
+        eeg_channels: neurofield::q21_api::NUM_CHANNELS,
+        eeg_sample_rate: neurofield::q21_api::SAMPLING_RATE,
+        channel_names: neurofield::q21_api::EEG_CHANNEL_NAMES.iter().map(ToString::to_string).collect(),
+        caps: DeviceCaps::EEG,
+        pipeline_channels: neurofield::q21_api::NUM_CHANNELS,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+    Ok(Box::new(NeuroFieldAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        stop_tx: Some(stop_tx),
+        read_thread: Some(read_thread),
+        connected_sent: false,
+    }))
+}
+
+struct NeuroFieldAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<neurofield::q21_api::EegSample>,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for NeuroFieldAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor { &self.desc }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(), ..Default::default()
+            }));
+        }
+        let s = self.rx.recv().await?;
+        let channels: Vec<f64> = s.data.to_vec();
+        let ts = s.timestamp_us as f64 / 1_000_000.0;
+        Some(DeviceEvent::Eeg(EegFrame { channels, timestamp_s: ts }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = handle.join();
+            })
+            .await;
+        }
+    }
+}
+
 // ── BrainMaster (USB serial) ────────────────────────────────────────────
 
 async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
@@ -305,7 +417,7 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
 
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<brainmaster::device::EegSample>(512);
 
-    let device_name = tokio::task::spawn_blocking(move || -> Result<String, String> {
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let port = if port.is_empty() {
             BrainMasterDevice::scan()
                 .map_err(|e| format!("scan: {e}"))?
@@ -319,7 +431,7 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
         device.start_streaming().map_err(|e| format!("start: {e}"))?;
         let name = format!("BrainMaster {:?} ({port})", model);
         let tx = sample_tx;
-        std::thread::Builder::new()
+        let read_thread = std::thread::Builder::new()
             .name("brainmaster-read".to_string())
             .spawn(move || {
                 while let Ok(sample) = device.read_sample() {
@@ -328,8 +440,8 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
                     }
                 }
             })
-            .expect("brainmaster reader thread");
-        Ok(name)
+            .map_err(|e| format!("spawn reader: {e}"))?;
+        Ok((name, read_thread))
     })
     .await
     .map_err(|e| format!("spawn: {e}"))??;
@@ -353,6 +465,7 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
         name: device_name,
         desc,
         rx: sample_rx,
+        read_thread: Some(read_thread),
         connected_sent: false,
     }))
 }
@@ -361,6 +474,7 @@ struct BrainMasterAdapter {
     name: String,
     desc: skill_devices::session::DeviceDescriptor,
     rx: tokio::sync::mpsc::Receiver<brainmaster::device::EegSample>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
     connected_sent: bool,
 }
 
@@ -392,6 +506,15 @@ impl skill_devices::session::DeviceAdapter for BrainMasterAdapter {
 
     async fn disconnect(&mut self) {
         self.rx.close();
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || {
+                    let _ = handle.join();
+                }),
+            )
+            .await;
+        }
     }
 }
 
@@ -440,54 +563,60 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
 
     info!("scanning for BrainBit…");
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<Vec<brainbit::device::EegSample>>(64);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
 
     let target_addr = target.strip_prefix("brainbit:").unwrap_or("").to_string();
 
-    let (device_name, device_addr) = tokio::task::spawn_blocking(move || -> Result<(String, String), String> {
-        let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
-        scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
-        let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
-        if devices.is_empty() {
-            return Err("No BrainBit device found nearby".into());
-        }
-        // Pick matching device or first.
-        let info = if !target_addr.is_empty() {
-            devices
-                .iter()
-                .find(|d| d.address_str() == target_addr)
-                .or(devices.first())
-        } else {
-            devices.first()
-        }
-        .ok_or("No matching BrainBit device")?;
+    let (device_name, device_addr, keepalive_thread) =
+        tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
+            scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
+            let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
+            if devices.is_empty() {
+                return Err("No BrainBit device found nearby".into());
+            }
+            // Pick matching device or first.
+            let info = if !target_addr.is_empty() {
+                devices
+                    .iter()
+                    .find(|d| d.address_str() == target_addr)
+                    .or(devices.first())
+            } else {
+                devices.first()
+            }
+            .ok_or("No matching BrainBit device")?;
 
-        let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
-        let name = device.name().unwrap_or_else(|_| "BrainBit".into());
-        let addr = device.address().unwrap_or_default();
+            let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
+            let name = device.name().unwrap_or_else(|_| "BrainBit".into());
+            let addr = device.address().unwrap_or_default();
 
-        // Set up streaming callback.
-        let tx = sample_tx;
-        device
-            .on_signal(move |samples| {
-                let _ = tx.blocking_send(samples.to_vec());
-            })
-            .map_err(|e| format!("BrainBit on_signal: {e}"))?;
-        device
-            .start_signal()
-            .map_err(|e| format!("BrainBit start_signal: {e}"))?;
+            // Set up streaming callback.
+            let tx = sample_tx;
+            device
+                .on_signal(move |samples| {
+                    let _ = tx.blocking_send(samples.to_vec());
+                })
+                .map_err(|e| format!("BrainBit on_signal: {e}"))?;
+            device
+                .start_signal()
+                .map_err(|e| format!("BrainBit start_signal: {e}"))?;
 
-        // Leak the device to keep it alive for the session lifetime.
-        // It will be cleaned up when the process exits.
-        // TODO: proper Drop-based lifetime management.
-        std::mem::forget(device);
-        std::mem::forget(scanner);
+            // Keep scanner/device alive until adapter disconnects.
+            let keepalive_thread = std::thread::Builder::new()
+                .name("brainbit-keepalive".to_string())
+                .spawn(move || {
+                    let _ = stop_rx.recv();
+                    drop(device);
+                    drop(scanner);
+                })
+                .map_err(|e| format!("spawn keepalive: {e}"))?;
 
-        Ok((name, addr))
-    })
-    .await
-    .map_err(|e| format!("spawn: {e}"))??;
+            Ok((name, addr, keepalive_thread))
+        })
+        .await
+        .map_err(|e| format!("spawn: {e}"))??;
 
     info!(name = %device_name, addr = %device_addr, "BrainBit connected");
 
@@ -507,6 +636,8 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
         name: device_name,
         desc,
         rx: sample_rx,
+        stop_tx: Some(stop_tx),
+        keepalive_thread: Some(keepalive_thread),
         connected_sent: false,
     }))
 }
@@ -516,6 +647,8 @@ struct BrainBitAdapter {
     name: String,
     desc: skill_devices::session::DeviceDescriptor,
     rx: tokio::sync::mpsc::Receiver<Vec<brainbit::device::EegSample>>,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    keepalive_thread: Option<std::thread::JoinHandle<()>>,
     connected_sent: bool,
 }
 
@@ -550,6 +683,15 @@ impl skill_devices::session::DeviceAdapter for BrainBitAdapter {
 
     async fn disconnect(&mut self) {
         self.rx.close();
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.keepalive_thread.take() {
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = handle.join();
+            })
+            .await;
+        }
     }
 }
 
@@ -563,7 +705,7 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
 
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<gtec::device::Scan>(512);
 
-    let device_serial = tokio::task::spawn_blocking(move || -> Result<String, String> {
+    let (device_serial, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let serial = if serial.is_empty() {
             let serials = UnicornDevice::scan(true).map_err(|e| format!("scan: {e}"))?;
             serials.into_iter().next().ok_or("No g.tec Unicorn found")?
@@ -577,7 +719,7 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
         let dev_serial = serial.clone();
         let tx = sample_tx;
         // Blocking reader thread.
-        std::thread::Builder::new()
+        let read_thread = std::thread::Builder::new()
             .name("gtec-read".to_string())
             .spawn(move || {
                 while let Ok(scan) = device.get_single_scan() {
@@ -586,9 +728,9 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
                     }
                 }
             })
-            .expect("gtec reader thread");
+            .map_err(|e| format!("spawn reader: {e}"))?;
 
-        Ok(dev_serial)
+        Ok((dev_serial, read_thread))
     })
     .await
     .map_err(|e| format!("spawn: {e}"))??;
@@ -611,6 +753,7 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
         name: format!("g.tec Unicorn ({device_serial})"),
         desc,
         rx: sample_rx,
+        read_thread: Some(read_thread),
         connected_sent: false,
     }))
 }
@@ -619,6 +762,7 @@ struct GtecAdapter {
     name: String,
     desc: skill_devices::session::DeviceDescriptor,
     rx: tokio::sync::mpsc::Receiver<gtec::device::Scan>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
     connected_sent: bool,
 }
 
@@ -652,6 +796,15 @@ impl skill_devices::session::DeviceAdapter for GtecAdapter {
 
     async fn disconnect(&mut self) {
         self.rx.close();
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || {
+                    let _ = handle.join();
+                }),
+            )
+            .await;
+        }
     }
 }
 
