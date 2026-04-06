@@ -59,6 +59,9 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower == "ganglion" {
         return connect_ganglion(state).await;
     }
+    if lower.starts_with("lsl:") || lower == "lsl" {
+        return connect_lsl(target).await;
+    }
     if lower.starts_with("brainbit:") || lower.contains("brainbit") {
         return connect_brainbit(target).await;
     }
@@ -271,6 +274,44 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
     let client = CgxClient::new(config);
     let (rx, handle) = client.start().await.map_err(|e| format!("CGX start: {e}"))?;
     let adapter: Box<dyn DeviceAdapter> = Box::new(CognionicsAdapter::new(rx, handle));
+
+    Ok(adapter)
+}
+
+// ── LSL (Lab Streaming Layer) ──────────────────────────────────────────────
+
+async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    let query = target.strip_prefix("lsl:").unwrap_or("").to_string();
+    info!(query = %query, "connecting to LSL stream");
+
+    let adapter = tokio::task::spawn_blocking(move || -> Result<Box<dyn DeviceAdapter>, String> {
+        let streams = skill_lsl::resolve_eeg_streams(5.0);
+        if streams.is_empty() {
+            return Err("No LSL EEG streams found on the network".into());
+        }
+
+        let info = if !query.is_empty() {
+            streams
+                .iter()
+                .find(|s| s.name().contains(query.as_str()))
+                .or(streams.first())
+                .cloned()
+                .ok_or_else(|| format!("No LSL stream matching '{query}'"))?
+        } else {
+            streams.into_iter().next().expect("non-empty")
+        };
+
+        info!(
+            name = %info.name(),
+            channels = info.channel_count(),
+            rate = info.nominal_srate(),
+            "LSL stream resolved"
+        );
+        let adapter = skill_lsl::LslAdapter::new(&info);
+        Ok(Box::new(adapter) as Box<dyn DeviceAdapter>)
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
 
     Ok(adapter)
 }
