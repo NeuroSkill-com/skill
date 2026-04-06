@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use skill_daemon_common::EventEnvelope;
-use skill_data::session_csv::CsvState;
+use skill_data::session_writer::{SessionWriter, StorageFormat};
 use skill_devices::session::{DeviceAdapter, DeviceEvent};
 use skill_eeg::eeg_bands::BandAnalyzer;
 use skill_settings::HookRule;
@@ -141,7 +141,7 @@ impl EpochStore {
 // ── Session pipeline ────────────────────────────────────────────────────────
 
 struct Pipeline {
-    csv: CsvState,
+    writer: SessionWriter,
     csv_path: PathBuf,
     band_analyzer: BandAnalyzer,
     epoch_store: Option<EpochStore>,
@@ -176,7 +176,14 @@ impl Pipeline {
         } else {
             labels
         };
-        let csv = CsvState::open_with_labels(&csv_path, &refs).map_err(|e| format!("CSV: {e}"))?;
+
+        // Read user's storage format preference (csv / parquet / both).
+        let storage_format = {
+            let settings = skill_settings::load_settings(skill_dir);
+            StorageFormat::parse(&settings.storage_format)
+        };
+        let writer =
+            SessionWriter::open(&csv_path, &refs, storage_format).map_err(|e| format!("SessionWriter open: {e}"))?;
         let band_analyzer = BandAnalyzer::new_with_rate(sample_rate as f32);
         let epoch_store = EpochStore::open(&day_dir);
 
@@ -193,7 +200,7 @@ impl Pipeline {
         info!(path = %csv_path.display(), ch = eeg_channels, rate = sample_rate, "session opened");
 
         Ok(Self {
-            csv,
+            writer,
             csv_path,
             band_analyzer,
             epoch_store,
@@ -213,10 +220,10 @@ impl Pipeline {
         self.flush_counter += 1;
 
         for (el, &v) in channels.iter().enumerate() {
-            self.csv.push_eeg(el, &[v], ts, self.sample_rate);
+            self.writer.push_eeg(el, &[v], ts, self.sample_rate);
         }
         if self.flush_counter >= 256 {
-            self.csv.flush();
+            self.writer.flush();
             self.flush_counter = 0;
         }
 
@@ -237,7 +244,7 @@ impl Pipeline {
 
         if new_snap {
             if let Some(ref snap) = self.band_analyzer.latest {
-                self.csv.push_metrics(&self.csv_path, snap);
+                self.writer.push_metrics(&self.csv_path, snap);
                 if let Some(ref store) = self.epoch_store {
                     let ts_ms = (snap.timestamp * 1000.0) as i64;
                     let metrics = skill_exg::EpochMetrics::from_snapshot(snap);
@@ -254,7 +261,7 @@ impl Pipeline {
     }
 
     fn finalize(&mut self) {
-        self.csv.flush();
+        self.writer.flush();
         write_session_meta(
             &self.csv_path,
             &self.device_name,
@@ -351,6 +358,13 @@ pub(crate) async fn run_adapter_session(
 
                     DeviceEvent::Imu(frame) => {
                         let ts = unix_secs_f64();
+                        // Record IMU to file.
+                        if let Some(ref mut pipe) = pipeline {
+                            pipe.writer.push_imu(
+                                &pipe.csv_path, ts,
+                                frame.accel, frame.gyro, None,
+                            );
+                        }
                         broadcast_event(&state.events_tx, "ImuSample", &serde_json::json!({
                             "sensor": "accel", "samples": [frame.accel], "timestamp": ts,
                         }));
