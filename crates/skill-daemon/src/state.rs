@@ -73,7 +73,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(auth_token: String, skill_dir: PathBuf) -> Self {
-        let (events_tx, _) = broadcast::channel(256);
+        let (events_tx, _) = broadcast::channel(4096);
         let settings = skill_settings::load_settings(&skill_dir);
         let token_store = crate::auth::TokenStore::load(&skill_dir);
         let hooks = settings.hooks.clone();

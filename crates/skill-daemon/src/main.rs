@@ -804,7 +804,7 @@ async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvel
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                        error!(%skipped, "websocket client lagged behind event stream");
+                        tracing::debug!(%skipped, "websocket client lagged behind event stream");
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
