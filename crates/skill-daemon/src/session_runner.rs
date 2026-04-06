@@ -25,7 +25,7 @@ use skill_settings::OpenBciConfig;
 use tokio::sync::{broadcast, oneshot};
 use tracing::{error, info};
 
-use crate::embed::{EpochAccumulator, EmbedWorkerHandle};
+use crate::embed::{EmbedWorkerHandle, EpochAccumulator};
 
 #[cfg(target_os = "windows")]
 use tracing::warn;
@@ -141,7 +141,15 @@ async fn run_openbci_session(state: AppState, mut cancel_rx: oneshot::Receiver<(
             .collect();
         (ch, rate, names)
     };
-    pump_events(adapter, &state, &mut cancel_rx, eeg_channels, sample_rate, channel_names).await;
+    pump_events(
+        adapter,
+        &state,
+        &mut cancel_rx,
+        eeg_channels,
+        sample_rate,
+        channel_names,
+    )
+    .await;
 
     // 5. Release the board (frees the serial port / BLE / TCP socket).
     //    Must run on a blocking thread because Board::release() does I/O.
@@ -347,14 +355,22 @@ fn auto_detect_serial_port() -> Result<String, String> {
     // Pass 2: FTDI / OpenBCI product/manufacturer string
     for port in &ports {
         if let serialport::SerialPortType::UsbPort(usb) = &port.port_type {
-            let product_match = usb.product.as_deref().map(|p| {
-                let pl = p.to_lowercase();
-                pl.contains("ft231x") || pl.contains("ft232") || pl.contains("openbci") || pl.contains("ftdi")
-            }).unwrap_or(false);
-            let mfg_match = usb.manufacturer.as_deref().map(|m| {
-                let ml = m.to_lowercase();
-                ml.contains("ftdi") || ml.contains("openbci")
-            }).unwrap_or(false);
+            let product_match = usb
+                .product
+                .as_deref()
+                .map(|p| {
+                    let pl = p.to_lowercase();
+                    pl.contains("ft231x") || pl.contains("ft232") || pl.contains("openbci") || pl.contains("ftdi")
+                })
+                .unwrap_or(false);
+            let mfg_match = usb
+                .manufacturer
+                .as_deref()
+                .map(|m| {
+                    let ml = m.to_lowercase();
+                    ml.contains("ftdi") || ml.contains("openbci")
+                })
+                .unwrap_or(false);
             if product_match || mfg_match {
                 info!(port = %port.port_name, "auto-detected OpenBCI serial port (product/mfg)");
                 return Ok(port.port_name.clone());
@@ -530,12 +546,7 @@ impl EpochStore {
         Some(Self { conn })
     }
 
-    fn insert_metrics(
-        &self,
-        timestamp_ms: i64,
-        device_name: Option<&str>,
-        metrics: &skill_exg::EpochMetrics,
-    ) {
+    fn insert_metrics(&self, timestamp_ms: i64, device_name: Option<&str>, metrics: &skill_exg::EpochMetrics) {
         let metrics_json = serde_json::to_string(metrics).unwrap_or_default();
         let empty_blob: &[u8] = &[];
         let _ = self.conn.execute(
@@ -583,9 +594,7 @@ impl SessionPipeline {
 
         let labels: Vec<&str> = channel_names.iter().map(String::as_str).collect();
         let csv = if labels.is_empty() {
-            let default_labels: Vec<String> = (0..eeg_channels)
-                .map(|i| format!("Ch{}", i + 1))
-                .collect();
+            let default_labels: Vec<String> = (0..eeg_channels).map(|i| format!("Ch{}", i + 1)).collect();
             let refs: Vec<&str> = default_labels.iter().map(String::as_str).collect();
             CsvState::open_with_labels(&csv_path, &refs)
         } else {
@@ -598,12 +607,7 @@ impl SessionPipeline {
 
         // Spawn the embedding worker + accumulator.
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
-        let embed_worker = EmbedWorkerHandle::spawn(
-            skill_dir.to_path_buf(),
-            model_config,
-            events_tx,
-            hooks,
-        );
+        let embed_worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
         let epoch_accumulator = EpochAccumulator::new(
             embed_worker.tx.clone(),
             eeg_channels,
@@ -630,18 +634,13 @@ impl SessionPipeline {
     }
 
     /// Push an EEG sample frame.  Returns a BandSnapshot if the DSP fired.
-    fn push_eeg(
-        &mut self,
-        channels: &[f64],
-        timestamp: f64,
-    ) -> Option<skill_eeg::eeg_bands::BandSnapshot> {
+    fn push_eeg(&mut self, channels: &[f64], timestamp: f64) -> Option<skill_eeg::eeg_bands::BandSnapshot> {
         self.total_samples += 1;
         self.flush_counter += 1;
 
         // Write to CSV
         for (electrode, &value) in channels.iter().enumerate() {
-            self.csv
-                .push_eeg(electrode, &[value], timestamp, self.sample_rate);
+            self.csv.push_eeg(electrode, &[value], timestamp, self.sample_rate);
         }
 
         // Flush every 256 samples (~1s at 250Hz)

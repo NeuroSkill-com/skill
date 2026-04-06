@@ -8,8 +8,8 @@ use axum::{
 };
 
 use crate::state::AppState;
-use skill_settings;
 use skill_data;
+use skill_settings;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -71,9 +71,7 @@ async fn api_sessions(State(state): State<AppState>) -> Json<serde_json::Value> 
     Json(serde_json::json!({ "command": "sessions", "ok": true, "sessions": out }))
 }
 
-async fn api_say(
-    Json(req): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+async fn api_say(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
     let text = req.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if text.is_empty() {
         return Json(serde_json::json!({ "command": "say", "ok": false, "error": "missing text" }));
@@ -84,9 +82,7 @@ async fn api_say(
     Json(serde_json::json!({ "command": "say", "ok": true, "spoken": spoken }))
 }
 
-async fn api_dnd_get(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn api_dnd_get(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let settings = skill_settings::load_settings(&skill_dir);
     let cfg = settings.do_not_disturb;
@@ -102,11 +98,13 @@ async fn api_dnd_get(
     }))
 }
 
-async fn api_dnd_set(
-    Json(req): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
-    let enabled = req.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let ok = if enabled { false } else { skill_data::dnd::set_dnd(false, "") };
+async fn api_dnd_set(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let enabled = req.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let ok = if enabled {
+        false
+    } else {
+        skill_data::dnd::set_dnd(false, "")
+    };
     Json(serde_json::json!({
         "command": "dnd_set",
         "ok": true,

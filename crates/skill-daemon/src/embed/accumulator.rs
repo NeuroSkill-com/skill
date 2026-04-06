@@ -9,9 +9,7 @@ use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::time::Instant;
 
-use skill_constants::{
-    EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS, EMBEDDING_HOP_SAMPLES,
-};
+use skill_constants::{EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS, EMBEDDING_HOP_SAMPLES};
 use tracing::info;
 
 /// Message sent to the background embed worker.
@@ -89,9 +87,7 @@ impl EpochAccumulator {
         // Discard stale data after long gap.
         let now = Instant::now();
         if now.duration_since(self.last_push_at).as_secs() > 30 {
-            let has_data = self.bufs[..self.device_channels]
-                .iter()
-                .any(|b| !b.is_empty());
+            let has_data = self.bufs[..self.device_channels].iter().any(|b| !b.is_empty());
             if has_data {
                 info!("discarding stale epoch data");
                 for b in &mut self.bufs {
@@ -108,11 +104,7 @@ impl EpochAccumulator {
         let n_ch = self.device_channels;
         let native_epoch = self.native_epoch_samples;
 
-        let min_buf = self.bufs[..n_ch]
-            .iter()
-            .map(VecDeque::len)
-            .min()
-            .unwrap_or(0);
+        let min_buf = self.bufs[..n_ch].iter().map(VecDeque::len).min().unwrap_or(0);
         let min_since = self.since_last[..n_ch].iter().copied().min().unwrap_or(0);
 
         if min_buf < native_epoch || min_since < self.hop_samples {

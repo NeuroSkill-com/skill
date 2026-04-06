@@ -41,10 +41,7 @@ impl EmbedWorkerHandle {
             })
             .expect("failed to spawn embed worker thread");
 
-        Self {
-            tx,
-            _thread: thread,
-        }
+        Self { tx, _thread: thread }
     }
 }
 
@@ -120,11 +117,7 @@ struct HookMatcher {
 }
 
 impl HookMatcher {
-    fn new(
-        skill_dir: PathBuf,
-        hooks: Vec<HookRule>,
-        events_tx: broadcast::Sender<EventEnvelope>,
-    ) -> Self {
+    fn new(skill_dir: PathBuf, hooks: Vec<HookRule>, events_tx: broadcast::Sender<EventEnvelope>) -> Self {
         let hooks_log = skill_data::hooks_log::HooksLog::open(&skill_dir);
         let label_state = skill_label_index::LabelIndexState::new();
         label_state.load(&skill_dir);
@@ -195,16 +188,14 @@ impl HookMatcher {
             let mut seen = std::collections::HashSet::new();
 
             for qvec in &embeddings {
-                let neighbors = skill_label_index::search_by_text_vec(
-                    qvec, 6, 64, &self.skill_dir, &self.label_state,
-                );
+                let neighbors = skill_label_index::search_by_text_vec(qvec, 6, 64, &self.skill_dir, &self.label_state);
                 for n in neighbors {
                     if !seen.insert(n.label_id) {
                         continue;
                     }
-                    if let Some(eeg_ref) = skill_label_index::mean_eeg_for_window(
-                        &self.skill_dir, n.eeg_start, n.eeg_end,
-                    ) {
+                    if let Some(eeg_ref) =
+                        skill_label_index::mean_eeg_for_window(&self.skill_dir, n.eeg_start, n.eeg_end)
+                    {
                         refs.push(HookReference {
                             emb: eeg_ref,
                             label_id: n.label_id,
@@ -326,7 +317,7 @@ impl HookMatcher {
                 }))
                 .unwrap_or_default();
                 log.record(&skill_data::hooks_log::HookFireEntry {
-                    triggered_at_utc: ts_utc as i64,
+                    triggered_at_utc: ts_utc,
                     hook_json: &hook_json,
                     trigger_json: &trigger_json,
                     payload_json: &payload_json,
@@ -353,11 +344,7 @@ fn embed_worker_main(
 
     // Open today's day store.
     let mut current_date = yyyymmdd_utc();
-    let mut store = DayStore::open(
-        &day_dir(&skill_dir),
-        config.hnsw_m,
-        config.hnsw_ef_construction,
-    );
+    let mut store = DayStore::open(&day_dir(&skill_dir), config.hnsw_m, config.hnsw_ef_construction);
 
     if let Some(ref s) = store {
         info!(
@@ -399,19 +386,12 @@ fn embed_worker_main(
                 s.save_hnsw();
             }
             current_date = today;
-            store = DayStore::open(
-                &day_dir(&skill_dir),
-                config.hnsw_m,
-                config.hnsw_ef_construction,
-            );
+            store = DayStore::open(&day_dir(&skill_dir), config.hnsw_m, config.hnsw_ef_construction);
             info!("day store rolled to {current_date}");
         }
 
         // Compute epoch metrics from band snapshot.
-        let metrics = msg
-            .band_snapshot
-            .as_ref()
-            .map(skill_exg::EpochMetrics::from_snapshot);
+        let metrics = msg.band_snapshot.as_ref().map(skill_exg::EpochMetrics::from_snapshot);
 
         let ts_ms = msg.timestamp * 1000;
 
@@ -439,7 +419,7 @@ fn embed_worker_main(
                 "EegEmbedding",
                 serde_json::json!({
                     "timestamp": msg.timestamp,
-                    "dim": embedding.as_ref().map(|e| e.len()).unwrap_or(0),
+                    "dim": embedding.as_ref().map(Vec::len).unwrap_or(0),
                     "epoch": epoch_count,
                 }),
             );
@@ -467,7 +447,7 @@ fn embed_worker_main(
 enum Encoder {
     #[cfg(feature = "embed-zuna")]
     Zuna(ZunaState),
-    NeuroRVQ(NeuroRVQState),
+    NeuroRVQ(Box<NeuroRVQState>),
     None,
 }
 
@@ -489,7 +469,7 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             match skill_neurorvq::NeuroRVQFM::from_default_hf(skill_neurorvq::Modality::EEG) {
                 Ok(model) => {
                     info!("NeuroRVQ encoder loaded");
-                    Some(Encoder::NeuroRVQ(NeuroRVQState { model }))
+                    Some(Encoder::NeuroRVQ(Box::new(NeuroRVQState { model })))
                 }
                 Err(e) => {
                     warn!(%e, "NeuroRVQ load failed — metrics-only");
@@ -500,13 +480,15 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
             info!(repo = %config.hf_repo, "loading ZUNA encoder");
-            load_zuna(config).map(|s| {
-                info!("ZUNA encoder loaded");
-                Encoder::Zuna(s)
-            }).or_else(|| {
-                warn!("ZUNA weights not found — metrics-only");
-                None
-            })
+            load_zuna(config)
+                .map(|s| {
+                    info!("ZUNA encoder loaded");
+                    Encoder::Zuna(s)
+                })
+                .or_else(|| {
+                    warn!("ZUNA weights not found — metrics-only");
+                    None
+                })
         }
         other => {
             info!(backend = other.as_str(), "no native encoder — metrics-only");
@@ -520,10 +502,12 @@ fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
     let (weights_path, config_path) = skill_exg::resolve_hf_weights(&config.hf_repo)?;
     let device = burn::backend::ndarray::NdArrayDevice::Cpu;
     let (encoder, _ms) =
-        zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(&config_path, &weights_path, device)
-            .ok()?;
+        zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(&config_path, &weights_path, device).ok()?;
     let model_config = zuna_rs::ModelConfig::load(&config_path).ok()?;
-    Some(ZunaState { encoder, data_config: model_config.data })
+    Some(ZunaState {
+        encoder,
+        data_config: model_config.data,
+    })
 }
 
 // ── Per-epoch encoding ──────────────────────────────────────────────────────
@@ -542,7 +526,9 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
 fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
     use std::collections::HashMap as HM;
     let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 { return None; }
+    if n_ch == 0 {
+        return None;
+    }
     let n_samples = msg.samples[0].len();
     let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
     for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
@@ -554,27 +540,40 @@ fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let device = burn::backend::ndarray::NdArrayDevice::Cpu;
     let empty_pos: HM<String, [f32; 3]> = HM::new();
     let batches = zuna_rs::load_from_named_tensor::<burn::backend::NdArray>(
-        data, &ch_names, msg.sample_rate, 10.0, &empty_pos, &state.data_config, &device,
-    ).ok()?;
+        data,
+        &ch_names,
+        msg.sample_rate,
+        10.0,
+        &empty_pos,
+        &state.data_config,
+        &device,
+    )
+    .ok()?;
     let epochs = state.encoder.encode_batches(batches).ok()?;
     epochs.first().map(|ep| {
         let dim = ep.output_dim();
         let n_tok = ep.n_tokens();
-        if dim == 0 || n_tok == 0 { return Vec::new(); }
+        if dim == 0 || n_tok == 0 {
+            return Vec::new();
+        }
         let mut pooled = vec![0.0f32; dim];
         for t in 0..n_tok {
             for d in 0..dim {
                 pooled[d] += ep.embeddings[t * dim + d];
             }
         }
-        for v in &mut pooled { *v /= n_tok as f32; }
+        for v in &mut pooled {
+            *v /= n_tok as f32;
+        }
         pooled
     })
 }
 
 fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 { return None; }
+    if n_ch == 0 {
+        return None;
+    }
     let n_samples = msg.samples[0].len();
     let mut signal = Vec::with_capacity(n_ch * n_samples);
     for s in 0..n_samples {

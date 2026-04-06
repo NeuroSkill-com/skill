@@ -52,13 +52,21 @@ impl DayStore {
                 }
                 Err(e) => {
                     error!(%e, "failed to load HNSW index, creating new");
-                    let cfg = fast_hnsw::hnsw::Config { m: hnsw_m, ef_construction: hnsw_ef_construction, ..Default::default() };
+                    let cfg = fast_hnsw::hnsw::Config {
+                        m: hnsw_m,
+                        ef_construction: hnsw_ef_construction,
+                        ..Default::default()
+                    };
                     let idx = fast_hnsw::labeled::LabeledIndex::new(cfg, fast_hnsw::distance::Cosine);
                     (Some(idx), 0)
                 }
             }
         } else {
-            let cfg = fast_hnsw::hnsw::Config { m: hnsw_m, ef_construction: hnsw_ef_construction, ..Default::default() };
+            let cfg = fast_hnsw::hnsw::Config {
+                m: hnsw_m,
+                ef_construction: hnsw_ef_construction,
+                ..Default::default()
+            };
             let idx = fast_hnsw::labeled::LabeledIndex::new(cfg, fast_hnsw::distance::Cosine);
             (Some(idx), 0)
         };
@@ -84,10 +92,7 @@ impl DayStore {
         let metrics_json: Option<String> = metrics.and_then(|m| serde_json::to_string(m).ok());
 
         // Store embedding as little-endian f32 blob.
-        let blob: Vec<u8> = embedding
-            .iter()
-            .flat_map(|f| f.to_le_bytes())
-            .collect();
+        let blob: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         // Insert into HNSW.
         let hnsw_id = if let Some(ref mut idx) = self.hnsw {

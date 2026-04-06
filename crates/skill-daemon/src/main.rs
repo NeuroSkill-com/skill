@@ -339,9 +339,10 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
     }
 
     // Spawn session runner if target is openbci or usb device.
-    let is_openbci = target.as_deref().map(|t| {
-        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
-    }).unwrap_or(false);
+    let is_openbci = target
+        .as_deref()
+        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
+        .unwrap_or(false);
     if is_openbci {
         let handle = session_runner::spawn_openbci_session(state.clone());
         if let Ok(mut slot) = state.session_handle.lock() {
@@ -405,9 +406,10 @@ async fn control_start_session(
 
     // Determine if this should launch an OpenBCI session.
     // Accept "openbci" directly, or any "usb:" / "cgx:" device ID.
-    let is_openbci = target.as_deref().map(|t| {
-        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
-    }).unwrap_or(false);
+    let is_openbci = target
+        .as_deref()
+        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
+        .unwrap_or(false);
 
     if is_openbci {
         // Cancel any existing session before starting a new one.
@@ -446,9 +448,10 @@ async fn control_switch_session(
         out = status.clone();
     }
 
-    let is_openbci = target.as_deref().map(|t| {
-        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
-    }).unwrap_or(false);
+    let is_openbci = target
+        .as_deref()
+        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
+        .unwrap_or(false);
     if is_openbci {
         let handle = session_runner::spawn_openbci_session(state.clone());
         if let Ok(mut slot) = state.session_handle.lock() {

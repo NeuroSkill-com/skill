@@ -15,11 +15,7 @@ use crate::state::AppState;
 /// forwarded as parameters.  Returns a JSON response that always contains
 /// `"command"` and `"ok"` fields matching the CLI protocol.
 pub async fn dispatch(state: AppState, msg: Value) -> Value {
-    let cmd = msg
-        .get("command")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
+    let cmd = msg.get("command").and_then(Value::as_str).unwrap_or("").to_string();
 
     if cmd.is_empty() {
         return json!({ "command": "", "ok": false, "error": "missing command field" });
@@ -144,11 +140,7 @@ pub async fn dispatch(state: AppState, msg: Value) -> Value {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn skill_dir(state: &AppState) -> std::path::PathBuf {
-    state
-        .skill_dir
-        .lock()
-        .map(|g| g.clone())
-        .unwrap_or_default()
+    state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default()
 }
 
 fn str_field(msg: &Value, key: &str) -> Option<String> {
@@ -198,11 +190,9 @@ async fn cmd_status(state: &AppState) -> Result<Value, String> {
     let bands = state.latest_bands.lock().map(|g| g.clone()).unwrap_or(None);
 
     let skill_dir = skill_dir(state);
-    let sessions = tokio::task::spawn_blocking(move || {
-        skill_history::list_all_sessions(&skill_dir, None)
-    })
-    .await
-    .unwrap_or_default();
+    let sessions = tokio::task::spawn_blocking(move || skill_history::list_all_sessions(&skill_dir, None))
+        .await
+        .unwrap_or_default();
 
     // Build device block
     let device = json!({
@@ -217,7 +207,7 @@ async fn cmd_status(state: &AppState) -> Result<Value, String> {
     let session = if let Some(s) = sessions.first() {
         let start = s.session_start_utc.unwrap_or(0);
         let end = s.session_end_utc.unwrap_or(0);
-        let dur = if end > start { end - start } else { 0 };
+        let dur = end.saturating_sub(start);
         json!({
             "start_utc": start,
             "end_utc": end,
@@ -229,11 +219,7 @@ async fn cmd_status(state: &AppState) -> Result<Value, String> {
     };
 
     // Build scores block from latest bands
-    let scores = if let Some(b) = &bands {
-        b.clone()
-    } else {
-        Value::Null
-    };
+    let scores = if let Some(b) = &bands { b.clone() } else { Value::Null };
 
     // Build embeddings stub
     let skill_dir2 = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -243,10 +229,9 @@ async fn cmd_status(state: &AppState) -> Result<Value, String> {
             for entry in entries.filter_map(Result::ok) {
                 let db = entry.path().join("eeg.sqlite");
                 if db.exists() {
-                    if let Ok(conn) = rusqlite::Connection::open_with_flags(
-                        &db,
-                        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-                    ) {
+                    if let Ok(conn) =
+                        rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    {
                         count += conn
                             .query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get::<_, u64>(0))
                             .unwrap_or(0);
@@ -275,11 +260,9 @@ async fn cmd_status(state: &AppState) -> Result<Value, String> {
 
 async fn cmd_sessions(state: &AppState) -> Result<Value, String> {
     let skill_dir = skill_dir(state);
-    let sessions = tokio::task::spawn_blocking(move || {
-        skill_history::list_all_sessions(&skill_dir, None)
-    })
-    .await
-    .unwrap_or_default();
+    let sessions = tokio::task::spawn_blocking(move || skill_history::list_all_sessions(&skill_dir, None))
+        .await
+        .unwrap_or_default();
 
     let out: Vec<Value> = sessions
         .into_iter()
@@ -301,11 +284,9 @@ async fn cmd_session_metrics(state: &AppState, msg: &Value) -> Result<Value, Str
     let start = u64_field(msg, "start_utc").ok_or("missing start_utc")?;
     let end = u64_field(msg, "end_utc").ok_or("missing end_utc")?;
     let skill_dir = skill_dir(state);
-    let result = tokio::task::spawn_blocking(move || {
-        skill_history::get_session_metrics(&skill_dir, start, end)
-    })
-    .await
-    .unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || skill_history::get_session_metrics(&skill_dir, start, end))
+        .await
+        .unwrap_or_default();
     Ok(serde_json::to_value(result).unwrap_or_default())
 }
 
@@ -489,7 +470,7 @@ async fn cmd_eeg_for_screenshots(state: &AppState, msg: &Value) -> Result<Value,
         let screenshots = skill_screenshots::capture::search_by_ocr_text_like(&store, &query, k);
         let mut eeg_segments = Vec::new();
         for s in &screenshots {
-            let ts = s.unix_ts as u64;
+            let ts = s.unix_ts;
             let start = ts.saturating_sub(window_secs);
             let end = ts + window_secs;
             let metrics = skill_history::get_session_metrics(&skill_dir, start, end);
@@ -541,9 +522,7 @@ async fn cmd_compare(state: &AppState, msg: &Value) -> Result<Value, String> {
     let result = tokio::task::spawn_blocking(move || {
         let avg_a = skill_history::get_session_metrics(&skill_dir, a_start, a_end);
         let avg_b = skill_history::get_session_metrics(&skill_dir, b_start, b_end);
-        skill_history::compute_compare_insights(
-            &skill_dir, a_start, a_end, b_start, b_end, &avg_a, &avg_b,
-        )
+        skill_history::compute_compare_insights(&skill_dir, a_start, a_end, b_start, b_end, &avg_a, &avg_b)
     })
     .await
     .unwrap_or_default();
@@ -557,8 +536,7 @@ async fn cmd_sleep(state: &AppState, msg: &Value) -> Result<Value, String> {
     let skill_dir = skill_dir(state);
 
     let result = tokio::task::spawn_blocking(move || {
-        serde_json::to_value(skill_history::get_sleep_stages(&skill_dir, start, end))
-            .unwrap_or_default()
+        serde_json::to_value(skill_history::get_sleep_stages(&skill_dir, start, end)).unwrap_or_default()
     })
     .await
     .unwrap_or_default();
@@ -708,8 +686,7 @@ async fn cmd_hooks_get(state: &AppState) -> Result<Value, String> {
 
 async fn cmd_hooks_set(state: &AppState, msg: &Value) -> Result<Value, String> {
     let hooks_val = msg.get("hooks").ok_or("missing hooks")?;
-    let hooks: Vec<skill_settings::HookRule> =
-        serde_json::from_value(hooks_val.clone()).map_err(|e| e.to_string())?;
+    let hooks: Vec<skill_settings::HookRule> = serde_json::from_value(hooks_val.clone()).map_err(|e| e.to_string())?;
     if let Ok(mut g) = state.hooks.lock() {
         *g = hooks.clone();
     }
@@ -725,8 +702,7 @@ async fn cmd_hooks_set(state: &AppState, msg: &Value) -> Result<Value, String> {
 
 async fn cmd_hooks_suggest(state: &AppState, msg: &Value) -> Result<Value, String> {
     let keywords_val = msg.get("keywords").ok_or("missing keywords")?;
-    let keywords: Vec<String> =
-        serde_json::from_value(keywords_val.clone()).map_err(|e| e.to_string())?;
+    let keywords: Vec<String> = serde_json::from_value(keywords_val.clone()).map_err(|e| e.to_string())?;
     let skill_dir = skill_dir(state);
 
     let result = tokio::task::spawn_blocking(move || {
@@ -901,8 +877,11 @@ async fn cmd_update_calibration(state: &AppState, msg: &Value) -> Result<Value, 
         let db = skill_dir.join("calibrations.db");
         let conn = rusqlite::Connection::open(&db).map_err(|e| e.to_string())?;
         if let Some(n) = &name {
-            conn.execute("UPDATE calibrations SET name = ?1 WHERE id = ?2", rusqlite::params![n, id])
-                .map_err(|e| e.to_string())?;
+            conn.execute(
+                "UPDATE calibrations SET name = ?1 WHERE id = ?2",
+                rusqlite::params![n, id],
+            )
+            .map_err(|e| e.to_string())?;
         }
         if let Some(c) = &config {
             conn.execute(
@@ -953,10 +932,7 @@ async fn cmd_notify(msg: &Value) -> Result<Value, String> {
     let body = str_field(msg, "body").unwrap_or_default();
 
     tokio::task::spawn_blocking(move || {
-        let _ = notify_rust::Notification::new()
-            .summary(&title)
-            .body(&body)
-            .show();
+        let _ = notify_rust::Notification::new().summary(&title).body(&body).show();
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -1317,11 +1293,10 @@ async fn cmd_llm_start(state: &AppState) -> Result<Value, String> {
             return Ok(json!({"result": "already_running"}));
         }
 
-        let emitter: std::sync::Arc<dyn skill_llm::LlmEventEmitter> =
-            std::sync::Arc::new(CmdLlmEmitter { events_tx: state.events_tx.clone() });
-        match tokio::task::spawn_blocking(move || skill_llm::init(&cfg, &cat, emitter, log_buf, &skill_dir))
-            .await
-        {
+        let emitter: std::sync::Arc<dyn skill_llm::LlmEventEmitter> = std::sync::Arc::new(CmdLlmEmitter {
+            events_tx: state.events_tx.clone(),
+        });
+        match tokio::task::spawn_blocking(move || skill_llm::init(&cfg, &cat, emitter, log_buf, &skill_dir)).await {
             Ok(Some(srv)) => {
                 let model_name = srv.model_name.clone();
                 if let Ok(mut g) = cell.lock() {
@@ -1382,8 +1357,17 @@ async fn cmd_llm_add_model(state: &AppState, msg: &Value) -> Result<Value, Strin
                 quant: infer_quant(&filename),
                 size_gb: size_gb.unwrap_or(0.0),
                 description: "External model".to_string(),
-                family_id: repo.split('/').next_back().unwrap_or("external").to_lowercase().replace(' ', "-"),
-                family_name: repo.split('/').next_back().unwrap_or("External").replace(['_', '-'], " "),
+                family_id: repo
+                    .split('/')
+                    .next_back()
+                    .unwrap_or("external")
+                    .to_lowercase()
+                    .replace(' ', "-"),
+                family_name: repo
+                    .split('/')
+                    .next_back()
+                    .unwrap_or("External")
+                    .replace(['_', '-'], " "),
                 family_desc: String::new(),
                 tags: vec!["external".to_string()],
                 is_mmproj,
@@ -1444,7 +1428,12 @@ async fn cmd_llm_set_autoload_mmproj(state: &AppState, msg: &Value) -> Result<Va
 
 async fn cmd_llm_download(state: &AppState, msg: &Value) -> Result<Value, String> {
     let filename = str_field(msg, "filename").ok_or("missing filename")?;
-    set_download_state_cmd(state, &filename, skill_llm::catalog::DownloadState::Downloading, Some("Queued".into()));
+    set_download_state_cmd(
+        state,
+        &filename,
+        skill_llm::catalog::DownloadState::Downloading,
+        Some("Queued".into()),
+    );
     spawn_model_download_cmd(state.clone(), filename.clone());
     Ok(json!({}))
 }
@@ -1452,7 +1441,12 @@ async fn cmd_llm_download(state: &AppState, msg: &Value) -> Result<Value, String
 async fn cmd_llm_pause_download(state: &AppState, msg: &Value) -> Result<Value, String> {
     let filename = str_field(msg, "filename").ok_or("missing filename")?;
     set_live_cancel_flags(state, &filename, true, true);
-    set_download_state_cmd(state, &filename, skill_llm::catalog::DownloadState::Paused, Some("Pausing".into()));
+    set_download_state_cmd(
+        state,
+        &filename,
+        skill_llm::catalog::DownloadState::Paused,
+        Some("Pausing".into()),
+    );
     Ok(json!({}))
 }
 
@@ -1465,7 +1459,12 @@ async fn cmd_llm_resume_download(state: &AppState, msg: &Value) -> Result<Value,
         .map(|m| m.contains_key(&filename))
         .unwrap_or(false);
     if !is_active {
-        set_download_state_cmd(state, &filename, skill_llm::catalog::DownloadState::Downloading, Some("Resumed".into()));
+        set_download_state_cmd(
+            state,
+            &filename,
+            skill_llm::catalog::DownloadState::Downloading,
+            Some("Resumed".into()),
+        );
         spawn_model_download_cmd(state.clone(), filename);
     }
     Ok(json!({}))
@@ -1474,7 +1473,12 @@ async fn cmd_llm_resume_download(state: &AppState, msg: &Value) -> Result<Value,
 async fn cmd_llm_cancel_download(state: &AppState, msg: &Value) -> Result<Value, String> {
     let filename = str_field(msg, "filename").ok_or("missing filename")?;
     set_live_cancel_flags(state, &filename, true, false);
-    set_download_state_cmd(state, &filename, skill_llm::catalog::DownloadState::Cancelled, Some("Cancelling".into()));
+    set_download_state_cmd(
+        state,
+        &filename,
+        skill_llm::catalog::DownloadState::Cancelled,
+        Some("Cancelling".into()),
+    );
     Ok(json!({}))
 }
 
@@ -1514,7 +1518,9 @@ async fn cmd_llm_downloads(state: &AppState) -> Result<Value, String> {
             )
         })
         .map(|e| {
-            let live = downloads.get(&e.filename).and_then(|p| p.lock().ok().map(|g| g.clone()));
+            let live = downloads
+                .get(&e.filename)
+                .and_then(|p| p.lock().ok().map(|g| g.clone()));
             json!({
                 "repo": e.repo,
                 "filename": e.filename,
@@ -1608,15 +1614,9 @@ async fn cmd_llm_chat(state: &AppState, msg: &Value) -> Result<Value, String> {
         let messages_vec: Vec<Value> = serde_json::from_value(messages).unwrap_or_default();
         let gen_params: skill_llm::GenParams = serde_json::from_value(params).unwrap_or_default();
 
-        let result = skill_llm::run_chat_with_builtin_tools(
-            &srv,
-            messages_vec,
-            gen_params,
-            Vec::new(),
-            |_delta| {},
-            |_evt| {},
-        )
-        .await;
+        let result =
+            skill_llm::run_chat_with_builtin_tools(&srv, messages_vec, gen_params, Vec::new(), |_delta| {}, |_evt| {})
+                .await;
 
         return match result {
             Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => Ok(json!({
@@ -1665,7 +1665,9 @@ pub async fn dispatch_llm_chat_streaming(
         .map(|mut store| store.get_or_create_last_session())
         .unwrap_or(0);
     let session_msg = json!({ "command": "llm_chat", "type": "session", "session_id": session_id });
-    let _ = ws_tx.send(serde_json::to_string(&session_msg).unwrap_or_default()).await;
+    let _ = ws_tx
+        .send(serde_json::to_string(&session_msg).unwrap_or_default())
+        .await;
 
     // Set up streaming callback.
     let tx_for_delta = ws_tx.clone();
@@ -1675,15 +1677,9 @@ pub async fn dispatch_llm_chat_streaming(
         let _ = tx_for_delta.blocking_send(serde_json::to_string(&msg).unwrap_or_default());
     };
 
-    let result = skill_llm::run_chat_with_builtin_tools(
-        &srv,
-        messages_vec,
-        gen_params,
-        Vec::new(),
-        delta_callback,
-        |_evt| {},
-    )
-    .await;
+    let result =
+        skill_llm::run_chat_with_builtin_tools(&srv, messages_vec, gen_params, Vec::new(), delta_callback, |_evt| {})
+            .await;
 
     match result {
         Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
@@ -1718,9 +1714,8 @@ pub async fn dispatch_llm_chat_streaming(
 fn infer_quant(filename: &str) -> String {
     let upper = filename.to_uppercase();
     for q in [
-        "IQ4_NL", "IQ4_XS", "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S", "Q6_K", "Q5_K_M",
-        "Q5_K_S", "Q4_K_M", "Q4_K_S", "Q4_0", "Q3_K_M", "Q3_K_S", "Q2_K", "Q8_0", "BF16",
-        "F16", "F32",
+        "IQ4_NL", "IQ4_XS", "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S",
+        "Q4_0", "Q3_K_M", "Q3_K_S", "Q2_K", "Q8_0", "BF16", "F16", "F32",
     ] {
         if upper.contains(q) {
             return q.to_string();
@@ -1760,11 +1755,7 @@ fn set_download_state_cmd(
 }
 
 fn set_live_cancel_flags(state: &AppState, filename: &str, cancelled: bool, pause_requested: bool) {
-    let progress_opt = state
-        .llm_downloads
-        .lock()
-        .ok()
-        .and_then(|m| m.get(filename).cloned());
+    let progress_opt = state.llm_downloads.lock().ok().and_then(|m| m.get(filename).cloned());
     if let Some(progress) = progress_opt {
         if let Ok(mut p) = progress.lock() {
             p.cancelled = cancelled;
@@ -1782,13 +1773,11 @@ fn spawn_model_download_cmd(state: AppState, filename: String) {
             .and_then(|cat| cat.entries.iter().find(|e| e.filename == filename).cloned());
         let Some(entry) = entry_opt else { return };
 
-        let progress = std::sync::Arc::new(std::sync::Mutex::new(
-            skill_llm::catalog::DownloadProgress {
-                filename: entry.filename.clone(),
-                state: skill_llm::catalog::DownloadState::Downloading,
-                ..Default::default()
-            },
-        ));
+        let progress = std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress {
+            filename: entry.filename.clone(),
+            state: skill_llm::catalog::DownloadState::Downloading,
+            ..Default::default()
+        }));
 
         if let Ok(mut m) = state.llm_downloads.lock() {
             m.insert(filename.clone(), progress.clone());
@@ -1796,9 +1785,8 @@ fn spawn_model_download_cmd(state: AppState, filename: String) {
 
         let progress_for_job = progress.clone();
         let entry_for_job = entry.clone();
-        let job = tokio::task::spawn_blocking(move || {
-            skill_llm::catalog::download_model(&entry_for_job, &progress_for_job)
-        });
+        let job =
+            tokio::task::spawn_blocking(move || skill_llm::catalog::download_model(&entry_for_job, &progress_for_job));
 
         let res = job.await;
 
