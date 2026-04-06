@@ -1065,8 +1065,22 @@ fn token_path() -> Result<PathBuf, String> {
 //
 // All proxies are async + spawn_blocking to avoid blocking the Tauri main thread.
 
+/// Ensure daemon is reachable, restarting it if necessary.
+fn ensure_daemon_for_proxy() {
+    let addr: std::net::SocketAddr = std::env::var("SKILL_DAEMON_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
+        .parse()
+        .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 18444)));
+    if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
+        return;
+    }
+    eprintln!("[proxy] daemon unreachable, attempting restart…");
+    ensure_daemon_running();
+}
+
 /// Blocking GET helper used inside spawn_blocking.
 fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
+    ensure_daemon_for_proxy();
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     fetch_json_with_auth(&base_url, &token, path)
@@ -1074,6 +1088,7 @@ fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
 
 /// Blocking POST helper used inside spawn_blocking.
 fn daemon_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    ensure_daemon_for_proxy();
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     post_json_with_auth_response(&base_url, &token, path, body)
