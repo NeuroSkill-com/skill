@@ -15,8 +15,8 @@
 git clone http://192.168.99.99:3000/NeuroSkill-com/skill.git
 cd skill
 
-# Install JS dependencies & configure git hooks
-npm install
+# Install all platform dependencies + JS deps (interactive)
+npm run setup
 
 # Run in development mode (starts Vite dev server + Tauri)
 npm run tauri dev
@@ -24,6 +24,11 @@ npm run tauri dev
 # Or build a release
 npm run tauri:build
 ```
+
+`npm run setup` auto-detects your platform and installs everything needed
+(protobuf, OpenMP, GNU ar, sccache, etc.).  Pass `--yes` to skip prompts.
+See also `npm run setup:build-cache` and `npm run setup:llama-prebuilt`
+for optional build acceleration.
 
 ## Project Structure
 
