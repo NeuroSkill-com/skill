@@ -772,14 +772,11 @@ async fn pump_events(
                         // Feed the session pipeline (CSV + DSP)
                         if let Some(ref mut pipe) = pipeline {
                             if let Some(snap) = pipe.push_eeg(&frame.channels, frame.timestamp_s) {
-                                // Update latest_bands in daemon state
-                                if let Ok(val) = serde_json::to_value(&snap) {
-                                    if let Ok(mut bands) = state.latest_bands.lock() {
-                                        *bands = Some(val.clone());
-                                    }
-                                    // Broadcast band snapshot to WS clients
-                                    broadcast_event(&state.events_tx, "EegBands", &val);
+                                let enriched = enrich_band_snapshot(&snap);
+                                if let Ok(mut bands) = state.latest_bands.lock() {
+                                    *bands = Some(enriched.clone());
                                 }
+                                broadcast_event(&state.events_tx, "EegBands", &enriched);
                             }
                         }
 
@@ -838,6 +835,28 @@ async fn pump_events(
     if let Some(ref mut pipe) = pipeline {
         pipe.finalize();
     }
+}
+
+/// Enrich a BandSnapshot with composite scores (focus, relaxation, engagement).
+fn enrich_band_snapshot(snap: &skill_eeg::eeg_bands::BandSnapshot) -> serde_json::Value {
+    let mut val = serde_json::to_value(snap).unwrap_or_default();
+    if let Some(obj) = val.as_object_mut() {
+        let engage_raw = skill_devices::compute_engagement_raw(snap);
+        let focus = skill_devices::focus_score(engage_raw);
+        let nch = snap.channels.len().max(1) as f64;
+        let avg_alpha = snap.channels.iter().map(|c| c.rel_alpha as f64).sum::<f64>() / nch;
+        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
+        let relaxation = if (avg_alpha + avg_beta) > 0.0 {
+            (avg_alpha / (avg_alpha + avg_beta)) * 100.0
+        } else {
+            0.0
+        };
+        let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
+        obj.insert("focus".into(), serde_json::json!(focus));
+        obj.insert("relaxation".into(), serde_json::json!(relaxation));
+        obj.insert("engagement".into(), serde_json::json!(engagement));
+    }
+    val
 }
 
 fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, payload: &serde_json::Value) {
@@ -994,12 +1013,11 @@ async fn run_neurofield_session(
 
                         // Feed session pipeline.
                         if let Some(snap) = pipeline.push_eeg(&s.data, ts) {
-                            if let Ok(val) = serde_json::to_value(&snap) {
-                                if let Ok(mut bands) = state.latest_bands.lock() {
-                                    *bands = Some(val.clone());
-                                }
-                                broadcast_event(&state.events_tx, "EegBands", &val);
+                            let enriched = enrich_band_snapshot(&snap);
+                            if let Ok(mut bands) = state.latest_bands.lock() {
+                                *bands = Some(enriched.clone());
                             }
+                            broadcast_event(&state.events_tx, "EegBands", &enriched);
                         }
 
                         // Broadcast per-electrode samples.
