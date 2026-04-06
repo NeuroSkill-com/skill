@@ -222,6 +222,9 @@ pub(crate) fn detect_device_kind(
         if id.starts_with("brainbit:") {
             return "brainbit";
         }
+        if id.starts_with("gtec:") {
+            return "gtec";
+        }
         if id.starts_with("cortex:") {
             return "emotiv";
         }
@@ -284,6 +287,9 @@ pub(crate) fn detect_device_kind(
     }
     if name.contains("brainbit") {
         return "brainbit";
+    }
+    if name.contains("unicorn") || name.contains("g.tec") || name.contains("gtec") {
+        return "gtec";
     }
 
     "muse"

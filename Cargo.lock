@@ -5533,6 +5533,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gtec"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7c162ee5089d7b975f98b80df0ae656050d3dd2e94314cb4c266c05f1f16b2"
+dependencies = [
+ "env_logger",
+ "libc",
+ "libloading 0.8.9",
+ "log",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12264,6 +12277,7 @@ dependencies = [
  "dirs",
  "fast-hnsw",
  "fastembed",
+ "gtec",
  "hex",
  "hf-hub 0.5.0",
  "luna-rs",

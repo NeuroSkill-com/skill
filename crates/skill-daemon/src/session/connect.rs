@@ -62,6 +62,9 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower.starts_with("brainbit:") || lower.contains("brainbit") {
         return connect_brainbit(target).await;
     }
+    if lower.starts_with("gtec:") || lower.contains("unicorn") {
+        return connect_gtec(target).await;
+    }
     if lower.contains("mw75") || lower.contains("neurable") {
         return connect_mw75().await;
     }
@@ -377,6 +380,108 @@ impl skill_devices::session::DeviceAdapter for BrainBitAdapter {
         // BrainBit sends in Volts; convert to µV.
         let s = samples.first()?;
         let channels: Vec<f64> = s.channels.iter().map(|&v| v * 1e6).collect();
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels,
+            timestamp_s: ts,
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+    }
+}
+
+// ── g.tec Unicorn Hybrid Black (BLE) ──────────────────────────────────────
+
+async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use gtec::prelude::*;
+
+    let serial = target.strip_prefix("gtec:").unwrap_or("").to_string();
+    info!(serial = %serial, "connecting to g.tec Unicorn");
+
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<gtec::device::Scan>(512);
+
+    let device_serial = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let serial = if serial.is_empty() {
+            let serials = UnicornDevice::scan(true).map_err(|e| format!("scan: {e}"))?;
+            serials.into_iter().next().ok_or("No g.tec Unicorn found")?
+        } else {
+            serial
+        };
+
+        let mut device = UnicornDevice::open(&serial).map_err(|e| format!("open: {e}"))?;
+        device.start_acquisition(false).map_err(|e| format!("start: {e}"))?;
+
+        let dev_serial = serial.clone();
+        let tx = sample_tx;
+        // Blocking reader thread.
+        std::thread::Builder::new()
+            .name("gtec-read".to_string())
+            .spawn(move || {
+                while let Ok(scan) = device.get_single_scan() {
+                    if tx.blocking_send(scan).is_err() {
+                        break;
+                    }
+                }
+            })
+            .expect("gtec reader thread");
+
+        Ok(dev_serial)
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
+
+    info!(serial = %device_serial, "g.tec Unicorn connected");
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "gtec",
+        eeg_channels: 8,
+        eeg_sample_rate: 250.0,
+        channel_names: gtec::types::EEG_CHANNEL_NAMES.iter().map(ToString::to_string).collect(),
+        caps: DeviceCaps::EEG,
+        pipeline_channels: 8,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+    Ok(Box::new(GtecAdapter {
+        name: format!("g.tec Unicorn ({device_serial})"),
+        desc,
+        rx: sample_rx,
+        connected_sent: false,
+    }))
+}
+
+struct GtecAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<gtec::device::Scan>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for GtecAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+        let scan = self.rx.recv().await?;
+        let eeg = scan.eeg();
+        let channels: Vec<f64> = eeg.iter().map(|&v| v as f64).collect();
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs_f64())

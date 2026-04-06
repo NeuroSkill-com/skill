@@ -72,6 +72,7 @@ skill-exg           = { path = "../skill-exg" }
 skill-neurorvq      = { path = "../skill-neurorvq", default-features = false, features = ["ndarray"] }
 neurofield          = { version = "0.0.1", default-features = false }
 brainbit            = { version = "0.0.1", default-features = false }
+gtec                = { version = "0.0.2", default-features = false }
 # EXG encoder crates (behind feature flags)
 zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
