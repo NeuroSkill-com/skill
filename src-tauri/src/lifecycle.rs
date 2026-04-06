@@ -47,6 +47,8 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         &skill_daemon_common::StatusResponse {
             state: state.to_string(),
             device_name: None,
+            device_kind: String::new(),
+            device_id: None,
             sample_count: 0,
             battery: 0.0,
             device_error: error.clone(),

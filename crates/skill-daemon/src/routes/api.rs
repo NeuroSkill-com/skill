@@ -22,22 +22,7 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn api_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let status = state
-        .status
-        .lock()
-        .ok()
-        .map(|g| g.clone())
-        .unwrap_or_else(|| skill_daemon_common::StatusResponse {
-            state: "disconnected".to_string(),
-            device_name: None,
-            sample_count: 0,
-            battery: 0.0,
-            device_error: None,
-            target_name: None,
-            retry_attempt: 0,
-            retry_countdown_secs: 0,
-            paired_devices: Vec::new(),
-        });
+    let status = state.status.lock().ok().map(|g| g.clone()).unwrap_or_default();
     Json(serde_json::json!({
         "command": "status",
         "ok": true,

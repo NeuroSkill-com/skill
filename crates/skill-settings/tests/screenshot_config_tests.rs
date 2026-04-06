@@ -47,31 +47,42 @@ fn effective_interval_default() {
 
 #[test]
 fn effective_interval_multiple_of_epoch() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 15;
+    let cfg = ScreenshotConfig {
+        interval_secs: 15,
+        ..Default::default()
+    };
     assert_eq!(cfg.effective_interval_secs(), 15);
 }
 
 #[test]
 fn effective_interval_rounds_non_multiple() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 7; // Rounds to nearest epoch (5s) → 5 or 10
+    let cfg = ScreenshotConfig {
+        interval_secs: 7, // Rounds to nearest epoch (5s) → 5 or 10
+        ..Default::default()
+    };
     let eff = cfg.effective_interval_secs();
-    assert!(eff % 5 == 0, "effective interval should be a multiple of 5, got {eff}");
+    assert!(
+        eff.is_multiple_of(5),
+        "effective interval should be a multiple of 5, got {eff}"
+    );
 }
 
 #[test]
 fn effective_interval_clamps_zero() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 0;
+    let cfg = ScreenshotConfig {
+        interval_secs: 0,
+        ..Default::default()
+    };
     // Should clamp to minimum (1× epoch = 5s)
     assert!(cfg.effective_interval_secs() >= 5);
 }
 
 #[test]
 fn effective_interval_clamps_huge() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 999;
+    let cfg = ScreenshotConfig {
+        interval_secs: 999,
+        ..Default::default()
+    };
     // Should clamp to maximum (12× epoch = 60s)
     assert!(cfg.effective_interval_secs() <= 60);
 }
@@ -80,15 +91,19 @@ fn effective_interval_clamps_huge() {
 
 #[test]
 fn multiplier_at_min() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 1;
+    let cfg = ScreenshotConfig {
+        interval_secs: 1,
+        ..Default::default()
+    };
     assert!(cfg.interval_multiplier() >= 1);
 }
 
 #[test]
 fn multiplier_at_max() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.interval_secs = 60;
+    let cfg = ScreenshotConfig {
+        interval_secs: 60,
+        ..Default::default()
+    };
     assert!(cfg.interval_multiplier() <= 12);
 }
 
@@ -102,15 +117,19 @@ fn model_id_fastembed_default() {
 
 #[test]
 fn model_id_mmproj() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.embed_backend = "mmproj".into();
+    let cfg = ScreenshotConfig {
+        embed_backend: "mmproj".into(),
+        ..Default::default()
+    };
     assert_eq!(cfg.model_id(), "mmproj");
 }
 
 #[test]
 fn model_id_llm_vlm() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.embed_backend = "llm-vlm".into();
+    let cfg = ScreenshotConfig {
+        embed_backend: "llm-vlm".into(),
+        ..Default::default()
+    };
     assert_eq!(cfg.model_id(), "llm-vlm");
 }
 
@@ -128,12 +147,14 @@ fn serde_roundtrip_default() {
 
 #[test]
 fn serde_roundtrip_custom() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.enabled = true;
-    cfg.interval_secs = 30;
-    cfg.quality = 90;
-    cfg.gif_enabled = true;
-    cfg.embed_backend = "mmproj".into();
+    let cfg = ScreenshotConfig {
+        enabled: true,
+        interval_secs: 30,
+        quality: 90,
+        gif_enabled: true,
+        embed_backend: "mmproj".into(),
+        ..Default::default()
+    };
 
     let json = serde_json::to_string(&cfg).unwrap();
     let restored: ScreenshotConfig = serde_json::from_str(&json).unwrap();

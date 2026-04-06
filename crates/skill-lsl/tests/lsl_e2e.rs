@@ -207,6 +207,7 @@ fn wrap(s: &str, width: usize) -> Vec<String> {
 // outlet's StreamInfo to `spawn_blocking` so the adapter's inlet uses a
 // direct connection rather than going through UDP discovery.
 
+#[allow(dead_code)]
 struct SendStreamInfo(StreamInfo);
 // SAFETY: liblsl's lsl_streaminfo objects are internally reference-counted
 // and all public C functions operating on them are thread-safe.

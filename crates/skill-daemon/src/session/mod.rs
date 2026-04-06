@@ -8,5 +8,6 @@
 
 mod connect;
 mod runner;
+pub(crate) mod shared;
 
 pub use connect::spawn_device_session;

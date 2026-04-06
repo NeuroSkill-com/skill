@@ -456,7 +456,7 @@ fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::all)]
 mod tests {
     use super::*;
 

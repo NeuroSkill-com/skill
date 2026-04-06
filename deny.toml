@@ -58,6 +58,7 @@ allow = [
 exceptions = [
     # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
     { allow = ["GPL-3.0-only"], crate = "skill" },
+    { allow = ["GPL-3.0-only"], crate = "brainmaster" },
     { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
     { allow = ["GPL-3.0-only"], crate = "skill-commands" },

@@ -20,7 +20,7 @@ use std::collections::VecDeque;
 // ── Public metrics ────────────────────────────────────────────────────────────
 
 /// Snapshot of artifact detection metrics, emitted alongside band snapshots.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ArtifactMetrics {
     /// Total blink count since connection.
     pub blink_count: u64,

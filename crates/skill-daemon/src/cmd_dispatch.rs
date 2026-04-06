@@ -170,21 +170,7 @@ async fn cmd_stub(cmd: &str, note: &str) -> Result<Value, String> {
 // ── Status ───────────────────────────────────────────────────────────────────
 
 async fn cmd_status(state: &AppState) -> Result<Value, String> {
-    let status = state
-        .status
-        .lock()
-        .map(|g| g.clone())
-        .unwrap_or_else(|_| skill_daemon_common::StatusResponse {
-            state: "disconnected".into(),
-            device_name: None,
-            sample_count: 0,
-            battery: 0.0,
-            device_error: None,
-            target_name: None,
-            retry_attempt: 0,
-            retry_countdown_secs: 0,
-            paired_devices: Vec::new(),
-        });
+    let status = state.status.lock().map(|g| g.clone()).unwrap_or_default();
 
     let devices = state.devices.lock().map(|g| g.clone()).unwrap_or_default();
     let bands = state.latest_bands.lock().map(|g| g.clone()).unwrap_or(None);

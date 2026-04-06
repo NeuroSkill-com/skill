@@ -17,8 +17,7 @@ use tokio::sync::{broadcast, oneshot};
 use tracing::{error, info};
 
 use super::shared::{
-    broadcast_event, enrich_band_snapshot, unix_secs, unix_secs_f64, utc_date_dir,
-    write_session_meta,
+    broadcast_event, enrich_band_snapshot, unix_secs, unix_secs_f64, utc_date_dir, write_session_meta,
 };
 use crate::embed::{EmbedWorkerHandle, EpochAccumulator};
 use crate::state::AppState;
@@ -100,8 +99,8 @@ impl Pipeline {
         } else {
             channel_names.iter().map(String::as_str).collect()
         };
-        let writer = SessionWriter::open(&csv_path, &labels, storage_format)
-            .map_err(|e| format!("SessionWriter open: {e}"))?;
+        let writer =
+            SessionWriter::open(&csv_path, &labels, storage_format).map_err(|e| format!("SessionWriter open: {e}"))?;
 
         // DSP pipeline: filter → bands → quality → artifacts.
         let filter_config = {
@@ -121,12 +120,7 @@ impl Pipeline {
 
         // EXG embedding pipeline.
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
-        let embed_worker = EmbedWorkerHandle::spawn(
-            skill_dir.to_path_buf(),
-            model_config,
-            events_tx,
-            hooks,
-        );
+        let embed_worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
         let mut acc = EpochAccumulator::new(
             embed_worker.tx.clone(),
             eeg_channels,
@@ -164,11 +158,7 @@ impl Pipeline {
 
     /// Push one EEG frame through the full DSP pipeline.
     /// Returns enriched band snapshot JSON if the band analyzer fired.
-    fn push_eeg(
-        &mut self,
-        channels: &[f64],
-        ts: f64,
-    ) -> Option<serde_json::Value> {
+    fn push_eeg(&mut self, channels: &[f64], ts: f64) -> Option<serde_json::Value> {
         self.total_samples += 1;
         self.flush_counter += 1;
 

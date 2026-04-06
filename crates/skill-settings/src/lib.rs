@@ -997,16 +997,16 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
     // If the JSON file still contains non-empty secret values (from a
     // pre-keychain build), migrate them into the system keychain and
     // re-save settings so the plaintext is stripped from disk.
-    let migrated = keychain::migrate_plaintext_secrets(
-        &s.api_token,
-        &s.device_api.emotiv_client_id,
-        &s.device_api.emotiv_client_secret,
-        &s.device_api.idun_api_token,
-        &s.device_api.oura_access_token,
-        &s.device_api.neurosity_email,
-        &s.device_api.neurosity_password,
-        &s.device_api.neurosity_device_id,
-    );
+    let migrated = keychain::migrate_plaintext_secrets(&Secrets {
+        api_token: s.api_token.clone(),
+        emotiv_client_id: s.device_api.emotiv_client_id.clone(),
+        emotiv_client_secret: s.device_api.emotiv_client_secret.clone(),
+        idun_api_token: s.device_api.idun_api_token.clone(),
+        oura_access_token: s.device_api.oura_access_token.clone(),
+        neurosity_email: s.device_api.neurosity_email.clone(),
+        neurosity_password: s.device_api.neurosity_password.clone(),
+        neurosity_device_id: s.device_api.neurosity_device_id.clone(),
+    });
     if migrated {
         // Re-save without the secret fields (skip_serializing takes care of it).
         if let Ok(json) = serde_json::to_string_pretty(&s) {

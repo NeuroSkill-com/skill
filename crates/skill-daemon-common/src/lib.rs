@@ -76,10 +76,16 @@ pub struct PairedDeviceResponse {
     pub last_seen: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub state: String,
     pub device_name: Option<String>,
+    /// Device kind tag matching `DeviceKind::as_str()` (e.g. "muse", "brainbit", "openbci").
+    #[serde(default)]
+    pub device_kind: String,
+    /// Device ID (BLE address, serial path, etc.).
+    #[serde(default)]
+    pub device_id: Option<String>,
     pub sample_count: u64,
     pub battery: f32,
     pub device_error: Option<String>,

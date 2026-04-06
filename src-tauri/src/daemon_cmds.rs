@@ -761,6 +761,8 @@ pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
     let status = StatusResponse {
         state: local.state.clone(),
         device_name: local.device_name.clone(),
+        device_kind: local.device_kind.clone(),
+        device_id: local.device_id.clone(),
         sample_count: local.sample_count,
         battery: local.battery,
         device_error: local.device_error.clone(),

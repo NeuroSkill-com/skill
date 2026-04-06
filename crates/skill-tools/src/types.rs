@@ -438,7 +438,7 @@ impl Default for LlmToolConfig {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::all)]
 mod tests {
     use super::*;
 

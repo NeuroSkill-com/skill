@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Tests for downsample_timeseries.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::all)]
 
 use skill_history::cache::downsample_timeseries;
 use skill_history::EpochRow;
 
 fn make_rows(n: usize) -> Vec<EpochRow> {
     (0..n)
-        .map(|i| {
-            let mut row = EpochRow::default();
-            row.t = i as f64;
-            row.ra = (i as f64) * 0.01; // alpha increases linearly
-            row
+        .map(|i| EpochRow {
+            t: i as f64,
+            ra: (i as f64) * 0.01, // alpha increases linearly
+            ..Default::default()
         })
         .collect()
 }

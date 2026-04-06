@@ -122,30 +122,21 @@ pub fn save_secrets(secrets: &Secrets) {
 /// secret values **and** the keychain entry is empty, the value is copied
 /// into the keychain.  Returns `true` if any migration happened (caller
 /// should re-save settings to strip the plaintext values).
-pub fn migrate_plaintext_secrets(
-    api_token: &str,
-    emotiv_client_id: &str,
-    emotiv_client_secret: &str,
-    idun_api_token: &str,
-    oura_access_token: &str,
-    neurosity_email: &str,
-    neurosity_password: &str,
-    neurosity_device_id: &str,
-) -> bool {
+pub fn migrate_plaintext_secrets(secrets: &Secrets) -> bool {
     if cfg!(debug_assertions) {
         return false;
     }
     let mut migrated = false;
 
     let pairs: &[(&str, &str)] = &[
-        (KEY_API_TOKEN, api_token),
-        (KEY_EMOTIV_CLIENT_ID, emotiv_client_id),
-        (KEY_EMOTIV_CLIENT_SECRET, emotiv_client_secret),
-        (KEY_IDUN_API_TOKEN, idun_api_token),
-        (KEY_OURA_ACCESS_TOKEN, oura_access_token),
-        (KEY_NEUROSITY_EMAIL, neurosity_email),
-        (KEY_NEUROSITY_PASSWORD, neurosity_password),
-        (KEY_NEUROSITY_DEVICE_ID, neurosity_device_id),
+        (KEY_API_TOKEN, &secrets.api_token),
+        (KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id),
+        (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
+        (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
+        (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
+        (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
+        (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),
     ];
 
     for &(key, plaintext) in pairs {

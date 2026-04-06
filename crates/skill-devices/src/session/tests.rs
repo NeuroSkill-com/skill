@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
+#![allow(clippy::all)]
 //! Tests for the session module: adapters, event translation, channel
 //! accumulation, capability flags, descriptors.
 

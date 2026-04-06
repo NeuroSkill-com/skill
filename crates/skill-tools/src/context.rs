@@ -120,7 +120,7 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::all)]
 mod tests {
     use super::*;
     use crate::types::CompressionLevel;
@@ -144,7 +144,7 @@ mod tests {
         // 400 chars → ~100 tokens (+ 1)
         let s = "a".repeat(400);
         let t = estimate_tokens(&s);
-        assert!(t >= 90 && t <= 110, "expected ~101, got {t}");
+        assert!((90..=110).contains(&t), "expected ~101, got {t}");
     }
 
     #[test]

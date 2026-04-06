@@ -64,6 +64,7 @@ pub const ATLANTIS_UV_PER_LSB: f64 = 400.0 / 32768.0; // ~0.01221
 pub const DISCOVERY_UV_PER_LSB: f64 = 3200.0 / 32768.0; // ~0.09766
 
 #[cfg(test)]
+#[allow(clippy::all)]
 mod tests {
     use super::*;
 

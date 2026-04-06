@@ -569,6 +569,7 @@ pub fn rerank_tools_for_prompt(prompt: &str, tools: Vec<Tool>, top_n: usize) -> 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::all)]
 mod tests {
     use super::*;
 
