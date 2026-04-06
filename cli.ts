@@ -178,7 +178,37 @@ const CLI_VERSION = "1.2.0";
 
 import { Bonjour } from "bonjour-service";
 import { execSync } from "child_process";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import WebSocket from "ws";
+
+// ── Daemon auth ───────────────────────────────────────────────────────────────
+
+/** Default daemon port. */
+const DAEMON_PORT = 18444;
+
+/** Cached daemon auth token. */
+let daemonToken = "";
+
+/**
+ * Load the daemon bearer token from ~/.config/skill/daemon/auth.token.
+ * Returns empty string if the file doesn't exist.
+ */
+function loadDaemonToken(): string {
+  if (daemonToken) return daemonToken;
+  try {
+    const configDir = process.env.XDG_CONFIG_HOME
+      || (process.platform === "win32"
+        ? join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"))
+        : join(homedir(), process.platform === "darwin" ? "Library/Application Support" : ".config"));
+    const tokenPath = join(configDir, "skill", "daemon", "auth.token");
+    daemonToken = readFileSync(tokenPath, "utf8").trim();
+  } catch {
+    daemonToken = "";
+  }
+  return daemonToken;
+}
 
 // ── ANSI colors ───────────────────────────────────────────────────────────────
 // These are module-level `let`s so that `applyNoColor()` can zero them all
@@ -466,9 +496,12 @@ let httpBase = "";
 async function sendHttp(cmd: { command: string; [k: string]: unknown }, _timeout?: number): Promise<any> {
   let res: Response;
   try {
+    const token = loadDaemonToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     res = await fetch(`${httpBase}/`, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body:    JSON.stringify(cmd),
     });
   } catch (e: any) {
@@ -501,6 +534,21 @@ async function discover(explicitPort: number | null): Promise<number> {
   // Use `!= null` rather than truthiness so that an explicit --port 0 would
   // be caught (port 0 is not valid for our use case, but the intent is clear).
   if (explicitPort != null) return explicitPort;
+
+  // Try daemon port first (fast check)
+  printInfo(`probing daemon at 127.0.0.1:${DAEMON_PORT}…`);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}/healthz`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      printInfo(`daemon reachable at port ${DAEMON_PORT}`);
+      return DAEMON_PORT;
+    }
+  } catch {}
 
   // mDNS via bonjour-service
   printInfo("discovering Skill via mDNS…");
@@ -560,12 +608,16 @@ async function connect(port: number): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const w = new WebSocket(`ws://127.0.0.1:${port}`);
+        const token = loadDaemonToken();
+        const wsUrl = token
+          ? `ws://127.0.0.1:${port}/v1/events?token=${encodeURIComponent(token)}`
+          : `ws://127.0.0.1:${port}/v1/events`;
+        const w = new WebSocket(wsUrl);
         const t = setTimeout(() => { try { w.close(); } catch {} reject(new Error("timeout")); }, 5000);
         w.on("open", () => { clearTimeout(t); ws = w; resolve(); });
         w.on("error", () => { clearTimeout(t); reject(new Error("connection refused")); });
       });
-      printInfo(`connected to ws://127.0.0.1:${port}`);
+      printInfo(`connected to ws://127.0.0.1:${port}/v1/events`);
       return;
     } catch (e: any) {
       if (attempt >= 3) printError(`failed to connect after 3 attempts: ${e.message}`);
@@ -583,7 +635,11 @@ async function connect(port: number): Promise<void> {
 async function tryConnectOnce(port: number, timeoutMs = 3000): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     try {
-      const w = new WebSocket(`ws://127.0.0.1:${port}`);
+      const token = loadDaemonToken();
+      const wsUrl = token
+        ? `ws://127.0.0.1:${port}/v1/events?token=${encodeURIComponent(token)}`
+        : `ws://127.0.0.1:${port}/v1/events`;
+      const w = new WebSocket(wsUrl);
       const t = setTimeout(() => { try { w.close(); } catch {} resolve(false); }, timeoutMs);
       w.on("open", () => { clearTimeout(t); ws = w; resolve(true); });
       w.on("error", () => { clearTimeout(t); resolve(false); });

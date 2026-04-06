@@ -1,5 +1,7 @@
 mod activity;
 mod auth;
+pub(crate) mod cmd_dispatch;
+pub(crate) mod embed;
 mod routes;
 mod service_installer;
 mod session_runner;
@@ -102,12 +104,18 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/events", get(ws_events))
         .route("/events/push", axum::routing::post(push_event))
+        .route("/cmd", axum::routing::post(cmd_tunnel))
         .merge(routes::labels::router())
         .merge(routes::history::router())
         .merge(routes::settings::router())
         .merge(routes::api::router())
         .merge(routes::analysis::router())
         .merge(routes::search::router())
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
+    // Root-level command tunnel for CLI HTTP mode (POST / with JSON body)
+    let root_cmd = Router::new()
+        .route("/", axum::routing::post(cmd_tunnel_root))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     let app = Router::new()
@@ -117,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/service/uninstall", axum::routing::post(service_uninstall))
         .route("/service/status", get(service_status))
         .nest("/v1", v1)
+        .merge(root_cmd)
         .with_state(state);
 
     let addr = daemon_addr();
@@ -329,8 +338,11 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         out = status.clone();
     }
 
-    // Spawn session runner if target is openbci.
-    if target.as_deref() == Some("openbci") {
+    // Spawn session runner if target is openbci or usb device.
+    let is_openbci = target.as_deref().map(|t| {
+        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
+    }).unwrap_or(false);
+    if is_openbci {
         let handle = session_runner::spawn_openbci_session(state.clone());
         if let Ok(mut slot) = state.session_handle.lock() {
             *slot = Some(handle);
@@ -368,6 +380,22 @@ async fn control_start_session(
     let mut out = default_status("connecting");
 
     let target = req.target.clone();
+
+    // If the target is a device ID from the scanner (e.g. "usb:COM3",
+    // "usb:/dev/ttyUSB0"), extract the serial port and store it in the
+    // OpenBCI config so the session runner can use it.
+    if let Some(ref t) = target {
+        if let Some(port) = t.strip_prefix("usb:") {
+            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+            let mut settings = skill_settings::load_settings(&skill_dir);
+            settings.openbci.serial_port = port.to_string();
+            let path = skill_settings::settings_path(&skill_dir);
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let _ = std::fs::write(path, json);
+            }
+        }
+    }
+
     if let Ok(mut status) = state.status.lock() {
         status.state = "connecting".to_string();
         status.target_name = req.target;
@@ -375,9 +403,13 @@ async fn control_start_session(
         out = status.clone();
     }
 
-    // If the target is "openbci", spawn the session runner that actually
-    // opens the board, calls prepare()/start_stream(), and pumps events.
-    if target.as_deref() == Some("openbci") {
+    // Determine if this should launch an OpenBCI session.
+    // Accept "openbci" directly, or any "usb:" / "cgx:" device ID.
+    let is_openbci = target.as_deref().map(|t| {
+        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
+    }).unwrap_or(false);
+
+    if is_openbci {
         // Cancel any existing session before starting a new one.
         if let Ok(mut slot) = state.session_handle.lock() {
             if let Some(handle) = slot.take() {
@@ -414,7 +446,10 @@ async fn control_switch_session(
         out = status.clone();
     }
 
-    if target.as_deref() == Some("openbci") {
+    let is_openbci = target.as_deref().map(|t| {
+        t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:")
+    }).unwrap_or(false);
+    if is_openbci {
         let handle = session_runner::spawn_openbci_session(state.clone());
         if let Ok(mut slot) = state.session_handle.lock() {
             *slot = Some(handle);
@@ -561,7 +596,8 @@ async fn ws_events(
         let peer = peer.clone();
         let state = state.clone();
         async move {
-            handle_ws(socket, state.events_tx.subscribe()).await;
+            let rx = state.events_tx.subscribe();
+            handle_ws(socket, rx, state.clone()).await;
             remove_client(&state, &peer);
         }
     })
@@ -710,7 +746,17 @@ async fn push_event(State(state): State<AppState>, Json(envelope): Json<EventEnv
     Json(serde_json::json!({ "ok": true }))
 }
 
-async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvelope>) {
+/// Universal command tunnel — accepts CLI JSON commands via `POST /v1/cmd`.
+async fn cmd_tunnel(State(state): State<AppState>, Json(msg): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    Json(cmd_dispatch::dispatch(state, msg).await)
+}
+
+/// Root-level command tunnel — accepts CLI JSON commands via `POST /`.
+async fn cmd_tunnel_root(State(state): State<AppState>, Json(msg): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    Json(cmd_dispatch::dispatch(state, msg).await)
+}
+
+async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvelope>, state: AppState) {
     let connected = EventEnvelope {
         r#type: "DaemonStarted".to_string(),
         ts_unix_ms: now_unix_ms(),
@@ -730,25 +776,83 @@ async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvel
         }
     }
 
-    loop {
-        match rx.recv().await {
-            Ok(event) => {
-                let payload = match serde_json::to_string(&event) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        error!(%err, "failed to serialize websocket event");
-                        continue;
-                    }
-                };
+    // Channel for streaming messages back to the WS client.
+    // Used by LLM chat streaming to send incremental deltas.
+    let (_stream_tx, mut stream_rx) = tokio::sync::mpsc::channel::<String>(64);
+    #[cfg(feature = "llm")]
+    let stream_tx = _stream_tx;
 
-                if socket.send(Message::Text(payload.into())).await.is_err() {
+    loop {
+        tokio::select! {
+            // Broadcast events → send to client
+            event = rx.recv() => {
+                match event {
+                    Ok(ev) => {
+                        let payload = match serde_json::to_string(&ev) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                error!(%err, "failed to serialize websocket event");
+                                continue;
+                            }
+                        };
+                        if socket.send(Message::Text(payload.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        error!(%skipped, "websocket client lagged behind event stream");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            // Streaming messages (from LLM chat) → send to client
+            Some(msg_str) = stream_rx.recv() => {
+                if socket.send(Message::Text(msg_str.into())).await.is_err() {
                     break;
                 }
             }
-            Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                error!(%skipped, "websocket client lagged behind event stream");
+            // Incoming messages from client → dispatch as commands
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        let text_str: &str = &text;
+                        if let Ok(cmd) = serde_json::from_str::<serde_json::Value>(text_str) {
+                            let cmd_name = cmd.get("command")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("");
+
+                            if cmd_name == "llm_chat" {
+                                // LLM chat uses streaming: send deltas incrementally.
+                                #[cfg(feature = "llm")]
+                                {
+                                    let mut tx = stream_tx.clone();
+                                    cmd_dispatch::dispatch_llm_chat_streaming(
+                                        state.clone(), cmd, &mut tx,
+                                    ).await;
+                                }
+                                #[cfg(not(feature = "llm"))]
+                                {
+                                    let response = cmd_dispatch::dispatch(state.clone(), cmd).await;
+                                    if let Ok(resp_str) = serde_json::to_string(&response) {
+                                        if socket.send(Message::Text(resp_str.into())).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else if !cmd_name.is_empty() {
+                                let response = cmd_dispatch::dispatch(state.clone(), cmd).await;
+                                if let Ok(resp_str) = serde_json::to_string(&response) {
+                                    if socket.send(Message::Text(resp_str.into())).await.is_err() {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => break,
+                    _ => {}
+                }
             }
-            Err(broadcast::error::RecvError::Closed) => break,
         }
     }
 }

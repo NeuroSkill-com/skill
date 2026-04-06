@@ -11,6 +11,8 @@ llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
 llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
+# EEG embedding encoders (optional — metrics-only mode if disabled)
+embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 
 [[bin]]
 name = "skill-daemon"
@@ -55,8 +57,20 @@ skill-skills        = { path = "../skill-skills", features = ["sync"] }
 skill-tools         = { path = "../skill-tools" }
 skill-oura          = { path = "../skill-oura" }
 skill-eeg           = { path = "../skill-eeg" }
+skill-exg           = { path = "../skill-exg" }
+skill-neurorvq      = { path = "../skill-neurorvq", default-features = false, features = ["ndarray"] }
+# Optional ZUNA encoder deps (behind embed-zuna feature)
+zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
+burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
+burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
+ndarray             = { version = "0.16", optional = true }
 skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
+skill-tts            = { path = "../skill-tts" }
+skill-calendar       = { path = "../skill-calendar" }
+notify-rust          = "4"
+uuid                 = { version = "1", features = ["v4"] }
+sysinfo              = "0.33"
 
 [lints]
 workspace = true

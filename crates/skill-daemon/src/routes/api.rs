@@ -8,12 +8,17 @@ use axum::{
 };
 
 use crate::state::AppState;
+use skill_settings;
+use skill_data;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/status", get(api_status))
         .route("/api/sessions", get(api_sessions))
         .route("/api/label", post(api_create_label))
+        // REST shortcuts used by test.ts and external integrations
+        .route("/say", post(api_say))
+        .route("/dnd", get(api_dnd_get).post(api_dnd_set))
 }
 
 async fn api_status(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -64,6 +69,50 @@ async fn api_sessions(State(state): State<AppState>) -> Json<serde_json::Value> 
         .collect();
 
     Json(serde_json::json!({ "command": "sessions", "ok": true, "sessions": out }))
+}
+
+async fn api_say(
+    Json(req): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let text = req.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if text.is_empty() {
+        return Json(serde_json::json!({ "command": "say", "ok": false, "error": "missing text" }));
+    }
+    let voice = req.get("voice").and_then(|v| v.as_str()).map(String::from);
+    let spoken = text.clone();
+    skill_tts::tts_speak(text, voice).await;
+    Json(serde_json::json!({ "command": "say", "ok": true, "spoken": spoken }))
+}
+
+async fn api_dnd_get(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let settings = skill_settings::load_settings(&skill_dir);
+    let cfg = settings.do_not_disturb;
+    let os_active = skill_data::dnd::query_os_active();
+    Json(serde_json::json!({
+        "command": "dnd",
+        "ok": true,
+        "enabled": cfg.enabled,
+        "threshold": cfg.focus_threshold,
+        "duration_secs": cfg.duration_secs,
+        "dnd_active": os_active.unwrap_or(false),
+        "os_active": os_active,
+    }))
+}
+
+async fn api_dnd_set(
+    Json(req): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let enabled = req.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let ok = if enabled { false } else { skill_data::dnd::set_dnd(false, "") };
+    Json(serde_json::json!({
+        "command": "dnd_set",
+        "ok": true,
+        "enabled": enabled,
+        "applied": ok,
+    }))
 }
 
 async fn api_create_label(

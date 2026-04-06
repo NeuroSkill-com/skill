@@ -620,6 +620,7 @@ pub fn panic_msg(payload: &Box<dyn std::any::Any + Send>) -> &str {
 // ── Epoch metrics ─────────────────────────────────────────────────────────────
 
 /// Per-epoch band-derived metrics stored alongside each embedding.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EpochMetrics {
     pub rel_delta: f32,
     pub rel_theta: f32,
