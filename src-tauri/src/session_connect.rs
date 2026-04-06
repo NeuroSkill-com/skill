@@ -8,7 +8,7 @@ use crate::{emit_status, AppStateExt, MutexExt};
 /// Connect to OpenBCI via daemon session control.
 #[tauri::command]
 pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
-    let status = crate::daemon_cmds::start_session(Some("openbci".to_string()))?;
+    let status = crate::daemon_cmds::start_session_sync(Some("openbci".to_string()))?;
 
     {
         let r = app.app_state();

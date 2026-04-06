@@ -169,7 +169,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
                 attempt + 1
             );
 
-            match crate::daemon_cmds::start_session(preferred) {
+            match crate::daemon_cmds::start_session_sync(preferred) {
                 Ok(daemon_status) => {
                     let r = app.app_state();
                     let mut s = r.lock_or_recover();
