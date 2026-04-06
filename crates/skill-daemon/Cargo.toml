@@ -59,6 +59,7 @@ skill-oura          = { path = "../skill-oura" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-exg           = { path = "../skill-exg" }
 skill-neurorvq      = { path = "../skill-neurorvq", default-features = false, features = ["ndarray"] }
+neurofield          = { version = "0.0.1", default-features = false }
 # Optional ZUNA encoder deps (behind embed-zuna feature)
 zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }

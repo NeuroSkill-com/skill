@@ -303,6 +303,33 @@ async fn forget_device(
     Json(out)
 }
 
+/// Spawn the appropriate session runner for the given target device.
+/// Cancels any existing session first.
+fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
+    // Cancel any existing session.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+
+    let Some(t) = target else { return };
+
+    let handle = if t.starts_with("neurofield:") {
+        Some(session_runner::spawn_neurofield_session(state.clone(), t.to_string()))
+    } else if t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:") {
+        Some(session_runner::spawn_openbci_session(state.clone()))
+    } else {
+        None
+    };
+
+    if let Some(h) = handle {
+        if let Ok(mut slot) = state.session_handle.lock() {
+            *slot = Some(h);
+        }
+    }
+}
+
 fn default_status(state: &str) -> StatusResponse {
     StatusResponse {
         state: state.to_string(),
@@ -338,17 +365,7 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         out = status.clone();
     }
 
-    // Spawn session runner if target is openbci or usb device.
-    let is_openbci = target
-        .as_deref()
-        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
-        .unwrap_or(false);
-    if is_openbci {
-        let handle = session_runner::spawn_openbci_session(state.clone());
-        if let Ok(mut slot) = state.session_handle.lock() {
-            *slot = Some(handle);
-        }
-    }
+    spawn_session_for_target(&state, target.as_deref());
 
     Json(out)
 }
@@ -404,25 +421,7 @@ async fn control_start_session(
         out = status.clone();
     }
 
-    // Determine if this should launch an OpenBCI session.
-    // Accept "openbci" directly, or any "usb:" / "cgx:" device ID.
-    let is_openbci = target
-        .as_deref()
-        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
-        .unwrap_or(false);
-
-    if is_openbci {
-        // Cancel any existing session before starting a new one.
-        if let Ok(mut slot) = state.session_handle.lock() {
-            if let Some(handle) = slot.take() {
-                let _ = handle.cancel_tx.send(());
-            }
-        }
-        let handle = session_runner::spawn_openbci_session(state.clone());
-        if let Ok(mut slot) = state.session_handle.lock() {
-            *slot = Some(handle);
-        }
-    }
+    spawn_session_for_target(&state, target.as_deref());
 
     Json(out)
 }
@@ -448,16 +447,7 @@ async fn control_switch_session(
         out = status.clone();
     }
 
-    let is_openbci = target
-        .as_deref()
-        .map(|t| t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:"))
-        .unwrap_or(false);
-    if is_openbci {
-        let handle = session_runner::spawn_openbci_session(state.clone());
-        if let Ok(mut slot) = state.session_handle.lock() {
-            *slot = Some(handle);
-        }
-    }
+    spawn_session_for_target(&state, target.as_deref());
 
     Json(out)
 }
@@ -981,6 +971,46 @@ fn detect_cgx_serial_ports() -> Vec<(String, String)> {
         .collect()
 }
 
+fn detect_neurofield_devices() -> Vec<DiscoveredDeviceResponse> {
+    let mut out = Vec::new();
+    let online = neurofield::q21_api::Q21Api::get_online_pcan_interfaces();
+    for bus in online {
+        let bus_name = format!("{bus:?}");
+        // Try to connect briefly to get device info.
+        match neurofield::q21_api::Q21Api::new(bus) {
+            Ok(mut api) => {
+                let serial = api.eeg_device_serial();
+                let dev_type = api.eeg_device_type();
+                let name = format!("NeuroField Q21 ({dev_type:?} #{serial})");
+                let id = format!("neurofield:{bus_name}:{serial}");
+                api.release();
+                out.push(DiscoveredDeviceResponse {
+                    id,
+                    name,
+                    last_seen: now_unix_secs(),
+                    last_rssi: 0,
+                    is_paired: false,
+                    is_preferred: false,
+                    transport: "usb_serial".to_string(),
+                });
+            }
+            Err(_) => {
+                // PCAN interface online but no Q21 connected — report as available bus.
+                out.push(DiscoveredDeviceResponse {
+                    id: format!("neurofield:{bus_name}"),
+                    name: format!("NeuroField PCAN ({bus_name})"),
+                    last_seen: now_unix_secs(),
+                    last_rssi: 0,
+                    is_paired: false,
+                    is_preferred: false,
+                    transport: "usb_serial".to_string(),
+                });
+            }
+        }
+    }
+    out
+}
+
 async fn detect_ble_devices() -> Vec<DiscoveredDeviceResponse> {
     let Ok(manager) = BtManager::new().await else {
         return Vec::new();
@@ -1230,12 +1260,23 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                         galea_ip: String::new(),
                     });
                 let wifi_discovered = detect_wifi_devices(&wifi_cfg);
+
+                // NeuroField Q21 (PCAN-USB) — probe every other tick to avoid
+                // holding the CAN bus open continuously.
+                let neurofield_discovered = if cortex_tick.is_multiple_of(2) {
+                    tokio::task::spawn_blocking(detect_neurofield_devices)
+                        .await
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
                 cortex_tick = cortex_tick.wrapping_add(1);
 
                 let mut discovered = usb_discovered;
                 discovered.extend(ble_discovered);
                 discovered.extend(cortex_discovered);
                 discovered.extend(wifi_discovered);
+                discovered.extend(neurofield_discovered);
                 let discovered_count = discovered.len();
 
                 if let Ok(mut guard) = state.devices.lock() {
@@ -1251,6 +1292,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                                 && !d.id.starts_with("cortex:")
                                 && !d.id.starts_with("wifi:")
                                 && !d.id.starts_with("galea:")
+                                && !d.id.starts_with("neurofield:")
                         })
                         .cloned()
                         .collect();
@@ -1273,7 +1315,8 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                             && !d.id.starts_with("ble:")
                             && !d.id.starts_with("cortex:")
                             && !d.id.starts_with("wifi:")
-                            && !d.id.starts_with("galea:"))
+                            && !d.id.starts_with("galea:")
+                            && !d.id.starts_with("neurofield:"))
                             || current_ids.contains(&d.id)
                     });
                     *guard = merged;

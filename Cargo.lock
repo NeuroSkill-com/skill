@@ -8188,6 +8188,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "neurofield"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c13eaa73c77084513832d5f142cd4b5f5e8cc8fa0d8078213e94b40a15a19210"
+dependencies = [
+ "env_logger",
+ "libloading 0.8.9",
+ "log",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "neurorvq"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12236,6 +12248,7 @@ dependencies = [
  "fastembed",
  "hex",
  "ndarray 0.16.1",
+ "neurofield",
  "notify-rust",
  "rand 0.9.2",
  "rusqlite",

@@ -854,6 +854,211 @@ fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, payl
     let _ = tx.send(envelope);
 }
 
+// ── NeuroField Q21 session ────────────────────────────────────────────────────
+
+/// Spawn a NeuroField Q21 session task.  Returns a handle that can cancel it.
+pub fn spawn_neurofield_session(state: AppState, device_id: String) -> SessionHandle {
+    let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
+    let state2 = state.clone();
+    tokio::task::spawn(async move {
+        if let Err(e) = run_neurofield_session(state2.clone(), cancel_rx, device_id).await {
+            error!(%e, "neurofield session failed");
+            if let Ok(mut status) = state2.status.lock() {
+                status.state = "disconnected".to_string();
+                status.device_error = Some(e.to_string());
+            }
+        }
+        if let Ok(mut slot) = state2.session_handle.lock() {
+            *slot = None;
+        }
+    });
+    SessionHandle { cancel_tx }
+}
+
+async fn run_neurofield_session(
+    state: AppState,
+    mut cancel_rx: oneshot::Receiver<()>,
+    device_id: String,
+) -> Result<(), String> {
+    use neurofield::prelude::*;
+
+    // Parse bus from device_id (e.g. "neurofield:USB1:5")
+    let bus = parse_neurofield_bus(&device_id);
+
+    info!(?bus, %device_id, "starting neurofield session");
+
+    // Connect to Q21 (blocking I/O).
+    let api = tokio::task::spawn_blocking(move || -> Result<Q21Api, String> {
+        Q21Api::new(bus).map_err(|e| format!("NeuroField connect failed: {e}"))
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking: {e}"))?
+    .map_err(|e| format!("Q21 connect: {e}"))?;
+
+    let device_name = format!(
+        "NeuroField Q21 ({:?} #{})",
+        api.eeg_device_type(),
+        api.eeg_device_serial()
+    );
+    let channel_names: Vec<String> = EEG_CHANNEL_NAMES.iter().map(|s| (*s).to_string()).collect();
+    let eeg_channels = NUM_CHANNELS;
+    let sample_rate = SAMPLING_RATE;
+
+    // Update status to connected.
+    if let Ok(mut status) = state.status.lock() {
+        status.state = "connected".to_string();
+        status.device_name = Some(device_name.clone());
+        status.device_error = None;
+    }
+    broadcast_event(
+        &state.events_tx,
+        "DeviceConnected",
+        &serde_json::json!({ "name": device_name }),
+    );
+
+    // Open the session pipeline (CSV + DSP + embeddings).
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut pipeline = SessionPipeline::new(
+        &skill_dir,
+        eeg_channels,
+        sample_rate,
+        channel_names,
+        device_name.clone(),
+        state.events_tx.clone(),
+        hooks,
+    )
+    .map_err(|e| format!("pipeline open: {e}"))?;
+
+    if let Some(ref mut acc) = pipeline.epoch_accumulator {
+        acc.set_device_name(device_name.clone());
+    }
+
+    // Wrap the API in an Arc<Mutex> so the blocking reader and cancel can share it.
+    let api = std::sync::Arc::new(std::sync::Mutex::new(api));
+
+    // Start streaming.
+    {
+        let mut guard = api.lock().expect("Q21 api mutex poisoned");
+        guard
+            .start_receiving_eeg()
+            .map_err(|e| format!("start_receiving_eeg: {e}"))?;
+    }
+
+    let mut sample_count: u64 = 0;
+    let stop_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Spawn a blocking reader thread that pumps samples into a channel.
+    let (sample_tx, mut sample_rx) = tokio::sync::mpsc::channel::<neurofield::q21_api::EegSample>(512);
+    {
+        let api = api.clone();
+        let stop = stop_flag.clone();
+        std::thread::Builder::new()
+            .name("neurofield-read".into())
+            .spawn(move || loop {
+                if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                let Ok(guard) = api.lock() else { break };
+                match guard.get_single_sample() {
+                    Ok(sample) => {
+                        if sample_tx.blocking_send(sample).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        info!(%e, "neurofield read error — ending session");
+                        break;
+                    }
+                }
+            })
+            .map_err(|e| format!("spawn reader: {e}"))?;
+    }
+
+    // Main event loop: forward samples to pipeline + broadcast.
+    loop {
+        tokio::select! {
+            _ = &mut cancel_rx => {
+                info!("neurofield session cancelled");
+                break;
+            }
+            sample = sample_rx.recv() => {
+                match sample {
+                    Some(s) => {
+                        sample_count += 1;
+                        if let Ok(mut status) = state.status.lock() {
+                            status.sample_count = sample_count;
+                        }
+
+                        let ts = s.timestamp_us as f64 / 1_000_000.0;
+
+                        // Feed session pipeline.
+                        if let Some(snap) = pipeline.push_eeg(&s.data, ts) {
+                            if let Ok(val) = serde_json::to_value(&snap) {
+                                if let Ok(mut bands) = state.latest_bands.lock() {
+                                    *bands = Some(val.clone());
+                                }
+                                broadcast_event(&state.events_tx, "EegBands", &val);
+                            }
+                        }
+
+                        // Broadcast per-electrode samples.
+                        for (electrode, &value) in s.data.iter().enumerate() {
+                            broadcast_event(
+                                &state.events_tx,
+                                "EegSample",
+                                &serde_json::json!({
+                                    "electrode": electrode,
+                                    "samples": [value],
+                                    "timestamp": ts,
+                                }),
+                            );
+                        }
+                    }
+                    None => {
+                        info!("neurofield sample stream ended");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Stop streaming + release.
+    stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    if let Ok(mut guard) = api.lock() {
+        let _ = guard.abort_receiving_eeg();
+        guard.release();
+    }
+
+    pipeline.finalize();
+
+    if let Ok(mut status) = state.status.lock() {
+        if status.state == "connected" {
+            status.state = "disconnected".to_string();
+        }
+    }
+    broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
+    info!(samples = sample_count, "neurofield session ended");
+    Ok(())
+}
+
+/// Parse the PCAN UsbBus from a device ID like "neurofield:USB1:5".
+fn parse_neurofield_bus(device_id: &str) -> neurofield::pcan::UsbBus {
+    let parts: Vec<&str> = device_id.split(':').collect();
+    let bus_str = parts.get(1).unwrap_or(&"USB1");
+    match bus_str.to_uppercase().as_str() {
+        "USB2" => neurofield::pcan::UsbBus::USB2,
+        "USB3" => neurofield::pcan::UsbBus::USB3,
+        "USB4" => neurofield::pcan::UsbBus::USB4,
+        "USB5" => neurofield::pcan::UsbBus::USB5,
+        "USB6" => neurofield::pcan::UsbBus::USB6,
+        "USB7" => neurofield::pcan::UsbBus::USB7,
+        "USB8" => neurofield::pcan::UsbBus::USB8,
+        _ => neurofield::pcan::UsbBus::USB1,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

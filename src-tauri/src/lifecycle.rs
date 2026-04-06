@@ -216,6 +216,9 @@ pub(crate) fn detect_device_kind(
     device_name: Option<&str>,
 ) -> &'static str {
     if let Some(id) = device_id.map(str::to_ascii_lowercase) {
+        if id.starts_with("neurofield:") {
+            return "neurofield";
+        }
         if id.starts_with("cortex:") {
             return "emotiv";
         }
@@ -272,6 +275,9 @@ pub(crate) fn detect_device_kind(
     }
     if name.contains("cgx") || name.contains("cognionics") || name.contains("quick-20r") {
         return "cognionics";
+    }
+    if name.contains("neurofield") || name.contains("q21") {
+        return "neurofield";
     }
 
     "muse"
