@@ -447,6 +447,12 @@ fn embed_worker_main(
 enum Encoder {
     #[cfg(feature = "embed-zuna")]
     Zuna(Box<ZunaState>),
+    #[cfg(feature = "embed-luna")]
+    Luna(Box<luna_rs::LunaEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-reve")]
+    Reve(Box<reve_rs::ReveEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-osf")]
+    Osf(Box<osf_rs::OsfEncoder<burn::backend::NdArray>>),
     NeuroRVQ(Box<NeuroRVQState>),
     None,
 }
@@ -463,7 +469,8 @@ struct NeuroRVQState {
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
     let backend = config.model_backend.clone();
-    match backend {
+    info!(backend = backend.as_str(), "loading EXG encoder");
+    let result = match &backend {
         ExgModelBackend::Neurorvq => {
             info!("loading NeuroRVQ encoder");
             match skill_neurorvq::NeuroRVQFM::from_default_hf(skill_neurorvq::Modality::EEG) {
@@ -490,11 +497,58 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
                     None
                 })
         }
+        #[cfg(feature = "embed-luna")]
+        ExgModelBackend::Luna => {
+            let wf = config.luna_weights_file();
+            skill_exg::resolve_luna_weights(&config.luna_hf_repo, wf).and_then(|(w, c)| {
+                let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+                luna_rs::LunaEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                    .ok()
+                    .map(|(enc, _)| Encoder::Luna(Box::new(enc)))
+            })
+        }
+        #[cfg(feature = "embed-reve")]
+        ExgModelBackend::Reve => resolve_catalog_hf("reve-base").and_then(|(w, c)| {
+            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+            reve_rs::ReveEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                .ok()
+                .map(|(enc, _)| Encoder::Reve(Box::new(enc)))
+        }),
+        #[cfg(feature = "embed-osf")]
+        ExgModelBackend::Osf => resolve_catalog_hf("osf-base").and_then(|(w, c)| {
+            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+            osf_rs::OsfEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                .ok()
+                .map(|(enc, _)| Encoder::Osf(Box::new(enc)))
+        }),
+        #[allow(unreachable_patterns)]
         other => {
-            info!(backend = other.as_str(), "no native encoder — metrics-only");
+            info!(backend = other.as_str(), "no compiled encoder for this backend");
             None
         }
+    };
+    if result.is_some() {
+        info!(backend = backend.as_str(), "encoder loaded");
+    } else {
+        warn!(backend = backend.as_str(), "encoder unavailable — metrics-only");
     }
+    result
+}
+
+/// Resolve weights+config from HF cache using the exg_catalog.json family ID.
+#[allow(dead_code)]
+fn resolve_catalog_hf(family_id: &str) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let catalog: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).ok()?;
+    let fam = catalog.get("families")?.get(family_id)?;
+    let repo = fam.get("repo")?.as_str()?;
+    let wf = fam.get("weights_file")?.as_str()?;
+    let cf = fam.get("config_file")?.as_str().unwrap_or("config.json");
+    let cache = hf_hub::Cache::from_env();
+    let hf_repo = cache.repo(hf_hub::Repo::model(repo.to_string()));
+    let w = hf_repo.get(wf)?;
+    let c = hf_repo.get(cf)?;
+    Some((w, c))
 }
 
 #[cfg(feature = "embed-zuna")]
@@ -513,6 +567,12 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     match encoder {
         #[cfg(feature = "embed-zuna")]
         Encoder::Zuna(state) => encode_zuna(state, msg),
+        #[cfg(feature = "embed-luna")]
+        Encoder::Luna(enc) => encode_luna(enc, msg),
+        #[cfg(feature = "embed-reve")]
+        Encoder::Reve(enc) => encode_reve(enc, msg),
+        #[cfg(feature = "embed-osf")]
+        Encoder::Osf(enc) => encode_osf(enc, msg),
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
@@ -564,6 +624,66 @@ fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
         }
         pooled
     })
+}
+
+#[cfg(feature = "embed-luna")]
+fn encode_luna(enc: &luna_rs::LunaEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    // LUNA needs uppercase channel names from its vocabulary.
+    let mut luna_names: Vec<String> = Vec::new();
+    let mut luna_indices: Vec<usize> = Vec::new();
+    for (idx, name) in msg.channel_names.iter().take(n_ch).enumerate() {
+        let upper = name.to_uppercase();
+        if luna_rs::channel_index(&upper).is_some() {
+            luna_names.push(upper);
+            luna_indices.push(idx);
+        }
+    }
+    if luna_names.is_empty() {
+        return None;
+    }
+    let flat: Vec<f32> = luna_indices
+        .iter()
+        .flat_map(|&ch| msg.samples[ch].iter().copied())
+        .collect();
+    let ch_refs: Vec<&str> = luna_names.iter().map(String::as_str).collect();
+    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+    let batch = luna_rs::build_batch_named::<burn::backend::NdArray>(flat, &ch_refs, n_samples, &device);
+    let ep = enc.run_batch(&batch).ok()?;
+    Some(ep.output)
+}
+
+#[cfg(feature = "embed-reve")]
+fn encode_reve(enc: &reve_rs::ReveEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let flat: Vec<f32> = (0..n_ch).flat_map(|ch| msg.samples[ch].iter().copied()).collect();
+    let positions = vec![0.0f32; n_ch * 3];
+    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+    let batch = reve_rs::build_batch::<burn::backend::NdArray>(flat, positions, n_ch, n_samples, &device);
+    let result = enc.run_batch(&batch).ok()?;
+    Some(result.output)
+}
+
+#[cfg(feature = "embed-osf")]
+fn encode_osf(enc: &osf_rs::OsfEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let flat: Vec<f32> = (0..n_ch).flat_map(|ch| msg.samples[ch].iter().copied()).collect();
+    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+    let batch = osf_rs::build_batch::<burn::backend::NdArray>(flat, n_ch, n_samples, &device);
+    let ep = enc.run_batch(&batch).ok()?;
+    Some(ep.cls_emb)
 }
 
 fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {

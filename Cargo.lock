@@ -7416,6 +7416,7 @@ checksum = "d50e0aacebb90506938281064ebc240859ae6835b2d4d430871c4e6becbec69a"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "bytemuck",
  "clap 4.6.0",
  "exg 0.0.3",
@@ -9290,6 +9291,7 @@ checksum = "1030c3973eab027950e90c3dbb618cacf5051e9ac82d47c2d923611cbadd88ea"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "clap 4.6.0",
  "half",
  "safetensors 0.7.0",
@@ -10948,6 +10950,7 @@ checksum = "174b48f52088459b8c609203822e20d0c937b96c1a557cbc955f5ece822c4606"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "clap 4.6.0",
  "half",
  "safetensors 0.7.0",
@@ -12247,10 +12250,14 @@ dependencies = [
  "fast-hnsw",
  "fastembed",
  "hex",
+ "hf-hub 0.5.0",
+ "luna-rs",
  "ndarray 0.17.2",
  "neurofield",
  "notify-rust",
+ "osf-rs",
  "rand 0.9.2",
+ "reve-rs",
  "rusqlite",
  "serde",
  "serde_json",

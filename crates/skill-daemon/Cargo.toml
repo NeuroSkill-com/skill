@@ -5,14 +5,19 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "embed-zuna"]
+default = ["llm", "embed-exg"]
 llm = ["skill-llm/llm"]
 llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
 llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
-# EEG embedding encoders (optional — metrics-only mode if disabled)
+# EEG embedding encoders
+# embed-exg enables all encoder backends; individual flags available below.
+embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
+embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
+embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
+embed-osf  = ["dep:osf-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 
 [[bin]]
 name = "skill-daemon"
@@ -38,6 +43,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 urlencoding = "2"
 hex = "0.4"
+hf-hub = "0.5"
 sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 skill-daemon-common = { path = "../skill-daemon-common" }
@@ -60,8 +66,11 @@ skill-eeg           = { path = "../skill-eeg" }
 skill-exg           = { path = "../skill-exg" }
 skill-neurorvq      = { path = "../skill-neurorvq", default-features = false, features = ["ndarray"] }
 neurofield          = { version = "0.0.1", default-features = false }
-# Optional ZUNA encoder deps (behind embed-zuna feature)
+# EXG encoder crates (behind feature flags)
 zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
+luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
+reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
+osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 ndarray             = { version = "0.17", optional = true }
