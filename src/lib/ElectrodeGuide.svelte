@@ -183,16 +183,40 @@ const brainbitElectrodes = allElectrodes.filter((e) => BRAINBIT_LABELS.includes(
 const GTEC_LABELS = ["C3", "C4", "P3", "P4", "O1", "O2", "Fz", "Cz"];
 const gtecElectrodes = allElectrodes.filter((e) => GTEC_LABELS.includes(e.name));
 const NEUROFIELD_LABELS = [
-  "F7", "T3", "T4", "T5", "T6", "Cz", "Fz", "Pz", "F3", "C4", "C3", "P4", "P3", "O2", "O1", "F8", "F4", "Fp1", "Fp2",
+  "F7",
+  "T3",
+  "T4",
+  "T5",
+  "T6",
+  "Cz",
+  "Fz",
+  "Pz",
+  "F3",
+  "C4",
+  "C3",
+  "P4",
+  "P3",
+  "O2",
+  "O1",
+  "F8",
+  "F4",
+  "Fp1",
+  "Fp2",
 ];
 const neurofieldElectrodes = allElectrodes.filter((e) => NEUROFIELD_LABELS.includes(e.name));
 const BRAINMASTER_LABELS = ["F3", "F4", "C3", "C4"];
 const brainmasterElectrodes = allElectrodes.filter((e) => BRAINMASTER_LABELS.includes(e.name));
 const NEUROSKY_LABELS = ["Fp1"];
 const neuroskyElectrodes = allElectrodes.filter((e) => NEUROSKY_LABELS.includes(e.name));
-const neurosityLabels = $derived(channelNames.length > 0 ? channelNames : ["CP3", "C3", "F5", "PO3", "PO4", "F6", "C4", "CP4"]);
+const neurosityLabels = $derived(
+  channelNames.length > 0 ? channelNames : ["CP3", "C3", "F5", "PO3", "PO4", "F6", "C4", "CP4"],
+);
 const neurosityElectrodes = $derived(allElectrodes.filter((e) => neurosityLabels.includes(e.name)));
-const brainvisionLabels = $derived(channelNames.length > 0 ? channelNames : ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2", "F7", "F8", "T7", "T8", "P7", "P8"]);
+const brainvisionLabels = $derived(
+  channelNames.length > 0
+    ? channelNames
+    : ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2", "F7", "F8", "T7", "T8", "P7", "P8"],
+);
 const brainvisionElectrodes = $derived(allElectrodes.filter((e) => brainvisionLabels.includes(e.name)));
 
 // System used for the 3D view (device tabs still need a valid system for raycasting)
