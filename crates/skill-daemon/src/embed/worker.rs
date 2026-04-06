@@ -596,12 +596,29 @@ fn resolve_catalog_hf(family_id: &str) -> Option<(std::path::PathBuf, std::path:
 
 #[cfg(feature = "embed-zuna")]
 fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
-    let (weights_path, config_path) = skill_exg::resolve_hf_weights(&config.hf_repo)?;
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let (encoder, _ms) =
-        zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(&config_path, &weights_path, device).ok()?;
-    let data_config = encoder.data_cfg.clone();
-    Some(ZunaState { encoder, data_config })
+    match skill_exg::resolve_hf_weights(&config.hf_repo) {
+        Some((weights_path, config_path)) => {
+            info!(weights = %weights_path.display(), config = %config_path.display(), "ZUNA weights resolved");
+            match zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(
+                &config_path, &weights_path, burn::backend::ndarray::NdArrayDevice::Cpu,
+            ) {
+                Ok((encoder, ms)) => {
+                    info!(ms, "ZUNA encoder loaded");
+                    let data_config = encoder.data_cfg.clone();
+                    Some(ZunaState { encoder, data_config })
+                }
+                Err(e) => {
+                    warn!(%e, "ZUNA encoder load failed");
+                    None
+                }
+            }
+        }
+        None => {
+            let cache = skill_data::util::hf_model_dir(&config.hf_repo);
+            warn!(repo = %config.hf_repo, cache_dir = %cache.display(), "ZUNA weights not in HF cache");
+            None
+        }
+    }
 }
 
 // ── Per-epoch encoding ──────────────────────────────────────────────────────
