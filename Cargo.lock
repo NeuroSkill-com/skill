@@ -1025,6 +1025,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
+name = "brainbit"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd4a0fe309c3c602e988f7593bdbf451d08ec75232f786015378f0d2bc2457be"
+dependencies = [
+ "env_logger",
+ "libc",
+ "libloading 0.8.9",
+ "log",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12239,8 +12252,10 @@ name = "skill-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
+ "brainbit",
  "btleplug 0.11.8",
  "burn",
  "burn-ndarray",

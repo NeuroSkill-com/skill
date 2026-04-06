@@ -59,6 +59,9 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower == "ganglion" {
         return connect_ganglion(state).await;
     }
+    if lower.starts_with("brainbit:") || lower.contains("brainbit") {
+        return connect_brainbit(target).await;
+    }
     if lower.contains("mw75") || lower.contains("neurable") {
         return connect_mw75().await;
     }
@@ -267,6 +270,126 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
     let adapter: Box<dyn DeviceAdapter> = Box::new(CognionicsAdapter::new(rx, handle));
 
     Ok(adapter)
+}
+
+// ── BrainBit (BLE via NeuroSDK2) ───────────────────────────────────────────
+
+async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use brainbit::prelude::*;
+
+    info!("scanning for BrainBit…");
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<Vec<brainbit::device::EegSample>>(64);
+
+    let target_addr = target.strip_prefix("brainbit:").unwrap_or("").to_string();
+
+    let (device_name, device_addr) = tokio::task::spawn_blocking(move || -> Result<(String, String), String> {
+        let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
+        scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
+        let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
+        if devices.is_empty() {
+            return Err("No BrainBit device found nearby".into());
+        }
+        // Pick matching device or first.
+        let info = if !target_addr.is_empty() {
+            devices
+                .iter()
+                .find(|d| d.address_str() == target_addr)
+                .or(devices.first())
+        } else {
+            devices.first()
+        }
+        .ok_or("No matching BrainBit device")?;
+
+        let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
+        let name = device.name().unwrap_or_else(|_| "BrainBit".into());
+        let addr = device.address().unwrap_or_default();
+
+        // Set up streaming callback.
+        let tx = sample_tx;
+        device
+            .on_signal(move |samples| {
+                let _ = tx.blocking_send(samples.to_vec());
+            })
+            .map_err(|e| format!("BrainBit on_signal: {e}"))?;
+        device
+            .start_signal()
+            .map_err(|e| format!("BrainBit start_signal: {e}"))?;
+
+        // Leak the device to keep it alive for the session lifetime.
+        // It will be cleaned up when the process exits.
+        // TODO: proper Drop-based lifetime management.
+        std::mem::forget(device);
+        std::mem::forget(scanner);
+
+        Ok((name, addr))
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
+
+    info!(name = %device_name, addr = %device_addr, "BrainBit connected");
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "brainbit",
+        eeg_channels: 4,
+        eeg_sample_rate: 250.0,
+        channel_names: vec!["O1".into(), "O2".into(), "T3".into(), "T4".into()],
+        caps: DeviceCaps::EEG,
+        pipeline_channels: 4,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+    Ok(Box::new(BrainBitAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        connected_sent: false,
+    }))
+}
+
+/// Minimal DeviceAdapter for BrainBit.
+struct BrainBitAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<Vec<brainbit::device::EegSample>>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for BrainBitAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+        let samples = self.rx.recv().await?;
+        // BrainBit sends in Volts; convert to µV.
+        let s = samples.first()?;
+        let channels: Vec<f64> = s.channels.iter().map(|&v| v * 1e6).collect();
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels,
+            timestamp_s: ts,
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+    }
 }
 
 // ── Emotiv (Cortex WebSocket API) ────────────────────────────────────────────

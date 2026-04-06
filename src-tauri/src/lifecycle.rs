@@ -219,6 +219,9 @@ pub(crate) fn detect_device_kind(
         if id.starts_with("neurofield:") {
             return "neurofield";
         }
+        if id.starts_with("brainbit:") {
+            return "brainbit";
+        }
         if id.starts_with("cortex:") {
             return "emotiv";
         }
@@ -278,6 +281,9 @@ pub(crate) fn detect_device_kind(
     }
     if name.contains("neurofield") || name.contains("q21") {
         return "neurofield";
+    }
+    if name.contains("brainbit") {
+        return "brainbit";
     }
 
     "muse"

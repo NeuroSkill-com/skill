@@ -991,6 +991,41 @@ fn detect_cgx_serial_ports() -> Vec<(String, String)> {
         .collect()
 }
 
+fn detect_brainbit_devices() -> Vec<DiscoveredDeviceResponse> {
+    use brainbit::prelude::*;
+    let Ok(scanner) = Scanner::new(&[SensorFamily::LEBrainBit]) else {
+        return Vec::new();
+    };
+    if scanner.start().is_err() {
+        return Vec::new();
+    }
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    let _ = scanner.stop();
+    let devices = scanner.devices().unwrap_or_default();
+    devices
+        .into_iter()
+        .map(|d| {
+            let name = d.name_str();
+            let addr = d.address_str();
+            let id = format!("brainbit:{addr}");
+            let display = if name.is_empty() {
+                format!("BrainBit ({addr})")
+            } else {
+                format!("BrainBit {name}")
+            };
+            DiscoveredDeviceResponse {
+                id,
+                name: display,
+                last_seen: now_unix_secs(),
+                last_rssi: 0,
+                is_paired: false,
+                is_preferred: false,
+                transport: "ble".to_string(),
+            }
+        })
+        .collect()
+}
+
 fn detect_neurofield_devices() -> Vec<DiscoveredDeviceResponse> {
     let mut out = Vec::new();
     let online = neurofield::q21_api::Q21Api::get_online_pcan_interfaces();
@@ -1297,6 +1332,16 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                 discovered.extend(cortex_discovered);
                 discovered.extend(wifi_discovered);
                 discovered.extend(neurofield_discovered);
+
+                // BrainBit (BLE via NeuroSDK2) — probe every other tick.
+                let brainbit_discovered = if cortex_tick.is_multiple_of(2) {
+                    tokio::task::spawn_blocking(detect_brainbit_devices)
+                        .await
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                discovered.extend(brainbit_discovered);
                 let discovered_count = discovered.len();
 
                 if let Ok(mut guard) = state.devices.lock() {
@@ -1312,7 +1357,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                                 && !d.id.starts_with("cortex:")
                                 && !d.id.starts_with("wifi:")
                                 && !d.id.starts_with("galea:")
-                                && !d.id.starts_with("neurofield:")
+                                && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:")
                         })
                         .cloned()
                         .collect();
@@ -1336,7 +1381,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                             && !d.id.starts_with("cortex:")
                             && !d.id.starts_with("wifi:")
                             && !d.id.starts_with("galea:")
-                            && !d.id.starts_with("neurofield:"))
+                            && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:"))
                             || current_ids.contains(&d.id)
                     });
                     *guard = merged;
