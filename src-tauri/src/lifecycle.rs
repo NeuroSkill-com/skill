@@ -225,6 +225,9 @@ pub(crate) fn detect_device_kind(
         if id.starts_with("gtec:") {
             return "gtec";
         }
+        if id.starts_with("brainmaster:") {
+            return "brainmaster";
+        }
         if id.starts_with("cortex:") {
             return "emotiv";
         }
@@ -290,6 +293,9 @@ pub(crate) fn detect_device_kind(
     }
     if name.contains("unicorn") || name.contains("g.tec") || name.contains("gtec") {
         return "gtec";
+    }
+    if name.contains("brainmaster") || name.contains("atlantis") || name.contains("discovery") {
+        return "brainmaster";
     }
 
     "muse"
