@@ -423,7 +423,9 @@ All global shortcuts are configurable in **Settings → Shortcuts**.
 ### Setup
 
 ```bash
-npm install
+# Install all platform dependencies (protobuf, OpenMP, GNU ar, sccache, etc.)
+npm run setup            # interactive
+npm run setup -- --yes   # non-interactive
 
 # Download ZUNA encoder weights
 python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mariozechner/zuna-EXG-v1')"

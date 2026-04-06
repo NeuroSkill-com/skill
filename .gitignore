@@ -32,3 +32,4 @@ AGENTS.md
 test-results/
 .llama-prebuilt/
 src-tauri/binaries/
+errors/
