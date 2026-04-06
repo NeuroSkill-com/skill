@@ -1051,6 +1051,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "brainvision"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73a1f095a9006f4c671af5eb6ac11c5f1e50326fa01ddedde027b1b4692aa46c"
+dependencies = [
+ "env_logger",
+ "libc",
+ "log",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8259,6 +8271,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "neurosity"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1eff82cf68a76b6bffb3dbada16100d404ce17b254d2599b866c44439be502be"
+dependencies = [
+ "env_logger",
+ "libc",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "ureq 2.12.1",
+]
+
+[[package]]
+name = "neurosky"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a77b2f902d736135d528ef4af4767cf2099d8a64da6ab2146093b446ac084b80"
+dependencies = [
+ "env_logger",
+ "libc",
+ "log",
+ "serialport",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "neutts"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12283,6 +12323,7 @@ dependencies = [
  "base64 0.22.1",
  "brainbit",
  "brainmaster",
+ "brainvision",
  "btleplug 0.11.8",
  "burn",
  "burn-ndarray",
@@ -12297,6 +12338,8 @@ dependencies = [
  "luna-rs",
  "ndarray 0.17.2",
  "neurofield",
+ "neurosity",
+ "neurosky",
  "notify-rust",
  "osf-rs",
  "rand 0.9.2",

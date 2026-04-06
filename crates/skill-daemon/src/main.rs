@@ -212,17 +212,7 @@ async fn version() -> Json<VersionResponse> {
 }
 
 async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
-    let current = state.status.lock().map(|g| g.clone()).unwrap_or(StatusResponse {
-        state: "disconnected".to_string(),
-        device_name: None,
-        sample_count: 0,
-        battery: 0.0,
-        device_error: None,
-        target_name: None,
-        retry_attempt: 0,
-        retry_countdown_secs: 0,
-        paired_devices: Vec::new(),
-    });
+    let current = state.status.lock().map(|g| g.clone()).unwrap_or_default();
     Json(current)
 }
 
@@ -320,28 +310,8 @@ fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
 
     let Some(t) = target else { return };
 
-    // NeuroField has a dedicated runner (blocking CAN bus read loop).
-    let handle = if t.starts_with("neurofield:") {
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
-        let state2 = state.clone();
-        let device_id = t.to_string();
-        tokio::task::spawn(async move {
-            if let Err(e) = session_runner::run_neurofield_session(state2.clone(), cancel_rx, device_id).await {
-                tracing::error!(%e, "neurofield session failed");
-                if let Ok(mut s) = state2.status.lock() {
-                    s.state = "disconnected".into();
-                    s.device_error = Some(e.to_string());
-                }
-            }
-            if let Ok(mut slot) = state2.session_handle.lock() {
-                *slot = None;
-            }
-        });
-        Some(session_runner::SessionHandle { cancel_tx })
-    } else {
-        // All other devices go through the generic adapter session.
-        session::spawn_device_session(state.clone(), t.to_string())
-    };
+    // All devices route through the generic adapter session runner.
+    let handle = session::spawn_device_session(state.clone(), t.to_string());
 
     if let Some(h) = handle {
         if let Ok(mut slot) = state.session_handle.lock() {
@@ -353,14 +323,7 @@ fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
 fn default_status(state: &str) -> StatusResponse {
     StatusResponse {
         state: state.to_string(),
-        device_name: None,
-        sample_count: 0,
-        battery: 0.0,
-        device_error: None,
-        target_name: None,
-        retry_attempt: 0,
-        retry_countdown_secs: 0,
-        paired_devices: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -1274,6 +1237,63 @@ fn detect_wifi_devices(cfg: &ScannerWifiConfigRequest) -> Vec<DiscoveredDeviceRe
     out
 }
 
+fn detect_manual_device_hints(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
+    let now = now_unix_secs();
+    let mut out = vec![
+        DiscoveredDeviceResponse {
+            id: "neurosky".to_string(),
+            name: "NeuroSky MindWave (serial)".to_string(),
+            last_seen: now,
+            last_rssi: 0,
+            is_paired: false,
+            is_preferred: false,
+            transport: "usb_serial".to_string(),
+        },
+        DiscoveredDeviceResponse {
+            id: "brainvision:127.0.0.1:51244".to_string(),
+            name: "BrainVision RDA (127.0.0.1:51244)".to_string(),
+            last_seen: now,
+            last_rssi: 0,
+            is_paired: false,
+            is_preferred: false,
+            transport: "wifi".to_string(),
+        },
+    ];
+
+    let settings_device_id = state
+        .skill_dir
+        .lock()
+        .ok()
+        .map(|d| skill_settings::load_settings(&d).device_api.neurosity_device_id)
+        .filter(|s| !s.trim().is_empty());
+
+    let neurosity_device_id = settings_device_id
+        .or_else(|| {
+            std::env::var("SKILL_NEUROSITY_DEVICE_ID")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        })
+        .or_else(|| {
+            std::env::var("NEUROSITY_DEVICE_ID")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        });
+
+    if let Some(device_id) = neurosity_device_id {
+        out.push(DiscoveredDeviceResponse {
+            id: format!("neurosity:{device_id}"),
+            name: format!("Neurosity Crown/Notion ({device_id})"),
+            last_seen: now,
+            last_rssi: 0,
+            is_paired: false,
+            is_preferred: false,
+            transport: "wifi".to_string(),
+        });
+    }
+
+    out
+}
+
 async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()>) {
     let mut tick = tokio::time::interval(Duration::from_secs(5));
     let mut cortex_tick = 0u64;
@@ -1395,6 +1415,10 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                 .and_then(std::result::Result::ok)
                 .unwrap_or_default();
                 discovered.extend(brainmaster_discovered);
+
+                // Manual-connect device hints (always visible in scanner list).
+                discovered.extend(detect_manual_device_hints(&state));
+
                 let discovered_count = discovered.len();
 
                 if let Ok(mut guard) = state.devices.lock() {
@@ -1410,7 +1434,14 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                                 && !d.id.starts_with("cortex:")
                                 && !d.id.starts_with("wifi:")
                                 && !d.id.starts_with("galea:")
-                                && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:") && !d.id.starts_with("brainmaster:")
+                                && !d.id.starts_with("neurofield:")
+                                && !d.id.starts_with("brainbit:")
+                                && !d.id.starts_with("gtec:")
+                                && !d.id.starts_with("brainmaster:")
+                                && !d.id.starts_with("neurosky")
+                                && !d.id.starts_with("neurosity:")
+                                && !d.id.starts_with("brainvision:")
+                                && !d.id.starts_with("rda:")
                         })
                         .cloned()
                         .collect();
@@ -1434,7 +1465,14 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                             && !d.id.starts_with("cortex:")
                             && !d.id.starts_with("wifi:")
                             && !d.id.starts_with("galea:")
-                            && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:") && !d.id.starts_with("brainmaster:"))
+                            && !d.id.starts_with("neurofield:")
+                            && !d.id.starts_with("brainbit:")
+                            && !d.id.starts_with("gtec:")
+                            && !d.id.starts_with("brainmaster:")
+                            && !d.id.starts_with("neurosky")
+                            && !d.id.starts_with("neurosity:")
+                            && !d.id.starts_with("brainvision:")
+                            && !d.id.starts_with("rda:"))
                             || current_ids.contains(&d.id)
                     });
                     *guard = merged;

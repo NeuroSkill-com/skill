@@ -180,7 +180,7 @@ impl Default for ScannerConfig {
 /// Service, Windows Credential Manager) and are **not** written to
 /// `settings.json`.  Legacy plaintext values are still accepted on
 /// deserialization for one-time migration into the keychain.
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DeviceApiConfig {
     /// Emotiv Cortex API application client id.
@@ -195,6 +195,33 @@ pub struct DeviceApiConfig {
     /// Oura Ring V2 personal access token for cloud data sync.
     #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub oura_access_token: String,
+    /// Neurosity account email.
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
+    pub neurosity_email: String,
+    /// Neurosity account password.
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
+    pub neurosity_password: String,
+    /// Neurosity device id (Crown/Notion).
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
+    pub neurosity_device_id: String,
+    /// BrainMaster model tag: atlantis2 | atlantis4 | discovery | freedom.
+    #[serde(default = "default_brainmaster_model")]
+    pub brainmaster_model: String,
+}
+
+impl Default for DeviceApiConfig {
+    fn default() -> Self {
+        Self {
+            emotiv_client_id: String::new(),
+            emotiv_client_secret: String::new(),
+            idun_api_token: String::new(),
+            oura_access_token: String::new(),
+            neurosity_email: String::new(),
+            neurosity_password: String::new(),
+            neurosity_device_id: String::new(),
+            brainmaster_model: default_brainmaster_model(),
+        }
+    }
 }
 
 // ── Sleep schedule ─────────────────────────────────────────────────────────────
@@ -949,6 +976,10 @@ impl Default for UserSettings {
     }
 }
 
+fn default_brainmaster_model() -> String {
+    "atlantis4".to_string()
+}
+
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
     let path = settings_path(skill_dir);
     let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
@@ -972,6 +1003,9 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         &s.device_api.emotiv_client_secret,
         &s.device_api.idun_api_token,
         &s.device_api.oura_access_token,
+        &s.device_api.neurosity_email,
+        &s.device_api.neurosity_password,
+        &s.device_api.neurosity_device_id,
     );
     if migrated {
         // Re-save without the secret fields (skip_serializing takes care of it).
@@ -988,6 +1022,9 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
         s.device_api.idun_api_token = secrets.idun_api_token;
         s.device_api.oura_access_token = secrets.oura_access_token;
+        s.device_api.neurosity_email = secrets.neurosity_email;
+        s.device_api.neurosity_password = secrets.neurosity_password;
+        s.device_api.neurosity_device_id = secrets.neurosity_device_id;
     }
     // In debug mode, secrets stay as loaded from the JSON file — no keychain
     // interaction, no macOS authorization prompts on every dev build.
@@ -1006,6 +1043,9 @@ pub fn save_secrets_from_settings(settings: &UserSettings) {
         emotiv_client_secret: settings.device_api.emotiv_client_secret.clone(),
         idun_api_token: settings.device_api.idun_api_token.clone(),
         oura_access_token: settings.device_api.oura_access_token.clone(),
+        neurosity_email: settings.device_api.neurosity_email.clone(),
+        neurosity_password: settings.device_api.neurosity_password.clone(),
+        neurosity_device_id: settings.device_api.neurosity_device_id.clone(),
     });
 }
 

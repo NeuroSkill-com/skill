@@ -86,7 +86,23 @@ let effectiveLabels = $derived.by((): string[] => {
 });
 
 // ── Electrode system tabs ──────────────────────────────────────────────────
-type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "emotiv" | "idun" | "10-20" | "10-10" | "10-5";
+type ActiveTab =
+  | "muse"
+  | "mw75"
+  | "hermes"
+  | "ganglion"
+  | "emotiv"
+  | "idun"
+  | "brainbit"
+  | "gtec"
+  | "neurofield"
+  | "brainmaster"
+  | "neurosky"
+  | "neurosity"
+  | "brainvision"
+  | "10-20"
+  | "10-10"
+  | "10-5";
 const TABS: { id: ActiveTab; label: string; count: () => string }[] = [
   { id: "muse", label: "Muse", count: () => "4" },
   { id: "mw75", label: "MW75", count: () => "12" },
@@ -94,6 +110,13 @@ const TABS: { id: ActiveTab; label: string; count: () => string }[] = [
   { id: "ganglion", label: "Ganglion", count: () => "4" },
   { id: "emotiv", label: "Emotiv", count: () => String(emotivActiveLabels.length) },
   { id: "idun", label: "IDUN", count: () => "1" },
+  { id: "brainbit", label: "BrainBit", count: () => "4" },
+  { id: "gtec", label: "g.tec", count: () => "8" },
+  { id: "neurofield", label: "NeuroField", count: () => "20" },
+  { id: "brainmaster", label: "BrainMaster", count: () => "4" },
+  { id: "neurosky", label: "NeuroSky", count: () => "1" },
+  { id: "neurosity", label: "Neurosity", count: () => String(neurosityLabels.length) },
+  { id: "brainvision", label: "BrainVision", count: () => String(brainvisionLabels.length) },
   { id: "10-20", label: "10-20", count: () => "21" },
   { id: "10-10", label: "10-10", count: () => "64" },
   { id: "10-5", label: "10-5", count: () => "345" },
@@ -109,7 +132,21 @@ function defaultTab(d: string): ActiveTab {
           ? "emotiv"
           : d === "idun"
             ? "idun"
-            : "muse";
+            : d === "brainbit"
+              ? "brainbit"
+              : d === "gtec"
+                ? "gtec"
+                : d === "neurofield"
+                  ? "neurofield"
+                  : d === "brainmaster"
+                    ? "brainmaster"
+                    : d === "neurosky"
+                      ? "neurosky"
+                      : d === "neurosity"
+                        ? "neurosity"
+                        : d === "brainvision"
+                          ? "brainvision"
+                          : "muse";
 }
 let activeTab: ActiveTab = $state("muse" as ActiveTab);
 
@@ -141,9 +178,39 @@ const emotivActiveLabels = $derived(
 const emotivElectrodes = $derived(allElectrodes.filter((e) => emotivActiveLabels.includes(e.name)));
 const IDUN_LABELS = ["A1"]; // Single-channel in-ear reference
 const idunElectrodes = allElectrodes.filter((e) => IDUN_LABELS.includes(e.name));
+const BRAINBIT_LABELS = ["O1", "O2", "T3", "T4"];
+const brainbitElectrodes = allElectrodes.filter((e) => BRAINBIT_LABELS.includes(e.name));
+const GTEC_LABELS = ["C3", "C4", "P3", "P4", "O1", "O2", "Fz", "Cz"];
+const gtecElectrodes = allElectrodes.filter((e) => GTEC_LABELS.includes(e.name));
+const NEUROFIELD_LABELS = [
+  "F7", "T3", "T4", "T5", "T6", "Cz", "Fz", "Pz", "F3", "C4", "C3", "P4", "P3", "O2", "O1", "F8", "F4", "Fp1", "Fp2",
+];
+const neurofieldElectrodes = allElectrodes.filter((e) => NEUROFIELD_LABELS.includes(e.name));
+const BRAINMASTER_LABELS = ["F3", "F4", "C3", "C4"];
+const brainmasterElectrodes = allElectrodes.filter((e) => BRAINMASTER_LABELS.includes(e.name));
+const NEUROSKY_LABELS = ["Fp1"];
+const neuroskyElectrodes = allElectrodes.filter((e) => NEUROSKY_LABELS.includes(e.name));
+const neurosityLabels = $derived(channelNames.length > 0 ? channelNames : ["CP3", "C3", "F5", "PO3", "PO4", "F6", "C4", "CP4"]);
+const neurosityElectrodes = $derived(allElectrodes.filter((e) => neurosityLabels.includes(e.name)));
+const brainvisionLabels = $derived(channelNames.length > 0 ? channelNames : ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2", "F7", "F8", "T7", "T8", "P7", "P8"]);
+const brainvisionElectrodes = $derived(allElectrodes.filter((e) => brainvisionLabels.includes(e.name)));
 
 // System used for the 3D view (device tabs still need a valid system for raycasting)
-const DEVICE_TABS: ActiveTab[] = ["muse", "mw75", "hermes", "ganglion", "emotiv", "idun"];
+const DEVICE_TABS: ActiveTab[] = [
+  "muse",
+  "mw75",
+  "hermes",
+  "ganglion",
+  "emotiv",
+  "idun",
+  "brainbit",
+  "gtec",
+  "neurofield",
+  "brainmaster",
+  "neurosky",
+  "neurosity",
+  "brainvision",
+];
 let system: ElectrodeSystem = $derived(DEVICE_TABS.includes(activeTab) ? "10-10" : (activeTab as ElectrodeSystem));
 
 // Electrodes shown in the 3D view
@@ -156,11 +223,25 @@ const electrodes3D = $derived(
         ? emotivElectrodes
         : activeTab === "idun"
           ? idunElectrodes
-          : activeTab === "hermes"
-            ? [] // Hermes positions depend on montage
-            : activeTab === "ganglion"
-              ? [] // Ganglion has configurable positions
-              : getElectrodes(activeTab as ElectrodeSystem),
+          : activeTab === "brainbit"
+            ? brainbitElectrodes
+            : activeTab === "gtec"
+              ? gtecElectrodes
+              : activeTab === "neurofield"
+                ? neurofieldElectrodes
+                : activeTab === "brainmaster"
+                  ? brainmasterElectrodes
+                  : activeTab === "neurosky"
+                    ? neuroskyElectrodes
+                    : activeTab === "neurosity"
+                      ? neurosityElectrodes
+                      : activeTab === "brainvision"
+                        ? brainvisionElectrodes
+                        : activeTab === "hermes"
+                          ? [] // Hermes positions depend on montage
+                          : activeTab === "ganglion"
+                            ? [] // Ganglion has configurable positions
+                            : getElectrodes(activeTab as ElectrodeSystem),
 );
 
 let selectedElectrode: Electrode | null = $state(null);
@@ -307,7 +388,33 @@ function qualityBg(val: number): string {
     {#if Head3D}
       <Canvas {createRenderer}>
         <Head3D bind:this={head3DRef} {system}
-                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : activeTab === "emotiv" ? emotivElectrodes : activeTab === "idun" ? idunElectrodes : activeTab === "hermes" ? [] : null}
+                electrodesOverride={
+                  activeTab === "muse"
+                    ? museElectrodes
+                    : activeTab === "mw75"
+                      ? mw75Electrodes
+                      : activeTab === "emotiv"
+                        ? emotivElectrodes
+                        : activeTab === "idun"
+                          ? idunElectrodes
+                          : activeTab === "brainbit"
+                            ? brainbitElectrodes
+                            : activeTab === "gtec"
+                              ? gtecElectrodes
+                              : activeTab === "neurofield"
+                                ? neurofieldElectrodes
+                                : activeTab === "brainmaster"
+                                  ? brainmasterElectrodes
+                                  : activeTab === "neurosky"
+                                    ? neuroskyElectrodes
+                                    : activeTab === "neurosity"
+                                      ? neurosityElectrodes
+                                      : activeTab === "brainvision"
+                                        ? brainvisionElectrodes
+                                        : activeTab === "hermes"
+                                          ? []
+                                          : null
+                }
                 {onSelect} selectedName={selectedElectrode?.name} />
       </Canvas>
     {:else}

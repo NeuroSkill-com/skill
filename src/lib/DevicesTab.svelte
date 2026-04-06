@@ -80,6 +80,10 @@ interface DeviceApiConfig {
   emotiv_client_secret: string;
   idun_api_token: string;
   oura_access_token: string;
+  neurosity_email: string;
+  neurosity_password: string;
+  neurosity_device_id: string;
+  brainmaster_model: string;
 }
 const OPENBCI_DEFAULT: OpenBciConfig = {
   board: "ganglion",
@@ -101,6 +105,10 @@ let deviceApi = $state<DeviceApiConfig>({
   emotiv_client_secret: "",
   idun_api_token: "",
   oura_access_token: "",
+  neurosity_email: "",
+  neurosity_password: "",
+  neurosity_device_id: "",
+  brainmaster_model: "atlantis4",
 });
 let emotivApiChanged = $state(false);
 let emotivApiSaved = $state(false);
@@ -120,6 +128,15 @@ let ouraApiExpanded = $state(false);
 let ouraSyncing = $state(false);
 let ouraSynced = $state(false);
 let ouraSyncError = $state("");
+let neurosityApiChanged = $state(false);
+let neurosityApiSaved = $state(false);
+let neurosityApiError = $state("");
+let neurosityPasswordVisible = $state(false);
+let neurosityApiExpanded = $state(false);
+let brainmasterApiChanged = $state(false);
+let brainmasterApiSaved = $state(false);
+let brainmasterApiError = $state("");
+let brainmasterApiExpanded = $state(false);
 let supportedCompanies = $state(getSupportedCompanies());
 let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
 let supportedDevicesSearchQuery = $state("");
@@ -271,6 +288,34 @@ async function saveOuraApi() {
     }, 2000);
   } catch (e: unknown) {
     ouraApiError = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function saveNeurosityApi() {
+  neurosityApiError = "";
+  try {
+    await setDeviceApiConfig(deviceApi);
+    neurosityApiChanged = false;
+    neurosityApiSaved = true;
+    setTimeout(() => {
+      neurosityApiSaved = false;
+    }, 2000);
+  } catch (e: unknown) {
+    neurosityApiError = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function saveBrainmasterApi() {
+  brainmasterApiError = "";
+  try {
+    await setDeviceApiConfig(deviceApi);
+    brainmasterApiChanged = false;
+    brainmasterApiSaved = true;
+    setTimeout(() => {
+      brainmasterApiSaved = false;
+    }, 2000);
+  } catch (e: unknown) {
+    brainmasterApiError = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -1142,6 +1187,152 @@ onDestroy(() => {
           </div>
           {#if idunApiError}
             <p class="text-[0.62rem] text-destructive">{idunApiError}</p>
+          {/if}
+        {/if}
+
+        <Separator class="bg-border dark:bg-white/[0.04]" />
+
+        <button
+          onclick={() => neurosityApiExpanded = !neurosityApiExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={neurosityApiExpanded}
+        >
+          <span class="text-[0.78rem] font-semibold text-foreground">Neurosity</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {neurosityApiExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if neurosityApiExpanded}
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            Credentials and device id for Neurosity Crown/Notion cloud streaming.
+          </p>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="neurosity-email" class="text-[0.68rem] font-medium text-foreground/80">Email</label>
+            <input
+              id="neurosity-email"
+              type="text"
+              bind:value={deviceApi.neurosity_email}
+              oninput={() => {
+                neurosityApiChanged = true;
+              }}
+              placeholder="you@example.com"
+              class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="neurosity-password" class="text-[0.68rem] font-medium text-foreground/80">Password</label>
+            <div class="flex items-center gap-2">
+              <input
+                id="neurosity-password"
+                type={neurosityPasswordVisible ? "text" : "password"}
+                bind:value={deviceApi.neurosity_password}
+                oninput={() => {
+                  neurosityApiChanged = true;
+                }}
+                placeholder="Neurosity account password"
+                class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <Button
+                size="sm"
+                variant="outline"
+                class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                onclick={() => (neurosityPasswordVisible = !neurosityPasswordVisible)}>
+                {neurosityPasswordVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="neurosity-device-id" class="text-[0.68rem] font-medium text-foreground/80">Device ID</label>
+            <input
+              id="neurosity-device-id"
+              type="text"
+              bind:value={deviceApi.neurosity_device_id}
+              oninput={() => {
+                neurosityApiChanged = true;
+              }}
+              placeholder="e.g. crown-xxxx"
+              class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+          </div>
+
+          <div class="flex justify-end">
+            <Button
+              size="sm"
+              variant={neurosityApiSaved ? "secondary" : "outline"}
+              class="text-[0.66rem] h-7 px-3
+                {neurosityApiSaved
+                ? 'text-green-600 dark:text-green-400 border-green-500/30'
+                : neurosityApiChanged
+                  ? 'border-primary/50 text-primary'
+                  : 'border-border dark:border-white/10 text-muted-foreground'}"
+              onclick={saveNeurosityApi}
+              disabled={!neurosityApiChanged && !neurosityApiSaved}>
+              {neurosityApiSaved ? t("settings.deviceApi.saved") : t("settings.deviceApi.save")}
+            </Button>
+          </div>
+          {#if neurosityApiError}
+            <p class="text-[0.62rem] text-destructive">{neurosityApiError}</p>
+          {/if}
+        {/if}
+
+        <Separator class="bg-border dark:bg-white/[0.04]" />
+
+        <button
+          onclick={() => brainmasterApiExpanded = !brainmasterApiExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={brainmasterApiExpanded}
+        >
+          <span class="text-[0.78rem] font-semibold text-foreground">BrainMaster</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {brainmasterApiExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if brainmasterApiExpanded}
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            Select the BrainMaster model used by the connector.
+          </p>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="brainmaster-model" class="text-[0.68rem] font-medium text-foreground/80">Model</label>
+            <select
+              id="brainmaster-model"
+              bind:value={deviceApi.brainmaster_model}
+              onchange={() => {
+                brainmasterApiChanged = true;
+              }}
+              class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground">
+              <option value="atlantis4">Atlantis 4</option>
+              <option value="atlantis2">Atlantis 2</option>
+              <option value="discovery">Discovery</option>
+              <option value="freedom">Freedom</option>
+            </select>
+          </div>
+
+          <div class="flex justify-end">
+            <Button
+              size="sm"
+              variant={brainmasterApiSaved ? "secondary" : "outline"}
+              class="text-[0.66rem] h-7 px-3
+                {brainmasterApiSaved
+                ? 'text-green-600 dark:text-green-400 border-green-500/30'
+                : brainmasterApiChanged
+                  ? 'border-primary/50 text-primary'
+                  : 'border-border dark:border-white/10 text-muted-foreground'}"
+              onclick={saveBrainmasterApi}
+              disabled={!brainmasterApiChanged && !brainmasterApiSaved}>
+              {brainmasterApiSaved ? t("settings.deviceApi.saved") : t("settings.deviceApi.save")}
+            </Button>
+          </div>
+          {#if brainmasterApiError}
+            <p class="text-[0.62rem] text-destructive">{brainmasterApiError}</p>
           {/if}
         {/if}
 

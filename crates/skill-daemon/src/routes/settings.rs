@@ -901,6 +901,10 @@ async fn get_device_api_config(State(state): State<AppState>) -> Json<serde_json
         "emotiv_client_secret": c.emotiv_client_secret,
         "idun_api_token": c.idun_api_token,
         "oura_access_token": c.oura_access_token,
+        "neurosity_email": c.neurosity_email,
+        "neurosity_password": c.neurosity_password,
+        "neurosity_device_id": c.neurosity_device_id,
+        "brainmaster_model": c.brainmaster_model,
     }))
 }
 

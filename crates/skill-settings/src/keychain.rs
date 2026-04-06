@@ -22,6 +22,9 @@ const KEY_EMOTIV_CLIENT_ID: &str = "emotiv_client_id";
 const KEY_EMOTIV_CLIENT_SECRET: &str = "emotiv_client_secret";
 const KEY_IDUN_API_TOKEN: &str = "idun_api_token";
 const KEY_OURA_ACCESS_TOKEN: &str = "oura_access_token";
+const KEY_NEUROSITY_EMAIL: &str = "neurosity_email";
+const KEY_NEUROSITY_PASSWORD: &str = "neurosity_password";
+const KEY_NEUROSITY_DEVICE_ID: &str = "neurosity_device_id";
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
@@ -67,6 +70,9 @@ pub struct Secrets {
     pub emotiv_client_secret: String,
     pub idun_api_token: String,
     pub oura_access_token: String,
+    pub neurosity_email: String,
+    pub neurosity_password: String,
+    pub neurosity_device_id: String,
 }
 
 /// Load all secrets from the system keychain.
@@ -87,6 +93,9 @@ pub fn load_secrets() -> Secrets {
         emotiv_client_secret: get_secret(KEY_EMOTIV_CLIENT_SECRET),
         idun_api_token: get_secret(KEY_IDUN_API_TOKEN),
         oura_access_token: get_secret(KEY_OURA_ACCESS_TOKEN),
+        neurosity_email: get_secret(KEY_NEUROSITY_EMAIL),
+        neurosity_password: get_secret(KEY_NEUROSITY_PASSWORD),
+        neurosity_device_id: get_secret(KEY_NEUROSITY_DEVICE_ID),
     }
 }
 
@@ -102,6 +111,9 @@ pub fn save_secrets(secrets: &Secrets) {
     set_secret(KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret);
     set_secret(KEY_IDUN_API_TOKEN, &secrets.idun_api_token);
     set_secret(KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token);
+    set_secret(KEY_NEUROSITY_EMAIL, &secrets.neurosity_email);
+    set_secret(KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password);
+    set_secret(KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id);
 }
 
 /// Migrate plaintext secrets from settings JSON into the keychain.
@@ -116,6 +128,9 @@ pub fn migrate_plaintext_secrets(
     emotiv_client_secret: &str,
     idun_api_token: &str,
     oura_access_token: &str,
+    neurosity_email: &str,
+    neurosity_password: &str,
+    neurosity_device_id: &str,
 ) -> bool {
     if cfg!(debug_assertions) {
         return false;
@@ -128,6 +143,9 @@ pub fn migrate_plaintext_secrets(
         (KEY_EMOTIV_CLIENT_SECRET, emotiv_client_secret),
         (KEY_IDUN_API_TOKEN, idun_api_token),
         (KEY_OURA_ACCESS_TOKEN, oura_access_token),
+        (KEY_NEUROSITY_EMAIL, neurosity_email),
+        (KEY_NEUROSITY_PASSWORD, neurosity_password),
+        (KEY_NEUROSITY_DEVICE_ID, neurosity_device_id),
     ];
 
     for &(key, plaintext) in pairs {
