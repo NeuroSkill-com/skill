@@ -60,6 +60,15 @@ pub enum DeviceKind {
     /// Broadcasts as "AttentivU-XXXX" or "AtU-XXXX" / "AtUXXXX".
     #[serde(rename = "attentivu")]
     AttentivU,
+    /// BrainBit EEG headbands — Original, 2, Pro, Flex 4/8 (4ch @ 250 Hz, BLE via NeuroSDK2).
+    BrainBit,
+    /// g.tec Unicorn Hybrid Black — 8-channel EEG headset (250 Hz, BLE via Unicorn API).
+    #[serde(rename = "gtec")]
+    GTec,
+    /// NeuroField Q21 — 20-channel research-grade EEG amplifier (256 Hz, PCAN-USB CAN bus).
+    NeuroField,
+    /// BrainMaster Atlantis/Discovery/Freedom — 2/4/24-channel neurofeedback amplifiers (USB serial).
+    BrainMaster,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -146,6 +155,18 @@ impl DeviceKind {
         }
         if n.starts_with("atu") || n.starts_with("attentivu") {
             return Self::AttentivU;
+        }
+        if n.contains("brainbit") {
+            return Self::BrainBit;
+        }
+        if n.contains("unicorn") || n.contains("g.tec") || n.starts_with("un-") {
+            return Self::GTec;
+        }
+        if n.contains("neurofield") || n.contains("q21") {
+            return Self::NeuroField;
+        }
+        if n.contains("brainmaster") || n.contains("atlantis") || n.contains("discovery") || n.contains("freedom") {
+            return Self::BrainMaster;
         }
 
         Self::Unknown
@@ -271,6 +292,50 @@ impl DeviceKind {
                 sample_rate_hz: 250.0,
                 electrode_names: sv(&["ExG0", "ExG1", "ExG2", "ExG3"]),
             },
+            Self::BrainBit => DeviceCapabilities {
+                kind: Self::BrainBit,
+                channel_count: 4,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["O1", "O2", "T3", "T4"]),
+            },
+            Self::GTec => DeviceCapabilities {
+                kind: Self::GTec,
+                channel_count: 8,
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: true,
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["EEG 1", "EEG 2", "EEG 3", "EEG 4", "EEG 5", "EEG 6", "EEG 7", "EEG 8"]),
+            },
+            Self::NeuroField => DeviceCapabilities {
+                kind: Self::NeuroField,
+                channel_count: 20,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: true,
+                has_full_montage: true,
+                sample_rate_hz: 256.0,
+                electrode_names: sv(&[
+                    "F7", "T3", "T4", "T5", "T6", "Cz", "Fz", "Pz",
+                    "F3", "C4", "C3", "P4", "P3", "O2", "O1", "F8",
+                    "F4", "Fp1", "Fp2", "HR",
+                ]),
+            },
+            Self::BrainMaster => DeviceCapabilities {
+                kind: Self::BrainMaster,
+                channel_count: 4,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: true,
+                has_full_montage: false,
+                sample_rate_hz: 256.0,
+                electrode_names: sv(&["EEG1", "EEG2", "EEG3", "EEG4"]),
+            },
             Self::Unknown => DeviceCapabilities {
                 kind: Self::Unknown,
                 channel_count: 0,
@@ -303,6 +368,10 @@ impl DeviceKind {
             Self::Cognionics => "cognionics",
             Self::Mendi => "mendi",
             Self::AttentivU => "attentivu",
+            Self::BrainBit => "brainbit",
+            Self::GTec => "gtec",
+            Self::NeuroField => "neurofield",
+            Self::BrainMaster => "brainmaster",
             Self::Unknown => "unknown",
         }
     }
@@ -325,6 +394,10 @@ impl DeviceKind {
             "cognionics" => Self::Cognionics,
             "mendi" => Self::Mendi,
             "attentivu" => Self::AttentivU,
+            "brainbit" => Self::BrainBit,
+            "gtec" => Self::GTec,
+            "neurofield" => Self::NeuroField,
+            "brainmaster" => Self::BrainMaster,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -400,6 +473,59 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.attentivu3".into(),
             ],
         },
+        // ── B ─────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "brainbit".into(),
+            name_key: "settings.supportedDevices.company.brainbit".into(),
+            logo: "/logos/brainbit.svg".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainbitOriginal".into(),
+                    ios_only: false,
+                    image: "/devices/brainbit.svg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainbit2".into(),
+                    ios_only: false,
+                    image: "/devices/brainbit.svg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainbitFlex".into(),
+                    ios_only: false,
+                    image: "/devices/brainbit.svg".into(),
+                },
+            ],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.brainbit1".into(),
+                "settings.supportedDevices.instruction.brainbit2".into(),
+            ],
+        },
+        SupportedCompany {
+            id: "brainmaster".into(),
+            name_key: "settings.supportedDevices.company.brainmaster".into(),
+            logo: "/logos/brainmaster.svg".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainmasterAtlantis4".into(),
+                    ios_only: false,
+                    image: "/devices/brainmaster.svg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainmasterDiscovery".into(),
+                    ios_only: false,
+                    image: "/devices/brainmaster.svg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.brainmasterFreedom".into(),
+                    ios_only: false,
+                    image: "/devices/brainmaster.svg".into(),
+                },
+            ],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.brainmaster1".into(),
+                "settings.supportedDevices.instruction.brainmaster2".into(),
+            ],
+        },
         // ── C ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "cognionics".into(),
@@ -464,6 +590,21 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.emotiv2".into(),
             ],
         },
+        // ── G ─────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "gtec".into(),
+            name_key: "settings.supportedDevices.company.gtec".into(),
+            logo: "/logos/gtec.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.unicornHybridBlack".into(),
+                ios_only: false,
+                image: "/devices/gtec-unicorn.svg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.gtec1".into(),
+                "settings.supportedDevices.instruction.gtec2".into(),
+            ],
+        },
         // ── I ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "idun".into(),
@@ -525,7 +666,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.mendi2".into(),
             ],
         },
-        // ── N ─────────────────────────────────────────────────────────────
+        // ── N ─────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "neurofield".into(),
+            name_key: "settings.supportedDevices.company.neurofield".into(),
+            logo: "/logos/neurofield.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.neurofieldQ21".into(),
+                ios_only: false,
+                image: "/devices/neurofield-q21.svg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.neurofield1".into(),
+                "settings.supportedDevices.instruction.neurofield2".into(),
+            ],
+        },
+        // ── N (Neurable) ──────────────────────────────────────────────
         SupportedCompany {
             id: "neurable".into(),
             name_key: "settings.supportedDevices.company.neurable".into(),

@@ -115,6 +115,38 @@ const settings: Record<string, string> = {
     "In the iOS app, scan for BLE devices and connect to your AttentivU glasses.",
   "settings.supportedDevices.instruction.attentivu3":
     "EEG data streams from the glasses → iPhone → desktop via the encrypted iroh tunnel. All processing happens on this computer.",
+  // ── BrainBit ──
+  "settings.supportedDevices.company.brainbit": "BrainBit LLC",
+  "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
+  "settings.supportedDevices.device.brainbit2": "BrainBit 2",
+  "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
+  "settings.supportedDevices.instruction.brainbit1":
+    "Power on your BrainBit headband. Ensure NeuroSDK2 library (libneurosdk2) is installed for your platform.",
+  "settings.supportedDevices.instruction.brainbit2":
+    "The scanner auto-detects BrainBit devices over BLE. Tap the device to pair and connect.",
+  // ── BrainMaster ──
+  "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
+  "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4 (4-ch)",
+  "settings.supportedDevices.device.brainmasterDiscovery": "Discovery (24-ch)",
+  "settings.supportedDevices.device.brainmasterFreedom": "Freedom (24-ch wireless)",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "Plug in the USB serial dongle and power on the BrainMaster amplifier (57600 baud, FTDI).",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "Select your board model in OpenBCI Settings. The port is auto-detected or set it manually.",
+  // ── g.tec ──
+  "settings.supportedDevices.company.gtec": "g.tec medical engineering",
+  "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
+  "settings.supportedDevices.instruction.gtec1":
+    "Ensure the Unicorn API library (libunicorn.so / Unicorn.dll) is installed on your system.",
+  "settings.supportedDevices.instruction.gtec2":
+    "Power on the Unicorn headset and keep it near this computer. The scanner auto-detects it over BLE.",
+  // ── NeuroField ──
+  "settings.supportedDevices.company.neurofield": "Neurofield Inc",
+  "settings.supportedDevices.device.neurofieldQ21": "Q21 (20-ch)",
+  "settings.supportedDevices.instruction.neurofield1":
+    "Connect the PEAK PCAN-USB adapter to your computer and plug the Q21 amplifier into it via CAN bus.",
+  "settings.supportedDevices.instruction.neurofield2":
+    "Install PCAN Basic drivers for your platform. The scanner detects the Q21 automatically.",
   "settings.scanner.title": "Scanner Backends",
   "settings.scanner.desc":
     "Toggle which discovery transports run in the background. Changes take effect on next app restart.",

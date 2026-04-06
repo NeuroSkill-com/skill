@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" fill="none">
+  <rect width="200" height="80" rx="8" fill="#1a1a2e"/>
+  <circle cx="30" cy="40" r="18" fill="#4f46e5"/>
+  <text x="28" y="46" font-family="Arial" font-size="18" font-weight="bold" fill="white" text-anchor="middle">B</text>
+  <text x="100" y="48" font-family="Arial" font-size="16" font-weight="bold" fill="#e2e8f0" text-anchor="middle">BrainBit</text>
+</svg>

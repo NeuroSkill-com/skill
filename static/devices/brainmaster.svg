@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
+  <rect width="300" height="200" rx="12" fill="#0f172a"/>
+  <!-- Amplifier unit -->
+  <rect x="70" y="35" width="160" height="115" rx="6" fill="#1e293b" stroke="#2563eb" stroke-width="2"/>
+  <!-- USB connector -->
+  <rect x="230" y="70" width="30" height="20" rx="2" fill="#334155" stroke="#2563eb" stroke-width="1"/>
+  <text x="245" y="83" font-family="Arial" font-size="7" fill="#93c5fd" text-anchor="middle">USB</text>
+  <!-- 4 channel inputs -->
+  <circle cx="100" cy="65" r="7" fill="#2563eb" stroke="#93c5fd" stroke-width="1"/>
+  <circle cx="120" cy="65" r="7" fill="#2563eb" stroke="#93c5fd" stroke-width="1"/>
+  <circle cx="140" cy="65" r="7" fill="#2563eb" stroke="#93c5fd" stroke-width="1"/>
+  <circle cx="160" cy="65" r="7" fill="#2563eb" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="68" font-family="Arial" font-size="6" fill="white" text-anchor="middle">1</text>
+  <text x="120" y="68" font-family="Arial" font-size="6" fill="white" text-anchor="middle">2</text>
+  <text x="140" y="68" font-family="Arial" font-size="6" fill="white" text-anchor="middle">3</text>
+  <text x="160" y="68" font-family="Arial" font-size="6" fill="white" text-anchor="middle">4</text>
+  <!-- Model text on box -->
+  <text x="150" y="100" font-family="Arial" font-size="12" font-weight="bold" fill="#e2e8f0" text-anchor="middle">Atlantis 4×4</text>
+  <text x="150" y="118" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">4-ch · 256 Hz · USB Serial</text>
+  <text x="150" y="134" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">57600 baud · ±400 µV</text>
+  <!-- Bottom label -->
+  <text x="150" y="174" font-family="Arial" font-size="13" font-weight="bold" fill="#94a3b8" text-anchor="middle">BrainMaster Technologies</text>
+  <text x="150" y="192" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">Atlantis · Discovery (24ch) · Freedom (wireless)</text>
+</svg>

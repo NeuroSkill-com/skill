@@ -1,6 +1,6 @@
 # Supported Devices
 
-NeuroSkill supports **19 hardware variants** across **13 device families**, plus LSL streams, virtual EEG, and iroh remote relay — for a total of **22 input sources**.
+NeuroSkill supports **24 hardware variants** across **14 device families**, plus LSL streams, virtual EEG, and iroh remote relay — for a total of **27 input sources**.
 
 All devices feed into the same unified pipeline:
 
@@ -16,8 +16,8 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 
 | Device | Manufacturer | Channels | Sample Rate | Transport | Crate | Notes |
 |--------|-------------|----------|-------------|-----------|-------|-------|
-| **Muse** (1, 2, S) | Interaxon | 4 (TP9, AF7, AF8, TP10) | 256 Hz | BLE | `muse-rs` | PPG (3ch, 64 Hz), IMU, battery |
-| **BrainBit** (Original, 2, Pro) | BrainBit LLC | 4 (O1, O2, T3, T4) | 250 Hz | BLE (NeuroSDK2) | `brainbit` | Resistance measurement (Rev-K) |
+| **Muse** (1, 2, S, Monitor) | InteraXon | 4 (TP9, AF7, AF8, TP10) | 256 Hz | BLE | `muse-rs` | PPG (3ch, 64 Hz), IMU, battery |
+| **BrainBit** (Original, 2, Pro) | BrainBit LLC | 4 (O1, O2, T3, T4) | 250 Hz | BLE (NeuroSDK2) | `brainbit` | Impedance on Rev-K |
 | **BrainBit Flex** 4/8 | BrainBit LLC | 4–8 | 250 Hz | BLE (NeuroSDK2) | `brainbit` | Flexible electrode placement |
 | **IDUN Guardian** | IDUN Technologies | 1 | 250 Hz | BLE | `idun` | Behind-ear EEG, cloud decode |
 
@@ -26,12 +26,12 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Device | Manufacturer | Channels | Sample Rate | Transport | Crate | Notes |
 |--------|-------------|----------|-------------|-----------|-------|-------|
 | **Neurable MW75 Neuro** | Neurable / Master & Dynamic | 12 | 500 Hz | BLE | `mw75` | Over-ear headphones with EEG |
-| **Hermes V1** | Nucleus Neuro | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE | `hermes-ble` | — |
-| **Emotiv EPOC X** | Emotiv | 14 | 256 Hz | Cortex WebSocket | `emotiv` | via Emotiv Launcher |
-| **Emotiv Insight** | Emotiv | 5 | 128 Hz | Cortex WebSocket | `emotiv` | via Emotiv Launcher |
-| **Emotiv EPOC Flex** | Emotiv | 32 | 256 Hz | Cortex WebSocket | `emotiv` | Research-grade, saline/gel |
-| **Emotiv MN8** | Emotiv | 2 | 128 Hz | Cortex WebSocket | `emotiv` | In-ear |
-| **g.tec Unicorn Hybrid Black** | g.tec medical engineering | 8 (EEG 1–8) | 250 Hz | BLE (Unicorn API) | `gtec` | Also: 3-axis accel + gyro |
+| **Hermes V1** | RE-AK Nucleus | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE | `hermes-ble` | IMU |
+| **Emotiv EPOC X** | Emotiv | 14 | 256 Hz | Cortex WS | `emotiv` | via Emotiv Launcher |
+| **Emotiv Insight** | Emotiv | 5 | 128 Hz | Cortex WS | `emotiv` | via Emotiv Launcher |
+| **Emotiv EPOC Flex** | Emotiv | 32 | 256 Hz | Cortex WS | `emotiv` | Research-grade |
+| **Emotiv MN8** | Emotiv | 2 | 128 Hz | Cortex WS | `emotiv` | In-ear |
+| **g.tec Unicorn Hybrid Black** | g.tec medical engineering | 8 (EEG 1–8) | 250 Hz | BLE (Unicorn API) | `gtec` | + 3-axis accel + gyro |
 
 ## EEG Amplifiers (Research-Grade)
 
@@ -44,8 +44,11 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | **OpenBCI Ganglion** | OpenBCI | 4 | 200 Hz | BLE | `openbci` | Budget 4-channel |
 | **OpenBCI Ganglion WiFi** | OpenBCI | 4 | 200 Hz | WiFi Shield | `openbci` | — |
 | **OpenBCI Galea** | OpenBCI | 24 | 250 Hz | UDP | `openbci` | Research headset, multimodal |
-| **Cognionics CGX** (Quick-20r, etc.) | Cognionics | 8–32 | 500 Hz | USB serial | `cognionics` | Dry/wet electrodes |
-| **NeuroField Q21** | Neurofield Inc | 20 (F7,T3,T4,T5,T6,Cz,Fz,Pz,F3,C4,C3,P4,P3,O2,O1,F8,F4,Fp1,Fp2,HR) | 256 Hz | PCAN-USB (CAN bus) | `neurofield` | FDA approved, DC-coupled |
+| **Cognionics CGX** (Quick-20r, 32r, 8r, AIM-2) | Cognionics | 8–32 | 500 Hz | USB serial | `cognionics` | Dry/wet electrodes |
+| **NeuroField Q21** | Neurofield Inc | 20 (F7…HR, full 10-20) | 256 Hz | PCAN-USB (CAN bus) | `neurofield` | FDA approved, DC-coupled |
+| **BrainMaster Atlantis 4×4** | BrainMaster Technologies | 4 | 256 Hz | USB serial (FTDI) | `brainmaster` | ±400 µV, 57600 baud |
+| **BrainMaster Discovery** | BrainMaster Technologies | 24 (full 10-20) | 256 Hz | USB serial (FTDI) | `brainmaster` | ±3200 µV clinical EEG |
+| **BrainMaster Freedom** | BrainMaster Technologies | 24 | 256 Hz | USB serial (FTDI) | `brainmaster` | Wireless version of Discovery |
 
 ## fNIRS
 
@@ -58,7 +61,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Source | Type | Channels | Transport | Notes |
 |--------|------|----------|-----------|-------|
 | **LSL Stream** | Lab Streaming Layer | Any | TCP/UDP (LSL protocol) | Connects to any LSL-compatible device; auto-discovers via `lsl_discover` |
-| **Virtual EEG** | Synthetic test signal | 4 | In-process LSL | Generates synthetic EEG for testing without hardware; starts via `/v1/lsl/virtual-source/start` |
+| **Virtual EEG** | Synthetic test signal | 4 | In-process LSL | Generates synthetic EEG for testing without hardware; start via `/v1/lsl/virtual-source/start` |
 | **iroh Remote** | Relay from mobile app | Any | iroh tunnel (QUIC) | Streams EEG from a paired iOS/Android device over encrypted P2P tunnel |
 
 ---
@@ -68,7 +71,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
 | **BLE** | Muse, MW75, Hermes, Ganglion, IDUN, Mendi, BrainBit, g.tec | Bluetooth Low Energy (btleplug / vendor SDK) |
-| **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX | FTDI/CDC serial (serialport-rs) |
+| **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
 | **UDP** | Galea | Direct UDP streaming |
 | **PCAN-USB** | NeuroField Q21 | CAN bus via PEAK PCAN adapter |
@@ -78,12 +81,29 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | **LSL** | Any LSL source | Lab Streaming Layer TCP/UDP |
 | **iroh** | Remote devices | QUIC P2P tunnel |
 
+## Manufacturer Overview
+
+| Manufacturer | Headquarters | Founded | Website |
+|-------------|-------------|---------|---------|
+| InteraXon | Toronto, Canada | 2007 | mymuse.com |
+| Neurable | Boston, USA | 2015 | neurable.com |
+| RE-AK / Nucleus Neuro | — | — | nucleus.bio |
+| Emotiv | San Francisco, USA | 2011 | emotiv.com |
+| OpenBCI | Brooklyn, USA | 2014 | openbci.com |
+| Cognionics / CGX | San Diego, USA | 2009 | cgxsystems.com |
+| IDUN Technologies | Zurich, Switzerland | 2016 | iduntechnologies.com |
+| Mendi | Stockholm, Sweden | 2019 | mendi.io |
+| BrainBit LLC | Saratov, Russia | 2016 | brainbit.com |
+| g.tec medical engineering | Schiedlberg, Austria | 1999 | gtec.at |
+| Neurofield Inc | Santa Barbara, USA | 2009 | neurofieldneuroscience.com |
+| BrainMaster Technologies | Bedford, USA | 1995 | brainmaster.com |
+
 ## Platform Support
 
 | Transport | Windows | macOS | Linux |
 |-----------|---------|-------|-------|
 | BLE (btleplug) | ✅ | ✅ | ✅ |
-| USB Serial | ✅ (COM3+) | ✅ | ✅ |
+| USB Serial | ✅ (COM3+, COM10+ auto-prefixed) | ✅ | ✅ |
 | WiFi / UDP | ✅ | ✅ | ✅ |
 | PCAN-USB | ✅ | ✅ | ✅ |
 | Cortex WebSocket | ✅ | ✅ | ✅ |
@@ -93,17 +113,15 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | iroh tunnel | ✅ | ✅ | ✅ |
 
 > **Note**: BLE on Linux requires BlueZ ≥ 5.44. NeuroSDK2 and Unicorn API
-> require their respective native shared libraries to be installed
-> (`libneurosdk2.so`/`.dylib`/`.dll` and `libunicorn.so`/`.dll`).
+> require their respective native shared libraries to be installed.
+> PCAN-USB requires PCAN Basic drivers from PEAK-System.
 
 ## Device ID Format
-
-Each discovered device gets a unique ID used for pairing, session start, and persistence:
 
 | Prefix | Example | Device |
 |--------|---------|--------|
 | `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, MW75, Hermes, IDUN, Mendi (via btleplug) |
-| `usb:` | `usb:COM3`, `usb:/dev/ttyUSB0` | OpenBCI Cyton/Daisy serial dongles |
+| `usb:` | `usb:COM3`, `usb:/dev/ttyUSB0` | OpenBCI Cyton/Daisy, BrainMaster serial |
 | `cgx:` | `cgx:/dev/ttyUSB1` | Cognionics CGX |
 | `wifi:` | `wifi:192.168.1.100` | OpenBCI WiFi Shield |
 | `galea:` | `galea:192.168.1.200` | OpenBCI Galea |
@@ -111,13 +129,31 @@ Each discovered device gets a unique ID used for pairing, session start, and per
 | `neurofield:` | `neurofield:USB1:5` | NeuroField Q21 (bus:serial) |
 | `brainbit:` | `brainbit:AA:BB:CC:DD` | BrainBit (BLE address) |
 | `gtec:` | `gtec:UN-2023.01.01` | g.tec Unicorn (serial number) |
+| `brainmaster:` | `brainmaster:COM4` | BrainMaster (serial port) |
 | `lsl:` | `lsl:MyEEGStream` | LSL stream (source_id) |
+
+## EXG Embedding Backends
+
+All device data feeds into the EXG embedding pipeline. Available backends:
+
+| Backend | Crate | Architecture | HF Repo |
+|---------|-------|-------------|---------|
+| **ZUNA** | zuna-rs | Transformer encoder | Zyphra/ZUNA |
+| **LUNA** | luna-rs | Topology-agnostic | PulpBio/LUNA |
+| **REVE** | reve-rs | 4D Fourier positional | brain-bzh/reve-base |
+| **OSF** | osf-rs | ViT-Base (PSG) | yang-ai-lab/OSF-Base |
+| **SleepLM** | sleeplm | Contrastive (PSG) | yang-ai-lab/SleepLM |
+| **ST-EEGFormer** | steegformer | ViT-based EEG | eugenehp/ST-EEGFormer |
+| **NeuroRVQ** | skill-neurorvq | Residual VQ | eugenehp/NeuroRVQ |
 
 ## Adding a New Device
 
-1. Create a `DeviceAdapter` implementation (see `crates/skill-devices/src/session/`)
-2. Add a scanner function in `crates/skill-daemon/src/main.rs`
-3. Add a connect function in `crates/skill-daemon/src/session/connect.rs`
-4. Add device ID prefix to the filter lists in the scanner merge logic
-5. Add device kind detection in `src-tauri/src/lifecycle.rs`
-6. Add the crate dependency to `crates/skill-daemon/Cargo.toml`
+1. Add a `DeviceKind` variant and `capabilities()` arm in `crates/skill-data/src/device.rs`
+2. Add a `SupportedCompany` entry to `supported_companies()` with logo/image paths and i18n keys
+3. Add logo SVG to `static/logos/` and device image to `static/devices/`
+4. Add i18n keys to all 5 locales in `src/lib/i18n/*/settings.ts`
+5. Create a scanner function in `crates/skill-daemon/src/main.rs`
+6. Add a connect function in `crates/skill-daemon/src/session/connect.rs`
+7. Add device ID prefix to the filter lists in the scanner merge logic
+8. Add device kind detection in `src-tauri/src/lifecycle.rs`
+9. Add the crate dependency to `crates/skill-daemon/Cargo.toml`

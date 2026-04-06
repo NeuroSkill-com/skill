@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
+  <rect width="300" height="200" rx="12" fill="#0c1428"/>
+  <!-- Amplifier box -->
+  <rect x="60" y="40" width="180" height="110" rx="8" fill="#1e293b" stroke="#22d3ee" stroke-width="2"/>
+  <!-- 20 electrode connectors on top -->
+  <g fill="#22d3ee">
+    <rect x="70" y="30" width="7" height="14" rx="2"/>
+    <rect x="83" y="30" width="7" height="14" rx="2"/>
+    <rect x="96" y="30" width="7" height="14" rx="2"/>
+    <rect x="109" y="30" width="7" height="14" rx="2"/>
+    <rect x="122" y="30" width="7" height="14" rx="2"/>
+    <rect x="135" y="30" width="7" height="14" rx="2"/>
+    <rect x="148" y="30" width="7" height="14" rx="2"/>
+    <rect x="161" y="30" width="7" height="14" rx="2"/>
+    <rect x="174" y="30" width="7" height="14" rx="2"/>
+    <rect x="187" y="30" width="7" height="14" rx="2"/>
+    <rect x="200" y="30" width="7" height="14" rx="2"/>
+    <rect x="213" y="30" width="7" height="14" rx="2"/>
+  </g>
+  <!-- PCAN USB connector -->
+  <rect x="220" y="80" width="28" height="40" rx="3" fill="#334155" stroke="#22d3ee" stroke-width="1"/>
+  <text x="234" y="104" font-family="Arial" font-size="8" fill="#22d3ee" text-anchor="middle">PCAN</text>
+  <!-- Label inside box -->
+  <text x="150" y="90" font-family="Arial" font-size="11" font-weight="bold" fill="#e2e8f0" text-anchor="middle">NeuroField Q21</text>
+  <text x="150" y="108" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">20-channel · 256 Hz</text>
+  <text x="150" y="124" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">FDA Approved · DC-coupled</text>
+  <!-- Labels -->
+  <text x="150" y="175" font-family="Arial" font-size="13" font-weight="bold" fill="#94a3b8" text-anchor="middle">NeuroField Q21</text>
+  <text x="150" y="192" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">CAN bus via PCAN-USB adapter</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" fill="none">
+  <rect width="200" height="80" rx="8" fill="#0c1428"/>
+  <polygon points="28,20 52,20 60,40 52,60 28,60 20,40" fill="#22d3ee"/>
+  <text x="40" y="46" font-family="Arial" font-size="12" font-weight="bold" fill="#0c1428" text-anchor="middle">NF</text>
+  <text x="120" y="38" font-family="Arial" font-size="13" font-weight="bold" fill="#e2e8f0" text-anchor="middle">NeuroField</text>
+  <text x="120" y="56" font-family="Arial" font-size="10" fill="#64748b" text-anchor="middle">neuroscience</text>
+</svg>

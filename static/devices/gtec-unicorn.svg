@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
+  <rect width="300" height="200" rx="12" fill="#0f172a"/>
+  <!-- Headset shape -->
+  <path d="M 60 130 Q 150 20 240 130" stroke="#2563eb" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- 8 electrodes -->
+  <circle cx="80" cy="120" r="10" fill="#3b82f6"/>
+  <circle cx="110" cy="80" r="10" fill="#3b82f6"/>
+  <circle cx="140" cy="55" r="10" fill="#3b82f6"/>
+  <circle cx="160" cy="55" r="10" fill="#3b82f6"/>
+  <circle cx="190" cy="80" r="10" fill="#3b82f6"/>
+  <circle cx="220" cy="120" r="10" fill="#3b82f6"/>
+  <circle cx="98" cy="148" r="8" fill="#1d4ed8"/>
+  <circle cx="202" cy="148" r="8" fill="#1d4ed8"/>
+  <!-- IMU indicator -->
+  <rect x="136" y="155" width="28" height="16" rx="3" fill="#1e40af"/>
+  <text x="150" y="167" font-family="Arial" font-size="7" fill="#93c5fd" text-anchor="middle">IMU</text>
+  <!-- Labels -->
+  <text x="150" y="182" font-family="Arial" font-size="13" font-weight="bold" fill="#94a3b8" text-anchor="middle">g.tec Unicorn Hybrid Black</text>
+  <text x="150" y="196" font-family="Arial" font-size="9" fill="#64748b" text-anchor="middle">8-channel EEG · 250 Hz · BLE (Unicorn API)</text>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
+  <rect width="300" height="200" rx="12" fill="#0f172a"/>
+  <!-- Headband arc -->
+  <path d="M 60 140 Q 150 30 240 140" stroke="#4f46e5" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <!-- Electrodes O1, O2, T3, T4 -->
+  <circle cx="90" cy="125" r="12" fill="#6366f1"/>
+  <circle cx="135" cy="75" r="12" fill="#6366f1"/>
+  <circle cx="165" cy="75" r="12" fill="#6366f1"/>
+  <circle cx="210" cy="125" r="12" fill="#6366f1"/>
+  <text x="90" y="130" font-family="Arial" font-size="9" fill="white" text-anchor="middle">O1</text>
+  <text x="135" y="79" font-family="Arial" font-size="9" fill="white" text-anchor="middle">T3</text>
+  <text x="165" y="79" font-family="Arial" font-size="9" fill="white" text-anchor="middle">T4</text>
+  <text x="210" y="130" font-family="Arial" font-size="9" fill="white" text-anchor="middle">O2</text>
+  <!-- Label -->
+  <text x="150" y="175" font-family="Arial" font-size="14" font-weight="bold" fill="#94a3b8" text-anchor="middle">BrainBit</text>
+  <text x="150" y="192" font-family="Arial" font-size="10" fill="#64748b" text-anchor="middle">4-channel EEG · 250 Hz · BLE</text>
+</svg>
