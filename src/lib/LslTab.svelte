@@ -744,14 +744,20 @@ onDestroy(() => {
     </span>
   </div>
 
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden
+              {virtualSourceRunning ? 'ring-1 ring-emerald-500/30' : ''}">
     <CardContent class="flex items-center gap-3 px-4 py-3.5">
-      <span class="relative flex h-2 w-2 shrink-0">
-        <span class="relative inline-flex rounded-full h-2 w-2 {virtualSourceRunning ? 'bg-emerald-500' : 'bg-muted-foreground/30'}"></span>
+      <!-- Status badge -->
+      <span class="shrink-0 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.56rem] font-semibold
+                   {virtualSourceRunning
+                     ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                     : 'bg-muted text-muted-foreground'}">
+        <span class="h-1.5 w-1.5 rounded-full {virtualSourceRunning ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}"></span>
+        {virtualSourceRunning ? "ON" : "OFF"}
       </span>
       <div class="flex flex-col gap-0.5 min-w-0 flex-1">
         <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
-          {virtualSourceRunning ? "Running" : "Stopped"}
+          {virtualSourceRunning ? "Streaming synthetic EEG" : "Virtual source stopped"}
         </span>
         <span class="text-[0.58rem] text-muted-foreground leading-tight">
           Emits synthetic EEG for LSL testing. Start it, then click Scan Network below.
@@ -769,9 +775,8 @@ onDestroy(() => {
         </Button>
       {:else}
         <Button
-          variant="outline"
           size="sm"
-          class="h-7 text-[0.58rem] px-3"
+          class="h-7 text-[0.58rem] px-3 bg-emerald-600 hover:bg-emerald-700 text-white"
           disabled={virtualSourceBusy}
           onclick={startVirtualSource}
         >
