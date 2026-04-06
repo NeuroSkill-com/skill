@@ -34,7 +34,7 @@ base64 = { workspace = true }
 btleplug = "0.11"
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
-rand = "0.9"
+rand = "0.10"
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
@@ -95,7 +95,7 @@ skill-tts            = { path = "../skill-tts" }
 skill-calendar       = { path = "../skill-calendar" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
-sysinfo              = "0.33"
+sysinfo              = "0.38"
 
 [lints]
 workspace = true

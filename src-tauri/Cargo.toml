@@ -100,7 +100,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
 # llmfit-core covers NVIDIA (nvidia-smi + sysfs), AMD (rocm-smi + sysfs),
 # Intel Arc (sysfs), Apple Silicon (system_profiler), and Windows WMI.
-llmfit-core = "0.8.4"
+llmfit-core = "0.9.1"
 # sysinfo is already compiled as an indirect dep via llmfit-core; listing it
 # directly gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
@@ -250,7 +250,7 @@ async-stream      = "0.3"
 llama-cpp-4 = { version = "0.2.26", optional = true, features = ["q1"] }
 
 # mDNS / Bonjour service discovery
-mdns-sd = "0.18"
+mdns-sd = "0.19"
 
 # NAT-traversing P2P transport + TOTP access control.
 skill-iroh = { path = "../crates/skill-iroh" }
