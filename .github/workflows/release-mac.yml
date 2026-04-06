@@ -78,8 +78,11 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Install protoc + OpenMP runtime (macOS)
-        run: brew install protobuf libomp
+      - name: Install protoc + OpenMP runtime + GNU ar (macOS)
+        run: |
+          brew install protobuf libomp binutils
+          # Use GNU ar to suppress "illegal option -- D" warnings from Apple's system ar
+          echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
 
       - name: Download prebuilt llama libs (macOS, optional)
         shell: bash

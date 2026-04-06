@@ -16,6 +16,12 @@ export interface EegPacket {
   timestamp: number;
 }
 
+/** Batched frame: all channels in one event. */
+interface EegFramePacket {
+  channels: number[];
+  timestamp: number;
+}
+
 export interface PpgPacket {
   channel: number;
   samples: number[];
@@ -24,10 +30,22 @@ export interface PpgPacket {
 
 // ── Subscriptions ──────────────────────────────────────────────────────────
 
-/** Subscribe to EEG sample packets. Returns unsubscribe function. */
+/** Subscribe to EEG sample packets. Returns unsubscribe function.
+ *  The daemon sends batched frames (`{ channels, timestamp }`); this
+ *  unpacks them into per-electrode `EegPacket` calls for backward compat. */
 export function subscribeEeg(callback: (pkt: EegPacket) => void): () => void {
   return onDaemonEvent("EegSample", (ev: DaemonEvent) => {
-    callback(ev.payload as unknown as EegPacket);
+    const p = ev.payload as Record<string, unknown>;
+    if (Array.isArray(p.channels)) {
+      // Batched frame — unpack into per-electrode callbacks
+      const frame = p as unknown as EegFramePacket;
+      for (let i = 0; i < frame.channels.length; i++) {
+        callback({ electrode: i, samples: [frame.channels[i]], timestamp: frame.timestamp });
+      }
+    } else {
+      // Legacy per-electrode format
+      callback(p as unknown as EegPacket);
+    }
   });
 }
 

@@ -355,13 +355,13 @@ pub(crate) async fn run_adapter_session(
                             }
                         }
 
-                        for (el, &v) in frame.channels.iter().enumerate() {
-                            broadcast_event(&state.events_tx, "EegSample", &serde_json::json!({
-                                "electrode": el,
-                                "samples": [v],
-                                "timestamp": frame.timestamp_s,
-                            }));
-                        }
+                        // Batch all channels into a single event per frame
+                        // to avoid flooding the broadcast channel (was 32 events
+                        // per frame at 256 Hz = 8192 events/sec).
+                        broadcast_event(&state.events_tx, "EegSample", &serde_json::json!({
+                            "channels": &frame.channels,
+                            "timestamp": frame.timestamp_s,
+                        }));
 
                         // Emit full status once per second.
                         let rate = sample_rate.max(1.0) as u64;
