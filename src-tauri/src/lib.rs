@@ -195,6 +195,12 @@ use daemon_cmds::{
     get_exg_catalog, get_eeg_model_config, get_eeg_model_status,
     set_eeg_model_config, trigger_weights_download, cancel_weights_download,
     estimate_reembed, trigger_reembed,
+    // LSL daemon proxies
+    lsl_discover, lsl_get_config, lsl_set_auto_connect, lsl_pair_stream,
+    lsl_unpair_stream, lsl_get_idle_timeout, lsl_set_idle_timeout,
+    lsl_virtual_source_running, lsl_virtual_source_start, lsl_virtual_source_stop,
+    lsl_iroh_start, lsl_iroh_stop, lsl_iroh_status,
+    start_session, switch_session, cancel_session,
 };
 
 mod settings_cmds;
@@ -1354,6 +1360,22 @@ pub fn run() {
             cancel_weights_download,
             estimate_reembed,
             trigger_reembed,
+            lsl_discover,
+            lsl_get_config,
+            lsl_set_auto_connect,
+            lsl_pair_stream,
+            lsl_unpair_stream,
+            lsl_get_idle_timeout,
+            lsl_set_idle_timeout,
+            lsl_virtual_source_running,
+            lsl_virtual_source_start,
+            lsl_virtual_source_stop,
+            lsl_iroh_start,
+            lsl_iroh_stop,
+            lsl_iroh_status,
+            start_session,
+            switch_session,
+            cancel_session,
             pick_exg_weights_file,
             pick_gguf_file,
             // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)

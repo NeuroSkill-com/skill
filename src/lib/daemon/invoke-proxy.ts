@@ -22,6 +22,9 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   // Control
   retry_connect: [P, "/v1/control/retry-connect"],
   cancel_retry: [P, "/v1/control/cancel-retry"],
+  start_session: [P, "/v1/control/start-session"],
+  switch_session: [P, "/v1/control/switch-session"],
+  cancel_session: [P, "/v1/control/cancel-session"],
   lsl_cancel_secondary: [P, "/v1/control/cancel-session"],
 
   // Devices
@@ -148,6 +151,21 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_hook_log_count: [G, "/v1/hooks/log-count"],
   suggest_hook_keywords: [P, "/v1/hooks/suggest-keywords"],
   suggest_hook_distances: [P, "/v1/hooks/suggest-distances"],
+
+  // LSL
+  lsl_discover: [G, "/v1/lsl/discover"],
+  lsl_get_config: [G, "/v1/lsl/config"],
+  lsl_set_auto_connect: [P, "/v1/lsl/auto-connect"],
+  lsl_pair_stream: [P, "/v1/lsl/pair"],
+  lsl_unpair_stream: [P, "/v1/lsl/unpair"],
+  lsl_get_idle_timeout: [G, "/v1/lsl/idle-timeout"],
+  lsl_set_idle_timeout: [P, "/v1/lsl/idle-timeout"],
+  lsl_virtual_source_running: [G, "/v1/lsl/virtual-source/running"],
+  lsl_virtual_source_start: [P, "/v1/lsl/virtual-source/start"],
+  lsl_virtual_source_stop: [P, "/v1/lsl/virtual-source/stop"],
+  lsl_iroh_start: [P, "/v1/lsl/iroh/start"],
+  lsl_iroh_stop: [P, "/v1/lsl/iroh/stop"],
+  lsl_iroh_status: [G, "/v1/lsl/iroh/status"],
 
   // DnD / Goals
   get_dnd_config: [G, "/v1/settings/dnd/config"],

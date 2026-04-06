@@ -289,7 +289,8 @@ pub(crate) fn cancel_retry() -> Result<StatusResponse, String> {
     )
 }
 
-pub(crate) fn start_session(target: Option<String>) -> Result<StatusResponse, String> {
+#[tauri::command]
+pub fn start_session(target: Option<String>) -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     post_json_with_auth_response(
@@ -1119,3 +1120,130 @@ pub fn trigger_reembed() -> Result<serde_json::Value, String> {
     let token = load_daemon_token()?;
     post_json_with_auth_response(&base_url, &token, "/v1/models/trigger-reembed", &serde_json::json!({}))
 }
+
+// ── LSL daemon proxies ──────────────────────────────────────────────────────
+
+/// Proxy: GET /v1/lsl/discover
+#[tauri::command]
+pub fn lsl_discover() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/lsl/discover")
+}
+
+/// Proxy: GET /v1/lsl/config
+#[tauri::command]
+pub fn lsl_get_config() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/lsl/config")
+}
+
+/// Proxy: POST /v1/lsl/auto-connect
+#[tauri::command]
+pub fn lsl_set_auto_connect(enabled: bool) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/auto-connect", &serde_json::json!({"enabled": enabled}))
+}
+
+/// Proxy: POST /v1/lsl/pair
+#[tauri::command]
+pub fn lsl_pair_stream(source_id: String, name: String, stream_type: String, channels: u32, sample_rate: f64) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/pair", &serde_json::json!({
+        "source_id": source_id, "name": name, "stream_type": stream_type,
+        "channels": channels, "sample_rate": sample_rate
+    }))
+}
+
+/// Proxy: POST /v1/lsl/unpair
+#[tauri::command]
+pub fn lsl_unpair_stream(source_id: String) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/unpair", &serde_json::json!({"source_id": source_id}))
+}
+
+/// Proxy: GET /v1/lsl/idle-timeout
+#[tauri::command]
+pub fn lsl_get_idle_timeout() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/lsl/idle-timeout")
+}
+
+/// Proxy: POST /v1/lsl/idle-timeout
+#[tauri::command]
+pub fn lsl_set_idle_timeout(secs: serde_json::Value) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/idle-timeout", &serde_json::json!({"secs": secs}))
+}
+
+/// Proxy: GET /v1/lsl/virtual-source/running
+#[tauri::command]
+pub fn lsl_virtual_source_running() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/lsl/virtual-source/running")
+}
+
+/// Proxy: POST /v1/lsl/virtual-source/start
+#[tauri::command]
+pub fn lsl_virtual_source_start() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/virtual-source/start", &serde_json::json!({}))
+}
+
+/// Proxy: POST /v1/lsl/virtual-source/stop
+#[tauri::command]
+pub fn lsl_virtual_source_stop() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/virtual-source/stop", &serde_json::json!({}))
+}
+
+/// Proxy: POST /v1/lsl/iroh/start
+#[tauri::command]
+pub fn lsl_iroh_start() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/iroh/start", &serde_json::json!({}))
+}
+
+/// Proxy: POST /v1/lsl/iroh/stop
+#[tauri::command]
+pub fn lsl_iroh_stop() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/lsl/iroh/stop", &serde_json::json!({}))
+}
+
+/// Proxy: GET /v1/lsl/iroh/status
+#[tauri::command]
+pub fn lsl_iroh_status() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/lsl/iroh/status")
+}
+
+/// Proxy: POST /v1/control/switch-session
+#[tauri::command]
+pub fn switch_session(target: String) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/control/switch-session", &serde_json::json!({"target": target}))
+}
+
+/// Proxy: POST /v1/control/cancel-session
+#[tauri::command]
+pub fn cancel_session() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/control/cancel-session", &serde_json::json!({}))
+}
+
+

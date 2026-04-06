@@ -646,11 +646,11 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "gtec".into(),
             name_key: "settings.supportedDevices.company.gtec".into(),
-            logo: "/logos/gtec.svg".into(),
+            logo: "/logos/gtec.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.unicornHybridBlack".into(),
                 ios_only: false,
-                image: "/devices/gtec-unicorn.svg".into(),
+                image: "/devices/gtec-unicorn.jpg".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.gtec1".into(),
@@ -827,7 +827,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "brainvision".into(),
             name_key: "settings.supportedDevices.company.brainvision".into(),
-            logo: "/logos/brainvision.svg".into(),
+            logo: "/logos/brainvision.jpg".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.brainvisionRda".into(),
                 ios_only: false,
