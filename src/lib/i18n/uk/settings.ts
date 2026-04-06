@@ -416,34 +416,48 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
   "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
-  "settings.supportedDevices.instruction.brainbit1": "Увімкніть BrainBit. Переконайтеся, що бібліотека NeuroSDK2 встановлена для вашої платформи.",
-  "settings.supportedDevices.instruction.brainbit2": "Сканер автоматично виявляє пристрої BrainBit через BLE. Торкніться пристрою для з'єднання.",
+  "settings.supportedDevices.instruction.brainbit1":
+    "Увімкніть BrainBit. Переконайтеся, що бібліотека NeuroSDK2 встановлена для вашої платформи.",
+  "settings.supportedDevices.instruction.brainbit2":
+    "Сканер автоматично виявляє пристрої BrainBit через BLE. Торкніться пристрою для з'єднання.",
   "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
   "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4 (4 канали)",
   "settings.supportedDevices.device.brainmasterDiscovery": "Discovery (24 канали)",
   "settings.supportedDevices.device.brainmasterFreedom": "Freedom (24 канали бездротовий)",
-  "settings.supportedDevices.instruction.brainmaster1": "Підключіть USB-серійний донгл та увімкніть підсилювач BrainMaster (57600 бод, FTDI).",
-  "settings.supportedDevices.instruction.brainmaster2": "Виберіть модель плати в налаштуваннях OpenBCI. Порт визначається автоматично.",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "Підключіть USB-серійний донгл та увімкніть підсилювач BrainMaster (57600 бод, FTDI).",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "Виберіть модель плати в налаштуваннях OpenBCI. Порт визначається автоматично.",
   "settings.supportedDevices.company.gtec": "g.tec medical engineering",
   "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
-  "settings.supportedDevices.instruction.gtec1": "Переконайтеся, що бібліотека Unicorn API встановлена на вашій системі.",
-  "settings.supportedDevices.instruction.gtec2": "Увімкніть Unicorn та тримайте його поруч із комп'ютером. Сканер автоматично виявляє його через BLE.",
+  "settings.supportedDevices.instruction.gtec1":
+    "Переконайтеся, що бібліотека Unicorn API встановлена на вашій системі.",
+  "settings.supportedDevices.instruction.gtec2":
+    "Увімкніть Unicorn та тримайте його поруч із комп'ютером. Сканер автоматично виявляє його через BLE.",
   "settings.supportedDevices.company.neurofield": "Neurofield Inc",
   "settings.supportedDevices.device.neurofieldQ21": "Q21 (20 каналів)",
-  "settings.supportedDevices.instruction.neurofield1": "Підключіть адаптер PEAK PCAN-USB та підсилювач Q21 через шину CAN.",
-  "settings.supportedDevices.instruction.neurofield2": "Встановіть драйвери PCAN Basic для вашої платформи. Сканер автоматично виявляє Q21.",
+  "settings.supportedDevices.instruction.neurofield1":
+    "Підключіть адаптер PEAK PCAN-USB та підсилювач Q21 через шину CAN.",
+  "settings.supportedDevices.instruction.neurofield2":
+    "Встановіть драйвери PCAN Basic для вашої платформи. Сканер автоматично виявляє Q21.",
   "settings.supportedDevices.company.neurosky": "NeuroSky",
   "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
-  "settings.supportedDevices.instruction.neurosky1": "Під'єднайте серійний USB/Bluetooth-адаптер NeuroSky і увімкніть гарнітуру.",
-  "settings.supportedDevices.instruction.neurosky2": "Використовуйте ціль 'neurosky' (або 'neurosky:<serial-port>') для підключення.",
+  "settings.supportedDevices.instruction.neurosky1":
+    "Під'єднайте серійний USB/Bluetooth-адаптер NeuroSky і увімкніть гарнітуру.",
+  "settings.supportedDevices.instruction.neurosky2":
+    "Використовуйте ціль 'neurosky' (або 'neurosky:<serial-port>') для підключення.",
   "settings.supportedDevices.company.neurosity": "Neurosity",
   "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
-  "settings.supportedDevices.instruction.neurosity1": "Встановіть SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD і SKILL_NEUROSITY_DEVICE_ID.",
-  "settings.supportedDevices.instruction.neurosity2": "Використовуйте ціль 'neurosity:<device-id>' для підключення через Neurosity Cloud API.",
+  "settings.supportedDevices.instruction.neurosity1":
+    "Встановіть SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD і SKILL_NEUROSITY_DEVICE_ID.",
+  "settings.supportedDevices.instruction.neurosity2":
+    "Використовуйте ціль 'neurosity:<device-id>' для підключення через Neurosity Cloud API.",
   "settings.supportedDevices.company.brainvision": "Brain Products",
   "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
-  "settings.supportedDevices.instruction.brainvision1": "Запустіть Recorder/Remote Data Access і відкрийте RDA TCP-потік (типово 127.0.0.1:51244).",
-  "settings.supportedDevices.instruction.brainvision2": "Використовуйте ціль 'brainvision:<host>:<port>' (або 'brainvision') для підключення.",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Запустіть Recorder/Remote Data Access і відкрийте RDA TCP-потік (типово 127.0.0.1:51244).",
+  "settings.supportedDevices.instruction.brainvision2":
+    "Використовуйте ціль 'brainvision:<host>:<port>' (або 'brainvision') для підключення.",
   "settings.scanner.title": "Бекенди сканера",
   "settings.scanner.desc":
     "Оберіть, які транспорти виявлення працюють у фоновому режимі. Зміни набудуть чинності після перезапуску додатку.",
@@ -478,6 +492,15 @@ const settings: Record<string, string> = {
   "settings.deviceApi.ouraSyncing": "Синхронізація…",
   "settings.deviceApi.ouraSynced": "Синхронізовано!",
   "settings.deviceApi.ouraSyncDesc": "Отримати останні 30 днів даних Oura Ring та зберегти в базі даних здоров'я.",
+  "settings.deviceApi.neurosityTitle": "Neurosity",
+  "settings.deviceApi.neurosityDesc":
+    "Облікові дані та ідентифікатор пристрою для хмарного стримінгу Neurosity Crown/Notion.",
+  "settings.deviceApi.neurosityEmail": "Email",
+  "settings.deviceApi.neurosityPassword": "Пароль",
+  "settings.deviceApi.neurosityDeviceId": "ID пристрою",
+  "settings.deviceApi.brainmasterTitle": "BrainMaster",
+  "settings.deviceApi.brainmasterDesc": "Оберіть модель BrainMaster, яку використовує конектор.",
+  "settings.deviceApi.brainmasterModel": "Модель",
   "settings.deviceApi.clientId": "Client ID",
   "settings.deviceApi.clientSecret": "Client Secret",
   "settings.deviceApi.apiToken": "API Token",

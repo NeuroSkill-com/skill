@@ -423,34 +423,48 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
   "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
-  "settings.supportedDevices.instruction.brainbit1": "Schalten Sie das BrainBit-Stirnband ein. Stellen Sie sicher, dass die NeuroSDK2-Bibliothek für Ihre Plattform installiert ist.",
-  "settings.supportedDevices.instruction.brainbit2": "Der Scanner erkennt BrainBit-Geräte automatisch über BLE. Tippen Sie auf das Gerät zum Koppeln.",
+  "settings.supportedDevices.instruction.brainbit1":
+    "Schalten Sie das BrainBit-Stirnband ein. Stellen Sie sicher, dass die NeuroSDK2-Bibliothek für Ihre Plattform installiert ist.",
+  "settings.supportedDevices.instruction.brainbit2":
+    "Der Scanner erkennt BrainBit-Geräte automatisch über BLE. Tippen Sie auf das Gerät zum Koppeln.",
   "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
   "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4 (4-Kanal)",
   "settings.supportedDevices.device.brainmasterDiscovery": "Discovery (24-Kanal)",
   "settings.supportedDevices.device.brainmasterFreedom": "Freedom (24-Kanal kabellos)",
-  "settings.supportedDevices.instruction.brainmaster1": "USB-Seriell-Dongle anschließen und BrainMaster-Verstärker einschalten (57600 Baud, FTDI).",
-  "settings.supportedDevices.instruction.brainmaster2": "Boardmodell in OpenBCI-Einstellungen auswählen. Port wird automatisch erkannt oder manuell gesetzt.",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "USB-Seriell-Dongle anschließen und BrainMaster-Verstärker einschalten (57600 Baud, FTDI).",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "Boardmodell in OpenBCI-Einstellungen auswählen. Port wird automatisch erkannt oder manuell gesetzt.",
   "settings.supportedDevices.company.gtec": "g.tec medical engineering",
   "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
-  "settings.supportedDevices.instruction.gtec1": "Stellen Sie sicher, dass die Unicorn-API-Bibliothek auf Ihrem System installiert ist.",
-  "settings.supportedDevices.instruction.gtec2": "Unicorn-Headset einschalten und in der Nähe des Computers halten. Der Scanner erkennt es automatisch über BLE.",
+  "settings.supportedDevices.instruction.gtec1":
+    "Stellen Sie sicher, dass die Unicorn-API-Bibliothek auf Ihrem System installiert ist.",
+  "settings.supportedDevices.instruction.gtec2":
+    "Unicorn-Headset einschalten und in der Nähe des Computers halten. Der Scanner erkennt es automatisch über BLE.",
   "settings.supportedDevices.company.neurofield": "Neurofield Inc",
   "settings.supportedDevices.device.neurofieldQ21": "Q21 (20-Kanal)",
-  "settings.supportedDevices.instruction.neurofield1": "PEAK PCAN-USB-Adapter anschließen und den Q21-Verstärker über CAN-Bus verbinden.",
-  "settings.supportedDevices.instruction.neurofield2": "PCAN-Basic-Treiber für Ihre Plattform installieren. Der Scanner erkennt den Q21 automatisch.",
+  "settings.supportedDevices.instruction.neurofield1":
+    "PEAK PCAN-USB-Adapter anschließen und den Q21-Verstärker über CAN-Bus verbinden.",
+  "settings.supportedDevices.instruction.neurofield2":
+    "PCAN-Basic-Treiber für Ihre Plattform installieren. Der Scanner erkennt den Q21 automatisch.",
   "settings.supportedDevices.company.neurosky": "NeuroSky",
   "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
-  "settings.supportedDevices.instruction.neurosky1": "Verbinden Sie den NeuroSky-USB/Bluetooth-Serielladapter und schalten Sie das Headset ein.",
-  "settings.supportedDevices.instruction.neurosky2": "Verwenden Sie das Ziel 'neurosky' (oder 'neurosky:<serial-port>') für die Verbindung.",
+  "settings.supportedDevices.instruction.neurosky1":
+    "Verbinden Sie den NeuroSky-USB/Bluetooth-Serielladapter und schalten Sie das Headset ein.",
+  "settings.supportedDevices.instruction.neurosky2":
+    "Verwenden Sie das Ziel 'neurosky' (oder 'neurosky:<serial-port>') für die Verbindung.",
   "settings.supportedDevices.company.neurosity": "Neurosity",
   "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
-  "settings.supportedDevices.instruction.neurosity1": "Setzen Sie SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD und SKILL_NEUROSITY_DEVICE_ID.",
-  "settings.supportedDevices.instruction.neurosity2": "Verwenden Sie das Ziel 'neurosity:<device-id>' für die Verbindung über die Neurosity-Cloud-API.",
+  "settings.supportedDevices.instruction.neurosity1":
+    "Setzen Sie SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD und SKILL_NEUROSITY_DEVICE_ID.",
+  "settings.supportedDevices.instruction.neurosity2":
+    "Verwenden Sie das Ziel 'neurosity:<device-id>' für die Verbindung über die Neurosity-Cloud-API.",
   "settings.supportedDevices.company.brainvision": "Brain Products",
   "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
-  "settings.supportedDevices.instruction.brainvision1": "Starten Sie Recorder/Remote Data Access und stellen Sie einen RDA-TCP-Stream bereit (Standard 127.0.0.1:51244).",
-  "settings.supportedDevices.instruction.brainvision2": "Verwenden Sie das Ziel 'brainvision:<host>:<port>' (oder 'brainvision') für die Verbindung.",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Starten Sie Recorder/Remote Data Access und stellen Sie einen RDA-TCP-Stream bereit (Standard 127.0.0.1:51244).",
+  "settings.supportedDevices.instruction.brainvision2":
+    "Verwenden Sie das Ziel 'brainvision:<host>:<port>' (oder 'brainvision') für die Verbindung.",
   "settings.scanner.title": "Scanner-Backends",
   "settings.scanner.desc":
     "Wählen Sie, welche Erkennungstransporte im Hintergrund laufen. Änderungen werden beim nächsten App-Neustart wirksam.",
@@ -486,6 +500,14 @@ const settings: Record<string, string> = {
   "settings.deviceApi.ouraSynced": "Synchronisiert!",
   "settings.deviceApi.ouraSyncDesc":
     "Die letzten 30 Tage an Oura-Ring-Daten abrufen und in der Gesundheitsdatenbank speichern.",
+  "settings.deviceApi.neurosityTitle": "Neurosity",
+  "settings.deviceApi.neurosityDesc": "Zugangsdaten und Geräte-ID für Neurosity Crown/Notion Cloud-Streaming.",
+  "settings.deviceApi.neurosityEmail": "E-Mail",
+  "settings.deviceApi.neurosityPassword": "Passwort",
+  "settings.deviceApi.neurosityDeviceId": "Geräte-ID",
+  "settings.deviceApi.brainmasterTitle": "BrainMaster",
+  "settings.deviceApi.brainmasterDesc": "Wählen Sie das BrainMaster-Modell für den Connector.",
+  "settings.deviceApi.brainmasterModel": "Modell",
   "settings.deviceApi.clientId": "Client ID",
   "settings.deviceApi.clientSecret": "Client Secret",
   "settings.deviceApi.apiToken": "API Token",

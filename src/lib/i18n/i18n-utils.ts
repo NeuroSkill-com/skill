@@ -226,6 +226,8 @@ export const EXEMPT_KEY_PREFIXES = [
   "settings.deviceApi.emotivTitle", // "Emotiv Cortex" product name
   "settings.deviceApi.idunTitle", // "IDUN Cloud" product name
   "settings.deviceApi.openbciTitle", // "OpenBCI" product name
+  "settings.deviceApi.neurosityTitle", // product name
+  "settings.deviceApi.brainmasterTitle", // product name
   "settings.deviceApi.clientId", // "Client ID" technical term
   "settings.deviceApi.clientSecret", // "Client Secret" technical term
   "settings.deviceApi.apiToken", // "API Token" technical term
