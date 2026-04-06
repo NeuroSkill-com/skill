@@ -20,6 +20,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | **BrainBit** (Original, 2, Pro) | BrainBit LLC | 4 (O1, O2, T3, T4) | 250 Hz | BLE (NeuroSDK2) | `brainbit` | Impedance on Rev-K |
 | **BrainBit Flex** 4/8 | BrainBit LLC | 4–8 | 250 Hz | BLE (NeuroSDK2) | `brainbit` | Flexible electrode placement |
 | **IDUN Guardian** | IDUN Technologies | 1 | 250 Hz | BLE | `idun` | Behind-ear EEG, cloud decode |
+| **NeuroSky MindWave / Mobile** | NeuroSky | 1 (Fp1) | 512 Hz | USB/BT serial (ThinkGear) | `neurosky` | Single-channel consumer EEG |
 
 ## EEG Headsets
 
@@ -49,6 +50,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | **BrainMaster Atlantis 4×4** | BrainMaster Technologies | 4 | 256 Hz | USB serial (FTDI) | `brainmaster` | ±400 µV, 57600 baud |
 | **BrainMaster Discovery** | BrainMaster Technologies | 24 (full 10-20) | 256 Hz | USB serial (FTDI) | `brainmaster` | ±3200 µV clinical EEG |
 | **BrainMaster Freedom** | BrainMaster Technologies | 24 | 256 Hz | USB serial (FTDI) | `brainmaster` | Wireless version of Discovery |
+| **BrainVision RDA** | Brain Products | Variable (commonly 16–64) | Variable (commonly 250–1000 Hz) | TCP/IP (RDA) | `brainvision` | Streams from BrainVision Recorder / RDA server |
 
 ## fNIRS
 
@@ -61,6 +63,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Source | Type | Channels | Transport | Notes |
 |--------|------|----------|-----------|-------|
 | **LSL Stream** | Lab Streaming Layer | Any | TCP/UDP (LSL protocol) | Connects to any LSL-compatible device; auto-discovers via `lsl_discover` |
+| **Neurosity Crown / Notion** | Cloud stream | 8 | HTTPS polling (Firebase RTDB) | Requires credentials + device ID in Device API settings |
 | **Virtual EEG** | Synthetic test signal | 4 | In-process LSL | Generates synthetic EEG for testing without hardware; start via `/v1/lsl/virtual-source/start` |
 | **iroh Remote** | Relay from mobile app | Any | iroh tunnel (QUIC) | Streams EEG from a paired iOS/Android device over encrypted P2P tunnel |
 
@@ -71,7 +74,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
 | **BLE** | Muse, MW75, Hermes, Ganglion, IDUN, Mendi, BrainBit, g.tec | Bluetooth Low Energy (btleplug / vendor SDK) |
-| **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster | FTDI/CDC serial at 57600–115200 baud |
+| **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster, NeuroSky | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
 | **UDP** | Galea | Direct UDP streaming |
 | **PCAN-USB** | NeuroField Q21 | CAN bus via PEAK PCAN adapter |
@@ -79,6 +82,8 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | **NeuroSDK2** | BrainBit (all models) | Native C library, runtime-loaded |
 | **Unicorn API** | g.tec Unicorn | Native C library, runtime-loaded |
 | **LSL** | Any LSL source | Lab Streaming Layer TCP/UDP |
+| **Neurosity Cloud** | Neurosity Crown / Notion | Firebase RTDB over HTTPS |
+| **BrainVision RDA** | Brain Products Recorder streams | TCP RDA framing |
 | **iroh** | Remote devices | QUIC P2P tunnel |
 
 ## Manufacturer Overview
@@ -97,6 +102,9 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | g.tec medical engineering | Schiedlberg, Austria | 1999 | gtec.at |
 | Neurofield Inc | Santa Barbara, USA | 2009 | neurofieldneuroscience.com |
 | BrainMaster Technologies | Bedford, USA | 1995 | brainmaster.com |
+| NeuroSky | San Jose, USA | 2004 | neurosky.com |
+| Neurosity | New York, USA | 2018 | neurosity.co |
+| Brain Products | Gilching, Germany | 1998 | brainproducts.com |
 
 ## Platform Support
 
@@ -130,6 +138,9 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | `brainbit:` | `brainbit:AA:BB:CC:DD` | BrainBit (BLE address) |
 | `gtec:` | `gtec:UN-2023.01.01` | g.tec Unicorn (serial number) |
 | `brainmaster:` | `brainmaster:COM4` | BrainMaster (serial port) |
+| `neurosky:` | `neurosky:/dev/ttyUSB0` | NeuroSky MindWave (serial port optional) |
+| `neurosity:` | `neurosity:crown-xxxx` | Neurosity Crown/Notion (device ID; can be read from settings) |
+| `brainvision:` | `brainvision:127.0.0.1:51244` | BrainVision RDA TCP endpoint |
 | `lsl:` | `lsl:MyEEGStream` | LSL stream (source_id) |
 
 ## EXG Embedding Backends
