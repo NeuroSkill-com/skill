@@ -65,6 +65,9 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower.starts_with("brainbit:") || lower.contains("brainbit") {
         return connect_brainbit(target).await;
     }
+    if lower.starts_with("brainmaster:") || lower.contains("brainmaster") {
+        return connect_brainmaster(state, target).await;
+    }
     if lower.starts_with("gtec:") || lower.contains("unicorn") {
         return connect_gtec(target).await;
     }
@@ -276,6 +279,120 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
     let adapter: Box<dyn DeviceAdapter> = Box::new(CognionicsAdapter::new(rx, handle));
 
     Ok(adapter)
+}
+
+// ── BrainMaster (USB serial) ────────────────────────────────────────────
+
+async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use brainmaster::prelude::*;
+
+    let port = target.strip_prefix("brainmaster:").unwrap_or("").to_string();
+
+    // Read model from settings or default to Atlantis4.
+    let model_str = {
+        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        let settings = skill_settings::load_settings(&skill_dir);
+        settings.openbci.serial_port.clone() // reuse field or default
+    };
+    let model = match model_str.to_lowercase().as_str() {
+        "atlantis2" | "a2" => DeviceModel::Atlantis2,
+        "discovery" | "d24" => DeviceModel::Discovery,
+        "freedom" | "f24" => DeviceModel::Freedom,
+        _ => DeviceModel::Atlantis4,
+    };
+
+    info!(port = %port, model = ?model, "connecting to BrainMaster");
+
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<brainmaster::device::EegSample>(512);
+
+    let device_name = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let port = if port.is_empty() {
+            BrainMasterDevice::scan()
+                .map_err(|e| format!("scan: {e}"))?
+                .into_iter()
+                .next()
+                .ok_or("No BrainMaster device found")?
+        } else {
+            port
+        };
+        let mut device = BrainMasterDevice::open(&port, model).map_err(|e| format!("open: {e}"))?;
+        device.start_streaming().map_err(|e| format!("start: {e}"))?;
+        let name = format!("BrainMaster {:?} ({port})", model);
+        let tx = sample_tx;
+        std::thread::Builder::new()
+            .name("brainmaster-read".to_string())
+            .spawn(move || {
+                while let Ok(sample) = device.read_sample() {
+                    if tx.blocking_send(sample).is_err() {
+                        break;
+                    }
+                }
+            })
+            .expect("brainmaster reader thread");
+        Ok(name)
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
+
+    info!(name = %device_name, "BrainMaster connected");
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let ch_names: Vec<String> = model.channel_names().iter().map(ToString::to_string).collect();
+    let desc = DeviceDescriptor {
+        kind: "brainmaster",
+        eeg_channels: model.channel_count(),
+        eeg_sample_rate: model.sample_rate() as f64,
+        channel_names: ch_names,
+        caps: DeviceCaps::EEG,
+        pipeline_channels: model.channel_count(),
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+    Ok(Box::new(BrainMasterAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        connected_sent: false,
+    }))
+}
+
+struct BrainMasterAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<brainmaster::device::EegSample>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for BrainMasterAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+        let sample = self.rx.recv().await?;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels: sample.channels,
+            timestamp_s: ts,
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+    }
 }
 
 // ── LSL (Lab Streaming Layer) ──────────────────────────────────────────────

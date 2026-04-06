@@ -1026,6 +1026,22 @@ fn detect_brainbit_devices() -> Vec<DiscoveredDeviceResponse> {
         .collect()
 }
 
+fn detect_brainmaster_devices() -> Vec<DiscoveredDeviceResponse> {
+    let ports = brainmaster::device::BrainMasterDevice::scan().unwrap_or_default();
+    ports
+        .into_iter()
+        .map(|port| DiscoveredDeviceResponse {
+            id: format!("brainmaster:{port}"),
+            name: format!("BrainMaster ({port})"),
+            last_seen: now_unix_secs(),
+            last_rssi: 0,
+            is_paired: false,
+            is_preferred: false,
+            transport: "usb_serial".to_string(),
+        })
+        .collect()
+}
+
 fn detect_gtec_devices() -> Vec<DiscoveredDeviceResponse> {
     let serials = gtec::device::UnicornDevice::scan(false).unwrap_or_default();
     serials
@@ -1368,6 +1384,17 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                     Vec::new()
                 };
                 discovered.extend(gtec_discovered);
+
+                // BrainMaster (USB serial)
+                let brainmaster_discovered = tokio::time::timeout(
+                    Duration::from_secs(3),
+                    tokio::task::spawn_blocking(detect_brainmaster_devices),
+                )
+                .await
+                .ok()
+                .and_then(std::result::Result::ok)
+                .unwrap_or_default();
+                discovered.extend(brainmaster_discovered);
                 let discovered_count = discovered.len();
 
                 if let Ok(mut guard) = state.devices.lock() {
@@ -1383,7 +1410,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                                 && !d.id.starts_with("cortex:")
                                 && !d.id.starts_with("wifi:")
                                 && !d.id.starts_with("galea:")
-                                && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:")
+                                && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:") && !d.id.starts_with("brainmaster:")
                         })
                         .cloned()
                         .collect();
@@ -1407,7 +1434,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                             && !d.id.starts_with("cortex:")
                             && !d.id.starts_with("wifi:")
                             && !d.id.starts_with("galea:")
-                            && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:"))
+                            && !d.id.starts_with("neurofield:") && !d.id.starts_with("brainbit:") && !d.id.starts_with("gtec:") && !d.id.starts_with("brainmaster:"))
                             || current_ids.contains(&d.id)
                     });
                     *guard = merged;
