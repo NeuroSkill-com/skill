@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm"]
+default = ["llm", "embed-zuna"]
 llm = ["skill-llm/llm"]
 llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
@@ -64,7 +64,7 @@ neurofield          = { version = "0.0.1", default-features = false }
 zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
-ndarray             = { version = "0.16", optional = true }
+ndarray             = { version = "0.17", optional = true }
 skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
 skill-tts            = { path = "../skill-tts" }

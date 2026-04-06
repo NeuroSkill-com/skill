@@ -446,7 +446,7 @@ fn embed_worker_main(
 #[allow(dead_code)]
 enum Encoder {
     #[cfg(feature = "embed-zuna")]
-    Zuna(ZunaState),
+    Zuna(Box<ZunaState>),
     NeuroRVQ(Box<NeuroRVQState>),
     None,
 }
@@ -483,7 +483,7 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             load_zuna(config)
                 .map(|s| {
                     info!("ZUNA encoder loaded");
-                    Encoder::Zuna(s)
+                    Encoder::Zuna(Box::new(s))
                 })
                 .or_else(|| {
                     warn!("ZUNA weights not found — metrics-only");
@@ -503,11 +503,8 @@ fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
     let device = burn::backend::ndarray::NdArrayDevice::Cpu;
     let (encoder, _ms) =
         zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(&config_path, &weights_path, device).ok()?;
-    let model_config = zuna_rs::ModelConfig::load(&config_path).ok()?;
-    Some(ZunaState {
-        encoder,
-        data_config: model_config.data,
-    })
+    let data_config = encoder.data_cfg.clone();
+    Some(ZunaState { encoder, data_config })
 }
 
 // ── Per-epoch encoding ──────────────────────────────────────────────────────
@@ -558,8 +555,8 @@ fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
         }
         let mut pooled = vec![0.0f32; dim];
         for t in 0..n_tok {
-            for d in 0..dim {
-                pooled[d] += ep.embeddings[t * dim + d];
+            for (d, p) in pooled.iter_mut().enumerate() {
+                *p += ep.embeddings[t * dim + d];
             }
         }
         for v in &mut pooled {
