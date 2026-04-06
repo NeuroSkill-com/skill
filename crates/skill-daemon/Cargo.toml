@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = []
+default = ["llm"]
 llm = ["skill-llm/llm"]
 llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
