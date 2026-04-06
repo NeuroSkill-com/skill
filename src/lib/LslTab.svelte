@@ -192,85 +192,104 @@ async function cancelSecondary(sessionId: string) {
 }
 
 async function connectOrSwitch(stream: LslStream) {
-  if (!stream.paired) {
-    // Pair first
-    await lslPairStream({
-      sourceId: stream.source_id,
-      name: stream.name,
-      streamType: stream.type,
-      channels: stream.channels,
-      sampleRate: stream.sample_rate,
-    });
-    pairedStreams = [
-      ...pairedStreams,
-      {
-        source_id: stream.source_id,
+  connecting = stream.name;
+  scanError = "";
+  try {
+    if (!stream.paired) {
+      // Pair first
+      await lslPairStream({
+        sourceId: stream.source_id,
         name: stream.name,
-        stream_type: stream.type,
+        streamType: stream.type,
         channels: stream.channels,
-        sample_rate: stream.sample_rate,
-      },
-    ];
-    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
-  }
-  // If another session is active, switch; otherwise connect
-  if (isSessionActive) {
-    await switchToStream(stream);
-  } else {
-    await connectStream(stream);
+        sampleRate: stream.sample_rate,
+      });
+      pairedStreams = [
+        ...pairedStreams,
+        {
+          source_id: stream.source_id,
+          name: stream.name,
+          stream_type: stream.type,
+          channels: stream.channels,
+          sample_rate: stream.sample_rate,
+        },
+      ];
+      streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+    }
+    // If another session is active, switch; otherwise connect
+    if (isSessionActive) {
+      await lslSwitchSession(stream.name);
+    } else {
+      await lslConnect(stream.name);
+    }
+  } catch (e: unknown) {
+    scanError = `Failed to connect to ${stream.name}: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    connecting = null;
   }
 }
 
 async function pairAndConnect(stream: LslStream) {
-  // Pair if not already
-  if (!stream.paired) {
-    await lslPairStream({
-      sourceId: stream.source_id,
-      name: stream.name,
-      streamType: stream.type,
-      channels: stream.channels,
-      sampleRate: stream.sample_rate,
-    });
-    pairedStreams = [
-      ...pairedStreams,
-      {
-        source_id: stream.source_id,
+  connecting = stream.name;
+  scanError = "";
+  try {
+    if (!stream.paired) {
+      await lslPairStream({
+        sourceId: stream.source_id,
         name: stream.name,
-        stream_type: stream.type,
+        streamType: stream.type,
         channels: stream.channels,
-        sample_rate: stream.sample_rate,
-      },
-    ];
-    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+        sampleRate: stream.sample_rate,
+      });
+      pairedStreams = [
+        ...pairedStreams,
+        {
+          source_id: stream.source_id,
+          name: stream.name,
+          stream_type: stream.type,
+          channels: stream.channels,
+          sample_rate: stream.sample_rate,
+        },
+      ];
+      streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+    }
+    await lslConnect(stream.name);
+  } catch (e: unknown) {
+    scanError = `Failed to connect to ${stream.name}: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    connecting = null;
   }
-  // Connect
-  await connectStream(stream);
 }
 
 async function togglePair(stream: LslStream) {
-  if (stream.paired) {
-    await lslUnpairStream(stream.source_id);
-    pairedStreams = pairedStreams.filter((p) => p.source_id !== stream.source_id);
-    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: false } : s));
-  } else {
-    await lslPairStream({
-      sourceId: stream.source_id,
-      name: stream.name,
-      streamType: stream.type,
-      channels: stream.channels,
-      sampleRate: stream.sample_rate,
-    });
-    pairedStreams = [
-      ...pairedStreams,
-      {
-        source_id: stream.source_id,
+  scanError = "";
+  try {
+    if (stream.paired) {
+      await lslUnpairStream(stream.source_id);
+      pairedStreams = pairedStreams.filter((p) => p.source_id !== stream.source_id);
+      streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: false } : s));
+    } else {
+      await lslPairStream({
+        sourceId: stream.source_id,
         name: stream.name,
-        stream_type: stream.type,
+        streamType: stream.type,
         channels: stream.channels,
-        sample_rate: stream.sample_rate,
-      },
-    ];
-    streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+        sampleRate: stream.sample_rate,
+      });
+      pairedStreams = [
+        ...pairedStreams,
+        {
+          source_id: stream.source_id,
+          name: stream.name,
+          stream_type: stream.type,
+          channels: stream.channels,
+          sample_rate: stream.sample_rate,
+        },
+      ];
+      streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
+    }
+  } catch (e: unknown) {
+    scanError = `Pair/unpair failed: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
