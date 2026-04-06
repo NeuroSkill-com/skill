@@ -4,7 +4,8 @@ pub(crate) mod cmd_dispatch;
 pub(crate) mod embed;
 mod routes;
 mod service_installer;
-mod session_runner;
+pub(crate) mod session;
+pub(crate) mod session_runner;
 mod state;
 mod tracker;
 
@@ -315,12 +316,27 @@ fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
 
     let Some(t) = target else { return };
 
+    // NeuroField has a dedicated runner (blocking CAN bus read loop).
     let handle = if t.starts_with("neurofield:") {
-        Some(session_runner::spawn_neurofield_session(state.clone(), t.to_string()))
-    } else if t == "openbci" || t.starts_with("usb:") || t.starts_with("cgx:") {
-        Some(session_runner::spawn_openbci_session(state.clone()))
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let state2 = state.clone();
+        let device_id = t.to_string();
+        tokio::task::spawn(async move {
+            if let Err(e) = session_runner::run_neurofield_session(state2.clone(), cancel_rx, device_id).await {
+                tracing::error!(%e, "neurofield session failed");
+                if let Ok(mut s) = state2.status.lock() {
+                    s.state = "disconnected".into();
+                    s.device_error = Some(e.to_string());
+                }
+            }
+            if let Ok(mut slot) = state2.session_handle.lock() {
+                *slot = None;
+            }
+        });
+        Some(session_runner::SessionHandle { cancel_tx })
     } else {
-        None
+        // All other devices go through the generic adapter session.
+        session::spawn_device_session(state.clone(), t.to_string())
     };
 
     if let Some(h) = handle {

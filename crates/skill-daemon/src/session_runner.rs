@@ -38,6 +38,7 @@ pub struct SessionHandle {
 }
 
 /// Spawn an OpenBCI session task.  Returns a handle that can cancel it.
+#[allow(dead_code)]
 pub fn spawn_openbci_session(state: AppState) -> SessionHandle {
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
 
@@ -60,6 +61,7 @@ pub fn spawn_openbci_session(state: AppState) -> SessionHandle {
     SessionHandle { cancel_tx }
 }
 
+#[allow(dead_code)]
 async fn run_openbci_session(state: AppState, mut cancel_rx: oneshot::Receiver<()>) -> Result<(), String> {
     // 1. Load config
     let config = {
@@ -172,7 +174,7 @@ async fn run_openbci_session(state: AppState, mut cancel_rx: oneshot::Receiver<(
     Ok(())
 }
 
-fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciAdapter, Box<dyn Board>), String> {
+pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciAdapter, Box<dyn Board>), String> {
     use skill_devices::openbci::board::{cyton::CytonBoard, cyton_daisy::CytonDaisyBoard};
     use skill_settings::OpenBciBoard;
 
@@ -480,6 +482,7 @@ fn unix_secs() -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(dead_code)]
 fn unix_secs_f64() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -709,6 +712,7 @@ impl SessionPipeline {
 
 /// Read events from the adapter and broadcast them as daemon events.
 /// Also records EEG to CSV and computes band power.
+#[allow(dead_code)]
 async fn pump_events(
     mut adapter: OpenBciAdapter,
     state: &AppState,
@@ -876,6 +880,7 @@ fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, payl
 // ── NeuroField Q21 session ────────────────────────────────────────────────────
 
 /// Spawn a NeuroField Q21 session task.  Returns a handle that can cancel it.
+#[allow(dead_code)]
 pub fn spawn_neurofield_session(state: AppState, device_id: String) -> SessionHandle {
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
     let state2 = state.clone();
@@ -894,7 +899,7 @@ pub fn spawn_neurofield_session(state: AppState, device_id: String) -> SessionHa
     SessionHandle { cancel_tx }
 }
 
-async fn run_neurofield_session(
+pub(crate) async fn run_neurofield_session(
     state: AppState,
     mut cancel_rx: oneshot::Receiver<()>,
     device_id: String,
