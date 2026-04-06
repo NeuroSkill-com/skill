@@ -489,7 +489,7 @@ pub fn probe_weights_for_config(
     let entries = std::fs::read_dir(&snaps_dir).ok()?;
     for entry in entries.filter_map(|e| e.ok()) {
         let wp = entry.path().join(wf);
-        if wp.exists() {
+        if skill_exg::validate_or_remove(&wp) {
             return Some((wp.display().to_string(), backend.to_string()));
         }
     }
@@ -695,7 +695,10 @@ async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Valu
                         .map(|entries| {
                             entries
                                 .filter_map(|e| e.ok())
-                                .any(|e| e.path().join(weights_file).exists())
+                                .any(|e| {
+                                    let p = e.path().join(weights_file);
+                                    skill_exg::validate_or_remove(&p)
+                                })
                         })
                         .unwrap_or(false)
                 } else {

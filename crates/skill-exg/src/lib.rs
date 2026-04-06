@@ -96,6 +96,80 @@ pub fn fuzzy_match(keyword: &str, candidate: &str) -> bool {
 // Delegated to `skill_data::util`.  Re-exported here for backward compat.
 pub use skill_data::util::{yyyymmdd_utc, yyyymmddhhmmss_utc};
 
+// ── Safetensors integrity check ───────────────────────────────────────────────
+
+/// Validate that a `.safetensors` file has a complete header and the file size
+/// covers all declared tensor data.  Returns `true` if the file looks intact.
+///
+/// Does NOT load the full file — only reads the 8-byte length prefix and the
+/// JSON header to compute the expected minimum size.
+pub fn validate_safetensors(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let file_size = f.metadata().map(|m| m.len()).unwrap_or(0);
+    if file_size < 8 {
+        return false;
+    }
+    let mut len_buf = [0u8; 8];
+    if f.read_exact(&mut len_buf).is_err() {
+        return false;
+    }
+    let header_len = u64::from_le_bytes(len_buf);
+    // Sanity: header shouldn't be > 100 MB or exceed file size
+    if header_len > 100_000_000 || 8 + header_len > file_size {
+        return false;
+    }
+    let mut header_buf = vec![0u8; header_len as usize];
+    if f.read_exact(&mut header_buf).is_err() {
+        return false;
+    }
+    let Ok(header) = serde_json::from_slice::<serde_json::Value>(&header_buf) else {
+        return false;
+    };
+    let Some(obj) = header.as_object() else { return false };
+    // Find the maximum data offset across all tensors
+    let mut max_offset: u64 = 0;
+    for (key, val) in obj {
+        if key == "__metadata__" { continue; }
+        if let Some(offsets) = val.get("data_offsets").and_then(|v| v.as_array()) {
+            if let Some(end) = offsets.get(1).and_then(|v| v.as_u64()) {
+                max_offset = max_offset.max(end);
+            }
+        }
+    }
+    let expected = 8 + header_len + max_offset;
+    // Burn's safetensors loader requires exact size match.
+    // Allow a small tolerance (< 16 bytes) for alignment padding,
+    // but reject files with significant extra data — they indicate
+    // a corrupt or incomplete download.
+    file_size >= expected && (file_size - expected) < 16
+}
+
+/// Validate a weights file; if it's corrupt, remove the blob and snapshot
+/// symlink so the next download attempt starts fresh.
+pub fn validate_or_remove(weights_path: &Path) -> bool {
+    if !weights_path.exists() {
+        return false;
+    }
+    let ext = weights_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    // Only validate safetensors files; .pth / .bin / .gguf have different formats
+    if ext != "safetensors" {
+        return true;
+    }
+    if validate_safetensors(weights_path) {
+        return true;
+    }
+    eprintln!("[exg] corrupt safetensors file, removing: {}", weights_path.display());
+    // Resolve symlink target (the blob) and remove both
+    if let Ok(blob) = std::fs::read_link(weights_path) {
+        // blob is relative to the symlink's parent
+        let resolved = weights_path.parent().map(|p| p.join(&blob)).unwrap_or(blob);
+        let _ = std::fs::remove_file(&resolved);
+    }
+    let _ = std::fs::remove_file(weights_path);
+    false
+}
+
 // ── HuggingFace weight resolution ─────────────────────────────────────────────
 
 /// Find ZUNA weights in the HuggingFace disk cache for the given `hf_repo`.
@@ -114,7 +188,7 @@ pub fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
     for snap in dirs.into_iter().rev() {
         let w = snap.path().join(ZUNA_WEIGHTS_FILE);
         let c = snap.path().join(ZUNA_CONFIG_FILE);
-        if w.exists() && c.exists() {
+        if validate_or_remove(&w) && c.exists() {
             return Some((w, c));
         }
     }
@@ -143,7 +217,7 @@ pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBu
     for snap in dirs.into_iter().rev() {
         let w = snap.path().join(weights_file);
         let c = snap.path().join(LUNA_CONFIG_FILE);
-        if w.exists() && c.exists() {
+        if validate_or_remove(&w) && c.exists() {
             return Some((w, c));
         }
     }
