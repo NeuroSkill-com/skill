@@ -1164,7 +1164,7 @@ pub async fn lsl_set_auto_connect(enabled: bool) -> Result<serde_json::Value, St
         .await.map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn lsl_pair_stream(source_id: String, name: String, stream_type: String, channels: u32, sample_rate: f64) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/pair", &serde_json::json!({
         "source_id": source_id, "name": name, "stream_type": stream_type,
@@ -1172,7 +1172,7 @@ pub async fn lsl_pair_stream(source_id: String, name: String, stream_type: Strin
     }))).await.map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn lsl_unpair_stream(source_id: String) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/unpair", &serde_json::json!({"source_id": source_id})))
         .await.map_err(|e| e.to_string())?
