@@ -69,6 +69,12 @@ pub enum DeviceKind {
     NeuroField,
     /// BrainMaster Atlantis/Discovery/Freedom — 2/4/24-channel neurofeedback amplifiers (USB serial).
     BrainMaster,
+    /// NeuroSky MindWave / MindWave Mobile — single-channel ThinkGear (serial).
+    NeuroSky,
+    /// Neurosity Crown / Notion — cloud-streamed 8-channel EEG.
+    Neurosity,
+    /// Brain Products BrainVision RDA stream (TCP/IP).
+    BrainVision,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -167,6 +173,15 @@ impl DeviceKind {
         }
         if n.contains("brainmaster") || n.contains("atlantis") || n.contains("discovery") || n.contains("freedom") {
             return Self::BrainMaster;
+        }
+        if n.contains("neurosky") || n.contains("mindwave") {
+            return Self::NeuroSky;
+        }
+        if n.contains("neurosity") || n.contains("crown") || n.contains("notion") {
+            return Self::Neurosity;
+        }
+        if n.contains("brainvision") || n.contains("rda") {
+            return Self::BrainVision;
         }
 
         Self::Unknown
@@ -321,8 +336,7 @@ impl DeviceKind {
                 has_full_montage: true,
                 sample_rate_hz: 256.0,
                 electrode_names: sv(&[
-                    "F7", "T3", "T4", "T5", "T6", "Cz", "Fz", "Pz",
-                    "F3", "C4", "C3", "P4", "P3", "O2", "O1", "F8",
+                    "F7", "T3", "T4", "T5", "T6", "Cz", "Fz", "Pz", "F3", "C4", "C3", "P4", "P3", "O2", "O1", "F8",
                     "F4", "Fp1", "Fp2", "HR",
                 ]),
             },
@@ -335,6 +349,38 @@ impl DeviceKind {
                 has_full_montage: false,
                 sample_rate_hz: 256.0,
                 electrode_names: sv(&["EEG1", "EEG2", "EEG3", "EEG4"]),
+            },
+            Self::NeuroSky => DeviceCapabilities {
+                kind: Self::NeuroSky,
+                channel_count: 1,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 512.0,
+                electrode_names: sv(&["Fp1"]),
+            },
+            Self::Neurosity => DeviceCapabilities {
+                kind: Self::Neurosity,
+                channel_count: 8,
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: true,
+                has_full_montage: false,
+                sample_rate_hz: 256.0,
+                electrode_names: sv(&["CP3", "C3", "F5", "PO3", "PO4", "F6", "C4", "CP4"]),
+            },
+            Self::BrainVision => DeviceCapabilities {
+                kind: Self::BrainVision,
+                channel_count: 16,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: true,
+                has_full_montage: true,
+                sample_rate_hz: 500.0,
+                electrode_names: sv(&[
+                    "Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2", "F7", "F8", "T7", "T8", "P7", "P8",
+                ]),
             },
             Self::Unknown => DeviceCapabilities {
                 kind: Self::Unknown,
@@ -372,6 +418,9 @@ impl DeviceKind {
             Self::GTec => "gtec",
             Self::NeuroField => "neurofield",
             Self::BrainMaster => "brainmaster",
+            Self::NeuroSky => "neurosky",
+            Self::Neurosity => "neurosity",
+            Self::BrainVision => "brainvision",
             Self::Unknown => "unknown",
         }
     }
@@ -398,6 +447,9 @@ impl DeviceKind {
             "gtec" => Self::GTec,
             "neurofield" => Self::NeuroField,
             "brainmaster" => Self::BrainMaster,
+            "neurosky" => Self::NeuroSky,
+            "neurosity" => Self::Neurosity,
+            "brainvision" | "rda" => Self::BrainVision,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -681,6 +733,34 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.neurofield2".into(),
             ],
         },
+        SupportedCompany {
+            id: "neurosity".into(),
+            name_key: "settings.supportedDevices.company.neurosity".into(),
+            logo: "/logos/neurosity.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.neurosityCrownNotion".into(),
+                ios_only: false,
+                image: "/devices/neurosity-crown.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.neurosity1".into(),
+                "settings.supportedDevices.instruction.neurosity2".into(),
+            ],
+        },
+        SupportedCompany {
+            id: "neurosky".into(),
+            name_key: "settings.supportedDevices.company.neurosky".into(),
+            logo: "/logos/neurosky.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.neuroskyMindWave".into(),
+                ios_only: false,
+                image: "/devices/neurosky-mindwave.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.neurosky1".into(),
+                "settings.supportedDevices.instruction.neurosky2".into(),
+            ],
+        },
         // ── N (Neurable) ──────────────────────────────────────────────
         SupportedCompany {
             id: "neurable".into(),
@@ -742,6 +822,20 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.oura1".into(),
                 "settings.supportedDevices.instruction.oura2".into(),
                 "settings.supportedDevices.instruction.oura3".into(),
+            ],
+        },
+        SupportedCompany {
+            id: "brainvision".into(),
+            name_key: "settings.supportedDevices.company.brainvision".into(),
+            logo: "/logos/brainvision.svg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.brainvisionRda".into(),
+                ios_only: false,
+                image: "/devices/brainvision-rda.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.brainvision1".into(),
+                "settings.supportedDevices.instruction.brainvision2".into(),
             ],
         },
         // ── R ─────────────────────────────────────────────────────────────
@@ -826,6 +920,13 @@ mod tests {
     }
 
     #[test]
+    fn from_name_new_devices() {
+        assert_eq!(DeviceKind::from_name(Some("MindWave Mobile")), DeviceKind::NeuroSky);
+        assert_eq!(DeviceKind::from_name(Some("Neurosity Crown")), DeviceKind::Neurosity);
+        assert_eq!(DeviceKind::from_name(Some("BrainVision RDA")), DeviceKind::BrainVision);
+    }
+
+    #[test]
     fn from_name_cognionics() {
         assert_eq!(DeviceKind::from_name(Some("CGX Quick-20r")), DeviceKind::Cognionics);
         assert_eq!(DeviceKind::from_name(Some("cognionics-device")), DeviceKind::Cognionics);
@@ -855,6 +956,9 @@ mod tests {
         assert_eq!(DeviceKind::from_kind_str("idun"), DeviceKind::Idun);
         assert_eq!(DeviceKind::from_kind_str("cognionics"), DeviceKind::Cognionics);
         assert_eq!(DeviceKind::from_kind_str("mendi"), DeviceKind::Mendi);
+        assert_eq!(DeviceKind::from_kind_str("neurosky"), DeviceKind::NeuroSky);
+        assert_eq!(DeviceKind::from_kind_str("neurosity"), DeviceKind::Neurosity);
+        assert_eq!(DeviceKind::from_kind_str("brainvision"), DeviceKind::BrainVision);
         assert_eq!(DeviceKind::from_kind_str("unknown"), DeviceKind::Unknown);
     }
 

@@ -147,6 +147,27 @@ const settings: Record<string, string> = {
     "Connect the PEAK PCAN-USB adapter to your computer and plug the Q21 amplifier into it via CAN bus.",
   "settings.supportedDevices.instruction.neurofield2":
     "Install PCAN Basic drivers for your platform. The scanner detects the Q21 automatically.",
+  // ── NeuroSky ──
+  "settings.supportedDevices.company.neurosky": "NeuroSky",
+  "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
+  "settings.supportedDevices.instruction.neurosky1":
+    "Connect the NeuroSky USB/Bluetooth serial adapter and power on the headset.",
+  "settings.supportedDevices.instruction.neurosky2":
+    "Use target 'neurosky' (or 'neurosky:<serial-port>') to connect. Raw ThinkGear EEG is streamed at 512 Hz.",
+  // ── Neurosity ──
+  "settings.supportedDevices.company.neurosity": "Neurosity",
+  "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
+  "settings.supportedDevices.instruction.neurosity1":
+    "Set environment variables SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD, and SKILL_NEUROSITY_DEVICE_ID.",
+  "settings.supportedDevices.instruction.neurosity2":
+    "Use target 'neurosity:<device-id>' to connect via Neurosity Cloud API.",
+  // ── BrainVision ──
+  "settings.supportedDevices.company.brainvision": "Brain Products",
+  "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Start Recorder/Remote Data Access and expose an RDA TCP stream (default 127.0.0.1:51244).",
+  "settings.supportedDevices.instruction.brainvision2":
+    "Use target 'brainvision:<host>:<port>' (or 'brainvision') to connect and stream scans.",
   "settings.scanner.title": "Scanner Backends",
   "settings.scanner.desc":
     "Toggle which discovery transports run in the background. Changes take effect on next app restart.",

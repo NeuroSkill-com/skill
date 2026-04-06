@@ -68,6 +68,15 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
     if lower.starts_with("brainbit:") || lower.contains("brainbit") {
         return connect_brainbit(target).await;
     }
+    if lower.starts_with("neurosky:") || lower == "neurosky" || lower.contains("mindwave") {
+        return connect_neurosky(target).await;
+    }
+    if lower.starts_with("neurosity:") || lower == "neurosity" || lower.contains("crown") || lower.contains("notion") {
+        return connect_neurosity(state, target).await;
+    }
+    if lower.starts_with("brainvision:") || lower == "brainvision" || lower.starts_with("rda:") {
+        return connect_brainvision(target).await;
+    }
     if lower.starts_with("neurofield:") || lower.contains("neurofield") {
         return connect_neurofield(target).await;
     }
@@ -298,7 +307,11 @@ async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
 
     let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
         let mut api = Q21Api::new(bus).map_err(|e| format!("Q21 connect: {e}"))?;
-        let name = format!("NeuroField Q21 ({:?} #{})", api.eeg_device_type(), api.eeg_device_serial());
+        let name = format!(
+            "NeuroField Q21 ({:?} #{})",
+            api.eeg_device_type(),
+            api.eeg_device_serial()
+        );
         api.start_receiving_eeg().map_err(|e| format!("start: {e}"))?;
 
         let tx = sample_tx;
@@ -335,7 +348,10 @@ async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
         kind: "neurofield",
         eeg_channels: neurofield::q21_api::NUM_CHANNELS,
         eeg_sample_rate: neurofield::q21_api::SAMPLING_RATE,
-        channel_names: neurofield::q21_api::EEG_CHANNEL_NAMES.iter().map(ToString::to_string).collect(),
+        channel_names: neurofield::q21_api::EEG_CHANNEL_NAMES
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         caps: DeviceCaps::EEG,
         pipeline_channels: neurofield::q21_api::NUM_CHANNELS,
         ppg_channel_names: Vec::new(),
@@ -363,20 +379,26 @@ struct NeuroFieldAdapter {
 
 #[async_trait::async_trait]
 impl skill_devices::session::DeviceAdapter for NeuroFieldAdapter {
-    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor { &self.desc }
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
 
     async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
         use skill_devices::session::*;
         if !self.connected_sent {
             self.connected_sent = true;
             return Some(DeviceEvent::Connected(DeviceInfo {
-                name: self.name.clone(), ..Default::default()
+                name: self.name.clone(),
+                ..Default::default()
             }));
         }
         let s = self.rx.recv().await?;
         let channels: Vec<f64> = s.data.to_vec();
         let ts = s.timestamp_us as f64 / 1_000_000.0;
-        Some(DeviceEvent::Eeg(EegFrame { channels, timestamp_s: ts }))
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels,
+            timestamp_s: ts,
+        }))
     }
 
     async fn disconnect(&mut self) {
@@ -400,11 +422,11 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
 
     let port = target.strip_prefix("brainmaster:").unwrap_or("").to_string();
 
-    // Read model from settings or default to Atlantis4.
+    // Read model from settings (device_api.brainmaster_model) or default Atlantis4.
     let model_str = {
         let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
         let settings = skill_settings::load_settings(&skill_dir);
-        settings.openbci.serial_port.clone() // reuse field or default
+        settings.device_api.brainmaster_model.clone()
     };
     let model = match model_str.to_lowercase().as_str() {
         "atlantis2" | "a2" => DeviceModel::Atlantis2,
@@ -556,6 +578,476 @@ async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
     Ok(adapter)
 }
 
+// ── NeuroSky MindWave (serial ThinkGear) ───────────────────────────────────
+
+async fn connect_neurosky(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use neurosky::prelude::*;
+
+    let requested = target.strip_prefix("neurosky:").unwrap_or("").trim().to_string();
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<i16>(1024);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let port = if requested.is_empty() {
+            MindWaveDevice::find()
+                .map_err(|e| format!("MindWave find: {e}"))?
+                .into_iter()
+                .next()
+                .ok_or("No NeuroSky MindWave serial port found")?
+        } else {
+            requested
+        };
+
+        let mut device = MindWaveDevice::open(&port)
+            .or_else(|_| MindWaveDevice::open_bluetooth(&port))
+            .map_err(|e| format!("MindWave open: {e}"))?;
+        let _ = device.auto_connect();
+
+        let tx = sample_tx;
+        let read_thread = std::thread::Builder::new()
+            .name("neurosky-read".to_string())
+            .spawn(move || loop {
+                if stop_rx.try_recv().is_ok() {
+                    break;
+                }
+                match device.read() {
+                    Ok(packets) => {
+                        if packets.is_empty() {
+                            std::thread::sleep(Duration::from_millis(5));
+                            continue;
+                        }
+                        for p in packets {
+                            match p {
+                                Packet::RawValue(v) => {
+                                    if tx.blocking_send(v).is_err() {
+                                        return;
+                                    }
+                                }
+                                Packet::HeadsetDisconnected => return,
+                                _ => {}
+                            }
+                        }
+                    }
+                    Err(_) => break,
+                }
+            })
+            .map_err(|e| format!("spawn reader: {e}"))?;
+
+        Ok((format!("NeuroSky MindWave ({port})"), read_thread))
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "neurosky",
+        eeg_channels: 1,
+        eeg_sample_rate: neurosky::types::RAW_SAMPLING_RATE as f64,
+        channel_names: vec!["Fp1".into()],
+        caps: DeviceCaps::EEG,
+        pipeline_channels: 1,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+
+    Ok(Box::new(NeuroSkyAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        stop_tx: Some(stop_tx),
+        read_thread: Some(read_thread),
+        connected_sent: false,
+    }))
+}
+
+struct NeuroSkyAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<i16>,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for NeuroSkyAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+
+        let sample = self.rx.recv().await?;
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels: vec![sample as f64],
+            timestamp_s: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0),
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || {
+                    let _ = handle.join();
+                }),
+            )
+            .await;
+        }
+    }
+}
+
+// ── Neurosity Crown/Notion (Cloud API) ─────────────────────────────────────
+
+async fn connect_neurosity(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use neurosity::prelude::*;
+
+    let requested_device_id = target.strip_prefix("neurosity:").unwrap_or("").trim().to_string();
+
+    let (device_id, email, password) = {
+        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        let settings = skill_settings::load_settings(&skill_dir);
+
+        let device_id = if requested_device_id.is_empty() {
+            settings.device_api.neurosity_device_id.clone()
+        } else {
+            requested_device_id
+        };
+        let email = if settings.device_api.neurosity_email.trim().is_empty() {
+            std::env::var("SKILL_NEUROSITY_EMAIL")
+                .or_else(|_| std::env::var("NEUROSITY_EMAIL"))
+                .unwrap_or_default()
+        } else {
+            settings.device_api.neurosity_email.clone()
+        };
+        let password = if settings.device_api.neurosity_password.trim().is_empty() {
+            std::env::var("SKILL_NEUROSITY_PASSWORD")
+                .or_else(|_| std::env::var("NEUROSITY_PASSWORD"))
+                .unwrap_or_default()
+        } else {
+            settings.device_api.neurosity_password.clone()
+        };
+
+        (device_id, email, password)
+    };
+
+    if device_id.is_empty() {
+        return Err("Neurosity device_id missing (set in Device API settings or use neurosity:<device_id>)".into());
+    }
+    if email.trim().is_empty() {
+        return Err("Neurosity email missing (Device API settings or SKILL_NEUROSITY_EMAIL)".into());
+    }
+    if password.trim().is_empty() {
+        return Err("Neurosity password missing (Device API settings or SKILL_NEUROSITY_PASSWORD)".into());
+    }
+
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<Vec<f64>>(512);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+
+    let (device_name, eeg_channels, sample_rate, channel_names, read_thread) =
+        tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut client = NeurosityClient::new(&device_id);
+            client
+                .login(&Credentials { email, password })
+                .map_err(|e| format!("Neurosity login: {e}"))?;
+
+            let info = client.get_info().unwrap_or_default();
+            let model = info.model.to_lowercase();
+            let default_names: Vec<String> = if model.contains("notion") {
+                neurosity::types::NOTION_CHANNEL_NAMES
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            } else {
+                neurosity::types::CROWN_CHANNEL_NAMES
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            };
+            let eeg_channels = if info.channels > 0 {
+                info.channels as usize
+            } else {
+                default_names.len()
+            };
+            let channel_names = if default_names.len() == eeg_channels {
+                default_names
+            } else {
+                (1..=eeg_channels).map(|i| format!("Ch{i}")).collect()
+            };
+            let sample_rate = if info.sampling_rate > 0 {
+                info.sampling_rate as f64
+            } else {
+                neurosity::types::CROWN_SAMPLING_RATE as f64
+            };
+            let display_name = if info.device_nickname.trim().is_empty() {
+                format!("Neurosity {device_id}")
+            } else {
+                format!("Neurosity {}", info.device_nickname)
+            };
+
+            let tx = sample_tx;
+            let read_thread = std::thread::Builder::new()
+                .name("neurosity-read".to_string())
+                .spawn(move || loop {
+                    if stop_rx.try_recv().is_ok() {
+                        break;
+                    }
+                    match client.brainwaves_raw() {
+                        Ok(raw) => {
+                            let channels: Vec<f64> =
+                                raw.data.iter().map(|c| c.last().copied().unwrap_or(0.0)).collect();
+                            if !channels.is_empty() && tx.blocking_send(channels).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => std::thread::sleep(Duration::from_millis(250)),
+                    }
+                    std::thread::sleep(Duration::from_millis(25));
+                })
+                .map_err(|e| format!("spawn reader: {e}"))?;
+
+            Ok((display_name, eeg_channels, sample_rate, channel_names, read_thread))
+        })
+        .await
+        .map_err(|e| format!("spawn: {e}"))??;
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "neurosity",
+        eeg_channels,
+        eeg_sample_rate: sample_rate,
+        channel_names,
+        caps: DeviceCaps::EEG,
+        pipeline_channels: eeg_channels,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+
+    Ok(Box::new(NeurosityAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        stop_tx: Some(stop_tx),
+        read_thread: Some(read_thread),
+        connected_sent: false,
+    }))
+}
+
+struct NeurosityAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<Vec<f64>>,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for NeurosityAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+
+        let channels = self.rx.recv().await?;
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels,
+            timestamp_s: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0),
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || {
+                    let _ = handle.join();
+                }),
+            )
+            .await;
+        }
+    }
+}
+
+// ── BrainVision RDA (TCP/IP) ────────────────────────────────────────────────
+
+async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+    use brainvision::prelude::*;
+
+    let spec = target
+        .strip_prefix("brainvision:")
+        .or_else(|| target.strip_prefix("rda:"))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    let (host, port) = if spec.is_empty() {
+        ("127.0.0.1".to_string(), brainvision::types::RDA_PORT_I16)
+    } else if let Some((h, p)) = spec.rsplit_once(':') {
+        let parsed = p
+            .parse::<u16>()
+            .map_err(|e| format!("invalid BrainVision port '{p}': {e}"))?;
+        (h.to_string(), parsed)
+    } else {
+        (spec, brainvision::types::RDA_PORT_I16)
+    };
+
+    let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<Vec<f64>>(1024);
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+
+    let (device_name, eeg_channels, sample_rate, channel_names, read_thread) =
+        tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut device = BrainVisionDevice::connect(&host, port).map_err(|e| format!("RDA connect: {e}"))?;
+            let header = device.wait_for_start().map_err(|e| format!("RDA start: {e}"))?;
+            let eeg_channels = header.channel_count as usize;
+            let sample_rate = header.sampling_rate_hz();
+            let channel_names = if header.channel_names.is_empty() {
+                (1..=eeg_channels).map(|i| format!("Ch{i}")).collect()
+            } else {
+                header.channel_names.clone()
+            };
+
+            let tx = sample_tx;
+            let read_thread = std::thread::Builder::new()
+                .name("brainvision-read".to_string())
+                .spawn(move || {
+                    loop {
+                        if stop_rx.try_recv().is_ok() {
+                            break;
+                        }
+                        match device.next_scan() {
+                            Ok(Some(scan)) => {
+                                if tx.blocking_send(scan.data).is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(None) => break,
+                            Err(_) => break,
+                        }
+                    }
+                    device.close();
+                })
+                .map_err(|e| format!("spawn reader: {e}"))?;
+
+            Ok((
+                format!("BrainVision RDA ({host}:{port})"),
+                eeg_channels,
+                if sample_rate > 0.0 { sample_rate } else { 500.0 },
+                channel_names,
+                read_thread,
+            ))
+        })
+        .await
+        .map_err(|e| format!("spawn: {e}"))??;
+
+    use skill_devices::session::{DeviceCaps, DeviceDescriptor};
+    let desc = DeviceDescriptor {
+        kind: "brainvision",
+        eeg_channels,
+        eeg_sample_rate: sample_rate,
+        channel_names,
+        caps: DeviceCaps::EEG,
+        pipeline_channels: eeg_channels,
+        ppg_channel_names: Vec::new(),
+        imu_channel_names: Vec::new(),
+        fnirs_channel_names: Vec::new(),
+    };
+
+    Ok(Box::new(BrainVisionAdapter {
+        name: device_name,
+        desc,
+        rx: sample_rx,
+        stop_tx: Some(stop_tx),
+        read_thread: Some(read_thread),
+        connected_sent: false,
+    }))
+}
+
+struct BrainVisionAdapter {
+    name: String,
+    desc: skill_devices::session::DeviceDescriptor,
+    rx: tokio::sync::mpsc::Receiver<Vec<f64>>,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    read_thread: Option<std::thread::JoinHandle<()>>,
+    connected_sent: bool,
+}
+
+#[async_trait::async_trait]
+impl skill_devices::session::DeviceAdapter for BrainVisionAdapter {
+    fn descriptor(&self) -> &skill_devices::session::DeviceDescriptor {
+        &self.desc
+    }
+
+    async fn next_event(&mut self) -> Option<skill_devices::session::DeviceEvent> {
+        use skill_devices::session::*;
+        if !self.connected_sent {
+            self.connected_sent = true;
+            return Some(DeviceEvent::Connected(DeviceInfo {
+                name: self.name.clone(),
+                ..Default::default()
+            }));
+        }
+
+        let channels = self.rx.recv().await?;
+        Some(DeviceEvent::Eeg(EegFrame {
+            channels,
+            timestamp_s: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0),
+        }))
+    }
+
+    async fn disconnect(&mut self) {
+        self.rx.close();
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(handle) = self.read_thread.take() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || {
+                    let _ = handle.join();
+                }),
+            )
+            .await;
+        }
+    }
+}
+
 // ── BrainBit (BLE via NeuroSDK2) ───────────────────────────────────────────
 
 async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
@@ -567,56 +1059,55 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
 
     let target_addr = target.strip_prefix("brainbit:").unwrap_or("").to_string();
 
-    let (device_name, device_addr, keepalive_thread) =
-        tokio::task::spawn_blocking(move || -> Result<_, String> {
-            let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
-            scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
-            let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
-            if devices.is_empty() {
-                return Err("No BrainBit device found nearby".into());
-            }
-            // Pick matching device or first.
-            let info = if !target_addr.is_empty() {
-                devices
-                    .iter()
-                    .find(|d| d.address_str() == target_addr)
-                    .or(devices.first())
-            } else {
-                devices.first()
-            }
-            .ok_or("No matching BrainBit device")?;
+    let (device_name, device_addr, keepalive_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
+        scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
+        let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
+        if devices.is_empty() {
+            return Err("No BrainBit device found nearby".into());
+        }
+        // Pick matching device or first.
+        let info = if !target_addr.is_empty() {
+            devices
+                .iter()
+                .find(|d| d.address_str() == target_addr)
+                .or(devices.first())
+        } else {
+            devices.first()
+        }
+        .ok_or("No matching BrainBit device")?;
 
-            let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
-            let name = device.name().unwrap_or_else(|_| "BrainBit".into());
-            let addr = device.address().unwrap_or_default();
+        let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
+        let name = device.name().unwrap_or_else(|_| "BrainBit".into());
+        let addr = device.address().unwrap_or_default();
 
-            // Set up streaming callback.
-            let tx = sample_tx;
-            device
-                .on_signal(move |samples| {
-                    let _ = tx.blocking_send(samples.to_vec());
-                })
-                .map_err(|e| format!("BrainBit on_signal: {e}"))?;
-            device
-                .start_signal()
-                .map_err(|e| format!("BrainBit start_signal: {e}"))?;
+        // Set up streaming callback.
+        let tx = sample_tx;
+        device
+            .on_signal(move |samples| {
+                let _ = tx.blocking_send(samples.to_vec());
+            })
+            .map_err(|e| format!("BrainBit on_signal: {e}"))?;
+        device
+            .start_signal()
+            .map_err(|e| format!("BrainBit start_signal: {e}"))?;
 
-            // Keep scanner/device alive until adapter disconnects.
-            let keepalive_thread = std::thread::Builder::new()
-                .name("brainbit-keepalive".to_string())
-                .spawn(move || {
-                    let _ = stop_rx.recv();
-                    drop(device);
-                    drop(scanner);
-                })
-                .map_err(|e| format!("spawn keepalive: {e}"))?;
+        // Keep scanner/device alive until adapter disconnects.
+        let keepalive_thread = std::thread::Builder::new()
+            .name("brainbit-keepalive".to_string())
+            .spawn(move || {
+                let _ = stop_rx.recv();
+                drop(device);
+                drop(scanner);
+            })
+            .map_err(|e| format!("spawn keepalive: {e}"))?;
 
-            Ok((name, addr, keepalive_thread))
-        })
-        .await
-        .map_err(|e| format!("spawn: {e}"))??;
+        Ok((name, addr, keepalive_thread))
+    })
+    .await
+    .map_err(|e| format!("spawn: {e}"))??;
 
     info!(name = %device_name, addr = %device_addr, "BrainBit connected");
 

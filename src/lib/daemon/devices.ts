@@ -35,6 +35,10 @@ export interface DeviceApiConfig {
   emotiv_client_secret: string;
   idun_api_token: string;
   oura_access_token: string;
+  neurosity_email: string;
+  neurosity_password: string;
+  neurosity_device_id: string;
+  brainmaster_model: string;
 }
 
 export interface ScannerConfig {
