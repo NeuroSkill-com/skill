@@ -8,6 +8,41 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.86] — 2026-04-06
+
+### Features
+
+- **Daemon CLI command dispatch**: universal JSON command dispatcher mapping ~70 CLI commands to daemon REST handler logic. `POST /` root tunnel and `POST /v1/cmd` authenticated endpoints. WebSocket handler upgraded to bidirectional — dispatches incoming JSON commands alongside broadcasting events.
+- **CLI daemon connectivity**: auto-discovers daemon port 18444, loads auth token from `~/.config/skill/daemon/auth.token`, includes Bearer token in WS and HTTP requests.
+- **Full session recording pipeline**: CSV and Parquet recording via `SessionWriter`, `BandAnalyzer` DSP computing band power at ~4 Hz (delta through gamma, FAA, TAR, coherence, entropy, 30+ derived metrics), `EegBands` WS events broadcast, session metadata JSON sidecar, epoch metrics stored in `eeg.sqlite`.
+- **EXG embedding pipeline**: sliding-window 5s epoch accumulator with resampling, per-day HNSW + SQLite store, background embed worker thread with 9 encoder backends (ZUNA, LUNA, REVE, OSF, SleepFM, SleepLM, ST-EEGFormer, TRIBEv2, NeuroRVQ). All enabled by default via `embed-exg` feature flag.
+- **Hook triggers**: `HookMatcher` with fastembed BGE-small-en-v1.5 for keyword→vector, label index HNSW search, cosine distance against live EEG embeddings, scenario filtering, rate limiting, audit log in `hooks.sqlite`.
+- **LLM streaming over WebSocket**: incremental delta tokens via mpsc bridge, protocol matches CLI expectations (session → delta* → done). LLM inference enabled by default.
+- **Generic adapter session runner**: single `run_adapter_session` function drives any `Box<dyn DeviceAdapter>` through the full daemon pipeline. Replaced device-specific event loops.
+- **Enriched band snapshots**: focus, relaxation, engagement composite scores computed from raw band power data, matching the old Tauri session runner formulas.
+- **Parquet storage support**: `SessionWriter` dispatches to CSV, Parquet, or both based on user's `storage_format` setting. IMU frames also recorded.
+
+- **NeuroField Q21 support**: 20-channel FDA-approved EEG amplifier via PCAN-USB (CAN bus). Scanner probes online PCAN interfaces, session runner with blocking reader thread, standard 10-20 electrode names (F7, T3, T4, T5, T6, Cz, Fz, Pz, F3, C4, C3, P4, P3, O2, O1, F8, F4, Fp1, Fp2, HR). Crate: `neurofield 0.0.1`.
+- **BrainBit support**: BrainBit, BrainBit 2, Pro, Flex 4/8 EEG headbands via NeuroSDK2 BLE. 4 channels (O1, O2, T3, T4) at 250 Hz. Callback-based streaming via `on_signal()`. Crate: `brainbit 0.0.1`.
+- **g.tec Unicorn Hybrid Black support**: 8-channel EEG headset via Unicorn C API (BLE). 250 Hz, blocking `get_single_scan()` reader thread. Crate: `gtec 0.0.2`.
+- **Restored all BLE devices**: Muse, MW75 Neuro, Hermes V1, IDUN Guardian, Mendi fNIRS — all re-wired through the generic adapter session runner with full pipeline (CSV/Parquet, DSP, embeddings, hooks).
+- **Restored Emotiv**: EPOC X, Insight, Flex, MN8 via Cortex WebSocket API.
+- **Restored Cognionics CGX**: Quick-20r and other CGX headsets via USB serial.
+- **LSL stream sessions**: `connect_lsl()` resolves EEG streams, creates `LslAdapter`, feeds into generic pipeline. Discovery was working; session recording was broken and is now fixed.
+
+### Bugfixes
+
+- **Windows COM port ≥ 10**: added `\\.\COMxx` prefix normalization for COM10+ ports that otherwise fail with "file not found".
+- **FTDI dongle auto-detection**: 3-pass serial port detection (VID/PID → product/manufacturer string → heuristic fallback) catches dongles that Windows reports without USB metadata.
+- **Hot-plug retry**: 3 attempts with 1.5s/3s backoff delays when the serial port is temporarily locked after USB replug.
+- **Device ID → session start**: `start_session` now accepts `usb:COM3`, `cgx:*`, `neurofield:*`, `brainbit:*`, `gtec:*`, `lsl:*` device IDs and routes to the correct connect function.
+- **LLM inference disabled by default**: daemon `Cargo.toml` had `default = []` — all `#[cfg(feature = "llm")]` code was dead. Fixed: `default = ["llm", "embed-exg"]`.
+- **LSL sessions broken**: `lsl:` targets were not handled in `connect_device`. Now wired through `connect_lsl()` with stream resolution and `LslAdapter`.
+
+### Docs
+
+- **DEVICES.md**: complete device support matrix — 13 device families, 19 hardware variants, 3 virtual/network sources. Transport summary, platform support table, device ID format reference, guide for adding new devices.
+
 ## [0.0.85] — 2026-04-03
 
 ### Docs
