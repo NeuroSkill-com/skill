@@ -1040,10 +1040,10 @@ dependencies = [
 [[package]]
 name = "brainmaster"
 version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbff1286420780dbf5480466aa922d838fbc496edfcbc6a0057cd10825ebdedf"
 dependencies = [
- "crossterm",
  "log",
- "ratatui",
  "serde",
  "serde_json",
  "serialport",

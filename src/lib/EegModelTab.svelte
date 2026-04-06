@@ -225,7 +225,11 @@ onMount(async () => {
 
   // Final events: refresh full status to pick up any fields the progress
   // event doesn't carry (encoder_loaded, weights_path, etc.).
-  const unlistenCompleted = onDaemonEvent("ExgDownloadCompleted", () => refreshStatus());
+  const unlistenCompleted = onDaemonEvent("ExgDownloadCompleted", async () => {
+    await refreshStatus();
+    // Also refresh config in case backend/repo changed
+    modelConfig = await daemonInvoke<ExgModelConfig>("get_eeg_model_config");
+  });
   const unlistenFailed = onDaemonEvent("ExgDownloadFailed", () => refreshStatus());
 
   // Chain cleanup into the existing unsub.

@@ -76,7 +76,7 @@ gtec                = { version = "0.0.2", default-features = false }
 neurosky            = { version = "0.0.1", default-features = false }
 neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
-brainmaster         = { path = "../brainmaster", default-features = false }
+brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
 zuna-rs             = { version = "0.0.2", default-features = false, features = ["ndarray"], optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }

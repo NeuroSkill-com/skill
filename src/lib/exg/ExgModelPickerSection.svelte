@@ -3,11 +3,12 @@
 <!-- EXG model picker — browse families from exg_catalog.json, download weights, select active model. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { onMount } from "svelte";
+import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -206,6 +207,8 @@ async function refreshCatalog() {
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
+let unlistenDownload: (() => void) | undefined;
+
 onMount(async () => {
   await refreshCatalog();
   if (activeFamilyId && catalog?.families[activeFamilyId]) {
@@ -213,6 +216,15 @@ onMount(async () => {
   } else if (familyIds.length > 0) {
     selectedFamilyId = familyIds[0];
   }
+
+  // Refresh catalog after download completes so weights_cached updates
+  const unsub1 = onDaemonEvent("ExgDownloadCompleted", () => refreshCatalog());
+  const unsub2 = onDaemonEvent("ExgDownloadFailed", () => refreshCatalog());
+  unlistenDownload = () => { unsub1(); unsub2(); };
+});
+
+onDestroy(() => {
+  unlistenDownload?.();
 });
 
 $effect(() => {

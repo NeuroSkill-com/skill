@@ -554,7 +554,7 @@ fn spawn_exg_download(
                 &config_file,
                 &status_for_thread,
                 &cancel_for_thread,
-                true, // mark_needs_restart
+                false, // don't mark needs_restart — we reload in-place
             )
         });
 
@@ -575,7 +575,7 @@ fn spawn_exg_download(
                         "progress": st.download_progress,
                         "status_msg": st.download_status_msg,
                         "weights_found": st.weights_found,
-                        "needs_restart": st.download_needs_restart,
+                        "needs_restart": false,
                     }),
                 );
             }
@@ -586,6 +586,16 @@ fn spawn_exg_download(
         // Read final result
         let result = (&mut job).await;
         let succeeded = matches!(result, Ok(Some(_)));
+
+        // After successful download, ensure status reflects the new state
+        // immediately — no restart required.
+        if succeeded {
+            if let Ok(mut st) = status.lock() {
+                st.download_needs_restart = false;
+                st.weights_found = true;
+                st.active_model_backend = Some(backend_str.clone());
+            }
+        }
 
         // Emit final event
         if let Ok(st) = status.lock() {
@@ -598,7 +608,7 @@ fn spawn_exg_download(
                     "progress": st.download_progress,
                     "status_msg": st.download_status_msg,
                     "weights_found": st.weights_found,
-                    "needs_restart": st.download_needs_restart,
+                    "needs_restart": false,
                 }),
             );
         }
