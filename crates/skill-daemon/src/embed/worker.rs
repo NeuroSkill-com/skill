@@ -453,8 +453,21 @@ enum Encoder {
     Reve(Box<reve_rs::ReveEncoder<burn::backend::NdArray>>),
     #[cfg(feature = "embed-osf")]
     Osf(Box<osf_rs::OsfEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-sleepfm")]
+    SleepFM(Box<sleepfm::SleepFmEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-sleeplm")]
+    SleepLM(Box<sleeplm::SleepLMEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-steegformer")]
+    STEEGFormer(Box<steegformer::STEEGFormerEncoder<burn::backend::NdArray>>),
+    #[cfg(feature = "embed-tribev2")]
+    Tribev2(Box<Tribev2State>),
     NeuroRVQ(Box<NeuroRVQState>),
     None,
+}
+
+#[cfg(feature = "embed-tribev2")]
+struct Tribev2State {
+    _placeholder: (),
 }
 
 #[cfg(feature = "embed-zuna")]
@@ -521,6 +534,36 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
                 .ok()
                 .map(|(enc, _)| Encoder::Osf(Box::new(enc)))
         }),
+        #[cfg(feature = "embed-sleepfm")]
+        ExgModelBackend::Sleepfm => resolve_catalog_hf("sleepfm").and_then(|(w, c)| {
+            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+            sleepfm::SleepFmEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                .ok()
+                .map(|(enc, _)| Encoder::SleepFM(Box::new(enc)))
+        }),
+        #[cfg(feature = "embed-sleeplm")]
+        ExgModelBackend::Sleeplm => resolve_catalog_hf("sleeplm").and_then(|(w, c)| {
+            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+            sleeplm::SleepLMEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                .ok()
+                .map(|(enc, _)| Encoder::SleepLM(Box::new(enc)))
+        }),
+        #[cfg(feature = "embed-steegformer")]
+        ExgModelBackend::Steegformer => resolve_catalog_hf("steegformer-base").and_then(|(w, c)| {
+            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+            steegformer::STEEGFormerEncoder::<burn::backend::NdArray>::load(&c, &w, device)
+                .ok()
+                .map(|(enc, _)| Encoder::STEEGFormer(Box::new(enc)))
+        }),
+        #[cfg(feature = "embed-tribev2")]
+        ExgModelBackend::Tribev2 => {
+            // TRIBEv2 is a complex multimodal fMRI encoder.
+            // Weight loading is supported but runtime encoding requires
+            // the full modality pipeline.  For now, report as available
+            // but fall through to metrics-only.
+            info!("TRIBEv2 weights can be resolved but runtime encoding is not yet integrated");
+            None
+        }
         #[allow(unreachable_patterns)]
         other => {
             info!(backend = other.as_str(), "no compiled encoder for this backend");
@@ -573,6 +616,17 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
         Encoder::Reve(enc) => encode_reve(enc, msg),
         #[cfg(feature = "embed-osf")]
         Encoder::Osf(enc) => encode_osf(enc, msg),
+        #[cfg(feature = "embed-sleepfm")]
+        Encoder::SleepFM(_enc) => {
+            // SleepFM requires PSG-specific tensor layout; use catalog embedding dim as fallback.
+            None
+        }
+        #[cfg(feature = "embed-sleeplm")]
+        Encoder::SleepLM(enc) => encode_sleeplm(enc, msg),
+        #[cfg(feature = "embed-steegformer")]
+        Encoder::STEEGFormer(enc) => encode_steegformer(enc, msg),
+        #[cfg(feature = "embed-tribev2")]
+        Encoder::Tribev2(state) => encode_tribev2(state, msg),
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
@@ -684,6 +738,67 @@ fn encode_osf(enc: &osf_rs::OsfEncoder<burn::backend::NdArray>, msg: &EpochMsg) 
     let batch = osf_rs::build_batch::<burn::backend::NdArray>(flat, n_ch, n_samples, &device);
     let ep = enc.run_batch(&batch).ok()?;
     Some(ep.cls_emb)
+}
+
+#[cfg(feature = "embed-sleeplm")]
+fn encode_sleeplm(enc: &sleeplm::SleepLMEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+    // SleepLM expects [10, 1920] (10 PSG channels × 1920 samples).
+    // Pad/truncate the EEG signal to fit.
+    let n_ch = msg.channel_names.len().min(msg.samples.len()).min(10);
+    if n_ch == 0 {
+        return None;
+    }
+    let target_samples = 1920;
+    let mut flat = vec![0.0f32; 10 * target_samples];
+    for ch in 0..n_ch {
+        let src = &msg.samples[ch];
+        let copy_len = src.len().min(target_samples);
+        for (i, &v) in src.iter().take(copy_len).enumerate() {
+            flat[ch * target_samples + i] = v;
+        }
+    }
+    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+    let batch = sleeplm::build_batch::<burn::backend::NdArray>(flat, &device);
+    let ep = enc.encode(&batch).ok()?;
+    Some(ep.embedding)
+}
+
+#[cfg(feature = "embed-steegformer")]
+fn encode_steegformer(
+    enc: &steegformer::STEEGFormerEncoder<burn::backend::NdArray>,
+    msg: &EpochMsg,
+) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    // ST-EEGFormer has a channel vocabulary like LUNA.
+    let mut names: Vec<String> = Vec::new();
+    let mut indices: Vec<usize> = Vec::new();
+    for (idx, name) in msg.channel_names.iter().take(n_ch).enumerate() {
+        let upper = name.to_uppercase();
+        if steegformer::channel_index(&upper).is_some() {
+            names.push(upper);
+            indices.push(idx);
+        }
+    }
+    if names.is_empty() {
+        return None;
+    }
+    let flat: Vec<f32> = indices.iter().flat_map(|&ch| msg.samples[ch].iter().copied()).collect();
+    let ch_refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+    let batch = steegformer::build_batch_named::<burn::backend::NdArray>(flat, &ch_refs, n_samples, &device);
+    let ep = enc.run_batch(&batch).ok()?;
+    Some(ep.output)
+}
+
+#[cfg(feature = "embed-tribev2")]
+fn encode_tribev2(_state: &Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
+    // TRIBEv2 runtime encoding requires the full multimodal pipeline.
+    // Not yet integrated — weights are downloaded but encoding is pending.
+    None
 }
 
 fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {

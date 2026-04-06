@@ -12286,11 +12286,15 @@ dependencies = [
  "skill-skills",
  "skill-tools",
  "skill-tts",
+ "sleepfm",
+ "sleeplm",
+ "steegformer",
  "sysinfo 0.33.1",
  "tokio",
  "tower",
  "tracing",
  "tracing-subscriber",
+ "tribev2",
  "urlencoding",
  "uuid",
  "zuna-rs",
@@ -12698,6 +12702,7 @@ checksum = "e50d6a671cc1fe4bb7927ab9dd7b183b6964632a8354fc22edeab42a9e29305d"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "clap 4.6.0",
  "half",
  "safetensors 0.7.0",
@@ -12713,6 +12718,7 @@ checksum = "ced74400919ed0688623a456896f46904c6bcdf037b36dff28a4e9556fbdb2cd"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "bytemuck",
  "clap 4.6.0",
  "half",
@@ -12939,6 +12945,25 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steegformer"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8268a0dbf4fadae3d5b313c4386270bca4978248096705ce5a9dd6a5d41d98cf"
+dependencies = [
+ "anyhow",
+ "burn",
+ "burn-ndarray",
+ "bytemuck",
+ "clap 4.6.0",
+ "half",
+ "libm",
+ "rayon",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "strength_reduce"
@@ -14675,6 +14700,7 @@ checksum = "4b1eee4f03c9961e4bbae9d08f0a55ea35ff67e9dae6da005f7636058d8a5688"
 dependencies = [
  "anyhow",
  "burn",
+ "burn-ndarray",
  "bytemuck",
  "cc",
  "clap 4.6.0",

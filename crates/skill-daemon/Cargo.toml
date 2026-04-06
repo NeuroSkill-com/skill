@@ -13,11 +13,15 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf"]
+embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-osf  = ["dep:osf-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
+embed-sleepfm = ["dep:sleepfm", "dep:burn", "dep:burn-ndarray"]
+embed-sleeplm = ["dep:sleeplm", "dep:burn", "dep:burn-ndarray"]
+embed-steegformer = ["dep:steegformer", "dep:burn", "dep:burn-ndarray"]
+embed-tribev2 = ["dep:tribev2", "dep:burn", "dep:burn-ndarray"]
 
 [[bin]]
 name = "skill-daemon"
@@ -71,6 +75,10 @@ zuna-rs             = { version = "0.0.2", default-features = false, features = 
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
 reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
+sleepfm             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
+sleeplm             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
+steegformer         = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
+tribev2             = { version = "0.0.4", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
 ndarray             = { version = "0.17", optional = true }
