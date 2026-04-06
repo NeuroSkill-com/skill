@@ -1,3 +1,7 @@
+// Allow needless_return in cfg-gated code paths where return is required
+// to exit early before the #[cfg(not(feature))] fallback block.
+#![allow(clippy::needless_return)]
+
 mod activity;
 mod auth;
 pub(crate) mod cmd_dispatch;
