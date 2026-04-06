@@ -70,8 +70,25 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let skill_dir = skill_data_dir();
-    let state = AppState::new(load_or_create_token()?, skill_dir);
+    let state = AppState::new(load_or_create_token()?, skill_dir.clone());
     activity::start_workers(state.clone());
+
+    // Probe HF cache for the currently configured model weights so the UI
+    // shows the correct state immediately on first load.
+    {
+        let st = state.exg_model_status.clone();
+        let sd = skill_dir.clone();
+        std::thread::spawn(move || {
+            let config = skill_eeg::eeg_model_config::load_model_config(&sd);
+            if let Some((path, backend)) = routes::settings::probe_weights_for_config(&config) {
+                if let Ok(mut status) = st.lock() {
+                    status.weights_found = true;
+                    status.weights_path = Some(path);
+                    status.active_model_backend = Some(backend);
+                }
+            }
+        });
+    }
 
     let v1 = Router::new()
         .route("/version", get(version))
@@ -123,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/", axum::routing::post(cmd_tunnel_root))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
+    let shutdown_state = state.clone();
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
@@ -140,6 +158,16 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown)
         .await?;
+
+    // Cancel any in-flight EXG weights download.
+    shutdown_state.exg_download_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    // Drop the active BLE session so btleplug stops firing delegate callbacks
+    // before the event channel is torn down (prevents spurious
+    // "Error sending notification event: send failed because receiver is gone").
+    if let Ok(mut slot) = shutdown_state.session_handle.lock() {
+        drop(slot.take());
+    }
 
     // Clean up PID file
     let _ = std::fs::remove_file(&pid_path);

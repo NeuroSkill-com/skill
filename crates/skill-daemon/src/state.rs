@@ -65,6 +65,10 @@ pub struct AppState {
     pub llm_state_cell: LlmStateCell,
     /// Active OpenBCI session handle (cancel sender).
     pub session_handle: Arc<Mutex<Option<crate::session_runner::SessionHandle>>>,
+    /// Shared EXG model status (download progress, encoder state, etc.).
+    pub exg_model_status: Arc<Mutex<skill_eeg::eeg_model_config::EegModelStatus>>,
+    /// Cancel flag for the EXG weights download thread.
+    pub exg_download_cancel: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -122,6 +126,8 @@ impl AppState {
             #[cfg(feature = "llm")]
             llm_state_cell: skill_llm::new_state_cell(),
             session_handle: Arc::new(Mutex::new(None)),
+            exg_model_status: Arc::new(Mutex::new(skill_eeg::eeg_model_config::EegModelStatus::default())),
+            exg_download_cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 }

@@ -1049,3 +1049,73 @@ fn token_path() -> Result<PathBuf, String> {
         dirs::config_dir().ok_or_else(|| "unable to resolve config directory".to_string())?;
     Ok(base.join("skill").join("daemon").join("auth.token"))
 }
+
+// ── EXG model daemon proxies ──────────────────────────────────────────────────
+//
+// The webview cannot always reach the daemon over HTTP (macOS WKWebView
+// restrictions, ATS, etc.).  These Tauri commands proxy the requests through
+// native `ureq` calls so the webview never needs direct network access.
+
+/// Proxy: GET /v1/models/exg-catalog
+#[tauri::command]
+pub fn get_exg_catalog() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/models/exg-catalog")
+}
+
+/// Proxy: GET /v1/models/config
+#[tauri::command]
+pub fn get_eeg_model_config() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/models/config")
+}
+
+/// Proxy: GET /v1/models/status
+#[tauri::command]
+pub fn get_eeg_model_status() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/models/status")
+}
+
+/// Proxy: PUT /v1/models/config
+#[tauri::command]
+pub fn set_eeg_model_config(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/models/config", &config)
+}
+
+/// Proxy: POST /v1/models/trigger-weights-download
+#[tauri::command]
+pub fn trigger_weights_download() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/models/trigger-weights-download", &serde_json::json!({}))
+}
+
+/// Proxy: POST /v1/models/cancel-weights-download
+#[tauri::command]
+pub fn cancel_weights_download() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/models/cancel-weights-download", &serde_json::json!({}))
+}
+
+/// Proxy: GET /v1/models/estimate-reembed
+#[tauri::command]
+pub fn estimate_reembed() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    fetch_json_with_auth(&base_url, &token, "/v1/models/estimate-reembed")
+}
+
+/// Proxy: POST /v1/models/trigger-reembed
+#[tauri::command]
+pub fn trigger_reembed() -> Result<serde_json::Value, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(&base_url, &token, "/v1/models/trigger-reembed", &serde_json::json!({}))
+}

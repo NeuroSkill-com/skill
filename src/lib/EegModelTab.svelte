@@ -13,6 +13,7 @@ import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import ExgModelPickerSection from "$lib/exg/ExgModelPickerSection.svelte";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -118,7 +119,9 @@ async function saveModelConfig(patch: Partial<ExgModelConfig>) {
 
 async function startDownload() {
   await daemonInvoke("trigger_weights_download");
-  // Status updates will arrive via the 2-second poll.
+  // Immediate status refresh so UI flips to "downloading" before the first
+  // ExgDownloadProgress event arrives.
+  await refreshStatus();
 }
 
 async function cancelDownload() {
@@ -185,6 +188,7 @@ const encoderLoading = $derived(
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenReembed: (() => void) | undefined;
+let unlistenExgProgress: (() => void) | undefined;
 
 onMount(async () => {
   modelConfig = await daemonInvoke<ExgModelConfig>("get_eeg_model_config");
@@ -199,10 +203,43 @@ onMount(async () => {
       loadReembedEstimate();
     }
   });
+
+  // Real-time download progress from daemon WebSocket (~200 ms updates).
+  unlistenExgProgress = onDaemonEvent("ExgDownloadProgress", (ev) => {
+    const p = ev.payload as {
+      downloading?: boolean;
+      progress?: number;
+      status_msg?: string | null;
+      weights_found?: boolean;
+      needs_restart?: boolean;
+    };
+    modelStatus = {
+      ...modelStatus,
+      downloading_weights: p.downloading ?? modelStatus.downloading_weights,
+      download_progress: (p.progress as number) ?? modelStatus.download_progress,
+      download_status_msg: (p.status_msg as string | null) ?? modelStatus.download_status_msg,
+      weights_found: p.weights_found ?? modelStatus.weights_found,
+      download_needs_restart: p.needs_restart ?? modelStatus.download_needs_restart,
+    };
+  });
+
+  // Final events: refresh full status to pick up any fields the progress
+  // event doesn't carry (encoder_loaded, weights_path, etc.).
+  const unlistenCompleted = onDaemonEvent("ExgDownloadCompleted", () => refreshStatus());
+  const unlistenFailed = onDaemonEvent("ExgDownloadFailed", () => refreshStatus());
+
+  // Chain cleanup into the existing unsub.
+  const origUnsub = unlistenExgProgress;
+  unlistenExgProgress = () => {
+    origUnsub();
+    unlistenCompleted();
+    unlistenFailed();
+  };
 });
 onDestroy(() => {
   clearInterval(statusTimer);
   unlistenReembed?.();
+  unlistenExgProgress?.();
 });
 </script>
 

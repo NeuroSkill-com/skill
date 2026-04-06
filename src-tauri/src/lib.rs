@@ -191,6 +191,10 @@ mod daemon_cmds;
 use daemon_cmds::{
     daemon_install_service, daemon_uninstall_service, get_daemon_bootstrap,
     get_daemon_service_status, get_daemon_status, get_daemon_token_path, start_daemon_dev,
+    // EXG model daemon proxies
+    get_exg_catalog, get_eeg_model_config, get_eeg_model_status,
+    set_eeg_model_config, trigger_weights_download, cancel_weights_download,
+    estimate_reembed, trigger_reembed,
 };
 
 mod settings_cmds;
@@ -1342,6 +1346,14 @@ pub fn run() {
             get_recent_input_activity,
             get_input_buckets,
             test_location,
+            get_exg_catalog,
+            get_eeg_model_config,
+            get_eeg_model_status,
+            set_eeg_model_config,
+            trigger_weights_download,
+            cancel_weights_download,
+            estimate_reembed,
+            trigger_reembed,
             pick_exg_weights_file,
             pick_gguf_file,
             // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)

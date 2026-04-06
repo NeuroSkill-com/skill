@@ -529,22 +529,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "brainbit".into(),
             name_key: "settings.supportedDevices.company.brainbit".into(),
-            logo: "/logos/brainbit.svg".into(),
+            logo: "/logos/brainbit.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainbitOriginal".into(),
                     ios_only: false,
-                    image: "/devices/brainbit.svg".into(),
+                    image: "/devices/brainbit-headband.png".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainbit2".into(),
                     ios_only: false,
-                    image: "/devices/brainbit.svg".into(),
+                    image: "/devices/brainbit-pro.png".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainbitFlex".into(),
                     ios_only: false,
-                    image: "/devices/brainbit.svg".into(),
+                    image: "/devices/brainbit-flex.png".into(),
                 },
             ],
             instruction_keys: vec![
@@ -555,22 +555,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "brainmaster".into(),
             name_key: "settings.supportedDevices.company.brainmaster".into(),
-            logo: "/logos/brainmaster.svg".into(),
+            logo: "/logos/brainmaster.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainmasterAtlantis4".into(),
                     ios_only: false,
-                    image: "/devices/brainmaster.svg".into(),
+                    image: "/devices/brainmaster-atlantis.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainmasterDiscovery".into(),
                     ios_only: false,
-                    image: "/devices/brainmaster.svg".into(),
+                    image: "/devices/brainmaster-discovery.jpg".into(),
                 },
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.brainmasterFreedom".into(),
                     ios_only: false,
-                    image: "/devices/brainmaster.svg".into(),
+                    image: "/devices/brainmaster-freedom.jpg".into(),
                 },
             ],
             instruction_keys: vec![
@@ -722,11 +722,11 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "neurofield".into(),
             name_key: "settings.supportedDevices.company.neurofield".into(),
-            logo: "/logos/neurofield.svg".into(),
+            logo: "/logos/neurofield.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.neurofieldQ21".into(),
                 ios_only: false,
-                image: "/devices/neurofield-q21.svg".into(),
+                image: "/devices/neurofield-q21.png".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.neurofield1".into(),
@@ -736,11 +736,11 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "neurosity".into(),
             name_key: "settings.supportedDevices.company.neurosity".into(),
-            logo: "/logos/neurosity.svg".into(),
+            logo: "/logos/neurosity.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.neurosityCrownNotion".into(),
                 ios_only: false,
-                image: "/devices/neurosity-crown.jpg".into(),
+                image: "/devices/neurosity-crown.png".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.neurosity1".into(),
@@ -750,11 +750,11 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "neurosky".into(),
             name_key: "settings.supportedDevices.company.neurosky".into(),
-            logo: "/logos/neurosky.svg".into(),
+            logo: "/logos/neurosky.png".into(),
             devices: vec![SupportedDevice {
                 name_key: "settings.supportedDevices.device.neuroskyMindWave".into(),
                 ios_only: false,
-                image: "/devices/neurosky-mindwave.jpg".into(),
+                image: "/devices/neurosky-mindwave.webp".into(),
             }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.neurosky1".into(),

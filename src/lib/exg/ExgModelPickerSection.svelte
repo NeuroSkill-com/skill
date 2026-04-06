@@ -69,6 +69,7 @@ let { modelConfig, modelStatus, onSaveConfig, onStartDownload, onCancelDownload 
 let catalog = $state<ExgCatalog | null>(null);
 let selectedFamilyId = $state("");
 let loading = $state(true);
+let loadError = $state<string | null>(null);
 
 // ── Derived ────────────────────────────────────────────────────────────────
 const familyIds = $derived(catalog ? Object.keys(catalog.families) : []);
@@ -189,8 +190,16 @@ async function pickLocalWeights() {
 
 async function refreshCatalog() {
   loading = true;
+  loadError = null;
   try {
-    catalog = await daemonInvoke<ExgCatalog>("get_exg_catalog");
+    const result = await daemonInvoke<ExgCatalog>("get_exg_catalog");
+    if (!result || !result.families) {
+      throw new Error("Invalid catalog response: missing families");
+    }
+    catalog = result;
+  } catch (e) {
+    console.error("[ExgModelPicker] failed to load catalog:", e);
+    loadError = e instanceof Error ? e.message : String(e);
   } finally {
     loading = false;
   }
@@ -228,10 +237,20 @@ $effect(() => {
     </button>
   </div>
 
-  {#if loading || !catalog}
+  {#if loading}
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e]">
       <CardContent class="flex items-center justify-center py-6">
         <span class="text-[0.72rem] text-muted-foreground">{t("common.loading")}</span>
+      </CardContent>
+    </Card>
+  {:else if loadError || !catalog}
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e]">
+      <CardContent class="flex flex-col items-center justify-center gap-2 py-6">
+        <span class="text-[0.72rem] text-destructive">Failed to load model catalog</span>
+        {#if loadError}
+          <span class="text-[0.6rem] text-muted-foreground font-mono break-all px-4">{loadError}</span>
+        {/if}
+        <Button size="sm" variant="outline" class="h-6 text-[0.6rem] px-2" onclick={refreshCatalog}>Retry</Button>
       </CardContent>
     </Card>
   {:else}

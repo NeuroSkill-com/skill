@@ -231,7 +231,7 @@ impl skill_llm::LlmEventEmitter for DaemonLlmEmitter {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/models/config", get(get_model_config).put(set_model_config))
+        .route("/models/config", get(get_model_config).put(set_model_config).post(set_model_config))
         .route("/models/status", get(get_model_status))
         .route("/models/trigger-reembed", post(trigger_reembed))
         .route("/models/trigger-weights-download", post(trigger_weights_download))
@@ -434,19 +434,230 @@ async fn set_model_config(
     Json(serde_json::json!({"ok": true}))
 }
 
-async fn get_model_status() -> Json<EegModelStatus> {
-    Json(EegModelStatus::default())
+async fn get_model_status(State(state): State<AppState>) -> Json<EegModelStatus> {
+    let mut st = state.exg_model_status.lock().map(|g| g.clone()).unwrap_or_default();
+
+    // If the shared status doesn't know about weights yet (e.g. no download
+    // has been triggered and no embed worker has run), probe the HF cache
+    // so the UI shows the correct state on first load.
+    if !st.weights_found && !st.downloading_weights {
+        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
+        let found = probe_weights_for_config(&config);
+        if let Some((weights_path, backend_str)) = found {
+            st.weights_found = true;
+            st.weights_path = Some(weights_path);
+            st.active_model_backend = Some(backend_str);
+            // Persist back so subsequent polls don't re-probe
+            if let Ok(mut shared) = state.exg_model_status.lock() {
+                shared.weights_found = true;
+                shared.weights_path = st.weights_path.clone();
+                shared.active_model_backend = st.active_model_backend.clone();
+            }
+        }
+    }
+
+    Json(st)
+}
+
+/// Check whether weights for the currently configured model backend exist in
+/// the HuggingFace disk cache.  Returns `(path_display, backend_str)` if found.
+///
+/// Public so `main.rs` can call it during daemon startup.
+pub fn probe_weights_for_config(
+    config: &ExgModelConfig,
+) -> Option<(String, String)> {
+    let catalog: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).ok()?;
+    let backend = config.model_backend.as_str();
+    let family_id = if backend == "luna" {
+        format!("luna-{}", config.luna_variant)
+    } else {
+        let families = catalog.get("families")?.as_object()?;
+        families
+            .keys()
+            .find(|id| family_id_to_backend(id) == backend)
+            .cloned()
+            .unwrap_or_else(|| backend.to_string())
+    };
+
+    let fam = catalog.get("families")?.get(&family_id)?;
+    let repo = fam.get("repo")?.as_str()?;
+    let wf = fam.get("weights_file")?.as_str()?;
+
+    let snaps_dir = skill_data::util::hf_model_dir(repo).join("snapshots");
+    let entries = std::fs::read_dir(&snaps_dir).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let wp = entry.path().join(wf);
+        if wp.exists() {
+            return Some((wp.display().to_string(), backend.to_string()));
+        }
+    }
+    None
 }
 
 async fn trigger_reembed() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true, "message": "reembed queued in daemon" }))
 }
 
-async fn trigger_weights_download() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "message": "weights download queued in daemon" }))
+async fn trigger_weights_download(State(state): State<AppState>) -> Json<serde_json::Value> {
+    use std::sync::atomic::Ordering;
+
+    // Reset cancel flag
+    state.exg_download_cancel.store(false, Ordering::Relaxed);
+
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
+    let status = state.exg_model_status.clone();
+    let cancel = state.exg_download_cancel.clone();
+
+    // Check if already downloading
+    {
+        if let Ok(st) = status.lock() {
+            if st.downloading_weights {
+                return Json(serde_json::json!({ "ok": false, "message": "download already in progress" }));
+            }
+        }
+    }
+
+    // Resolve repo + weights_file from the catalog based on current config
+    let catalog: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).unwrap_or_default();
+    let backend_str = config.model_backend.as_str().to_string();
+    let (hf_repo, weights_file, config_file) = resolve_download_target(&catalog, &config);
+
+    spawn_exg_download(state, hf_repo, weights_file, config_file, backend_str, status, cancel);
+
+    Json(serde_json::json!({ "ok": true, "message": "weights download started" }))
 }
 
-async fn cancel_weights_download() -> Json<serde_json::Value> {
+/// Spawn the EXG weights download on a blocking thread with a 200 ms progress
+/// emission loop that pushes `ExgDownloadProgress` events over the daemon
+/// WebSocket so the Tauri frontend can show real-time progress.
+fn spawn_exg_download(
+    state: AppState,
+    hf_repo: String,
+    weights_file: String,
+    config_file: String,
+    backend_str: String,
+    status: std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    tokio::spawn(async move {
+        let status_for_thread = status.clone();
+        let cancel_for_thread = cancel.clone();
+
+        let mut job = tokio::task::spawn_blocking(move || {
+            skill_exg::download_hf_weights_files(
+                &hf_repo,
+                &weights_file,
+                &config_file,
+                &status_for_thread,
+                &cancel_for_thread,
+                true, // mark_needs_restart
+            )
+        });
+
+        // Poll the shared status and emit events every 200 ms until the
+        // blocking task finishes.
+        loop {
+            if job.is_finished() {
+                break;
+            }
+
+            if let Ok(st) = status.lock() {
+                emit_daemon_event(
+                    &state,
+                    "ExgDownloadProgress",
+                    serde_json::json!({
+                        "backend": backend_str,
+                        "downloading": st.downloading_weights,
+                        "progress": st.download_progress,
+                        "status_msg": st.download_status_msg,
+                        "weights_found": st.weights_found,
+                        "needs_restart": st.download_needs_restart,
+                    }),
+                );
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
+        // Read final result
+        let result = (&mut job).await;
+        let succeeded = matches!(result, Ok(Some(_)));
+
+        // Emit final event
+        if let Ok(st) = status.lock() {
+            emit_daemon_event(
+                &state,
+                if succeeded { "ExgDownloadCompleted" } else { "ExgDownloadFailed" },
+                serde_json::json!({
+                    "backend": backend_str,
+                    "downloading": st.downloading_weights,
+                    "progress": st.download_progress,
+                    "status_msg": st.download_status_msg,
+                    "weights_found": st.weights_found,
+                    "needs_restart": st.download_needs_restart,
+                }),
+            );
+        }
+
+        if succeeded {
+            tracing::info!("[exg] weights download complete for {backend_str}");
+        } else {
+            tracing::warn!("[exg] weights download failed or cancelled for {backend_str}");
+        }
+    });
+}
+
+/// Determine repo, weights_file, config_file from catalog + current model config.
+fn resolve_download_target(
+    catalog: &serde_json::Value,
+    config: &ExgModelConfig,
+) -> (String, String, String) {
+    let backend = config.model_backend.as_str();
+
+    // For luna, use variant to find the right family entry
+    let family_id = if backend == "luna" {
+        format!("luna-{}", config.luna_variant)
+    } else {
+        // Find matching family by checking familyToBackend equivalent
+        let families = catalog.get("families").and_then(|f| f.as_object());
+        if let Some(fams) = families {
+            fams.keys()
+                .find(|id| family_id_to_backend(id) == backend)
+                .cloned()
+                .unwrap_or_else(|| backend.to_string())
+        } else {
+            backend.to_string()
+        }
+    };
+
+    if let Some(fam) = catalog.get("families").and_then(|f| f.get(&family_id)) {
+        let repo = fam.get("repo").and_then(|v| v.as_str()).unwrap_or(&config.hf_repo);
+        let wf = fam.get("weights_file").and_then(|v| v.as_str()).unwrap_or("model-00001-of-00001.safetensors");
+        let cf = fam.get("config_file").and_then(|v| v.as_str()).unwrap_or("config.json");
+        (repo.to_string(), wf.to_string(), cf.to_string())
+    } else if backend == "luna" {
+        (config.luna_hf_repo.clone(), config.luna_weights_file().to_string(), "config.json".to_string())
+    } else {
+        (config.hf_repo.clone(), "model-00001-of-00001.safetensors".to_string(), "config.json".to_string())
+    }
+}
+
+/// Map catalog family ID → backend string (mirrors the frontend familyToBackend).
+fn family_id_to_backend(id: &str) -> &str {
+    if id == "zuna" { return "zuna"; }
+    if id.starts_with("luna-") { return "luna"; }
+    if id == "reve-base" || id == "reve-large" { return "reve"; }
+    if id == "osf-base" { return "osf"; }
+    if id.starts_with("steegformer-") { return "steegformer"; }
+    id
+}
+
+async fn cancel_weights_download(State(state): State<AppState>) -> Json<serde_json::Value> {
+    state.exg_download_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     Json(serde_json::json!({ "ok": true, "message": "weights download cancellation requested" }))
 }
 
@@ -465,9 +676,69 @@ async fn rebuild_index() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true, "message": "index rebuild queued in daemon" }))
 }
 
-async fn get_exg_catalog() -> Json<serde_json::Value> {
-    const BUNDLED: &str = include_str!("../../../../src-tauri/exg_catalog.json");
-    let v: serde_json::Value = serde_json::from_str(BUNDLED).unwrap_or_default();
+async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+
+    let v = tokio::task::spawn_blocking(move || {
+        const BUNDLED: &str = include_str!("../../../../src-tauri/exg_catalog.json");
+        let mut v: serde_json::Value = serde_json::from_str(BUNDLED).unwrap_or_default();
+
+        // Enrich each family with `weights_cached` by probing the HF disk cache.
+        if let Some(families) = v.get_mut("families").and_then(|f| f.as_object_mut()) {
+            for (_id, fam) in families.iter_mut() {
+                let repo = fam.get("repo").and_then(|r| r.as_str()).unwrap_or("");
+                let weights_file = fam.get("weights_file").and_then(|w| w.as_str()).unwrap_or("");
+                let cached = if !repo.is_empty() && !weights_file.is_empty() {
+                    let snaps_dir = skill_data::util::hf_model_dir(repo).join("snapshots");
+                    std::fs::read_dir(&snaps_dir)
+                        .ok()
+                        .map(|entries| {
+                            entries
+                                .filter_map(|e| e.ok())
+                                .any(|e| e.path().join(weights_file).exists())
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                if let Some(obj) = fam.as_object_mut() {
+                    obj.insert("weights_cached".to_string(), serde_json::json!(cached));
+                }
+            }
+        }
+
+        // Set active_model based on current config
+        let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
+        let active_name = match config.model_backend {
+            skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
+                if let Some(fam) = v.get("families").and_then(|f| f.get(format!("luna-{}", config.luna_variant))) {
+                    fam.get("name").and_then(|n| n.as_str()).unwrap_or("LUNA").to_string()
+                } else {
+                    "LUNA".to_string()
+                }
+            }
+            _ => {
+                let backend_str = config.model_backend.as_str();
+                if let Some(families) = v.get("families").and_then(|f| f.as_object()) {
+                    families.iter()
+                        .find(|(id, _)| family_id_to_backend(id) == backend_str)
+                        .and_then(|(_, fam)| fam.get("name").and_then(|n| n.as_str()))
+                        .unwrap_or("ZUNA")
+                        .to_string()
+                } else {
+                    "ZUNA".to_string()
+                }
+            }
+        };
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("active_model".to_string(), serde_json::json!(active_name));
+        }
+
+        v
+    })
+    .await
+    .unwrap_or_default();
+
     Json(v)
 }
 
