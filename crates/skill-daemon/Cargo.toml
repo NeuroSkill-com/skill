@@ -34,7 +34,7 @@ base64 = { workspace = true }
 btleplug = "0.11"
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
-rand = "0.10"
+rand = "0.9"
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
