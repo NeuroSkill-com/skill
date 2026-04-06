@@ -1197,7 +1197,7 @@ onDestroy(() => {
           class="flex items-center justify-between w-full px-0.5 group"
           aria-expanded={neurosityApiExpanded}
         >
-          <span class="text-[0.78rem] font-semibold text-foreground">Neurosity</span>
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.neurosityTitle")}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -1208,11 +1208,11 @@ onDestroy(() => {
 
         {#if neurosityApiExpanded}
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-            Credentials and device id for Neurosity Crown/Notion cloud streaming.
+            {t("settings.deviceApi.neurosityDesc")}
           </p>
 
           <div class="flex flex-col gap-1.5">
-            <label for="neurosity-email" class="text-[0.68rem] font-medium text-foreground/80">Email</label>
+            <label for="neurosity-email" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.neurosityEmail")}</label>
             <input
               id="neurosity-email"
               type="text"
@@ -1225,7 +1225,7 @@ onDestroy(() => {
           </div>
 
           <div class="flex flex-col gap-1.5">
-            <label for="neurosity-password" class="text-[0.68rem] font-medium text-foreground/80">Password</label>
+            <label for="neurosity-password" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.neurosityPassword")}</label>
             <div class="flex items-center gap-2">
               <input
                 id="neurosity-password"
@@ -1247,7 +1247,7 @@ onDestroy(() => {
           </div>
 
           <div class="flex flex-col gap-1.5">
-            <label for="neurosity-device-id" class="text-[0.68rem] font-medium text-foreground/80">Device ID</label>
+            <label for="neurosity-device-id" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.neurosityDeviceId")}</label>
             <input
               id="neurosity-device-id"
               type="text"
@@ -1286,7 +1286,7 @@ onDestroy(() => {
           class="flex items-center justify-between w-full px-0.5 group"
           aria-expanded={brainmasterApiExpanded}
         >
-          <span class="text-[0.78rem] font-semibold text-foreground">BrainMaster</span>
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.brainmasterTitle")}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -1297,11 +1297,11 @@ onDestroy(() => {
 
         {#if brainmasterApiExpanded}
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-            Select the BrainMaster model used by the connector.
+            {t("settings.deviceApi.brainmasterDesc")}
           </p>
 
           <div class="flex flex-col gap-1.5">
-            <label for="brainmaster-model" class="text-[0.68rem] font-medium text-foreground/80">Model</label>
+            <label for="brainmaster-model" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.brainmasterModel")}</label>
             <select
               id="brainmaster-model"
               bind:value={deviceApi.brainmaster_model}

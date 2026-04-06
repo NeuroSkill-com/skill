@@ -130,34 +130,48 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
   "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
-  "settings.supportedDevices.instruction.brainbit1": "Enciende tu diadema BrainBit. Asegúrate de que la biblioteca NeuroSDK2 esté instalada para tu plataforma.",
-  "settings.supportedDevices.instruction.brainbit2": "El escáner detecta automáticamente dispositivos BrainBit por BLE. Toca el dispositivo para emparejarlo.",
+  "settings.supportedDevices.instruction.brainbit1":
+    "Enciende tu diadema BrainBit. Asegúrate de que la biblioteca NeuroSDK2 esté instalada para tu plataforma.",
+  "settings.supportedDevices.instruction.brainbit2":
+    "El escáner detecta automáticamente dispositivos BrainBit por BLE. Toca el dispositivo para emparejarlo.",
   "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
   "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4 (4 canales)",
   "settings.supportedDevices.device.brainmasterDiscovery": "Discovery (24 canales)",
   "settings.supportedDevices.device.brainmasterFreedom": "Freedom (24 canales inalámbrico)",
-  "settings.supportedDevices.instruction.brainmaster1": "Conecta el dongle USB serie y enciende el amplificador BrainMaster (57600 baudios, FTDI).",
-  "settings.supportedDevices.instruction.brainmaster2": "Selecciona el modelo de placa en Ajustes de OpenBCI. El puerto se detecta automáticamente.",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "Conecta el dongle USB serie y enciende el amplificador BrainMaster (57600 baudios, FTDI).",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "Selecciona el modelo de placa en Ajustes de OpenBCI. El puerto se detecta automáticamente.",
   "settings.supportedDevices.company.gtec": "g.tec medical engineering",
   "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
-  "settings.supportedDevices.instruction.gtec1": "Asegúrate de que la biblioteca Unicorn API esté instalada en tu sistema.",
-  "settings.supportedDevices.instruction.gtec2": "Enciende el Unicorn y mantenlo cerca del ordenador. El escáner lo detecta automáticamente por BLE.",
+  "settings.supportedDevices.instruction.gtec1":
+    "Asegúrate de que la biblioteca Unicorn API esté instalada en tu sistema.",
+  "settings.supportedDevices.instruction.gtec2":
+    "Enciende el Unicorn y mantenlo cerca del ordenador. El escáner lo detecta automáticamente por BLE.",
   "settings.supportedDevices.company.neurofield": "Neurofield Inc",
   "settings.supportedDevices.device.neurofieldQ21": "Q21 (20 canales)",
-  "settings.supportedDevices.instruction.neurofield1": "Conecta el adaptador PEAK PCAN-USB y el amplificador Q21 vía bus CAN.",
-  "settings.supportedDevices.instruction.neurofield2": "Instala los controladores PCAN Basic para tu plataforma. El escáner detecta el Q21 automáticamente.",
+  "settings.supportedDevices.instruction.neurofield1":
+    "Conecta el adaptador PEAK PCAN-USB y el amplificador Q21 vía bus CAN.",
+  "settings.supportedDevices.instruction.neurofield2":
+    "Instala los controladores PCAN Basic para tu plataforma. El escáner detecta el Q21 automáticamente.",
   "settings.supportedDevices.company.neurosky": "NeuroSky",
   "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
-  "settings.supportedDevices.instruction.neurosky1": "Conecta el adaptador serie USB/Bluetooth de NeuroSky y enciende el casco.",
-  "settings.supportedDevices.instruction.neurosky2": "Usa el objetivo 'neurosky' (o 'neurosky:<serial-port>') para conectar.",
+  "settings.supportedDevices.instruction.neurosky1":
+    "Conecta el adaptador serie USB/Bluetooth de NeuroSky y enciende el casco.",
+  "settings.supportedDevices.instruction.neurosky2":
+    "Usa el objetivo 'neurosky' (o 'neurosky:<serial-port>') para conectar.",
   "settings.supportedDevices.company.neurosity": "Neurosity",
   "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
-  "settings.supportedDevices.instruction.neurosity1": "Define SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD y SKILL_NEUROSITY_DEVICE_ID.",
-  "settings.supportedDevices.instruction.neurosity2": "Usa el objetivo 'neurosity:<device-id>' para conectar por la API en la nube de Neurosity.",
+  "settings.supportedDevices.instruction.neurosity1":
+    "Define SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD y SKILL_NEUROSITY_DEVICE_ID.",
+  "settings.supportedDevices.instruction.neurosity2":
+    "Usa el objetivo 'neurosity:<device-id>' para conectar por la API en la nube de Neurosity.",
   "settings.supportedDevices.company.brainvision": "Brain Products",
   "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
-  "settings.supportedDevices.instruction.brainvision1": "Inicia Recorder/Remote Data Access y expón un flujo TCP RDA (por defecto 127.0.0.1:51244).",
-  "settings.supportedDevices.instruction.brainvision2": "Usa el objetivo 'brainvision:<host>:<port>' (o 'brainvision') para conectar.",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Inicia Recorder/Remote Data Access y expón un flujo TCP RDA (por defecto 127.0.0.1:51244).",
+  "settings.supportedDevices.instruction.brainvision2":
+    "Usa el objetivo 'brainvision:<host>:<port>' (o 'brainvision') para conectar.",
   "settings.scanner.title": "Backends de escaneo",
   "settings.scanner.desc":
     "Alterna qué transportes de descubrimiento se ejecutan en segundo plano. Los cambios entran en vigor en el próximo reinicio de la aplicación.",
@@ -193,6 +207,15 @@ const settings: Record<string, string> = {
   "settings.deviceApi.ouraSynced": "¡Sincronizado!",
   "settings.deviceApi.ouraSyncDesc":
     "Obtener los últimos 30 días de datos del Oura Ring y almacenarlos en la base de datos de salud.",
+  "settings.deviceApi.neurosityTitle": "Neurosity",
+  "settings.deviceApi.neurosityDesc":
+    "Credenciales e ID de dispositivo para streaming en la nube de Neurosity Crown/Notion.",
+  "settings.deviceApi.neurosityEmail": "Correo",
+  "settings.deviceApi.neurosityPassword": "Contraseña",
+  "settings.deviceApi.neurosityDeviceId": "ID del dispositivo",
+  "settings.deviceApi.brainmasterTitle": "BrainMaster",
+  "settings.deviceApi.brainmasterDesc": "Selecciona el modelo BrainMaster usado por el conector.",
+  "settings.deviceApi.brainmasterModel": "Modelo",
   "settings.deviceApi.clientId": "ID de cliente",
   "settings.deviceApi.clientSecret": "Secreto del cliente",
   "settings.deviceApi.apiToken": "Token de API",
