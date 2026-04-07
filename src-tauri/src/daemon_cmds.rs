@@ -289,6 +289,17 @@ pub(crate) fn cancel_retry() -> Result<StatusResponse, String> {
     )
 }
 
+pub(crate) fn cancel_session_sync() -> Result<StatusResponse, String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth_response(
+        &base_url,
+        &token,
+        "/v1/control/cancel-session",
+        &serde_json::json!({}),
+    )
+}
+
 /// Blocking version for internal callers (lifecycle, session_connect).
 pub(crate) fn start_session_sync(target: Option<String>) -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();

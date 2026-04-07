@@ -40,17 +40,9 @@ pub(crate) fn retry_delay_secs(attempt: u32) -> u32 {
 
 #[allow(dead_code)]
 pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
-    // Mirror disconnected state to daemon first
-    let state = if is_bt { "bt_off" } else { "disconnected" };
-    let _ = crate::daemon_cmds::post_json_with_auth_pub(
-        "/v1/status",
-        &{
-            let mut sr = skill_daemon_common::StatusResponse::default();
-            sr.state = state.to_string();
-            sr.device_error = error.clone();
-            sr
-        },
-    );
+    // Tell the daemon to cancel any active session so it transitions
+    // cleanly.  This is a no-op if no session is running.
+    let _ = crate::daemon_cmds::cancel_session_sync();
 
     let (mut retry, attempt) = {
         let r = app.app_state();
