@@ -139,7 +139,7 @@ let startError = $state("");
 
 let logs = $state<LlmLogEntry[]>([]);
 
-let pollTimer: ReturnType<typeof setInterval> | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let unlistenLog: (() => void) | undefined;
 let unlistenStatus: (() => void) | undefined;
 
@@ -287,14 +287,10 @@ onMount(async () => {
       logs = [...logs.slice(-499), ev.payload];
     });
   } catch (e) {}
-  // Poll catalog + server status every second.  The catalog call is a cheap
-  // in-memory read on the backend.  Always polling (instead of only when a
-  // download is detected) ensures that re-opening the settings window after
-  // closing it mid-download still picks up in-flight progress immediately.
-  pollTimer = setInterval(async () => {
+  // Adaptive poll: 1 s during loading/downloading (catch transitions),
+  // 5 s when idle (stopped/running with no downloads).
+  async function llmPoll() {
     await loadCatalog();
-    // Poll server status so Loading → Running and start_error are reflected
-    // without relying solely on push events.
     try {
       const s = await daemonInvoke<{
         status: "stopped" | "loading" | "running";
@@ -303,11 +299,15 @@ onMount(async () => {
       serverStatus = s.status;
       if (s.start_error) startError = s.start_error;
     } catch (e) {}
-  }, 1000);
+    const hasDownloading = catalog.entries.some(e => e.state === "downloading");
+    const busy = serverStatus === "loading" || hasDownloading;
+    pollTimer = setTimeout(llmPoll, busy ? 1000 : 5000);
+  }
+  pollTimer = setTimeout(llmPoll, 1000);
 });
 
 onDestroy(() => {
-  clearInterval(pollTimer);
+  clearTimeout(pollTimer);
   unlistenLog?.();
   unlistenStatus?.();
 });
