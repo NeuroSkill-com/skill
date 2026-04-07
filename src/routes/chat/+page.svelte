@@ -201,7 +201,9 @@ async function loadSessionParams(id: number): Promise<boolean> {
 const thinkingBudget = $derived(THINKING_LEVELS.find((l) => l.key === thinkingLevel)?.budget ?? null);
 
 // ── Derived ────────────────────────────────────────────────────────────────
-const canSend = $derived(status === "running" && (input.trim().length > 0 || attachments.length > 0) && !generating);
+const canSend = $derived(
+  status === "running" && (input.trim().length > 0 || attachments.length > 0) && !generating && latestBands !== null,
+);
 const canStart = $derived(status === "stopped");
 const canStop = $derived(status === "running" || status === "loading");
 
@@ -1339,6 +1341,7 @@ onDestroy(() => {
         {aborting}
         {canSend}
         {supportsVision}
+        eegBlocked={latestBands === null}
         {nCtx}
         {liveUsedTokens}
         onSend={sendMessage}

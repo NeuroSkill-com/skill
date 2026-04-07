@@ -10,7 +10,10 @@ use crate::MutexExt;
 use tauri::AppHandle;
 
 use crate::tray::refresh_tray;
-use crate::{emit_devices, emit_status, helpers::emit_status_from_daemon, AppStateExt, DeviceStatus, DiscoveredDevice};
+use crate::{
+    emit_devices, emit_status, helpers::emit_status_from_daemon, AppStateExt, DeviceStatus,
+    DiscoveredDevice,
+};
 
 // ── Device commands ────────────────────────────────────────────────────────────
 

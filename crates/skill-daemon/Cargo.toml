@@ -43,6 +43,7 @@ serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 serialport = "4"
 tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 urlencoding = "2"

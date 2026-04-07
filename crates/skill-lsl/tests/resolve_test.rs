@@ -9,7 +9,14 @@ use std::time::{Duration, Instant};
 /// `resolve_stream_by_name` returns a match in well under 5 s for a local outlet.
 #[test]
 fn resolve_by_name_is_fast() {
-    let info = StreamInfo::new("FastResolveTest", "EEG", 4, 256.0, ChannelFormat::Float32, "fast-resolve-001");
+    let info = StreamInfo::new(
+        "FastResolveTest",
+        "EEG",
+        4,
+        256.0,
+        ChannelFormat::Float32,
+        "fast-resolve-001",
+    );
     let _outlet = StreamOutlet::new(&info, 0, 360);
 
     let t0 = Instant::now();
@@ -49,7 +56,14 @@ fn resolve_eeg_streams_filters_by_type() {
     let eeg_info = StreamInfo::new("EegStream", "EEG", 4, 256.0, ChannelFormat::Float32, "filter-eeg-001");
     let _eeg_outlet = StreamOutlet::new(&eeg_info, 0, 360);
 
-    let marker_info = StreamInfo::new("MarkerStream", "Markers", 1, 0.0, ChannelFormat::String, "filter-marker-001");
+    let marker_info = StreamInfo::new(
+        "MarkerStream",
+        "Markers",
+        1,
+        0.0,
+        ChannelFormat::String,
+        "filter-marker-001",
+    );
     let _marker_outlet = StreamOutlet::new(&marker_info, 0, 360);
 
     let streams = skill_lsl::resolve_eeg_streams(2.0);

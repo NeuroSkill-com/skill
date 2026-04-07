@@ -78,7 +78,9 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
           }
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, 30_000);
 
   afterAll(async () => {
@@ -92,7 +94,9 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
           }
         }
       }
-    } catch { /* daemon already stopped */ }
+    } catch {
+      /* daemon already stopped */
+    }
     daemon?.kill();
   });
 
@@ -173,7 +177,6 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
     });
     // Skip if token creation failed (e.g. max tokens reached from prior runs)
     if (!created.token) {
-      console.warn("[skip] token creation failed:", created);
       return;
     }
 
@@ -208,7 +211,6 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
       expiry: "week",
     });
     if (!created.token) {
-      console.warn("[skip] token creation failed:", created);
       return;
     }
 

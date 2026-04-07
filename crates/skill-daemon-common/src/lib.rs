@@ -95,7 +95,6 @@ pub struct StatusResponse {
     pub paired_devices: Vec<PairedDeviceResponse>,
 
     // ── Device descriptor fields (set on connect) ─────────────────────────
-
     /// CSV recording path for the current session.
     #[serde(default)]
     pub csv_path: Option<String>,
@@ -122,7 +121,6 @@ pub struct StatusResponse {
     pub channel_quality: Vec<String>,
 
     // ── Device identity (populated by adapters that report it) ────────────
-
     /// Factory serial number.
     #[serde(default)]
     pub serial_number: Option<String>,
@@ -137,7 +135,6 @@ pub struct StatusResponse {
     pub hardware_version: Option<String>,
 
     // ── Capability flags ──────────────────────────────────────────────────
-
     /// Device has a PPG (heart-rate) sensor.
     #[serde(default)]
     pub has_ppg: bool,

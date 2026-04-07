@@ -600,7 +600,9 @@ fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
         Some((weights_path, config_path)) => {
             info!(weights = %weights_path.display(), config = %config_path.display(), "ZUNA weights resolved");
             match zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(
-                &config_path, &weights_path, burn::backend::ndarray::NdArrayDevice::Cpu,
+                &config_path,
+                &weights_path,
+                burn::backend::ndarray::NdArrayDevice::Cpu,
             ) {
                 Ok((encoder, ms)) => {
                     info!(ms, "ZUNA encoder loaded");

@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use skill_daemon_common::DeviceLogEntry;
 use skill_devices::session::{DeviceAdapter, DeviceInfo};
 use tokio::sync::oneshot;
 use tracing::{error, info};
@@ -23,6 +24,18 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
             s.target_name = Some(target.clone());
             s.device_error = None;
         }
+
+        // ── Routing log ──────────────────────────────────────────────────
+        // Produces: [devices] [session] routing: target=… kind=…
+        // Visible in the device log and tracing output so connection
+        // failures are easy to diagnose.
+        let routed_kind = infer_kind_from_target(&target);
+        push_device_log_static(
+            &state2,
+            "session",
+            &format!("routing: target={target:?} kind={routed_kind}"),
+        );
+        info!(target = %target, kind = %routed_kind, "session routing");
 
         match connect_device(&state2, &target).await {
             Ok(adapter) => {
@@ -260,6 +273,21 @@ async fn connect_openbci(state: &AppState, target: &str) -> Result<Box<dyn Devic
             }
         }
         settings.openbci
+    };
+
+    // Safety-net: if the target carries an explicit serial port but the
+    // persisted board type is not a serial board (Ganglion/BLE,
+    // GanglionWifi, CytonWifi, CytonDaisyWifi, Galea/UDP), the port would
+    // be silently ignored and the wrong transport would start.
+    // Keep the board as-is when it is already a serial board (Cyton or
+    // CytonDaisy) so the user's 8-ch / 16-ch choice is respected.
+    let config = if target.to_lowercase().starts_with("usb:") && !config.board.is_serial() {
+        skill_settings::OpenBciConfig {
+            board: skill_settings::OpenBciBoard::Cyton,
+            ..config
+        }
+    } else {
+        config
     };
 
     info!(board = ?config.board, port = %config.serial_port, "connecting to OpenBCI…");
@@ -551,12 +579,13 @@ async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
         // minimum=1 so it returns as soon as the stream is found (typically
         // < 500 ms for local streams) instead of waiting the full timeout.
         let info = if !query.is_empty() {
-            skill_lsl::resolve_stream_by_name(&query, 5.0)
-                .ok_or_else(|| format!("No LSL stream matching '{query}'"))?
+            skill_lsl::resolve_stream_by_name(&query, 5.0).ok_or_else(|| format!("No LSL stream matching '{query}'"))?
         } else {
             // No name given — discover all EEG streams and take the first.
             let streams = skill_lsl::resolve_eeg_streams(5.0);
-            streams.into_iter().next()
+            streams
+                .into_iter()
+                .next()
                 .ok_or_else(|| "No LSL EEG streams found on the network".to_string())?
         };
 
@@ -1326,4 +1355,78 @@ async fn connect_emotiv(state: &AppState) -> Result<Box<dyn DeviceAdapter>, Stri
     // Emotiv auto-detects channels from the headset type after DataLabels arrives.
     // Start with defaults; the adapter updates dynamically.
     Ok(Box::new(EmotivAdapter::new(rx, handle, 14, vec![], String::new())))
+}
+
+// ── Routing helpers ────────────────────────────────────────────────────────────────
+
+/// Infer a human-readable device kind string from the raw target identifier.
+///
+/// Used only for diagnostic logging in [`spawn_device_session`]; not used for
+/// actual routing decisions (that remains in [`connect_device`]).
+fn infer_kind_from_target(target: &str) -> &'static str {
+    let lower = target.to_lowercase();
+    if lower.starts_with("neurofield:") {
+        return "neurofield";
+    }
+    if lower.starts_with("brainbit:") {
+        return "brainbit";
+    }
+    if lower.starts_with("gtec:") {
+        return "gtec";
+    }
+    if lower.starts_with("brainmaster:") {
+        return "brainmaster";
+    }
+    if lower.starts_with("cortex:") {
+        return "emotiv";
+    }
+    if lower.starts_with("cgx:") {
+        return "cognionics";
+    }
+    if lower.starts_with("lsl:") || lower == "lsl" {
+        return "lsl";
+    }
+    if lower.starts_with("usb:") {
+        return "openbci/cyton";
+    } // serial → Cyton, not Ganglion
+    if lower == "ganglion" {
+        return "ganglion";
+    }
+    if lower == "openbci" {
+        return "openbci";
+    }
+    if lower.contains("mw75") || lower.contains("neurable") {
+        return "mw75";
+    }
+    if lower.contains("hermes") {
+        return "hermes";
+    }
+    if lower.contains("idun") || lower.contains("guardian") {
+        return "idun";
+    }
+    if lower.contains("mendi") {
+        return "mendi";
+    }
+    "muse"
+}
+
+/// Append an entry to the state device log (used by `spawn_device_session`).
+///
+/// Mirrors the `push_device_log` helper in `main.rs` without requiring a
+/// shared reference to it across the module boundary.
+fn push_device_log_static(state: &AppState, tag: &str, msg: &str) {
+    let entry = DeviceLogEntry {
+        ts: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        tag: tag.to_string(),
+        msg: msg.to_string(),
+    };
+    if let Ok(mut guard) = state.device_log.lock() {
+        if guard.len() >= 256 {
+            guard.pop_front();
+        }
+        guard.push_back(entry);
+    }
 }

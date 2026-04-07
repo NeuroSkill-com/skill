@@ -12378,6 +12378,7 @@ dependencies = [
  "sysinfo 0.33.1",
  "tokio",
  "tower",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
  "tribev2",

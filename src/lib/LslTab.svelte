@@ -159,7 +159,9 @@ $effect(() => {
     return;
   }
   // Safety timeout — 30 s max.
-  const timer = setTimeout(() => { connecting = null; }, 30_000);
+  const timer = setTimeout(() => {
+    connecting = null;
+  }, 30_000);
   return () => clearTimeout(timer);
 });
 

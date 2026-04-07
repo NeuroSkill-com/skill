@@ -15,6 +15,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { arch, cpus, platform, tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -777,9 +778,36 @@ if (subcommand === "dev") {
       });
       daemonChild.on("error", (e) => console.error(`[daemon] spawn error: ${e.message}`));
       daemonChild.on("exit", (code) => console.log(`[daemon] exited with code ${code}`));
-      // Give daemon time to bind the port
-      await new Promise((r) => setTimeout(r, 1000));
-      console.log("[daemon] started, launching Tauri…\n");
+      // Poll the TCP port until the daemon is ready (up to 10 s).
+      // A fixed sleep is unreliable: on first run or slow machines the daemon
+      // can take longer than 1 s to bind, causing Tauri's ensure_daemon_running()
+      // to detect the port as closed and spawn a second instance — resulting in
+      // two daemons fighting each other and a 1000% CPU spike at startup.
+      const daemonAddrEnv = process.env.SKILL_DAEMON_ADDR || "127.0.0.1:18444";
+      const lastColon = daemonAddrEnv.lastIndexOf(":");
+      const daemonHost = daemonAddrEnv.slice(0, lastColon) || "127.0.0.1";
+      const daemonPort = parseInt(daemonAddrEnv.slice(lastColon + 1), 10) || 18444;
+      let daemonReady = false;
+      for (let i = 0; i < 100; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        daemonReady = await new Promise((resolve) => {
+          const sock = createConnection({ host: daemonHost, port: daemonPort });
+          sock.once("connect", () => {
+            sock.destroy();
+            resolve(true);
+          });
+          sock.once("error", () => {
+            sock.destroy();
+            resolve(false);
+          });
+        });
+        if (daemonReady) break;
+      }
+      if (daemonReady) {
+        console.log("[daemon] ready, launching Tauri…\n");
+      } else {
+        console.warn("[daemon] not ready after 10 s — launching Tauri anyway (ensure_daemon_running will retry)\n");
+      }
     } else {
       console.warn("⚠ skill-daemon binary not found after build — Tauri will attempt auto-launch");
     }

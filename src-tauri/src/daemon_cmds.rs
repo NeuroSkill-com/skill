@@ -102,17 +102,38 @@ pub fn get_daemon_token_path() -> String {
 /// spawn it.  Called once during `setup_app`.
 pub(crate) fn ensure_daemon_running() {
     let base_url = daemon_base_url();
+    let addr: std::net::SocketAddr = std::env::var("SKILL_DAEMON_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
+        .parse()
+        .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 18444)));
+
     // Quick health check — if the daemon is already up, nothing to do.
-    let reachable = std::net::TcpStream::connect_timeout(
-        &std::env::var("SKILL_DAEMON_ADDR")
-            .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
-            .parse()
-            .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 18444))),
-        Duration::from_millis(300),
-    )
-    .is_ok();
-    if reachable {
+    if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
         eprintln!("[daemon] already running at {base_url}");
+        return;
+    }
+
+    // The daemon may have been spawned by tauri-build.js moments ago but not
+    // yet bound its port (slow first-run: model probe, HF cache scan, etc.).
+    // Poll for up to 4 s before concluding it is absent and spawning a second
+    // instance.  Spawning two daemons simultaneously causes a CPU spike
+    // because both start BLE scanning and activity-monitor threads before the
+    // loser fails to bind the port and exits.
+    eprintln!(
+        "[daemon] not yet reachable at {base_url} — waiting up to 4 s for in-progress start…"
+    );
+    let poll_deadline = std::time::Instant::now() + Duration::from_secs(4);
+    let already_running = loop {
+        std::thread::sleep(Duration::from_millis(200));
+        if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
+            break true;
+        }
+        if std::time::Instant::now() >= poll_deadline {
+            break false;
+        }
+    };
+    if already_running {
+        eprintln!("[daemon] became ready during wait — skipping spawn");
         return;
     }
 
@@ -315,7 +336,8 @@ pub(crate) fn start_session_sync(target: Option<String>) -> Result<StatusRespons
 #[tauri::command]
 pub async fn start_session(target: Option<String>) -> Result<StatusResponse, String> {
     tokio::task::spawn_blocking(move || start_session_sync(target))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 pub(crate) fn scanner_start() -> Result<ScannerStateResponse, String> {
@@ -803,7 +825,9 @@ pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
         fnirs_channel_names: local.fnirs_channel_names.clone(),
         eeg_channel_count: local.eeg_channel_count,
         eeg_sample_rate_hz: local.eeg_sample_rate_hz,
-        channel_quality: local.channel_quality.iter()
+        channel_quality: local
+            .channel_quality
+            .iter()
             .map(|q| format!("{q:?}").to_lowercase())
             .collect(),
         serial_number: local.serial_number.clone(),
@@ -1117,7 +1141,10 @@ pub(crate) fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
 }
 
 /// Blocking POST helper used inside spawn_blocking.
-pub(crate) fn daemon_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn daemon_post(
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     ensure_daemon_for_proxy();
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -1129,49 +1156,66 @@ pub(crate) fn daemon_post(path: &str, body: &serde_json::Value) -> Result<serde_
 #[tauri::command]
 pub async fn get_exg_catalog() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/models/exg-catalog"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn get_eeg_model_config() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/models/config"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn get_eeg_model_status() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/models/status"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn set_eeg_model_config(config: serde_json::Value) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || daemon_post("/v1/models/config", &config))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn trigger_weights_download() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/models/trigger-weights-download", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post(
+            "/v1/models/trigger-weights-download",
+            &serde_json::json!({}),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn cancel_weights_download() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/models/cancel-weights-download", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post("/v1/models/cancel-weights-download", &serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn estimate_reembed() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/models/estimate-reembed"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn trigger_reembed() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/models/trigger-reembed", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post("/v1/models/trigger-reembed", &serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ── LSL proxies ─────────────────────────────────────────────────────────────
@@ -1179,95 +1223,143 @@ pub async fn trigger_reembed() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn lsl_discover() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/lsl/discover"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_get_config() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/lsl/config"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_set_auto_connect(enabled: bool) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/auto-connect", &serde_json::json!({"enabled": enabled})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        daemon_post(
+            "/v1/lsl/auto-connect",
+            &serde_json::json!({"enabled": enabled}),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn lsl_pair_stream(source_id: String, name: String, stream_type: String, channels: u32, sample_rate: f64) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/pair", &serde_json::json!({
-        "source_id": source_id, "name": name, "stream_type": stream_type,
-        "channels": channels, "sample_rate": sample_rate
-    }))).await.map_err(|e| e.to_string())?
+pub async fn lsl_pair_stream(
+    source_id: String,
+    name: String,
+    stream_type: String,
+    channels: u32,
+    sample_rate: f64,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        daemon_post(
+            "/v1/lsl/pair",
+            &serde_json::json!({
+                "source_id": source_id, "name": name, "stream_type": stream_type,
+                "channels": channels, "sample_rate": sample_rate
+            }),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn lsl_unpair_stream(source_id: String) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/unpair", &serde_json::json!({"source_id": source_id})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        daemon_post(
+            "/v1/lsl/unpair",
+            &serde_json::json!({"source_id": source_id}),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_get_idle_timeout() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/lsl/idle-timeout"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_set_idle_timeout(secs: serde_json::Value) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || daemon_post("/v1/lsl/idle-timeout", &serde_json::json!({"secs": secs})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        daemon_post("/v1/lsl/idle-timeout", &serde_json::json!({"secs": secs}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_virtual_source_running() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/lsl/virtual-source/running"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_virtual_source_start() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/lsl/virtual-source/start", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post("/v1/lsl/virtual-source/start", &serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_virtual_source_stop() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/lsl/virtual-source/stop", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post("/v1/lsl/virtual-source/stop", &serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_iroh_start() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_post("/v1/lsl/iroh/start", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_iroh_stop() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_post("/v1/lsl/iroh/stop", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn lsl_iroh_status() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_get("/v1/lsl/iroh/status"))
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 // ── Session control proxies ─────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn switch_session(target: String) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || daemon_post("/v1/control/switch-session", &serde_json::json!({"target": target})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        daemon_post(
+            "/v1/control/switch-session",
+            &serde_json::json!({"target": target}),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn cancel_session() -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(|| daemon_post("/v1/control/cancel-session", &serde_json::json!({})))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        daemon_post("/v1/control/cancel-session", &serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
-
-

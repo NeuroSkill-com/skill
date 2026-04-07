@@ -105,7 +105,9 @@ pub use skill_data::util::{yyyymmdd_utc, yyyymmddhhmmss_utc};
 /// JSON header to compute the expected minimum size.
 pub fn validate_safetensors(path: &Path) -> bool {
     use std::io::Read;
-    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
     let file_size = f.metadata().map(|m| m.len()).unwrap_or(0);
     if file_size < 8 {
         return false;
@@ -130,7 +132,9 @@ pub fn validate_safetensors(path: &Path) -> bool {
     // Find the maximum data offset across all tensors
     let mut max_offset: u64 = 0;
     for (key, val) in obj {
-        if key == "__metadata__" { continue; }
+        if key == "__metadata__" {
+            continue;
+        }
         if let Some(offsets) = val.get("data_offsets").and_then(|v| v.as_array()) {
             if let Some(end) = offsets.get(1).and_then(|v| v.as_u64()) {
                 max_offset = max_offset.max(end);

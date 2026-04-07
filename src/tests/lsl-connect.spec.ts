@@ -145,7 +145,9 @@ test.describe("LSL connection flow", () => {
 
     // Should show scanning/connecting state (not disconnected)
     const disconnected = page.locator("text=DISCONNECTED").first();
-    await expect(disconnected).not.toBeVisible({ timeout: 3000 }).catch(() => {});
+    await expect(disconnected)
+      .not.toBeVisible({ timeout: 3000 })
+      .catch(() => {});
   });
 
   test("signal quality section shows summary for 32 channels", async ({ page }) => {
@@ -164,7 +166,7 @@ test.describe("LSL connection flow", () => {
     await page.evaluate((connectedStatus) => {
       // Override the fetch mock to return connected status
       const origFetch = window.fetch;
-      window.fetch = function (url: RequestInfo | URL, opts?: RequestInit) {
+      window.fetch = (url: RequestInfo | URL, opts?: RequestInit) => {
         const urlStr = typeof url === "string" ? url : url.toString();
         if (urlStr.includes("/v1/status")) {
           return Promise.resolve(
@@ -191,7 +193,7 @@ test.describe("LSL connection flow", () => {
     // Simulate disconnect
     await page.evaluate((disconnectedStatus) => {
       const origFetch = window.fetch;
-      window.fetch = function (url: RequestInfo | URL, opts?: RequestInit) {
+      window.fetch = (url: RequestInfo | URL, opts?: RequestInit) => {
         const urlStr = typeof url === "string" ? url : url.toString();
         if (urlStr.includes("/v1/status")) {
           return Promise.resolve(

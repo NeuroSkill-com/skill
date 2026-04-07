@@ -27,7 +27,7 @@ use axum::{
         ws::{Message, WebSocket},
         ConnectInfo, State, WebSocketUpgrade,
     },
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -46,6 +46,7 @@ use skill_daemon_common::{
     WsClient, WsPortResponse, WsRequestLog, DAEMON_NAME, PROTOCOL_VERSION,
 };
 use tokio::sync::{broadcast, oneshot};
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -150,6 +151,20 @@ async fn main() -> anyhow::Result<()> {
         .route("/", axum::routing::post(cmd_tunnel_root))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
+    // ── CORS — allow Tauri webview (and any local tool) to reach the daemon ──
+    //
+    // WKWebView on macOS treats `fetch()` from the Tauri devUrl / custom
+    // protocol as cross-origin when the target is `http://127.0.0.1:<port>`.
+    // Without CORS headers the browser strips the `Authorization` header and
+    // the request fails the auth middleware.  A permissive CORS layer fixes
+    // this: we already authenticate every request via bearer tokens so the
+    // origin check adds no security value.
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers(Any)
+        .expose_headers(Any);
+
     let shutdown_state = state.clone();
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -159,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/service/status", get(service_status))
         .nest("/v1", v1)
         .merge(root_cmd)
+        .layer(cors)
         .with_state(state);
 
     let addr = daemon_addr();
@@ -170,7 +186,9 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // Cancel any in-flight EXG weights download.
-    shutdown_state.exg_download_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    shutdown_state
+        .exg_download_cancel
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
     // Drop the active BLE session so btleplug stops firing delegate callbacks
     // before the event channel is torn down (prevents spurious
@@ -423,11 +441,22 @@ async fn control_start_session(
     // If the target is a device ID from the scanner (e.g. "usb:COM3",
     // "usb:/dev/ttyUSB0"), extract the serial port and store it in the
     // OpenBCI config so the session runner can use it.
+    //
+    // Crucially, also promote the board type to Cyton when the persisted
+    // value is BLE-only (Ganglion).  Without this, create_and_start_board
+    // would attempt a BLE scan even though the user plugged in a USB dongle.
     if let Some(ref t) = target {
         if let Some(port) = t.strip_prefix("usb:") {
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
             let mut settings = skill_settings::load_settings(&skill_dir);
             settings.openbci.serial_port = port.to_string();
+            // A usb: target always means a serial board (Cyton or CytonDaisy).
+            // Preserve the user's choice if it is already a serial board;
+            // otherwise reset to Cyton so we never attempt a BLE / WiFi /
+            // UDP connection when a dongle is plugged in.
+            if !settings.openbci.board.is_serial() {
+                settings.openbci.board = skill_settings::OpenBciBoard::Cyton;
+            }
             let path = skill_settings::settings_path(&skill_dir);
             if let Ok(json) = serde_json::to_string_pretty(&settings) {
                 let _ = std::fs::write(path, json);
@@ -877,6 +906,13 @@ async fn auth_middleware(
     request: axum::extract::Request,
     next: Next,
 ) -> Response {
+    // CORS preflight requests never carry credentials — let them through so
+    // the CorsLayer (applied as an outer layer) can respond with the proper
+    // `Access-Control-Allow-*` headers.
+    if request.method() == Method::OPTIONS {
+        return next.run(request).await;
+    }
+
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

@@ -11,9 +11,7 @@
 //! 7. Persist to disk → reload → verify search still works
 
 use skill_constants::LABELS_FILE;
-use skill_label_index::{
-    insert_label, rebuild, search_by_context_vec, search_by_text_vec, LabelIndexState,
-};
+use skill_label_index::{insert_label, rebuild, search_by_context_vec, search_by_text_vec, LabelIndexState};
 use std::path::Path;
 use tempfile::tempdir;
 

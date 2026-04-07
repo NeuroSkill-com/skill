@@ -413,6 +413,54 @@ mod tests {
         }
     }
 
+    /// Verify that the `usb:` target board-type promotion logic correctly
+    /// maps every non-serial board to Cyton while preserving Cyton / CytonDaisy.
+    ///
+    /// This mirrors the guard in `connect_openbci` and `control_start_session`
+    /// that prevents a BLE / WiFi / UDP board from being used when the user
+    /// plugs in a USB dongle.
+    #[test]
+    fn usb_target_promotes_non_serial_boards_to_cyton() {
+        use skill_settings::OpenBciBoard;
+
+        // Helper: apply the same guard used in connect_openbci.
+        fn resolve_board_for_usb(board: OpenBciBoard) -> OpenBciBoard {
+            if !board.is_serial() {
+                OpenBciBoard::Cyton
+            } else {
+                board
+            }
+        }
+
+        // Non-serial boards — all should become Cyton.
+        for board in [
+            OpenBciBoard::Ganglion,
+            OpenBciBoard::GanglionWifi,
+            OpenBciBoard::CytonWifi,
+            OpenBciBoard::CytonDaisyWifi,
+            OpenBciBoard::Galea,
+        ] {
+            let promoted = resolve_board_for_usb(board.clone());
+            assert_eq!(
+                promoted,
+                OpenBciBoard::Cyton,
+                "usb: with board {board:?} should promote to Cyton"
+            );
+        }
+
+        // Serial boards — must be preserved as-is.
+        assert_eq!(
+            resolve_board_for_usb(OpenBciBoard::Cyton),
+            OpenBciBoard::Cyton,
+            "Cyton should stay Cyton"
+        );
+        assert_eq!(
+            resolve_board_for_usb(OpenBciBoard::CytonDaisy),
+            OpenBciBoard::CytonDaisy,
+            "CytonDaisy should stay CytonDaisy (16-ch user choice preserved)"
+        );
+    }
+
     /// Full board variant test — skipped by default because WiFi/BLE/UDP
     /// boards attempt real network I/O and take 60+ seconds to time out.
     /// Run explicitly with: cargo test -- --ignored create_board_all_variants

@@ -15,6 +15,7 @@ interface Props {
   aborting: boolean;
   canSend: boolean;
   supportsVision: boolean;
+  eegBlocked: boolean;
   nCtx: number;
   liveUsedTokens: number;
   onSend: () => void;
@@ -31,6 +32,7 @@ let {
   aborting,
   canSend,
   supportsVision,
+  eegBlocked,
   nCtx,
   liveUsedTokens,
   onSend,
@@ -95,6 +97,22 @@ async function selectPrompt(text: string) {
 
 <footer class="relative shrink-0 border-t border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#0f0f18] px-3 py-2.5">
+
+  <!-- EEG-required gate -->
+  {#if eegBlocked}
+    <div class="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg
+                 bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 shrink-0">
+        <path d="M9 3C6 3 3 5.5 3 9c0 2.4 1 4.4 2.6 5.7L6 21h12l.4-6.3C20 13.4 21 11.4 21 9c0-3.5-3-6-6-6-1 0-2 .3-2.8.7A5 5 0 0 0 9 3z"/>
+        <line x1="12" y1="10" x2="12" y2="14"/>
+        <line x1="9" y1="12" x2="15" y2="12"/>
+      </svg>
+      <span class="text-[0.65rem] font-medium leading-snug">
+        {t("chat.eeg.noSignalBlockedHint")}
+      </span>
+    </div>
+  {/if}
 
   <!-- Vision-not-supported warning -->
   {#if attachments.length > 0 && !supportsVision}
@@ -182,7 +200,7 @@ async function selectPrompt(text: string) {
     <!-- Image attach button -->
     <button
       onclick={openFilePicker}
-      disabled={status !== "running" || generating}
+      disabled={status !== "running" || generating || eegBlocked}
       title={supportsVision ? t("chat.attachImage") : t("chat.attachImageNoVision")}
       class="shrink-0 p-1 rounded-md transition-colors cursor-pointer self-center
              disabled:opacity-30 disabled:cursor-not-allowed
@@ -200,7 +218,7 @@ async function selectPrompt(text: string) {
     <!-- Prompt library button -->
     <button
       onclick={() => promptLibRef?.toggle()}
-      disabled={status !== "running" || generating}
+      disabled={status !== "running" || generating || eegBlocked}
       title={t("chat.prompts.btn")}
       aria-label={t("chat.prompts.btn")}
       class="shrink-0 p-1 rounded-md transition-colors cursor-pointer self-center
@@ -222,10 +240,11 @@ async function selectPrompt(text: string) {
       onkeydown={onInputKeydown}
       onbeforeinput={onBeforeInput}
       oninput={autoResize}
-      placeholder={status === "running" ? t("chat.inputPlaceholder")
+      placeholder={eegBlocked ? t("chat.inputPlaceholderNoEeg")
+                   : status === "running" ? t("chat.inputPlaceholder")
                    : status === "loading" ? t("chat.status.loading")
                    : t("chat.inputPlaceholderStopped")}
-      disabled={status !== "running" || generating}
+      disabled={status !== "running" || generating || eegBlocked}
       rows="1"
       class="flex-1 bg-transparent text-[0.78rem] text-foreground resize-none
              placeholder:text-muted-foreground/40 focus:outline-none
@@ -274,7 +293,9 @@ async function selectPrompt(text: string) {
   </div>
 
   <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1.5">
-    {#if status === "running"}
+    {#if eegBlocked}
+      {t("chat.hint.noEeg")}
+    {:else if status === "running"}
       {t("chat.hint.running")}
     {:else if status === "loading"}
       {t("chat.hint.loading")}

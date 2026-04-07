@@ -357,10 +357,7 @@ async fn delete_label(
 }
 
 /// Semantic search across labels using HNSW.
-async fn search_labels(
-    State(state): State<AppState>,
-    Json(req): Json<SearchLabelsRequest>,
-) -> Json<serde_json::Value> {
+async fn search_labels(State(state): State<AppState>, Json(req): Json<SearchLabelsRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let label_index = state.label_index.clone();
     let k = req.k.unwrap_or(10);
@@ -370,18 +367,13 @@ async fn search_labels(
 
     let results = tokio::task::spawn_blocking(move || {
         // Embed the query text
-        let query_vec = match embed_text(&query_text) {
-            Some(v) => v,
-            None => return serde_json::json!({ "results": [], "error": "failed to embed query" }),
+        let Some(query_vec) = embed_text(&query_text) else {
+            return serde_json::json!({ "results": [], "error": "failed to embed query" });
         };
 
         let neighbors = match mode.as_str() {
-            "context" => {
-                skill_label_index::search_by_context_vec(&query_vec, k, ef, &skill_dir, &label_index)
-            }
-            _ => {
-                skill_label_index::search_by_text_vec(&query_vec, k, ef, &skill_dir, &label_index)
-            }
+            "context" => skill_label_index::search_by_context_vec(&query_vec, k, ef, &skill_dir, &label_index),
+            _ => skill_label_index::search_by_text_vec(&query_vec, k, ef, &skill_dir, &label_index),
         };
 
         serde_json::json!({ "results": neighbors })
@@ -403,9 +395,8 @@ async fn search_labels_by_eeg(
 
     let results = tokio::task::spawn_blocking(move || {
         // Get mean EEG embedding for the query window
-        let query_vec = match skill_label_index::mean_eeg_for_window(&skill_dir, req.start_utc, req.end_utc) {
-            Some(v) => v,
-            None => return serde_json::json!({ "results": [], "error": "no EEG data in window" }),
+        let Some(query_vec) = skill_label_index::mean_eeg_for_window(&skill_dir, req.start_utc, req.end_utc) else {
+            return serde_json::json!({ "results": [], "error": "no EEG data in window" });
         };
 
         let neighbors = skill_label_index::search_by_eeg_vec(&query_vec, k, 64, &skill_dir, &label_index);

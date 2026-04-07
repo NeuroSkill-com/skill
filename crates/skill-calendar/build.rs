@@ -5,10 +5,14 @@ fn main() {
     {
         println!("cargo:rerun-if-changed=src/skill_calendar_macos.m");
 
-        cc::Build::new()
-            .file("src/skill_calendar_macos.m")
-            .flag("-fobjc-arc")
-            .compile("skill_calendar_macos");
+        // macOS's BSD ar doesn't support the -D (deterministic) flag that the
+        // cc crate passes by default.  Use llvm-ar when available.
+        let mut build = cc::Build::new();
+        build.file("src/skill_calendar_macos.m").flag("-fobjc-arc");
+        if std::path::Path::new("/opt/homebrew/opt/llvm/bin/llvm-ar").exists() {
+            build.archiver("/opt/homebrew/opt/llvm/bin/llvm-ar");
+        }
+        build.compile("skill_calendar_macos");
 
         println!("cargo:rustc-link-lib=framework=EventKit");
         println!("cargo:rustc-link-lib=framework=Foundation");

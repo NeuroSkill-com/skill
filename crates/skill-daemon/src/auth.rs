@@ -39,6 +39,12 @@ impl TokenAcl {
     pub fn allows(&self, method: &str, path: &str) -> bool {
         let method = method.to_ascii_uppercase();
         let is_read = matches!(method.as_str(), "GET" | "HEAD");
+        // Axum strips the /v1 prefix when the router is nested, so the
+        // middleware may receive either "/history/sessions" or
+        // "/v1/history/sessions" depending on how allows() is called
+        // (e.g. directly in unit tests vs. via the live request path).
+        // Normalise to the unprefixed form so both work.
+        let path = path.strip_prefix("/v1").unwrap_or(path);
 
         match self {
             Self::Admin => true,
@@ -46,23 +52,23 @@ impl TokenAcl {
             Self::Data => {
                 // Data-scope tokens can use data namespaces only.
                 // This intentionally excludes auth/control/settings/admin routes.
-                path.starts_with("/v1/labels")
-                    || path.starts_with("/v1/history")
-                    || path.starts_with("/v1/search")
-                    || path.starts_with("/v1/analysis")
-                    || path.starts_with("/v1/llm/chat")
+                path.starts_with("/labels")
+                    || path.starts_with("/history")
+                    || path.starts_with("/search")
+                    || path.starts_with("/analysis")
+                    || path.starts_with("/llm/chat")
                     || (is_read
-                        && (path == "/v1/version"
-                            || path.starts_with("/v1/status")
-                            || path.starts_with("/v1/activity/latest-bands")))
+                        && (path == "/version"
+                            || path.starts_with("/status")
+                            || path.starts_with("/activity/latest-bands")))
             }
             Self::Stream => {
                 // Stream tokens are read-only and limited to live status/event feeds.
                 is_read
-                    && (path.starts_with("/v1/events")
-                        || path.starts_with("/v1/status")
-                        || path == "/v1/version"
-                        || path.starts_with("/v1/activity/latest-bands"))
+                    && (path.starts_with("/events")
+                        || path.starts_with("/status")
+                        || path == "/version"
+                        || path.starts_with("/activity/latest-bands"))
             }
         }
     }

@@ -194,12 +194,11 @@ async function refreshCatalog() {
   loadError = null;
   try {
     const result = await daemonInvoke<ExgCatalog>("get_exg_catalog");
-    if (!result || !result.families) {
+    if (!result?.families) {
       throw new Error("Invalid catalog response: missing families");
     }
     catalog = result;
   } catch (e) {
-    console.error("[ExgModelPicker] failed to load catalog:", e);
     loadError = e instanceof Error ? e.message : String(e);
   } finally {
     loading = false;
@@ -220,7 +219,10 @@ onMount(async () => {
   // Refresh catalog after download completes so weights_cached updates
   const unsub1 = onDaemonEvent("ExgDownloadCompleted", () => refreshCatalog());
   const unsub2 = onDaemonEvent("ExgDownloadFailed", () => refreshCatalog());
-  unlistenDownload = () => { unsub1(); unsub2(); };
+  unlistenDownload = () => {
+    unsub1();
+    unsub2();
+  };
 });
 
 onDestroy(() => {

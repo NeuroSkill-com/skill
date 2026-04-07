@@ -162,18 +162,12 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         eprintln!("[shortcut] open_skill: {e}");
     }
 
-    // Cmd+, — macOS standard "Preferences/Settings" shortcut (not user-configurable).
-    // Registered unconditionally alongside whatever the user has set for settings_shortcut.
-    // Errors are soft-logged: if the user's configurable shortcut is already Cmd+, this
-    // registration will fail with a duplicate-hotkey error, which is harmless.
-    #[cfg(target_os = "macos")]
-    if let Err(e) = register_one(app, "Command+Comma", |a| {
-        tauri::async_runtime::spawn(async move {
-            let _ = open_settings_window(a).await;
-        });
-    }) {
-        eprintln!("[shortcut] settings (Cmd+,): {e}");
-    }
+    // Cmd+, (macOS "Preferences" convention) is intentionally NOT registered here as a
+    // global hotkey.  macOS reserves Cmd+, for the native app-menu Preferences item and
+    // the Carbon RegisterEventHotKey API rejects it with "RegisterEventHotKey failed for
+    // Comma".  Instead, Cmd+, is handled as a window-level keyboard event in the Svelte
+    // layout (+layout.svelte) so it works whenever the app window is focused — which is
+    // the only context where the macOS convention applies.
 
     Ok(())
 }

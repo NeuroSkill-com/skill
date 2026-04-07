@@ -299,7 +299,7 @@ onMount(async () => {
       serverStatus = s.status;
       if (s.start_error) startError = s.start_error;
     } catch (e) {}
-    const hasDownloading = catalog.entries.some(e => e.state === "downloading");
+    const hasDownloading = catalog.entries.some((e) => e.state === "downloading");
     const busy = serverStatus === "loading" || hasDownloading;
     pollTimer = setTimeout(llmPoll, busy ? 1000 : 5000);
   }

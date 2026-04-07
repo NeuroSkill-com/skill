@@ -231,7 +231,10 @@ impl skill_llm::LlmEventEmitter for DaemonLlmEmitter {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/models/config", get(get_model_config).put(set_model_config).post(set_model_config))
+        .route(
+            "/models/config",
+            get(get_model_config).put(set_model_config).post(set_model_config),
+        )
         .route("/models/status", get(get_model_status))
         .route("/models/trigger-reembed", post(trigger_reembed))
         .route("/models/trigger-weights-download", post(trigger_weights_download))
@@ -464,9 +467,7 @@ async fn get_model_status(State(state): State<AppState>) -> Json<EegModelStatus>
 /// the HuggingFace disk cache.  Returns `(path_display, backend_str)` if found.
 ///
 /// Public so `main.rs` can call it during daemon startup.
-pub fn probe_weights_for_config(
-    config: &ExgModelConfig,
-) -> Option<(String, String)> {
+pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, String)> {
     let catalog: serde_json::Value =
         serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).ok()?;
     let backend = config.model_backend.as_str();
@@ -601,7 +602,11 @@ fn spawn_exg_download(
         if let Ok(st) = status.lock() {
             emit_daemon_event(
                 &state,
-                if succeeded { "ExgDownloadCompleted" } else { "ExgDownloadFailed" },
+                if succeeded {
+                    "ExgDownloadCompleted"
+                } else {
+                    "ExgDownloadFailed"
+                },
                 serde_json::json!({
                     "backend": backend_str,
                     "downloading": st.downloading_weights,
@@ -622,10 +627,7 @@ fn spawn_exg_download(
 }
 
 /// Determine repo, weights_file, config_file from catalog + current model config.
-fn resolve_download_target(
-    catalog: &serde_json::Value,
-    config: &ExgModelConfig,
-) -> (String, String, String) {
+fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig) -> (String, String, String) {
     let backend = config.model_backend.as_str();
 
     // For luna, use variant to find the right family entry
@@ -646,28 +648,51 @@ fn resolve_download_target(
 
     if let Some(fam) = catalog.get("families").and_then(|f| f.get(&family_id)) {
         let repo = fam.get("repo").and_then(|v| v.as_str()).unwrap_or(&config.hf_repo);
-        let wf = fam.get("weights_file").and_then(|v| v.as_str()).unwrap_or("model-00001-of-00001.safetensors");
+        let wf = fam
+            .get("weights_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("model-00001-of-00001.safetensors");
         let cf = fam.get("config_file").and_then(|v| v.as_str()).unwrap_or("config.json");
         (repo.to_string(), wf.to_string(), cf.to_string())
     } else if backend == "luna" {
-        (config.luna_hf_repo.clone(), config.luna_weights_file().to_string(), "config.json".to_string())
+        (
+            config.luna_hf_repo.clone(),
+            config.luna_weights_file().to_string(),
+            "config.json".to_string(),
+        )
     } else {
-        (config.hf_repo.clone(), "model-00001-of-00001.safetensors".to_string(), "config.json".to_string())
+        (
+            config.hf_repo.clone(),
+            "model-00001-of-00001.safetensors".to_string(),
+            "config.json".to_string(),
+        )
     }
 }
 
 /// Map catalog family ID → backend string (mirrors the frontend familyToBackend).
 fn family_id_to_backend(id: &str) -> &str {
-    if id == "zuna" { return "zuna"; }
-    if id.starts_with("luna-") { return "luna"; }
-    if id == "reve-base" || id == "reve-large" { return "reve"; }
-    if id == "osf-base" { return "osf"; }
-    if id.starts_with("steegformer-") { return "steegformer"; }
+    if id == "zuna" {
+        return "zuna";
+    }
+    if id.starts_with("luna-") {
+        return "luna";
+    }
+    if id == "reve-base" || id == "reve-large" {
+        return "reve";
+    }
+    if id == "osf-base" {
+        return "osf";
+    }
+    if id.starts_with("steegformer-") {
+        return "steegformer";
+    }
     id
 }
 
 async fn cancel_weights_download(State(state): State<AppState>) -> Json<serde_json::Value> {
-    state.exg_download_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    state
+        .exg_download_cancel
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     Json(serde_json::json!({ "ok": true, "message": "weights download cancellation requested" }))
 }
 
@@ -703,12 +728,10 @@ async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Valu
                     std::fs::read_dir(&snaps_dir)
                         .ok()
                         .map(|entries| {
-                            entries
-                                .filter_map(|e| e.ok())
-                                .any(|e| {
-                                    let p = e.path().join(weights_file);
-                                    skill_exg::validate_or_remove(&p)
-                                })
+                            entries.filter_map(|e| e.ok()).any(|e| {
+                                let p = e.path().join(weights_file);
+                                skill_exg::validate_or_remove(&p)
+                            })
                         })
                         .unwrap_or(false)
                 } else {
@@ -724,7 +747,10 @@ async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Valu
         let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
         let active_name = match config.model_backend {
             skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
-                if let Some(fam) = v.get("families").and_then(|f| f.get(format!("luna-{}", config.luna_variant))) {
+                if let Some(fam) = v
+                    .get("families")
+                    .and_then(|f| f.get(format!("luna-{}", config.luna_variant)))
+                {
                     fam.get("name").and_then(|n| n.as_str()).unwrap_or("LUNA").to_string()
                 } else {
                     "LUNA".to_string()
@@ -733,7 +759,8 @@ async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Valu
             _ => {
                 let backend_str = config.model_backend.as_str();
                 if let Some(families) = v.get("families").and_then(|f| f.as_object()) {
-                    families.iter()
+                    families
+                        .iter()
                         .find(|(id, _)| family_id_to_backend(id) == backend_str)
                         .and_then(|(_, fam)| fam.get("name").and_then(|n| n.as_str()))
                         .unwrap_or("ZUNA")

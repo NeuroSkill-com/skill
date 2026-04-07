@@ -37,7 +37,10 @@ pub(crate) fn yyyymmdd_utc() -> String {
 ///
 /// The daemon is the source of truth for device state; the Tauri UI is a thin
 /// client.  This helper ensures every field is copied (no cherry-picking).
-pub(crate) fn apply_daemon_status(local: &mut crate::DeviceStatus, ds: skill_daemon_common::StatusResponse) {
+pub(crate) fn apply_daemon_status(
+    local: &mut crate::DeviceStatus,
+    ds: skill_daemon_common::StatusResponse,
+) {
     local.state = ds.state;
     local.device_name = ds.device_name;
     local.device_kind = ds.device_kind;
@@ -48,9 +51,14 @@ pub(crate) fn apply_daemon_status(local: &mut crate::DeviceStatus, ds: skill_dae
     local.target_name = ds.target_name;
     local.retry_attempt = ds.retry_attempt;
     local.retry_countdown_secs = ds.retry_countdown_secs;
-    local.paired_devices = ds.paired_devices
+    local.paired_devices = ds
+        .paired_devices
         .into_iter()
-        .map(|d| crate::PairedDevice { id: d.id, name: d.name, last_seen: d.last_seen })
+        .map(|d| crate::PairedDevice {
+            id: d.id,
+            name: d.name,
+            last_seen: d.last_seen,
+        })
         .collect();
     local.csv_path = ds.csv_path;
     local.channel_names = ds.channel_names;
@@ -59,7 +67,8 @@ pub(crate) fn apply_daemon_status(local: &mut crate::DeviceStatus, ds: skill_dae
     local.fnirs_channel_names = ds.fnirs_channel_names;
     local.eeg_channel_count = ds.eeg_channel_count;
     local.eeg_sample_rate_hz = ds.eeg_sample_rate_hz;
-    local.channel_quality = ds.channel_quality
+    local.channel_quality = ds
+        .channel_quality
         .into_iter()
         .map(|q| match q.as_str() {
             "good" => skill_eeg::eeg_quality::SignalQuality::Good,

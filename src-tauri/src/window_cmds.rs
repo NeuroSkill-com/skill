@@ -1198,19 +1198,17 @@ pub fn open_latest_log() {
     let dir = default_skill_dir();
     let log_dir = std::path::PathBuf::from(&dir).join("logs");
     // Find the most recently modified .log file.
-    let latest = std::fs::read_dir(&log_dir)
-        .ok()
-        .and_then(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .map(|ext| ext == "log")
-                        .unwrap_or(false)
-                })
-                .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
-        });
+    let latest = std::fs::read_dir(&log_dir).ok().and_then(|entries| {
+        entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map(|ext| ext == "log")
+                    .unwrap_or(false)
+            })
+            .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
+    });
     let Some(entry) = latest else {
         eprintln!("[open_latest_log] no log files in {}", log_dir.display());
         return;

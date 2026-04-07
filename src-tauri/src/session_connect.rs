@@ -3,7 +3,10 @@
 
 use tauri::AppHandle;
 
-use crate::{helpers::{apply_daemon_status, emit_status_from_daemon}, AppStateExt, MutexExt};
+use crate::{
+    helpers::{apply_daemon_status, emit_status_from_daemon},
+    AppStateExt, MutexExt,
+};
 
 /// Connect to OpenBCI via daemon session control.
 #[tauri::command]

@@ -321,7 +321,15 @@ async fn cmd_label(state: &AppState, msg: &Value) -> Result<Value, String> {
         conn.execute(
             "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![text, context, now_secs as i64, now_secs as i64, now_secs as i64, now_secs as i64, now_secs as i64],
+            rusqlite::params![
+                text,
+                context,
+                now_secs as i64,
+                now_secs as i64,
+                now_secs as i64,
+                now_secs as i64,
+                now_secs as i64
+            ],
         )
         .map_err(|e| e.to_string())?;
         let id = conn.last_insert_rowid();

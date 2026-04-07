@@ -66,15 +66,21 @@ onMount(async () => {
   );
   unlisteners.push(await listen("toggle-theme", () => toggleTheme()));
 
-  // ── Cmd/Ctrl+W to close (or hide) the current window ─────────────────
-  function handleCloseShortcut(e: KeyboardEvent) {
+  // ── Cmd/Ctrl+W to close, Cmd+, to open Settings ─────────────────────
+  // Cmd+, (macOS Preferences convention) is handled here as a window-level
+  // event because Carbon's RegisterEventHotKey rejects it at the OS level.
+  function handleWindowShortcuts(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === "w") {
       e.preventDefault();
       getCurrentWindow().close();
     }
+    if (e.metaKey && e.key === "," && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      invoke("open_settings_window").catch(() => {});
+    }
   }
-  window.addEventListener("keydown", handleCloseShortcut);
-  unlisteners.push(() => window.removeEventListener("keydown", handleCloseShortcut));
+  window.addEventListener("keydown", handleWindowShortcuts);
+  unlisteners.push(() => window.removeEventListener("keydown", handleWindowShortcuts));
 });
 // biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
 onDestroy(() => unlisteners.forEach((u) => u()));

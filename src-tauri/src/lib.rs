@@ -175,10 +175,10 @@ use window_cmds::{
     list_calibration_profiles, open_accessibility_settings, open_and_start_calibration,
     open_api_window, open_bt_settings, open_calendar_settings, open_calibration_window,
     open_focus_settings, open_focus_timer_window, open_help_window, open_input_monitoring_settings,
-    open_label_window, open_label_window_at, open_labels_window, open_location_settings,
-    open_model_tab, open_notifications_settings, open_onboarding_window,
+    open_label_window, open_label_window_at, open_labels_window, open_latest_log,
+    open_location_settings, open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
-    open_latest_log, open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
+    open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
     record_calibration_completed, request_calendar_permission, request_location_permission,
     set_active_calibration, set_calibration_config, set_data_dir, set_update_ready,
     show_main_window, update_calibration_profile,
@@ -189,18 +189,39 @@ use label_cmds::{get_queue_stats, rebuild_label_index, search_labels_by_eeg};
 
 mod daemon_cmds;
 use daemon_cmds::{
-    daemon_install_service, daemon_uninstall_service, get_daemon_bootstrap,
-    get_daemon_service_status, get_daemon_status, get_daemon_token_path, start_daemon_dev,
+    cancel_session,
+    cancel_weights_download,
+    daemon_install_service,
+    daemon_uninstall_service,
+    estimate_reembed,
+    get_daemon_bootstrap,
+    get_daemon_service_status,
+    get_daemon_status,
+    get_daemon_token_path,
+    get_eeg_model_config,
+    get_eeg_model_status,
     // EXG model daemon proxies
-    get_exg_catalog, get_eeg_model_config, get_eeg_model_status,
-    set_eeg_model_config, trigger_weights_download, cancel_weights_download,
-    estimate_reembed, trigger_reembed,
+    get_exg_catalog,
     // LSL daemon proxies
-    lsl_discover, lsl_get_config, lsl_set_auto_connect, lsl_pair_stream,
-    lsl_unpair_stream, lsl_get_idle_timeout, lsl_set_idle_timeout,
-    lsl_virtual_source_running, lsl_virtual_source_start, lsl_virtual_source_stop,
-    lsl_iroh_start, lsl_iroh_stop, lsl_iroh_status,
-    start_session, switch_session, cancel_session,
+    lsl_discover,
+    lsl_get_config,
+    lsl_get_idle_timeout,
+    lsl_iroh_start,
+    lsl_iroh_status,
+    lsl_iroh_stop,
+    lsl_pair_stream,
+    lsl_set_auto_connect,
+    lsl_set_idle_timeout,
+    lsl_unpair_stream,
+    lsl_virtual_source_running,
+    lsl_virtual_source_start,
+    lsl_virtual_source_stop,
+    set_eeg_model_config,
+    start_daemon_dev,
+    start_session,
+    switch_session,
+    trigger_reembed,
+    trigger_weights_download,
 };
 
 mod settings_cmds;
@@ -225,8 +246,8 @@ pub(crate) use state::*;
 
 mod helpers;
 pub(crate) use helpers::{
-    apply_daemon_status, emit_devices, emit_status, emit_status_from_daemon, mutate_and_save, save_settings, save_settings_now, send_toast,
-    unix_secs, yyyymmdd_utc, AppStateExt, ToastLevel,
+    apply_daemon_status, emit_devices, emit_status, emit_status_from_daemon, mutate_and_save,
+    save_settings, save_settings_now, send_toast, unix_secs, yyyymmdd_utc, AppStateExt, ToastLevel,
 };
 
 // ── Mutex poison recovery ─────────────────────────────────────────────────────
@@ -759,7 +780,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let delay = {
                 let r = app_poll.state::<Mutex<Box<AppState>>>();
                 let s = r.lock_or_recover();
-                if s.status.state == "connected" { 5 } else { 2 }
+                if s.status.state == "connected" {
+                    5
+                } else {
+                    2
+                }
             };
             tokio::time::sleep(Duration::from_secs(delay)).await;
         }

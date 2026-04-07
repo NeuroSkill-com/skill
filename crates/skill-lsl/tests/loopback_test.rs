@@ -7,28 +7,48 @@ use rlsl::types::ChannelFormat;
 use skill_devices::session::{DeviceAdapter, DeviceEvent};
 use std::time::Duration;
 
-/// Create an adapter and verify the Connected event arrives immediately.
+/// Create an outlet then an adapter and verify the Connected event arrives.
+///
+/// Runs on a dedicated OS thread (not a tokio spawn_blocking) so that:
+///  - rlsl's internal runtime doesn't conflict with the test runtime, and
+///  - the outlet stays alive through the entire connection handshake.
 #[tokio::test]
 async fn adapter_sends_connected_event() {
-    let mut adapter = tokio::task::spawn_blocking(|| {
-        let info = StreamInfo::new(
-            "ConnectTest",
-            "EEG",
-            4,
-            256.0,
-            ChannelFormat::Float32,
-            "test-connect-001",
-        );
-        skill_lsl::LslAdapter::new(&info)
-    })
-    .await
-    .unwrap();
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    // The Connected event is sent by the inlet thread immediately
-    let evt = tokio::time::timeout(Duration::from_secs(2), adapter.next_event())
+    std::thread::Builder::new()
+        .name("lsl-loopback-test".into())
+        .spawn(move || {
+            let info = StreamInfo::new(
+                "ConnectTest",
+                "EEG",
+                4,
+                256.0,
+                ChannelFormat::Float32,
+                "test-connect-001",
+            );
+            // Outlet must exist before the adapter so the inlet can resolve it.
+            // Keep it alive until after the Connected event is received.
+            let _outlet = rlsl::outlet::StreamOutlet::new(&info, 0, 360);
+            let mut adapter = skill_lsl::LslAdapter::new(&info);
+
+            // Drive next_event() synchronously — we're on a plain OS thread.
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build runtime");
+            let evt = rt.block_on(async { tokio::time::timeout(Duration::from_secs(15), adapter.next_event()).await });
+            let _ = tx.send(evt);
+            // Keep _outlet alive until the event is sent.
+        })
+        .expect("spawn thread");
+
+    let result = tokio::time::timeout(Duration::from_secs(20), rx)
         .await
-        .expect("should receive event within 2s");
+        .expect("thread did not complete within 20s")
+        .expect("channel closed");
 
+    let evt = result.expect("should receive event within 15s");
     match evt {
         Some(DeviceEvent::Connected(info)) => {
             assert!(info.name.contains("ConnectTest"));

@@ -292,7 +292,7 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
   if (route) {
     try {
       return route[0] === "GET" ? await daemonGet<T>(route[1]) : await daemonPost<T>(route[1], args ?? {});
-    } catch (daemonErr) {
+    } catch (_daemonErr) {
       // Daemon HTTP failed — try Tauri invoke as fallback.
       // If Tauri invoke also fails, throw the Tauri error (more specific).
       const { invoke } = await import("@tauri-apps/api/core");
