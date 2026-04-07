@@ -268,7 +268,10 @@ async function openPage(page: Page, path: string, extra: CommandMap = {}) {
 async function fireTauriEvent(page: Page, event: string, payload: Record<string, unknown>) {
   await page.evaluate(
     ([e, p]) => {
-      (window as Record<string, unknown>).__skillFireTauriEvent__?.(e, p);
+      (window as unknown as { __skillFireTauriEvent__?: (e: string, p: unknown) => void }).__skillFireTauriEvent__?.(
+        e,
+        p,
+      );
     },
     [event, payload] as const,
   );
@@ -278,7 +281,7 @@ async function fireTauriEvent(page: Page, event: string, payload: Record<string,
 async function emitDaemonEvent(page: Page, type: string, payload: Record<string, unknown>) {
   await page.evaluate(
     ([t, p]) => {
-      (window as Record<string, unknown>).__skillEmitEvent__?.(t, p);
+      (window as unknown as { __skillEmitEvent__?: (t: string, p: unknown) => void }).__skillEmitEvent__?.(t, p);
     },
     [type, payload] as const,
   );
@@ -420,7 +423,10 @@ test.describe("Virtual Devices window", () => {
 
     const args = await page.evaluate(
       () =>
-        (window as Record<string, unknown>).__invokedArgs__ as Array<{ cmd: string; args: Record<string, unknown> }>,
+        (window as unknown as Record<string, unknown>).__invokedArgs__ as Array<{
+          cmd: string;
+          args: Record<string, unknown>;
+        }>,
     );
 
     // Step 1: daemon virtual source started with preset config
@@ -457,7 +463,7 @@ test.describe("Virtual Devices window", () => {
     await page.locator("button", { hasText: /Stop Virtual Device/i }).click();
     await page.waitForTimeout(600);
 
-    const cmds = await page.evaluate(() => (window as Record<string, unknown>).__invokedCmds__);
+    const cmds = await page.evaluate(() => (window as unknown as Record<string, unknown>).__invokedCmds__);
     expect(cmds).toContain("cancel_session");
     expect(cmds).toContain("lsl_virtual_source_stop");
   });
@@ -490,7 +496,7 @@ test.describe("Virtual Devices window", () => {
 
     const emits = await page.evaluate(
       () =>
-        (window as Record<string, unknown>).__tauriEmits__ as Array<{
+        (window as unknown as Record<string, unknown>).__tauriEmits__ as Array<{
           event: string;
           payload: Record<string, unknown>;
         }>,
@@ -526,7 +532,7 @@ test.describe("Virtual Devices window", () => {
 
     const emits = await page.evaluate(
       () =>
-        (window as Record<string, unknown>).__tauriEmits__ as Array<{
+        (window as unknown as Record<string, unknown>).__tauriEmits__ as Array<{
           event: string;
           payload: Record<string, unknown>;
         }>,
@@ -750,7 +756,7 @@ test.describe("Full flow: virtual-devices page → dashboard", () => {
       // Verify it emitted the correct Tauri event with 4ch
       const emits = await vdevPage.evaluate(
         () =>
-          (window as Record<string, unknown>).__tauriEmits__ as Array<{
+          (window as unknown as Record<string, unknown>).__tauriEmits__ as Array<{
             event: string;
             payload: Record<string, unknown>;
           }>,
@@ -764,7 +770,7 @@ test.describe("Full flow: virtual-devices page → dashboard", () => {
       // Now open the dashboard in a SEPARATE context and simulate receiving the event
       await openPage(dashPage, "/");
       // Simulate the re-broadcast timer delivering the event to a freshly opened window
-      await fireTauriEvent(dashPage, "virtual-device-status", statusEmit?.payload);
+      await fireTauriEvent(dashPage, "virtual-device-status", statusEmit?.payload ?? {});
       // Feed EEG data
       for (let i = 0; i < 6; i++) {
         await fireTauriEvent(dashPage, "virtual-eeg-bands", SYNTH_BANDS);
