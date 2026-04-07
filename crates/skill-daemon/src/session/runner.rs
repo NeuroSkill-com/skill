@@ -119,15 +119,24 @@ impl Pipeline {
         let epoch_store = EpochStore::open(&day_dir);
 
         // EXG embedding pipeline.
+        // Skip for virtual/synthetic devices: their data is procedurally
+        // generated and not worth embedding, and ZUNA takes 60+ seconds to
+        // load — starving the LLM of GPU while the virtual stream is active.
+        let is_virtual = device_name.to_lowercase().contains("virtual");
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
-        let embed_worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
-        let mut acc = EpochAccumulator::new(
-            embed_worker.tx.clone(),
-            eeg_channels,
-            sample_rate as f32,
-            channel_names.clone(),
-        );
-        acc.set_device_name(device_name.clone());
+        let (embed_worker_opt, acc) = if is_virtual {
+            (None, None)
+        } else {
+            let worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
+            let mut acc = EpochAccumulator::new(
+                worker.tx.clone(),
+                eeg_channels,
+                sample_rate as f32,
+                channel_names.clone(),
+            );
+            acc.set_device_name(device_name.clone());
+            (Some(worker), Some(acc))
+        };
 
         info!(
             path = %csv_path.display(),
@@ -145,8 +154,8 @@ impl Pipeline {
             quality,
             artifacts,
             epoch_store,
-            epoch_accumulator: Some(acc),
-            _embed_worker: Some(embed_worker),
+            epoch_accumulator: acc,
+            _embed_worker: embed_worker_opt,
             channel_names,
             sample_rate,
             start_utc,

@@ -178,10 +178,10 @@ use window_cmds::{
     open_label_window, open_label_window_at, open_labels_window, open_latest_log,
     open_location_settings, open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
-    open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
-    record_calibration_completed, request_calendar_permission, request_location_permission,
-    set_active_calibration, set_calibration_config, set_data_dir, set_update_ready,
-    show_main_window, update_calibration_profile,
+    open_skill_dir, open_updates_window, open_virtual_devices_window, open_whats_new_window,
+    quit_app, record_calibration_completed, request_calendar_permission,
+    request_location_permission, set_active_calibration, set_calibration_config, set_data_dir,
+    set_update_ready, show_main_window, update_calibration_profile,
 };
 
 mod label_cmds;
@@ -215,6 +215,7 @@ use daemon_cmds::{
     lsl_unpair_stream,
     lsl_virtual_source_running,
     lsl_virtual_source_start,
+    lsl_virtual_source_start_configured,
     lsl_virtual_source_stop,
     set_eeg_model_config,
     start_daemon_dev,
@@ -655,6 +656,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 let a = app.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = open_api_window(a).await;
+                });
+            } else if id == "virtual_devices" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_virtual_devices_window(a).await;
                 });
             } else if id == "chat" {
                 #[cfg(feature = "llm")]
@@ -1390,6 +1396,7 @@ pub fn run() {
             lsl_set_idle_timeout,
             lsl_virtual_source_running,
             lsl_virtual_source_start,
+            lsl_virtual_source_start_configured,
             lsl_virtual_source_stop,
             lsl_iroh_start,
             lsl_iroh_stop,
@@ -1413,6 +1420,7 @@ pub fn run() {
             tts_list_neutts_voices,
             session_connect::connect_openbci,
             open_api_window,
+            open_virtual_devices_window,
             open_whats_new_window,
             get_whats_new_seen_version,
             dismiss_whats_new,

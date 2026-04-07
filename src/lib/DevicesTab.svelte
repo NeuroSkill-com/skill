@@ -527,6 +527,21 @@ function fmtLastSeen(ts: number) {
   return `${Math.floor(d / 3600)}h ago`;
 }
 
+// ── Virtual device detection ──────────────────────────────────────────────────
+function isVirtualDevice(dev: { id: string; name: string }): boolean {
+  const n = dev.name.toLowerCase();
+  const id = dev.id.toLowerCase();
+  return n.includes("virtual") || id.includes("virtual");
+}
+
+function sortDevicesRealFirst<T extends { id: string; name: string }>(devs: T[]): T[] {
+  return [...devs].sort((a, b) => {
+    const av = isVirtualDevice(a) ? 1 : 0;
+    const bv = isVirtualDevice(b) ? 1 : 0;
+    return av - bv;
+  });
+}
+
 // ── Device images ──────────────────────────────────────────────────────────
 function museImage(name: string, hw?: string | null): string | null {
   const n = name.toLowerCase();
@@ -582,8 +597,15 @@ const OPENBCI_IMAGES: Record<string, string> = {
   galea: "/devices/openbci-galea.jpg",
 };
 
-// ── Unpaired device banner logic ───────────────────────────────────────────
-const newUnpairedDevices = $derived(devices.filter((d) => !d.is_paired && d.last_rssi !== 0));
+// ── Device lists ─────────────────────────────────────────────────────────────
+// Paired: real hardware always first, virtual devices at the bottom.
+const pairedDevices = $derived(sortDevicesRealFirst(devices.filter((d) => d.is_paired)));
+// Discovered: split so the template renders real devices above the virtual subsection.
+const discoveredReal = $derived(devices.filter((d) => !d.is_paired && !isVirtualDevice(d)));
+const discoveredVirtual = $derived(devices.filter((d) => !d.is_paired && isVirtualDevice(d)));
+const discoveredDevices = $derived([...discoveredReal, ...discoveredVirtual]);
+// "New device" banner only fires for real hardware — not virtual sources.
+const newUnpairedDevices = $derived(devices.filter((d) => !d.is_paired && d.last_rssi !== 0 && !isVirtualDevice(d)));
 const hasNewUnpaired = $derived(newUnpairedDevices.length > 0);
 
 function expandSupportedCompany(id: SupportedCompanyId) {
@@ -593,10 +615,6 @@ function expandSupportedCompany(id: SupportedCompanyId) {
   if (id === "idun") idunApiExpanded = true;
   if (id === "oura") ouraApiExpanded = true;
 }
-
-// ── Sorted device lists ────────────────────────────────────────────────────
-const pairedDevices = $derived(devices.filter((d) => d.is_paired));
-const discoveredDevices = $derived(devices.filter((d) => !d.is_paired));
 
 // ── Device actions ─────────────────────────────────────────────────────────
 async function setPreferred(id: string) {
@@ -704,7 +722,16 @@ onDestroy(() => {
         </CardContent>
       {:else}
         {#each pairedDevices as dev, i (dev.id)}
-          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+          {#if i > 0 && !isVirtualDevice(pairedDevices[i - 1]) && isVirtualDevice(dev)}
+            <!-- Divider between real hardware and virtual devices -->
+            <div class="flex items-center gap-2 px-4 py-1.5 bg-muted/30 dark:bg-white/[0.02]
+                        border-y border-border dark:border-white/[0.05]">
+              <span class="text-[0.46rem] font-bold tracking-widest uppercase
+                           text-muted-foreground/50">🔬 {t("devices.virtualDevices")}</span>
+            </div>
+          {:else if i > 0}
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
           {@render deviceRow(dev)}
         {/each}
       {/if}
@@ -743,10 +770,30 @@ onDestroy(() => {
           </p>
         </CardContent>
       {:else}
-        {#each discoveredDevices as dev, i (dev.id)}
+        <!-- Real hardware -->
+        {#each discoveredReal as dev, i (dev.id)}
           {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
           {@render deviceRow(dev)}
         {/each}
+
+        <!-- Virtual subsection -->
+        {#if discoveredVirtual.length > 0}
+          {#if discoveredReal.length > 0}
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+          <!-- Subsection header -->
+          <div class="flex items-center gap-2 px-4 py-2 bg-muted/30 dark:bg-white/[0.02]
+                      {discoveredReal.length > 0 ? 'border-t border-border dark:border-white/[0.05]' : ''}">
+            <span class="text-[0.46rem] font-bold tracking-widest uppercase text-muted-foreground/50">
+              🔬 {t("devices.virtualDevices")}
+            </span>
+            <span class="text-[0.46rem] text-muted-foreground/35 leading-relaxed">— {t("devices.virtualDevicesHint")}</span>
+          </div>
+          {#each discoveredVirtual as dev, i (dev.id)}
+            {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+            {@render deviceRow(dev)}
+          {/each}
+        {/if}
       {/if}
     </Card>
   </div>
@@ -1626,7 +1673,13 @@ onDestroy(() => {
             {t("settings.new")}
           </Badge>
         {/if}
-        {#if dev.transport && dev.transport !== "ble"}
+        {#if isVirtualDevice(dev)}
+          <Badge variant="outline"
+            class="text-[0.46rem] tracking-wide uppercase py-0 px-1 shrink-0
+                   bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20">
+            🔬 {t("devices.virtualBadge")}
+          </Badge>
+        {:else if dev.transport && dev.transport !== "ble"}
           <Badge variant="outline"
             class="text-[0.46rem] tracking-wide uppercase py-0 px-1 shrink-0
                    {dev.transport === 'usb_serial' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :

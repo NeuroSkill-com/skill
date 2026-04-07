@@ -162,6 +162,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   lsl_set_idle_timeout: [P, "/v1/lsl/idle-timeout"],
   lsl_virtual_source_running: [G, "/v1/lsl/virtual-source/running"],
   lsl_virtual_source_start: [P, "/v1/lsl/virtual-source/start"],
+  lsl_virtual_source_start_configured: [P, "/v1/lsl/virtual-source/start"],
   lsl_virtual_source_stop: [P, "/v1/lsl/virtual-source/stop"],
   lsl_iroh_start: [P, "/v1/lsl/iroh/start"],
   lsl_iroh_stop: [P, "/v1/lsl/iroh/stop"],

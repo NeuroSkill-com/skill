@@ -833,6 +833,16 @@ onDestroy(() => {
     {#if virtualSourceError}
       <div class="px-4 pb-3 text-[0.58rem] text-red-500 leading-relaxed">{virtualSourceError}</div>
     {/if}
+    <!-- Link to full Virtual Devices window -->
+    <div class="px-4 pb-3 border-t border-border dark:border-white/[0.05]">
+      <p class="text-[0.54rem] text-muted-foreground/50 leading-relaxed mt-2.5">
+        For full virtual device configuration — multiple presets, custom channels, signal templates and live preview — use the dedicated
+        <button
+          class="text-primary hover:underline cursor-pointer font-semibold"
+          onclick={() => import("@tauri-apps/api/core").then(({ invoke }) => invoke("open_virtual_devices_window")).catch(() => {})}
+        >Virtual Devices window</button>.
+      </p>
+    </div>
   </Card>
 </section>
 

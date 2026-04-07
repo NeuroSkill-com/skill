@@ -718,6 +718,11 @@ pub(crate) fn read_payloads<L: Payload, R: Read + Seek>(
     r.read_exact(&mut buf8)?;
     let stride = u64::from_le_bytes(buf8) as usize;
 
+    // An empty index saved with save_with_payload writes payload_count=0.
+    // That is valid — just return an empty vec.
+    if payload_count == 0 && n == 0 {
+        return Ok(Vec::new());
+    }
     if payload_count == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

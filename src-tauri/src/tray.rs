@@ -527,6 +527,13 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         true,
         Some(api_shortcut.as_str()),
     )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "virtual_devices",
+        "Virtual Devices…",
+        true,
+        None::<&str>,
+    )?)?;
     #[cfg(feature = "llm")]
     {
         menu.append(&MenuItem::with_id(

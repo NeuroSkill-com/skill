@@ -750,6 +750,10 @@ window_cmd!(open_api_window, "api", "api",
     "NeuroSkill™ – API Status",
     size: (620.0, 560.0), min: (480.0, 400.0));
 
+window_cmd!(open_virtual_devices_window, "virtual-devices", "virtual-devices",
+    "NeuroSkill™ – Virtual Devices",
+    size: (720.0, 800.0), min: (560.0, 600.0));
+
 /// Return the last app version for which the What's New window was dismissed.
 ///
 /// An empty string means the window has never been seen.
@@ -1196,35 +1200,64 @@ pub fn open_skill_dir() {
 #[tauri::command]
 pub fn open_latest_log() {
     let dir = default_skill_dir();
-    let log_dir = std::path::PathBuf::from(&dir).join("logs");
-    // Find the most recently modified .log file.
-    let latest = std::fs::read_dir(&log_dir).ok().and_then(|entries| {
-        entries
+    let base_dir = std::path::PathBuf::from(&dir);
+    // Logs are stored as log_TIMESTAMP.txt inside date-stamped subdirectories (e.g. 20260407/).
+    // Walk all date directories and find the most recently modified log_*.txt file.
+    let latest = std::fs::read_dir(&base_dir).ok().and_then(|date_entries| {
+        date_entries
             .filter_map(|e| e.ok())
             .filter(|e| {
-                e.path()
-                    .extension()
-                    .map(|ext| ext == "log")
-                    .unwrap_or(false)
+                // Only consider directories whose names are 8-digit dates (YYYYMMDD).
+                e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                    && e.file_name()
+                        .to_string_lossy()
+                        .chars()
+                        .all(|c| c.is_ascii_digit())
+                    && e.file_name().to_string_lossy().len() == 8
+            })
+            .flat_map(|date_dir| {
+                std::fs::read_dir(date_dir.path())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let name = e.file_name();
+                        let name_str = name.to_string_lossy();
+                        name_str.starts_with("log_")
+                            && e.path()
+                                .extension()
+                                .map(|ext| ext == "txt")
+                                .unwrap_or(false)
+                    })
+                    .collect::<Vec<_>>()
             })
             .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
     });
     let Some(entry) = latest else {
-        eprintln!("[open_latest_log] no log files in {}", log_dir.display());
+        eprintln!("[open_latest_log] no log files in {}", base_dir.display());
         return;
     };
     let path = entry.path();
     #[cfg(target_os = "macos")]
     {
         let _ = std::process::Command::new("open").arg(&path).spawn();
+        if let Some(folder) = path.parent() {
+            let _ = std::process::Command::new("open").arg(folder).spawn();
+        }
     }
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
+        if let Some(folder) = path.parent() {
+            let _ = std::process::Command::new("xdg-open").arg(folder).spawn();
+        }
     }
     #[cfg(target_os = "windows")]
     {
         let _ = std::process::Command::new("notepad").arg(&path).spawn();
+        if let Some(folder) = path.parent() {
+            let _ = std::process::Command::new("explorer").arg(folder).spawn();
+        }
     }
 }
 

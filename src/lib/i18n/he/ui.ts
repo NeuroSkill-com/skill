@@ -246,6 +246,7 @@ const ui: Record<string, string> = {
   "window.title.onboarding": "{app} – ברוכים הבאים",
   "window.title.api": "{app} – סטטוס API",
   "window.title.about": "אודות {app}",
+  "window.title.virtualDevices": "{app} – מכשירים וירטואליים",
 
   "about.title": "אודות NeuroSkill™",
   "about.links": "קישורים",
@@ -275,6 +276,9 @@ const ui: Record<string, string> = {
   "devices.noDiscovered": "אין מכשירים בקרבת מקום",
   "devices.noDiscoveredHint":
     "הפעל את אוזניות ה-BCI שלך ומקם אותה בטווח Bluetooth. מכשירים שזוהו יופיעו כאן באופן אוטומטי.",
+  "devices.virtualDevices": "וירטואלי",
+  "devices.virtualDevicesHint": "מכשירים מדומים לבדיקה ללא חומרה. הפעל אחד מחלון המכשירים הווירטואליים.",
+  "devices.virtualBadge": "וירטואלי",
   "devices.deviceSingular": "מכשיר",
   "devices.devicePlural": "מכשירים",
 

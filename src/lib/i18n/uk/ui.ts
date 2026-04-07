@@ -235,6 +235,7 @@ const ui: Record<string, string> = {
   "window.title.onboarding": "{app} – Ласкаво просимо",
   "window.title.api": "{app} – Статус API",
   "window.title.about": "Про {app}",
+  "window.title.virtualDevices": "{app} – Віртуальні пристрої",
 
   "about.title": "Про NeuroSkill™",
   "about.links": "Посилання",
@@ -282,6 +283,10 @@ const ui: Record<string, string> = {
   "devices.noDiscovered": "Немає пристроїв поблизу",
   "devices.noDiscoveredHint":
     "Увімкніть BCI-гарнітуру та розмістіть її в зоні дії Bluetooth. Виявлені пристрої з'являться тут автоматично.",
+  "devices.virtualDevices": "Віртуальний",
+  "devices.virtualDevicesHint":
+    "Імітовані пристрої для тестування без фізичного обладнання. Запустіть один у вікні Віртуальні пристрої.",
+  "devices.virtualBadge": "Віртуал.",
   "devices.deviceSingular": "пристрій",
   "devices.devicePlural": "пристроїв",
 

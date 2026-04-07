@@ -3251,14 +3251,20 @@ async fn set_lsl_idle_timeout(
     Json(serde_json::json!({"ok": true, "secs": req.secs}))
 }
 
-async fn lsl_virtual_source_start(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn lsl_virtual_source_start(
+    State(state): State<AppState>,
+    body: Option<axum::extract::Json<serde_json::Value>>,
+) -> Json<serde_json::Value> {
     let Ok(mut g) = state.lsl_virtual_source.lock() else {
         return Json(serde_json::json!({"ok": false, "running": false}));
     };
     if g.is_some() {
         return Json(serde_json::json!({"ok": true, "running": true, "started": false}));
     }
-    match skill_lsl::VirtualLslSource::start() {
+    // Parse config from the request body; fall back to defaults if absent / invalid.
+    let config: skill_lsl::VirtualSourceConfig =
+        body.and_then(|b| serde_json::from_value(b.0).ok()).unwrap_or_default();
+    match skill_lsl::VirtualLslSource::start(config) {
         Ok(src) => {
             *g = Some(src);
             Json(serde_json::json!({"ok": true, "running": true, "started": true}))

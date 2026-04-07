@@ -74,24 +74,29 @@ impl LslAdapter {
         let stream_type = info.type_().to_string();
         let source_id = info.source_id().to_string();
 
-        // Read channel labels from LSL description XML if available
+        // Read channel labels from LSL description XML.
+        // `resolve_query` returns a minimal StreamInfo whose desc() XML is
+        // empty. We must open a temporary StreamInlet and call get_fullinfo()
+        // to obtain the full XML with channel labels.
         let channel_names: Vec<String> = {
-            let desc = info.desc();
+            let tmp = rlsl::inlet::StreamInlet::new(info, 1, 0, false);
+            let full = tmp.get_fullinfo(2.0);
+            let desc = full.desc();
             let channels_node = desc.child("channels");
             let mut names = Vec::with_capacity(channel_count);
             if !channels_node.is_empty() {
                 let mut ch = channels_node.child("channel");
                 while !ch.is_empty() {
                     let label = ch.child_value("label");
-                    if label.is_empty() {
-                        names.push(format!("Ch{}", names.len() + 1));
+                    names.push(if label.is_empty() {
+                        format!("Ch{}", names.len() + 1)
                     } else {
-                        names.push(label);
-                    }
+                        label
+                    });
                     ch = ch.next_sibling_named("channel");
                 }
             }
-            // Pad if XML didn't have all channels
+            // Pad / truncate to exact channel count.
             while names.len() < channel_count {
                 names.push(format!("Ch{}", names.len() + 1));
             }

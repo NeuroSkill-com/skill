@@ -111,6 +111,31 @@ export async function lslStartVirtualSource(): Promise<boolean> {
   return !!v.started;
 }
 
+export interface VirtualSourceConfig {
+  channels: number;
+  sampleRate: number;
+  template: string;
+  quality: string;
+  amplitudeUv: number;
+  noiseUv: number;
+  lineNoise: string;
+  dropoutProb: number;
+}
+
+export async function lslStartVirtualSourceConfigured(cfg: VirtualSourceConfig): Promise<boolean> {
+  const v = await daemonInvoke<{ started?: boolean }>("lsl_virtual_source_start_configured", {
+    channels: cfg.channels,
+    sample_rate: cfg.sampleRate,
+    template: cfg.template,
+    quality: cfg.quality,
+    amplitude_uv: cfg.amplitudeUv,
+    noise_uv: cfg.noiseUv,
+    line_noise: cfg.lineNoise,
+    dropout_prob: cfg.dropoutProb,
+  });
+  return !!v.started;
+}
+
 export async function lslStopVirtualSource(): Promise<boolean> {
   const v = await daemonInvoke<{ was_running?: boolean }>("lsl_virtual_source_stop", {});
   return !!v.was_running;

@@ -1311,6 +1311,40 @@ pub async fn lsl_virtual_source_start() -> Result<serde_json::Value, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Start the virtual EEG source with explicit signal configuration.
+/// The body is forwarded verbatim to the daemon so it can honour whatever
+/// fields it supports; unknown fields are silently ignored.
+#[tauri::command(rename_all = "snake_case")]
+#[allow(clippy::too_many_arguments)]
+pub async fn lsl_virtual_source_start_configured(
+    channels: u32,
+    sample_rate: u32,
+    template: String,
+    quality: String,
+    amplitude_uv: f64,
+    noise_uv: f64,
+    line_noise: String,
+    dropout_prob: f64,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        daemon_post(
+            "/v1/lsl/virtual-source/start",
+            &serde_json::json!({
+                "channels":     channels,
+                "sample_rate":  sample_rate,
+                "template":     template,
+                "quality":      quality,
+                "amplitude_uv": amplitude_uv,
+                "noise_uv":     noise_uv,
+                "line_noise":   line_noise,
+                "dropout_prob": dropout_prob,
+            }),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn lsl_virtual_source_stop() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| {

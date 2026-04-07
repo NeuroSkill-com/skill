@@ -268,6 +268,7 @@ const ui: Record<string, string> = {
   "window.title.onboarding": "{app} – Bienvenido",
   "window.title.api": "{app} – Estado de la API",
   "window.title.about": "Acerca de {app}",
+  "window.title.virtualDevices": "{app} – Dispositivos Virtuales",
 
   "about.title": "Acerca de NeuroSkill™",
   "about.links": "Enlaces",
@@ -306,6 +307,10 @@ const ui: Record<string, string> = {
   "devices.noDiscovered": "No hay dispositivos cercanos",
   "devices.noDiscoveredHint":
     "Encienda sus auriculares BCI y colóquelos dentro del alcance de Bluetooth. Los dispositivos descubiertos aparecerán aquí automáticamente.",
+  "devices.virtualDevices": "Simulado",
+  "devices.virtualDevicesHint":
+    "Dispositivos simulados para probar sin hardware. Inícialo desde la ventana de Dispositivos Virtuales.",
+  "devices.virtualBadge": "Simulado",
   "devices.deviceSingular": "dispositivo",
   "devices.devicePlural": "dispositivos",
 

@@ -6,6 +6,34 @@
  * Fuzzy matching, device image resolution, channel labeling, and formatting.
  */
 
+// ── Virtual device detection ────────────────────────────────────────────────────
+
+/**
+ * Return true when `dev` is a simulated/virtual device rather than real hardware.
+ *
+ * Detection rules (any match → virtual):
+ *  - name contains "virtual" (case-insensitive) — covers "SkillVirtualEEG",
+ *    "Virtual EEG", etc.
+ *  - id   contains "virtual" (case-insensitive) — covers daemon id "virtual-eeg"
+ */
+export function isVirtualDevice(dev: { id: string; name: string }): boolean {
+  const n = dev.name.toLowerCase();
+  const id = dev.id.toLowerCase();
+  return n.includes("virtual") || id.includes("virtual");
+}
+
+/**
+ * Stable-sort a device list so real hardware always appears above virtual
+ * devices.  Within each group the original relative order is preserved.
+ */
+export function sortDevicesRealFirst<T extends { id: string; name: string }>(devs: T[]): T[] {
+  return [...devs].sort((a, b) => {
+    const av = isVirtualDevice(a) ? 1 : 0;
+    const bv = isVirtualDevice(b) ? 1 : 0;
+    return av - bv; // real (0) before virtual (1)
+  });
+}
+
 // ── Fuzzy search ──────────────────────────────────────────────────────────────
 
 /** Fuzzy substring + character-sequence match. */

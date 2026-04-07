@@ -4,7 +4,8 @@
   "description": "Capability for all Skill windows",
   "windows": ["main", "settings", "calibration", "api", "onboarding",
               "search", "help", "labels", "label", "focus-timer", "about",
-              "history", "compare", "downloads", "whats-new", "session-*", "chat"],
+              "history", "compare", "downloads", "whats-new", "session-*", "chat",
+              "virtual-devices"],
   "permissions": [
     "core:default",
     "core:window:allow-set-title",

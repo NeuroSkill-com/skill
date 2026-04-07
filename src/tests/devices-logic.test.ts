@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { deviceImage, fmtLastSeen, fuzzyMatch, museImage, openbciChannelLabel } from "$lib/devices-logic";
+import {
+  deviceImage,
+  fmtLastSeen,
+  fuzzyMatch,
+  isVirtualDevice,
+  museImage,
+  openbciChannelLabel,
+  sortDevicesRealFirst,
+} from "$lib/devices-logic";
 
 describe("fuzzyMatch", () => {
   it("matches empty needle", () => {
@@ -83,6 +91,53 @@ describe("openbciChannelLabel", () => {
   it("falls back to Ch# for out-of-range", () => {
     expect(openbciChannelLabel(8)).toBe("Ch9");
     expect(openbciChannelLabel(15)).toBe("Ch16");
+  });
+});
+
+describe("isVirtualDevice", () => {
+  it("detects SkillVirtualEEG by name", () => {
+    expect(isVirtualDevice({ id: "skill-001", name: "SkillVirtualEEG" })).toBe(true);
+  });
+  it("detects Virtual EEG by name", () => {
+    expect(isVirtualDevice({ id: "anything", name: "Virtual EEG" })).toBe(true);
+  });
+  it("detects virtual by id", () => {
+    expect(isVirtualDevice({ id: "virtual-eeg", name: "EEG Source" })).toBe(true);
+  });
+  it("is case-insensitive for name", () => {
+    expect(isVirtualDevice({ id: "x", name: "VIRTUAL TEST" })).toBe(true);
+  });
+  it("returns false for real hardware names", () => {
+    expect(isVirtualDevice({ id: "aa:bb:cc:dd:ee:ff", name: "Muse-S" })).toBe(false);
+    expect(isVirtualDevice({ id: "ganglion-1234", name: "Ganglion" })).toBe(false);
+    expect(isVirtualDevice({ id: "SkillLSL-001", name: "SkillLSL" })).toBe(false);
+  });
+});
+
+describe("sortDevicesRealFirst", () => {
+  const real1 = { id: "aa:bb", name: "Muse-S" };
+  const real2 = { id: "cc:dd", name: "Ganglion" };
+  const virt1 = { id: "virtual-eeg", name: "Virtual EEG" };
+  const virt2 = { id: "x", name: "SkillVirtualEEG" };
+
+  it("keeps all-real list in original order", () => {
+    expect(sortDevicesRealFirst([real1, real2])).toEqual([real1, real2]);
+  });
+  it("keeps all-virtual list in original order", () => {
+    expect(sortDevicesRealFirst([virt1, virt2])).toEqual([virt1, virt2]);
+  });
+  it("puts real before virtual in mixed list", () => {
+    const sorted = sortDevicesRealFirst([virt1, real1, virt2, real2]);
+    expect(sorted.indexOf(real1)).toBeLessThan(sorted.indexOf(virt1));
+    expect(sorted.indexOf(real2)).toBeLessThan(sorted.indexOf(virt2));
+  });
+  it("does not mutate the input array", () => {
+    const input = [virt1, real1];
+    sortDevicesRealFirst(input);
+    expect(input[0]).toBe(virt1); // unchanged
+  });
+  it("handles empty list", () => {
+    expect(sortDevicesRealFirst([])).toEqual([]);
   });
 });
 
