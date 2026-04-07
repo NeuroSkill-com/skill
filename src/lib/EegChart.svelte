@@ -50,8 +50,10 @@ export interface EventMarker {
   } = $props();
 
   /** Actual channel count for buffer allocation.
-   *  Captured at init — component remounts on device switch. */
-  const N_CH = (numChannels || 4) as number; // eslint-disable-line
+   *  Uses $derived (like RBUF/SPEC_COLS) to satisfy the svelte
+   *  `state_referenced_locally` rule — the initial value is what matters
+   *  for buffer sizing; the component remounts on device switch. */
+  const N_CH = $derived(numChannels || 4);
   /** Maximum channels to render visually (performance guard). */
   const MAX_VIS = 64;
   /** Visible channel count — all channels up to MAX_VIS are drawn. */
@@ -106,19 +108,19 @@ export interface EventMarker {
   // svelte `state_referenced_locally` warning).
   const RBUF = $derived(bufSizeForRate(sampleRate));
   const SPEC_COLS = $derived(Math.ceil(RBUF / HOP));
-  const buffers  = Array.from({ length: N_CH }, () => new Float64Array(RBUF));
-  const writePos = new Int32Array(N_CH);
+  const buffers  = $derived(Array.from({ length: N_CH }, () => new Float64Array(RBUF)));
+  const writePos = $derived(new Int32Array(N_CH));
 
   // Per-channel one-pole high-pass (DC blocker, τ ≈ 780 ms @ 256 Hz).
-  const dcEma = new Float64Array(N_CH);
+  const dcEma = $derived(new Float64Array(N_CH));
 
   // ── Decimation output buffers (pre-allocated, reused every frame) ─────────
   // Sized to a generous max canvas width so no allocation happens in RAF.
   // Stores per-pixel-column { min, max, mean } after decimate() runs.
   const MAX_CANVAS_W = 2048;
-  const decMins  = Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W));
-  const decMaxs  = Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W));
-  const decMeans = Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W));
+  const decMins  = $derived(Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W)));
+  const decMaxs  = $derived(Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W)));
+  const decMeans = $derived(Array.from({ length: N_CH }, () => new Float32Array(MAX_CANVAS_W)));
 
   // ── Spectrogram state ────────────────────────────────────────────────────────
   // Four off-screen tape canvases: each is SPEC_COLS × SPEC_N_FREQ px.
@@ -132,7 +134,7 @@ export interface EventMarker {
   // logMaxPwr[ch]: running soft-maximum of log₁₀(PSD) values seen so far.
   // Decays slowly so short bursts don't permanently crush the colormap.
   // LOG_DECAY / LOG_RANGE / LOG_FLOOR / SPEC_LOG_INIT imported from constants.ts.
-  const logMaxPwr = new Float64Array(N_CH).fill(SPEC_LOG_INIT);
+  const logMaxPwr = $derived(new Float64Array(N_CH).fill(SPEC_LOG_INIT));
 
   function initSpecTapes() {
     specTapes = [];

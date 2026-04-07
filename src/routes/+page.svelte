@@ -825,6 +825,9 @@ async function fitMainWindowHeight() {
 const unlisteners: UnlistenFn[] = [];
 async function refreshStatus() {
   try {
+    // Don't let the daemon's real device state overwrite an active virtual
+    // EEG session — the daemon knows nothing about the JS-side generator.
+    if (status.device_id === "virtual-eeg") return;
     const prev = status.state;
     const ds = await daemonInvoke<Partial<DeviceStatus>>("get_status");
     // Merge daemon response into existing status to preserve fields the
@@ -886,26 +889,46 @@ onMount(async () => {
     if (status.eeg.length < n) status.eeg = Array.from(eegLatest);
     else {
       for (let i = 0; i < n; i++) status.eeg[i] = eegLatest[i];
-      status.eeg = status.eeg; // trigger reactivity
+      status.eeg = [...status.eeg]; // new reference — triggers Svelte 5 reactivity
     }
   }, 250);
   unlisteners.push(() => clearInterval(eegFlushTimer));
 
-  unlisteners.push(subscribeEeg((pkt) => {
-    chartEl?.pushSamples(pkt.electrode, pkt.samples);
-    // Grow buffer on first sight of a higher electrode index.
-    if (pkt.electrode >= eegLatest.length) {
-      const next = new Float64Array(pkt.electrode + 1);
-      next.set(eegLatest);
-      eegLatest = next;
-    }
-    if (pkt.samples.length > 0) {
-      eegLatest[pkt.electrode] = pkt.samples[pkt.samples.length - 1];
-      eegDirty = true;
-    }
-  }));
+  unlisteners.push(
+    subscribeEeg((pkt) => {
+      chartEl?.pushSamples(pkt.electrode, pkt.samples);
+      // Grow buffer on first sight of a higher electrode index.
+      if (pkt.electrode >= eegLatest.length) {
+        const next = new Float64Array(pkt.electrode + 1);
+        next.set(eegLatest);
+        eegLatest = next;
+      }
+      if (pkt.samples.length > 0) {
+        eegLatest[pkt.electrode] = pkt.samples[pkt.samples.length - 1];
+        eegDirty = true;
+      }
+    }),
+  );
   unlisteners.push(subscribePpg((pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples)));
   unlisteners.push(subscribeImu((pkt) => imuChartEl?.pushPacket(pkt)));
+
+  // ── Virtual EEG cross-window relay ─────────────────────────────────────
+  // VirtualEegTab lives in the settings window; its injectDaemonEvent calls
+  // never reach this window's onDaemonEvent handlers. Tauri emit/listen
+  // bridges the gap — the settings window emits these events and we relay
+  // them into the local injectDaemonEvent pipeline so subscribeEeg and
+  // subscribeBands fire normally in this window.
+  const { injectDaemonEvent: relayEvent } = await import("$lib/daemon/ws");
+  unlisteners.push(
+    await listen<{ electrode: number; samples: number[]; timestamp: number }>("virtual-eeg-sample", (ev) =>
+      relayEvent({ type: "EegSample", ts_unix_ms: Math.round(ev.payload.timestamp * 1000), payload: ev.payload }),
+    ),
+  );
+  unlisteners.push(
+    await listen<Record<string, unknown>>("virtual-eeg-bands", (ev) =>
+      relayEvent({ type: "EegBands", ts_unix_ms: Date.now(), payload: ev.payload }),
+    ),
+  );
 
   await refreshStatus();
   appVersion = await invoke<string>("get_app_version");
@@ -931,7 +954,9 @@ onMount(async () => {
     }, interval);
   }
   scheduleStatusPoll();
-  unlisteners.push(() => { if (statusPollHandle) clearTimeout(statusPollHandle); });
+  unlisteners.push(() => {
+    if (statusPollHandle) clearTimeout(statusPollHandle);
+  });
 
   // Poll model download status every 2 s until the encoder is loaded.
   await refreshModelDl();
@@ -961,8 +986,43 @@ onMount(async () => {
     }),
   );
 
+  // Virtual EEG device status — injected by VirtualEegTab when the JS
+  // generator starts/stops so the dashboard sees it as a connected device.
+  // VirtualEegTab lives in the separate settings window, so we listen via a
+  // Tauri cross-window event ("virtual-device-status") as the primary path.
+  // The onDaemonEvent handler below handles the same-window / test path.
+  const { onDaemonEvent } = await import("$lib/daemon/ws");
+
+  function applyVirtualStatus(payload: Partial<DeviceStatus>) {
+    // Only apply when no real device is already connected.
+    if (status.state === "connected" && status.device_id !== "virtual-eeg") return;
+    const prev = status.state;
+    status = { ...status, ...payload };
+    if (prev !== "connected" && status.state === "connected") startUptime();
+    if (prev === "connected" && status.state !== "connected") {
+      stopUptime();
+      showDeviceSwitcher = false;
+    }
+  }
+
+  // Cross-window path: settings window → main window via Tauri emit
+  unlisteners.push(
+    await listen<Partial<DeviceStatus>>("virtual-device-status", (ev) => {
+      applyVirtualStatus(ev.payload);
+    }),
+  );
+
+  // Same-window path: used by tests and any future same-window embedding
+  unlisteners.push(
+    onDaemonEvent("VirtualDeviceStatus", (ev) => {
+      applyVirtualStatus(ev.payload as Partial<DeviceStatus>);
+    }),
+  );
+
   unlisteners.push(
     await listen<DeviceStatus>("status", (ev) => {
+      // Don't let real-device Tauri events displace an active virtual session.
+      if (status.device_id === "virtual-eeg") return;
       const prev = status.state;
       status = ev.payload;
       if ((status.fnirs_channel_names?.length ?? 0) > 0) {

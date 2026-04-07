@@ -5,6 +5,7 @@ import { onDestroy } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
+import type { DaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import {
   createRuntime,
@@ -13,6 +14,7 @@ import {
   generateSamples,
   getChannelLabels,
   type LineNoise,
+  QUALITY_SNR,
   type SignalQuality,
   type SignalTemplate,
   startRuntime,
@@ -56,53 +58,166 @@ const QUALITY_OPTIONS: { key: SignalQuality; label: string }[] = [
 const CHANNEL_OPTIONS = [1, 2, 4, 8, 16, 32];
 const RATE_OPTIONS = [128, 256, 512, 1000];
 
+/** Inject a DeviceStatus-like event into the WS dispatcher so the dashboard
+ *  sees the virtual generator as a connected device. */
+function injectVirtualStatus(cfg: VirtualEegConfig, connected: boolean) {
+  const labels = getChannelLabels(cfg.channels);
+  const payload = connected
+    ? {
+        state: "connected",
+        device_name: "Virtual EEG",
+        device_id: "virtual-eeg",
+        device_kind: "lsl",
+        serial_number: null,
+        mac_address: null,
+        csv_path: null,
+        sample_count: 0,
+        battery: 0,
+        eeg: new Array(cfg.channels).fill(0),
+        paired_devices: [],
+        device_error: null,
+        target_name: null,
+        filter_config: {
+          sample_rate: cfg.sampleRate,
+          low_pass_hz: null,
+          high_pass_hz: null,
+          notch: null,
+          notch_bandwidth_hz: 1,
+        },
+        channel_quality: new Array(cfg.channels).fill("good"),
+        retry_attempt: 0,
+        retry_countdown_secs: 0,
+        ppg: [],
+        ppg_sample_count: 0,
+        accel: [0, 0, 0] as [number, number, number],
+        gyro: [0, 0, 0] as [number, number, number],
+        fuel_gauge_mv: 0,
+        temperature_raw: 0,
+        hardware_version: null,
+        has_ppg: false,
+        has_imu: false,
+        has_central_electrodes: cfg.channels >= 8,
+        has_full_montage: cfg.channels >= 32,
+        channel_names: labels,
+        eeg_channel_count: cfg.channels,
+        eeg_sample_rate_hz: cfg.sampleRate,
+      }
+    : {
+        state: "disconnected",
+        device_name: null,
+        device_id: null,
+        device_kind: "",
+        serial_number: null,
+        mac_address: null,
+        csv_path: null,
+        sample_count: 0,
+        battery: 0,
+        eeg: [],
+        paired_devices: [],
+        device_error: null,
+        target_name: null,
+        filter_config: { sample_rate: 256, low_pass_hz: null, high_pass_hz: null, notch: null, notch_bandwidth_hz: 1 },
+        channel_quality: [],
+        retry_attempt: 0,
+        retry_countdown_secs: 0,
+        ppg: [],
+        ppg_sample_count: 0,
+        accel: [0, 0, 0] as [number, number, number],
+        gyro: [0, 0, 0] as [number, number, number],
+        fuel_gauge_mv: 0,
+        temperature_raw: 0,
+        hardware_version: null,
+        has_ppg: false,
+        has_imu: false,
+        has_central_electrodes: false,
+        has_full_montage: false,
+        channel_names: [],
+        eeg_channel_count: 0,
+        eeg_sample_rate_hz: 0,
+      };
+
+  // Inject into the same-window handler map (covers tests / same-window use)
+  // AND emit a cross-window Tauri event so the main dashboard window receives
+  // it even when VirtualEegTab lives in the separate settings window.
+  import("$lib/daemon/ws")
+    .then(({ injectDaemonEvent }) => {
+      injectDaemonEvent({
+        type: "VirtualDeviceStatus",
+        ts_unix_ms: Date.now(),
+        payload: payload as unknown as Record<string, unknown>,
+      } satisfies DaemonEvent);
+    })
+    .catch(() => {});
+  import("@tauri-apps/api/event").then(({ emit }) => emit("virtual-device-status", payload)).catch(() => {});
+}
+
 // ── Actions ────────────────────────────────────────────────────────────────
 
-function start() {
+async function start() {
   if (running) return;
+
+  // Pre-resolve both modules once so the hot onSamples path is synchronous
+  // (dynamic imports are cached, but Promise allocation still adds overhead
+  // at 4×sampleRate callbacks/sec).
+  // The Tauri emit is the cross-window relay: the generator runs in the
+  // settings window, but subscribeEeg/subscribeBands listen in the main
+  // window's JS context. injectDaemonEvent covers same-window / test path.
+  const { injectDaemonEvent } = await import("$lib/daemon/ws");
+  const { emit } = await import("@tauri-apps/api/event");
+
   const rt = createRuntime(config);
   let bandCounter = 0;
   rt.onSamples = (electrode, samples, timestamp) => {
-    import("$lib/daemon/ws")
-      .then(({ injectDaemonEvent }) => {
-        // EEG waveform samples
-        injectDaemonEvent({
-          type: "EegSample",
-          ts_unix_ms: Math.round(timestamp * 1000),
-          payload: { electrode, samples, timestamp },
-        });
-        // Band power snapshot at ~4 Hz (every 8th batch on channel 0)
-        bandCounter++;
-        if (electrode === 0 && bandCounter % 8 === 0) {
-          const bands = estimateBandPowers(config, rt.sampleIndex);
-          const labels = getChannelLabels(config.channels);
-          const channels = Array.from({ length: Math.min(config.channels, 4) }, (_, ch) => ({
-            channel: labels[ch] ?? `Ch${ch + 1}`,
-            ...bands,
-            high_gamma: bands.gamma * 0.5,
-            rel_delta: 0.15,
-            rel_theta: 0.15,
-            rel_alpha: 0.4,
-            rel_beta: 0.15,
-            rel_gamma: 0.1,
-            rel_high_gamma: 0.05,
-            dominant: "alpha",
-            dominant_symbol: "\u03b1",
-            dominant_color: "#22c55e",
-          }));
-          injectDaemonEvent({
-            type: "EegBands",
-            ts_unix_ms: Math.round(timestamp * 1000),
-            payload: { timestamp: Math.round(timestamp * 1000), channels, faa: 0.1 },
-          });
-        }
-      })
-      .catch(() => {});
+    const tsMs = Math.round(timestamp * 1000);
+
+    // ── EEG waveform samples ─────────────────────────────────────────────
+    const samplePayload = { electrode, samples, timestamp };
+    injectDaemonEvent({ type: "EegSample", ts_unix_ms: tsMs, payload: samplePayload });
+    emit("virtual-eeg-sample", samplePayload).catch(() => {});
+
+    // ── Band power snapshot at ~4 Hz (every 8th batch on channel 0) ─────
+    bandCounter++;
+    if (electrode === 0 && bandCounter % 8 === 0) {
+      const bands = estimateBandPowers(config, rt.sampleIndex);
+      const labels = getChannelLabels(config.channels);
+      // Derive relative powers from the template's band energy estimates.
+      // High gamma (50–100 Hz) is EMG artifact territory — not modelled by
+      // the virtual generator, so keep it at 0 to avoid the red BandChart
+      // stripe that #ef4444 (high-gamma color) would otherwise paint.
+      const total = bands.delta + bands.theta + bands.alpha + bands.beta + bands.gamma || 1;
+      const rel_delta = bands.delta / total;
+      const rel_theta = bands.theta / total;
+      const rel_alpha = bands.alpha / total;
+      const rel_beta = bands.beta / total;
+      const rel_gamma = bands.gamma / total;
+      const channels = Array.from({ length: Math.min(config.channels, 4) }, (_, ch) => ({
+        channel: labels[ch] ?? `Ch${ch + 1}`,
+        ...bands,
+        high_gamma: 0,
+        rel_delta,
+        rel_theta,
+        rel_alpha,
+        rel_beta,
+        rel_gamma,
+        rel_high_gamma: 0,
+        dominant: "alpha",
+        dominant_symbol: "\u03b1",
+        dominant_color: "#22c55e",
+      }));
+      const bandsPayload = {
+        timestamp: tsMs,
+        channels,
+        faa: 0.1,
+        snr: QUALITY_SNR[config.quality],
+      };
+      injectDaemonEvent({ type: "EegBands", ts_unix_ms: tsMs, payload: bandsPayload });
+      emit("virtual-eeg-bands", bandsPayload).catch(() => {});
+    }
   };
   startRuntime(rt);
   runtime = rt;
   running = true;
-  startPreview();
+  injectVirtualStatus(config, true);
 }
 
 function stop() {
@@ -110,7 +225,7 @@ function stop() {
   stopRuntime(runtime);
   runtime = null;
   running = false;
-  stopPreview();
+  injectVirtualStatus(config, false);
 }
 
 async function chooseFile() {
@@ -140,7 +255,7 @@ async function chooseFile() {
           const vals = line
             .split(",")
             .map(Number)
-            .filter((v) => !isNaN(v));
+            .filter((v) => !Number.isNaN(v));
           if (vals.length > 0) {
             for (let ch = 0; ch < vals.length; ch++) {
               if (!data[ch]) data[ch] = [];
@@ -197,7 +312,9 @@ function drawPreview() {
   const h = canvas.height;
   const chH = h / Math.max(previewBuffers.length, 1);
 
-  ctx.fillStyle = "var(--background, #0c0c14)";
+  // CSS variables are not resolved by the canvas 2D context — use a
+  // literal colour so fillStyle is always valid.
+  ctx.fillStyle = "#0c0c14";
   ctx.fillRect(0, 0, w, h);
 
   const colors = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444"];
@@ -227,9 +344,15 @@ function drawPreview() {
   }
 }
 
-// Start preview on mount for visual feedback
+// Keep the preview running at all times (both idle and while the virtual
+// device is active).  The effect re-fires whenever `running` changes so
+// the timer is always restarted with the correct config after start/stop.
+// Using the effect exclusively avoids the race where start()/stop() call
+// startPreview() and then the effect cleanup immediately calls stopPreview().
 $effect(() => {
-  if (!running) startPreview();
+  // Declare reactive dependency on `running` so the effect reruns on change.
+  void running;
+  startPreview();
   return () => stopPreview();
 });
 
