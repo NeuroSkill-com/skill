@@ -87,8 +87,8 @@ import {
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
 describe("hardware constants", () => {
-  it("EEG_CHANNELS is 12 (mirrors Rust EEG_CHANNELS)", () => {
-    expect(EEG_CHANNELS).toBe(12);
+  it("EEG_CHANNELS is 32 (mirrors Rust EEG_CHANNELS)", () => {
+    expect(EEG_CHANNELS).toBe(32);
   });
 
   it("EEG_CH has one label per Muse channel", () => {
@@ -286,12 +286,12 @@ describe("waveform rendering constants", () => {
 // ── BandChart layout ──────────────────────────────────────────────────────────
 
 describe("BandChart canvas layout", () => {
-  it("BAND_CANVAS_H = EEG_CHANNELS × BAND_TILE_H + (EEG_CHANNELS−1) × BAND_TILE_GAP", () => {
-    expect(BAND_CANVAS_H).toBe(EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP);
+  it("BAND_CANVAS_H = default 4-channel layout (4 × TILE_H + 3 × TILE_GAP)", () => {
+    expect(BAND_CANVAS_H).toBe(4 * BAND_TILE_H + 3 * BAND_TILE_GAP);
   });
 
-  it("BAND_CANVAS_H is 642 px (12 × 48 + 11 × 6)", () => {
-    expect(BAND_CANVAS_H).toBe(642);
+  it("BAND_CANVAS_H is 210 px (4 × 48 + 3 × 6)", () => {
+    expect(BAND_CANVAS_H).toBe(210);
   });
 
   it("BAND_TILE_H is positive", () => {

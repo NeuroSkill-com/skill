@@ -14,7 +14,11 @@
 
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
-/** Maximum number of EEG channels in the DSP pipeline.  Mirrors `EEG_CHANNELS` in constants.rs. */
+/**
+ * Default maximum EEG channel count.  Used as a fallback buffer size when the
+ * actual channel count is unknown.  Components should use the runtime channel
+ * count (from device descriptor / props) instead of this constant.
+ */
 export const EEG_CHANNELS = 32;
 
 /** Number of EEG channels for 4-channel devices (Muse, Ganglion). */
@@ -92,8 +96,8 @@ export const EMOTIV_EEG_CHANNELS = 14;
  * Emotiv EPOC X / EPOC+ channel labels — all 14 electrodes.
  *
  * Must match Rust `EMOTIV_EPOC_CHANNEL_NAMES` in `skill-constants`.
- * The DSP pipeline is capped at `EEG_CHANNELS` (12), so only the first
- * 12 channels are processed; the remaining 2 are shown for reference.
+ * The DSP pipeline processes all channels dynamically based on the
+ * connected device descriptor.
  */
 export const EMOTIV_CH = [
   "AF3",
@@ -270,8 +274,8 @@ export const BAND_TILE_H = 48;
 /** Gap between adjacent channel tiles (CSS px). */
 export const BAND_TILE_GAP = 6;
 
-/** Total band chart canvas height (CSS px) = 4 × TILE_H + 3 × TILE_GAP. */
-export const BAND_CANVAS_H = EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP; // 642
+/** Default band chart canvas height for 4-channel devices (CSS px). */
+export const BAND_CANVAS_H = 4 * BAND_TILE_H + 3 * BAND_TILE_GAP;
 
 /** Left inner margin inside each tile (CSS px). */
 export const BAND_TILE_ML = 12;

@@ -28,7 +28,7 @@ export interface EventMarker {
   import { cn } from "$lib/utils";
   import {
     CHART_H, TIME_H, WAVE_H, ROW_PAD as PAD,
-    EEG_CH, EEG_COLOR, EEG_CHANNELS as N_CH, EEG_CHANNELS_4,
+    EEG_CH, EEG_COLOR, EEG_CHANNELS_4,
     N_EPOCHS, EPOCH_S, SAMPLE_RATE, EPOCH_SAMP, EEG_RANGE_UV as EEG_RANGE,
     SPEC_N_FREQ, FILTER_HOP as HOP,
     bufSizeForRate, specColsForRate,
@@ -49,8 +49,13 @@ export interface EventMarker {
     sampleRate?: number;
   } = $props();
 
-  /** Visible channel count — clamped to [1, N_CH]. */
-  const VIS_CH = $derived(Math.max(1, Math.min(numChannels, N_CH)));
+  /** Actual channel count for buffer allocation.
+   *  Captured at init — component remounts on device switch. */
+  const N_CH = (numChannels || 4) as number; // eslint-disable-line
+  /** Maximum channels to render visually (performance guard). */
+  const MAX_VIS = 64;
+  /** Visible channel count — all channels up to MAX_VIS are drawn. */
+  const VIS_CH = $derived(Math.max(1, Math.min(numChannels, MAX_VIS)));
 
 
 

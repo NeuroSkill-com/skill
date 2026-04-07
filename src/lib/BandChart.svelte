@@ -105,7 +105,10 @@ export interface BandSnapshot {
     chColors?: readonly string[];
   } = $props();
 
-  const CANVAS_H = $derived(chNames.length * TILE_H + (chNames.length - 1) * TILE_GAP);
+  /** Max channels to render (performance guard for very high channel counts). */
+  const MAX_VIS = 64;
+  const visCh = $derived(Math.min(chNames.length, MAX_VIS));
+  const CANVAS_H = $derived(visCh * TILE_H + Math.max(0, visCh - 1) * TILE_GAP);
 
   // ── Band metadata + canvas layout ─────────────────────────────────────────
   // Each channel gets one "tile" — a full-width rectangle whose background is
@@ -156,7 +159,7 @@ export interface BandSnapshot {
 
     // ── Interpolate toward target ─────────────────────────────────────────
     if (target) {
-      for (let ci = 0; ci < target.channels.length; ci++) {
+      for (let ci = 0; ci < Math.min(target.channels.length, MAX_VIS); ci++) {
         const ch = target.channels[ci];
         if (!ch) continue;
         const vals = [
@@ -174,7 +177,7 @@ export interface BandSnapshot {
 
     ctx.clearRect(0, 0, W, CANVAS_H);
 
-    const numCh = target ? target.channels.length : 4;
+    const numCh = target ? Math.min(target.channels.length, MAX_VIS) : 4;
     for (let ci = 0; ci < numCh; ci++) {
       const ty = ci * (TILE_H + TILE_GAP); // top-y of this tile
 
