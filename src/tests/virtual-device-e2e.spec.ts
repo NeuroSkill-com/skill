@@ -543,8 +543,8 @@ test.describe("Virtual Devices window", () => {
     const canvas = page.locator("canvas").first();
     await expect(canvas).toBeVisible({ timeout: 5000 });
     const box = await canvas.boundingBox();
-    expect(box!.width).toBeGreaterThan(100);
-    expect(box!.height).toBeGreaterThan(60);
+    expect(box?.width).toBeGreaterThan(100);
+    expect(box?.height).toBeGreaterThan(60);
   });
 
   test("LSL source section shows start/stop buttons", async ({ page }) => {
@@ -764,7 +764,7 @@ test.describe("Full flow: virtual-devices page → dashboard", () => {
       // Now open the dashboard in a SEPARATE context and simulate receiving the event
       await openPage(dashPage, "/");
       // Simulate the re-broadcast timer delivering the event to a freshly opened window
-      await fireTauriEvent(dashPage, "virtual-device-status", statusEmit!.payload);
+      await fireTauriEvent(dashPage, "virtual-device-status", statusEmit?.payload);
       // Feed EEG data
       for (let i = 0; i < 6; i++) {
         await fireTauriEvent(dashPage, "virtual-eeg-bands", SYNTH_BANDS);
