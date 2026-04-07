@@ -15,7 +15,7 @@
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
 /** Maximum number of EEG channels in the DSP pipeline.  Mirrors `EEG_CHANNELS` in constants.rs. */
-export const EEG_CHANNELS = 12;
+export const EEG_CHANNELS = 32;
 
 /** Number of EEG channels for 4-channel devices (Muse, Ganglion). */
 export const EEG_CHANNELS_4 = 4;

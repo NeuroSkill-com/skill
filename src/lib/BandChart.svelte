@@ -127,11 +127,21 @@ export interface BandSnapshot {
   // ── Canvas state ───────────────────────────────────────────────────────────
 
   // Smoothed display values — [channel][band] relative powers.
-  const MAX_CH = 12;
-  const displayed = Array.from({ length: MAX_CH }, () =>
-    new Float64Array(NBAND).fill(1 / NBAND)
-  );
-  const domIdx = new Int8Array(MAX_CH).fill(2); // 2 = alpha, initial default
+  // Start with 32 slots (max EEG channels); grown if needed.
+  let displayed: Float64Array[] = [];
+  let domIdx = new Int8Array(0);
+
+  function ensureBuffers(n: number) {
+    if (displayed.length >= n) return;
+    while (displayed.length < n) displayed.push(new Float64Array(NBAND).fill(1 / NBAND));
+    const newDom = new Int8Array(n).fill(2);
+    if (domIdx.length > 0) newDom.set(domIdx);
+    domIdx = newDom;
+  }
+  ensureBuffers(32);
+
+  // Grow buffers when channel count increases (e.g. device switch).
+  $effect(() => { ensureBuffers(chNames.length || 4); });
 
   let lastNow = -1;
 
