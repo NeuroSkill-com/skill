@@ -178,7 +178,7 @@ use window_cmds::{
     open_label_window, open_label_window_at, open_labels_window, open_location_settings,
     open_model_tab, open_notifications_settings, open_onboarding_window,
     open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
-    open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
+    open_latest_log, open_skill_dir, open_updates_window, open_whats_new_window, quit_app,
     record_calibration_completed, request_calendar_permission, request_location_permission,
     set_active_calibration, set_calibration_config, set_data_dir, set_update_ready,
     show_main_window, update_calibration_profile,
@@ -225,7 +225,7 @@ pub(crate) use state::*;
 
 mod helpers;
 pub(crate) use helpers::{
-    emit_devices, emit_status, mutate_and_save, save_settings, save_settings_now, send_toast,
+    apply_daemon_status, emit_devices, emit_status, emit_status_from_daemon, mutate_and_save, save_settings, save_settings_now, send_toast,
     unix_secs, yyyymmdd_utc, AppStateExt, ToastLevel,
 };
 
@@ -455,12 +455,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Migrate fastembed_cache → HuggingFace hub cache (one-time, idempotent).
     migrate_fastembed_cache(&skill_dir);
 
-    {
-        let label_idx =
-            std::sync::Arc::clone(&*app.state::<std::sync::Arc<label_index::LabelIndexState>>());
-        let sd = skill_dir.clone();
-        std::thread::spawn(move || label_idx.load(&sd));
-    }
+    // Label HNSW indices are now owned by the daemon — no Tauri-side load.
 
     // ── Startup weights probe ─────────────────────────────────────────
     std::thread::Builder::new()
@@ -661,6 +656,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 tauri::async_runtime::spawn(async move {
                     let _ = open_focus_timer_window(a).await;
                 });
+            } else if id == "show_logs" {
+                open_latest_log();
             } else if id == "check_update" {
                 let a = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -752,16 +749,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         {
                             let r = app_poll.state::<Mutex<Box<AppState>>>();
                             let mut s = r.lock_or_recover();
-                            s.status.state = daemon_status.state;
-                            s.status.device_name = daemon_status.device_name;
-                            s.status.sample_count = daemon_status.sample_count;
-                            s.status.battery = daemon_status.battery;
-                            s.status.device_error = daemon_status.device_error;
-                            s.status.target_name = daemon_status.target_name;
-                            s.status.retry_attempt = daemon_status.retry_attempt;
-                            s.status.retry_countdown_secs = daemon_status.retry_countdown_secs;
+                            apply_daemon_status(&mut s.status, daemon_status);
                         }
-                        emit_status(&app_poll);
+                        emit_status_from_daemon(&app_poll);
                     }
                 }
                 Err(_) => { /* daemon unreachable — skip this tick */ }
@@ -1246,7 +1236,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(Mutex::new(AppState::new_boxed()))
         .manage(job_queue::JobQueue::new())
-        .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
         .setup(|app| setup_app(app))
         .invoke_handler(tauri::generate_handler![
             get_supported_companies,
@@ -1336,6 +1325,7 @@ pub fn run() {
             get_data_dir,
             set_data_dir,
             open_skill_dir,
+            open_latest_log,
             get_daemon_status,
             get_daemon_token_path,
             get_daemon_bootstrap,

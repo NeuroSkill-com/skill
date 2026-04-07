@@ -90,6 +90,16 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // Load HNSW label indices from disk (background thread).
+    {
+        let label_idx = state.label_index.clone();
+        let sd = skill_dir.clone();
+        std::thread::spawn(move || {
+            label_idx.load(&sd);
+            info!("label HNSW indices loaded");
+        });
+    }
+
     let v1 = Router::new()
         .route("/version", get(version))
         .route("/status", get(status).post(update_status))

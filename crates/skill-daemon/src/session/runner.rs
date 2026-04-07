@@ -296,8 +296,7 @@ pub(crate) async fn run_adapter_session(
                 let Some(ev) = ev else {
                     info!("event stream ended");
                     if let Ok(mut s) = state.status.lock() {
-                        s.state = "disconnected".into();
-                        s.device_kind.clear();
+                        s.clear_device();
                     }
                     broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                     break;
@@ -310,7 +309,22 @@ pub(crate) async fn run_adapter_session(
                             s.state = "connected".into();
                             s.device_name = Some(info.name.clone());
                             s.device_kind = device_kind.clone();
+                            s.device_id = Some(info.id.clone());
                             s.device_error = None;
+                            // Device descriptor fields
+                            s.channel_names = desc.channel_names.clone();
+                            s.ppg_channel_names = desc.ppg_channel_names.clone();
+                            s.imu_channel_names = desc.imu_channel_names.clone();
+                            s.fnirs_channel_names = desc.fnirs_channel_names.clone();
+                            s.eeg_channel_count = desc.eeg_channels;
+                            s.eeg_sample_rate_hz = desc.eeg_sample_rate;
+                            s.has_ppg = desc.caps.contains(skill_devices::session::DeviceCaps::PPG);
+                            s.has_imu = desc.caps.contains(skill_devices::session::DeviceCaps::IMU);
+                            // Device identity
+                            s.serial_number = info.serial_number.clone();
+                            s.mac_address = info.mac_address.clone();
+                            s.firmware_version = info.firmware_version.clone();
+                            s.hardware_version = info.hardware_version.clone();
                         }
                         broadcast_event(&state.events_tx, "DeviceConnected", &serde_json::json!({
                             "name": info.name,
@@ -326,7 +340,12 @@ pub(crate) async fn run_adapter_session(
                             state.events_tx.clone(),
                             hooks.clone(),
                         ) {
-                            Ok(p) => pipeline = Some(p),
+                            Ok(p) => {
+                                if let Ok(mut s) = state.status.lock() {
+                                    s.csv_path = Some(p.csv_path.display().to_string());
+                                }
+                                pipeline = Some(p);
+                            }
                             Err(e) => error!(%e, "pipeline open failed"),
                         }
                     }
@@ -350,6 +369,9 @@ pub(crate) async fn run_adapter_session(
                                 let q_vals: Vec<String> = qualities.iter()
                                     .map(|q| format!("{q:?}").to_lowercase())
                                     .collect();
+                                if let Ok(mut s) = state.status.lock() {
+                                    s.channel_quality = q_vals.clone();
+                                }
                                 broadcast_event(&state.events_tx, "SignalQuality",
                                     &serde_json::json!({ "quality": q_vals }));
                             }
@@ -413,8 +435,7 @@ pub(crate) async fn run_adapter_session(
                     DeviceEvent::Disconnected => {
                         info!("device disconnected");
                         if let Ok(mut s) = state.status.lock() {
-                            s.state = "disconnected".into();
-                            s.device_kind.clear();
+                            s.clear_device();
                         }
                         broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                         break;

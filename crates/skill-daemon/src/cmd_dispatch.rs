@@ -290,13 +290,25 @@ async fn cmd_label(state: &AppState, msg: &Value) -> Result<Value, String> {
     let context = str_field(msg, "context");
     let label_start_utc = f64_field(msg, "label_start_utc");
     let skill_dir = skill_dir(state);
-    let db_path = skill_dir.join("labels.db");
+    let _label_index = state.label_index.clone();
+    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
 
     let result = tokio::task::spawn_blocking(move || {
         let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS labels (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-             text TEXT NOT NULL, context TEXT, created_at REAL NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS labels (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                text              TEXT NOT NULL,
+                context           TEXT DEFAULT '',
+                eeg_start         INTEGER NOT NULL DEFAULT 0,
+                eeg_end           INTEGER NOT NULL DEFAULT 0,
+                wall_start        INTEGER NOT NULL DEFAULT 0,
+                wall_end          INTEGER NOT NULL DEFAULT 0,
+                created_at        INTEGER NOT NULL DEFAULT 0,
+                text_embedding    BLOB,
+                context_embedding BLOB,
+                embedding_model   TEXT
+            );",
         )
         .map_err(|e| e.to_string())?;
         let now = label_start_utc.unwrap_or_else(|| {
@@ -305,12 +317,19 @@ async fn cmd_label(state: &AppState, msg: &Value) -> Result<Value, String> {
                 .map(|d| d.as_secs_f64())
                 .unwrap_or(0.0)
         });
+        let now_secs = now as u64;
         conn.execute(
-            "INSERT INTO labels (text, context, created_at) VALUES (?1, ?2, ?3)",
-            rusqlite::params![text, context, now],
+            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![text, context, now_secs as i64, now_secs as i64, now_secs as i64, now_secs as i64, now_secs as i64],
         )
         .map_err(|e| e.to_string())?;
-        Ok::<_, String>(conn.last_insert_rowid())
+        let id = conn.last_insert_rowid();
+
+        // Background-embed: the HNSW insert happens via the label route's
+        // background path; for the cmd tunnel we do a simpler insert.
+        // A full rebuild can be triggered via /v1/labels/index/rebuild.
+        Ok::<_, String>(id)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -323,7 +342,7 @@ async fn cmd_search_labels(state: &AppState, msg: &Value) -> Result<Value, Strin
     let k = u64_field(msg, "k").unwrap_or(10) as usize;
     let mode = str_field(msg, "mode").unwrap_or_else(|| "text".into());
     let skill_dir = skill_dir(state);
-    let db_path = skill_dir.join("labels.db");
+    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
 
     let results = tokio::task::spawn_blocking(move || {
         if !db_path.exists() {
@@ -540,7 +559,7 @@ async fn cmd_interactive_search(state: &AppState, msg: &Value) -> Result<Value, 
 
     let result = tokio::task::spawn_blocking(move || {
         // Step 1: search labels
-        let db_path = skill_dir.join("labels.db");
+        let db_path = skill_dir.join(skill_constants::LABELS_FILE);
         let mut label_results = Vec::new();
         if db_path.exists() {
             if let Ok(conn) = rusqlite::Connection::open_with_flags(

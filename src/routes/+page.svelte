@@ -758,7 +758,7 @@ async function forgetDevice(id: string) {
 }
 async function connectDevice(id: string) {
   // If currently connected or scanning, cancel first before switching
-  if (status.state === "connected" || status.state === "scanning") {
+  if (status.state === "connected" || status.state === "scanning" || status.state === "connecting") {
     await daemonInvoke("cancel_retry");
     // Small delay so the backend finishes teardown before starting a new session
     await new Promise((r) => setTimeout(r, 200));
@@ -823,10 +823,17 @@ async function fitMainWindowHeight() {
 
 const unlisteners: UnlistenFn[] = [];
 async function refreshStatus() {
-  const prev = status.state;
-  status = await daemonInvoke<DeviceStatus>("get_status");
-  if (prev !== "connected" && status.state === "connected") startUptime();
-  if (prev === "connected" && status.state !== "connected") stopUptime();
+  try {
+    const prev = status.state;
+    const ds = await daemonInvoke<Partial<DeviceStatus>>("get_status");
+    // Merge daemon response into existing status to preserve fields the
+    // daemon doesn't track (eeg samples, filter_config, accel, gyro, etc.).
+    status = { ...status, ...ds };
+    if (prev !== "connected" && status.state === "connected") startUptime();
+    if (prev === "connected" && status.state !== "connected") stopUptime();
+  } catch {
+    // daemon unreachable — keep existing status
+  }
 }
 
 onMount(async () => {
@@ -880,6 +887,11 @@ onMount(async () => {
   window.addEventListener("resize", scheduleAutoHeightFit);
   unlisteners.push(() => window.removeEventListener("resize", scheduleAutoHeightFit));
   scheduleAutoHeightFit();
+
+  // Poll daemon status every 2 s as a fallback in case Tauri events
+  // don't reach this window (e.g. when it was unfocused during connect).
+  const statusPollTimer = setInterval(refreshStatus, 2000);
+  unlisteners.push(() => clearInterval(statusPollTimer));
 
   // Poll model download status every 2 s until the encoder is loaded.
   await refreshModelDl();
@@ -1234,6 +1246,7 @@ useWindowTitle("window.title.main");
             style="background:{sc.badge}; color:{sc.text}; border-color:{sc.border}"
           >
             {#if status.state === "scanning"}{t("dashboard.scanning")}
+            {:else if status.state === "connecting"}{t("dashboard.scanning")}
             {:else if status.state === "connected"}● {t("dashboard.connected")}
             {:else if status.state === "bt_off"}⚠ {t("dashboard.btOff")}
             {:else}{t("dashboard.disconnected")}{/if}
@@ -1511,7 +1524,7 @@ useWindowTitle("window.title.main");
         {/if}
 
       <!-- ════ SCANNING / RETRY COUNTDOWN ════════════════════════════════ -->
-      {:else if status.state === "scanning"}
+      {:else if status.state === "scanning" || status.state === "connecting"}
         <div class="flex flex-col items-center gap-3 py-3">
           {#if status.retry_countdown_secs > 0}
             <!-- Retry countdown -->

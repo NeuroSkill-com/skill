@@ -140,6 +140,29 @@ let lastScanLabel = $derived.by(() => {
   return `${Math.floor(secs / 60)}m ago`;
 });
 
+// Clear the "connecting" spinner once the daemon confirms the session.
+// `connectingSince` records when we started so we can ignore stale
+// "disconnected" states that arrive before the daemon processes our request.
+let connectingSince = $state(0);
+$effect(() => {
+  if (!connecting) return;
+  const elapsed = Date.now() - connectingSince;
+  // Ignore the initial "disconnected" — give the daemon at least 1 s to
+  // transition to "connecting" before we treat "disconnected" as a failure.
+  if (sessionState === "connected") {
+    connecting = null;
+    return;
+  }
+  if (sessionState === "disconnected" && elapsed > 2000) {
+    // Daemon reported disconnected well after our connect request — failed.
+    connecting = null;
+    return;
+  }
+  // Safety timeout — 30 s max.
+  const timer = setTimeout(() => { connecting = null; }, 30_000);
+  return () => clearTimeout(timer);
+});
+
 // ── Actions ────────────────────────────────────────────────────────────────
 async function scanStreams() {
   scanning = true;
@@ -154,35 +177,37 @@ async function scanStreams() {
   }
 }
 
+function beginConnect(name: string) {
+  connecting = name;
+  connectingSince = Date.now();
+}
+
 async function connectStream(stream: LslStream) {
-  connecting = stream.name;
+  beginConnect(stream.name);
   try {
     await lslConnect(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
-  } finally {
     connecting = null;
   }
 }
 
 async function switchToStream(stream: LslStream) {
-  connecting = stream.name;
+  beginConnect(stream.name);
   try {
     await lslSwitchSession(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
-  } finally {
     connecting = null;
   }
 }
 
 async function startSecondary(stream: LslStream) {
-  connecting = stream.name;
+  beginConnect(stream.name);
   try {
     await lslStartSecondary(stream.name);
   } catch (e: unknown) {
     scanError = String(e);
-  } finally {
     connecting = null;
   }
 }
@@ -192,7 +217,7 @@ async function cancelSecondary(sessionId: string) {
 }
 
 async function connectOrSwitch(stream: LslStream) {
-  connecting = stream.name;
+  beginConnect(stream.name);
   scanError = "";
   try {
     if (!stream.paired) {
@@ -222,15 +247,15 @@ async function connectOrSwitch(stream: LslStream) {
     } else {
       await lslConnect(stream.name);
     }
+    // Don't clear `connecting` — cleared reactively when sessionState changes
   } catch (e: unknown) {
     scanError = `Failed to connect to ${stream.name}: ${e instanceof Error ? e.message : String(e)}`;
-  } finally {
     connecting = null;
   }
 }
 
 async function pairAndConnect(stream: LslStream) {
-  connecting = stream.name;
+  beginConnect(stream.name);
   scanError = "";
   try {
     if (!stream.paired) {
@@ -254,9 +279,9 @@ async function pairAndConnect(stream: LslStream) {
       streams = streams.map((s) => (s.source_id === stream.source_id ? { ...s, paired: true } : s));
     }
     await lslConnect(stream.name);
+    // Don't clear `connecting` — cleared reactively when sessionState changes
   } catch (e: unknown) {
     scanError = `Failed to connect to ${stream.name}: ${e instanceof Error ? e.message : String(e)}`;
-  } finally {
     connecting = null;
   }
 }

@@ -33,7 +33,63 @@ pub(crate) fn yyyymmdd_utc() -> String {
 
 // ── Status / device emitters ──────────────────────────────────────────────────
 
+/// Apply all daemon `StatusResponse` fields onto the local `DeviceStatus`.
+///
+/// The daemon is the source of truth for device state; the Tauri UI is a thin
+/// client.  This helper ensures every field is copied (no cherry-picking).
+pub(crate) fn apply_daemon_status(local: &mut crate::DeviceStatus, ds: skill_daemon_common::StatusResponse) {
+    local.state = ds.state;
+    local.device_name = ds.device_name;
+    local.device_kind = ds.device_kind;
+    local.device_id = ds.device_id;
+    local.sample_count = ds.sample_count;
+    local.battery = ds.battery;
+    local.device_error = ds.device_error;
+    local.target_name = ds.target_name;
+    local.retry_attempt = ds.retry_attempt;
+    local.retry_countdown_secs = ds.retry_countdown_secs;
+    local.paired_devices = ds.paired_devices
+        .into_iter()
+        .map(|d| crate::PairedDevice { id: d.id, name: d.name, last_seen: d.last_seen })
+        .collect();
+    local.csv_path = ds.csv_path;
+    local.channel_names = ds.channel_names;
+    local.ppg_channel_names = ds.ppg_channel_names;
+    local.imu_channel_names = ds.imu_channel_names;
+    local.fnirs_channel_names = ds.fnirs_channel_names;
+    local.eeg_channel_count = ds.eeg_channel_count;
+    local.eeg_sample_rate_hz = ds.eeg_sample_rate_hz;
+    local.channel_quality = ds.channel_quality
+        .into_iter()
+        .map(|q| match q.as_str() {
+            "good" => skill_eeg::eeg_quality::SignalQuality::Good,
+            "fair" => skill_eeg::eeg_quality::SignalQuality::Fair,
+            "poor" => skill_eeg::eeg_quality::SignalQuality::Poor,
+            _ => skill_eeg::eeg_quality::SignalQuality::NoSignal,
+        })
+        .collect();
+    local.serial_number = ds.serial_number;
+    local.mac_address = ds.mac_address;
+    local.hardware_version = ds.hardware_version;
+    local.has_ppg = ds.has_ppg;
+    local.has_imu = ds.has_imu;
+    local.has_central_electrodes = ds.has_central_electrodes;
+    local.has_full_montage = ds.has_full_montage;
+    local.ppg_sample_count = ds.ppg_sample_count;
+}
+
 pub(crate) fn emit_status(app: &AppHandle) {
+    emit_status_inner(app, true);
+}
+
+/// Emit status to the frontend without mirroring back to the daemon.
+/// Used when the status data originated FROM the daemon (poll loop) to
+/// avoid overwriting the daemon's authoritative state.
+pub(crate) fn emit_status_from_daemon(app: &AppHandle) {
+    emit_status_inner(app, false);
+}
+
+fn emit_status_inner(app: &AppHandle, mirror: bool) {
     let s_ref = app.app_state();
     let st = {
         let g = s_ref.lock_or_recover();
@@ -42,8 +98,11 @@ pub(crate) fn emit_status(app: &AppHandle) {
     // Renamed from "muse-status" to "status" — device-agnostic.
     let _ = app.emit("status", &st);
     app.state::<WsBroadcaster>().send("status", &st);
-    crate::daemon_cmds::mirror_status_to_daemon(&st);
+    if mirror {
+        crate::daemon_cmds::mirror_status_to_daemon(&st);
+    }
     crate::daemon_cmds::push_event_to_daemon("status", &st);
+    crate::tray::refresh_tray(app);
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {

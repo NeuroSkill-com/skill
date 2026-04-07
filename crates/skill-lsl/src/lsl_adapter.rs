@@ -19,6 +19,18 @@ pub fn resolve_eeg_streams(timeout_secs: f64) -> Vec<StreamInfo> {
         .collect()
 }
 
+/// Resolve a single LSL stream by name.  Returns as soon as a match is found
+/// (typically < 500 ms for local streams) rather than waiting the full timeout.
+pub fn resolve_stream_by_name(name: &str, timeout_secs: f64) -> Option<StreamInfo> {
+    let query = format!("name='{name}'");
+    let mut results = resolver::resolve_query(&query, 1, timeout_secs);
+    if results.is_empty() {
+        None
+    } else {
+        Some(results.swap_remove(0))
+    }
+}
+
 /// Lightweight description of a discovered LSL stream for UI display.
 #[derive(Clone)]
 pub struct LslStreamInfo {

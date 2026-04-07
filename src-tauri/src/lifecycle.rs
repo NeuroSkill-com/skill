@@ -8,7 +8,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 use crate::{
-    helpers::{emit_status, AppStateExt},
+    helpers::{emit_status, emit_status_from_daemon, AppStateExt},
     tray::refresh_tray,
     MutexExt,
 };
@@ -44,18 +44,11 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
     let state = if is_bt { "bt_off" } else { "disconnected" };
     let _ = crate::daemon_cmds::post_json_with_auth_pub(
         "/v1/status",
-        &skill_daemon_common::StatusResponse {
-            state: state.to_string(),
-            device_name: None,
-            device_kind: String::new(),
-            device_id: None,
-            sample_count: 0,
-            battery: 0.0,
-            device_error: error.clone(),
-            target_name: None,
-            retry_attempt: 0,
-            retry_countdown_secs: 0,
-            paired_devices: Vec::new(),
+        &{
+            let mut sr = skill_daemon_common::StatusResponse::default();
+            sr.state = state.to_string();
+            sr.device_error = error.clone();
+            sr
         },
     );
 
@@ -173,25 +166,9 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
                 Ok(daemon_status) => {
                     let r = app.app_state();
                     let mut s = r.lock_or_recover();
-                    s.status.state = daemon_status.state;
-                    s.status.device_name = daemon_status.device_name;
-                    s.status.sample_count = daemon_status.sample_count;
-                    s.status.battery = daemon_status.battery;
-                    s.status.device_error = daemon_status.device_error;
-                    s.status.target_name = daemon_status.target_name;
-                    s.status.retry_attempt = daemon_status.retry_attempt;
-                    s.status.retry_countdown_secs = daemon_status.retry_countdown_secs;
-                    s.status.paired_devices = daemon_status
-                        .paired_devices
-                        .into_iter()
-                        .map(|d| crate::PairedDevice {
-                            id: d.id,
-                            name: d.name,
-                            last_seen: d.last_seen,
-                        })
-                        .collect();
+                    crate::helpers::apply_daemon_status(&mut s.status, daemon_status);
                     drop(s);
-                    emit_status(&app);
+                    emit_status_from_daemon(&app);
                 }
                 Err(err) => {
                     let r = app.app_state();

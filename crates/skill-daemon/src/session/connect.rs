@@ -547,20 +547,17 @@ async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
     info!(query = %query, "connecting to LSL stream");
 
     let adapter = tokio::task::spawn_blocking(move || -> Result<Box<dyn DeviceAdapter>, String> {
-        let streams = skill_lsl::resolve_eeg_streams(5.0);
-        if streams.is_empty() {
-            return Err("No LSL EEG streams found on the network".into());
-        }
-
+        // Fast path: when we know the stream name, use a targeted query with
+        // minimum=1 so it returns as soon as the stream is found (typically
+        // < 500 ms for local streams) instead of waiting the full timeout.
         let info = if !query.is_empty() {
-            streams
-                .iter()
-                .find(|s| s.name().contains(query.as_str()))
-                .or(streams.first())
-                .cloned()
+            skill_lsl::resolve_stream_by_name(&query, 5.0)
                 .ok_or_else(|| format!("No LSL stream matching '{query}'"))?
         } else {
-            streams.into_iter().next().expect("non-empty")
+            // No name given — discover all EEG streams and take the first.
+            let streams = skill_lsl::resolve_eeg_streams(5.0);
+            streams.into_iter().next()
+                .ok_or_else(|| "No LSL EEG streams found on the network".to_string())?
         };
 
         info!(

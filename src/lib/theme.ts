@@ -80,6 +80,7 @@ export const QUALITY_COLORS: Record<string, string> = {
 /** Per-state ring / badge / text / border colours for the Muse connection ring. */
 export const STATE_COLORS = {
   connected: { ring: C_GOOD, badge: rgba(C_GOOD, 0.15), text: C_GOOD, border: rgba(C_GOOD, 0.35) },
+  connecting: { ring: C_WARN, badge: rgba(C_WARN, 0.13), text: C_WARN, border: rgba(C_WARN, 0.32) },
   scanning: { ring: C_WARN, badge: rgba(C_WARN, 0.13), text: C_WARN, border: rgba(C_WARN, 0.32) },
   bt_off: { ring: C_BAD, badge: rgba(C_BAD, 0.13), text: C_BAD, border: rgba(C_BAD, 0.32) },
   disconnected: { ring: C_NEUTRAL, badge: "transparent", text: C_MUTED, border: C_BORDER },

@@ -104,19 +104,31 @@ async fn api_create_label(
 ) -> Json<serde_json::Value> {
     let text = req.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let db_path = skill_dir.join("labels.db");
-    let now = std::time::SystemTime::now()
+    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
+    let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0);
+        .map(|d| d.as_secs())
+        .unwrap_or(0) as i64;
     let result = rusqlite::Connection::open(&db_path).and_then(|conn| {
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS labels (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-             text TEXT NOT NULL, context TEXT, created_at REAL NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS labels (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                text              TEXT NOT NULL,
+                context           TEXT DEFAULT '',
+                eeg_start         INTEGER NOT NULL DEFAULT 0,
+                eeg_end           INTEGER NOT NULL DEFAULT 0,
+                wall_start        INTEGER NOT NULL DEFAULT 0,
+                wall_end          INTEGER NOT NULL DEFAULT 0,
+                created_at        INTEGER NOT NULL DEFAULT 0,
+                text_embedding    BLOB,
+                context_embedding BLOB,
+                embedding_model   TEXT
+            );",
         )?;
         conn.execute(
-            "INSERT INTO labels (text, context, created_at) VALUES (?1, NULL, ?2)",
-            rusqlite::params![text, now],
+            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
+             VALUES (?1, '', ?2, ?2, ?2, ?2, ?2)",
+            rusqlite::params![text, now_secs],
         )?;
         Ok(conn.last_insert_rowid())
     });

@@ -28,7 +28,7 @@ export interface FilterConfig {
 }
 
 export interface DeviceStatus {
-  state: "disconnected" | "scanning" | "connected" | "bt_off";
+  state: "disconnected" | "scanning" | "connecting" | "connected" | "bt_off";
   device_name: string | null;
   device_id: string | null;
   /** Factory serial number from the headset ("sn" field), e.g. "AAAA-BBBB-CCCC". Arrives a few seconds after connect. */

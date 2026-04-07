@@ -19,6 +19,7 @@ use skill_settings::{HookRule, LslPairedStream};
 use skill_llm::{LlmConfig, LlmLogBuffer, LlmStateCell};
 
 use crate::tracker::DaemonTracker;
+use skill_label_index::LabelIndexState;
 
 /// Shared application state threaded through all axum handlers.
 #[derive(Clone)]
@@ -69,6 +70,8 @@ pub struct AppState {
     pub exg_model_status: Arc<Mutex<skill_eeg::eeg_model_config::EegModelStatus>>,
     /// Cancel flag for the EXG weights download thread.
     pub exg_download_cancel: Arc<AtomicBool>,
+    /// Daemon-owned HNSW indices for label search (text, context, EEG).
+    pub label_index: Arc<LabelIndexState>,
 }
 
 impl AppState {
@@ -128,6 +131,7 @@ impl AppState {
             session_handle: Arc::new(Mutex::new(None)),
             exg_model_status: Arc::new(Mutex::new(skill_eeg::eeg_model_config::EegModelStatus::default())),
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
+            label_index: Arc::new(LabelIndexState::new()),
         }
     }
 }

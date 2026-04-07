@@ -93,6 +93,96 @@ pub struct StatusResponse {
     pub retry_attempt: u32,
     pub retry_countdown_secs: u32,
     pub paired_devices: Vec<PairedDeviceResponse>,
+
+    // ── Device descriptor fields (set on connect) ─────────────────────────
+
+    /// CSV recording path for the current session.
+    #[serde(default)]
+    pub csv_path: Option<String>,
+    /// EEG channel labels from the device descriptor.
+    #[serde(default)]
+    pub channel_names: Vec<String>,
+    /// PPG channel labels.
+    #[serde(default)]
+    pub ppg_channel_names: Vec<String>,
+    /// IMU channel labels.
+    #[serde(default)]
+    pub imu_channel_names: Vec<String>,
+    /// fNIRS channel labels.
+    #[serde(default)]
+    pub fnirs_channel_names: Vec<String>,
+    /// Hardware EEG channel count.
+    #[serde(default)]
+    pub eeg_channel_count: usize,
+    /// Hardware EEG sample rate (Hz).
+    #[serde(default)]
+    pub eeg_sample_rate_hz: f64,
+    /// Per-channel signal quality strings ("good", "fair", "poor", "no_signal").
+    #[serde(default)]
+    pub channel_quality: Vec<String>,
+
+    // ── Device identity (populated by adapters that report it) ────────────
+
+    /// Factory serial number.
+    #[serde(default)]
+    pub serial_number: Option<String>,
+    /// Hardware MAC address.
+    #[serde(default)]
+    pub mac_address: Option<String>,
+    /// Firmware version string.
+    #[serde(default)]
+    pub firmware_version: Option<String>,
+    /// Hardware version / revision.
+    #[serde(default)]
+    pub hardware_version: Option<String>,
+
+    // ── Capability flags ──────────────────────────────────────────────────
+
+    /// Device has a PPG (heart-rate) sensor.
+    #[serde(default)]
+    pub has_ppg: bool,
+    /// Device has an IMU (accelerometer + gyroscope).
+    #[serde(default)]
+    pub has_imu: bool,
+    /// Device has electrodes at central scalp sites.
+    #[serde(default)]
+    pub has_central_electrodes: bool,
+    /// Device supports a full 10-20 montage.
+    #[serde(default)]
+    pub has_full_montage: bool,
+    /// PPG sample count this session.
+    #[serde(default)]
+    pub ppg_sample_count: u64,
+}
+
+impl StatusResponse {
+    /// Reset all device-specific fields when transitioning to disconnected.
+    pub fn clear_device(&mut self) {
+        self.state = "disconnected".into();
+        self.device_name = None;
+        self.device_kind.clear();
+        self.device_id = None;
+        self.device_error = None;
+        self.csv_path = None;
+        self.channel_names.clear();
+        self.ppg_channel_names.clear();
+        self.imu_channel_names.clear();
+        self.fnirs_channel_names.clear();
+        self.eeg_channel_count = 0;
+        self.eeg_sample_rate_hz = 0.0;
+        self.channel_quality.clear();
+        self.serial_number = None;
+        self.mac_address = None;
+        self.firmware_version = None;
+        self.hardware_version = None;
+        self.has_ppg = false;
+        self.has_imu = false;
+        self.has_central_electrodes = false;
+        self.has_full_montage = false;
+        self.sample_count = 0;
+        self.battery = 0.0;
+        self.ppg_sample_count = 0;
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

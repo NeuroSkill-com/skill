@@ -10,7 +10,7 @@ use crate::MutexExt;
 use tauri::AppHandle;
 
 use crate::tray::refresh_tray;
-use crate::{emit_devices, emit_status, AppStateExt, DeviceStatus, DiscoveredDevice};
+use crate::{emit_devices, emit_status, helpers::emit_status_from_daemon, AppStateExt, DeviceStatus, DiscoveredDevice};
 
 // ── Device commands ────────────────────────────────────────────────────────────
 
@@ -42,23 +42,7 @@ fn apply_daemon_devices_to_local(
 fn apply_daemon_status_to_local(app: &AppHandle, daemon: skill_daemon_common::StatusResponse) {
     let r = app.app_state();
     let mut s = r.lock_or_recover();
-    s.status.state = daemon.state;
-    s.status.device_name = daemon.device_name;
-    s.status.sample_count = daemon.sample_count;
-    s.status.battery = daemon.battery;
-    s.status.device_error = daemon.device_error;
-    s.status.target_name = daemon.target_name;
-    s.status.retry_attempt = daemon.retry_attempt;
-    s.status.retry_countdown_secs = daemon.retry_countdown_secs;
-    s.status.paired_devices = daemon
-        .paired_devices
-        .into_iter()
-        .map(|d| crate::PairedDevice {
-            id: d.id,
-            name: d.name,
-            last_seen: d.last_seen,
-        })
-        .collect();
+    crate::helpers::apply_daemon_status(&mut s.status, daemon);
 }
 
 fn mark_daemon_unavailable(app: &AppHandle, err: &str) {
@@ -118,7 +102,7 @@ pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
     }
 
     refresh_tray(&app);
-    emit_status(&app);
+    emit_status_from_daemon(&app);
     emit_devices(&app);
     app.app_state().lock_or_recover().status.clone()
 }
@@ -140,7 +124,7 @@ pub fn cancel_retry(app: AppHandle) {
         }
     }
 
-    emit_status(&app);
+    emit_status_from_daemon(&app);
 }
 
 #[tauri::command]
@@ -160,5 +144,5 @@ pub fn retry_connect(app: AppHandle) {
         }
     }
 
-    emit_status(&app);
+    emit_status_from_daemon(&app);
 }

@@ -3,35 +3,19 @@
 
 use tauri::AppHandle;
 
-use crate::{emit_status, AppStateExt, MutexExt};
+use crate::{helpers::{apply_daemon_status, emit_status_from_daemon}, AppStateExt, MutexExt};
 
 /// Connect to OpenBCI via daemon session control.
 #[tauri::command]
 pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
-    let status = crate::daemon_cmds::start_session_sync(Some("openbci".to_string()))?;
+    let daemon_status = crate::daemon_cmds::start_session_sync(Some("openbci".to_string()))?;
 
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        s.status.state = status.state;
-        s.status.device_name = status.device_name;
-        s.status.sample_count = status.sample_count;
-        s.status.battery = status.battery;
-        s.status.device_error = status.device_error;
-        s.status.target_name = status.target_name;
-        s.status.retry_attempt = status.retry_attempt;
-        s.status.retry_countdown_secs = status.retry_countdown_secs;
-        s.status.paired_devices = status
-            .paired_devices
-            .into_iter()
-            .map(|d| crate::PairedDevice {
-                id: d.id,
-                name: d.name,
-                last_seen: d.last_seen,
-            })
-            .collect();
+        apply_daemon_status(&mut s.status, daemon_status);
     }
 
-    emit_status(&app);
+    emit_status_from_daemon(&app);
     Ok(())
 }

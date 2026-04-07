@@ -785,6 +785,25 @@ pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
                 last_seen: d.last_seen,
             })
             .collect(),
+        csv_path: local.csv_path.clone(),
+        channel_names: local.channel_names.clone(),
+        ppg_channel_names: local.ppg_channel_names.clone(),
+        imu_channel_names: local.imu_channel_names.clone(),
+        fnirs_channel_names: local.fnirs_channel_names.clone(),
+        eeg_channel_count: local.eeg_channel_count,
+        eeg_sample_rate_hz: local.eeg_sample_rate_hz,
+        channel_quality: local.channel_quality.iter()
+            .map(|q| format!("{q:?}").to_lowercase())
+            .collect(),
+        serial_number: local.serial_number.clone(),
+        mac_address: local.mac_address.clone(),
+        firmware_version: local.firmware_version.clone(),
+        hardware_version: local.hardware_version.clone(),
+        has_ppg: local.has_ppg,
+        has_imu: local.has_imu,
+        has_central_electrodes: local.has_central_electrodes,
+        has_full_montage: local.has_full_montage,
+        ppg_sample_count: local.ppg_sample_count,
     };
 
     let Ok(payload) = serde_json::to_string(&status) else {
@@ -1079,7 +1098,7 @@ fn ensure_daemon_for_proxy() {
 }
 
 /// Blocking GET helper used inside spawn_blocking.
-fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
+pub(crate) fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
     ensure_daemon_for_proxy();
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -1087,7 +1106,7 @@ fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
 }
 
 /// Blocking POST helper used inside spawn_blocking.
-fn daemon_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn daemon_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
     ensure_daemon_for_proxy();
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
