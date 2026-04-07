@@ -642,7 +642,8 @@ let recentLabelAt = $state(0); // unix seconds
 // ── Card collapse state ────────────────────────────────────────────────────
 let ppgOpticalExpanded = $state(true);
 let imuExpanded = $state(true);
-let eegChExpanded = $state(true);
+let eegChExpanded = $state(false);
+let signalExpanded = $state(false);
 
 // ── Onboarding checklist ───────────────────────────────────────────────────
 // Persisted in localStorage so it survives reloads.
@@ -1350,7 +1351,7 @@ useWindowTitle("window.title.main");
             class="text-[0.65rem] font-semibold tracking-widest uppercase px-3 py-0.5 rounded-full transition-all"
             style="background:{sc.badge}; color:{sc.text}; border-color:{sc.border}"
           >
-            {#if status.state === "scanning"}
+            {#if status.state === "scanning" || status.state === "connecting"}
               {t("dashboard.scanning")}
             {:else if status.state === "connected"}
               ● {t("dashboard.connected")}
@@ -1648,73 +1649,63 @@ useWindowTitle("window.title.main");
         </div>
         {/if}
 
-        <!-- Device info badge (non-Muse devices) -->
-        {#if isGanglion}
-          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 200}
+        <!-- Device info badge (generic — works for any device type) -->
+        {#if chLabels.length > 0 || sourceLabel}
+          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : null}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-emerald-500/10 border border-emerald-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide">
-              OpenBCI Ganglion · {chLabels.length}ch · {sr} Hz
-            </span>
-          </div>
-        {:else if isEmotiv}
-          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : null}
-          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
-                      bg-violet-500/10 border border-violet-500/20 w-fit">
-            <span class="text-[0.55rem] font-semibold text-violet-600 dark:text-violet-400 tracking-wide">
-              {status.device_name ?? "Emotiv"} · {chLabels.length}ch{#if sr} · {sr} Hz{/if}
-            </span>
-          </div>
-        {:else if isIdun}
-          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 250}
-          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
-                      bg-cyan-500/10 border border-cyan-500/20 w-fit">
-            <span class="text-[0.55rem] font-semibold text-cyan-600 dark:text-cyan-400 tracking-wide">
-              IDUN Guardian · {chLabels.length}ch · {sr} Hz
-            </span>
-          </div>
-        {:else if isMendi}
-          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
-                      bg-fuchsia-500/10 border border-fuchsia-500/20 w-fit">
-            <span class="text-[0.55rem] font-semibold text-fuchsia-600 dark:text-fuchsia-400 tracking-wide">
-              Mendi · fNIRS + IMU
-            </span>
-          </div>
-        {:else if isHermes}
-          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 250}
-          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
-                      bg-amber-500/10 border border-amber-500/20 w-fit">
-            <span class="text-[0.55rem] font-semibold text-amber-600 dark:text-amber-400 tracking-wide">
-              Nucleus Hermes · {chLabels.length}ch · {sr} Hz
+              {chLabels.length}ch{#if sr} · {sr} Hz{/if}{#if sourceLabel} · {sourceLabel}{/if}
             </span>
           </div>
         {/if}
 
         {#if hasEeg}
-          <!-- Signal quality row -->
+          <!-- Signal quality -->
+          {@const qGood = status.channel_quality.filter(q => q === 'good').length}
+          {@const qFair = status.channel_quality.filter(q => q === 'fair').length}
+          {@const qPoor = status.channel_quality.filter(q => q === 'poor').length}
+          {@const qNone = chLabels.length - qGood - qFair - qPoor}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
                       bg-muted dark:bg-[#1a1a28] px-3 py-2.5"
               role="group" aria-label={t("dashboard.signal")}>
-            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground block mb-1.5">
-              {t("dashboard.signal")}
-            </span>
-            <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 6} class:grid-cols-4={chLabels.length > 6}>
-              {#each chLabels as ch, i}
-                {@const q = status.channel_quality[i] ?? 'no_signal'}
-                <div class="flex items-center gap-1.5">
-                  <svg width="8" height="8" viewBox="0 0 8 8" class="shrink-0">
-                    <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
-                      {#if q === 'fair' || q === 'poor'}
-                        <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
-                      {/if}
-                    </circle>
-                  </svg>
-                  <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
-                  <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
-                        style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
-                </div>
-              {/each}
-            </div>
+            <button class="flex items-center gap-2 w-full" onclick={() => signalExpanded = !signalExpanded}>
+              <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+                {t("dashboard.signal")}
+              </span>
+              <!-- Compact summary dots -->
+              <div class="flex items-center gap-1 flex-1 min-w-0">
+                {#if qGood > 0}<span class="text-[0.48rem] font-bold text-emerald-500">{qGood}✓</span>{/if}
+                {#if qFair > 0}<span class="text-[0.48rem] font-bold text-amber-500">{qFair}~</span>{/if}
+                {#if qPoor > 0}<span class="text-[0.48rem] font-bold text-red-500">{qPoor}✗</span>{/if}
+                {#if qNone > 0}<span class="text-[0.48rem] font-bold text-muted-foreground/40">{qNone}—</span>{/if}
+              </div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round"
+                   class="w-2.5 h-2.5 text-muted-foreground/40 transition-transform duration-150 shrink-0
+                          {signalExpanded ? 'rotate-90' : ''}">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+            {#if signalExpanded}
+              <div class="grid gap-1.5 mt-2" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
+                {#each chLabels as ch, i}
+                  {@const q = status.channel_quality[i] ?? 'no_signal'}
+                  <div class="flex items-center gap-1.5">
+                    <svg width="8" height="8" viewBox="0 0 8 8" class="shrink-0">
+                      <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
+                        {#if q === 'fair' || q === 'poor'}
+                          <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
+                        {/if}
+                      </circle>
+                    </svg>
+                    <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
+                    <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
+                          style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
 
           <!-- Electrode placement toggle -->
@@ -2062,7 +2053,12 @@ useWindowTitle("window.title.main");
             <p class="text-[0.72rem] text-muted-foreground text-center leading-relaxed">
               {t("dashboard.noDevicesPaired")}
             </p>
-            <Button size="sm" onclick={retryConnect}>{t("dashboard.scanForMuse")}</Button>
+            <div class="flex gap-2">
+              <Button size="sm" onclick={retryConnect}>{t("dashboard.scanForMuse")}</Button>
+              <Button size="sm" variant="outline" onclick={() => invoke('open_settings_window')}>
+                LSL / Settings
+              </Button>
+            </div>
           </div>
         {/if}
       {/if}
@@ -2078,7 +2074,9 @@ useWindowTitle("window.title.main");
           </p>
           <span class="text-[0.5rem] text-green-500 live-blink">●</span>
         </div>
-        <BandChart bind:this={bandChartEl} chNames={chLabels} chColors={chColors} />
+        <div class="{chLabels.length > 8 ? 'max-h-[400px] overflow-y-auto rounded-lg' : ''}">
+          <BandChart bind:this={bandChartEl} chNames={chLabels} chColors={chColors} />
+        </div>
       </div>
 
       <Separator class="bg-border dark:bg-white/[0.06]" />
