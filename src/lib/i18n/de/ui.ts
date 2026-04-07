@@ -291,7 +291,7 @@ const ui: Record<string, string> = {
     "Schalten Sie Ihr BCI-Headset ein und platzieren Sie es in Bluetooth-Reichweite. Erkannte Geräte erscheinen hier automatisch.",
   "devices.virtualDevices": "Virtuell",
   "devices.virtualDevicesHint":
-    "Simulierte Geräte zum Testen ohne Hardware. Starte eines im Fenster \"Virtuelle Geräte\".",
+    'Simulierte Geräte zum Testen ohne Hardware. Starte eines im Fenster "Virtuelle Geräte".',
   "devices.virtualBadge": "Virtuell",
   "devices.deviceSingular": "Gerät",
   "devices.devicePlural": "Geräte",
