@@ -38,11 +38,18 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "lsl_iroh_stop",
   "lsl_iroh_status",
   "lsl_virtual_source_running",
+  "lsl_virtual_source_start",
+  "lsl_virtual_source_stop",
   "lsl_start_virtual_source",
   "lsl_stop_virtual_source",
   "lsl_get_config",
   "lsl_get_idle_timeout",
   "list_secondary_sessions",
+
+  // session control
+  "start_session",
+  "switch_session",
+  "cancel_session",
 
   // devices
   "get_devices",
@@ -109,11 +116,18 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "lsl_iroh_status",
   "lsl_iroh_stop",
   "lsl_virtual_source_running",
+  "lsl_virtual_source_start",
+  "lsl_virtual_source_stop",
   "lsl_start_virtual_source",
   "lsl_stop_virtual_source",
   "lsl_get_config",
   "lsl_get_idle_timeout",
   "list_secondary_sessions",
+
+  // session control
+  "start_session",
+  "switch_session",
+  "cancel_session",
 
   // chat persistence
   "get_last_chat_session",

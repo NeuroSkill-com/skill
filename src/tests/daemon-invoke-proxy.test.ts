@@ -86,6 +86,6 @@ describe("invoke-proxy route table", () => {
 
     // The catch block should fall back to invoke
     expect(src).toContain("catch");
-    expect(src).toContain("Fallback to Tauri invoke when daemon is unreachable");
+    expect(src).toContain("Daemon HTTP failed");
   });
 });
