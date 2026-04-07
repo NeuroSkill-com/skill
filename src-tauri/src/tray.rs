@@ -577,6 +577,13 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&MenuItem::with_id(
         app,
+        "show_logs",
+        "Open Logs…",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
         "check_update",
         "Check for Updates…",
         true,
