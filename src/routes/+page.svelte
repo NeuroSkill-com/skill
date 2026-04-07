@@ -919,10 +919,19 @@ onMount(async () => {
   unlisteners.push(() => window.removeEventListener("resize", scheduleAutoHeightFit));
   scheduleAutoHeightFit();
 
-  // Poll daemon status every 2 s as a fallback in case Tauri events
-  // don't reach this window (e.g. when it was unfocused during connect).
-  const statusPollTimer = setInterval(refreshStatus, 2000);
-  unlisteners.push(() => clearInterval(statusPollTimer));
+  // Poll daemon status as a fallback in case Tauri events don't reach
+  // this window.  Adaptive interval: 2 s when disconnected/connecting
+  // (catch transitions fast), 5 s when connected (just sample count).
+  let statusPollHandle: ReturnType<typeof setTimeout> | null = null;
+  function scheduleStatusPoll() {
+    const interval = status.state === "connected" ? 5000 : 2000;
+    statusPollHandle = setTimeout(async () => {
+      await refreshStatus();
+      scheduleStatusPoll();
+    }, interval);
+  }
+  scheduleStatusPoll();
+  unlisteners.push(() => { if (statusPollHandle) clearTimeout(statusPollHandle); });
 
   // Poll model download status every 2 s until the encoder is loaded.
   await refreshModelDl();

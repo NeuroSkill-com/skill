@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 describe("status merge", () => {
   /** Simulates the dashboard refreshStatus merge: { ...existing, ...daemon } */
-  function mergeStatus<T extends Record<string, unknown>>(existing: T, daemon: Partial<T>): T {
+  function mergeStatus(existing: Record<string, unknown>, daemon: Record<string, unknown>): Record<string, unknown> {
     return { ...existing, ...daemon };
   }
 

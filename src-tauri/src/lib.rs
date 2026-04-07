@@ -729,9 +729,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         // Wait for daemon to be ready before polling.
         tokio::time::sleep(Duration::from_secs(2)).await;
-        let mut interval = tokio::time::interval(Duration::from_secs(2));
         loop {
-            interval.tick().await;
             let poll_result = tokio::task::spawn_blocking(crate::daemon_cmds::fetch_daemon_status)
                 .await
                 .unwrap_or_else(|e| Err(e.to_string()));
@@ -756,6 +754,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Err(_) => { /* daemon unreachable — skip this tick */ }
             }
+            // Adaptive poll: 2 s when disconnected (catch transitions fast),
+            // 5 s when connected (just sample count / battery updates).
+            let delay = {
+                let r = app_poll.state::<Mutex<Box<AppState>>>();
+                let s = r.lock_or_recover();
+                if s.status.state == "connected" { 5 } else { 2 }
+            };
+            tokio::time::sleep(Duration::from_secs(delay)).await;
         }
     });
 
