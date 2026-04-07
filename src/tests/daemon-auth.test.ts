@@ -26,9 +26,9 @@ describe("daemon auth module (auth.rs)", () => {
     // Read-only path uses read-method gate (GET/HEAD)
     expect(src).toContain('let is_read = matches!(method.as_str(), "GET" | "HEAD")');
     expect(src).toContain("Self::ReadOnly => is_read");
-    // Data ACL limited to data namespaces
-    expect(src).toContain('path.starts_with("/v1/labels")');
-    expect(src).toContain('path.starts_with("/v1/history")');
+    // Data ACL limited to data namespaces (note: /v1 prefix is stripped before matching)
+    expect(src).toContain('path.starts_with("/labels")');
+    expect(src).toContain('path.starts_with("/history")');
     // Stream ACL is read-only and includes events/status/version
     expect(src).toContain("Self::Stream => {");
     expect(src).toContain('!TokenAcl::Stream.allows("POST", "/v1/events/push")');
