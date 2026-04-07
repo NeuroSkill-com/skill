@@ -346,7 +346,7 @@ let status = $state<DeviceStatus>({
   csv_path: null,
   sample_count: 0,
   battery: 0,
-  eeg: [0, 0, 0, 0],
+  eeg: Array.from({ length: 32 }, () => NaN),
   paired_devices: [],
   device_error: null,
   target_name: null,
@@ -872,7 +872,27 @@ onMount(async () => {
 
   // EEG/PPG/IMU streaming via daemon WebSocket
   const { subscribeEeg, subscribePpg, subscribeImu } = await import("$lib/daemon/eeg-stream");
-  unlisteners.push(subscribeEeg((pkt) => chartEl?.pushSamples(pkt.electrode, pkt.samples)));
+  // Accumulate latest EEG values in a non-reactive buffer, then flush
+  // into status.eeg at ~4 Hz to avoid 8 k/s reactive updates.
+  const eegLatest = new Float64Array(64); // up to 64 channels
+  let eegDirty = false;
+  const eegFlushTimer = setInterval(() => {
+    if (!eegDirty) return;
+    eegDirty = false;
+    const arr = status.eeg;
+    for (let i = 0; i < arr.length; i++) arr[i] = eegLatest[i];
+    // Trigger Svelte reactivity by reassigning the array.
+    status.eeg = arr;
+  }, 250);
+  unlisteners.push(() => clearInterval(eegFlushTimer));
+
+  unlisteners.push(subscribeEeg((pkt) => {
+    chartEl?.pushSamples(pkt.electrode, pkt.samples);
+    if (pkt.electrode < eegLatest.length && pkt.samples.length > 0) {
+      eegLatest[pkt.electrode] = pkt.samples[pkt.samples.length - 1];
+      eegDirty = true;
+    }
+  }));
   unlisteners.push(subscribePpg((pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples)));
   unlisteners.push(subscribeImu((pkt) => imuChartEl?.pushPacket(pkt)));
 
