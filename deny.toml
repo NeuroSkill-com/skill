@@ -97,7 +97,6 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-location" },
     { allow = ["GPL-3.0-only"], crate = "skill-iroh" },
     { allow = ["GPL-3.0-only"], crate = "skill-lsl" },
-    { allow = ["GPL-3.0-only"], crate = "skill-neurorvq" },
     { allow = ["GPL-3.0-only"], crate = "sleepfm" },
     { allow = ["GPL-3.0-only"], crate = "iroh-example-client" },
     { allow = ["GPL-3.0-only"], crate = "iroh_test_client" },
