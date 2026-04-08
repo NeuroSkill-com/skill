@@ -137,3 +137,64 @@ async fn api_create_label(
         Err(e) => Json(serde_json::json!({ "command": "label", "ok": false, "error": e.to_string() })),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn api_status_shape_is_stable() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(v) = api_status(State(state)).await;
+        assert_eq!(v["command"], "status");
+        assert_eq!(v["ok"], true);
+        assert!(v.get("state").is_some());
+        assert!(v.get("sample_count").is_some());
+    }
+
+    #[tokio::test]
+    async fn api_say_rejects_missing_text() {
+        let Json(v) = api_say(Json(serde_json::json!({}))).await;
+        assert_eq!(v["command"], "say");
+        assert_eq!(v["ok"], false);
+    }
+
+    #[tokio::test]
+    async fn api_dnd_set_false_is_accepted() {
+        let Json(v) = api_dnd_set(Json(serde_json::json!({"enabled": false}))).await;
+        assert_eq!(v["command"], "dnd_set");
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn api_create_label_persists_row() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let Json(v) = api_create_label(State(state.clone()), Json(serde_json::json!({"text": "focus marker"}))).await;
+        assert_eq!(v["ok"], true);
+        assert!(v["label_id"].as_i64().unwrap_or(0) > 0);
+
+        let db = td.path().join(skill_constants::LABELS_FILE);
+        let conn = rusqlite::Connection::open(db).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM labels WHERE text='focus marker'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn api_sessions_empty_dir_returns_empty_array() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(v) = api_sessions(State(state)).await;
+        assert_eq!(v["command"], "sessions");
+        assert_eq!(v["ok"], true);
+        assert!(v["sessions"].as_array().map(|a| a.is_empty()).unwrap_or(false));
+    }
+}

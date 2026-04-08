@@ -3316,3 +3316,549 @@ async fn lsl_iroh_stop(State(state): State<AppState>) -> Json<serde_json::Value>
     }
     Json(serde_json::json!({"running": false, "endpoint_id": serde_json::Value::Null}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+    use tempfile::TempDir;
+
+    fn mk_state() -> (TempDir, AppState) {
+        let td = TempDir::new().unwrap();
+        let st = AppState::new("t".into(), td.path().to_path_buf());
+        (td, st)
+    }
+
+    #[tokio::test]
+    async fn api_token_roundtrip() {
+        let (_td, st) = mk_state();
+        let Json(v) = set_api_token(State(st.clone()), Json(StringValueRequest { value: "abc123".into() })).await;
+        assert_eq!(v["ok"], true);
+        let Json(v2) = get_api_token(State(st)).await;
+        assert_eq!(v2["value"], "abc123");
+    }
+
+    #[tokio::test]
+    async fn hf_endpoint_empty_defaults_and_trimmed_custom() {
+        let (_td, st) = mk_state();
+        let Json(v0) = get_hf_endpoint(State(st.clone())).await;
+        assert!(!v0["value"].as_str().unwrap_or("").is_empty());
+
+        let Json(v1) = set_hf_endpoint(
+            State(st.clone()),
+            Json(StringValueRequest {
+                value: "  https://example.test  ".into(),
+            }),
+        )
+        .await;
+        assert_eq!(v1["ok"], true);
+        assert_eq!(v1["value"], "https://example.test");
+
+        let Json(v2) = set_hf_endpoint(State(st), Json(StringValueRequest { value: " ".into() })).await;
+        assert_eq!(v2["ok"], true);
+        assert!(!v2["value"].as_str().unwrap_or("").is_empty());
+    }
+
+    #[tokio::test]
+    async fn storage_format_normalizes_values() {
+        let (_td, st) = mk_state();
+        let Json(v_csv) =
+            set_storage_format(State(st.clone()), Json(StringValueRequest { value: "weird".into() })).await;
+        assert_eq!(v_csv["value"], "csv");
+
+        let Json(v_parquet) = set_storage_format(
+            State(st.clone()),
+            Json(StringValueRequest {
+                value: "PARQUET".into(),
+            }),
+        )
+        .await;
+        assert_eq!(v_parquet["value"], "parquet");
+
+        let Json(v_both) = set_storage_format(State(st), Json(StringValueRequest { value: "both".into() })).await;
+        assert_eq!(v_both["value"], "both");
+    }
+
+    #[tokio::test]
+    async fn embedding_overlap_is_clamped() {
+        let (_td, st) = mk_state();
+        let Json(v_hi) = set_embedding_overlap(State(st.clone()), Json(serde_json::json!({"value": 99999.0}))).await;
+        let hi = v_hi["value"].as_f64().unwrap_or(0.0) as f32;
+        assert_eq!(hi, skill_constants::EMBEDDING_OVERLAP_MAX_SECS);
+
+        let Json(v_lo) = set_embedding_overlap(State(st), Json(serde_json::json!({"value": -1.0}))).await;
+        let lo = v_lo["value"].as_f64().unwrap_or(0.0) as f32;
+        assert_eq!(lo, skill_constants::EMBEDDING_OVERLAP_MIN_SECS);
+    }
+
+    #[tokio::test]
+    async fn ws_config_validates_host_and_port() {
+        let (_td, st) = mk_state();
+        let Json(bad_host) = set_ws_config(
+            State(st.clone()),
+            Json(WsConfigRequest {
+                host: "localhost".into(),
+                port: 18444,
+            }),
+        )
+        .await;
+        assert_eq!(bad_host["ok"], false);
+
+        let Json(bad_port) = set_ws_config(
+            State(st.clone()),
+            Json(WsConfigRequest {
+                host: "127.0.0.1".into(),
+                port: 80,
+            }),
+        )
+        .await;
+        assert_eq!(bad_port["ok"], false);
+
+        let Json(ok) = set_ws_config(
+            State(st),
+            Json(WsConfigRequest {
+                host: "0.0.0.0".into(),
+                port: 18445,
+            }),
+        )
+        .await;
+        assert_eq!(ok["ok"], true);
+        assert_eq!(ok["port"], 18445);
+    }
+
+    #[tokio::test]
+    async fn activity_tracking_toggles_update_state() {
+        let (_td, st) = mk_state();
+        let Json(v1) = set_active_window_tracking(State(st.clone()), Json(BoolValueRequest { value: true })).await;
+        assert_eq!(v1["value"], true);
+        assert!(st.track_active_window.load(Ordering::Relaxed));
+
+        let Json(v2) = set_input_activity_tracking(State(st.clone()), Json(BoolValueRequest { value: false })).await;
+        assert_eq!(v2["value"], false);
+        assert!(!st.track_input_activity.load(Ordering::Relaxed));
+
+        let Json(g1) = get_active_window_tracking(State(st.clone())).await;
+        let Json(g2) = get_input_activity_tracking(State(st)).await;
+        assert_eq!(g1["value"], true);
+        assert_eq!(g2["value"], false);
+    }
+
+    #[tokio::test]
+    async fn lsl_config_pair_unpair_and_idle_timeout_roundtrip() {
+        let (_td, st) = mk_state();
+
+        let Json(v1) = set_lsl_auto_connect(State(st.clone()), Json(LslAutoConnectRequest { enabled: true })).await;
+        assert_eq!(v1["ok"], true);
+        assert_eq!(v1["auto_connect"], true);
+
+        let Json(v2) = lsl_pair_stream(
+            State(st.clone()),
+            Json(LslPairRequest {
+                source_id: "src-1".into(),
+                name: "My EEG".into(),
+                stream_type: "EEG".into(),
+                channels: 8,
+                sample_rate: 256.0,
+            }),
+        )
+        .await;
+        assert_eq!(v2["ok"], true);
+
+        let Json(cfg) = get_lsl_config(State(st.clone())).await;
+        assert_eq!(cfg["auto_connect"], true);
+        assert_eq!(cfg["paired_streams"].as_array().map(|a| a.len()).unwrap_or(0), 1);
+
+        let Json(v3) = set_lsl_idle_timeout(State(st.clone()), Json(LslIdleTimeoutRequest { secs: Some(77) })).await;
+        assert_eq!(v3["ok"], true);
+        let Json(timeout) = get_lsl_idle_timeout(State(st.clone())).await;
+        assert_eq!(timeout["secs"], 77);
+
+        let Json(v4) = lsl_unpair_stream(
+            State(st),
+            Json(LslUnpairRequest {
+                source_id: "src-1".into(),
+            }),
+        )
+        .await;
+        assert_eq!(v4["ok"], true);
+    }
+
+    #[tokio::test]
+    async fn lsl_iroh_lifecycle_is_consistent() {
+        let (_td, st) = mk_state();
+        let Json(start) = lsl_iroh_start(State(st.clone())).await;
+        assert_eq!(start["running"], true);
+        let id = start["endpoint_id"].as_str().unwrap_or("").to_string();
+        assert_eq!(id.len(), 16);
+
+        let Json(status) = lsl_iroh_status(State(st.clone())).await;
+        assert_eq!(status["running"], true);
+        assert_eq!(status["endpoint_id"], id);
+
+        let Json(stop) = lsl_iroh_stop(State(st.clone())).await;
+        assert_eq!(stop["running"], false);
+
+        let Json(status2) = lsl_iroh_status(State(st)).await;
+        assert_eq!(status2["running"], false);
+    }
+
+    #[tokio::test]
+    async fn lsl_virtual_source_running_and_stop_when_not_started() {
+        let (_td, st) = mk_state();
+        let Json(r0) = lsl_virtual_source_running(State(st.clone())).await;
+        assert_eq!(r0["running"], false);
+
+        let Json(stop) = lsl_virtual_source_stop(State(st.clone())).await;
+        assert_eq!(stop["ok"], true);
+        assert_eq!(stop["was_running"], false);
+
+        let Json(r1) = lsl_virtual_source_running(State(st)).await;
+        assert_eq!(r1["running"], false);
+    }
+
+    #[tokio::test]
+    async fn latest_bands_null_then_value() {
+        let (_td, st) = mk_state();
+        let Json(v0) = get_latest_bands(State(st.clone())).await;
+        assert!(v0.is_null());
+
+        if let Ok(mut g) = st.latest_bands.lock() {
+            *g = Some(serde_json::json!({"alpha": 1.23}));
+        }
+        let Json(v1) = get_latest_bands(State(st)).await;
+        assert_eq!(v1["alpha"], 1.23);
+    }
+
+    #[tokio::test]
+    async fn hooks_roundtrip_status_and_log_queries() {
+        let (td, st) = mk_state();
+
+        let hook = skill_settings::HookRule {
+            name: "focus".into(),
+            enabled: true,
+            keywords: vec!["focus".into()],
+            scenario: "any".into(),
+            command: "say".into(),
+            text: "yo".into(),
+            distance_threshold: 0.2,
+            recent_limit: 10,
+        };
+        let Json(v) = set_hooks(State(st.clone()), Json(vec![hook.clone()])).await;
+        assert_eq!(v["ok"], true);
+
+        let Json(hooks) = get_hooks(State(st.clone())).await;
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(hooks[0].name, "focus");
+
+        let Json(statuses) = get_hook_statuses(State(st.clone())).await;
+        let arr = statuses.as_array().cloned().unwrap_or_default();
+        assert_eq!(arr.len(), 1);
+        assert!(arr[0].get("last_trigger").map(|v| v.is_null()).unwrap_or(false));
+
+        let log = skill_data::hooks_log::HooksLog::open(td.path()).expect("open hooks log");
+        log.record(&skill_data::hooks_log::HookFireEntry {
+            triggered_at_utc: 100,
+            hook_json: "{}",
+            trigger_json: "{\"distance\":0.3}",
+            payload_json: "{}",
+        });
+        log.record(&skill_data::hooks_log::HookFireEntry {
+            triggered_at_utc: 101,
+            hook_json: "{}",
+            trigger_json: "{\"eegDistance\":0.8}",
+            payload_json: "{}",
+        });
+
+        let Json(count) = get_hook_log_count(State(st.clone())).await;
+        assert_eq!(count["count"], 2);
+
+        let Json(rows) = get_hook_log(
+            State(st.clone()),
+            Json(HookLogRequest {
+                limit: Some(1),
+                offset: Some(0),
+            }),
+        )
+        .await;
+        assert_eq!(rows.len(), 1);
+
+        let Json(d) = suggest_hook_distances(
+            State(st),
+            Json(HookDistanceRequest {
+                keywords: vec!["focus".into()],
+            }),
+        )
+        .await;
+        assert_eq!(d["sample_n"], 2);
+        assert!(d["suggested"].as_f64().unwrap_or(0.0) > 0.0);
+    }
+
+    #[tokio::test]
+    async fn suggest_hook_keywords_finds_matching_labels() {
+        let (td, st) = mk_state();
+        let db = td.path().join(skill_constants::LABELS_FILE);
+        let conn = rusqlite::Connection::open(db).unwrap();
+        conn.execute_batch("CREATE TABLE labels (text TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0);")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO labels (text, created_at) VALUES (?1, ?2)",
+            rusqlite::params!["Deep Focus", 1_i64],
+        )
+        .unwrap();
+
+        let Json(items) = suggest_hook_keywords(
+            State(st),
+            Json(HookKeywordsRequest {
+                draft: "focu".into(),
+                limit: Some(8),
+            }),
+        )
+        .await;
+        assert!(!items.is_empty());
+        assert!(items[0]["keyword"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("focu"));
+    }
+
+    #[tokio::test]
+    async fn web_cache_endpoints_smoke() {
+        let Json(stats) = web_cache_stats().await;
+        assert!(stats.get("total_entries").is_some());
+
+        let Json(list) = web_cache_list().await;
+        let _ = list.len();
+
+        let Json(cleared) = web_cache_clear().await;
+        assert!(cleared.get("removed").is_some());
+
+        let Json(rm_domain) = web_cache_remove_domain(Json(StringValueRequest {
+            value: "example.com".into(),
+        }))
+        .await;
+        assert!(rm_domain.get("removed").is_some());
+
+        let Json(rm_key) = web_cache_remove_entry(Json(StringKeyRequest { key: "k".into() })).await;
+        assert!(rm_key.get("removed").is_some());
+    }
+
+    #[tokio::test]
+    async fn chat_session_lifecycle_roundtrip() {
+        let (_td, st) = mk_state();
+
+        let Json(new_s) = chat_new_session(State(st.clone())).await;
+        let sid = new_s["id"].as_i64().unwrap_or(0);
+        assert!(sid > 0);
+
+        let Json(saved) = chat_save_message(
+            State(st.clone()),
+            Json(ChatSaveMessageRequest {
+                session_id: sid,
+                role: "user".into(),
+                content: "hello".into(),
+                thinking: None,
+            }),
+        )
+        .await;
+        assert!(saved["id"].as_i64().unwrap_or(0) > 0);
+
+        let Json(loaded) = chat_load_session(State(st.clone()), Json(ChatIdRequest { id: sid })).await;
+        assert_eq!(loaded.session_id, sid);
+        assert!(!loaded.messages.is_empty());
+
+        let Json(_ok) = chat_rename_session(
+            State(st.clone()),
+            Json(ChatRenameRequest {
+                id: sid,
+                title: "renamed".into(),
+            }),
+        )
+        .await;
+
+        let Json(active) = chat_list_sessions(State(st.clone())).await;
+        assert!(active.iter().any(|s| s.id == sid));
+
+        let Json(_arch) = chat_archive_session(State(st.clone()), Json(ChatIdRequest { id: sid })).await;
+        let Json(archived) = chat_list_archived_sessions(State(st.clone())).await;
+        assert!(archived.iter().any(|s| s.id == sid));
+
+        let Json(_unarch) = chat_unarchive_session(State(st.clone()), Json(ChatIdRequest { id: sid })).await;
+        let Json(_del) = chat_delete_session(State(st.clone()), Json(ChatIdRequest { id: sid })).await;
+        let Json(active2) = chat_list_sessions(State(st)).await;
+        assert!(!active2.iter().any(|s| s.id == sid));
+    }
+
+    #[tokio::test]
+    async fn llm_download_state_and_active_selection_paths() {
+        let (_td, st) = mk_state();
+
+        let mut cat = st.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
+        cat.entries.push(skill_llm::catalog::LlmModelEntry {
+            repo: "x/y".into(),
+            filename: "model.gguf".into(),
+            quant: "Q4".into(),
+            size_gb: 1.0,
+            description: "m".into(),
+            family_id: "fam".into(),
+            family_name: "Fam".into(),
+            family_desc: String::new(),
+            tags: vec![],
+            is_mmproj: false,
+            recommended: false,
+            advanced: false,
+            params_b: 1.0,
+            max_context_length: 2048,
+            shard_files: vec![],
+            local_path: None,
+            state: skill_llm::catalog::DownloadState::NotDownloaded,
+            status_msg: None,
+            progress: 0.0,
+            initiated_at_unix: None,
+        });
+        cat.entries.push(skill_llm::catalog::LlmModelEntry {
+            repo: "x/y".into(),
+            filename: "model-mmproj-f16.gguf".into(),
+            quant: "F16".into(),
+            size_gb: 0.2,
+            description: "mm".into(),
+            family_id: "fam".into(),
+            family_name: "Fam".into(),
+            family_desc: String::new(),
+            tags: vec![],
+            is_mmproj: true,
+            recommended: false,
+            advanced: false,
+            params_b: 0.0,
+            max_context_length: 0,
+            shard_files: vec![],
+            local_path: None,
+            state: skill_llm::catalog::DownloadState::NotDownloaded,
+            status_msg: None,
+            progress: 0.0,
+            initiated_at_unix: None,
+        });
+        if let Ok(mut g) = st.llm_catalog.lock() {
+            *g = cat;
+        }
+
+        let Json(c) = llm_download_cancel(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(c["ok"], true);
+
+        let Json(p) = llm_download_pause(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(p["ok"], true);
+
+        let Json(sel_model) = llm_set_active_model(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(sel_model["ok"], true);
+
+        let Json(sel_mmproj) = llm_set_active_mmproj(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model-mmproj-f16.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(sel_mmproj["ok"], true);
+
+        let Json(del) = llm_download_delete(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(del["ok"], true);
+
+        let cat_after = st.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
+        let e = cat_after.entries.iter().find(|e| e.filename == "model.gguf").unwrap();
+        assert!(matches!(e.state, skill_llm::catalog::DownloadState::NotDownloaded));
+    }
+
+    #[tokio::test]
+    async fn set_lsl_idle_timeout_accepts_none() {
+        let (_td, st) = mk_state();
+        let Json(v) = set_lsl_idle_timeout(State(st.clone()), Json(LslIdleTimeoutRequest { secs: None })).await;
+        assert_eq!(v["ok"], true);
+        assert!(v["secs"].is_null());
+
+        let Json(got) = get_lsl_idle_timeout(State(st)).await;
+        assert!(got["secs"].is_null());
+    }
+
+    #[tokio::test]
+    async fn lsl_pair_stream_updates_existing_source() {
+        let (_td, st) = mk_state();
+        let _ = lsl_pair_stream(
+            State(st.clone()),
+            Json(LslPairRequest {
+                source_id: "src".into(),
+                name: "A".into(),
+                stream_type: "EEG".into(),
+                channels: 4,
+                sample_rate: 256.0,
+            }),
+        )
+        .await;
+        let _ = lsl_pair_stream(
+            State(st.clone()),
+            Json(LslPairRequest {
+                source_id: "src".into(),
+                name: "B".into(),
+                stream_type: "EEG".into(),
+                channels: 8,
+                sample_rate: 512.0,
+            }),
+        )
+        .await;
+
+        let Json(cfg) = get_lsl_config(State(st)).await;
+        let arr = cfg["paired_streams"].as_array().cloned().unwrap_or_default();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["name"], "B");
+        assert_eq!(arr[0]["channels"], 8);
+    }
+
+    #[tokio::test]
+    async fn lsl_iroh_start_is_idempotent_when_running() {
+        let (_td, st) = mk_state();
+        let Json(a) = lsl_iroh_start(State(st.clone())).await;
+        let Json(b) = lsl_iroh_start(State(st)).await;
+        assert_eq!(a["running"], true);
+        assert_eq!(b["running"], true);
+        assert_eq!(a["endpoint_id"], b["endpoint_id"]);
+    }
+
+    #[tokio::test]
+    async fn inference_device_roundtrip_cpu_then_gpu() {
+        let (_td, st) = mk_state();
+
+        let Json(cpu) = set_inference_device(State(st.clone()), Json(StringValueRequest { value: "cpu".into() })).await;
+        assert_eq!(cpu["ok"], true);
+        assert_eq!(cpu["value"], "cpu");
+
+        let Json(gpu) = set_inference_device(State(st.clone()), Json(StringValueRequest { value: "gpu".into() })).await;
+        assert_eq!(gpu["ok"], true);
+        assert_eq!(gpu["value"], "gpu");
+
+        let Json(cur) = get_inference_device(State(st)).await;
+        assert_eq!(cur["value"], "gpu");
+    }
+}

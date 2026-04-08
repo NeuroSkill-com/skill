@@ -17,6 +17,7 @@
     "preview": "vite preview",
     "check:markdown-renderer": "node scripts/check-markdown-renderer.js",
     "check:daemon-invokes": "node scripts/check-daemon-invokes.js",
+    "audit:daemon-routes": "node scripts/audit-daemon-routes.js",
     "verify:tauri:frontend": "node scripts/verify-tauri-frontend-structure.js",
     "check:i18n": "npx tsx scripts/audit-i18n.ts --check",
     "health": "node scripts/health.mjs",

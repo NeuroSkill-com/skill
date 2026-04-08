@@ -108,3 +108,36 @@ async fn global_index_rebuild(State(state): State<AppState>) -> Json<serde_json:
     // Placeholder daemon-owned endpoint; full global-index lifecycle moved out of Tauri.
     global_index_stats(State(state)).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn global_index_stats_reports_path_and_ready() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(v) = global_index_stats(State(state)).await;
+        assert_eq!(v["ready"], true);
+        assert!(v["path"].as_str().unwrap_or("").contains("global"));
+    }
+
+    #[tokio::test]
+    async fn compare_search_returns_a_and_b_keys() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(v) = compare_search(
+            State(state),
+            Json(CompareSearchRequest {
+                a_start_utc: 1,
+                a_end_utc: 2,
+                b_start_utc: 3,
+                b_end_utc: 4,
+            }),
+        )
+        .await;
+        assert!(v.get("a").is_some());
+        assert!(v.get("b").is_some());
+    }
+}

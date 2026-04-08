@@ -1841,3 +1841,225 @@ fn spawn_model_download_cmd(state: AppState, filename: String) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn helpers_extract_typed_fields() {
+        let msg = json!({"s":"x","u":7,"f":1.25,"i":-2,"b":true});
+        assert_eq!(str_field(&msg, "s").as_deref(), Some("x"));
+        assert_eq!(u64_field(&msg, "u"), Some(7));
+        assert_eq!(f64_field(&msg, "f"), Some(1.25));
+        assert_eq!(i64_field(&msg, "i"), Some(-2));
+        assert_eq!(bool_field(&msg, "b"), Some(true));
+    }
+
+    #[tokio::test]
+    async fn dispatch_missing_command_fails() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let v = dispatch(state, json!({"foo":"bar"})).await;
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"], "missing command field");
+    }
+
+    #[tokio::test]
+    async fn dispatch_unknown_command_fails() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let v = dispatch(state, json!({"command":"nope"})).await;
+        assert_eq!(v["command"], "nope");
+        assert_eq!(v["ok"], false);
+        assert!(v["error"].as_str().unwrap_or("").contains("unknown command"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_status_returns_command_and_ok() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let v = dispatch(state, json!({"command":"status"})).await;
+        assert_eq!(v["command"], "status");
+        assert_eq!(v["ok"], true);
+        assert!(v.get("device").is_some());
+    }
+
+    #[tokio::test]
+    async fn dispatch_devices_and_sessions_have_expected_shape() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let v1 = dispatch(state.clone(), json!({"command":"devices"})).await;
+        assert_eq!(v1["ok"], true);
+        assert!(v1["devices"].is_array());
+
+        let v2 = dispatch(state, json!({"command":"sessions"})).await;
+        assert_eq!(v2["ok"], true);
+        assert!(v2["sessions"].is_array());
+    }
+
+    #[tokio::test]
+    async fn dispatch_validation_errors_for_missing_required_fields() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let m1 = dispatch(state.clone(), json!({"command":"session_metrics"})).await;
+        assert_eq!(m1["ok"], false);
+        assert!(m1["error"].as_str().unwrap_or("").contains("start_utc"));
+
+        let m2 = dispatch(state.clone(), json!({"command":"label"})).await;
+        assert_eq!(m2["ok"], false);
+        assert!(m2["error"].as_str().unwrap_or("").contains("text"));
+
+        let m3 = dispatch(state.clone(), json!({"command":"search_labels"})).await;
+        assert_eq!(m3["ok"], false);
+        assert!(m3["error"].as_str().unwrap_or("").contains("query"));
+
+        let m4 = dispatch(state.clone(), json!({"command":"dnd_set"})).await;
+        assert_eq!(m4["ok"], false);
+        assert!(m4["error"].as_str().unwrap_or("").contains("enabled"));
+
+        let m5 = dispatch(state, json!({"command":"hooks_set"})).await;
+        assert_eq!(m5["ok"], false);
+        assert!(m5["error"].as_str().unwrap_or("").contains("hooks"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_hooks_and_iroh_info_paths() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let set = dispatch(
+            state.clone(),
+            json!({
+                "command":"hooks_set",
+                "hooks":[{
+                    "name":"focus",
+                    "enabled":true,
+                    "keywords":["focus"],
+                    "scenario":"any",
+                    "command":"say",
+                    "text":"hello",
+                    "distance_threshold":0.2,
+                    "recent_limit":8
+                }]
+            }),
+        )
+        .await;
+        assert_eq!(set["ok"], true);
+        assert!(set["hooks"].is_array());
+
+        let get = dispatch(state.clone(), json!({"command":"hooks_get"})).await;
+        assert_eq!(get["ok"], true);
+        assert_eq!(get["hooks"].as_array().map(|a| a.len()).unwrap_or(0), 1);
+
+        let status = dispatch(state.clone(), json!({"command":"hooks_status"})).await;
+        assert_eq!(status["ok"], true);
+        assert!(status["hooks"].is_array());
+
+        let iroh = dispatch(state, json!({"command":"iroh_info"})).await;
+        assert_eq!(iroh["ok"], true);
+        assert_eq!(iroh["running"], false);
+    }
+
+    #[tokio::test]
+    async fn dispatch_sleep_schedule_roundtrip_and_stub_command() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let before = dispatch(state.clone(), json!({"command":"sleep_schedule"})).await;
+        assert_eq!(before["ok"], true);
+
+        let set = dispatch(
+            state.clone(),
+            json!({
+                "command":"sleep_schedule_set",
+                "bedtime":"22:30",
+                "wake_time":"06:45"
+            }),
+        )
+        .await;
+        assert_eq!(set["ok"], true);
+        assert_eq!(set["bedtime"], "22:30");
+
+        let timer = dispatch(state, json!({"command":"timer"})).await;
+        assert_eq!(timer["ok"], false);
+        assert!(timer["error"].as_str().unwrap_or("").contains("requires GUI"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_dnd_and_dnd_set_paths() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let dnd = dispatch(state.clone(), json!({"command":"dnd"})).await;
+        assert_eq!(dnd["ok"], true);
+        assert!(dnd.get("enabled").is_some());
+
+        let off = dispatch(state.clone(), json!({"command":"dnd_set","enabled":false})).await;
+        assert_eq!(off["ok"], true);
+        assert_eq!(off["enabled"], false);
+
+        let on = dispatch(state, json!({"command":"dnd_set","enabled":true})).await;
+        assert_eq!(on["ok"], true);
+        assert_eq!(on["enabled"], true);
+        assert_eq!(on["applied"], false);
+    }
+
+    #[tokio::test]
+    async fn dispatch_hooks_suggest_and_log_empty_paths() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let suggest = dispatch(state.clone(), json!({"command":"hooks_suggest","keywords":["focus"]})).await;
+        assert_eq!(suggest["ok"], true);
+        assert!(suggest.get("suggested").is_some());
+
+        let log = dispatch(state, json!({"command":"hooks_log","limit":10,"offset":0})).await;
+        assert_eq!(log["ok"], true);
+        assert!(log["rows"].is_array());
+        assert_eq!(log["count"], 0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_calibration_crud_roundtrip() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let created = dispatch(
+            state.clone(),
+            json!({"command":"create_calibration","name":"alpha","config":{"gain":2}}),
+        )
+        .await;
+        assert_eq!(created["ok"], true);
+        let id = created["id"].as_str().unwrap_or("").to_string();
+        assert!(!id.is_empty());
+
+        let listed = dispatch(state.clone(), json!({"command":"list_calibrations"})).await;
+        assert_eq!(listed["ok"], true);
+        assert!(listed["profiles"].as_array().map(|a| !a.is_empty()).unwrap_or(false));
+
+        let got = dispatch(state.clone(), json!({"command":"get_calibration","id":id})).await;
+        assert_eq!(got["ok"], true);
+        assert!(got["profile"].get("id").is_some());
+
+        let _updated = dispatch(
+            state.clone(),
+            json!({"command":"update_calibration","id":got["profile"]["id"],"name":"beta","config":{"gain":3}}),
+        )
+        .await;
+
+        let deleted = dispatch(
+            state.clone(),
+            json!({"command":"delete_calibration","id":got["profile"]["id"]}),
+        )
+        .await;
+        assert_eq!(deleted["ok"], true);
+
+        let listed2 = dispatch(state, json!({"command":"list_calibrations"})).await;
+        assert_eq!(listed2["ok"], true);
+        assert_eq!(listed2["profiles"].as_array().map(|a| a.len()).unwrap_or(0), 0);
+    }
+}

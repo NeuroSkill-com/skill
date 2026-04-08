@@ -133,6 +133,107 @@ fn f32_to_blob(v: &[f32]) -> Vec<u8> {
 
 const EMBED_MODEL_NAME: &str = "bge-small-en-v1.5";
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn f32_to_blob_size_matches_input() {
+        let v = vec![1.0_f32, 2.0, 3.0, 4.0];
+        let b = f32_to_blob(&v);
+        assert_eq!(b.len(), v.len() * 4);
+    }
+
+    #[test]
+    fn embed_text_empty_is_none() {
+        assert!(embed_text("   ").is_none());
+        assert!(embed_text("").is_none());
+    }
+
+    #[test]
+    fn open_labels_db_creates_schema() {
+        let td = TempDir::new().unwrap();
+        let conn = open_labels_db(td.path()).expect("db open");
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='labels'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn list_labels_empty_then_create_and_delete_label() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let Json(v0) = list_labels(State(state.clone())).await;
+        assert!(v0.is_empty());
+
+        let created = create_label(
+            State(state.clone()),
+            Json(CreateLabelRequest {
+                text: "".into(),
+                context: None,
+                label_start_utc: Some(100.0),
+                eeg_start: Some(100),
+                eeg_end: Some(101),
+            }),
+        )
+        .await
+        .expect("create should succeed with empty text")
+        .0;
+        assert!(created.id > 0);
+
+        let Json(v1) = list_labels(State(state.clone())).await;
+        assert_eq!(v1.len(), 1);
+
+        let _ = delete_label(State(state.clone()), axum::extract::Path(created.id))
+            .await
+            .expect("delete ok");
+        let Json(v2) = list_labels(State(state)).await;
+        assert!(v2.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_and_index_stats_paths_are_stable() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let Json(stats0) = label_index_stats(State(state.clone())).await;
+        assert!(stats0.get("text_nodes").is_some());
+
+        let Json(search) = search_labels(
+            State(state.clone()),
+            Json(SearchLabelsRequest {
+                query: "   ".into(),
+                k: Some(5),
+                ef: Some(32),
+                mode: Some("text".into()),
+            }),
+        )
+        .await;
+        assert!(search.get("results").is_some());
+
+        let Json(eeg) = search_labels_by_eeg(
+            State(state.clone()),
+            Json(SearchByEegRequest {
+                start_utc: 1,
+                end_utc: 2,
+                k: Some(5),
+            }),
+        )
+        .await;
+        assert!(eeg.get("results").is_some());
+
+        let Json(rb) = rebuild_label_index(State(state)).await;
+        assert!(rb.get("ok").is_some());
+    }
+}
+
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 async fn list_labels(State(state): State<AppState>) -> Json<Vec<LabelEntry>> {

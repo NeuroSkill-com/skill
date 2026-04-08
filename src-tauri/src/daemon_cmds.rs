@@ -1373,6 +1373,507 @@ pub async fn lsl_virtual_source_stop() -> Result<serde_json::Value, String> {
     .map_err(|e| e.to_string())?
 }
 
+#[cfg(test)]
+fn daemon_cmds_test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    #[derive(Clone)]
+    struct ExpectedReq {
+        method: &'static str,
+        path: &'static str,
+        response_json: String,
+    }
+
+    fn read_http_request(stream: &mut TcpStream) -> (String, String, String, String) {
+        let mut buf = Vec::<u8>::new();
+        let mut tmp = [0_u8; 4096];
+        let mut header_end = None;
+
+        while header_end.is_none() {
+            let n = stream.read(&mut tmp).expect("read request bytes");
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                header_end = Some(i + 4);
+            }
+        }
+
+        let header_end = header_end.unwrap_or(buf.len());
+        let head = String::from_utf8_lossy(&buf[..header_end]).to_string();
+        let mut lines = head.lines();
+        let first = lines.next().unwrap_or("");
+        let mut parts = first.split_whitespace();
+        let method = parts.next().unwrap_or("").to_string();
+        let path = parts.next().unwrap_or("").to_string();
+
+        let content_len = head
+            .lines()
+            .find_map(|l| {
+                let (k, v) = l.split_once(':')?;
+                if k.eq_ignore_ascii_case("content-length") {
+                    return v.trim().parse::<usize>().ok();
+                }
+                None
+            })
+            .unwrap_or(0);
+
+        let mut body_bytes = if buf.len() > header_end {
+            buf[header_end..].to_vec()
+        } else {
+            Vec::new()
+        };
+        while body_bytes.len() < content_len {
+            let n = stream.read(&mut tmp).expect("read request body");
+            if n == 0 {
+                break;
+            }
+            body_bytes.extend_from_slice(&tmp[..n]);
+        }
+
+        (
+            method,
+            path,
+            head,
+            String::from_utf8_lossy(&body_bytes).to_string(),
+        )
+    }
+
+    fn write_json_response(stream: &mut TcpStream, status: &str, body: &str) {
+        let resp = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(resp.as_bytes()).expect("write response");
+        let _ = stream.flush();
+    }
+
+    #[test]
+    fn tauri_daemon_http_contract_smoke() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+
+        let status_json = serde_json::to_string(&StatusResponse::default()).unwrap();
+        let expected = vec![
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/status",
+                response_json: status_json,
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/history/sessions",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/settings/update-check-interval",
+                response_json: "{\"value\":123}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/settings/update-check-interval",
+                response_json: "{\"value\":123}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/activity/recent-windows",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/activity/recent-input",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/activity/input-buckets",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/hooks",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/llm/downloads",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/selection/active-model",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/scanner/wifi-config",
+                response_json: "{\"wifi_shield_ip\":\"1.2.3.4\",\"galea_ip\":\"\"}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/lsl/config",
+                response_json: "{\"auto_connect\":false,\"paired_streams\":[]}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/lsl/idle-timeout",
+                response_json: "{\"secs\":77}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/analysis/day-metrics",
+                response_json: "{\"ok\":true}".into(),
+            },
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, head, _body) = read_http_request(&mut stream);
+                if method.is_empty() {
+                    continue;
+                }
+                let e = &expected[i];
+                assert_eq!(method, e.method);
+                assert_eq!(path, e.path);
+                assert!(
+                    head.to_ascii_lowercase()
+                        .contains("authorization: bearer test-token"),
+                    "missing bearer header: {head}"
+                );
+                write_json_response(&mut stream, "200 OK", &e.response_json);
+                i += 1;
+            }
+        });
+
+        let _ = fetch_daemon_status().expect("status");
+        let _ = fetch_history_sessions().expect("history");
+        let _ = set_update_check_interval(123).expect("set interval");
+        let _ = fetch_update_check_interval().expect("get interval");
+        let _ = fetch_recent_active_windows(Some(5)).expect("recent windows");
+        let _ = fetch_recent_input_activity(Some(5)).expect("recent input");
+        let _ = fetch_input_buckets(Some(1), Some(2)).expect("input buckets");
+        let _ = fetch_hooks().expect("hooks");
+        let _ = llm_get_downloads().expect("downloads");
+        llm_set_active_model("model.gguf".into()).expect("active model");
+        let _ = scanner_set_wifi_config("1.2.3.4".into(), "".into()).expect("wifi cfg");
+        let _ = fetch_lsl_config().expect("lsl cfg");
+        let _ = get_lsl_idle_timeout().expect("lsl timeout");
+        let _ = post_json_value_with_auth(
+            "/v1/analysis/day-metrics",
+            &serde_json::json!({"day":"20260101"}),
+        )
+        .expect("analysis post");
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn tauri_daemon_http_contract_control_and_llm_routes() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+
+        let status_json = serde_json::to_string(&StatusResponse::default()).unwrap();
+        let expected = vec![
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/ws-port",
+                response_json: "{\"port\":18444}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/log/recent?since=7",
+                response_json: "{\"next_seq\":9,\"lines\":[\"8\\tline\"]}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/retry-connect",
+                response_json: status_json.clone(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/cancel-retry",
+                response_json: status_json.clone(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/start-session",
+                response_json: status_json.clone(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/cancel-session",
+                response_json: status_json.clone(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/scanner/start",
+                response_json: "{\"running\":true}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/scanner/stop",
+                response_json: "{\"running\":false}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/control/scanner/state",
+                response_json: "{\"running\":false}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/settings/notch-preset",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/settings/location-test",
+                response_json: "{\"ok\":true}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/ui/accent-color",
+                response_json: "{\"value\":\"blue\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/ui/accent-color",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/devices/set-preferred",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/devices/forget",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/skills/refresh-interval",
+                response_json: "{\"value\":90}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/skills/sync-on-launch",
+                response_json: "{\"value\":true}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/skills/disabled",
+                response_json: "{\"value\":[\"x\"]}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/history/find-session",
+                response_json: "{\"csv_path\":\"/tmp/a.csv\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/server/start",
+                response_json: "{\"result\":\"starting\"}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/llm/server/status",
+                response_json: "{\"running\":true}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/llm/server/logs",
+                response_json: "[]".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/server/switch-model",
+                response_json: "{\"result\":\"switching\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/server/switch-mmproj",
+                response_json: "{\"result\":\"switching\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/server/stop",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/catalog/refresh",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/catalog/add-model",
+                response_json: "{\"filename\":\"model.gguf\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/downloads/pause",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/selection/active-mmproj",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/selection/autoload-mmproj",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/chat-completions",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/abort-stream",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/llm/cancel-tool-call",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/some/custom",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/version",
+                response_json: "{\"ok\":true}".into(),
+            },
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, head, _body) = read_http_request(&mut stream);
+                if method.is_empty() {
+                    continue;
+                }
+                let e = &expected[i];
+                assert_eq!(method, e.method);
+                assert_eq!(path, e.path);
+                assert!(
+                    head.to_ascii_lowercase()
+                        .contains("authorization: bearer test-token"),
+                    "missing bearer header: {head}"
+                );
+                write_json_response(&mut stream, "200 OK", &e.response_json);
+                i += 1;
+            }
+        });
+
+        assert_eq!(fetch_daemon_ws_port().unwrap(), 18444);
+        let (next, lines) = fetch_daemon_log_recent(7).unwrap();
+        assert_eq!(next, 9);
+        assert_eq!(lines.len(), 1);
+        let _ = retry_connect().unwrap();
+        let _ = cancel_retry().unwrap();
+        let _ = start_session_sync(Some("muse".into())).unwrap();
+        let _ = cancel_session_sync().unwrap();
+        let _ = scanner_start().unwrap();
+        let _ = scanner_stop().unwrap();
+        let _ = scanner_state().unwrap();
+        set_notch_preset(None).unwrap();
+        let _ = test_location().unwrap();
+        assert_eq!(fetch_accent_color().unwrap(), "blue");
+        set_accent_color("teal".into()).unwrap();
+        let _ = set_preferred_device("d1".into()).unwrap();
+        let _ = forget_device("d1".into()).unwrap();
+        assert_eq!(fetch_skills_refresh_interval().unwrap(), 90);
+        assert!(fetch_skills_sync_on_launch().unwrap());
+        assert_eq!(get_disabled_skills().unwrap(), vec!["x".to_string()]);
+        assert_eq!(
+            find_history_session(123).unwrap().as_deref(),
+            Some("/tmp/a.csv")
+        );
+        assert_eq!(llm_server_start().unwrap(), "starting");
+        let _ = llm_server_status().unwrap();
+        let _ = llm_server_logs().unwrap();
+        assert_eq!(
+            llm_server_switch_model("model.gguf".into()).unwrap(),
+            "switching"
+        );
+        assert_eq!(
+            llm_server_switch_mmproj("mmproj.gguf".into()).unwrap(),
+            "switching"
+        );
+        llm_server_stop().unwrap();
+        llm_refresh_catalog().unwrap();
+        assert_eq!(
+            llm_add_model(
+                "a/b".into(),
+                "model.gguf".into(),
+                Some(1.0),
+                None,
+                Some(false)
+            )
+            .unwrap(),
+            "model.gguf"
+        );
+        llm_download_action("/v1/llm/downloads/pause", "model.gguf".into()).unwrap();
+        llm_set_active_mmproj("mmproj.gguf".into()).unwrap();
+        llm_set_autoload_mmproj(true).unwrap();
+        let _ = llm_chat_completions(vec![], serde_json::json!({})).unwrap();
+        llm_abort_stream().unwrap();
+        llm_cancel_tool_call("tc-1".into()).unwrap();
+        post_json_with_auth_pub("/v1/some/custom", &serde_json::json!({"x":1})).unwrap();
+        let _ = fetch_json_value_with_auth("/v1/version").unwrap();
+
+        server.join().unwrap();
+    }
+}
+
 #[tauri::command]
 pub async fn lsl_iroh_start() -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(|| daemon_post("/v1/lsl/iroh/start", &serde_json::json!({})))
@@ -1415,4 +1916,158 @@ pub async fn cancel_session() -> Result<serde_json::Value, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod async_contract_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    fn read_req(stream: &mut TcpStream) -> (String, String, String) {
+        let mut buf = Vec::<u8>::new();
+        let mut tmp = [0_u8; 4096];
+        let mut header_end = None;
+        while header_end.is_none() {
+            let n = stream.read(&mut tmp).expect("read request bytes");
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                header_end = Some(i + 4);
+            }
+        }
+        let header_end = header_end.unwrap_or(buf.len());
+        let head = String::from_utf8_lossy(&buf[..header_end]).to_string();
+        let mut parts = head.lines().next().unwrap_or("").split_whitespace();
+        let method = parts.next().unwrap_or("").to_string();
+        let path = parts.next().unwrap_or("").to_string();
+        (method, path, head)
+    }
+
+    fn write_json(stream: &mut TcpStream, body: &str) {
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(resp.as_bytes()).expect("write response");
+    }
+
+    #[test]
+    fn tauri_daemon_http_contract_async_proxy_routes() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+
+        let expected: Vec<(&str, &str, &str)> = vec![
+            ("GET", "/v1/models/exg-catalog", "{}"),
+            ("GET", "/v1/models/config", "{}"),
+            ("GET", "/v1/models/status", "{}"),
+            ("POST", "/v1/models/config", "{}"),
+            ("POST", "/v1/models/trigger-weights-download", "{}"),
+            ("POST", "/v1/models/cancel-weights-download", "{}"),
+            ("GET", "/v1/models/estimate-reembed", "{}"),
+            ("POST", "/v1/models/trigger-reembed", "{}"),
+            ("GET", "/v1/lsl/discover", "{}"),
+            ("GET", "/v1/lsl/config", "{}"),
+            ("POST", "/v1/lsl/auto-connect", "{}"),
+            ("POST", "/v1/lsl/pair", "{}"),
+            ("POST", "/v1/lsl/unpair", "{}"),
+            ("GET", "/v1/lsl/idle-timeout", "{\"secs\":12}"),
+            ("POST", "/v1/lsl/idle-timeout", "{}"),
+            (
+                "GET",
+                "/v1/lsl/virtual-source/running",
+                "{\"running\":false}",
+            ),
+            ("POST", "/v1/lsl/virtual-source/start", "{}"),
+            ("POST", "/v1/lsl/virtual-source/start", "{}"),
+            ("POST", "/v1/lsl/virtual-source/stop", "{}"),
+            ("POST", "/v1/lsl/iroh/start", "{}"),
+            ("POST", "/v1/lsl/iroh/stop", "{}"),
+            ("GET", "/v1/lsl/iroh/status", "{}"),
+            ("POST", "/v1/control/switch-session", "{}"),
+            ("POST", "/v1/control/cancel-session", "{}"),
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, head) = read_req(&mut stream);
+                // allow bare TCP readiness probes from ensure_daemon_for_proxy()
+                if method.is_empty() {
+                    continue;
+                }
+                let (m, p, body) = expected[i];
+                assert_eq!(method, m);
+                assert_eq!(path, p);
+                assert!(
+                    head.to_ascii_lowercase()
+                        .contains("authorization: bearer test-token"),
+                    "missing bearer header: {head}"
+                );
+                write_json(&mut stream, body);
+                i += 1;
+            }
+        });
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let _ = get_exg_catalog().await.unwrap();
+            let _ = get_eeg_model_config().await.unwrap();
+            let _ = get_eeg_model_status().await.unwrap();
+            let _ = set_eeg_model_config(serde_json::json!({})).await.unwrap();
+            let _ = trigger_weights_download().await.unwrap();
+            let _ = cancel_weights_download().await.unwrap();
+            let _ = estimate_reembed().await.unwrap();
+            let _ = trigger_reembed().await.unwrap();
+            let _ = lsl_discover().await.unwrap();
+            let _ = lsl_get_config().await.unwrap();
+            let _ = lsl_set_auto_connect(true).await.unwrap();
+            let _ = lsl_pair_stream("s1".into(), "n".into(), "EEG".into(), 8, 256.0)
+                .await
+                .unwrap();
+            let _ = lsl_unpair_stream("s1".into()).await.unwrap();
+            let _ = lsl_get_idle_timeout().await.unwrap();
+            let _ = lsl_set_idle_timeout(serde_json::json!(12)).await.unwrap();
+            let _ = lsl_virtual_source_running().await.unwrap();
+            let _ = lsl_virtual_source_start().await.unwrap();
+            let _ = lsl_virtual_source_start_configured(
+                8,
+                256,
+                "GoodQuality".into(),
+                "good".into(),
+                20.0,
+                1.0,
+                "50hz".into(),
+                0.0,
+            )
+            .await
+            .unwrap();
+            let _ = lsl_virtual_source_stop().await.unwrap();
+            let _ = lsl_iroh_start().await.unwrap();
+            let _ = lsl_iroh_stop().await.unwrap();
+            let _ = lsl_iroh_status().await.unwrap();
+            let _ = switch_session("muse".into()).await.unwrap();
+            let _ = cancel_session().await.unwrap();
+        });
+
+        server.join().unwrap();
+    }
 }

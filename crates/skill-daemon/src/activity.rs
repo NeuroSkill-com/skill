@@ -381,3 +381,17 @@ fn unix_secs() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unix_secs_is_nonzero_and_monotonic() {
+        let a = unix_secs();
+        std::thread::sleep(Duration::from_millis(5));
+        let b = unix_secs();
+        assert!(a > 0);
+        assert!(b >= a);
+    }
+}

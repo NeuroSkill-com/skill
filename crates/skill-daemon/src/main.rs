@@ -2201,6 +2201,13 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::{to_bytes, Body};
+    use axum::http::Request;
+    use axum::routing::get;
+    use futures::{SinkExt, StreamExt};
+    use tempfile::TempDir;
+    use tokio_tungstenite::connect_async;
+    use tower::ServiceExt;
 
     #[test]
     fn ble_filter_accepts_known_eeg_devices() {
@@ -2243,5 +2250,621 @@ mod tests {
         assert_eq!(read_back, data);
         // No .tmp file left behind
         assert!(!dir.path().join("test.tmp").exists());
+    }
+
+    #[test]
+    fn scanner_wifi_detects_wifi_transports() {
+        let cfg = ScannerWifiConfigRequest {
+            wifi_shield_ip: "192.168.4.1".to_string(),
+            galea_ip: "10.0.0.42".to_string(),
+        };
+        let devices = detect_wifi_devices(&cfg);
+        assert_eq!(devices.len(), 2);
+        assert!(devices
+            .iter()
+            .any(|d| d.id == "wifi:192.168.4.1" && d.transport == "wifi"));
+        assert!(devices
+            .iter()
+            .any(|d| d.id == "galea:10.0.0.42" && d.transport == "wifi"));
+    }
+
+    #[test]
+    fn manual_hints_include_usb_serial_and_wifi() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let hints = detect_manual_device_hints(&state);
+
+        assert!(hints.iter().any(|d| d.id == "neurosky" && d.transport == "usb_serial"));
+        assert!(hints
+            .iter()
+            .any(|d| d.id == "brainvision:127.0.0.1:51244" && d.transport == "wifi"));
+    }
+
+    #[test]
+    fn ble_cache_filters_stale_and_unknown_devices() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let now = now_unix_secs();
+
+        {
+            let mut cache = state.ble_device_cache.lock().unwrap();
+            cache.insert("ble:muse".to_string(), (Some("Muse-AB12".to_string()), -48, now));
+            cache.insert(
+                "ble:stale".to_string(),
+                (Some("Muse-OLD".to_string()), -70, now.saturating_sub(121)),
+            );
+            cache.insert("ble:jbl".to_string(), (Some("JBL Flip 5".to_string()), -30, now));
+            cache.insert("ble:noname".to_string(), (None, -40, now));
+        }
+
+        let found = read_ble_cache(&state);
+        assert_eq!(found.len(), 1, "only fresh known EEG BLE devices should remain");
+        assert_eq!(found[0].id, "ble:muse");
+        assert_eq!(found[0].transport, "ble");
+    }
+
+    #[test]
+    fn ble_cache_large_scan_is_fast() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let now = now_unix_secs();
+
+        {
+            let mut cache = state.ble_device_cache.lock().unwrap();
+            for i in 0..10_000 {
+                let id = format!("ble:{i}");
+                let name = if i % 2 == 0 {
+                    Some(format!("Muse-{i:04}"))
+                } else {
+                    Some(format!("Speaker-{i:04}"))
+                };
+                cache.insert(id, (name, -50, now));
+            }
+        }
+
+        let t0 = std::time::Instant::now();
+        let found = read_ble_cache(&state);
+        let elapsed = t0.elapsed();
+
+        assert_eq!(found.len(), 5_000);
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "BLE cache filter too slow: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn auth_decision_missing_invalid_and_query_bearer() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let headers = HeaderMap::new();
+
+        let req_missing = Request::builder().uri("/v1/status").body(Body::empty()).unwrap();
+        assert!(matches!(
+            auth_decision(&headers, &req_missing, &state),
+            AuthDecision::MissingOrInvalid
+        ));
+
+        let req_query = Request::builder()
+            .uri("/v1/status?token=default-token")
+            .body(Body::empty())
+            .unwrap();
+        assert!(matches!(
+            auth_decision(&headers, &req_query, &state),
+            AuthDecision::Allowed
+        ));
+
+        let mut bad_headers = HeaderMap::new();
+        bad_headers.insert(header::AUTHORIZATION, "Bearer totally-wrong".parse().unwrap());
+        let req_bad = Request::builder().uri("/v1/status").body(Body::empty()).unwrap();
+        assert!(matches!(
+            auth_decision(&bad_headers, &req_bad, &state),
+            AuthDecision::MissingOrInvalid
+        ));
+    }
+
+    #[test]
+    fn auth_decision_forbidden_when_acl_denies_endpoint() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+
+        let stream_secret = {
+            let mut store = state.token_store.lock().unwrap();
+            let tok = store
+                .create(
+                    "stream".to_string(),
+                    crate::auth::TokenAcl::Stream,
+                    crate::auth::TokenExpiry::Never,
+                )
+                .expect("create stream token");
+            tok.token
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            format!("Bearer {stream_secret}").parse().unwrap(),
+        );
+
+        // Stream ACL allows read status.
+        let req_get = Request::builder()
+            .method("GET")
+            .uri("/v1/status")
+            .body(Body::empty())
+            .unwrap();
+        assert!(matches!(
+            auth_decision(&headers, &req_get, &state),
+            AuthDecision::Allowed
+        ));
+
+        // But forbids control mutation.
+        let req_post = Request::builder()
+            .method("POST")
+            .uri("/v1/control/start-session")
+            .body(Body::empty())
+            .unwrap();
+        assert!(matches!(
+            auth_decision(&headers, &req_post, &state),
+            AuthDecision::Forbidden
+        ));
+    }
+
+    fn test_app(state: AppState) -> Router {
+        let v1 = Router::new()
+            .route("/version", get(version))
+            .route("/events", get(ws_events))
+            .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
+        Router::new()
+            .route("/healthz", get(healthz))
+            .nest("/v1", v1)
+            .with_state(state)
+    }
+
+    async fn spawn_test_server(
+        app: Router,
+    ) -> (
+        SocketAddr,
+        tokio::sync::oneshot::Sender<()>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await;
+        });
+        (addr, tx, handle)
+    }
+
+    fn wait_for_client_count(state: &AppState, want: usize) -> bool {
+        for _ in 0..200 {
+            let got = state.tracker.lock().map(|g| g.clients.len()).unwrap_or(0);
+            if got == want {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    #[tokio::test]
+    async fn router_e2e_healthz_public_and_version_protected() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("test-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+
+        let res = app
+            .clone()
+            .oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let res = app
+            .clone()
+            .oneshot(Request::builder().uri("/v1/version").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        let mut req = Request::builder().uri("/v1/version").body(Body::empty()).unwrap();
+        req.headers_mut()
+            .insert(header::AUTHORIZATION, "Bearer test-token".parse().unwrap());
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn router_e2e_forbidden_acl_and_ws_auth_gate() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+
+        let stream_secret = {
+            let mut store = state.token_store.lock().unwrap();
+            let tok = store
+                .create(
+                    "stream".to_string(),
+                    crate::auth::TokenAcl::Stream,
+                    crate::auth::TokenExpiry::Never,
+                )
+                .expect("create stream token");
+            tok.token
+        };
+
+        // ACL denial on non-read method.
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/v1/version")
+            .body(Body::empty())
+            .unwrap();
+        req.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {stream_secret}").parse().unwrap(),
+        );
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+        // WS endpoint with missing token should be unauthorized.
+        let res = app
+            .clone()
+            .oneshot(Request::builder().uri("/v1/events").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // WS endpoint with valid token passes auth layer; without upgrade headers
+        // handler will return 400 (expected in this in-process HTTP test).
+        let mut req = Request::builder()
+            .uri("/v1/events?token=default-token")
+            .body(Body::empty())
+            .unwrap();
+        req.headers_mut().insert(header::CONNECTION, "upgrade".parse().unwrap());
+        req.headers_mut().insert(header::UPGRADE, "websocket".parse().unwrap());
+        req.headers_mut().insert("sec-websocket-version", "13".parse().unwrap());
+        req.headers_mut()
+            .insert("sec-websocket-key", "dGVzdA==".parse().unwrap());
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Unauthorized body shape contract.
+        let res = app
+            .clone()
+            .oneshot(Request::builder().uri("/v1/version").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = res.status();
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(v["code"], "unauthorized");
+    }
+
+    #[tokio::test]
+    async fn router_e2e_forbidden_body_shape() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+
+        let stream_secret = {
+            let mut store = state.token_store.lock().unwrap();
+            let tok = store
+                .create(
+                    "stream".to_string(),
+                    crate::auth::TokenAcl::Stream,
+                    crate::auth::TokenExpiry::Never,
+                )
+                .expect("create stream token");
+            tok.token
+        };
+
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/v1/version")
+            .body(Body::empty())
+            .unwrap();
+        req.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {stream_secret}").parse().unwrap(),
+        );
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        let status = res.status();
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(v["code"], "forbidden");
+    }
+
+    #[test]
+    fn extract_bearer_token_header_and_query() {
+        let req = Request::builder()
+            .uri("/v1/events?token=query-token")
+            .body(Body::empty())
+            .unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "Bearer header-token".parse().unwrap());
+        assert_eq!(extract_bearer_token(&headers, &req).as_deref(), Some("header-token"));
+
+        let req = Request::builder()
+            .uri("/v1/events?token=query-token")
+            .body(Body::empty())
+            .unwrap();
+        let headers = HeaderMap::new();
+        assert_eq!(extract_bearer_token(&headers, &req).as_deref(), Some("query-token"));
+
+        let req = Request::builder()
+            .uri("/v1/events?token=abc%2Bdef%3D")
+            .body(Body::empty())
+            .unwrap();
+        let headers = HeaderMap::new();
+        assert_eq!(extract_bearer_token(&headers, &req).as_deref(), Some("abc+def="));
+    }
+
+    #[test]
+    fn extract_bearer_token_rejects_malformed_auth_header() {
+        let req = Request::builder().uri("/v1/version").body(Body::empty()).unwrap();
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "Basic abc123".parse().unwrap());
+        assert_eq!(extract_bearer_token(&headers, &req), None);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "Bearer".parse().unwrap());
+        assert_eq!(extract_bearer_token(&headers, &req), None);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, "bearer token".parse().unwrap());
+        assert_eq!(extract_bearer_token(&headers, &req), None);
+    }
+
+    #[test]
+    fn detect_wifi_devices_empty_config_returns_none() {
+        let cfg = ScannerWifiConfigRequest {
+            wifi_shield_ip: String::new(),
+            galea_ip: String::new(),
+        };
+        let found = detect_wifi_devices(&cfg);
+        assert!(found.is_empty());
+    }
+
+    #[tokio::test]
+    async fn auth_middleware_allows_options_without_token() {
+        async fn ok() -> &'static str {
+            "ok"
+        }
+
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let app = Router::new()
+            .route("/v1/echo", get(ok).post(ok))
+            .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+            .with_state(state);
+
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .method(axum::http::Method::OPTIONS)
+                    .uri("/v1/echo")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn scanner_start_stop_race_is_safe() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+
+        let start = control_scanner_start(State(state.clone())).await.0;
+        assert!(start.running);
+        assert!(state.scanner_running.lock().map(|g| *g).unwrap_or(false));
+
+        // Start again should be idempotent.
+        let start2 = control_scanner_start(State(state.clone())).await.0;
+        assert!(start2.running);
+
+        let stop = control_scanner_stop(State(state.clone())).await.0;
+        assert!(!stop.running);
+
+        // Give background task a brief chance to observe stop signal.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert!(!state.scanner_running.lock().map(|g| *g).unwrap_or(true));
+        assert!(state.scanner_stop_tx.lock().map(|g| g.is_none()).unwrap_or(true));
+    }
+
+    #[tokio::test]
+    async fn scanner_stop_without_start_is_safe() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+
+        let stop = control_scanner_stop(State(state.clone())).await.0;
+        assert!(!stop.running);
+        assert!(!state.scanner_running.lock().map(|g| *g).unwrap_or(true));
+    }
+
+    #[tokio::test]
+    async fn ws_receives_broadcast_and_tracks_clients() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+        let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
+
+        let url = format!("ws://{addr}/v1/events?token=ws-token");
+        let (mut ws, _resp) = connect_async(url).await.expect("ws connect");
+        assert!(
+            wait_for_client_count(&state, 1),
+            "client should be tracked after ws connect"
+        );
+
+        let _ = state.events_tx.send(EventEnvelope {
+            r#type: "Ping".to_string(),
+            ts_unix_ms: 1,
+            correlation_id: None,
+            payload: serde_json::json!({"ok": true}),
+        });
+
+        let mut saw_ping = false;
+        for _ in 0..8 {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+                .await
+                .expect("ws receive timeout")
+                .expect("ws closed")
+                .expect("ws error");
+            if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
+                let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+                if v["type"] == "Ping" {
+                    assert_eq!(v["payload"]["ok"], true);
+                    saw_ping = true;
+                    break;
+                }
+            }
+        }
+        assert!(saw_ping, "did not observe Ping event on websocket stream");
+
+        let _ = ws.close(None).await;
+
+        let _ = shutdown_tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn ws_non_text_frame_does_not_break_stream() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+        let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
+
+        let url = format!("ws://{addr}/v1/events?token=ws-token");
+        let (mut ws, _resp) = connect_async(url).await.expect("ws connect");
+
+        // Send a binary frame; server should ignore unsupported frame types,
+        // not drop the socket.
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Binary(vec![0, 1, 2].into()))
+            .await;
+
+        let _ = state.events_tx.send(EventEnvelope {
+            r#type: "AfterBinary".to_string(),
+            ts_unix_ms: 2,
+            correlation_id: None,
+            payload: serde_json::json!({"ok": true}),
+        });
+
+        let mut saw = false;
+        for _ in 0..8 {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+                .await
+                .expect("ws receive timeout")
+                .expect("ws closed")
+                .expect("ws error");
+            if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
+                let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+                if v["type"] == "AfterBinary" {
+                    saw = true;
+                    break;
+                }
+            }
+        }
+        assert!(saw, "stream should continue after non-text frame");
+
+        let _ = ws.close(None).await;
+        let _ = shutdown_tx.send(());
+        let _ = handle.await;
+    }
+
+    #[test]
+    fn ws_client_tracker_add_remove_is_consistent() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+
+        add_client(&state, "127.0.0.1:10001");
+        add_client(&state, "127.0.0.1:10002");
+        let n = state.tracker.lock().map(|g| g.clients.len()).unwrap_or(0);
+        assert_eq!(n, 2);
+
+        remove_client(&state, "127.0.0.1:10001");
+        let n = state.tracker.lock().map(|g| g.clients.len()).unwrap_or(0);
+        assert_eq!(n, 1);
+
+        // Removing unknown peer is a no-op.
+        remove_client(&state, "127.0.0.1:99999");
+        let n = state.tracker.lock().map(|g| g.clients.len()).unwrap_or(0);
+        assert_eq!(n, 1);
+
+        remove_client(&state, "127.0.0.1:10002");
+        let n = state.tracker.lock().map(|g| g.clients.len()).unwrap_or(0);
+        assert_eq!(n, 0);
+    }
+
+    #[tokio::test]
+    async fn scanner_config_roundtrip_wifi_and_cortex() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+
+        let wifi = ScannerWifiConfigRequest {
+            wifi_shield_ip: "192.168.4.1".into(),
+            galea_ip: "10.0.0.10".into(),
+        };
+        let out_wifi = control_scanner_wifi_config(State(state.clone()), Json(wifi.clone()))
+            .await
+            .0;
+        assert_eq!(out_wifi.wifi_shield_ip, wifi.wifi_shield_ip);
+        assert_eq!(out_wifi.galea_ip, wifi.galea_ip);
+        let stored_wifi = state.scanner_wifi_config.lock().unwrap().clone();
+        assert_eq!(stored_wifi.wifi_shield_ip, wifi.wifi_shield_ip);
+        assert_eq!(stored_wifi.galea_ip, wifi.galea_ip);
+
+        let cortex = ScannerCortexConfigRequest {
+            emotiv_client_id: "client-id".into(),
+            emotiv_client_secret: "client-secret".into(),
+        };
+        let out_cortex = control_scanner_cortex_config(State(state.clone()), Json(cortex.clone()))
+            .await
+            .0;
+        assert_eq!(out_cortex.emotiv_client_id, cortex.emotiv_client_id);
+        assert_eq!(out_cortex.emotiv_client_secret, cortex.emotiv_client_secret);
+        let stored_cortex = state.scanner_cortex_config.lock().unwrap().clone();
+        assert_eq!(stored_cortex.emotiv_client_id, cortex.emotiv_client_id);
+        assert_eq!(stored_cortex.emotiv_client_secret, cortex.emotiv_client_secret);
+    }
+
+    #[test]
+    fn request_log_is_capped_under_abuse() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+
+        for i in 0..1200 {
+            record_request(&state, "127.0.0.1".into(), format!("/bad/{i}"), false);
+        }
+
+        let guard = state.tracker.lock().unwrap();
+        assert_eq!(guard.requests.len(), 500);
+        assert_eq!(guard.requests.first().map(|r| r.command.as_str()), Some("/bad/700"));
+        assert_eq!(guard.requests.last().map(|r| r.command.as_str()), Some("/bad/1199"));
+    }
+
+    #[test]
+    fn device_log_is_capped_at_256_entries() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+
+        for i in 0..400 {
+            push_device_log(&state, "test", &format!("msg-{i}"));
+        }
+
+        let guard = state.device_log.lock().unwrap();
+        assert_eq!(guard.len(), 256);
+        assert_eq!(guard.front().map(|e| e.msg.as_str()), Some("msg-144"));
+        assert_eq!(guard.back().map(|e| e.msg.as_str()), Some("msg-399"));
     }
 }

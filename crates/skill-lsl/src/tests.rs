@@ -225,6 +225,52 @@ mod tests {
     }
 
     #[test]
+    fn e2e_resolve_stream_by_name_with_multiple_outlets() {
+        // Ensure named resolve selects the exact stream when multiple EEG
+        // outlets are advertising simultaneously.
+        std::thread::spawn(|| {
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
+
+            let info_a = StreamInfo::new("SkillA", "EEG", 4, 256.0, ChannelFormat::Float32, "sid-a");
+            let info_b = StreamInfo::new("SkillB", "EEG", 8, 500.0, ChannelFormat::Float32, "sid-b");
+            let _outlet_a = StreamOutlet::new(&info_a, 0, 360);
+            let _outlet_b = StreamOutlet::new(&info_b, 0, 360);
+
+            // Give discovery a short moment.
+            std::thread::sleep(std::time::Duration::from_millis(300));
+
+            let found = crate::resolve_stream_by_name("SkillB", 5.0).expect("SkillB should resolve");
+            assert_eq!(found.name(), "SkillB");
+            assert_eq!(found.channel_count(), 8);
+            assert_eq!(found.nominal_srate(), 500.0);
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn e2e_resolve_eeg_streams_filters_non_eeg_types() {
+        std::thread::spawn(|| {
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
+
+            let eeg = StreamInfo::new("EEG-Only", "EEG", 4, 256.0, ChannelFormat::Float32, "sid-eeg");
+            let aux = StreamInfo::new("AUX-Only", "AUX", 2, 100.0, ChannelFormat::Float32, "sid-aux");
+            let _eeg_outlet = StreamOutlet::new(&eeg, 0, 360);
+            let _aux_outlet = StreamOutlet::new(&aux, 0, 360);
+
+            std::thread::sleep(std::time::Duration::from_millis(300));
+
+            let streams = crate::resolve_eeg_streams(3.0);
+            assert!(streams.iter().any(|s| s.name() == "EEG-Only"));
+            assert!(!streams.iter().any(|s| s.name() == "AUX-Only"));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn e2e_lsl_missing_labels_fallback() {
         std::thread::spawn(|| {
             let rt = tokio::runtime::Builder::new_multi_thread()

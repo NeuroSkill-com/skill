@@ -23,3 +23,28 @@ impl DaemonTracker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_request_keeps_max_log_size() {
+        let mut t = DaemonTracker::default();
+        for i in 0..700 {
+            t.add_request("peer".into(), format!("cmd-{i}"), true, i as u64);
+        }
+        assert_eq!(t.requests.len(), MAX_REQUEST_LOG);
+    }
+
+    #[test]
+    fn add_request_drops_oldest_entries_first() {
+        let mut t = DaemonTracker::default();
+        for i in 0..(MAX_REQUEST_LOG + 5) {
+            t.add_request("peer".into(), format!("cmd-{i}"), true, i as u64);
+        }
+        assert_eq!(t.requests.first().map(|r| r.command.as_str()), Some("cmd-5"));
+        let expected_last = format!("cmd-{}", MAX_REQUEST_LOG + 4);
+        assert_eq!(t.requests.last().map(|r| r.command.clone()), Some(expected_last));
+    }
+}
