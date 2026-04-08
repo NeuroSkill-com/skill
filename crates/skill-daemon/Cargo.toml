@@ -13,7 +13,7 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2"]
+embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
@@ -22,6 +22,7 @@ embed-sleepfm = ["dep:sleepfm", "dep:burn", "dep:burn-ndarray"]
 embed-sleeplm = ["dep:sleeplm", "dep:burn", "dep:burn-ndarray"]
 embed-steegformer = ["dep:steegformer", "dep:burn", "dep:burn-ndarray"]
 embed-tribev2 = ["dep:tribev2", "dep:burn", "dep:burn-ndarray"]
+embed-neurorvq = ["skill-exg/neurorvq-ndarray"]
 
 [[bin]]
 name = "skill-daemon"
@@ -72,7 +73,6 @@ skill-tools         = { path = "../skill-tools" }
 skill-oura          = { path = "../skill-oura" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-exg           = { path = "../skill-exg" }
-skill-neurorvq      = { path = "../skill-neurorvq", default-features = false, features = ["ndarray"] }
 neurofield          = { version = "0.0.1", default-features = false }
 brainbit            = { version = "0.0.1", default-features = false }
 gtec                = { version = "0.0.2", default-features = false }

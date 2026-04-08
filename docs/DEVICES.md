@@ -155,7 +155,7 @@ All device data feeds into the EXG embedding pipeline. Available backends:
 | **OSF** | osf-rs | ViT-Base (PSG) | yang-ai-lab/OSF-Base |
 | **SleepLM** | sleeplm | Contrastive (PSG) | yang-ai-lab/SleepLM |
 | **ST-EEGFormer** | steegformer | ViT-based EEG | eugenehp/ST-EEGFormer |
-| **NeuroRVQ** | skill-neurorvq | Residual VQ | eugenehp/NeuroRVQ |
+| **NeuroRVQ** | skill-exg (`neurorvq` module) | Residual VQ | eugenehp/NeuroRVQ |
 
 ## Adding a New Device
 

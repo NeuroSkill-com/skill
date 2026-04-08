@@ -1,66 +1,47 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! `skill-neurorvq` — NeuroRVQ biosignal tokenizer integration for NeuroSkill.
+//! NeuroRVQ biosignal tokenizer/foundation-model integration.
 //!
 //! Wraps [`neurorvq_rs`] to provide:
-//!
-//! - **HuggingFace weight resolution** — finds or downloads safetensors weights
-//! - **Tokenizer construction** — loads the right model for a given modality
-//! - **Batch helpers** — builds input batches from raw signal buffers
-//! - **Token extraction** — encode → RVQ → discrete token indices
-//!
-//! # Backends
-//!
-//! | Feature   | Backend                          |
-//! |-----------|----------------------------------|
-//! | `ndarray` | CPU (NdArray + Rayon) — default  |
-//! | `metal`   | GPU (wgpu / Metal on macOS)      |
-//! | `vulkan`  | GPU (wgpu / Vulkan on Linux/Win) |
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use skill_neurorvq::{NeuroRVQ, Modality};
-//!
-//! let model = NeuroRVQ::from_hf("eugenehp/NeuroRVQ", Modality::EEG)?;
-//! let tokens = model.tokenize(&signal, &channel_names)?;
-//! ```
+//! - HuggingFace weight resolution
+//! - tokenization helpers
+//! - foundation model encoding helpers
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-// Re-export core types from neurorvq-rs
 pub use neurorvq_rs::{
     ConfigOverrides, FMEncoderResult, ForwardResult, InputBatch, Modality, NeuroRVQConfig, ReconstructionResult,
     TokenResult,
 };
 
-// ── Backend selection ─────────────────────────────────────────────────────────
-
-#[cfg(feature = "ndarray")]
+#[cfg(feature = "neurorvq-ndarray")]
 type B = burn_ndarray::NdArray;
 
-#[cfg(feature = "ndarray")]
+#[cfg(feature = "neurorvq-ndarray")]
 fn default_device() -> burn_ndarray::NdArrayDevice {
     burn_ndarray::NdArrayDevice::Cpu
 }
 
-#[cfg(all(any(feature = "metal", feature = "vulkan"), not(feature = "ndarray")))]
+#[cfg(all(
+    any(feature = "neurorvq-metal", feature = "neurorvq-vulkan"),
+    not(feature = "neurorvq-ndarray")
+))]
 type B = burn_wgpu::Wgpu;
 
-#[cfg(all(any(feature = "metal", feature = "vulkan"), not(feature = "ndarray")))]
+#[cfg(all(
+    any(feature = "neurorvq-metal", feature = "neurorvq-vulkan"),
+    not(feature = "neurorvq-ndarray")
+))]
 fn default_device() -> burn_wgpu::WgpuDevice {
     burn_wgpu::WgpuDevice::DefaultDevice
 }
 
-// ── HuggingFace constants ─────────────────────────────────────────────────────
-
 /// Default HuggingFace repo with pre-converted safetensors weights.
 pub const HF_REPO: &str = "eugenehp/NeuroRVQ";
 
-/// Weight filenames per modality/type.
 pub fn tokenizer_weights_file(modality: Modality) -> &'static str {
     match modality {
         Modality::EEG => "NeuroRVQ_EEG_tokenizer_v1.safetensors",
@@ -69,16 +50,14 @@ pub fn tokenizer_weights_file(modality: Modality) -> &'static str {
     }
 }
 
-/// Foundation model weight filenames (EEG and EMG only).
 pub fn fm_weights_file(modality: Modality) -> Option<&'static str> {
     match modality {
         Modality::EEG => Some("NeuroRVQ_EEG_foundation_model_v1.safetensors"),
         Modality::EMG => Some("NeuroRVQ_EMG_foundation_model_v1.safetensors"),
-        Modality::ECG => None, // No FM released for ECG
+        Modality::ECG => None,
     }
 }
 
-/// Config flag filenames.
 pub fn config_file(modality: Modality) -> &'static str {
     match modality {
         Modality::EEG => "flags/NeuroRVQ_EEG_v1.yml",
@@ -87,9 +66,6 @@ pub fn config_file(modality: Modality) -> &'static str {
     }
 }
 
-// ── Weight resolution ─────────────────────────────────────────────────────────
-
-/// Resolve a file from the HuggingFace Hub cache, downloading if needed.
 fn resolve_hf_file(repo: &str, filename: &str) -> Result<PathBuf> {
     use hf_hub::api::sync::Api;
     let api = Api::new().context("HuggingFace Hub API init failed")?;
@@ -100,18 +76,11 @@ fn resolve_hf_file(repo: &str, filename: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-// ── NeuroRVQ Tokenizer ────────────────────────────────────────────────────────
-
-/// High-level NeuroRVQ tokenizer for NeuroSkill integration.
-///
-/// Wraps [`neurorvq_rs::NeuroRVQEncoder`] with HuggingFace weight resolution
-/// and convenient batch construction from raw signal buffers.
 pub struct NeuroRVQ {
     inner: neurorvq_rs::NeuroRVQEncoder<B>,
 }
 
 impl NeuroRVQ {
-    /// Load a tokenizer from local config + weights files.
     pub fn from_files(config_path: &Path, weights_path: &Path, modality: Modality) -> Result<Self> {
         let dev = default_device();
         let (inner, ms) =
@@ -120,7 +89,6 @@ impl NeuroRVQ {
         Ok(Self { inner })
     }
 
-    /// Load a tokenizer from HuggingFace Hub (downloads if not cached).
     pub fn from_hf(repo: &str, modality: Modality) -> Result<Self> {
         let weights_file = tokenizer_weights_file(modality);
         let cfg_file = config_file(modality);
@@ -141,12 +109,10 @@ impl NeuroRVQ {
         Self::from_files(&config_path, &weights_path, modality)
     }
 
-    /// Load from the default HuggingFace repo ([`HF_REPO`]).
     pub fn from_default_hf(modality: Modality) -> Result<Self> {
         Self::from_hf(HF_REPO, modality)
     }
 
-    /// Load with optional config overrides.
     pub fn from_hf_with_overrides(repo: &str, modality: Modality, overrides: &ConfigOverrides) -> Result<Self> {
         let weights_file = tokenizer_weights_file(modality);
         let cfg_file = config_file(modality);
@@ -161,12 +127,6 @@ impl NeuroRVQ {
         Ok(Self { inner })
     }
 
-    /// Tokenize a raw signal buffer.
-    ///
-    /// `signal`: flat `f32` buffer of shape `[n_channels × n_samples]`
-    /// `channel_names`: channel labels (e.g. `["fp1", "fp2", "c3", "c4"]`)
-    ///
-    /// Returns token indices for all 4 branches × 8 (or 16) RVQ levels.
     pub fn tokenize(&self, signal: &[f32], channel_names: &[&str]) -> Result<TokenResult> {
         let modality = self.inner.modality;
         let config = &self.inner.config;
@@ -198,29 +158,23 @@ impl NeuroRVQ {
         self.inner.tokenize(&batch)
     }
 
-    /// Encode + quantize + decode → reconstructed FFT components.
     pub fn reconstruct(&self, signal: &[f32], channel_names: &[&str]) -> Result<ReconstructionResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.reconstruct(&batch)
     }
 
-    /// Full forward: encode → decode → iFFT → standardized signals.
     pub fn forward(&self, signal: &[f32], channel_names: &[&str]) -> Result<ForwardResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.forward(&batch)
     }
 
-    /// The loaded modality.
     pub fn modality(&self) -> Modality {
         self.inner.modality
     }
 
-    /// The model configuration.
     pub fn config(&self) -> &NeuroRVQConfig {
         &self.inner.config
     }
-
-    // ── Internal helpers ──────────────────────────────────────────────────
 
     fn build_batch(&self, signal: &[f32], channel_names: &[&str]) -> Result<InputBatch<B>> {
         let config = &self.inner.config;
@@ -249,15 +203,11 @@ impl NeuroRVQ {
     }
 }
 
-// ── NeuroRVQ Foundation Model ─────────────────────────────────────────────────
-
-/// High-level NeuroRVQ Foundation Model for NeuroSkill integration.
 pub struct NeuroRVQFM {
     inner: neurorvq_rs::NeuroRVQFoundationModel<B>,
 }
 
 impl NeuroRVQFM {
-    /// Load a foundation model from local files.
     pub fn from_files(config_path: &Path, weights_path: &Path, modality: Modality) -> Result<Self> {
         let dev = default_device();
         let (inner, ms) = neurorvq_rs::NeuroRVQFoundationModel::<B>::load(config_path, weights_path, modality, dev)?;
@@ -265,7 +215,6 @@ impl NeuroRVQFM {
         Ok(Self { inner })
     }
 
-    /// Load from HuggingFace Hub.
     pub fn from_hf(repo: &str, modality: Modality) -> Result<Self> {
         let weights_file =
             fm_weights_file(modality).with_context(|| format!("No foundation model available for {modality}"))?;
@@ -277,18 +226,15 @@ impl NeuroRVQFM {
         Self::from_files(&config_path, &weights_path, modality)
     }
 
-    /// Load from the default HuggingFace repo.
     pub fn from_default_hf(modality: Modality) -> Result<Self> {
         Self::from_hf(HF_REPO, modality)
     }
 
-    /// Encode → 4 branch feature vectors.
     pub fn encode(&self, signal: &[f32], channel_names: &[&str]) -> Result<FMEncoderResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.encode(&batch)
     }
 
-    /// Encode → concat → mean-pool → single representation vector.
     pub fn encode_pooled(&self, signal: &[f32], channel_names: &[&str]) -> Result<Vec<f32>> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.encode_pooled(&batch)
@@ -320,7 +266,5 @@ impl NeuroRVQFM {
         ))
     }
 }
-
-// ── Channel helpers re-exports ────────────────────────────────────────────────
 
 pub use neurorvq_rs::{channel_indices, compute_n_time, global_channels, ECG_CHANNELS, EEG_CHANNELS, EMG_CHANNELS};

@@ -2101,4 +2101,41 @@ mod tests {
         let unknown = dispatch_family_commands(&state, &json!({}), "not-a-family-command").await;
         assert!(unknown.is_none());
     }
+
+    #[tokio::test]
+    async fn dispatch_command_matrix_has_no_unknowns() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let cases = vec![
+            json!({"command":"status"}),
+            json!({"command":"devices"}),
+            json!({"command":"sessions"}),
+            json!({"command":"hooks_status"}),
+            json!({"command":"hooks_get"}),
+            json!({"command":"hooks_log","limit":1,"offset":0}),
+            json!({"command":"sleep_schedule"}),
+            json!({"command":"dnd"}),
+            json!({"command":"dnd_set","enabled":false}),
+            json!({"command":"iroh_info"}),
+            json!({"command":"iroh_totp_list"}),
+            json!({"command":"llm_status"}),
+            json!({"command":"llm_catalog"}),
+            json!({"command":"llm_downloads"}),
+            json!({"command":"llm_logs"}),
+            json!({"command":"subscribe"}),
+            json!({"command":"calendar_status"}),
+            json!({"command":"health_metric_types"}),
+            json!({"command":"timer"}),
+        ];
+
+        for msg in cases {
+            let out = dispatch(state.clone(), msg).await;
+            let err = out["error"].as_str().unwrap_or("");
+            assert!(
+                !err.contains("unknown command"),
+                "dispatcher returned unknown command for payload: {out}"
+            );
+        }
+    }
 }

@@ -11,6 +11,8 @@ use std::sync::mpsc;
 
 use skill_daemon_common::EventEnvelope;
 use skill_eeg::eeg_model_config::{ExgModelBackend, ExgModelConfig};
+#[cfg(feature = "embed-neurorvq")]
+use skill_exg::neurorvq::{Modality as NeuroModality, NeuroRVQFM};
 use skill_settings::HookRule;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
@@ -461,6 +463,7 @@ enum Encoder {
     STEEGFormer(Box<steegformer::STEEGFormerEncoder<burn::backend::NdArray>>),
     #[cfg(feature = "embed-tribev2")]
     Tribev2(Box<Tribev2State>),
+    #[cfg(feature = "embed-neurorvq")]
     NeuroRVQ(Box<NeuroRVQState>),
     None,
 }
@@ -476,17 +479,19 @@ struct ZunaState {
     data_config: zuna_rs::config::DataConfig,
 }
 
+#[cfg(feature = "embed-neurorvq")]
 struct NeuroRVQState {
-    model: skill_neurorvq::NeuroRVQFM,
+    model: NeuroRVQFM,
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
     let backend = config.model_backend.clone();
     info!(backend = backend.as_str(), "loading EXG encoder");
     let result = match &backend {
+        #[cfg(feature = "embed-neurorvq")]
         ExgModelBackend::Neurorvq => {
             info!("loading NeuroRVQ encoder");
-            match skill_neurorvq::NeuroRVQFM::from_default_hf(skill_neurorvq::Modality::EEG) {
+            match NeuroRVQFM::from_default_hf(NeuroModality::EEG) {
                 Ok(model) => {
                     info!("NeuroRVQ encoder loaded");
                     Some(Encoder::NeuroRVQ(Box::new(NeuroRVQState { model })))
@@ -496,6 +501,11 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
                     None
                 }
             }
+        }
+        #[cfg(not(feature = "embed-neurorvq"))]
+        ExgModelBackend::Neurorvq => {
+            warn!("NeuroRVQ backend selected but support is not compiled (enable feature: embed-neurorvq)");
+            None
         }
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
@@ -646,6 +656,7 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
         Encoder::STEEGFormer(enc) => encode_steegformer(enc, msg),
         #[cfg(feature = "embed-tribev2")]
         Encoder::Tribev2(state) => encode_tribev2(state, msg),
+        #[cfg(feature = "embed-neurorvq")]
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
@@ -820,6 +831,7 @@ fn encode_tribev2(_state: &Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
     None
 }
 
+#[cfg(feature = "embed-neurorvq")]
 fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {

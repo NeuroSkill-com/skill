@@ -46,7 +46,6 @@ members = [
     "crates/skill-vision",
     "crates/iroh_test_client",
     "crates/iroh-example-client",
-    "crates/skill-neurorvq",
     "crates/skill-daemon-common",
     "crates/skill-daemon",
 ]

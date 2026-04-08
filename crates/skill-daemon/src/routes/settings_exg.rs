@@ -353,3 +353,43 @@ pub(crate) async fn get_exg_catalog_impl(State(state): State<AppState>) -> Json<
 
     Json(v)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_state() -> (tempfile::TempDir, AppState) {
+        let td = tempfile::tempdir().unwrap();
+        let st = AppState::new("t".into(), td.path().to_path_buf());
+        (td, st)
+    }
+
+    #[tokio::test]
+    async fn trigger_weights_download_rejects_when_already_running() {
+        let (_td, st) = mk_state();
+        if let Ok(mut s) = st.exg_model_status.lock() {
+            s.downloading_weights = true;
+        }
+        let Json(v) = trigger_weights_download_impl(State(st)).await;
+        assert_eq!(v["ok"], false);
+    }
+
+    #[tokio::test]
+    async fn cancel_weights_download_sets_flag() {
+        let (_td, st) = mk_state();
+        st.exg_download_cancel
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        let Json(v) = cancel_weights_download_impl(State(st.clone())).await;
+        assert_eq!(v["ok"], true);
+        assert!(st.exg_download_cancel.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[test]
+    fn family_id_to_backend_maps_known_variants() {
+        assert_eq!(family_id_to_backend("zuna"), "zuna");
+        assert_eq!(family_id_to_backend("luna-v1"), "luna");
+        assert_eq!(family_id_to_backend("reve-base"), "reve");
+        assert_eq!(family_id_to_backend("osf-base"), "osf");
+        assert_eq!(family_id_to_backend("steegformer-x"), "steegformer");
+    }
+}

@@ -1726,6 +1726,26 @@ mod tests {
     }
 
     #[test]
+    fn select_connect_route_is_deterministic_for_random_targets() {
+        use rand::{Rng, SeedableRng};
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0x5EED_BAAD_F00D);
+        for _ in 0..512 {
+            let len = rng.random_range(0..64);
+            let s: String = (0..len)
+                .map(|_| {
+                    let c = rng.random_range(0x20u8..0x7Eu8);
+                    c as char
+                })
+                .collect();
+            let lower = s.to_ascii_lowercase();
+            let a = select_connect_route(&lower);
+            let b = select_connect_route(&lower);
+            assert_eq!(a, b, "non-deterministic route for input={s:?}");
+        }
+    }
+
+    #[test]
     fn paired_name_lookup_uses_status_paired_devices() {
         let td = tempfile::tempdir().unwrap();
         let state = AppState::new("t".into(), td.path().to_path_buf());

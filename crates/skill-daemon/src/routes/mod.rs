@@ -6,6 +6,7 @@ pub mod labels;
 pub mod search;
 pub mod settings;
 pub(crate) mod settings_exg;
+pub(crate) mod settings_hooks_activity;
 pub(crate) mod settings_io;
 pub(crate) mod settings_llm;
 pub(crate) mod settings_llm_chat;

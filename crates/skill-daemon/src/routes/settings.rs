@@ -18,7 +18,7 @@ use skill_eeg::{
 
 use crate::{
     routes::{
-        settings_exg,
+        settings_exg, settings_hooks_activity,
         settings_io::{load_user_settings, save_user_settings},
         settings_llm::{
             get_exg_inference_device, get_hf_endpoint, get_inference_device, get_llm_config, set_exg_inference_device,
@@ -35,31 +35,31 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
-struct HookLogRequest {
-    limit: Option<i64>,
-    offset: Option<i64>,
+pub(crate) struct HookLogRequest {
+    pub(crate) limit: Option<i64>,
+    pub(crate) offset: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
-struct HookKeywordsRequest {
-    draft: String,
-    limit: Option<usize>,
+pub(crate) struct HookKeywordsRequest {
+    pub(crate) draft: String,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
-struct HookDistanceRequest {
-    keywords: Vec<String>,
+pub(crate) struct HookDistanceRequest {
+    pub(crate) keywords: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ActivityRecentRequest {
-    limit: Option<u32>,
+pub(crate) struct ActivityRecentRequest {
+    pub(crate) limit: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ActivityBucketsRequest {
-    from_ts: Option<u64>,
-    to_ts: Option<u64>,
+pub(crate) struct ActivityBucketsRequest {
+    pub(crate) from_ts: Option<u64>,
+    pub(crate) to_ts: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -452,238 +452,56 @@ async fn get_exg_catalog(state: State<AppState>) -> Json<serde_json::Value> {
     settings_exg::get_exg_catalog_impl(state).await
 }
 
-async fn get_hooks(State(state): State<AppState>) -> Json<Vec<skill_settings::HookRule>> {
-    Json(state.hooks.lock().map(|g| g.clone()).unwrap_or_default())
+async fn get_hooks(state: State<AppState>) -> Json<Vec<skill_settings::HookRule>> {
+    settings_hooks_activity::get_hooks_impl(state).await
 }
 
-async fn set_hooks(
-    State(state): State<AppState>,
-    Json(hooks): Json<Vec<skill_settings::HookRule>>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.hooks.lock() {
-        *g = hooks.clone();
-    }
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.hooks = hooks;
-    let path = skill_settings::settings_path(&skill_dir);
-    let ok = serde_json::to_string_pretty(&settings)
-        .ok()
-        .and_then(|json| std::fs::write(path, json).ok())
-        .is_some();
-    Json(serde_json::json!({"ok": ok}))
+async fn set_hooks(state: State<AppState>, hooks: Json<Vec<skill_settings::HookRule>>) -> Json<serde_json::Value> {
+    settings_hooks_activity::set_hooks_impl(state, hooks).await
 }
 
-async fn get_hook_statuses(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(serde_json::Value::Array(
-        hooks
-            .into_iter()
-            .map(|hook| serde_json::json!({"hook": hook, "last_trigger": serde_json::Value::Null}))
-            .collect(),
-    ))
+async fn get_hook_statuses(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_hooks_activity::get_hook_statuses_impl(state).await
 }
 
 async fn get_hook_log(
-    State(state): State<AppState>,
-    Json(req): Json<HookLogRequest>,
+    state: State<AppState>,
+    req: Json<HookLogRequest>,
 ) -> Json<Vec<skill_data::hooks_log::HookLogRow>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let rows = tokio::task::spawn_blocking(move || {
-        let Some(log) = skill_data::hooks_log::HooksLog::open(&skill_dir) else {
-            return vec![];
-        };
-        log.query(req.limit.unwrap_or(50).clamp(1, 500), req.offset.unwrap_or(0).max(0))
-    })
-    .await
-    .unwrap_or_default();
-    Json(rows)
+    settings_hooks_activity::get_hook_log_impl(state, req).await
 }
 
-async fn get_hook_log_count(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let count = tokio::task::spawn_blocking(move || {
-        skill_data::hooks_log::HooksLog::open(&skill_dir)
-            .map(|l| l.count())
-            .unwrap_or(0)
-    })
-    .await
-    .unwrap_or(0);
-    Json(serde_json::json!({"count": count}))
+async fn get_hook_log_count(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_hooks_activity::get_hook_log_count_impl(state).await
 }
 
-async fn suggest_hook_keywords(
-    State(state): State<AppState>,
-    Json(req): Json<HookKeywordsRequest>,
-) -> Json<Vec<serde_json::Value>> {
-    let q = req.draft.trim().to_lowercase();
-    if q.len() < 2 {
-        return Json(Vec::new());
-    }
-    let max_n = req.limit.unwrap_or(8).clamp(1, 20);
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
-
-    let out = tokio::task::spawn_blocking(move || {
-        let mut out = Vec::<serde_json::Value>::new();
-        if !labels_db.exists() {
-            return out;
-        }
-        let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
-            return out;
-        };
-        let Ok(mut stmt) = conn.prepare(
-            "SELECT text FROM labels
-             WHERE length(trim(text)) > 0
-             GROUP BY text
-             ORDER BY MAX(created_at) DESC
-             LIMIT 600",
-        ) else {
-            return out;
-        };
-        if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
-            for text in rows.flatten() {
-                let cand = text.to_lowercase();
-                if cand.contains(&q) {
-                    out.push(serde_json::json!({"keyword": text, "source": "fuzzy", "score": 0.92}));
-                }
-                if out.len() >= max_n {
-                    break;
-                }
-            }
-        }
-        out
-    })
-    .await
-    .unwrap_or_default();
-
-    Json(out)
+async fn suggest_hook_keywords(state: State<AppState>, req: Json<HookKeywordsRequest>) -> Json<Vec<serde_json::Value>> {
+    settings_hooks_activity::suggest_hook_keywords_impl(state, req).await
 }
 
-async fn suggest_hook_distances(
-    State(state): State<AppState>,
-    Json(req): Json<HookDistanceRequest>,
-) -> Json<serde_json::Value> {
-    let label_n = req.keywords.len();
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-
-    let mut distances: Vec<f32> = tokio::task::spawn_blocking(move || {
-        let Some(log) = skill_data::hooks_log::HooksLog::open(&skill_dir) else {
-            return Vec::new();
-        };
-        let rows = log.query(5000, 0);
-        let mut vals = Vec::new();
-        for row in rows {
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&row.trigger_json) else {
-                continue;
-            };
-            let maybe = v
-                .get("distance")
-                .and_then(serde_json::Value::as_f64)
-                .or_else(|| v.get("eeg_distance").and_then(serde_json::Value::as_f64))
-                .or_else(|| v.get("eegDistance").and_then(serde_json::Value::as_f64));
-            if let Some(d) = maybe {
-                let d = d as f32;
-                if d.is_finite() {
-                    vals.push(d.clamp(0.0, 1.0));
-                }
-            }
-        }
-        vals
-    })
-    .await
-    .unwrap_or_default();
-
-    if distances.is_empty() {
-        return Json(serde_json::json!({
-            "label_n": label_n,
-            "ref_n": 0,
-            "sample_n": 0,
-            "eeg_min": 0.0,
-            "eeg_p25": 0.0,
-            "eeg_p50": 0.0,
-            "eeg_p75": 0.0,
-            "eeg_max": 0.0,
-            "suggested": 0.1,
-            "note": "No hook trigger distances recorded yet."
-        }));
-    }
-
-    distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let sample_n = distances.len();
-    let min = distances[0];
-    let max = *distances.last().unwrap_or(&min);
-    let q = |p: f32| -> f32 {
-        let idx = ((sample_n - 1) as f32 * p).round() as usize;
-        distances[idx.min(sample_n - 1)]
-    };
-    let p25 = q(0.25);
-    let p50 = q(0.50);
-    let p75 = q(0.75);
-    let suggested = p75.clamp(0.05, 0.95);
-
-    Json(serde_json::json!({
-        "label_n": label_n,
-        "ref_n": sample_n,
-        "sample_n": sample_n,
-        "eeg_min": min,
-        "eeg_p25": p25,
-        "eeg_p50": p50,
-        "eeg_p75": p75,
-        "eeg_max": max,
-        "suggested": suggested,
-        "note": "Estimated from recent hook trigger EEG distances."
-    }))
+async fn suggest_hook_distances(state: State<AppState>, req: Json<HookDistanceRequest>) -> Json<serde_json::Value> {
+    settings_hooks_activity::suggest_hook_distances_impl(state, req).await
 }
 
 async fn activity_recent_windows(
-    State(state): State<AppState>,
-    Json(req): Json<ActivityRecentRequest>,
+    state: State<AppState>,
+    req: Json<ActivityRecentRequest>,
 ) -> Json<Vec<ActiveWindowRow>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let limit = req.limit.unwrap_or(50).min(500);
-    let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
-            .map(|store| store.get_recent_windows(limit))
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(rows)
+    settings_hooks_activity::activity_recent_windows_impl(state, req).await
 }
 
 async fn activity_recent_input(
-    State(state): State<AppState>,
-    Json(req): Json<ActivityRecentRequest>,
+    state: State<AppState>,
+    req: Json<ActivityRecentRequest>,
 ) -> Json<Vec<InputActivityRow>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let limit = req.limit.unwrap_or(50).min(500);
-    let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
-            .map(|store| store.get_recent_input(limit))
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(rows)
+    settings_hooks_activity::activity_recent_input_impl(state, req).await
 }
 
 async fn activity_input_buckets(
-    State(state): State<AppState>,
-    Json(req): Json<ActivityBucketsRequest>,
+    state: State<AppState>,
+    req: Json<ActivityBucketsRequest>,
 ) -> Json<Vec<InputBucketRow>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let now = now_unix();
-    let end = req.to_ts.unwrap_or(now);
-    let start = req.from_ts.unwrap_or_else(|| end.saturating_sub(24 * 3600));
-    let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
-            .map(|store| store.get_input_buckets(start, end))
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(rows)
+    settings_hooks_activity::activity_input_buckets_impl(state, req).await
 }
 
 async fn get_active_window_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -1815,13 +1633,6 @@ async fn llm_abort_stream(state: State<AppState>) -> Json<serde_json::Value> {
 
 async fn llm_cancel_tool_call(state: State<AppState>, req: Json<ToolCancelRequest>) -> Json<serde_json::Value> {
     settings_llm_chat::llm_cancel_tool_call_impl(state, req).await
-}
-
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 fn now_unix_ms() -> u64 {

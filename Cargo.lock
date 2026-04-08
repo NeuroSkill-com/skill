@@ -12684,7 +12684,6 @@ dependencies = [
  "skill-llm",
  "skill-location",
  "skill-lsl",
- "skill-neurorvq",
  "skill-oura",
  "skill-router",
  "skill-screenshots",
@@ -12784,8 +12783,13 @@ name = "skill-exg"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "burn",
+ "burn-ndarray",
+ "burn-wgpu",
  "cubecl-runtime",
  "hf-hub 0.5.0",
+ "log",
+ "neurorvq",
  "serde",
  "serde_json",
  "skill-constants",
@@ -12947,21 +12951,6 @@ dependencies = [
  "skill-devices",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "skill-neurorvq"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "burn",
- "burn-ndarray",
- "burn-wgpu",
- "hf-hub 0.5.0",
- "log",
- "neurorvq",
- "serde",
- "serde_json",
 ]
 
 [[package]]

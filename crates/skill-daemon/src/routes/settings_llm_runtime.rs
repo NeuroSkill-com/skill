@@ -668,3 +668,184 @@ pub(crate) async fn llm_set_autoload_mmproj_impl(
     }
     Json(serde_json::json!({"ok": true, "value": req.value}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routes::settings::{BoolValueRequest, LlmAddModelRequest, LlmFilenameRequest};
+
+    fn mk_state() -> (tempfile::TempDir, AppState) {
+        let td = tempfile::tempdir().unwrap();
+        let st = AppState::new("t".into(), td.path().to_path_buf());
+        (td, st)
+    }
+
+    #[test]
+    fn infer_quant_detects_known_and_unknown_patterns() {
+        assert_eq!(infer_quant("model-Q5_K_M.gguf"), "Q5_K_M");
+        assert_eq!(infer_quant("vision-mmproj-f16.gguf"), "F16");
+        assert_eq!(infer_quant("mystery-model.bin"), "unknown");
+    }
+
+    #[tokio::test]
+    async fn llm_server_status_and_logs_paths_are_stable() {
+        let (_td, st) = mk_state();
+        if let Ok(mut s) = st.llm_status.lock() {
+            *s = "running".into();
+        }
+        if let Ok(mut m) = st.llm_model_name.lock() {
+            *m = "model.gguf".into();
+        }
+        let Json(status) = llm_server_status_impl(State(st.clone())).await;
+        assert!(status.get("status").is_some());
+        assert!(status.get("model_name").is_some());
+        assert!(status.get("n_ctx").is_some());
+
+        let Json(logs) = llm_server_logs_impl(State(st)).await;
+        let _ = logs.len();
+    }
+
+    #[tokio::test]
+    async fn llm_add_model_is_idempotent_for_same_filename() {
+        let (_td, st) = mk_state();
+        let _ = llm_add_model_impl(
+            State(st.clone()),
+            Json(LlmAddModelRequest {
+                repo: "a/b".into(),
+                filename: "model-q4.gguf".into(),
+                size_gb: Some(1.2),
+                mmproj: None,
+                download: Some(false),
+            }),
+        )
+        .await;
+        let _ = llm_add_model_impl(
+            State(st.clone()),
+            Json(LlmAddModelRequest {
+                repo: "a/b".into(),
+                filename: "model-q4.gguf".into(),
+                size_gb: Some(1.2),
+                mmproj: None,
+                download: Some(false),
+            }),
+        )
+        .await;
+        let cat = st.llm_catalog.lock().unwrap().clone();
+        let n = cat.entries.iter().filter(|e| e.filename == "model-q4.gguf").count();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn set_download_state_marks_downloaded_progress() {
+        let (_td, st) = mk_state();
+        if let Ok(mut cat) = st.llm_catalog.lock() {
+            cat.entries.push(skill_llm::catalog::LlmModelEntry {
+                repo: "a/b".into(),
+                filename: "model.gguf".into(),
+                quant: "Q4".into(),
+                size_gb: 1.0,
+                description: String::new(),
+                family_id: "f".into(),
+                family_name: "F".into(),
+                family_desc: String::new(),
+                tags: vec![],
+                is_mmproj: false,
+                recommended: false,
+                advanced: false,
+                params_b: 1.0,
+                max_context_length: 2048,
+                shard_files: vec![],
+                local_path: None,
+                state: skill_llm::catalog::DownloadState::NotDownloaded,
+                status_msg: None,
+                progress: 0.0,
+                initiated_at_unix: None,
+            });
+        }
+
+        set_download_state(
+            &st,
+            "model.gguf",
+            skill_llm::catalog::DownloadState::Downloaded,
+            Some("done".into()),
+        );
+        let cat = st.llm_catalog.lock().unwrap().clone();
+        let e = cat.entries.iter().find(|e| e.filename == "model.gguf").unwrap();
+        assert!(matches!(e.state, skill_llm::catalog::DownloadState::Downloaded));
+        assert_eq!(e.progress, 1.0);
+        assert_eq!(e.status_msg.as_deref(), Some("done"));
+    }
+
+    #[tokio::test]
+    async fn llm_set_autoload_mmproj_persists_setting() {
+        let (_td, st) = mk_state();
+        let Json(v) = llm_set_autoload_mmproj_impl(State(st.clone()), Json(BoolValueRequest { value: true })).await;
+        assert_eq!(v["ok"], true);
+
+        let loaded = crate::routes::settings_io::load_user_settings(&st);
+        assert!(loaded.llm.autoload_mmproj);
+    }
+
+    #[tokio::test]
+    async fn llm_set_active_model_updates_active_model() {
+        let (_td, st) = mk_state();
+        if let Ok(mut cat) = st.llm_catalog.lock() {
+            cat.entries.push(skill_llm::catalog::LlmModelEntry {
+                repo: "a/b".into(),
+                filename: "model-a.gguf".into(),
+                quant: "Q4".into(),
+                size_gb: 1.0,
+                description: String::new(),
+                family_id: "f1".into(),
+                family_name: "F1".into(),
+                family_desc: String::new(),
+                tags: vec![],
+                is_mmproj: false,
+                recommended: false,
+                advanced: false,
+                params_b: 1.0,
+                max_context_length: 2048,
+                shard_files: vec![],
+                local_path: None,
+                state: skill_llm::catalog::DownloadState::NotDownloaded,
+                status_msg: None,
+                progress: 0.0,
+                initiated_at_unix: None,
+            });
+            cat.entries.push(skill_llm::catalog::LlmModelEntry {
+                repo: "a/b".into(),
+                filename: "model-b-mmproj.gguf".into(),
+                quant: "F16".into(),
+                size_gb: 0.2,
+                description: String::new(),
+                family_id: "f2".into(),
+                family_name: "F2".into(),
+                family_desc: String::new(),
+                tags: vec![],
+                is_mmproj: true,
+                recommended: false,
+                advanced: false,
+                params_b: 0.0,
+                max_context_length: 0,
+                shard_files: vec![],
+                local_path: None,
+                state: skill_llm::catalog::DownloadState::NotDownloaded,
+                status_msg: None,
+                progress: 0.0,
+                initiated_at_unix: None,
+            });
+            cat.active_mmproj = "model-b-mmproj.gguf".into();
+        }
+
+        let _ = llm_set_active_model_impl(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model-a.gguf".into(),
+            }),
+        )
+        .await;
+
+        let cat = st.llm_catalog.lock().unwrap().clone();
+        assert_eq!(cat.active_model, "model-a.gguf");
+    }
+}

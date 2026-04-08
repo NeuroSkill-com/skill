@@ -16,6 +16,13 @@ use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
 
+#[cfg(any(
+    feature = "neurorvq-ndarray",
+    feature = "neurorvq-metal",
+    feature = "neurorvq-vulkan"
+))]
+pub mod neurorvq;
+
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
 /// Cosine distance between two `f32` vectors (0 = identical, 2 = opposite).

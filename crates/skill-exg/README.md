@@ -46,6 +46,16 @@ Utility layer sitting between the raw EEG pipeline (`skill-eeg`) and the high-le
 | `EpochMetrics` | Per-epoch band-derived cognitive scores (meditation, cognitive load, drowsiness, engagement, focus) |
 | `EpochMetrics::from_snapshot(BandSnapshot)` | Derive metrics from a band snapshot |
 
+### NeuroRVQ (optional module)
+
+Enable one of:
+
+- `neurorvq-ndarray` (CPU)
+- `neurorvq-metal` (wgpu/Metal)
+- `neurorvq-vulkan` (wgpu/Vulkan)
+
+Then use `skill_exg::neurorvq::{NeuroRVQ, NeuroRVQFM, Modality, ...}`.
+
 ## Dependencies
 
 - `skill-constants`, `skill-eeg`, `skill-data` — shared types and constants
