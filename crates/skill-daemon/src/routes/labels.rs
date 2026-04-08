@@ -85,9 +85,10 @@ fn now_unix() -> f64 {
 }
 
 /// Open (or create) the canonical `labels.sqlite` with the full schema.
-fn open_labels_db(skill_dir: &std::path::Path) -> Result<rusqlite::Connection, String> {
+fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
+    use anyhow::Context as _;
     let db_path = skill_dir.join(LABELS_FILE);
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(&db_path).context("open labels DB")?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS labels (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +104,7 @@ fn open_labels_db(skill_dir: &std::path::Path) -> Result<rusqlite::Connection, S
             embedding_model   TEXT
         );",
     )
-    .map_err(|e| e.to_string())?;
+    .context("create labels table")?;
     Ok(conn)
 }
 
@@ -203,7 +204,7 @@ async fn create_label(
                 EMBED_MODEL_NAME,
             ],
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
         let id = conn.last_insert_rowid();
 
         // Insert into daemon-owned HNSW indices
@@ -219,7 +220,7 @@ async fn create_label(
             &label_index,
         );
 
-        Ok::<_, String>(LabelEntry {
+        Ok::<_, anyhow::Error>(LabelEntry {
             id,
             text: req.text,
             context: Some(context),
@@ -244,7 +245,7 @@ async fn create_label(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiError {
                 code: "db_error",
-                message: e,
+                message: e.to_string(),
             }),
         )
     })?;
@@ -266,7 +267,7 @@ async fn update_label(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiError {
                     code: "db_error",
-                    message: e,
+                    message: e.to_string(),
                 }),
             )
         })?;
@@ -324,7 +325,7 @@ async fn delete_label(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiError {
                     code: "db_error",
-                    message: e,
+                    message: e.to_string(),
                 }),
             )
         })?;

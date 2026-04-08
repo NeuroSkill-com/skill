@@ -28,7 +28,7 @@ pub(crate) async fn exec_read_file(args: &Value, allowed_tools: &LlmToolConfig) 
     let resolved_check = resolve_tool_path(&path);
     if allowed_tools.strict_path_safety {
         if let Err(reason) = enforce_path_integrity(&resolved_check) {
-            return json!({ "ok": false, "tool": "read_file", "error": reason });
+            return json!({ "ok": false, "tool": "read_file", "error": reason.to_string() });
         }
     }
     if let Some(reason) = check_path_safety(&resolved_check) {
@@ -111,7 +111,7 @@ pub(crate) async fn exec_write_file(args: &Value, allowed_tools: &LlmToolConfig)
     let resolved_check = resolve_tool_path(&path);
     if allowed_tools.strict_path_safety {
         if let Err(reason) = enforce_path_integrity(&resolved_check) {
-            return json!({ "ok": false, "tool": "write_file", "error": reason });
+            return json!({ "ok": false, "tool": "write_file", "error": reason.to_string() });
         }
     }
     if let Some(reason) = check_path_safety(&resolved_check) {
@@ -164,7 +164,7 @@ pub(crate) async fn exec_edit_file(args: &Value, allowed_tools: &LlmToolConfig) 
     let resolved_check = resolve_tool_path(&path);
     if allowed_tools.strict_path_safety {
         if let Err(reason) = enforce_path_integrity(&resolved_check) {
-            return json!({ "ok": false, "tool": "edit_file", "error": reason });
+            return json!({ "ok": false, "tool": "edit_file", "error": reason.to_string() });
         }
     }
     if let Some(reason) = check_path_safety(&resolved_check) {
@@ -269,7 +269,7 @@ pub(crate) async fn exec_search_output(args: &Value, allowed_tools: &LlmToolConf
     let resolved_check = resolve_tool_path(&path);
     if allowed_tools.strict_path_safety {
         if let Err(reason) = enforce_path_integrity(&resolved_check) {
-            return json!({ "ok": false, "tool": "search_output", "error": reason });
+            return json!({ "ok": false, "tool": "search_output", "error": reason.to_string() });
         }
     }
 

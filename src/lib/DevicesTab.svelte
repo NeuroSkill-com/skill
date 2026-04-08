@@ -543,9 +543,9 @@ function sortDevicesRealFirst<T extends { id: string; name: string }>(devs: T[])
 }
 
 // ── Device images ──────────────────────────────────────────────────────────
-function museImage(name: string, hw?: string | null): string | null {
+function museImage(name: string, _hw?: string | null): string | null {
   const n = name.toLowerCase();
-  const isAthena = hw === "p50" || n.includes("muses");
+  const isAthena = n.includes("muses");
   if (isAthena) return "/devices/muse-s-athena.jpg";
   if (n.includes("muse-s") || n.includes("muse s")) return "/devices/muse-s-gen1.jpg";
   if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-gen2.jpg";

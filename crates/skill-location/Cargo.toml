@@ -8,6 +8,7 @@ description = "Cross-platform location — CoreLocation (macOS) with IP-geolocat
 [dependencies]
 serde       = { workspace = true, features = ["derive"] }
 serde_json  = { workspace = true }
+anyhow      = { workspace = true }
 thiserror   = { workspace = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

@@ -1133,7 +1133,7 @@ async fn cmd_oura_sync(state: &AppState, msg: &Value) -> Result<Value, String> {
                     "steps_upserted": result.steps_upserted,
                 })
             }
-            Err(e) => json!({ "error": e }),
+            Err(e) => json!({ "error": e.to_string() }),
         }
     })
     .await
@@ -1182,7 +1182,7 @@ async fn cmd_calendar_events(msg: &Value) -> Result<Value, String> {
         let end = end_utc.unwrap_or(now + 7 * 86400) as i64;
         match skill_calendar::fetch_events(start, end) {
             Ok(events) => json!({ "events": events }),
-            Err(e) => json!({ "events": [], "error": e }),
+            Err(e) => json!({ "events": [], "error": e.to_string() }),
         }
     })
     .await

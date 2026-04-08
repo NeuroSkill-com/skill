@@ -187,7 +187,8 @@ skill-vision = { path = "../crates/skill-vision" }
 # screenshot.rs direct access to DynamicImage, GenericImageView, etc.
 image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
 
-serde      = { version = "1", features = ["derive"] }
+anyhow     = { workspace = true }
+serde      = { workspace = true, features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 jsonschema = "0.45"
@@ -304,7 +305,7 @@ tribev2-video = { version = "0.0.4", default-features = false, features = ["wgpu
 fast-hnsw = { version = "1.0.1" }
 
 # SQLite — bundled so no system lib required; stores daily embedding records.
-rusqlite  = { version = "0.37", features = ["bundled"] }
+rusqlite  = { workspace = true }
 
 # HuggingFace Hub client — used to auto-download ZUNA weights on first run.
 # The sync API (default feature) is used; no async/tokio dependency required.

@@ -29,8 +29,13 @@ describe("fuzzyMatch", () => {
 });
 
 describe("museImage", () => {
-  it("detects Muse S Athena by hw version", () => {
-    expect(museImage("Muse-S", "p50")).toContain("athena");
+  it("detects Muse S Athena by advertising name (MuseS-XXXX)", () => {
+    // Athena firmware advertises as "MuseS-F921" — no space before S.
+    expect(museImage("MuseS-F921")).toContain("athena");
+  });
+  it("hw='p50' does NOT trigger Athena (p50 is a preset command, not hw version)", () => {
+    // The Muse adapter never sets hardware_version; p50 check was dead code.
+    expect(museImage("Muse-S", "p50")).toContain("muse-s-gen1");
   });
   it("detects Muse 2", () => {
     expect(museImage("Muse-2")).toContain("gen2");

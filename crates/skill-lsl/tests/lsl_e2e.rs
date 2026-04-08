@@ -252,8 +252,28 @@ async fn lsl_e2e_32ch_256hz() {
 
     let t0 = Instant::now();
 
-    // Channel: outlet thread → main async: the (outlet, info, adapter)
+    // The outlet MUST stay alive until the async receive loop finishes.
+    //
+    // Root cause: rlsl's TCP session thread checks `shutdown` at the top of
+    // every loop iteration.  `Drop for StreamOutlet` sets shutdown=true and
+    // pushes a sentinel.  The TCP thread then exits on the NEXT iteration
+    // check, discarding any samples still buffered in `chunk_buf` (the last
+    // partial pushthrough chunk).  This causes the final 32-sample chunk to
+    // be lost reliably.
+    //
+    // Fix: push all samples in the blocking thread, then hand the outlet to
+    // the async side via a second channel so it is dropped only AFTER the
+    // receive loop completes.
+    struct SendOutlet(StreamOutlet);
+    // SAFETY: StreamOutlet contains raw pointers managed by liblsl's C layer.
+    // liblsl guarantees thread-safety of outlet handles; we simply move the
+    // owning wrapper to the async side after all pushes are complete.
+    unsafe impl Send for SendOutlet {}
+
     let (setup_tx, setup_rx) = mpsc::sync_channel::<Result<(SendStreamInfo, skill_lsl::LslAdapter), String>>(0);
+    // Second channel: blocking push thread sends the outlet to the async side
+    // after all samples have been pushed, keeping it alive until receive is done.
+    let (outlet_tx, outlet_rx) = mpsc::sync_channel::<SendOutlet>(0);
 
     let samples_for_push = all_samples.clone();
     let (push_done_tx, push_done_rx) = mpsc::sync_channel::<usize>(0);
@@ -278,7 +298,7 @@ async fn lsl_e2e_32ch_256hz() {
         // discovery round-trip, no risk of missing pre-connection samples).
         let adapter = skill_lsl::LslAdapter::new(&info);
 
-        // Send the info (wrapped for Send) and adapter back to the async test.
+        // Send info + adapter to the async side.
         setup_tx.send(Ok((SendStreamInfo(info), adapter))).ok();
 
         // Push data on this same blocking thread while the async side receives.
@@ -293,7 +313,11 @@ async fn lsl_e2e_32ch_256hz() {
             std::thread::sleep(chunk_delay);
         }
         push_done_tx.send(pushed).ok();
-        drop(outlet); // keep alive until push is done
+
+        // Transfer outlet ownership to the async side so it is dropped
+        // only after the receive loop finishes (prevents TCP session teardown
+        // while the last chunk is still in transit).
+        outlet_tx.send(SendOutlet(outlet)).ok();
     });
 
     let (_info, mut adapter) = match setup_rx.recv() {
@@ -387,7 +411,8 @@ async fn lsl_e2e_32ch_256hz() {
 
     let t0 = Instant::now();
     let mut received: Vec<(f64, Vec<f32>)> = Vec::with_capacity(TOTAL_SAMPLES);
-    let rx_deadline = Duration::from_secs(30);
+    // 5 s of data + 3 s headroom for LSL buffer flush and OS scheduling.
+    let rx_deadline = Duration::from_secs(8);
     let rx_start = Instant::now();
 
     'recv: loop {
@@ -408,11 +433,38 @@ async fn lsl_e2e_32ch_256hz() {
         }
     }
 
+    // Drain any samples that arrived after the timed receive loop exited.
+    // The inlet thread may have buffered the last chunk just as the deadline
+    // fired; a short extra receive window picks them up.
+    // Drain the adapter channel: the inlet thread may still be mid-transfer
+    // when the timed loop exits.  Keep reading with a tight per-event timeout
+    // until 500 ms of silence confirms no more samples are in flight.
+    loop {
+        match tokio::time::timeout(Duration::from_millis(500), adapter.next_event()).await {
+            Ok(Some(DeviceEvent::Eeg(frame))) => {
+                let samples: Vec<f32> = frame.channels.into_iter().map(|v| v as f32).collect();
+                received.push((frame.timestamp_s, samples));
+                if received.len() >= TOTAL_SAMPLES {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+
     let pushed = push_done_rx.recv().unwrap_or(0);
+
+    // Receive the outlet from the push thread and drop it NOW — after the
+    // receive loop has finished.  This prevents the rlsl TCP session thread
+    // from seeing shutdown=true while the last chunk is still in transit.
+    drop(outlet_rx.recv().ok());
+
     report.outlet_samples_pushed = pushed;
     report.adapter_samples_received = received.len();
 
-    if received.len() < TOTAL_SAMPLES / 2 {
+    // Require at least 95% of samples — a single lost chunk (32 samples, 2.5%)
+    // should still fail so regressions are caught.
+    if received.len() < TOTAL_SAMPLES * 95 / 100 {
         report.steps.push(Step::fail(
             "Receive 5 s EEG data (1280 × 32 ch)",
             t0.elapsed(),

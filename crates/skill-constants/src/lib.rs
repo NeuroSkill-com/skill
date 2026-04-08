@@ -687,6 +687,10 @@ pub const CALIBRATION_AUTO_START: bool = true;
 
 /// Filename of all user-configured app settings.
 pub const SETTINGS_FILE: &str = "settings.json";
+/// Lightweight store for paired BLE/USB device list — written on every
+/// pair/forget so the daemon never needs a full settings read-write cycle
+/// just to update one field.
+pub const PAIRED_DEVICES_FILE: &str = "paired_devices.json";
 
 /// Filename of the per-subsystem logging configuration.
 pub const LOG_CONFIG_FILE: &str = "log_config.json";

@@ -64,8 +64,12 @@ export interface DeviceStatus {
   temperature_raw: number;
   /** Which device family is connected (see `DeviceKind` in device.rs). */
   device_kind: string;
-  /** Hardware model code, e.g. "p50" = Muse S (Athena), "p21" = Muse 2. */
+  /** Hardware model code, e.g. "p21" = Muse 2. */
   hardware_version: string | null;
+  /** Firmware version string from the device, e.g. "3.4.5" (Muse). Arrives a few seconds after connect. */
+  firmware_version?: string | null;
+  /** Bootloader version string from the device, if reported. */
+  bootloader_version?: string | null;
   /** Device has a PPG (heart-rate) sensor. */
   has_ppg: boolean;
   /** Device has an IMU (accelerometer + gyroscope). */

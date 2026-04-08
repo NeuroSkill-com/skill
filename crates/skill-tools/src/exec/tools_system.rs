@@ -47,8 +47,8 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
         // Try skill-location first (CoreLocation on macOS, IP fallback elsewhere).
         // Then enrich with IP geolocation metadata (country/city/timezone) which
         // CoreLocation doesn't provide.
-        let result: Result<Value, String> = retry_with_backoff(max_retries, base_delay, || {
-            let fix = skill_location::fetch_location(10.0).map_err(|e| e.to_string())?;
+        let result: anyhow::Result<Value> = retry_with_backoff(max_retries, base_delay, || {
+            let fix = skill_location::fetch_location(10.0)?;
 
             // On macOS we got a precise fix but no geo metadata — fetch IP
             // location too for country/city/timezone if the primary source
@@ -100,7 +100,7 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
 
         match result {
             Ok(val) => val,
-            Err(e) => json!({ "ok": false, "tool": "location", "error": e }),
+            Err(e) => json!({ "ok": false, "tool": "location", "error": e.to_string() }),
         }
     })
     .await

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use anyhow::Context as _;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -137,16 +138,16 @@ impl IrohAuthStore {
         self.db.clients.iter().map(client_view).collect()
     }
 
-    pub fn create_totp(&mut self, name: &str) -> Result<(IrohTotpView, String, String), String> {
+    pub fn create_totp(&mut self, name: &str) -> anyhow::Result<(IrohTotpView, String, String)> {
         let name = name.trim();
         if name.is_empty() {
-            return Err("name must not be empty".into());
+            anyhow::bail!("name must not be empty");
         }
 
         let secret = Secret::generate_secret();
         let secret_b32 = match secret.to_encoded() {
             Secret::Encoded(s) => s,
-            Secret::Raw(_) => return Err("failed to encode TOTP secret".into()),
+            Secret::Raw(_) => anyhow::bail!("failed to encode TOTP secret"),
         };
 
         let now = unix_secs();
@@ -166,14 +167,14 @@ impl IrohAuthStore {
             .list_totp()
             .into_iter()
             .find(|t| t.id == id)
-            .ok_or_else(|| "internal error: created TOTP not found".to_string())?;
+            .ok_or_else(|| anyhow::anyhow!("internal error: created TOTP not found"))?;
         Ok((view, otpauth_url, qr_png_base64))
     }
 
-    pub fn revoke_totp(&mut self, id: &str) -> Result<(), String> {
+    pub fn revoke_totp(&mut self, id: &str) -> anyhow::Result<()> {
         let now = unix_secs();
         let Some(t) = self.db.totp.iter_mut().find(|t| t.id == id) else {
-            return Err(format!("unknown totp id: {id}"));
+            anyhow::bail!("unknown totp id: {id}");
         };
         if t.revoked_at.is_none() {
             t.revoked_at = Some(now);
@@ -188,10 +189,10 @@ impl IrohAuthStore {
         Ok(())
     }
 
-    pub fn revoke_client(&mut self, id: &str) -> Result<(), String> {
+    pub fn revoke_client(&mut self, id: &str) -> anyhow::Result<()> {
         let now = unix_secs();
         let Some(c) = self.db.clients.iter_mut().find(|c| c.id == id) else {
-            return Err(format!("unknown client id: {id}"));
+            anyhow::bail!("unknown client id: {id}");
         };
         if c.revoked_at.is_none() {
             c.revoked_at = Some(now);
@@ -207,14 +208,14 @@ impl IrohAuthStore {
         totp_id_hint: Option<&str>,
         name_hint: Option<&str>,
         scope_hint: Option<&str>,
-    ) -> Result<IrohClientView, String> {
+    ) -> anyhow::Result<IrohClientView> {
         let endpoint_id = endpoint_id.trim().to_lowercase();
         if endpoint_id.is_empty() {
-            return Err("endpoint_id must not be empty".into());
+            anyhow::bail!("endpoint_id must not be empty");
         }
         let otp = otp.trim();
         if otp.is_empty() {
-            return Err("otp must not be empty".into());
+            anyhow::bail!("otp must not be empty");
         }
 
         let matched_totp_id = self.verify_otp(otp, totp_id_hint)?;
@@ -289,7 +290,7 @@ impl IrohAuthStore {
         endpoint_id: &str,
         remote_addr: &str,
         geo: Option<IrohGeo>,
-    ) -> Result<(), String> {
+    ) -> anyhow::Result<()> {
         let endpoint_id = endpoint_id.trim().to_lowercase();
         let Some(c) = self
             .db
@@ -297,7 +298,7 @@ impl IrohAuthStore {
             .iter_mut()
             .find(|c| c.endpoint_id == endpoint_id && c.revoked_at.is_none())
         else {
-            return Err(format!("unknown or revoked endpoint_id: {endpoint_id}"));
+            anyhow::bail!("unknown or revoked endpoint_id: {endpoint_id}");
         };
 
         c.last_connected_at = Some(unix_secs());
@@ -314,7 +315,7 @@ impl IrohAuthStore {
     /// Persist the human-readable device model string for a client identified
     /// by its iroh endpoint ID.  Called when `phone_info` metadata arrives so
     /// that the device description is available even when the phone is offline.
-    pub fn update_client_device_model(&mut self, endpoint_id: &str, device_model: &str) -> Result<(), String> {
+    pub fn update_client_device_model(&mut self, endpoint_id: &str, device_model: &str) -> anyhow::Result<()> {
         let endpoint_id = endpoint_id.trim().to_lowercase();
         let device_model = device_model.trim();
         if endpoint_id.is_empty() || device_model.is_empty() {
@@ -335,7 +336,7 @@ impl IrohAuthStore {
         self.save()
     }
 
-    pub fn totp_qr(&self, id: &str) -> Result<(String, String), String> {
+    pub fn totp_qr(&self, id: &str) -> anyhow::Result<(String, String)> {
         self.totp_qr_inner(id)
     }
 
@@ -348,21 +349,21 @@ impl IrohAuthStore {
         totp_id: &str,
         endpoint_id: &str,
         relay_url: &str,
-    ) -> Result<IrohInvitePayload, String> {
+    ) -> anyhow::Result<IrohInvitePayload> {
         let t = self
             .db
             .totp
             .iter()
             .find(|t| t.id == totp_id)
-            .ok_or_else(|| format!("unknown totp id: {totp_id}"))?;
+            .ok_or_else(|| anyhow::anyhow!("unknown totp id: {totp_id}"))?;
         if t.revoked_at.is_some() {
-            return Err("that TOTP credential is revoked".into());
+            anyhow::bail!("that TOTP credential is revoked");
         }
         if endpoint_id.trim().is_empty() {
-            return Err("endpoint_id must not be empty (is the iroh tunnel running?)".into());
+            anyhow::bail!("endpoint_id must not be empty (is the iroh tunnel running?)");
         }
         if relay_url.trim().is_empty() {
-            return Err("relay_url must not be empty (is the iroh tunnel running?)".into());
+            anyhow::bail!("relay_url must not be empty (is the iroh tunnel running?)");
         }
         Ok(IrohInvitePayload {
             endpoint_id: endpoint_id.to_owned(),
@@ -421,10 +422,10 @@ impl IrohAuthStore {
     }
 
     /// Set the scope for a client (simple read/full/custom).
-    pub fn set_client_scope(&mut self, id: &str, scope: &str) -> Result<(), String> {
+    pub fn set_client_scope(&mut self, id: &str, scope: &str) -> anyhow::Result<()> {
         let scope = normalize_scope(scope)?;
         let Some(c) = self.db.clients.iter_mut().find(|c| c.id == id) else {
-            return Err(format!("unknown client id: {id}"));
+            anyhow::bail!("unknown client id: {id}");
         };
         c.scope = scope.clone();
         c.permissions.scope = scope;
@@ -439,7 +440,7 @@ impl IrohAuthStore {
         groups: Option<Vec<String>>,
         allow: Option<Vec<String>>,
         deny: Option<Vec<String>>,
-    ) -> Result<ClientScope, String> {
+    ) -> anyhow::Result<ClientScope> {
         let scope = normalize_scope(scope)?;
 
         if let Some(ref gs) = groups {
@@ -453,7 +454,7 @@ impl IrohAuthStore {
         }
 
         let Some(c) = self.db.clients.iter_mut().find(|c| c.id == id) else {
-            return Err(format!("unknown client id: {id}"));
+            anyhow::bail!("unknown client id: {id}");
         };
 
         c.scope = scope.clone();
@@ -472,35 +473,37 @@ impl IrohAuthStore {
         Ok(result)
     }
 
-    fn totp_qr_inner(&self, id: &str) -> Result<(String, String), String> {
+    fn totp_qr_inner(&self, id: &str) -> anyhow::Result<(String, String)> {
         let totp_entry = self
             .db
             .totp
             .iter()
             .find(|t| t.id == id)
-            .ok_or_else(|| format!("unknown totp id: {id}"))?;
+            .ok_or_else(|| anyhow::anyhow!("unknown totp id: {id}"))?;
         let t = totp_from_entry(totp_entry)?;
         let otpauth_url = t.get_url();
-        let qr_b64 = t.get_qr_base64().map_err(|e| format!("failed to build QR: {e}"))?;
+        let qr_b64 = t
+            .get_qr_base64()
+            .map_err(|e| anyhow::anyhow!("failed to build QR: {e}"))?;
         Ok((otpauth_url, format!("data:image/png;base64,{qr_b64}")))
     }
 
-    fn verify_otp(&mut self, otp: &str, totp_id_hint: Option<&str>) -> Result<String, String> {
+    fn verify_otp(&mut self, otp: &str, totp_id_hint: Option<&str>) -> anyhow::Result<String> {
         if let Some(id) = totp_id_hint {
             let Some(idx) = self.db.totp.iter().position(|t| t.id == id) else {
-                return Err(format!("unknown totp id: {id}"));
+                anyhow::bail!("unknown totp id: {id}");
             };
             {
                 let t = &self.db.totp[idx];
                 if t.revoked_at.is_some() {
-                    return Err("that TOTP credential is revoked".into());
+                    anyhow::bail!("that TOTP credential is revoked");
                 }
                 let ok = totp_from_entry(t).and_then(|totp| {
                     totp.check_current(otp)
-                        .map_err(|e| format!("failed to verify otp: {e}"))
+                        .map_err(|e| anyhow::anyhow!("failed to verify otp: {e}"))
                 })?;
                 if !ok {
-                    return Err("invalid otp".into());
+                    anyhow::bail!("invalid otp");
                 }
             }
             self.db.totp[idx].last_used_at = Some(unix_secs());
@@ -512,7 +515,7 @@ impl IrohAuthStore {
         for t in self.db.totp.iter_mut().filter(|t| t.revoked_at.is_none()) {
             let ok = totp_from_entry(t).and_then(|totp| {
                 totp.check_current(otp)
-                    .map_err(|e| format!("failed to verify otp: {e}"))
+                    .map_err(|e| anyhow::anyhow!("failed to verify otp: {e}"))
             })?;
             if ok {
                 matched.push(t.id.clone());
@@ -520,7 +523,7 @@ impl IrohAuthStore {
         }
 
         match matched.len() {
-            0 => Err("invalid otp".into()),
+            0 => Err(anyhow::anyhow!("invalid otp")),
             1 => {
                 let id = matched.remove(0);
                 if let Some(t) = self.db.totp.iter_mut().find(|t| t.id == id) {
@@ -529,16 +532,18 @@ impl IrohAuthStore {
                 }
                 Ok(id)
             }
-            _ => Err("otp matched multiple active TOTP credentials; pass `totp_id` explicitly".to_string()),
+            _ => Err(anyhow::anyhow!(
+                "otp matched multiple active TOTP credentials; pass `totp_id` explicitly"
+            )),
         }
     }
 
-    fn save(&self) -> Result<(), String> {
+    fn save(&self) -> anyhow::Result<()> {
         if let Some(parent) = self.path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let s = serde_json::to_string_pretty(&self.db).map_err(|e| format!("serialize auth db failed: {e}"))?;
-        std::fs::write(&self.path, s).map_err(|e| format!("write {} failed: {e}", self.path.display()))
+        let s = serde_json::to_string_pretty(&self.db).context("serialize auth db failed")?;
+        std::fs::write(&self.path, s).map_err(|e| anyhow::anyhow!("write {} failed: {e}", self.path.display()))
     }
 }
 
@@ -551,7 +556,7 @@ pub fn default_scope_string() -> String {
 }
 
 /// Re-export: use [`crate::scope::normalize_scope`] for new code.
-pub fn normalize_scope(scope: &str) -> Result<String, String> {
+pub fn normalize_scope(scope: &str) -> anyhow::Result<String> {
     crate::scope::normalize_scope(scope)
 }
 
@@ -598,10 +603,10 @@ fn make_id(prefix: &str) -> String {
     format!("{prefix}_{now}_{r:016x}")
 }
 
-pub fn totp_from_entry(e: &IrohTotpEntry) -> Result<TOTP, String> {
+pub fn totp_from_entry(e: &IrohTotpEntry) -> anyhow::Result<TOTP> {
     let secret = Secret::Encoded(e.secret_b32.clone())
         .to_bytes()
-        .map_err(|e| format!("invalid TOTP secret: {e}"))?;
+        .context("invalid TOTP secret")?;
     TOTP::new(
         Algorithm::SHA1,
         6,
@@ -611,7 +616,7 @@ pub fn totp_from_entry(e: &IrohTotpEntry) -> Result<TOTP, String> {
         Some("Skill".to_string()),
         e.name.clone(),
     )
-    .map_err(|e| format!("failed to build TOTP: {e}"))
+    .map_err(|e| anyhow::anyhow!("failed to build TOTP: {e}"))
 }
 
 #[cfg(test)]
@@ -767,7 +772,7 @@ mod tests {
         s.create_totp("phone").expect("create");
         let result = s.register_client("ep1", "000000", None, None, None);
         assert!(result.is_err());
-        assert!(result.expect_err("err").contains("invalid otp"));
+        assert!(result.expect_err("err").to_string().contains("invalid otp"));
     }
 
     #[test]
@@ -779,7 +784,7 @@ mod tests {
         s.revoke_totp(&tview.id).expect("revoke");
         let result = s.register_client("ep1", &otp, Some(&tview.id), None, None);
         assert!(result.is_err());
-        assert!(result.expect_err("err").contains("revoked"));
+        assert!(result.expect_err("err").to_string().contains("revoked"));
     }
 
     #[test]
@@ -799,7 +804,7 @@ mod tests {
             .expect("otp");
         let result = s.register_client("ep1", &otp, None, None, None);
         assert!(result.is_err());
-        assert!(result.expect_err("err").contains("multiple"));
+        assert!(result.expect_err("err").to_string().contains("multiple"));
 
         // With hint -> should succeed
         let otp2 = totp_from_entry(&s.db.totp[0])
@@ -860,7 +865,7 @@ mod tests {
         let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
         let result = s.register_client("ep1", &otp, Some(&tentry.id), None, Some("admin"));
         assert!(result.is_err());
-        assert!(result.expect_err("err").contains("invalid scope"));
+        assert!(result.expect_err("err").to_string().contains("invalid scope"));
     }
 
     #[test]
@@ -1117,7 +1122,10 @@ mod tests {
         let (_td, mut s) = tmp_store();
         let (view, _, _) = s.create_totp("phone").expect("create");
         s.revoke_totp(&view.id).expect("revoke");
-        let err = s.build_invite_payload(&view.id, "ep", "relay").expect_err("err");
+        let err = s
+            .build_invite_payload(&view.id, "ep", "relay")
+            .expect_err("err")
+            .to_string();
         assert!(err.contains("revoked"));
     }
 

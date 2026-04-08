@@ -75,7 +75,7 @@ fn sequential_execution() {
 #[test]
 fn error_job_returns_error() {
     let q = JobQueue::new();
-    let ticket = q.submit(100, || Err("something went wrong".into()));
+    let ticket = q.submit(100, || Err(anyhow::anyhow!("something went wrong")));
 
     let mut got_error = false;
     for _ in 0..50 {

@@ -89,7 +89,7 @@ pub fn request_access() -> bool {
 ///
 /// Returns `Err` only on hard failures (access denied, parse error).
 /// An empty `Vec` is returned when no events match the range.
-pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, String> {
+pub fn fetch_events(start_utc: i64, end_utc: i64) -> anyhow::Result<Vec<CalendarEvent>> {
     #[cfg(target_os = "macos")]
     return macos::fetch_events(start_utc, end_utc);
 

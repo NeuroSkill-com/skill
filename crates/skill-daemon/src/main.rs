@@ -35,9 +35,10 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use btleplug::{
-    api::{Central as _, Manager as _, Peripheral as _, ScanFilter},
+    api::{Central as _, CentralEvent, Manager as _, Peripheral as _, ScanFilter},
     platform::Manager as BtManager,
 };
+use futures::StreamExt;
 use rand::RngCore;
 use skill_daemon_common::{
     ApiError, DeviceLogEntry, DiscoveredDeviceResponse, EventEnvelope, ForgetDeviceRequest, HealthResponse,
@@ -51,8 +52,6 @@ use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    init_tracing();
-
     // Write PID file for process management
     let pid_path = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -72,6 +71,29 @@ async fn main() -> anyhow::Result<()> {
 
     let skill_dir = skill_data_dir();
     let state = AppState::new(load_or_create_token()?, skill_dir.clone());
+    init_tracing(state.app_log.clone());
+
+    // Restore paired devices from paired_devices.json (fast path) or fall back
+    // to settings.json (written by older builds / Tauri side).
+    {
+        let paired_path = skill_dir.join(skill_constants::PAIRED_DEVICES_FILE);
+        let paired: Vec<skill_settings::PairedDevice> = if paired_path.exists() {
+            skill_data::util::load_json_or_default(&paired_path)
+        } else {
+            skill_settings::load_settings(&skill_dir).paired
+        };
+        if let Ok(mut status) = state.status.lock() {
+            status.paired_devices = paired
+                .into_iter()
+                .map(|p| skill_daemon_common::PairedDeviceResponse {
+                    id: p.id,
+                    name: p.name,
+                    last_seen: p.last_seen,
+                })
+                .collect();
+        }
+    }
+
     activity::start_workers(state.clone());
 
     // Probe HF cache for the currently configured model weights so the UI
@@ -103,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
 
     let v1 = Router::new()
         .route("/version", get(version))
+        .route("/log/recent", get(get_log_recent))
         .route("/status", get(status).post(update_status))
         .route("/devices", get(devices).post(update_devices))
         .route("/devices/set-preferred", axum::routing::post(set_preferred_device))
@@ -209,11 +232,95 @@ fn skill_data_dir() -> PathBuf {
         .unwrap_or_else(|_| skill_settings::default_skill_dir())
 }
 
-fn init_tracing() {
+fn init_tracing(app_log: std::sync::Arc<std::sync::Mutex<(u64, std::collections::VecDeque<String>)>>) {
+    use std::io::Write;
+    use tracing_subscriber::fmt::MakeWriter;
+
+    /// A writer that writes each byte to both stderr and the shared ring buffer.
+    /// `tracing_subscriber::fmt` calls `make_writer()` once per log event and
+    /// then calls `write` / `flush` on the returned writer.
+    #[derive(Clone)]
+    struct TeeWriter {
+        log: std::sync::Arc<std::sync::Mutex<(u64, std::collections::VecDeque<String>)>>,
+        // Accumulate bytes for the current log line so we can store it whole.
+        buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    }
+
+    impl Write for TeeWriter {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            // Forward to real stderr.
+            std::io::stderr().write_all(data)?;
+            // Buffer locally for line assembly.
+            if let Ok(mut b) = self.buf.lock() {
+                b.extend_from_slice(data);
+                // tracing-subscriber calls `write_all` once per event with the
+                // complete formatted line (including the trailing '\n') and
+                // never calls `flush()`.  Commit to the ring buffer as soon as
+                // we see a newline so log lines are never lost.
+                if data.contains(&b'\n') {
+                    let line = String::from_utf8_lossy(&b).trim_end_matches('\n').to_string();
+                    b.clear();
+                    if !line.is_empty() {
+                        if let Ok(mut guard) = self.log.lock() {
+                            const CAP: usize = 512;
+                            let (seq, buf) = &mut *guard;
+                            if buf.len() >= CAP {
+                                buf.pop_front();
+                            }
+                            buf.push_back(format!("{}\t{}", seq, line));
+                            *seq += 1;
+                        }
+                    }
+                }
+            }
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            std::io::stderr().flush()?;
+            // Flush any partial line that didn't end with '\n'.
+            let line = if let Ok(mut b) = self.buf.lock() {
+                let s = String::from_utf8_lossy(&b).trim_end_matches('\n').to_string();
+                b.clear();
+                s
+            } else {
+                return Ok(());
+            };
+            if line.is_empty() {
+                return Ok(());
+            }
+            if let Ok(mut guard) = self.log.lock() {
+                const CAP: usize = 512;
+                let (seq, buf) = &mut *guard;
+                if buf.len() >= CAP {
+                    buf.pop_front();
+                }
+                buf.push_back(format!("{}\t{}", seq, line));
+                *seq += 1;
+            }
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for TeeWriter {
+        type Writer = TeeWriter;
+        fn make_writer(&'a self) -> TeeWriter {
+            TeeWriter {
+                log: self.log.clone(),
+                buf: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    let writer = TeeWriter {
+        log: app_log,
+        buf: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "skill_daemon=info,info".into()),
         )
+        .with_writer(writer)
         .with_target(false)
         .compact()
         .init();
@@ -239,7 +346,7 @@ async fn service_install() -> Json<serde_json::Value> {
     let installer = crate::service_installer::ServiceInstaller::new(bin);
     match installer.install() {
         Ok(_) => Json(serde_json::json!({ "ok": true })),
-        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
 }
 
@@ -248,7 +355,7 @@ async fn service_uninstall() -> Json<serde_json::Value> {
     let installer = crate::service_installer::ServiceInstaller::new(bin);
     match installer.uninstall() {
         Ok(()) => Json(serde_json::json!({ "ok": true })),
-        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
     }
 }
 
@@ -265,6 +372,40 @@ async fn version() -> Json<VersionResponse> {
         protocol_version: PROTOCOL_VERSION,
         daemon_version: env!("CARGO_PKG_VERSION").to_string(),
     })
+}
+
+/// `GET /v1/log/recent?since=<seq>`
+///
+/// Returns daemon log lines (from the tracing ring buffer) whose sequence
+/// number is >= `since`.  The Tauri dev process polls this endpoint every
+/// second and pipes new lines to its own stderr so all daemon output appears
+/// in the same terminal as the rest of `npm run tauri dev` output.
+async fn get_log_recent(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let since: u64 = params.get("since").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let (next_seq, lines) = if let Ok(guard) = state.app_log.lock() {
+        let next = guard.0;
+        let lines: Vec<String> = guard
+            .1
+            .iter()
+            .filter_map(|entry| {
+                // Format: "<seq>\t<text>"
+                let tab = entry.find('\t')?;
+                let seq: u64 = entry[..tab].parse().ok()?;
+                if seq >= since {
+                    Some(entry[tab + 1..].to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        (next, lines)
+    } else {
+        (0, vec![])
+    };
+    Json(serde_json::json!({ "next_seq": next_seq, "lines": lines }))
 }
 
 async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
@@ -322,15 +463,20 @@ async fn pair_device(
         out = guard.clone();
     }
 
+    let name = paired_name.unwrap_or_else(|| "Unknown".to_string());
+
     if let Ok(mut status) = state.status.lock() {
         if !status.paired_devices.iter().any(|d| d.id == req.id) {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
-                id: req.id,
-                name: paired_name.unwrap_or_else(|| "Unknown".to_string()),
+                id: req.id.clone(),
+                name: name.clone(),
                 last_seen: now_unix_secs(),
             });
         }
     }
+
+    // Persist to settings.json so paired devices survive daemon restarts.
+    persist_paired_devices(&state);
 
     Json(out)
 }
@@ -351,7 +497,66 @@ async fn forget_device(
         status.paired_devices.retain(|d| d.id != req.id);
     }
 
+    // Persist removal to settings.json.
+    persist_paired_devices(&state);
+
     Json(out)
+}
+
+/// Persist the current `status.paired_devices` list to disk.
+///
+/// Writes two files:
+/// * `paired_devices.json` — lightweight fast-path read on daemon startup
+/// * `settings.json` — kept in sync for Tauri and backward compatibility
+///
+/// Non-fatal: logs a warning on failure but never panics.
+fn persist_paired_devices(state: &AppState) {
+    let skill_dir = match state.skill_dir.lock() {
+        Ok(g) => g.clone(),
+        Err(_) => return,
+    };
+    let paired: Vec<skill_settings::PairedDevice> = state
+        .status
+        .lock()
+        .map(|s| {
+            s.paired_devices
+                .iter()
+                .map(|p| skill_settings::PairedDevice {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    last_seen: p.last_seen,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Fast path: paired_devices.json — written atomically so a crash mid-write
+    // never leaves a truncated file.
+    let paired_path = skill_dir.join(skill_constants::PAIRED_DEVICES_FILE);
+    match serde_json::to_string_pretty(&paired) {
+        Ok(json) => {
+            if let Err(e) = write_json_atomic(&paired_path, &json) {
+                tracing::warn!("persist_paired_devices: write {}: {e}", paired_path.display());
+            }
+        }
+        Err(e) => tracing::warn!("persist_paired_devices: serialize: {e}"),
+    }
+
+    // Keep settings.json in sync (read-modify-write) for Tauri / older builds.
+    // Spawned so the HTTP handler returns immediately; atomic write avoids
+    // partial-file corruption when Tauri writes settings concurrently.
+    let skill_dir2 = skill_dir.clone();
+    let paired2 = paired.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut settings = skill_settings::load_settings(&skill_dir2);
+        settings.paired = paired2;
+        let path = skill_settings::settings_path(&skill_dir2);
+        if let Ok(json) = serde_json::to_string_pretty(&settings) {
+            if let Err(e) = write_json_atomic(&path, &json) {
+                tracing::warn!("persist_paired_devices: write settings.json: {e}");
+            }
+        }
+    });
 }
 
 /// Spawn the appropriate session runner for the given target device.
@@ -416,6 +621,10 @@ async fn control_cancel_retry(State(state): State<AppState>) -> Json<StatusRespo
             let _ = handle.cancel_tx.send(());
         }
     }
+    // Clear the BLE scan pause so the background listener resumes immediately.
+    // Without this, cancelling a mid-connection attempt would leave the
+    // listener parked and BLE discovery would stop until the next connect.
+    state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
 
     let mut out = default_status("disconnected");
 
@@ -536,6 +745,10 @@ async fn control_scanner_start(State(state): State<AppState>) -> Json<ScannerSta
     if let Ok(mut running) = state.scanner_running.lock() {
         *running = true;
     }
+    // Clear any stale pause flag left over from a connection attempt that was
+    // interrupted while the scanner was stopped.  Without this, the freshly
+    // spawned BLE listener task would stall waiting for the flag to clear.
+    state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
 
     push_device_log(&state, "scanner", "scanner started");
 
@@ -1135,56 +1348,202 @@ fn detect_neurofield_devices() -> Vec<DiscoveredDeviceResponse> {
     out
 }
 
-async fn detect_ble_devices() -> Vec<DiscoveredDeviceResponse> {
-    let Ok(manager) = BtManager::new().await else {
+/// Return `true` when a BLE advertising name looks like a supported EEG/neurofeedback device.
+fn is_known_eeg_ble_name(name: &str) -> bool {
+    let n = name.to_lowercase();
+    // Muse family (Muse 1/2/S, Muse-S Athena, Muse Monitor)
+    n.starts_with("muse")
+        // OpenBCI Ganglion
+        || n.starts_with("ganglion")
+        || n.starts_with("simblee")
+        // OpenBCI Cyton
+        || n.starts_with("openbci")
+        || n.starts_with("cyton")
+        // Neurable MW75
+        || n.contains("mw75")
+        || n.contains("neurable")
+        // Hermes
+        || n.starts_with("hermes")
+        // Emotiv EPOC/Insight/Flex/MN8
+        || n.starts_with("emotiv")
+        || n.starts_with("epoc")
+        || n.starts_with("insight")
+        || n.starts_with("mn8")
+        // Idun / Guardian
+        || n.starts_with("idun")
+        || n.starts_with("ige")
+        || n.starts_with("guardian")
+        // Mendi fNIRS
+        || n.starts_with("mendi")
+        // CGX / Cognionics
+        || n.contains("cognionics")
+        || n.contains("cgx")
+        || n.starts_with("quick-")
+        || n.starts_with("aim-")
+        || n.starts_with("patch")
+        // AttentivU
+        || n.starts_with("atu")
+        || n.starts_with("attentivu")
+        // BrainBit
+        || n.contains("brainbit")
+        // g.tec Unicorn
+        || n.contains("unicorn")
+        || n.starts_with("un-")
+        // NeuroField
+        || n.contains("neurofield")
+        || n.contains("q21")
+        // NeuroSky
+        || n.contains("neurosky")
+        || n.contains("mindwave")
+        // Neurosity Crown / Notion
+        || n.contains("neurosity")
+        || n.contains("crown")
+        || n.contains("notion")
+}
+
+/// Read the current BLE device cache and return only devices whose names
+/// match a known EEG/neurofeedback headset.  Entries not seen within the
+/// last 60 seconds are suppressed (but kept in the cache for name recall).
+fn read_ble_cache(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
+    let now = now_unix_secs();
+    let Ok(cache) = state.ble_device_cache.lock() else {
         return Vec::new();
     };
-    let Ok(adapters) = manager.adapters().await else {
-        return Vec::new();
-    };
-
-    let mut out = Vec::new();
-    for adapter in adapters {
-        let _ = adapter.start_scan(ScanFilter::default()).await;
-        tokio::time::sleep(Duration::from_millis(800)).await;
-
-        let Ok(peripherals) = adapter.peripherals().await else {
-            continue;
-        };
-
-        for p in peripherals {
-            let id = format!("ble:{}", p.id());
-            let mut name = p.id().to_string();
-            let mut rssi = 0i16;
-
-            if let Ok(Some(props)) = p.properties().await {
-                if let Some(local_name) = props.local_name {
-                    name = local_name;
-                }
-                if let Some(rv) = props.rssi {
-                    rssi = rv;
-                }
+    cache
+        .iter()
+        .filter_map(|(id, (name_opt, rssi, last_seen))| {
+            // Must have a recognised EEG device name.
+            let name = name_opt.as_deref()?;
+            if !is_known_eeg_ble_name(name) {
+                return None;
             }
-
-            out.push(DiscoveredDeviceResponse {
-                id,
-                name,
-                last_seen: now_unix_secs(),
-                last_rssi: rssi,
+            // Suppress stale entries (> 120 s since last advertisement).
+            // 120 s covers the worst-case connection attempt window:
+            // 600 ms pause + 5 s scan + 10 s connect + 15 s discover + margin.
+            if now.saturating_sub(*last_seen) > 120 {
+                return None;
+            }
+            Some(DiscoveredDeviceResponse {
+                id: id.clone(),
+                name: name.to_string(),
+                last_seen: *last_seen,
+                last_rssi: *rssi,
                 is_paired: false,
                 is_preferred: false,
                 transport: "ble".to_string(),
-            });
-        }
-    }
+            })
+        })
+        .collect()
+}
 
-    out
+/// Persistent, event-driven BLE scanner.
+///
+/// Creates the platform BLE manager **once** and subscribes to the adapter
+/// event stream.  Each `DeviceDiscovered` / `DeviceUpdated` event is used to
+/// update `state.ble_device_cache` with the peripheral's `local_name` and
+/// RSSI.  This is far more reliable than the previous approach of tearing
+/// down and re-creating the manager every 5 s with an 800 ms poll window,
+/// which frequently caused CoreBluetooth to return `None` for `local_name`
+/// (making the Muse look like an anonymous UUID and then being filtered out).
+async fn run_ble_listener_task(state: AppState) {
+    loop {
+        // Stop when the outer scanner has been turned off.
+        if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
+            return;
+        }
+
+        let Ok(manager) = BtManager::new().await else {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        };
+
+        let Ok(adapters) = manager.adapters().await else {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        };
+
+        let Some(adapter) = adapters.into_iter().next() else {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        };
+
+        let Ok(mut events) = adapter.events().await else {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        };
+
+        // Start a continuous scan with no service-UUID filter so we see all
+        // advertising packets (including Muse, which uses proprietary UUIDs).
+        let _ = adapter.start_scan(ScanFilter::default()).await;
+
+        // Process events until the stream ends or the scanner is stopped.
+        loop {
+            // When a BLE device is actively connecting, stop our scan so only
+            // one CBCentralManager.scanForPeripherals() is active at a time.
+            // On macOS, two concurrent scans suppress peripheral.connect()
+            // delegate callbacks, causing connections to hang.
+            if state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = adapter.stop_scan().await;
+                while state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
+                    if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
+                        return;
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+                // Reconnection attempt finished — resume scan.
+                let _ = adapter.start_scan(ScanFilter::default()).await;
+            }
+
+            // Short timeout so ble_scan_paused and scanner_running are
+            // checked frequently even when no advertisements are arriving.
+            let maybe_event = tokio::time::timeout(Duration::from_millis(300), events.next()).await;
+
+            if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
+                return;
+            }
+
+            match maybe_event {
+                // Adapter stream ended — break to outer loop to restart.
+                Ok(None) => break,
+                // Timeout — just re-check scanner_running and continue.
+                Err(_) => continue,
+                Ok(Some(CentralEvent::DeviceDiscovered(id) | CentralEvent::DeviceUpdated(id))) => {
+                    if let Ok(peripheral) = adapter.peripheral(&id).await {
+                        let mut name: Option<String> = None;
+                        let mut rssi = 0i16;
+                        if let Ok(Some(props)) = peripheral.properties().await {
+                            name = props.local_name;
+                            if let Some(rv) = props.rssi {
+                                rssi = rv;
+                            }
+                        }
+                        let key = format!("ble:{}", id);
+                        if let Ok(mut cache) = state.ble_device_cache.lock() {
+                            let entry = cache.entry(key).or_insert((None, 0i16, 0u64));
+                            // Never overwrite a known name with None.
+                            if name.is_some() {
+                                entry.0 = name;
+                            }
+                            if rssi != 0 {
+                                entry.1 = rssi;
+                            }
+                            entry.2 = now_unix_secs();
+                        }
+                    }
+                }
+                Ok(Some(_)) => {} // StateUpdate, ManufacturerData, etc. — ignored
+            }
+        }
+
+        // Stream ended; brief pause before restarting.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 }
 
 async fn cortex_probe_headsets(
     client: &skill_devices::emotiv::client::CortexClient,
-) -> Result<Vec<skill_devices::emotiv::types::HeadsetInfo>, String> {
-    let (mut rx, handle) = client.connect().await.map_err(|e| e.to_string())?;
+) -> anyhow::Result<Vec<skill_devices::emotiv::types::HeadsetInfo>> {
+    let (mut rx, handle) = client.connect().await.map_err(|e| anyhow::anyhow!("{e}"))?;
 
     use skill_devices::emotiv::types::CortexEvent;
 
@@ -1194,22 +1553,22 @@ async fn cortex_probe_headsets(
         let ev = tokio::time::timeout_at(deadline, rx.recv()).await;
         match ev {
             Ok(Some(CortexEvent::Authorized)) => break,
-            Ok(Some(CortexEvent::Error(e))) => return Err(e),
-            Ok(None) => return Err("Channel closed before authorized".into()),
-            Err(_) => return Err("Timed out waiting for authorization".into()),
+            Ok(Some(CortexEvent::Error(e))) => anyhow::bail!("{e}"),
+            Ok(None) => anyhow::bail!("Channel closed before authorized"),
+            Err(_) => anyhow::bail!("Timed out waiting for authorization"),
             _ => continue,
         }
     }
 
-    handle.query_headsets().await.map_err(|e| e.to_string())?;
+    handle.query_headsets().await.map_err(|e| anyhow::anyhow!("{e}"))?;
 
     loop {
         let ev = tokio::time::timeout_at(deadline, rx.recv()).await;
         match ev {
             Ok(Some(CortexEvent::HeadsetsQueried(list))) => return Ok(list),
-            Ok(Some(CortexEvent::Error(e))) => return Err(e),
-            Ok(None) => return Err("Channel closed before headset query".into()),
-            Err(_) => return Err("Timed out waiting for headset query".into()),
+            Ok(Some(CortexEvent::Error(e))) => anyhow::bail!("{e}"),
+            Ok(None) => anyhow::bail!("Channel closed before headset query"),
+            Err(_) => anyhow::bail!("Timed out waiting for headset query"),
             _ => continue,
         }
     }
@@ -1369,6 +1728,11 @@ fn detect_manual_device_hints(state: &AppState) -> Vec<DiscoveredDeviceResponse>
 }
 
 async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()>) {
+    // Spawn the persistent event-driven BLE listener.  It runs in a separate
+    // task so the 5-second scanner tick is never blocked by BLE I/O, and the
+    // CoreBluetooth/BlueZ adapter stays alive between ticks.
+    tokio::spawn(run_ble_listener_task(state.clone()));
+
     let mut tick = tokio::time::interval(Duration::from_secs(5));
     let mut cortex_tick = 0u64;
 
@@ -1424,7 +1788,7 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
 
                 usb_discovered.extend(cgx_discovered);
 
-                let ble_discovered = detect_ble_devices().await;
+                let ble_discovered = read_ble_cache(&state);
 
                 let cortex_discovered = if cortex_tick.is_multiple_of(2) {
                     detect_cortex_devices(&state).await
@@ -1499,6 +1863,16 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
                     let old: HashMap<String, DiscoveredDeviceResponse> =
                         guard.iter().map(|d| (d.id.clone(), d.clone())).collect();
 
+                    // Build a set of paired device IDs from the authoritative
+                    // status list.  This ensures devices are correctly marked
+                    // as paired even on the very first scan tick after a daemon
+                    // restart (when `old` is empty and carries no is_paired state).
+                    let paired_ids: HashSet<String> = state
+                        .status
+                        .lock()
+                        .map(|s| s.paired_devices.iter().map(|p| p.id.clone()).collect())
+                        .unwrap_or_default();
+
                     let keep_other: Vec<DiscoveredDeviceResponse> = guard
                         .iter()
                         .filter(|d| {
@@ -1525,8 +1899,13 @@ async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::Receiver<()
 
                     let mut merged: Vec<DiscoveredDeviceResponse> = keep_other;
                     for mut d in discovered {
+                        // paired_ids (from settings) takes precedence so that
+                        // devices remain marked as paired after a daemon restart.
+                        d.is_paired = paired_ids.contains(&d.id);
                         if let Some(prev) = old.get(&d.id) {
-                            d.is_paired = prev.is_paired;
+                            if !d.is_paired {
+                                d.is_paired = prev.is_paired;
+                            }
                             d.is_preferred = prev.is_preferred;
                         }
                         merged.push(d);
@@ -1696,6 +2075,18 @@ fn token_path() -> anyhow::Result<PathBuf> {
     Ok(base.join("skill").join("daemon").join("auth.token"))
 }
 
+/// Write JSON to `path` atomically: write to a sibling `.tmp` file then
+/// rename into place.  A crash mid-write leaves the original file intact.
+fn write_json_atomic(path: &Path, json: &str) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp_path = path.with_extension("tmp");
+    std::fs::write(&tmp_path, json)?;
+    std::fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
 fn write_string_atomic(path: &Path, content: &str) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1805,4 +2196,52 @@ fn now_unix_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ble_filter_accepts_known_eeg_devices() {
+        // Muse family
+        assert!(is_known_eeg_ble_name("Muse-AB12"));
+        assert!(is_known_eeg_ble_name("MuseS-F921")); // Athena
+        assert!(is_known_eeg_ble_name("Muse S-1234"));
+        assert!(is_known_eeg_ble_name("Muse-2-XY99"));
+        assert!(is_known_eeg_ble_name("MUSE-AB12")); // case-insensitive
+
+        // Other EEG families
+        assert!(is_known_eeg_ble_name("Ganglion-1234"));
+        assert!(is_known_eeg_ble_name("MW75-Neuro"));
+        assert!(is_known_eeg_ble_name("Hermes-001"));
+        assert!(is_known_eeg_ble_name("Mendi-XY"));
+        assert!(is_known_eeg_ble_name("IGE-Guardian"));
+        assert!(is_known_eeg_ble_name("BrainBit-EEG"));
+        assert!(is_known_eeg_ble_name("Unicorn-EEG"));
+    }
+
+    #[test]
+    fn ble_filter_rejects_unrelated_devices() {
+        assert!(!is_known_eeg_ble_name("JBL Flip 5"));
+        assert!(!is_known_eeg_ble_name("Apple Watch"));
+        assert!(!is_known_eeg_ble_name("iPhone 15"));
+        assert!(!is_known_eeg_ble_name("AirPods Pro"));
+        // Anonymous UUID-only names (empty string)
+        assert!(!is_known_eeg_ble_name(""));
+        // Random UUID-style names that BLE devices sometimes advertise
+        assert!(!is_known_eeg_ble_name("8282ba24-1ffa-8bd5-659a-4b02f6783927"));
+    }
+
+    #[test]
+    fn write_json_atomic_creates_and_reads_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let data = r#"[{"id":"ble:abc","name":"Muse-1234","last_seen":1000}]"#;
+        write_json_atomic(&path, data).expect("write failed");
+        let read_back = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(read_back, data);
+        // No .tmp file left behind
+        assert!(!dir.path().join("test.tmp").exists());
+    }
 }

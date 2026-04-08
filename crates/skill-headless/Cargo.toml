@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Headless browser engine — CDP-like API over wry/tao for navigation, JS execution, screenshots, caching"
 
 [dependencies]
+anyhow = { workspace = true }
 # Windowing — hidden window hosts the webview; provides event loop + proxy.
 tao = { version = "0.35", default-features = false, features = ["rwh_06"] }
 
@@ -17,6 +18,7 @@ serde_json = "1"
 crossbeam-channel = "0.5"
 base64 = { workspace = true }
 http       = "1"
+thiserror  = { workspace = true }
 
 [dev-dependencies]
 serde_json = "1"

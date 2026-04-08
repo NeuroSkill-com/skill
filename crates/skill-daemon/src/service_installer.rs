@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+use anyhow::Context as _;
+
 #[allow(dead_code)]
 pub enum InstallResult {
     Installed,
@@ -26,7 +28,7 @@ impl ServiceInstaller {
         }
     }
 
-    pub fn install(&self) -> Result<InstallResult, String> {
+    pub fn install(&self) -> anyhow::Result<InstallResult> {
         #[cfg(target_os = "macos")]
         return self.install_launchagent();
 
@@ -36,11 +38,11 @@ impl ServiceInstaller {
         #[cfg(target_os = "windows")]
         return self.install_windows_service();
 
-        #[allow(unreachable_code)]
-        Err("unsupported platform".to_string())
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        anyhow::bail!("unsupported platform")
     }
 
-    pub fn uninstall(&self) -> Result<(), String> {
+    pub fn uninstall(&self) -> anyhow::Result<()> {
         #[cfg(target_os = "macos")]
         return self.uninstall_launchagent();
 
@@ -50,8 +52,8 @@ impl ServiceInstaller {
         #[cfg(target_os = "windows")]
         return self.uninstall_windows_service();
 
-        #[allow(unreachable_code)]
-        Err("unsupported platform".to_string())
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        anyhow::bail!("unsupported platform")
     }
 
     pub fn status(&self) -> ServiceStatus {
@@ -123,19 +125,19 @@ impl ServiceInstaller {
         )
     }
 
-    fn install_launchagent(&self) -> Result<InstallResult, String> {
+    fn install_launchagent(&self) -> anyhow::Result<InstallResult> {
         let plist = self.plist_path();
         let already = plist.exists();
 
         if let Some(parent) = plist.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(parent).context("create LaunchAgents dir")?;
         }
-        std::fs::write(&plist, self.plist_content()).map_err(|e| e.to_string())?;
+        std::fs::write(&plist, self.plist_content()).context("write plist")?;
 
         std::process::Command::new("launchctl")
             .args(["load", "-w", plist.to_str().unwrap_or("")])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("launchctl load")?;
 
         Ok(if already {
             InstallResult::Updated
@@ -144,14 +146,14 @@ impl ServiceInstaller {
         })
     }
 
-    fn uninstall_launchagent(&self) -> Result<(), String> {
+    fn uninstall_launchagent(&self) -> anyhow::Result<()> {
         let plist = self.plist_path();
         if plist.exists() {
             std::process::Command::new("launchctl")
                 .args(["unload", "-w", plist.to_str().unwrap_or("")])
                 .output()
-                .map_err(|e| e.to_string())?;
-            std::fs::remove_file(&plist).map_err(|e| e.to_string())?;
+                .context("launchctl unload")?;
+            std::fs::remove_file(&plist).context("remove plist")?;
         }
         Ok(())
     }
@@ -195,21 +197,21 @@ impl ServiceInstaller {
         )
     }
 
-    fn install_systemd_user(&self) -> Result<InstallResult, String> {
+    fn install_systemd_user(&self) -> anyhow::Result<InstallResult> {
         let unit = self.unit_path();
         let already = unit.exists();
         if let Some(p) = unit.parent() {
-            std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(p).context("create systemd/user dir")?;
         }
-        std::fs::write(&unit, self.unit_content()).map_err(|e| e.to_string())?;
+        std::fs::write(&unit, self.unit_content()).context("write unit file")?;
         std::process::Command::new("systemctl")
             .args(["--user", "daemon-reload"])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("systemctl daemon-reload")?;
         std::process::Command::new("systemctl")
             .args(["--user", "enable", "--now", &self.service_name])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("systemctl enable")?;
         Ok(if already {
             InstallResult::Updated
         } else {
@@ -217,7 +219,7 @@ impl ServiceInstaller {
         })
     }
 
-    fn uninstall_systemd_user(&self) -> Result<(), String> {
+    fn uninstall_systemd_user(&self) -> anyhow::Result<()> {
         let _ = std::process::Command::new("systemctl")
             .args(["--user", "disable", "--now", &self.service_name])
             .output();
@@ -250,8 +252,11 @@ impl ServiceInstaller {
 
 #[cfg(target_os = "windows")]
 impl ServiceInstaller {
-    fn install_windows_service(&self) -> Result<InstallResult, String> {
-        let bin = self.binary_path.to_str().ok_or("invalid binary path")?;
+    fn install_windows_service(&self) -> anyhow::Result<InstallResult> {
+        let bin = self
+            .binary_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("invalid binary path"))?;
         let status = self.status_windows_service();
         let already = !matches!(status, ServiceStatus::NotInstalled);
 
@@ -267,7 +272,7 @@ impl ServiceInstaller {
         std::process::Command::new("sc.exe")
             .args(["create", &self.service_name, &format!("binPath= {bin}"), "start= auto"])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("sc create")?;
 
         std::process::Command::new("sc.exe")
             .args([
@@ -277,12 +282,12 @@ impl ServiceInstaller {
                 "actions= restart/5000/restart/5000/restart/5000",
             ])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("sc failure")?;
 
         std::process::Command::new("sc.exe")
             .args(["start", &self.service_name])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("sc start")?;
 
         Ok(if already {
             InstallResult::Updated
@@ -291,14 +296,14 @@ impl ServiceInstaller {
         })
     }
 
-    fn uninstall_windows_service(&self) -> Result<(), String> {
+    fn uninstall_windows_service(&self) -> anyhow::Result<()> {
         let _ = std::process::Command::new("sc.exe")
             .args(["stop", &self.service_name])
             .output();
         std::process::Command::new("sc.exe")
             .args(["delete", &self.service_name])
             .output()
-            .map_err(|e| e.to_string())?;
+            .context("sc delete")?;
         Ok(())
     }
 

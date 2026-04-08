@@ -9,6 +9,7 @@
 //! All other devices route through `session/connect.rs` and the generic
 //! `session/runner.rs` adapter runner.
 
+use anyhow::Context as _;
 use std::time::Duration;
 
 use skill_devices::openbci::board::Board;
@@ -26,7 +27,7 @@ pub struct SessionHandle {
     pub cancel_tx: oneshot::Sender<()>,
 }
 
-pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciAdapter, Box<dyn Board>), String> {
+pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> anyhow::Result<(OpenBciAdapter, Box<dyn Board>)> {
     use skill_devices::openbci::board::{cyton::CytonBoard, cyton_daisy::CytonDaisyBoard};
     use skill_settings::OpenBciBoard;
 
@@ -63,10 +64,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
             let mut board = CytonBoard::new(&port);
             board
                 .prepare()
-                .map_err(|e| format!("Cyton prepare failed on {port}: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("Cyton start_stream failed: {e}"))?;
+                .with_context(|| format!("Cyton prepare failed on {port}"))?;
+            let stream = board.start_stream().context("Cyton start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -77,10 +76,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
             let mut board = CytonDaisyBoard::new(&port);
             board
                 .prepare()
-                .map_err(|e| format!("CytonDaisy prepare failed on {port}: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("CytonDaisy start_stream failed: {e}"))?;
+                .with_context(|| format!("CytonDaisy prepare failed on {port}"))?;
+            let stream = board.start_stream().context("CytonDaisy start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -94,10 +91,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
                 ..Default::default()
             };
             let mut board = GanglionBoard::new(ganglion_config);
-            board.prepare().map_err(|e| format!("Ganglion prepare failed: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("Ganglion start_stream failed: {e}"))?;
+            board.prepare().context("Ganglion prepare failed")?;
+            let stream = board.start_stream().context("Ganglion start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -111,10 +106,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
                 ..Default::default()
             };
             let mut board = CytonWifiBoard::new(wifi_cfg);
-            board.prepare().map_err(|e| format!("CytonWifi prepare failed: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("CytonWifi start_stream failed: {e}"))?;
+            board.prepare().context("CytonWifi prepare failed")?;
+            let stream = board.start_stream().context("CytonWifi start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -128,12 +121,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
                 ..Default::default()
             };
             let mut board = CytonDaisyWifiBoard::new(wifi_cfg);
-            board
-                .prepare()
-                .map_err(|e| format!("CytonDaisyWifi prepare failed: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("CytonDaisyWifi start_stream failed: {e}"))?;
+            board.prepare().context("CytonDaisyWifi prepare failed")?;
+            let stream = board.start_stream().context("CytonDaisyWifi start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -147,12 +136,8 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
                 ..Default::default()
             };
             let mut board = GanglionWifiBoard::new(wifi_cfg);
-            board
-                .prepare()
-                .map_err(|e| format!("GanglionWifi prepare failed: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("GanglionWifi start_stream failed: {e}"))?;
+            board.prepare().context("GanglionWifi prepare failed")?;
+            let stream = board.start_stream().context("GanglionWifi start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -162,13 +147,11 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
             use skill_devices::openbci::board::galea::GaleaBoard;
             let ip = config.galea_ip.trim();
             if ip.is_empty() {
-                return Err("Galea IP not configured".to_string());
+                anyhow::bail!("Galea IP not configured");
             }
             let mut board = GaleaBoard::new(ip);
-            board.prepare().map_err(|e| format!("Galea prepare failed: {e}"))?;
-            let stream = board
-                .start_stream()
-                .map_err(|e| format!("Galea start_stream failed: {e}"))?;
+            board.prepare().context("Galea prepare failed")?;
+            let stream = board.start_stream().context("Galea start_stream failed")?;
             Ok((
                 OpenBciAdapter::start(stream, desc, info),
                 Box::new(board) as Box<dyn Board>,
@@ -179,7 +162,7 @@ pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> Result<(OpenBciA
 
 /// Resolve the serial port: use the configured value or auto-detect the first
 /// available OpenBCI dongle.
-fn resolve_serial_port(configured: &str) -> Result<String, String> {
+fn resolve_serial_port(configured: &str) -> anyhow::Result<String> {
     let port_name = if !configured.is_empty() {
         configured.to_string()
     } else {
@@ -193,7 +176,7 @@ fn resolve_serial_port(configured: &str) -> Result<String, String> {
 }
 
 /// Auto-detect an OpenBCI FTDI serial port.
-fn auto_detect_serial_port() -> Result<String, String> {
+fn auto_detect_serial_port() -> anyhow::Result<String> {
     let ports = serialport::available_ports().unwrap_or_default();
 
     // Pass 1: exact FTDI VID/PID match
@@ -272,9 +255,10 @@ fn auto_detect_serial_port() -> Result<String, String> {
         }
     }
 
-    Err("No serial port configured and no OpenBCI dongle detected. \
+    anyhow::bail!(
+        "No serial port configured and no OpenBCI dongle detected. \
          Please plug in the USB dongle or set the serial port manually in Settings."
-        .to_string())
+    )
 }
 
 /// Normalize a Windows COM port path.  COM ports >= COM10 must use the
@@ -364,7 +348,7 @@ mod tests {
         // Either it finds a port or returns a clear error message.
         match result {
             Ok(port) => assert!(!port.is_empty()),
-            Err(e) => assert!(e.contains("No serial port configured")),
+            Err(e) => assert!(e.to_string().contains("No serial port configured")),
         }
     }
 
@@ -407,7 +391,7 @@ mod tests {
             assert!(result.is_err(), "expected error for board {board:?} with fake port");
             let err = result.err().expect("error expected for fake serial board");
             assert!(
-                err.contains("prepare failed"),
+                err.to_string().contains("prepare failed"),
                 "error should mention prepare failure: {err}"
             );
         }

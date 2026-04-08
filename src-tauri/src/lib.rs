@@ -340,7 +340,7 @@ fn setup_external_renderer(app: &mut tauri::App) {
 /// Extracted from the `.setup()` closure so LLVM does not merge its locals
 /// into the already-huge `run()` stack frame produced by `generate_handler!`.
 #[inline(never)]
-fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
     // On macOS, the headless browser (tao) cannot create a second event loop
     // because Tauri already owns the main thread.  Disable the standalone
     // browser and register an external renderer that reuses Tauri's webview.
@@ -796,6 +796,36 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // ── Daemon log tail: pipe daemon tracing output into this terminal ─
+    // Polls GET /v1/log/recent every second and eprintln!s new lines so
+    // `npm run tauri dev` shows daemon logs alongside Tauri logs.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let mut since: u64 = 0;
+        // On first call, skip any backlog — only show lines from now on.
+        if let Ok((next, _)) = tokio::task::spawn_blocking(move || {
+            crate::daemon_cmds::fetch_daemon_log_recent(u64::MAX)
+        })
+        .await
+        .unwrap_or(Err(String::new()))
+        {
+            since = next;
+        }
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let since_copy = since;
+            if let Ok(Ok((next_seq, lines))) = tokio::task::spawn_blocking(move || {
+                crate::daemon_cmds::fetch_daemon_log_recent(since_copy)
+            })
+            .await
+            {
+                for line in &lines {
+                    eprintln!("[daemon] {line}");
+                }
+                since = next_seq;
+            }
+        }
+    });
     let app_cal = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(1200)).await;
@@ -844,7 +874,16 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        s.status.paired_devices = data.paired.clone();
+        // Prefer paired_devices.json (daemon-authoritative) over settings.json.
+        // The daemon writes paired_devices.json on every pair/forget; settings.json
+        // is kept in sync asynchronously and may lag slightly.
+        let paired_devices_path = skill_dir.join(skill_constants::PAIRED_DEVICES_FILE);
+        let paired: Vec<skill_data::device::PairedDevice> = if paired_devices_path.exists() {
+            skill_data::util::load_json_or_default(&paired_devices_path)
+        } else {
+            data.paired.clone()
+        };
+        s.status.paired_devices = paired;
         s.preferred_id = data.preferred_id.clone();
         s.status.filter_config = data.filter_config;
         s.status.embedding_overlap_secs = data.embedding_overlap_secs;
@@ -1273,7 +1312,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(Mutex::new(AppState::new_boxed()))
         .manage(job_queue::JobQueue::new())
-        .setup(|app| setup_app(app))
+        .setup(|app| setup_app(app).map_err(Into::into))
         .invoke_handler(tauri::generate_handler![
             get_supported_companies,
             get_device_capabilities,

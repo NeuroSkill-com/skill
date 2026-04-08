@@ -106,6 +106,12 @@ pub fn enrich_band_snapshot(
 
 // ── Session metadata ──────────────────────────────────────────────────────────
 
+/// Device identity fields bundled for session metadata.
+pub struct SessionDeviceId<'a> {
+    pub firmware_version: Option<&'a str>,
+    pub serial_number: Option<&'a str>,
+}
+
 pub fn write_session_meta(
     csv_path: &Path,
     device_name: &str,
@@ -113,6 +119,7 @@ pub fn write_session_meta(
     sample_rate: f64,
     start_utc: u64,
     total_samples: u64,
+    device_id: &SessionDeviceId<'_>,
 ) {
     let meta = serde_json::json!({
         "session_start_utc": start_utc,
@@ -122,6 +129,8 @@ pub fn write_session_meta(
         "sample_rate": sample_rate,
         "total_samples": total_samples,
         "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
+        "firmware_version": device_id.firmware_version,
+        "serial_number": device_id.serial_number,
         "daemon": true,
     });
     if let Ok(json) = serde_json::to_string_pretty(&meta) {

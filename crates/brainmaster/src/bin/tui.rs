@@ -37,7 +37,7 @@ fn parse_model(s: &str) -> DeviceModel {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let mut port_arg: Option<String> = None;
     let mut model_arg = "atlantis4".to_string();
     let mut args = std::env::args().skip(1);
@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "tui")]
-fn run_tui(device: &mut BrainMasterDevice) -> Result<(), Box<dyn std::error::Error>> {
+fn run_tui(device: &mut BrainMasterDevice) -> anyhow::Result<()> {
     enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(io::stdout());

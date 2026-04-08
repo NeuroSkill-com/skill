@@ -3269,7 +3269,7 @@ async fn lsl_virtual_source_start(
             *g = Some(src);
             Json(serde_json::json!({"ok": true, "running": true, "started": true}))
         }
-        Err(e) => Json(serde_json::json!({"ok": false, "running": false, "error": e})),
+        Err(e) => Json(serde_json::json!({"ok": false, "running": false, "error": e.to_string()})),
     }
 }
 

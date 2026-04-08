@@ -14,6 +14,7 @@
 //! `title()` polling, and returns the content.
 
 pub(crate) fn setup(app: &mut tauri::App) {
+    use anyhow::Context as _;
     let handle = app.handle().clone();
 
     skill_headless::Browser::set_external_renderer(move |url, _wait_ms| {
@@ -26,7 +27,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
             .as_millis();
         let label = format!("hfetch_{}", ts);
 
-        let parsed_url: tauri::Url = url.parse().map_err(|e| format!("invalid URL: {e}"))?;
+        let parsed_url: tauri::Url = url.parse().context("invalid URL")?;
 
         // Channel to detect initial page-load completion (DOM ready).
         let (load_tx, load_rx) = mpsc::sync_channel::<()>(1);
@@ -45,7 +46,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
             }
         })
         .build()
-        .map_err(|e| format!("webview creation failed: {e}"))?;
+        .context("webview creation failed")?;
 
         // ── Phase 1: Wait for initial DOM load (or timeout / cancel) ─
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -53,14 +54,14 @@ pub(crate) fn setup(app: &mut tauri::App) {
         loop {
             if skill_headless::is_fetch_cancelled() {
                 let _ = window.destroy();
-                return Err("cancelled by user".into());
+                anyhow::bail!("cancelled by user");
             }
             if load_rx.try_recv().is_ok() {
                 break;
             }
             if Instant::now() > deadline {
                 let _ = window.destroy();
-                return Err("page load timeout (30s)".into());
+                anyhow::bail!("page load timeout (30s)");
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -85,7 +86,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
         loop {
             if skill_headless::is_fetch_cancelled() {
                 let _ = window.destroy();
-                return Err("cancelled by user".into());
+                anyhow::bail!("cancelled by user");
             }
 
             let _ = window.eval(stability_js);
@@ -117,7 +118,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
 
         if skill_headless::is_fetch_cancelled() {
             let _ = window.destroy();
-            return Err("cancelled by user".into());
+            anyhow::bail!("cancelled by user");
         }
 
         // ── Phase 3: Extract visible text ────────────────────────────
@@ -163,7 +164,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
 
             if skill_headless::is_fetch_cancelled() {
                 let _ = window.destroy();
-                return Err("cancelled by user".into());
+                anyhow::bail!("cancelled by user");
             }
 
             if let Ok(title) = window.title() {
@@ -179,6 +180,6 @@ pub(crate) fn setup(app: &mut tauri::App) {
         }
 
         let _ = window.destroy();
-        Err("content extraction timeout".into())
+        anyhow::bail!("content extraction timeout")
     });
 }

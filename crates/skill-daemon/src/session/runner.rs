@@ -3,6 +3,7 @@
 //! full daemon pipeline: EEG filter, band power DSP, quality monitor,
 //! artifact detection, CSV/Parquet recording, EXG embeddings, hooks, WS events.
 
+use anyhow::Context as _;
 use std::path::{Path, PathBuf};
 
 use skill_daemon_common::EventEnvelope;
@@ -72,6 +73,10 @@ struct Pipeline {
     device_name: String,
     total_samples: u64,
     flush_counter: u64,
+    firmware_version: Option<String>,
+    serial_number: Option<String>,
+    fnirs_channel_names: Vec<String>,
+    ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer,
 }
 
 impl Pipeline {
@@ -83,7 +88,7 @@ impl Pipeline {
         device_name: String,
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
-    ) -> Result<Self, String> {
+    ) -> anyhow::Result<Self> {
         let day_dir = utc_date_dir(skill_dir);
         let start_utc = unix_secs();
         let csv_path = day_dir.join(format!("exg_{start_utc}.csv"));
@@ -99,8 +104,7 @@ impl Pipeline {
         } else {
             channel_names.iter().map(String::as_str).collect()
         };
-        let writer =
-            SessionWriter::open(&csv_path, &labels, storage_format).map_err(|e| format!("SessionWriter open: {e}"))?;
+        let writer = SessionWriter::open(&csv_path, &labels, storage_format).context("SessionWriter open")?;
 
         // DSP pipeline: filter → bands → quality → artifacts.
         let filter_config = {
@@ -162,6 +166,11 @@ impl Pipeline {
             device_name,
             total_samples: 0,
             flush_counter: 0,
+            firmware_version: None,
+            serial_number: None,
+            fnirs_channel_names: Vec::new(),
+            // 5-second window covers one full HRV epoch at 64 Hz PPG.
+            ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer::new(5.0),
         })
     }
 
@@ -264,6 +273,10 @@ impl Pipeline {
             self.sample_rate,
             self.start_utc,
             self.total_samples,
+            &crate::session::shared::SessionDeviceId {
+                firmware_version: self.firmware_version.as_deref(),
+                serial_number: self.serial_number.as_deref(),
+            },
         );
         info!(
             path = %self.csv_path.display(),
@@ -349,7 +362,11 @@ pub(crate) async fn run_adapter_session(
                             state.events_tx.clone(),
                             hooks.clone(),
                         ) {
-                            Ok(p) => {
+                            Ok(mut p) => {
+                                // Capture device identity and channel metadata.
+                                p.serial_number = info.serial_number.clone();
+                                p.firmware_version = info.firmware_version.clone();
+                                p.fnirs_channel_names = desc.fnirs_channel_names.clone();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.csv_path = Some(p.csv_path.display().to_string());
                                 }
@@ -424,7 +441,30 @@ pub(crate) async fn run_adapter_session(
                     }
 
                     DeviceEvent::Ppg(frame) => {
-                        let ts = unix_secs_f64();
+                        let ts = frame.timestamp_s;
+                        if let Some(ref mut pipe) = pipeline {
+                            // Feed samples into the PPG analyzer.
+                            pipe.ppg_analyzer.push(frame.channel, &frame.samples);
+
+                            // Compute vitals once per 5-second epoch on the
+                            // IR channel (channel 1) which carries the cleanest
+                            // heart-rate signal.
+                            let epoch_samples =
+                                (5.0 * skill_constants::PPG_SAMPLE_RATE as f64) as usize;
+                            let vitals = if frame.channel == 1 {
+                                pipe.ppg_analyzer.compute_epoch(epoch_samples)
+                            } else {
+                                None
+                            };
+
+                            pipe.writer.push_ppg(
+                                &pipe.csv_path,
+                                frame.channel,
+                                &frame.samples,
+                                ts,
+                                vitals.as_ref(),
+                            );
+                        }
                         broadcast_event(&state.events_tx, "PpgSample", &serde_json::json!({
                             "channel": frame.channel,
                             "samples": frame.samples,
@@ -441,6 +481,40 @@ pub(crate) async fn run_adapter_session(
                         }));
                     }
 
+                    DeviceEvent::Meta(val) => {
+                        // Extract device identity fields from vendor metadata.
+                        // For Muse: Control JSON with "fw" (firmware version)
+                        // and "hn" (host/device name) sent shortly after connect.
+                        if let Some(fw) = val.get("fw").and_then(|v| v.as_str()) {
+                            if let Ok(mut s) = state.status.lock() {
+                                s.firmware_version = Some(fw.to_string());
+                            }
+                            // Update the pipeline sidecar so the session JSON
+                            // contains the firmware version even if it arrived
+                            // after DeviceEvent::Connected.
+                            if let Some(ref mut pipe) = pipeline {
+                                pipe.firmware_version = Some(fw.to_string());
+                            }
+                            broadcast_event(&state.events_tx, "StatusUpdate",
+                                &serde_json::json!({"firmware_version": fw}));
+                        }
+                    }
+
+                    DeviceEvent::Fnirs(frame) => {
+                        if let Some(ref mut pipe) = pipeline {
+                            pipe.writer.push_fnirs(
+                                &pipe.csv_path,
+                                &frame.channels,
+                                &pipe.fnirs_channel_names,
+                                frame.timestamp_s,
+                            );
+                        }
+                        broadcast_event(&state.events_tx, "FnirsSample", &serde_json::json!({
+                            "channels": frame.channels,
+                            "timestamp": frame.timestamp_s,
+                        }));
+                    }
+
                     DeviceEvent::Disconnected => {
                         info!("device disconnected");
                         if let Ok(mut s) = state.status.lock() {
@@ -449,8 +523,6 @@ pub(crate) async fn run_adapter_session(
                         broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                         break;
                     }
-
-                    _ => {}
                 }
             }
         }

@@ -89,7 +89,7 @@ pub enum JobPollResult {
 
 // ── Internal ──────────────────────────────────────────────────────────────────
 
-type JobFn = Box<dyn FnOnce() -> Result<serde_json::Value, String> + Send + 'static>;
+type JobFn = Box<dyn FnOnce() -> anyhow::Result<serde_json::Value> + Send + 'static>;
 
 struct PendingJob {
     id: u64,
@@ -98,7 +98,7 @@ struct PendingJob {
 }
 
 struct CompletedJob {
-    result: Result<serde_json::Value, String>,
+    result: anyhow::Result<serde_json::Value>,
     elapsed_ms: u64,
     completed: Instant,
 }
@@ -160,7 +160,7 @@ impl JobQueue {
     /// Submit a job.  Returns a ticket immediately.
     pub fn submit<F>(&self, estimated_ms: u64, work: F) -> JobTicket
     where
-        F: FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
+        F: FnOnce() -> anyhow::Result<serde_json::Value> + Send + 'static,
     {
         let mut inner = self.inner.lock_or_recover();
         let id = inner.next_id;
@@ -203,7 +203,7 @@ impl JobQueue {
     /// This allows the job to update the shared progress map.
     pub fn submit_with_id<F>(&self, estimated_ms: u64, work: F) -> JobTicket
     where
-        F: FnOnce(u64) -> Result<serde_json::Value, String> + Send + 'static,
+        F: FnOnce(u64) -> anyhow::Result<serde_json::Value> + Send + 'static,
     {
         let mut inner = self.inner.lock_or_recover();
         let id = inner.next_id;
@@ -266,7 +266,7 @@ impl JobQueue {
                     },
                     Err(e) => JobPollResult::Error {
                         job_id,
-                        error: e.clone(),
+                        error: e.to_string(),
                     },
                 };
             }

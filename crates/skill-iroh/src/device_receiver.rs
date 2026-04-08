@@ -4,6 +4,7 @@
 //! tokio channel.  The session runner consumes these and translates them into
 //! standard [`DeviceEvent`]s for the DSP / CSV / embedding pipeline.
 
+use anyhow::Context as _;
 use tokio::sync::mpsc;
 
 use crate::device_proto::{self, *};
@@ -109,36 +110,32 @@ async fn handle_one_message(
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
     tx: &RemoteEventTx,
-) -> Result<u64, String> {
+) -> anyhow::Result<u64> {
     // 1. Read header
     let mut hdr_buf = [0u8; HEADER_SIZE];
-    recv.read_exact(&mut hdr_buf)
-        .await
-        .map_err(|e| format!("read header: {e}"))?;
+    recv.read_exact(&mut hdr_buf).await.context("read header")?;
 
-    let hdr = decode_header(&hdr_buf).ok_or_else(|| "invalid header version".to_string())?;
+    let hdr = decode_header(&hdr_buf).ok_or_else(|| anyhow::anyhow!("invalid header version"))?;
 
     if hdr.payload_len > MAX_PAYLOAD {
         let ack = encode_ack(hdr.seq, ACK_ERR);
         let _ = send.write_all(&ack).await;
-        return Err(format!("payload too large: {}", hdr.payload_len));
+        return Err(anyhow::anyhow!("payload too large: {}", hdr.payload_len));
     }
 
     // 2. Read payload
     let mut payload = vec![0u8; hdr.payload_len as usize];
     if !payload.is_empty() {
-        recv.read_exact(&mut payload)
-            .await
-            .map_err(|e| format!("read payload: {e}"))?;
+        recv.read_exact(&mut payload).await.context("read payload")?;
     }
 
     // 3. Decompress if needed
     let raw = if hdr.is_compressed() {
-        let decompressed = zstd::decode_all(std::io::Cursor::new(&payload)).map_err(|e| format!("zstd: {e}"))?;
+        let decompressed = zstd::decode_all(std::io::Cursor::new(&payload)).context("zstd")?;
         if decompressed.len() > MAX_DECOMPRESSED {
             let ack = encode_ack(hdr.seq, ACK_ERR);
             let _ = send.write_all(&ack).await;
-            return Err(format!("decompressed too large: {}", decompressed.len()));
+            return Err(anyhow::anyhow!("decompressed too large: {}", decompressed.len()));
         }
         decompressed
     } else {
@@ -156,7 +153,7 @@ async fn handle_one_message(
             }
         }
         MSG_DEVICE_CONNECTED => {
-            let json = String::from_utf8(raw).map_err(|e| format!("utf8: {e}"))?;
+            let json = String::from_utf8(raw).context("utf8")?;
             RemoteDeviceEvent::DeviceConnected {
                 seq: hdr.seq,
                 timestamp: hdr.timestamp,
@@ -184,7 +181,7 @@ async fn handle_one_message(
             }
         }
         MSG_META => {
-            let json = String::from_utf8(raw).map_err(|e| format!("utf8: {e}"))?;
+            let json = String::from_utf8(raw).context("utf8")?;
             RemoteDeviceEvent::Meta {
                 seq: hdr.seq,
                 timestamp: hdr.timestamp,
@@ -200,7 +197,7 @@ async fn handle_one_message(
             }
         }
         MSG_PHONE_INFO => {
-            let json = String::from_utf8(raw).map_err(|e| format!("utf8: {e}"))?;
+            let json = String::from_utf8(raw).context("utf8")?;
             RemoteDeviceEvent::PhoneInfo {
                 seq: hdr.seq,
                 timestamp: hdr.timestamp,
@@ -210,13 +207,13 @@ async fn handle_one_message(
         other => {
             let ack = encode_ack(hdr.seq, ACK_ERR);
             let _ = send.write_all(&ack).await;
-            return Err(format!("unknown msg_type: 0x{other:02x}"));
+            anyhow::bail!("unknown msg_type: 0x{other:02x}");
         }
     };
 
     // 5. ACK
     let ack = encode_ack(hdr.seq, ACK_OK);
-    send.write_all(&ack).await.map_err(|e| format!("write ack: {e}"))?;
+    send.write_all(&ack).await.context("write ack")?;
 
     // 6. Forward (non-blocking: prefer dropping a message over stalling
     //    the QUIC stream, which would block the phone's ACK and outbox).

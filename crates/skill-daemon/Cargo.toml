@@ -28,7 +28,9 @@ name = "skill-daemon"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+futures = "0.3"
 axum = { version = "0.8", features = ["ws"] }
 base64 = { workspace = true }
 btleplug = "0.11"
@@ -97,6 +99,9 @@ skill-calendar       = { path = "../skill-calendar" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
 sysinfo              = "0.33"
+
+[dev-dependencies]
+tempfile             = "3"
 
 [lints]
 workspace = true

@@ -170,14 +170,12 @@ fn parse_data_url(url: &str) -> Option<(&str, &str)> {
     Some((mime, data))
 }
 
-fn encode_to_webp(img: &image::DynamicImage) -> Result<Vec<u8>, String> {
+fn encode_to_webp(img: &image::DynamicImage) -> anyhow::Result<Vec<u8>> {
+    use anyhow::Context as _;
     use std::io::Cursor;
     let rgba = img.to_rgba8();
     let mut buf = Cursor::new(Vec::new());
-    // Use PNG as intermediate since the `image` crate's WebP encoder
-    // may not be available in all builds.  The embed pipeline will
-    // re-encode if needed.
     rgba.write_to(&mut buf, image::ImageFormat::WebP)
-        .map_err(|e| format!("webp encode: {e}"))?;
+        .context("webp encode")?;
     Ok(buf.into_inner())
 }

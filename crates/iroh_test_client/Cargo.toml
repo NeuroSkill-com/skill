@@ -13,7 +13,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1.0"
+anyhow = { workspace = true }
 env_logger = "0.11"
 base32 = "0.5"
 url = "2"

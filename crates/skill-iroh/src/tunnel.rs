@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use anyhow::Context as _;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -85,7 +86,7 @@ pub fn spawn(
                 peer_map,
                 device_event_tx.clone(),
             )) {
-                lock_or_recover(&runtime).last_error = Some(e.clone());
+                lock_or_recover(&runtime).last_error = Some(e.to_string());
                 eprintln!("[iroh] tunnel stopped: {e}");
             }
         })
@@ -99,7 +100,7 @@ async fn run(
     runtime: SharedIrohRuntime,
     peer_map: IrohPeerMap,
     device_event_tx: SharedDeviceEventTx,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let secret_key = load_or_create_secret_key(skill_dir)?;
 
     let endpoint = Endpoint::builder(presets::N0)
@@ -108,7 +109,7 @@ async fn run(
         .relay_mode(RelayMode::Default)
         .bind()
         .await
-        .map_err(|e| format!("bind failed: {e}"))?;
+        .context("bind failed")?;
 
     endpoint.online().await;
     let addr = endpoint.addr();
@@ -234,7 +235,7 @@ async fn handle_connection(
     auth: SharedIrohAuth,
     peer_id: String,
     peer_map: IrohPeerMap,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     // Track whether this peer has ever been authorized.
     // Unregistered peers get a grace window to send a registration request.
     let mut was_ever_authorized = { lock_or_recover(&auth).is_endpoint_allowed(&peer_id) };
@@ -247,13 +248,13 @@ async fn handle_connection(
             if !auth_g.is_endpoint_allowed(&peer_id) {
                 drop(auth_g);
                 conn.close(1u32.into(), b"revoked");
-                return Err(format!("client {peer_id} was revoked, closing connection"));
+                anyhow::bail!("client {peer_id} was revoked, closing connection");
             }
         }
 
         let (mut send, mut recv) = match conn.accept_bi().await {
             Ok(s) => s,
-            Err(e) => return Err(format!("accept_bi failed: {e}")),
+            Err(e) => anyhow::bail!("accept_bi failed: {e}"),
         };
 
         // Re-check after accept
@@ -262,7 +263,7 @@ async fn handle_connection(
             if !auth_g.is_endpoint_allowed(&peer_id) {
                 drop(auth_g);
                 conn.close(1u32.into(), b"revoked");
-                return Err(format!("client {peer_id} was revoked, closing connection"));
+                anyhow::bail!("client {peer_id} was revoked, closing connection");
             }
         }
 
@@ -274,7 +275,7 @@ async fn handle_connection(
         let target = SocketAddr::from(([127, 0, 0, 1], local_port));
         let tcp = TcpStream::connect(target)
             .await
-            .map_err(|e| format!("tcp connect {target} failed: {e}"))?;
+            .with_context(|| format!("tcp connect {target} failed"))?;
 
         // Register the local TCP source port → peer mapping so the axum
         // server can look up which iroh peer this connection belongs to.
@@ -288,37 +289,23 @@ async fn handle_connection(
         let uplink = async {
             let mut buf = vec![0u8; 16 * 1024];
             loop {
-                let n = tcp_read
-                    .read(&mut buf)
-                    .await
-                    .map_err(|e| format!("tcp read failed: {e}"))?;
+                let n = tcp_read.read(&mut buf).await.context("tcp read failed")?;
                 if n == 0 {
-                    send.finish().map_err(|e| format!("send finish failed: {e}"))?;
-                    return Ok::<(), String>(());
+                    send.finish().context("send finish failed")?;
+                    return Ok::<(), anyhow::Error>(());
                 }
-                send.write_all(&buf[..n])
-                    .await
-                    .map_err(|e| format!("iroh write failed: {e}"))?;
+                send.write_all(&buf[..n]).await.context("iroh write failed")?;
             }
         };
 
         let downlink = async {
             loop {
-                let maybe_chunk = recv
-                    .read_chunk(16 * 1024)
-                    .await
-                    .map_err(|e| format!("iroh read failed: {e}"))?;
+                let maybe_chunk = recv.read_chunk(16 * 1024).await.context("iroh read failed")?;
                 let Some(chunk) = maybe_chunk else {
-                    tcp_write
-                        .shutdown()
-                        .await
-                        .map_err(|e| format!("tcp shutdown failed: {e}"))?;
-                    return Ok::<(), String>(());
+                    tcp_write.shutdown().await.context("tcp shutdown failed")?;
+                    return Ok::<(), anyhow::Error>(());
                 };
-                tcp_write
-                    .write_all(&chunk.bytes)
-                    .await
-                    .map_err(|e| format!("tcp write failed: {e}"))?;
+                tcp_write.write_all(&chunk.bytes).await.context("tcp write failed")?;
             }
         };
 
@@ -373,7 +360,7 @@ const IROH_KEY_HISTORY_FILE: &str = "iroh_key_history.json";
 /// **Breaking**: all existing iroh connections will drop.  Clients need to
 /// re-scan an updated invite QR (TOTP secrets remain valid — only the
 /// endpoint_id changes).
-pub fn rotate_secret_key(skill_dir: &Path) -> Result<(String, String), String> {
+pub fn rotate_secret_key(skill_dir: &Path) -> anyhow::Result<(String, String)> {
     let key_path = skill_dir.join(IROH_SECRET_FILE);
     let history_path = skill_dir.join(IROH_KEY_HISTORY_FILE);
 
@@ -390,15 +377,15 @@ pub fn rotate_secret_key(skill_dir: &Path) -> Result<(String, String), String> {
         "endpoint_id": old_id,
         "rotated_at": crate::unix_secs(),
     }));
-    let hist_json = serde_json::to_string_pretty(&history).map_err(|e| format!("serialize history: {e}"))?;
-    std::fs::write(&history_path, hist_json).map_err(|e| format!("write history: {e}"))?;
+    let hist_json = serde_json::to_string_pretty(&history).context("serialize history")?;
+    std::fs::write(&history_path, hist_json).context("write history")?;
 
     // Generate new key
     let new_key = {
         let mut rng = rand::rng();
         SecretKey::generate(&mut rng)
     };
-    std::fs::write(&key_path, new_key.to_bytes()).map_err(|e| format!("write new key: {e}"))?;
+    std::fs::write(&key_path, new_key.to_bytes()).context("write new key")?;
 
     #[cfg(unix)]
     {
@@ -421,7 +408,7 @@ pub fn key_history(skill_dir: &Path) -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
-fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
+fn load_or_create_secret_key(skill_dir: &Path) -> anyhow::Result<SecretKey> {
     let path = skill_dir.join(IROH_SECRET_FILE);
 
     if let Ok(bytes) = std::fs::read(&path) {
@@ -430,7 +417,7 @@ fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
             raw.copy_from_slice(&bytes);
             return Ok(SecretKey::from_bytes(&raw));
         }
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "invalid iroh key file {}: expected 32 bytes, got {}",
             path.display(),
             bytes.len()
@@ -444,7 +431,8 @@ fn load_or_create_secret_key(skill_dir: &Path) -> Result<SecretKey, String> {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(&path, secret.to_bytes()).map_err(|e| format!("failed to persist {}: {e}", path.display()))?;
+    std::fs::write(&path, secret.to_bytes())
+        .map_err(|e| anyhow::anyhow!("failed to persist {}: {e}", path.display()))?;
 
     #[cfg(unix)]
     {
@@ -481,7 +469,7 @@ mod tests {
         std::fs::write(&path, b"too_short").expect("write");
         let result = load_or_create_secret_key(td.path());
         assert!(result.is_err());
-        assert!(result.expect_err("err").contains("expected 32 bytes"));
+        assert!(result.expect_err("err").to_string().contains("expected 32 bytes"));
     }
 
     #[test]

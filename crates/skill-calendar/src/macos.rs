@@ -33,7 +33,7 @@ pub fn request_access() -> bool {
     unsafe { skill_calendar_request_access() == 1 }
 }
 
-pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, String> {
+pub fn fetch_events(start_utc: i64, end_utc: i64) -> anyhow::Result<Vec<CalendarEvent>> {
     // SAFETY: `skill_calendar_fetch_events` returns a malloc'd UTF-8 JSON
     // buffer.  We copy the bytes into a Rust String and immediately free the
     // C buffer, so there are no dangling references.
@@ -41,7 +41,7 @@ pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, 
         let mut len: u32 = 0;
         let ptr = skill_calendar_fetch_events(start_utc, end_utc, &mut len);
         if ptr.is_null() {
-            return Err("EventKit returned null (allocation failure)".into());
+            anyhow::bail!("EventKit returned null (allocation failure)");
         }
         let slice = std::slice::from_raw_parts(ptr, len as usize);
         let s = String::from_utf8_lossy(slice).into_owned();
@@ -56,16 +56,16 @@ pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, 
     // "error in production".
     match serde_json::from_str::<serde_json::Value>(&json_str) {
         Ok(serde_json::Value::Array(_)) => {
-            serde_json::from_str::<Vec<CalendarEvent>>(&json_str).map_err(|e| format!("JSON parse error: {e}"))
+            serde_json::from_str::<Vec<CalendarEvent>>(&json_str).map_err(|e| anyhow::anyhow!("JSON parse error: {e}"))
         }
         Ok(serde_json::Value::Object(obj)) => {
             let msg = obj
                 .get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown error from EventKit");
-            Err(msg.to_owned())
+            anyhow::bail!("{}", msg)
         }
         Ok(_) => Ok(Vec::new()),
-        Err(e) => Err(format!("JSON parse error: {e}")),
+        Err(e) => anyhow::bail!("JSON parse error: {e}"),
     }
 }

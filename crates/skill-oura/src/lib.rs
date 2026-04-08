@@ -72,7 +72,7 @@ impl<'a> OuraSync<'a> {
     /// Individual endpoint failures are logged to stderr but do **not** fail
     /// the overall sync — the payload will contain whatever data was
     /// successfully retrieved.
-    pub fn fetch(&self, start_date: &str, end_date: &str) -> Result<HealthSyncPayload, String> {
+    pub fn fetch(&self, start_date: &str, end_date: &str) -> anyhow::Result<HealthSyncPayload> {
         let mut payload = HealthSyncPayload::default();
 
         // ── Sleep (detailed) ─────────────────────────────────────────────

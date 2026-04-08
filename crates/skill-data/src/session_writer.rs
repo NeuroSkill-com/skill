@@ -101,6 +101,17 @@ impl SessionWriter {
         }
     }
 
+    pub fn push_fnirs(&mut self, eeg_csv_path: &Path, channels: &[f64], channel_names: &[String], timestamp_s: f64) {
+        match self {
+            Self::Csv(c) => c.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s),
+            Self::Parquet(p) => p.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s),
+            Self::Both(c, p) => {
+                c.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s);
+                p.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s);
+            }
+        }
+    }
+
     pub fn push_imu(
         &mut self,
         eeg_csv_path: &Path,

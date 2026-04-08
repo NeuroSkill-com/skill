@@ -103,7 +103,7 @@ async fn skill_server(server_ep: iroh::Endpoint, auth: Arc<Mutex<skill_iroh::Iro
                             format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len())
                         }
                         Err(e) => {
-                            let body = serde_json::json!({"ok": false, "error": e}).to_string();
+                            let body = serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
                             format!(
                                 "HTTP/1.1 400 Bad Request\r\nContent-Length: {}\r\n\r\n{body}",
                                 body.len()

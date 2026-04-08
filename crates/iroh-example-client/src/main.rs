@@ -78,7 +78,10 @@ async fn run_mock_server(
             let _ = store.mark_client_connected(&client.endpoint_id, "example-server", None);
             ("200 OK", serde_json::json!({"ok": true, "client": client}))
         }
-        Err(e) => ("400 Bad Request", serde_json::json!({"ok": false, "error": e})),
+        Err(e) => (
+            "400 Bad Request",
+            serde_json::json!({"ok": false, "error": e.to_string()}),
+        ),
     };
 
     let body = resp_body.to_string();

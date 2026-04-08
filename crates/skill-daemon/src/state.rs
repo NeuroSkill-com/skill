@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Shared daemon state type.
 
+/// Type alias for the persistent BLE discovery cache.
+/// Maps `"ble:<uuid>"` → `(local_name, rssi, last_seen_unix_secs)`.
+pub type BleDeviceCache = Arc<Mutex<HashMap<String, (Option<String>, i16, u64)>>>;
+
 use std::{
     collections::{HashMap, VecDeque},
     path::PathBuf,
@@ -30,6 +34,17 @@ pub struct AppState {
     pub status: Arc<Mutex<StatusResponse>>,
     pub devices: Arc<Mutex<Vec<DiscoveredDeviceResponse>>>,
     pub scanner_running: Arc<Mutex<bool>>,
+    /// Persistent BLE discovery cache: ble_id → (local_name, rssi, last_seen_secs).
+    /// Updated by the event-driven BLE listener; read each scanner tick.
+    pub ble_device_cache: BleDeviceCache,
+    /// Set to `true` while a BLE device is actively connecting.
+    /// The BLE listener task stops scanning when this is set so that only one
+    /// `CBCentralManager` is scanning at a time — having two concurrent scans
+    /// on macOS prevents `peripheral.connect()` callbacks from firing.
+    pub ble_scan_paused: Arc<std::sync::atomic::AtomicBool>,
+    /// Rolling log of all daemon tracing output.
+    /// Tuple is `(next_sequence_number, lines)` where each line is `"<seq>\t<text>"`.
+    pub app_log: Arc<Mutex<(u64, VecDeque<String>)>>,
     pub scanner_stop_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     pub scanner_wifi_config: Arc<Mutex<ScannerWifiConfigRequest>>,
     pub scanner_cortex_config: Arc<Mutex<ScannerCortexConfigRequest>>,
@@ -93,6 +108,9 @@ impl AppState {
             })),
             devices: Arc::new(Mutex::new(Vec::new())),
             scanner_running: Arc::new(Mutex::new(false)),
+            ble_device_cache: Arc::new(Mutex::new(HashMap::new())),
+            ble_scan_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            app_log: Arc::new(Mutex::new((0, VecDeque::with_capacity(512)))),
             scanner_stop_tx: Arc::new(Mutex::new(None)),
             scanner_wifi_config: Arc::new(Mutex::new(ScannerWifiConfigRequest {
                 wifi_shield_ip: String::new(),

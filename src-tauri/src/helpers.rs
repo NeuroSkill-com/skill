@@ -79,6 +79,7 @@ pub(crate) fn apply_daemon_status(
         .collect();
     local.serial_number = ds.serial_number;
     local.mac_address = ds.mac_address;
+    local.firmware_version = ds.firmware_version;
     local.hardware_version = ds.hardware_version;
     local.has_ppg = ds.has_ppg;
     local.has_imu = ds.has_imu;

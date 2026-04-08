@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Configurable virtual LSL EEG source.
+
 //!
 //! Streams synthetic EEG data so the full pipeline (LSL discovery → session
 //! connect → daemon WebSocket → dashboard) can be exercised without hardware.
@@ -14,6 +15,7 @@
 //! internally, which panics on Tokio worker threads.  All rlsl operations
 //! therefore run on a dedicated raw OS thread.
 
+use anyhow::Context as _;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -165,7 +167,7 @@ pub struct VirtualLslSource {
 
 impl VirtualLslSource {
     /// Start the virtual source on a dedicated OS thread and return immediately.
-    pub fn start(config: VirtualSourceConfig) -> Result<Self, String> {
+    pub fn start(config: VirtualSourceConfig) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown2 = shutdown.clone();
         let cfg_clone = config.clone();
@@ -173,7 +175,7 @@ impl VirtualLslSource {
         std::thread::Builder::new()
             .name("skill-virtual-lsl".into())
             .spawn(move || run_virtual_outlet(shutdown2, cfg_clone))
-            .map_err(|e| format!("failed to spawn virtual LSL thread: {e}"))?;
+            .context("failed to spawn virtual LSL thread")?;
 
         Ok(Self { shutdown, config })
     }

@@ -27,7 +27,7 @@ pub fn request_access() -> bool {
     true
 }
 
-pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, String> {
+pub fn fetch_events(start_utc: i64, end_utc: i64) -> anyhow::Result<Vec<CalendarEvent>> {
     let search_roots = build_search_roots();
 
     let mut events: Vec<CalendarEvent> = Vec::new();

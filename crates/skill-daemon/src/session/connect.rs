@@ -2,6 +2,7 @@
 //! Per-device connection logic — transport-specific setup (BLE, serial,
 //! Cortex WS, PCAN) → `Box<dyn DeviceAdapter>` for the generic runner.
 
+use anyhow::Context as _;
 use std::time::Duration;
 
 use skill_daemon_common::DeviceLogEntry;
@@ -45,7 +46,7 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
                 error!(%e, %target, "device connect failed");
                 if let Ok(mut s) = state2.status.lock() {
                     s.state = "disconnected".into();
-                    s.device_error = Some(e);
+                    s.device_error = Some(e.to_string());
                 }
             }
         }
@@ -57,9 +58,57 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
     Some(SessionHandle { cancel_tx })
 }
 
-async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     let lower = target.to_lowercase();
 
+    // Devices that use their own BLE scanner (btleplug CBCentralManager) need
+    // the background BLE listener scan to be stopped first.  On macOS, two
+    // concurrent CBCentralManager.scanForPeripherals() calls suppress the
+    // centralManager(_:didConnect:) delegate callback, so peripheral.connect()
+    // hangs forever.  We pause here once for every BLE-scanning connect path
+    // rather than duplicating the logic in each individual function.
+    let needs_ble_pause = lower == "ganglion"
+        || lower.contains("mw75")
+        || lower.contains("neurable")
+        || lower.contains("hermes")
+        || lower.contains("mendi")
+        || lower.contains("idun")
+        || lower.contains("guardian")
+        || lower.starts_with("ige")
+        || lower.starts_with("ble:")
+        // catch generic Muse targets (device name used as target)
+        || lower.starts_with("muse");
+
+    if needs_ble_pause {
+        state.ble_scan_paused.store(true, std::sync::atomic::Ordering::Relaxed);
+        // Allow up to 400 ms for the listener task to detect the flag and
+        // call stop_scan().  The event loop now has a 300 ms timeout so the
+        // listener notices the flag within 300 ms; stop_scan() is near-instant.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+    }
+
+    let result = connect_device_inner(state, target, &lower).await;
+
+    if needs_ble_pause {
+        state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    result
+}
+
+/// Look up the human-readable name for a paired device ID from the daemon's
+/// in-memory paired list.  Used to give BLE clients a specific name prefix so
+/// they can use the fast event-driven `connect()` path (~250 ms) instead of
+/// the fixed-sleep `scan_all()` path (3-5 s).
+fn paired_name_for(state: &AppState, target: &str) -> Option<String> {
+    state
+        .status
+        .lock()
+        .ok()
+        .and_then(|s| s.paired_devices.iter().find(|d| d.id == target).map(|d| d.name.clone()))
+}
+
+async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     if lower == "openbci" || lower.starts_with("usb:") {
         return connect_openbci(state, target).await;
     }
@@ -97,93 +146,107 @@ async fn connect_device(state: &AppState, target: &str) -> Result<Box<dyn Device
         return connect_gtec(target).await;
     }
     if lower.contains("mw75") || lower.contains("neurable") {
-        return connect_mw75().await;
+        return connect_mw75(paired_name_for(state, target)).await;
     }
     if lower.contains("hermes") {
-        return connect_hermes().await;
+        return connect_hermes(paired_name_for(state, target)).await;
     }
     if lower.contains("idun") || lower.contains("guardian") {
-        return connect_idun(state).await;
+        return connect_idun(state, paired_name_for(state, target)).await;
     }
     if lower.contains("mendi") {
-        return connect_mendi().await;
+        return connect_mendi(paired_name_for(state, target)).await;
     }
 
     // Default: Muse
-    connect_muse().await
+    connect_muse(target, paired_name_for(state, target)).await
 }
 
 // ── Muse (BLE) ──────────────────────────────────────────────────────────────
 
-async fn connect_muse() -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_muse(target: &str, paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::muse_rs::prelude::*;
     use skill_devices::session::muse::MuseAdapter;
 
-    info!("scanning for Muse headband…");
-    let config = MuseClientConfig {
-        scan_timeout_secs: 10,
+    // Fast path: if we know the device's name from the paired list, use
+    // connect() which polls every 250 ms and exits as soon as the device
+    // is found (~250 ms).  Fall back to scan_all() only when the name is
+    // unknown (first-time unpaired connect).
+    if let Some(name) = paired_name {
+        info!(name = %name, "connecting to Muse (fast path)");
+        let config = MuseClientConfig {
+            name_prefix: name.clone(),
+            enable_ppg: true,
+            scan_timeout_secs: 5,
+            ..Default::default()
+        };
+        let client = MuseClient::new(config);
+        let (rx, handle) = client.connect().await.context("Muse connect")?;
+        return Ok(Box::new(MuseAdapter::new(rx, handle)));
+    }
+
+    // Slow path: scan for 5 s then filter by UUID.
+    info!("scanning for Muse headband (slow path)…");
+    let client = MuseClient::new(MuseClientConfig {
+        scan_timeout_secs: 5,
         enable_ppg: true,
         ..Default::default()
+    });
+    let devices = client.scan_all().await.context("Muse scan")?;
+    let target_ble_id = target.strip_prefix("ble:").unwrap_or("");
+    let device = if !target_ble_id.is_empty() {
+        devices
+            .into_iter()
+            .find(|d| d.id.eq_ignore_ascii_case(target_ble_id))
+            .ok_or_else(|| anyhow::anyhow!("Muse {target} not found nearby"))?
+    } else {
+        devices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No Muse device found nearby"))?
     };
-    let client = MuseClient::new(config);
-    let devices = client.scan_all().await.map_err(|e| format!("Muse scan: {e}"))?;
-    let device = devices.into_iter().next().ok_or("No Muse device found nearby")?;
-    info!(name = %device.name, "connecting to Muse");
-    let (rx, handle) = client
-        .connect_to(device)
-        .await
-        .map_err(|e| format!("Muse connect: {e}"))?;
+    info!(name = %device.name, id = %device.id, "connecting to Muse");
+    let (rx, handle) = client.connect_to(device).await.context("Muse connect")?;
     Ok(Box::new(MuseAdapter::new(rx, handle)))
 }
 
 // ── MW75 Neuro (BLE) ────────────────────────────────────────────────────────
 
-async fn connect_mw75() -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_mw75(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::mw75::prelude::*;
     use skill_devices::session::mw75::Mw75Adapter;
 
-    info!("scanning for MW75 Neuro…");
     let config = Mw75ClientConfig {
-        scan_timeout_secs: 15,
+        name_pattern: paired_name.unwrap_or_else(|| "MW75".into()),
+        scan_timeout_secs: 5,
         ..Default::default()
     };
+    info!(name_pattern = %config.name_pattern, "connecting to MW75 Neuro");
     let client = Mw75Client::new(config);
-    let devices = client.scan_all().await.map_err(|e| format!("MW75 scan: {e}"))?;
-    let device = devices.into_iter().next().ok_or("No MW75 device found")?;
-    info!(name = %device.name, "connecting to MW75");
-    let (rx, handle) = client
-        .connect_to(device)
-        .await
-        .map_err(|e| format!("MW75 connect: {e}"))?;
+    let (rx, handle) = client.connect().await.context("MW75 connect")?;
     let handle = std::sync::Arc::new(handle);
     Ok(Box::new(Mw75Adapter::new(rx, handle, None)))
 }
 
 // ── Hermes V1 (BLE) ─────────────────────────────────────────────────────────
 
-async fn connect_hermes() -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_hermes(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::hermes_ble::prelude::*;
     use skill_devices::session::hermes::HermesAdapter;
 
-    info!("scanning for Hermes…");
     let config = HermesClientConfig {
-        scan_timeout_secs: 15,
-        ..Default::default()
+        name_prefix: paired_name.unwrap_or_else(|| "Hermes".into()),
+        scan_timeout_secs: 5,
     };
+    info!(name_prefix = %config.name_prefix, "connecting to Hermes");
     let client = HermesClient::new(config);
-    let devices = client.scan_all().await.map_err(|e| format!("Hermes scan: {e}"))?;
-    let device = devices.into_iter().next().ok_or("No Hermes device found")?;
-    info!(name = %device.name, "connecting to Hermes");
-    let (rx, handle) = client
-        .connect_to(device)
-        .await
-        .map_err(|e| format!("Hermes connect: {e}"))?;
+    let (rx, handle) = client.connect().await.context("Hermes connect")?;
     Ok(Box::new(HermesAdapter::new(rx, handle)))
 }
 
 // ── IDUN Guardian (BLE) ──────────────────────────────────────────────────────
 
-async fn connect_idun(state: &AppState) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_idun(state: &AppState, paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::idun::prelude::*;
     use skill_devices::session::idun::IdunAdapter;
 
@@ -198,34 +261,36 @@ async fn connect_idun(state: &AppState) -> Result<Box<dyn DeviceAdapter>, String
     info!("connecting to IDUN Guardian…");
     let config = GuardianClientConfig {
         api_token: if api_token.is_empty() { None } else { Some(api_token) },
+        name_prefix: paired_name.unwrap_or_else(|| "IGE".into()),
+        scan_timeout_secs: 5,
         ..Default::default()
     };
+    info!(name_prefix = %config.name_prefix, "connecting to IDUN Guardian");
     let client = GuardianClient::new(config);
-    let (rx, handle) = client.connect().await.map_err(|e| format!("IDUN connect: {e}"))?;
+    let (rx, handle) = client.connect().await.context("IDUN connect")?;
     Ok(Box::new(IdunAdapter::new(rx, handle)))
 }
 
 // ── Mendi fNIRS (BLE) ────────────────────────────────────────────────────────
 
-async fn connect_mendi() -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::mendi::prelude::*;
     use skill_devices::session::mendi::MendiAdapter;
 
-    info!("scanning for Mendi…");
-    let client = MendiClient::new(MendiClientConfig::default());
-    let devices = client.scan().await.map_err(|e| format!("Mendi scan: {e}"))?;
-    let device = devices.into_iter().next().ok_or("No Mendi device found")?;
-    info!(name = %device.name, "connecting to Mendi");
-    let (rx, handle) = client
-        .connect_to(device)
-        .await
-        .map_err(|e| format!("Mendi connect: {e}"))?;
+    let config = MendiClientConfig {
+        name_prefix: paired_name.unwrap_or_else(|| "Mendi".into()),
+        scan_timeout_secs: 5,
+        ..Default::default()
+    };
+    info!(name_prefix = %config.name_prefix, "connecting to Mendi");
+    let client = MendiClient::new(config);
+    let (rx, handle) = client.connect().await.context("Mendi connect")?;
     Ok(Box::new(MendiAdapter::new(rx, handle)))
 }
 
 // ── OpenBCI Ganglion (BLE) ───────────────────────────────────────────────────
 
-async fn connect_ganglion(state: &AppState) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_ganglion(state: &AppState) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::openbci::board::ganglion::{GanglionBoard, GanglionConfig};
     use skill_devices::openbci::board::Board;
     use skill_devices::session::openbci::OpenBciAdapter;
@@ -241,10 +306,10 @@ async fn connect_ganglion(state: &AppState) -> Result<Box<dyn DeviceAdapter>, St
         ..Default::default()
     };
 
-    let adapter = tokio::task::spawn_blocking(move || -> Result<Box<dyn DeviceAdapter>, String> {
+    let adapter = tokio::task::spawn_blocking(move || -> anyhow::Result<Box<dyn DeviceAdapter>> {
         let mut board = GanglionBoard::new(ganglion_config);
-        board.prepare().map_err(|e| format!("Ganglion prepare: {e}"))?;
-        let stream = board.start_stream().map_err(|e| format!("Ganglion stream: {e}"))?;
+        board.prepare().context("Ganglion prepare")?;
+        let stream = board.start_stream().context("Ganglion stream")?;
         let ch: Vec<String> = (1..=4).map(|i| format!("Ch{i}")).collect();
         let desc = OpenBciAdapter::make_descriptor("ganglion", 4, 200.0, ch);
         let info = DeviceInfo {
@@ -254,14 +319,14 @@ async fn connect_ganglion(state: &AppState) -> Result<Box<dyn DeviceAdapter>, St
         Ok(Box::new(OpenBciAdapter::start(stream, desc, info)) as Box<dyn DeviceAdapter>)
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     Ok(adapter)
 }
 
 // ── OpenBCI Cyton/Daisy (USB serial) ─────────────────────────────────────────
 
-async fn connect_openbci(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_openbci(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     let config = {
         let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
         let mut settings = skill_settings::load_settings(&skill_dir);
@@ -291,19 +356,19 @@ async fn connect_openbci(state: &AppState, target: &str) -> Result<Box<dyn Devic
     };
 
     info!(board = ?config.board, port = %config.serial_port, "connecting to OpenBCI…");
-    let adapter = tokio::task::spawn_blocking(move || -> Result<Box<dyn DeviceAdapter>, String> {
+    let adapter = tokio::task::spawn_blocking(move || -> anyhow::Result<Box<dyn DeviceAdapter>> {
         let (adapter, _board) = crate::session_runner::create_and_start_board(&config)?;
         Ok(Box::new(adapter) as Box<dyn DeviceAdapter>)
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     Ok(adapter)
 }
 
 // ── Cognionics CGX (USB serial) ──────────────────────────────────────────────
 
-async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_cognionics(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use cognionics::prelude::*;
     use skill_devices::session::cognionics::CognionicsAdapter;
 
@@ -315,7 +380,7 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
         ..Default::default()
     };
     let client = CgxClient::new(config);
-    let (rx, handle) = client.start().await.map_err(|e| format!("CGX start: {e}"))?;
+    let (rx, handle) = client.start().await.context("CGX start")?;
     let adapter: Box<dyn DeviceAdapter> = Box::new(CognionicsAdapter::new(rx, handle));
 
     Ok(adapter)
@@ -323,7 +388,7 @@ async fn connect_cognionics(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
 
 // ── NeuroField Q21 (PCAN-USB) ────────────────────────────────────────────
 
-async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_neurofield(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use crate::session_runner::parse_neurofield_bus;
     use neurofield::prelude::*;
 
@@ -333,14 +398,14 @@ async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<neurofield::q21_api::EegSample>(512);
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
 
-    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
-        let mut api = Q21Api::new(bus).map_err(|e| format!("Q21 connect: {e}"))?;
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let mut api = Q21Api::new(bus).context("Q21 connect")?;
         let name = format!(
             "NeuroField Q21 ({:?} #{})",
             api.eeg_device_type(),
             api.eeg_device_serial()
         );
-        api.start_receiving_eeg().map_err(|e| format!("start: {e}"))?;
+        api.start_receiving_eeg().context("start")?;
 
         let tx = sample_tx;
         let read_thread = std::thread::Builder::new()
@@ -362,12 +427,12 @@ async fn connect_neurofield(target: &str) -> Result<Box<dyn DeviceAdapter>, Stri
                 let _ = api.abort_receiving_eeg();
                 api.release();
             })
-            .map_err(|e| format!("spawn: {e}"))?;
+            .context("spawn")?;
 
         Ok((name, read_thread))
     })
     .await
-    .map_err(|e| format!("spawn_blocking: {e}"))??;
+    .context("spawn_blocking")??;
 
     info!(name = %device_name, "NeuroField Q21 connected");
 
@@ -445,7 +510,7 @@ impl skill_devices::session::DeviceAdapter for NeuroFieldAdapter {
 
 // ── BrainMaster (USB serial) ────────────────────────────────────────────
 
-async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_brainmaster(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use brainmaster::prelude::*;
 
     let port = target.strip_prefix("brainmaster:").unwrap_or("").to_string();
@@ -467,18 +532,18 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
 
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<brainmaster::device::EegSample>(512);
 
-    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let port = if port.is_empty() {
             BrainMasterDevice::scan()
-                .map_err(|e| format!("scan: {e}"))?
+                .context("scan")?
                 .into_iter()
                 .next()
-                .ok_or("No BrainMaster device found")?
+                .ok_or_else(|| anyhow::anyhow!("No BrainMaster device found"))?
         } else {
             port
         };
-        let mut device = BrainMasterDevice::open(&port, model).map_err(|e| format!("open: {e}"))?;
-        device.start_streaming().map_err(|e| format!("start: {e}"))?;
+        let mut device = BrainMasterDevice::open(&port, model).context("open")?;
+        device.start_streaming().context("start")?;
         let name = format!("BrainMaster {:?} ({port})", model);
         let tx = sample_tx;
         let read_thread = std::thread::Builder::new()
@@ -490,11 +555,11 @@ async fn connect_brainmaster(state: &AppState, target: &str) -> Result<Box<dyn D
                     }
                 }
             })
-            .map_err(|e| format!("spawn reader: {e}"))?;
+            .context("spawn reader")?;
         Ok((name, read_thread))
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     info!(name = %device_name, "BrainMaster connected");
 
@@ -570,23 +635,24 @@ impl skill_devices::session::DeviceAdapter for BrainMasterAdapter {
 
 // ── LSL (Lab Streaming Layer) ──────────────────────────────────────────────
 
-async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_lsl(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     let query = target.strip_prefix("lsl:").unwrap_or("").to_string();
     info!(query = %query, "connecting to LSL stream");
 
-    let adapter = tokio::task::spawn_blocking(move || -> Result<Box<dyn DeviceAdapter>, String> {
+    let adapter = tokio::task::spawn_blocking(move || -> anyhow::Result<Box<dyn DeviceAdapter>> {
         // Fast path: when we know the stream name, use a targeted query with
         // minimum=1 so it returns as soon as the stream is found (typically
         // < 500 ms for local streams) instead of waiting the full timeout.
         let info = if !query.is_empty() {
-            skill_lsl::resolve_stream_by_name(&query, 5.0).ok_or_else(|| format!("No LSL stream matching '{query}'"))?
+            skill_lsl::resolve_stream_by_name(&query, 5.0)
+                .ok_or_else(|| anyhow::anyhow!("No LSL stream matching '{query}'"))?
         } else {
             // No name given — discover all EEG streams and take the first.
             let streams = skill_lsl::resolve_eeg_streams(5.0);
             streams
                 .into_iter()
                 .next()
-                .ok_or_else(|| "No LSL EEG streams found on the network".to_string())?
+                .ok_or_else(|| anyhow::anyhow!("No LSL EEG streams found on the network"))?
         };
 
         info!(
@@ -599,34 +665,34 @@ async fn connect_lsl(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
         Ok(Box::new(adapter) as Box<dyn DeviceAdapter>)
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     Ok(adapter)
 }
 
 // ── NeuroSky MindWave (serial ThinkGear) ───────────────────────────────────
 
-async fn connect_neurosky(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_neurosky(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use neurosky::prelude::*;
 
     let requested = target.strip_prefix("neurosky:").unwrap_or("").trim().to_string();
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<i16>(1024);
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
 
-    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+    let (device_name, read_thread) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let port = if requested.is_empty() {
             MindWaveDevice::find()
-                .map_err(|e| format!("MindWave find: {e}"))?
+                .context("MindWave find")?
                 .into_iter()
                 .next()
-                .ok_or("No NeuroSky MindWave serial port found")?
+                .ok_or_else(|| anyhow::anyhow!("No NeuroSky MindWave serial port found"))?
         } else {
             requested
         };
 
         let mut device = MindWaveDevice::open(&port)
             .or_else(|_| MindWaveDevice::open_bluetooth(&port))
-            .map_err(|e| format!("MindWave open: {e}"))?;
+            .context("MindWave open")?;
         let _ = device.auto_connect();
 
         let tx = sample_tx;
@@ -657,12 +723,12 @@ async fn connect_neurosky(target: &str) -> Result<Box<dyn DeviceAdapter>, String
                     Err(_) => break,
                 }
             })
-            .map_err(|e| format!("spawn reader: {e}"))?;
+            .context("spawn reader")?;
 
         Ok((format!("NeuroSky MindWave ({port})"), read_thread))
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     use skill_devices::session::{DeviceCaps, DeviceDescriptor};
     let desc = DeviceDescriptor {
@@ -741,7 +807,7 @@ impl skill_devices::session::DeviceAdapter for NeuroSkyAdapter {
 
 // ── Neurosity Crown/Notion (Cloud API) ─────────────────────────────────────
 
-async fn connect_neurosity(state: &AppState, target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_neurosity(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use neurosity::prelude::*;
 
     let requested_device_id = target.strip_prefix("neurosity:").unwrap_or("").trim().to_string();
@@ -774,24 +840,24 @@ async fn connect_neurosity(state: &AppState, target: &str) -> Result<Box<dyn Dev
     };
 
     if device_id.is_empty() {
-        return Err("Neurosity device_id missing (set in Device API settings or use neurosity:<device_id>)".into());
+        anyhow::bail!("Neurosity device_id missing (set in Device API settings or use neurosity:<device_id>)");
     }
     if email.trim().is_empty() {
-        return Err("Neurosity email missing (Device API settings or SKILL_NEUROSITY_EMAIL)".into());
+        anyhow::bail!("Neurosity email missing (Device API settings or SKILL_NEUROSITY_EMAIL)");
     }
     if password.trim().is_empty() {
-        return Err("Neurosity password missing (Device API settings or SKILL_NEUROSITY_PASSWORD)".into());
+        anyhow::bail!("Neurosity password missing (Device API settings or SKILL_NEUROSITY_PASSWORD)");
     }
 
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<Vec<f64>>(512);
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
 
     let (device_name, eeg_channels, sample_rate, channel_names, read_thread) =
-        tokio::task::spawn_blocking(move || -> Result<_, String> {
+        tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
             let mut client = NeurosityClient::new(&device_id);
             client
                 .login(&Credentials { email, password })
-                .map_err(|e| format!("Neurosity login: {e}"))?;
+                .context("Neurosity login")?;
 
             let info = client.get_info().unwrap_or_default();
             let model = info.model.to_lowercase();
@@ -846,12 +912,12 @@ async fn connect_neurosity(state: &AppState, target: &str) -> Result<Box<dyn Dev
                     }
                     std::thread::sleep(Duration::from_millis(25));
                 })
-                .map_err(|e| format!("spawn reader: {e}"))?;
+                .context("spawn reader")?;
 
             Ok((display_name, eeg_channels, sample_rate, channel_names, read_thread))
         })
         .await
-        .map_err(|e| format!("spawn: {e}"))??;
+        .context("spawn")??;
 
     use skill_devices::session::{DeviceCaps, DeviceDescriptor};
     let desc = DeviceDescriptor {
@@ -930,7 +996,7 @@ impl skill_devices::session::DeviceAdapter for NeurosityAdapter {
 
 // ── BrainVision RDA (TCP/IP) ────────────────────────────────────────────────
 
-async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_brainvision(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use brainvision::prelude::*;
 
     let spec = target
@@ -945,7 +1011,7 @@ async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, Str
     } else if let Some((h, p)) = spec.rsplit_once(':') {
         let parsed = p
             .parse::<u16>()
-            .map_err(|e| format!("invalid BrainVision port '{p}': {e}"))?;
+            .with_context(|| format!("invalid BrainVision port '{p}'"))?;
         (h.to_string(), parsed)
     } else {
         (spec, brainvision::types::RDA_PORT_I16)
@@ -955,9 +1021,9 @@ async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, Str
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
 
     let (device_name, eeg_channels, sample_rate, channel_names, read_thread) =
-        tokio::task::spawn_blocking(move || -> Result<_, String> {
-            let mut device = BrainVisionDevice::connect(&host, port).map_err(|e| format!("RDA connect: {e}"))?;
-            let header = device.wait_for_start().map_err(|e| format!("RDA start: {e}"))?;
+        tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+            let mut device = BrainVisionDevice::connect(&host, port).context("RDA connect")?;
+            let header = device.wait_for_start().context("RDA start")?;
             let eeg_channels = header.channel_count as usize;
             let sample_rate = header.sampling_rate_hz();
             let channel_names = if header.channel_names.is_empty() {
@@ -986,7 +1052,7 @@ async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, Str
                     }
                     device.close();
                 })
-                .map_err(|e| format!("spawn reader: {e}"))?;
+                .context("spawn reader")?;
 
             Ok((
                 format!("BrainVision RDA ({host}:{port})"),
@@ -997,7 +1063,7 @@ async fn connect_brainvision(target: &str) -> Result<Box<dyn DeviceAdapter>, Str
             ))
         })
         .await
-        .map_err(|e| format!("spawn: {e}"))??;
+        .context("spawn")??;
 
     use skill_devices::session::{DeviceCaps, DeviceDescriptor};
     let desc = DeviceDescriptor {
@@ -1076,7 +1142,7 @@ impl skill_devices::session::DeviceAdapter for BrainVisionAdapter {
 
 // ── BrainBit (BLE via NeuroSDK2) ───────────────────────────────────────────
 
-async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_brainbit(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use brainbit::prelude::*;
 
     info!("scanning for BrainBit…");
@@ -1085,14 +1151,14 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
 
     let target_addr = target.strip_prefix("brainbit:").unwrap_or("").to_string();
 
-    let (device_name, device_addr, keepalive_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
-        let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).map_err(|e| format!("BrainBit scanner: {e}"))?;
-        scanner.start().map_err(|e| format!("BrainBit scan start: {e}"))?;
+    let (device_name, device_addr, keepalive_thread) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let scanner = Scanner::new(&[SensorFamily::LEBrainBit]).context("BrainBit scanner")?;
+        scanner.start().context("BrainBit scan start")?;
         std::thread::sleep(std::time::Duration::from_secs(5));
-        scanner.stop().map_err(|e| format!("BrainBit scan stop: {e}"))?;
-        let devices = scanner.devices().map_err(|e| format!("BrainBit devices: {e}"))?;
+        scanner.stop().context("BrainBit scan stop")?;
+        let devices = scanner.devices().context("BrainBit devices")?;
         if devices.is_empty() {
-            return Err("No BrainBit device found nearby".into());
+            anyhow::bail!("No BrainBit device found nearby");
         }
         // Pick matching device or first.
         let info = if !target_addr.is_empty() {
@@ -1103,9 +1169,9 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
         } else {
             devices.first()
         }
-        .ok_or("No matching BrainBit device")?;
+        .ok_or_else(|| anyhow::anyhow!("No matching BrainBit device"))?;
 
-        let mut device = BrainBitDevice::connect(&scanner, info).map_err(|e| format!("BrainBit connect: {e}"))?;
+        let mut device = BrainBitDevice::connect(&scanner, info).context("BrainBit connect")?;
         let name = device.name().unwrap_or_else(|_| "BrainBit".into());
         let addr = device.address().unwrap_or_default();
 
@@ -1115,10 +1181,8 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
             .on_signal(move |samples| {
                 let _ = tx.blocking_send(samples.to_vec());
             })
-            .map_err(|e| format!("BrainBit on_signal: {e}"))?;
-        device
-            .start_signal()
-            .map_err(|e| format!("BrainBit start_signal: {e}"))?;
+            .context("BrainBit on_signal")?;
+        device.start_signal().context("BrainBit start_signal")?;
 
         // Keep scanner/device alive until adapter disconnects.
         let keepalive_thread = std::thread::Builder::new()
@@ -1128,12 +1192,12 @@ async fn connect_brainbit(target: &str) -> Result<Box<dyn DeviceAdapter>, String
                 drop(device);
                 drop(scanner);
             })
-            .map_err(|e| format!("spawn keepalive: {e}"))?;
+            .context("spawn keepalive")?;
 
         Ok((name, addr, keepalive_thread))
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     info!(name = %device_name, addr = %device_addr, "BrainBit connected");
 
@@ -1214,7 +1278,7 @@ impl skill_devices::session::DeviceAdapter for BrainBitAdapter {
 
 // ── g.tec Unicorn Hybrid Black (BLE) ──────────────────────────────────────
 
-async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_gtec(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use gtec::prelude::*;
 
     let serial = target.strip_prefix("gtec:").unwrap_or("").to_string();
@@ -1222,16 +1286,19 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
 
     let (sample_tx, sample_rx) = tokio::sync::mpsc::channel::<gtec::device::Scan>(512);
 
-    let (device_serial, read_thread) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+    let (device_serial, read_thread) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let serial = if serial.is_empty() {
-            let serials = UnicornDevice::scan(true).map_err(|e| format!("scan: {e}"))?;
-            serials.into_iter().next().ok_or("No g.tec Unicorn found")?
+            let serials = UnicornDevice::scan(true).context("scan")?;
+            serials
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No g.tec Unicorn found"))?
         } else {
             serial
         };
 
-        let mut device = UnicornDevice::open(&serial).map_err(|e| format!("open: {e}"))?;
-        device.start_acquisition(false).map_err(|e| format!("start: {e}"))?;
+        let mut device = UnicornDevice::open(&serial).context("open")?;
+        device.start_acquisition(false).context("start")?;
 
         let dev_serial = serial.clone();
         let tx = sample_tx;
@@ -1245,12 +1312,12 @@ async fn connect_gtec(target: &str) -> Result<Box<dyn DeviceAdapter>, String> {
                     }
                 }
             })
-            .map_err(|e| format!("spawn reader: {e}"))?;
+            .context("spawn reader")?;
 
         Ok((dev_serial, read_thread))
     })
     .await
-    .map_err(|e| format!("spawn: {e}"))??;
+    .context("spawn")??;
 
     info!(serial = %device_serial, "g.tec Unicorn connected");
 
@@ -1327,7 +1394,7 @@ impl skill_devices::session::DeviceAdapter for GtecAdapter {
 
 // ── Emotiv (Cortex WebSocket API) ────────────────────────────────────────────
 
-async fn connect_emotiv(state: &AppState) -> Result<Box<dyn DeviceAdapter>, String> {
+async fn connect_emotiv(state: &AppState) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::emotiv::prelude::*;
     use skill_devices::session::emotiv::EmotivAdapter;
 
@@ -1341,7 +1408,7 @@ async fn connect_emotiv(state: &AppState) -> Result<Box<dyn DeviceAdapter>, Stri
     };
 
     if client_id.trim().is_empty() || client_secret.trim().is_empty() {
-        return Err("Emotiv client_id/client_secret not configured in Settings → Device API".into());
+        anyhow::bail!("Emotiv client_id/client_secret not configured in Settings → Device API");
     }
 
     info!("connecting to Emotiv via Cortex API…");
@@ -1351,7 +1418,7 @@ async fn connect_emotiv(state: &AppState) -> Result<Box<dyn DeviceAdapter>, Stri
         ..Default::default()
     };
     let client = CortexClient::new(config);
-    let (rx, handle) = client.connect().await.map_err(|e| format!("Emotiv connect: {e}"))?;
+    let (rx, handle) = client.connect().await.context("Emotiv connect")?;
     // Emotiv auto-detects channels from the headset type after DataLabels arrives.
     // Start with defaults; the adapter updates dynamically.
     Ok(Box::new(EmotivAdapter::new(rx, handle, 14, vec![], String::new())))

@@ -260,6 +260,25 @@ pub(crate) fn fetch_daemon_ws_port() -> Result<u16, String> {
     Ok(body.port)
 }
 
+/// Fetch daemon log lines that have a sequence number >= `since`.
+/// Returns `(next_seq, lines)` on success.
+pub(crate) fn fetch_daemon_log_recent(since: u64) -> Result<(u64, Vec<String>), String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    let path = format!("/v1/log/recent?since={since}");
+    let body: serde_json::Value = fetch_json_with_auth(&base_url, &token, &path)?;
+    let next_seq = body["next_seq"].as_u64().unwrap_or(0);
+    let lines = body["lines"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((next_seq, lines))
+}
+
 pub(crate) fn fetch_daemon_status() -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;

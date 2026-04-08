@@ -47,7 +47,7 @@ fn path_within(path: &std::path::Path, root: &std::path::Path) -> bool {
 ///
 /// Allows paths under: current working directory, home directory, and temp dir.
 /// Set `SKILL_DISABLE_STRICT_PATH_SAFETY=1` to disable this guard globally.
-pub fn enforce_path_integrity(path: &std::path::Path) -> Result<(), String> {
+pub fn enforce_path_integrity(path: &std::path::Path) -> anyhow::Result<()> {
     if std::env::var("SKILL_DISABLE_STRICT_PATH_SAFETY")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
@@ -63,10 +63,7 @@ pub fn enforce_path_integrity(path: &std::path::Path) -> Result<(), String> {
         return Ok(());
     }
 
-    Err(format!(
-        "path `{}` is outside trusted roots (cwd/home/tmp)",
-        path.display()
-    ))
+    anyhow::bail!("path `{}` is outside trusted roots (cwd/home/tmp)", path.display())
 }
 
 /// Retry a fallible closure with exponential backoff.

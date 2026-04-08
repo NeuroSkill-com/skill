@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use anyhow::Context as _;
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::png::PngEncoder;
 use image::ColorType;
@@ -10,8 +11,8 @@ use crate::{lock_or_recover, SharedIrohAuth, SharedIrohRuntime};
 use serde_json::{json, Value};
 
 /// Render a JSON string into a QR-code PNG and return it as a data-URI.
-fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
-    let qr = QrCode::encode_text(payload_json, QrCodeEcc::Medium).map_err(|e| format!("QR encode error: {e}"))?;
+fn json_to_qr_data_uri(payload_json: &str) -> anyhow::Result<String> {
+    let qr = QrCode::encode_text(payload_json, QrCodeEcc::Medium).context("QR encode error")?;
     let size = qr.size();
     let scale = 8; // pixels per module
     let border = 2 * scale;
@@ -34,7 +35,7 @@ fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
     let encoder = PngEncoder::new(&mut buf);
     encoder
         .write_image(&img, img_size, img_size, ColorType::L8.into())
-        .map_err(|e| format!("QR PNG encode error: {e}"))?;
+        .context("QR PNG encode error")?;
     let b64 = general_purpose::STANDARD.encode(&buf);
     Ok(format!("data:image/png;base64,{b64}"))
 }
@@ -54,12 +55,12 @@ fn json_to_qr_data_uri(payload_json: &str) -> Result<String, String> {
 ///   { "payload": { endpoint_id, relay_url, totp_id, secret_base32, name, created_at },
 ///     "otpauth_url": "otpauth://totp/...",
 ///     "qr_png_base64": "data:image/png;base64,..." }
-pub fn iroh_phone_invite(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime, msg: &Value) -> Result<Value, String> {
+pub fn iroh_phone_invite(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime, msg: &Value) -> anyhow::Result<Value> {
     // Grab endpoint info from the running tunnel
     let (endpoint_id, relay_url) = {
         let r = lock_or_recover(runtime);
         if !r.online {
-            return Err("iroh tunnel is not online yet".into());
+            anyhow::bail!("iroh tunnel is not online yet");
         }
         (r.endpoint_id.clone(), r.relay_url.clone())
     };
@@ -71,13 +72,13 @@ pub fn iroh_phone_invite(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime, msg
         let name = msg
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| "provide either \"totp_id\" or \"name\" to create a new TOTP".to_string())?;
+            .ok_or_else(|| anyhow::anyhow!("provide either \"totp_id\" or \"name\" to create a new TOTP"))?;
         let (view, _, _) = lock_or_recover(auth).create_totp(name)?;
         view.id
     };
 
     let invite = lock_or_recover(auth).build_invite_payload(&totp_id, &endpoint_id, &relay_url)?;
-    let payload_json = serde_json::to_string(&invite).map_err(|e| format!("serialize: {e}"))?;
+    let payload_json = serde_json::to_string(&invite).context("serialize")?;
     let qr_data_uri = json_to_qr_data_uri(&payload_json)?;
 
     // Also produce the standard otpauth:// URL for authenticator apps
@@ -90,7 +91,7 @@ pub fn iroh_phone_invite(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime, msg
     }))
 }
 
-pub fn iroh_info(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime) -> Result<Value, String> {
+pub fn iroh_info(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime) -> anyhow::Result<Value> {
     let r = lock_or_recover(runtime).clone();
 
     let a = lock_or_recover(auth);
@@ -115,18 +116,18 @@ pub fn iroh_info(auth: &SharedIrohAuth, runtime: &SharedIrohRuntime) -> Result<V
     }))
 }
 
-pub fn iroh_totp_list(auth: &SharedIrohAuth) -> Result<Value, String> {
+pub fn iroh_totp_list(auth: &SharedIrohAuth) -> anyhow::Result<Value> {
     let mut rows = lock_or_recover(auth).list_totp();
     rows.sort_by_key(|r| r.created_at);
     rows.reverse();
     Ok(json!({ "totp": rows }))
 }
 
-pub fn iroh_totp_create(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_totp_create(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let name = msg
         .get("name")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"name\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"name\" (string)"))?;
 
     let (totp, otpauth_url, qr_png_base64) = lock_or_recover(auth).create_totp(name)?;
 
@@ -137,11 +138,11 @@ pub fn iroh_totp_create(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, Str
     }))
 }
 
-pub fn iroh_totp_qr(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_totp_qr(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let id = msg
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"id\" (string)"))?;
 
     let (otpauth_url, qr_png_base64) = lock_or_recover(auth).totp_qr(id)?;
 
@@ -152,32 +153,32 @@ pub fn iroh_totp_qr(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String>
     }))
 }
 
-pub fn iroh_totp_revoke(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_totp_revoke(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let id = msg
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"id\" (string)"))?;
 
     lock_or_recover(auth).revoke_totp(id)?;
     Ok(json!({ "revoked": true, "id": id }))
 }
 
-pub fn iroh_clients_list(auth: &SharedIrohAuth) -> Result<Value, String> {
+pub fn iroh_clients_list(auth: &SharedIrohAuth) -> anyhow::Result<Value> {
     let mut rows = lock_or_recover(auth).list_clients();
     rows.sort_by_key(|r| r.created_at);
     rows.reverse();
     Ok(json!({ "clients": rows }))
 }
 
-pub fn iroh_client_register(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_client_register(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let endpoint_id = msg
         .get("endpoint_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"endpoint_id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"endpoint_id\" (string)"))?;
     let otp = msg
         .get("otp")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"otp\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"otp\" (string)"))?;
     let totp_id = msg.get("totp_id").and_then(Value::as_str);
     let name = msg.get("name").and_then(Value::as_str);
     let scope = msg.get("scope").and_then(Value::as_str);
@@ -187,25 +188,25 @@ pub fn iroh_client_register(auth: &SharedIrohAuth, msg: &Value) -> Result<Value,
     Ok(json!({ "client": client, "registered": true }))
 }
 
-pub fn iroh_client_revoke(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_client_revoke(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let id = msg
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"id\" (string)"))?;
 
     lock_or_recover(auth).revoke_client(id)?;
     Ok(json!({ "revoked": true, "id": id }))
 }
 
-pub fn iroh_client_set_scope(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_client_set_scope(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let id = msg
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"id\" (string)"))?;
     let scope = msg
         .get("scope")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"scope\" (string: read|full|custom)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"scope\" (string: read|full|custom)"))?;
 
     let groups: Option<Vec<String>> = msg
         .get("groups")
@@ -245,7 +246,7 @@ pub fn iroh_client_set_scope(auth: &SharedIrohAuth, msg: &Value) -> Result<Value
 }
 
 /// List all available command groups and their commands.
-pub fn iroh_scope_groups(_auth: &SharedIrohAuth) -> Result<Value, String> {
+pub fn iroh_scope_groups(_auth: &SharedIrohAuth) -> anyhow::Result<Value> {
     let groups: Vec<Value> = crate::scope::GROUPS
         .iter()
         .map(|g| {
@@ -269,18 +270,18 @@ pub fn iroh_scope_groups(_auth: &SharedIrohAuth) -> Result<Value, String> {
 }
 
 /// Return the resolved permissions for a specific client.
-pub fn iroh_client_permissions(auth: &SharedIrohAuth, msg: &Value) -> Result<Value, String> {
+pub fn iroh_client_permissions(auth: &SharedIrohAuth, msg: &Value) -> anyhow::Result<Value> {
     let id = msg
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
+        .ok_or_else(|| anyhow::anyhow!("missing required field: \"id\" (string)"))?;
 
     let a = lock_or_recover(auth);
     let clients = a.list_clients();
     let client = clients
         .iter()
         .find(|c| c.id == id)
-        .ok_or_else(|| format!("unknown client id: {id}"))?;
+        .ok_or_else(|| anyhow::anyhow!("unknown client id: {id}"))?;
 
     let report = crate::scope::permission_report(&client.permissions);
     Ok(json!({
@@ -428,7 +429,7 @@ mod tests {
         let td = tempfile::tempdir().expect("td");
         let auth = make_auth(td.path());
         let msg = json!({});
-        let err = iroh_totp_create(&auth, &msg).expect_err("err");
+        let err = iroh_totp_create(&auth, &msg).expect_err("err").to_string();
         assert!(err.contains("name"));
     }
 
@@ -452,7 +453,7 @@ mod tests {
     fn totp_qr_missing_id_errors() {
         let td = tempfile::tempdir().expect("td");
         let auth = make_auth(td.path());
-        let err = iroh_totp_qr(&auth, &json!({})).expect_err("err");
+        let err = iroh_totp_qr(&auth, &json!({})).expect_err("err").to_string();
         assert!(err.contains("id"));
     }
 
@@ -637,7 +638,9 @@ mod tests {
         let auth = make_auth(td.path());
         let rt = make_runtime();
         // Tunnel not online → error
-        let err = iroh_phone_invite(&auth, &rt, &json!({"name": "phone"})).expect_err("err");
+        let err = iroh_phone_invite(&auth, &rt, &json!({"name": "phone"}))
+            .expect_err("err")
+            .to_string();
         assert!(err.contains("not online"));
     }
 
@@ -711,7 +714,9 @@ mod tests {
         }
         let (view, _, _) = auth.lock().expect("lock").create_totp("revoked").expect("totp");
         auth.lock().expect("lock").revoke_totp(&view.id).expect("revoke");
-        let err = iroh_phone_invite(&auth, &rt, &json!({"totp_id": view.id})).expect_err("err");
+        let err = iroh_phone_invite(&auth, &rt, &json!({"totp_id": view.id}))
+            .expect_err("err")
+            .to_string();
         assert!(err.contains("revoked"));
     }
 
@@ -726,7 +731,7 @@ mod tests {
             r.endpoint_id = "ep".into();
             r.relay_url = "https://r/".into();
         }
-        let err = iroh_phone_invite(&auth, &rt, &json!({})).expect_err("err");
+        let err = iroh_phone_invite(&auth, &rt, &json!({})).expect_err("err").to_string();
         assert!(err.contains("totp_id") || err.contains("name"));
     }
 }

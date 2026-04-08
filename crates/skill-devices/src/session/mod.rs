@@ -60,6 +60,8 @@ bitflags! {
         const BATTERY = 0b0000_1000;
         /// Device-specific metadata (e.g. Muse Control JSON responses).
         const META    = 0b0001_0000;
+        /// Functional near-infrared spectroscopy optical channels.
+        const FNIRS   = 0b0010_0000;
     }
 }
 
@@ -174,6 +176,22 @@ pub enum DeviceEvent {
     Battery(BatteryFrame),
     /// Device-specific opaque metadata (e.g. Muse Control JSON).
     Meta(serde_json::Value),
+    /// One fNIRS optical frame (multi-channel raw photodetector counts).
+    Fnirs(FnirsFrame),
+}
+
+/// A single fNIRS (functional near-infrared spectroscopy) optical frame.
+///
+/// Channels are device-specific and described by
+/// [`DeviceDescriptor::fnirs_channel_names`].  Raw ADC counts are stored
+/// as-is; the host layer is responsible for normalisation and ΔHbO/ΔHbR
+/// computation.
+#[derive(Debug, Clone)]
+pub struct FnirsFrame {
+    /// Raw ADC values in channel order matching `fnirs_channel_names`.
+    pub channels: Vec<f64>,
+    /// Device-side timestamp in seconds since Unix epoch (or session start).
+    pub timestamp_s: f64,
 }
 
 // ── DeviceAdapter trait ───────────────────────────────────────────────────────

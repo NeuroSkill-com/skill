@@ -273,11 +273,11 @@ pub struct SensorChunk {
 }
 
 /// Parse a SensorChunk from raw bytes.
-pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
+pub fn decode_sensor_chunk(raw: &[u8]) -> anyhow::Result<SensorChunk> {
     let mut off = 0usize;
 
     if raw.len() < 8 {
-        return Err("sensor chunk too short".into());
+        anyhow::bail!("sensor chunk too short");
     }
 
     let sample_rate = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
@@ -289,7 +289,7 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
 
     let eeg_bytes = eeg_ch * eeg_spc * 4;
     if off + eeg_bytes > raw.len() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "eeg data truncated: need {} have {}",
             off + eeg_bytes,
             raw.len()
@@ -306,7 +306,7 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
     }
 
     if off + 4 > raw.len() {
-        return Err("ppg header truncated".into());
+        anyhow::bail!("ppg header truncated");
     }
     let ppg_ch = u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()) as usize;
     off += 2;
@@ -315,7 +315,7 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
 
     let ppg_bytes = ppg_ch * ppg_spc * 8;
     if off + ppg_bytes > raw.len() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "ppg data truncated: need {} have {}",
             off + ppg_bytes,
             raw.len()
@@ -332,13 +332,13 @@ pub fn decode_sensor_chunk(raw: &[u8]) -> Result<SensorChunk, String> {
     }
 
     if off + 2 > raw.len() {
-        return Err("imu header truncated".into());
+        anyhow::bail!("imu header truncated");
     }
     let imu_n = u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()) as usize;
     off += 2;
     let imu_bytes = imu_n * 24;
     if off + imu_bytes > raw.len() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "imu data truncated: need {} have {}",
             off + imu_bytes,
             raw.len()
@@ -394,9 +394,9 @@ pub fn encode_location(loc: &Location) -> [u8; LOCATION_PAYLOAD_SIZE] {
     buf
 }
 
-pub fn decode_location(buf: &[u8]) -> Result<Location, String> {
+pub fn decode_location(buf: &[u8]) -> anyhow::Result<Location> {
     if buf.len() < LOCATION_PAYLOAD_SIZE {
-        return Err("location payload too short".into());
+        anyhow::bail!("location payload too short");
     }
     Ok(Location {
         latitude: f64::from_le_bytes(buf[0..8].try_into().unwrap()),
@@ -414,9 +414,9 @@ pub fn encode_battery(level_pct: f32) -> [u8; 4] {
     level_pct.to_le_bytes()
 }
 
-pub fn decode_battery(buf: &[u8]) -> Result<f32, String> {
+pub fn decode_battery(buf: &[u8]) -> anyhow::Result<f32> {
     if buf.len() < 4 {
-        return Err("battery payload too short".into());
+        anyhow::bail!("battery payload too short");
     }
     Ok(f32::from_le_bytes(buf[0..4].try_into().unwrap()))
 }
@@ -507,14 +507,17 @@ pub fn encode_phone_imu(samples: &[PhoneImuSample]) -> Vec<u8> {
 }
 
 /// Decode a batch of phone sensor samples.
-pub fn decode_phone_imu(raw: &[u8]) -> Result<Vec<PhoneImuSample>, String> {
+pub fn decode_phone_imu(raw: &[u8]) -> anyhow::Result<Vec<PhoneImuSample>> {
     if raw.len() < 2 {
-        return Err("phone sensor too short".into());
+        anyhow::bail!("phone sensor too short");
     }
     let count = u16::from_le_bytes(raw[0..2].try_into().unwrap()) as usize;
     let expected = 2 + count * PHONE_SENSOR_SAMPLE_SIZE;
     if raw.len() < expected {
-        return Err(format!("phone sensor truncated: need {expected}, got {}", raw.len()));
+        return Err(anyhow::anyhow!(
+            "phone sensor truncated: need {expected}, got {}",
+            raw.len()
+        ));
     }
     let mut out = Vec::with_capacity(count);
     let mut off = 2;

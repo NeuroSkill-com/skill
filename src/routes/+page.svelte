@@ -558,15 +558,13 @@ const imuLabels = $derived((status.imu_channel_names ?? []) as string[]);
 const fnirsLabels = $derived((status.fnirs_channel_names ?? []) as string[]);
 /**
  * Athena = Muse S gen 2.
- * Detected by hardware_version "p50" (arrives a few seconds after connect)
- * OR by device name "MuseS-XXXX" — Athena advertises without a space/hyphen
- * between "Muse" and "S", e.g. "MuseS-F921".
+ * Detected by device name "MuseS-XXXX" — Athena advertises without a
+ * space before "S", e.g. "MuseS-F921".  Classic Muse S uses "Muse S-XXXX".
  */
 const isAthena = $derived(
   isMuse &&
-    (status.hardware_version === "p50" ||
-      // "MuseS-F921" → toLowerCase → "muses-f921" → includes "muses" ✓
-      (status.device_name?.toLowerCase().includes("muses") ?? false)),
+    // "MuseS-F921" → toLowerCase → "muses-f921" → includes "muses" ✓
+    (status.device_name?.toLowerCase().includes("muses") ?? false),
 );
 /**
  * Classic Muse S (gen 1) — advertises as "Muse S-XXXX" (space-separated).
@@ -578,14 +576,16 @@ const isMuseS = $derived(
     ((status.device_name?.toLowerCase().includes("muse-s") ?? false) ||
       (status.device_name?.toLowerCase().includes("muse s") ?? false)),
 );
-/** Muse 2 — advertises as "Muse-2-XXXX" or has hardware_version "p21". */
+/** Muse 2 — advertises as "Muse-2-XXXX". */
 const isMuse2 = $derived(
   isMuse &&
     !isAthena &&
     !isMuseS &&
+    // "Muse-2-XXXX" or "Muse 2-XXXX" advertising names.
+    // Note: hardware_version === "p21" was previously here but "p21" is a
+    // BLE preset command, not a hardware version — dead code removed.
     ((status.device_name?.toLowerCase().includes("muse-2") ?? false) ||
-      (status.device_name?.toLowerCase().includes("muse 2") ?? false) ||
-      status.hardware_version === "p21"),
+      (status.device_name?.toLowerCase().includes("muse 2") ?? false)),
 );
 /**
  * Image path for the currently connected device, or null if no matching image
@@ -1452,7 +1452,7 @@ useWindowTitle("window.title.main");
                              rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
               {/if}
             </p>
-            {#if status.serial_number || status.mac_address}
+            {#if status.serial_number || status.mac_address || status.firmware_version}
               <div class="flex flex-wrap justify-center gap-x-3 gap-y-0.5 -mt-0.5">
                 {#if status.serial_number}
                   <button
@@ -1471,6 +1471,11 @@ useWindowTitle("window.title.main");
                            cursor-pointer select-none transition-colors">
                     {revealMAC ? status.mac_address : redact(status.mac_address)}
                   </button>
+                {/if}
+                {#if status.firmware_version}
+                  <span class="font-mono text-[0.6rem] text-muted-foreground/70">
+                    fw&nbsp;{status.firmware_version}
+                  </span>
                 {/if}
               </div>
             {/if}

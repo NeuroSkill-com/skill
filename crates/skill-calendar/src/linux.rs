@@ -27,7 +27,7 @@ pub fn request_access() -> bool {
     true
 }
 
-pub fn fetch_events(start_utc: i64, end_utc: i64) -> Result<Vec<CalendarEvent>, String> {
+pub fn fetch_events(start_utc: i64, end_utc: i64) -> anyhow::Result<Vec<CalendarEvent>> {
     let Some(home) = dirs_home() else {
         return Ok(Vec::new());
     };

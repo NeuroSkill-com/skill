@@ -60,6 +60,11 @@ pub fn imu_parquet_path(csv_path: &Path) -> PathBuf {
     to_parquet_ext(&crate::session_csv::imu_csv_path(csv_path))
 }
 
+/// Parquet fNIRS path from EEG CSV path.
+pub fn fnirs_parquet_path(csv_path: &Path) -> PathBuf {
+    to_parquet_ext(&crate::session_csv::fnirs_csv_path(csv_path))
+}
+
 // ── Writer properties ─────────────────────────────────────────────────────────
 
 fn writer_props() -> WriterProperties {
@@ -105,6 +110,13 @@ pub struct ParquetState {
     imu_rows: usize,
     imu_path: PathBuf,
     imu_pending: Vec<[f64; 10]>,
+
+    // ── fNIRS (lazy) ─────────────────────────────────────────────────────────
+    fnirs_wtr: Option<ArrowWriter<std::fs::File>>,
+    fnirs_schema: Arc<Schema>,
+    fnirs_rows: usize,
+    fnirs_path: PathBuf,
+    fnirs_pending: Vec<Vec<f64>>, // [timestamp_s, ch0, ch1, ...]
 }
 
 impl ParquetState {
@@ -192,6 +204,13 @@ impl ParquetState {
             imu_rows: 0,
             imu_path: imu_parquet_path(csv_path),
             imu_pending: Vec::new(),
+
+            fnirs_wtr: None,
+            // Schema is built lazily in push_fnirs once channel names are known.
+            fnirs_schema: Arc::new(Schema::empty()),
+            fnirs_rows: 0,
+            fnirs_path: fnirs_parquet_path(csv_path),
+            fnirs_pending: Vec::new(),
         })
     }
 
@@ -554,6 +573,68 @@ impl ParquetState {
 
     // ── Flush / close ────────────────────────────────────────────────────────
 
+    /// Write fNIRS optical channels to `_fnirs.parquet`.
+    /// Schema is built lazily on the first call using `channel_names`.
+    pub fn push_fnirs(&mut self, _eeg_csv_path: &Path, channels: &[f64], channel_names: &[String], timestamp_s: f64) {
+        // Build schema on first call.
+        if self.fnirs_wtr.is_none() && self.fnirs_schema.fields().is_empty() {
+            let mut fields = vec![Field::new("timestamp_s", DataType::Float64, false)];
+            for name in channel_names {
+                fields.push(Field::new(name.as_str(), DataType::Float64, true));
+            }
+            self.fnirs_schema = Arc::new(Schema::new(fields));
+        }
+        if self.fnirs_wtr.is_none() {
+            match std::fs::File::create(&self.fnirs_path) {
+                Ok(f) => match ArrowWriter::try_new(f, self.fnirs_schema.clone(), Some(writer_props())) {
+                    Ok(w) => {
+                        self.fnirs_wtr = Some(w);
+                    }
+                    Err(e) => {
+                        eprintln!("[parquet] fNIRS writer error: {e}");
+                        return;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("[parquet] fNIRS create error: {e}");
+                    return;
+                }
+            }
+        }
+        let mut row = vec![timestamp_s];
+        row.extend_from_slice(channels);
+        self.fnirs_pending.push(row);
+        self.fnirs_rows += 1;
+        if self.fnirs_rows >= 256 {
+            self.flush_fnirs();
+        }
+    }
+
+    fn flush_fnirs(&mut self) {
+        if self.fnirs_pending.is_empty() {
+            return;
+        }
+        let Some(ref mut wtr) = self.fnirs_wtr else {
+            return;
+        };
+        let n_rows = self.fnirs_pending.len();
+        let n_cols = self.fnirs_pending[0].len(); // timestamp + channels
+        let mut cols: Vec<Vec<f64>> = (0..n_cols).map(|_| Vec::with_capacity(n_rows)).collect();
+        for row in self.fnirs_pending.drain(..) {
+            for (c, v) in row.into_iter().enumerate() {
+                cols[c].push(v);
+            }
+        }
+        let columns: Vec<Arc<dyn arrow_array::Array>> = cols
+            .into_iter()
+            .map(|c| Arc::new(Float64Array::from(c)) as Arc<dyn arrow_array::Array>)
+            .collect();
+        if let Ok(batch) = RecordBatch::try_new(self.fnirs_schema.clone(), columns) {
+            let _ = wtr.write(&batch);
+            let _ = wtr.flush();
+        }
+    }
+
     pub fn flush(&mut self) {
         let _ = self.eeg_wtr.flush();
         if let Some(ref mut w) = self.ppg_wtr {
@@ -561,12 +642,14 @@ impl ParquetState {
         }
         self.flush_metrics();
         self.flush_imu();
+        self.flush_fnirs();
     }
 
     /// Close all writers, finalising the Parquet files.
     pub fn close(mut self) {
         self.flush_metrics();
         self.flush_imu();
+        self.flush_fnirs();
         let _ = self.eeg_wtr.close();
         if let Some(w) = self.ppg_wtr {
             let _ = w.close();
@@ -575,6 +658,9 @@ impl ParquetState {
             let _ = w.close();
         }
         if let Some(w) = self.imu_wtr {
+            let _ = w.close();
+        }
+        if let Some(w) = self.fnirs_wtr {
             let _ = w.close();
         }
     }

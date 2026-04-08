@@ -381,31 +381,33 @@ pub fn permission_report(cs: &ClientScope) -> serde_json::Value {
 // ── Validation ───────────────────────────────────────────────────────────────
 
 /// Validate and normalise a scope string.
-pub fn normalize_scope(scope: &str) -> Result<String, String> {
+pub fn normalize_scope(scope: &str) -> anyhow::Result<String> {
     let s = scope.trim().to_lowercase();
     match s.as_str() {
         "read" | "readonly" => Ok("read".to_string()),
         "full" => Ok("full".to_string()),
         "custom" => Ok("custom".to_string()),
-        _ => Err(format!("invalid scope '{scope}': expected 'read', 'full', or 'custom'")),
+        _ => Err(anyhow::anyhow!(
+            "invalid scope '{scope}': expected 'read', 'full', or 'custom'"
+        )),
     }
 }
 
 /// Validate that all group IDs are known.
-pub fn validate_groups(groups: &[String]) -> Result<(), String> {
+pub fn validate_groups(groups: &[String]) -> anyhow::Result<()> {
     for gid in groups {
         if group_by_id(gid).is_none() {
-            return Err(format!("unknown group '{gid}'"));
+            anyhow::bail!("unknown group '{gid}'");
         }
     }
     Ok(())
 }
 
 /// Validate that all commands are known (belong to some group).
-pub fn validate_commands(commands: &[String]) -> Result<(), String> {
+pub fn validate_commands(commands: &[String]) -> anyhow::Result<()> {
     for cmd in commands {
         if group_for_command(cmd).is_none() {
-            return Err(format!("unknown command '{cmd}'"));
+            anyhow::bail!("unknown command '{cmd}'");
         }
     }
     Ok(())

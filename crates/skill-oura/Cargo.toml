@@ -8,8 +8,9 @@ description = "Oura Ring V2 API integration — fetch sleep, activity, heart rat
 [dependencies]
 oura-api = "0.1.2"
 skill-health = { path = "../skill-health" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+anyhow     = { workspace = true }
+serde      = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 
 [dev-dependencies]

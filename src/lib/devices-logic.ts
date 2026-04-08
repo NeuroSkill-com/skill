@@ -54,9 +54,11 @@ export function fuzzyMatch(haystack: string, needle: string): boolean {
 // ── Device image resolution ───────────────────────────────────────────────────
 
 /** Resolve the product image path for a Muse-family device. */
-export function museImage(name: string, hw?: string | null): string | null {
+export function museImage(name: string, _hw?: string | null): string | null {
   const n = name.toLowerCase();
-  const isAthena = hw === "p50" || n.includes("muses");
+  // Athena (Muse S gen 2) advertises as "MuseS-XXXX" (no space before S).
+  // hardware_version is not set by the Muse adapter so we rely on the name only.
+  const isAthena = n.includes("muses");
   if (isAthena) return "/devices/muse-s-athena.jpg";
   if (n.includes("muse-s") || n.includes("muse s")) return "/devices/muse-s-gen1.jpg";
   if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-gen2.jpg";

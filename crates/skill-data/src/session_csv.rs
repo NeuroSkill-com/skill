@@ -44,6 +44,13 @@ pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
     eeg_path.with_file_name(format!("{stem}_imu.csv"))
 }
 
+/// Derive the fNIRS CSV path from an EEG CSV path.
+/// `exg_1700000000.csv` → `exg_1700000000_fnirs.csv`
+pub fn fnirs_csv_path(eeg_path: &Path) -> PathBuf {
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    eeg_path.with_file_name(format!("{stem}_fnirs.csv"))
+}
+
 // ── Metrics CSV column header ─────────────────────────────────────────────────
 
 /// Column headers for the `_metrics.csv` file.
@@ -283,6 +290,8 @@ pub struct CsvState {
     metrics_written: u64,
     /// Separate CSV writer for IMU data (created lazily on first IMU sample).
     imu_wtr: Option<csv::Writer<std::fs::File>>,
+    fnirs_wtr: Option<csv::Writer<std::fs::File>>,
+    fnirs_written: u64,
     /// IMU rows written.
     imu_written: u64,
 }
@@ -313,6 +322,8 @@ impl CsvState {
             metrics_written: 0,
             imu_wtr: None,
             imu_written: 0,
+            fnirs_wtr: None,
+            fnirs_written: 0,
         })
     }
 
@@ -507,6 +518,42 @@ impl CsvState {
         }
     }
 
+    /// Write a fNIRS optical frame to `_fnirs.csv`.
+    ///
+    /// The file is created lazily on the first call.  Column order matches
+    /// `fnirs_channel_names` passed at construction (via the runner).
+    pub fn push_fnirs(&mut self, eeg_csv_path: &Path, channels: &[f64], channel_names: &[String], timestamp_s: f64) {
+        if self.fnirs_wtr.is_none() {
+            let path = fnirs_csv_path(eeg_csv_path);
+            match csv::Writer::from_path(&path) {
+                Ok(mut w) => {
+                    let mut header = vec!["timestamp_s".to_string()];
+                    header.extend_from_slice(channel_names);
+                    let refs: Vec<&str> = header.iter().map(String::as_str).collect();
+                    let _ = w.write_record(&refs);
+                    eprintln!("[csv] fNIRS file opened: {}", path.display());
+                    self.fnirs_wtr = Some(w);
+                }
+                Err(e) => {
+                    eprintln!("[csv] failed to create fNIRS file {}: {e}", path.display());
+                    return;
+                }
+            }
+        }
+        if let Some(ref mut wtr) = self.fnirs_wtr {
+            let mut row = vec![format!("{:.6}", timestamp_s)];
+            for &v in channels {
+                row.push(format!("{:.1}", v));
+            }
+            let refs: Vec<&str> = row.iter().map(String::as_str).collect();
+            let _ = wtr.write_record(&refs);
+            self.fnirs_written += 1;
+            if self.fnirs_written.is_multiple_of(64) {
+                let _ = wtr.flush();
+            }
+        }
+    }
+
     /// Write a `BandSnapshot` row to the `_metrics.csv` file (~4 Hz).
     /// The file is created lazily on the first call.
     pub fn push_metrics(&mut self, eeg_csv_path: &Path, snap: &BandSnapshot) {
@@ -631,6 +678,9 @@ impl CsvState {
             let _ = w.flush();
         }
         if let Some(ref mut w) = self.imu_wtr {
+            let _ = w.flush();
+        }
+        if let Some(ref mut w) = self.fnirs_wtr {
             let _ = w.flush();
         }
     }

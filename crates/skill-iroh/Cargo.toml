@@ -6,6 +6,8 @@ license = "GPL-3.0-only"
 description = "iroh tunnel + TOTP access control for Skill"
 
 [dependencies]
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 iroh = "0.97"

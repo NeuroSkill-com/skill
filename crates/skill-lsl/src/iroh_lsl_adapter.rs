@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use async_trait::async_trait;
 use iroh::protocol::ProtocolHandler;
 use iroh::Endpoint;
@@ -31,10 +32,10 @@ impl IrohLslAdapter {
     /// has the correct channel count and sample rate.
     ///
     /// Returns `(adapter, endpoint_id)` or an error on timeout (120 s).
-    pub async fn start_sink() -> Result<(Self, String), String> {
+    pub async fn start_sink() -> anyhow::Result<(Self, String)> {
         let (endpoint_id, adapter) = Self::start_sink_two_phase().await?;
-        let adapter = adapter.await.map_err(|e| format!("sink resolve: {e}"))?;
-        Ok((adapter?, endpoint_id))
+        let adapter = adapter.await.context("sink resolve")??;
+        Ok((adapter, endpoint_id))
     }
 
     /// Two-phase start: returns the endpoint ID immediately and a future
@@ -48,13 +49,13 @@ impl IrohLslAdapter {
     /// // Show endpoint_id to user...
     /// let (adapter, _) = adapter_fut.await??;
     /// ```
-    pub async fn start_sink_two_phase() -> Result<(String, tokio::task::JoinHandle<Result<Self, String>>), String> {
+    pub async fn start_sink_two_phase() -> anyhow::Result<(String, tokio::task::JoinHandle<anyhow::Result<Self>>)> {
         let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
             .alpns(vec![rlsl_iroh::protocol::LSL_ALPN.to_vec()])
             .relay_mode(iroh::RelayMode::Default)
             .bind()
             .await
-            .map_err(|e| format!("iroh bind: {e}"))?;
+            .context("iroh bind")?;
 
         endpoint.online().await;
         let endpoint_id = endpoint.id().to_string();
@@ -181,11 +182,11 @@ impl IrohLslAdapter {
 }
 
 /// Resolve a re-published local LSL EEG outlet with timeout.
-async fn resolve_eeg_stream(timeout_secs: u64) -> Result<rlsl::stream_info::StreamInfo, String> {
+async fn resolve_eeg_stream(timeout_secs: u64) -> anyhow::Result<rlsl::stream_info::StreamInfo> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     loop {
         if tokio::time::Instant::now() > deadline {
-            return Err(format!("Timed out waiting for remote LSL source ({timeout_secs}s)"));
+            anyhow::bail!("Timed out waiting for remote LSL source ({timeout_secs}s)");
         }
         let streams = tokio::task::spawn_blocking(|| rlsl::resolver::resolve_all(3.0))
             .await

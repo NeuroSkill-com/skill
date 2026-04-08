@@ -399,6 +399,7 @@ pub async fn get_calendar_events(
     tokio::task::spawn_blocking(move || skill_calendar::fetch_events(start_utc, end_utc))
         .await
         .map_err(|e| format!("calendar events task error: {e}"))?
+        .map_err(|e| e.to_string())
 }
 
 // ── Location permission ───────────────────────────────────────────────────────

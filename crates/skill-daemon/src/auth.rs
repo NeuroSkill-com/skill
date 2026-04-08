@@ -156,17 +156,10 @@ impl ApiToken {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TokenStoreError {
+    #[error("maximum number of active tokens reached")]
     MaxTokensReached,
-}
-
-impl std::fmt::Display for TokenStoreError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MaxTokensReached => write!(f, "maximum number of active tokens reached"),
-        }
-    }
 }
 
 /// Token store — persisted as JSON in the skill data dir.
@@ -266,13 +259,13 @@ impl TokenStore {
         }
     }
 
-    pub fn save(&self, skill_dir: &Path) -> Result<(), String> {
+    pub fn save(&self, skill_dir: &Path) -> anyhow::Result<()> {
         let path = store_path(skill_dir);
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| format!("serialize error: {e}"))?;
-        std::fs::write(&path, json).map_err(|e| format!("write error: {e}"))
+        let json = serde_json::to_string_pretty(self).map_err(|e| anyhow::anyhow!("serialize error: {e}"))?;
+        std::fs::write(&path, json).map_err(|e| anyhow::anyhow!("write error: {e}"))
     }
 
     /// Create a new token. Returns the full token only once.

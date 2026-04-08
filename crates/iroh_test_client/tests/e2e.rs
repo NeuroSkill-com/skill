@@ -36,7 +36,7 @@ async fn handle_one_request(
             ("200 OK", body)
         }
         Err(e) => {
-            let body = serde_json::json!({"ok": false, "error": e}).to_string();
+            let body = serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
             ("400 Bad Request", body)
         }
     };

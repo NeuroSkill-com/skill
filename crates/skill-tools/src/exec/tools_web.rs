@@ -380,7 +380,7 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
                     // Retry on server errors (5xx) and rate limits (429)
                     if status == 429 || (500..600).contains(&status) {
                         let body = r.into_body().read_to_string().unwrap_or_default();
-                        return Err(format!("HTTP {}: {}", status, body));
+                        anyhow::bail!("HTTP {}: {}", status, body);
                     }
                     let content_type = r
                         .headers()
@@ -400,15 +400,15 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
                     }))
                 }
                 Err(ureq::Error::StatusCode(code)) if code == 429 || (500..600).contains(&code) => {
-                    Err(format!("HTTP {}", code))
+                    anyhow::bail!("HTTP {}", code)
                 }
-                Err(e) => Err(e.to_string()),
+                Err(e) => Err(anyhow::Error::from(e)),
             }
         });
 
         match result {
             Ok(val) => val,
-            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e }),
+            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
         }
     })
     .await

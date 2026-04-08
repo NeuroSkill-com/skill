@@ -52,7 +52,7 @@ static FETCH_CANCELLED: AtomicBool = AtomicBool::new(false);
 /// When set, `external_fetch_page` uses this instead of launching a
 /// standalone headless browser.  The function receives `(url, wait_ms)`
 /// and must return the visible text content of the rendered page.
-type ExternalRendererFn = Box<dyn Fn(&str, u64) -> Result<String, String> + Send + Sync>;
+type ExternalRendererFn = Box<dyn Fn(&str, u64) -> anyhow::Result<String> + Send + Sync>;
 static EXTERNAL_RENDERER: std::sync::OnceLock<ExternalRendererFn> = std::sync::OnceLock::new();
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -186,8 +186,8 @@ impl Browser {
     /// the visible text.  This is used as a fallback when the standalone
     /// headless browser is unavailable (macOS inside Tauri).
     ///
-    /// The function signature is `(url: &str, wait_ms: u64) -> Result<String, String>`.
-    pub fn set_external_renderer(f: impl Fn(&str, u64) -> Result<String, String> + Send + Sync + 'static) {
+    /// The function signature is `(url: &str, wait_ms: u64) -> anyhow::Result<String>`.
+    pub fn set_external_renderer(f: impl Fn(&str, u64) -> anyhow::Result<String> + Send + Sync + 'static) {
         let _ = EXTERNAL_RENDERER.set(Box::new(f));
     }
 
@@ -1173,8 +1173,8 @@ fn js_timestamp() -> f64 {
 /// Render a URL using the registered external renderer (if any).
 ///
 /// Returns `None` if no external renderer is registered.
-/// Returns `Some(Ok(text))` on success or `Some(Err(msg))` on failure.
-pub fn external_fetch_page(url: &str, wait_ms: u64) -> Option<Result<String, String>> {
+/// Returns `Some(Ok(text))` on success or `Some(Err(e))` on failure.
+pub fn external_fetch_page(url: &str, wait_ms: u64) -> Option<anyhow::Result<String>> {
     FETCH_CANCELLED.store(false, Ordering::Relaxed);
     EXTERNAL_RENDERER.get().map(|f| f(url, wait_ms))
 }

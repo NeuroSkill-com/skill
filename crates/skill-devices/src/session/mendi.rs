@@ -4,15 +4,23 @@
 //! [`DeviceAdapter`] for the Mendi fNIRS headband.
 //!
 //! Mendi streams optical fNIRS frame data (IR/Red/Ambient), IMU readings,
-//! temperature, and battery status over BLE. The current app pipeline does not
-//! process fNIRS as EEG, so this adapter forwards IMU + battery + metadata.
+//! temperature, and battery status over BLE.
+//!
+//! Each frame emits:
+//!   - [`DeviceEvent::Fnirs`] — 9 raw optical channels in the order defined by
+//!     `fnirs_channel_names`: IR-left, IR-right, IR-pulse, Red-left, Red-right,
+//!     Red-pulse, Ambient-left, Ambient-right, Ambient-pulse.
+//!   - [`DeviceEvent::Imu`] — accelerometer + gyroscope from the same frame.
+//!   - [`DeviceEvent::Meta`] — temperature and other diagnostics.
 
 use std::collections::VecDeque;
 
 use mendi::prelude::*;
 use tokio::sync::mpsc;
 
-use super::{now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, ImuFrame};
+use super::{
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, FnirsFrame, ImuFrame,
+};
 
 pub struct MendiAdapter {
     rx: mpsc::Receiver<MendiEvent>,
@@ -28,7 +36,7 @@ impl MendiAdapter {
             handle: Some(handle),
             desc: DeviceDescriptor {
                 kind: "mendi",
-                caps: DeviceCaps::IMU | DeviceCaps::BATTERY | DeviceCaps::META,
+                caps: DeviceCaps::FNIRS | DeviceCaps::IMU | DeviceCaps::BATTERY | DeviceCaps::META,
                 eeg_channels: 0,
                 eeg_sample_rate: 0.0,
                 channel_names: Vec::new(),
@@ -73,27 +81,40 @@ impl MendiAdapter {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
             MendiEvent::Frame(frame) => {
+                let ts = if frame.timestamp > 0.0 {
+                    frame.timestamp / 1000.0
+                } else {
+                    now_secs()
+                };
+
+                // fNIRS optical channels in the canonical order declared by
+                // fnirs_channel_names: IR L/R/Pulse, Red L/R/Pulse, Amb L/R/Pulse.
+                self.pending.push_back(DeviceEvent::Fnirs(FnirsFrame {
+                    channels: vec![
+                        frame.ir_left as f64,
+                        frame.ir_right as f64,
+                        frame.ir_pulse as f64,
+                        frame.red_left as f64,
+                        frame.red_right as f64,
+                        frame.red_pulse as f64,
+                        frame.amb_left as f64,
+                        frame.amb_right as f64,
+                        frame.amb_pulse as f64,
+                    ],
+                    timestamp_s: ts,
+                }));
+
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
                     accel: [frame.accel_x_g(), frame.accel_y_g(), frame.accel_z_g()],
                     gyro: Some([frame.gyro_x_dps(), frame.gyro_y_dps(), frame.gyro_z_dps()]),
                     mag: None,
                 }));
 
+                // Temperature and other diagnostics go to Meta for WS broadcast.
                 self.pending.push_back(DeviceEvent::Meta(serde_json::json!({
                     "source": "mendi_frame",
-                    "timestamp_s": if frame.timestamp > 0.0 { frame.timestamp / 1000.0 } else { now_secs() },
+                    "timestamp_s": ts,
                     "temperature_c": frame.temperature,
-                    "optical": {
-                        "ir_left": frame.ir_left,
-                        "ir_right": frame.ir_right,
-                        "ir_pulse": frame.ir_pulse,
-                        "red_left": frame.red_left,
-                        "red_right": frame.red_right,
-                        "red_pulse": frame.red_pulse,
-                        "amb_left": frame.amb_left,
-                        "amb_right": frame.amb_right,
-                        "amb_pulse": frame.amb_pulse,
-                    }
                 })));
             }
             MendiEvent::Battery(b) => {
