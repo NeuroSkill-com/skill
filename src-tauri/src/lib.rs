@@ -236,6 +236,10 @@ use llm::cmds::{open_chat_window, open_downloads_window};
 
 use std::{sync::Mutex, time::Duration};
 
+/// Continuous reconnect cadence (seconds) used by the startup auto-reconnect loop.
+/// Single source of truth for countdown + retry trigger interval.
+const AUTO_RECONNECT_CADENCE_SECS: u32 = 3;
+
 use tauri::{tray::TrayIconBuilder, AppHandle, Emitter, Manager};
 
 // ── Core types (re-exported from state.rs) ────────────────────────────────────
@@ -756,12 +760,90 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
     tauri::async_runtime::spawn(async move {
         // Wait for daemon to be ready before polling.
         tokio::time::sleep(Duration::from_secs(2)).await;
+        let mut batt_warned_for: Option<String> = None;
+        let mut had_good_signal = false;
+        let mut bad_signal_since: Option<std::time::Instant> = None;
+        let mut signal_warned_for: Option<String> = None;
         loop {
             let poll_result = tokio::task::spawn_blocking(crate::daemon_cmds::fetch_daemon_status)
                 .await
                 .unwrap_or_else(|e| Err(e.to_string()));
             match poll_result {
                 Ok(daemon_status) => {
+                    // Backend-level safety alerts so notifications still fire
+                    // even when the dashboard window is hidden/closed.
+                    if daemon_status.state == "connected" {
+                        let dev_id = daemon_status
+                            .device_id
+                            .clone()
+                            .or(daemon_status.target_id.clone())
+                            .or(daemon_status.device_name.clone())
+                            .unwrap_or_default();
+
+                        // Low battery warning (once per device until recharge).
+                        let batt = daemon_status.battery;
+                        if !dev_id.is_empty()
+                            && batt > 0.0
+                            && batt <= 15.0
+                            && batt_warned_for.as_deref() != Some(&dev_id)
+                        {
+                            batt_warned_for = Some(dev_id.clone());
+                            crate::send_toast(
+                                &app_poll,
+                                crate::ToastLevel::Warning,
+                                "Low battery",
+                                &format!(
+                                    "{} battery is at {:.0}%.",
+                                    daemon_status
+                                        .device_name
+                                        .clone()
+                                        .unwrap_or_else(|| "Device".into()),
+                                    batt
+                                ),
+                            );
+                        }
+                        if batt >= 25.0 && batt_warned_for.as_deref() == Some(&dev_id) {
+                            batt_warned_for = None;
+                        }
+
+                        // Signal degradation warning after a previously good state.
+                        let q = &daemon_status.channel_quality;
+                        let good = q.iter().filter(|x| x.as_str() == "good").count();
+                        let bad = q
+                            .iter()
+                            .filter(|x| x.as_str() == "poor" || x.as_str() == "no_signal")
+                            .count();
+                        if good >= 2 {
+                            had_good_signal = true;
+                        }
+                        if had_good_signal && bad >= 2 && daemon_status.sample_count > 0 {
+                            if bad_signal_since.is_none() {
+                                bad_signal_since = Some(std::time::Instant::now());
+                            }
+                            if let Some(since) = bad_signal_since {
+                                if since.elapsed() >= Duration::from_secs(20)
+                                    && signal_warned_for.as_deref() != Some(&dev_id)
+                                {
+                                    signal_warned_for = Some(dev_id.clone());
+                                    crate::send_toast(
+                                        &app_poll,
+                                        crate::ToastLevel::Warning,
+                                        "Signal quality dropped",
+                                        "EEG signal became poor during recording. Re-seat electrodes / adjust fit.",
+                                    );
+                                }
+                            }
+                        } else {
+                            bad_signal_since = None;
+                            if good >= 2 && signal_warned_for.as_deref() == Some(&dev_id) {
+                                signal_warned_for = None;
+                            }
+                        }
+                    } else {
+                        had_good_signal = false;
+                        bad_signal_since = None;
+                    }
+
                     let changed = {
                         let r = app_poll.state::<Mutex<Box<AppState>>>();
                         let s = r.lock_or_recover();
@@ -793,6 +875,78 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
                 }
             };
             tokio::time::sleep(Duration::from_secs(delay)).await;
+        }
+    });
+
+    // ── Auto-reconnect loop (continuous, 3s cadence) ─────────────────
+    // Goal: continuous EXG streaming. If reconnect is enabled and we are
+    // disconnected, keep retrying every 3 seconds until user cancels.
+    let app_reconnect = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            let mut trigger_retry = false;
+            let mut should_emit = false;
+
+            {
+                let r = app_reconnect.state::<Mutex<Box<AppState>>>();
+                let mut s = r.lock_or_recover();
+
+                if !s.pending_reconnect {
+                    if s.status.retry_countdown_secs != 0 || s.status.retry_attempt != 0 {
+                        s.status.retry_countdown_secs = 0;
+                        s.status.retry_attempt = 0;
+                        should_emit = true;
+                    }
+                    drop(s);
+                } else if s.status.state == "connected" {
+                    if s.status.retry_countdown_secs != 0 || s.status.retry_attempt != 0 {
+                        s.status.retry_countdown_secs = 0;
+                        s.status.retry_attempt = 0;
+                        should_emit = true;
+                    }
+                } else if s.status.state == "bt_off"
+                    || s.status.state == "connecting"
+                    || s.status.state == "scanning"
+                {
+                    // Let active connect/scanner flow proceed; no local countdown.
+                } else {
+                    // Disconnected + reconnect enabled: 3-second countdown.
+                    if s.status.retry_countdown_secs == 0 {
+                        s.status.retry_countdown_secs = AUTO_RECONNECT_CADENCE_SECS;
+                        should_emit = true;
+                    } else {
+                        s.status.retry_countdown_secs =
+                            s.status.retry_countdown_secs.saturating_sub(1);
+                        should_emit = true;
+                    }
+
+                    if s.status.retry_countdown_secs == 0 {
+                        s.status.retry_attempt = s.status.retry_attempt.saturating_add(1);
+                        trigger_retry = true;
+                        should_emit = true;
+                    }
+                }
+            }
+
+            if should_emit {
+                emit_status(&app_reconnect);
+            }
+
+            if trigger_retry {
+                let _ = tokio::task::spawn_blocking(crate::daemon_cmds::retry_connect)
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .map(|daemon_status| {
+                        let r = app_reconnect.state::<Mutex<Box<AppState>>>();
+                        let mut s = r.lock_or_recover();
+                        apply_daemon_status(&mut s.status, daemon_status);
+                    });
+                emit_status_from_daemon(&app_reconnect);
+            }
         }
     });
 

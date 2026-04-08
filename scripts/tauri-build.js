@@ -44,6 +44,10 @@ function commandExists(cmd) {
   }
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 function linuxTrayRuntimeLooksPresent() {
   if (!commandExists("ldconfig")) return true;
   try {
@@ -126,7 +130,35 @@ function removeBundleArg(args, parsedBundleArg) {
 
 // ── Parse arguments ───────────────────────────────────────────────────────────
 // argv: ["node", "tauri-build.js", subcommand?, ...rest]
-const [subcommand = "", ...subArgs] = process.argv.slice(2);
+const [subcommand = "", ...rawSubArgs] = process.argv.slice(2);
+
+let tuiPaneRole = null;
+const subArgs = [];
+for (const arg of rawSubArgs) {
+  if (arg === "--__tui-pane-role=daemon") {
+    tuiPaneRole = "daemon";
+    continue;
+  }
+  if (arg === "--__tui-pane-role=tauri") {
+    tuiPaneRole = "tauri";
+    continue;
+  }
+  subArgs.push(arg);
+}
+
+const tuiEnabled = process.env.SKILL_TAURI_TUI !== "0";
+const shouldLaunchDevTui = subcommand === "dev" && !tuiPaneRole && tuiEnabled;
+
+if (shouldLaunchDevTui) {
+  const tuiScriptPath = resolve(__dirname, "tauri-dev-tui.js");
+  const forwarded = subArgs.map((arg) => shellQuote(arg)).join(" ");
+  const cmd = `${shellQuote(process.execPath)} ${shellQuote(tuiScriptPath)}${forwarded ? ` ${forwarded}` : ""}`;
+  execSync(cmd, { cwd: root, stdio: "inherit", env: process.env });
+  process.exit(0);
+}
+
+const tuiDaemonPane = tuiPaneRole === "daemon";
+const tuiTauriPane = tuiPaneRole === "tauri";
 
 // Subcommands that need platform setup before Tauri runs.
 const needsSetup = subcommand === "dev" || subcommand === "build";
@@ -749,8 +781,9 @@ if (subcommand === "build") {
     console.warn(`⚠ Daemon sidecar build failed: ${e.message}`);
   }
 }
+
 let daemonChild = null;
-if (subcommand === "dev") {
+if (subcommand === "dev" && !tuiTauriPane) {
   console.log("\n🔧 Building skill-daemon…");
   try {
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
@@ -768,7 +801,26 @@ if (subcommand === "dev") {
     ];
     const daemonBin = candidates.find((c) => existsSync(c));
 
-    if (daemonBin) {
+    if (!daemonBin) {
+      console.warn("⚠ skill-daemon binary not found after build — Tauri will attempt auto-launch");
+    } else if (tuiDaemonPane) {
+      console.log(`\n🚀 Starting daemon (TUI pane): ${daemonBin}`);
+      const { spawn } = await import("node:child_process");
+      daemonChild = spawn(daemonBin, [], {
+        cwd: root,
+        stdio: ["ignore", "inherit", "inherit"],
+        env: { ...process.env, SKILL_DAEMON_ADDR: "127.0.0.1:18444", RUST_LOG: "skill_daemon=info,info" },
+        detached: false,
+      });
+      const exitCode = await new Promise((resolve) => {
+        daemonChild.once("exit", (code, signal) => {
+          if (signal) resolve(1);
+          else resolve(code ?? 0);
+        });
+        daemonChild.once("error", () => resolve(1));
+      });
+      process.exit(exitCode);
+    } else {
       console.log(`\n🚀 Starting daemon: ${daemonBin}`);
       const { spawn } = await import("node:child_process");
       daemonChild = spawn(daemonBin, [], {
@@ -778,11 +830,6 @@ if (subcommand === "dev") {
       });
       daemonChild.on("error", (e) => console.error(`[daemon] spawn error: ${e.message}`));
       daemonChild.on("exit", (code) => console.log(`[daemon] exited with code ${code}`));
-      // Poll the TCP port until the daemon is ready (up to 10 s).
-      // A fixed sleep is unreliable: on first run or slow machines the daemon
-      // can take longer than 1 s to bind, causing Tauri's ensure_daemon_running()
-      // to detect the port as closed and spawn a second instance — resulting in
-      // two daemons fighting each other and a 1000% CPU spike at startup.
       const daemonAddrEnv = process.env.SKILL_DAEMON_ADDR || "127.0.0.1:18444";
       const lastColon = daemonAddrEnv.lastIndexOf(":");
       const daemonHost = daemonAddrEnv.slice(0, lastColon) || "127.0.0.1";
@@ -808,94 +855,101 @@ if (subcommand === "dev") {
       } else {
         console.warn("[daemon] not ready after 10 s — launching Tauri anyway (ensure_daemon_running will retry)\n");
       }
-    } else {
-      console.warn("⚠ skill-daemon binary not found after build — Tauri will attempt auto-launch");
     }
   } catch (e) {
+    if (tuiDaemonPane) throw e;
     console.warn(`⚠ Failed to build/start daemon: ${e.message}`);
   }
 }
 
 // Clean up daemon on exit
 process.on("exit", () => {
-  if (daemonChild) {
-    daemonChild.kill();
-  }
+  if (daemonChild) daemonChild.kill();
 });
 process.on("SIGINT", () => {
-  if (daemonChild) {
-    daemonChild.kill();
-  }
+  if (daemonChild) daemonChild.kill();
   process.exit(0);
 });
 process.on("SIGTERM", () => {
-  if (daemonChild) {
-    daemonChild.kill();
-  }
+  if (daemonChild) daemonChild.kill();
   process.exit(0);
 });
 
-try {
-  runTauriWithArgs(finalArgs);
-} catch (error) {
-  const hasSegfaultExitCode = Number(error?.status) === 139;
-  const hasCrashExitCode = Number(error?.status) === 134; // SIGABRT (stack overflow)
-  const baseArgs = bundleArg ? removeBundleArg(finalArgs, bundleArg) : [...finalArgs];
+if (!tuiDaemonPane) {
+  try {
+    runTauriWithArgs(finalArgs);
+  } catch (error) {
+    const isExpectedTuiShutdown =
+      subcommand === "dev" &&
+      (tuiTauriPane || tuiDaemonPane) &&
+      (error?.signal === "SIGTERM" ||
+        error?.signal === "SIGINT" ||
+        Number(error?.status) === 143 ||
+        Number(error?.status) === 130);
 
-  // ── macOS: Tauri CLI bundler stack-overflow recovery ────────────────────
-  // The Tauri CLI itself (not our app) can stack-overflow during the
-  // .app bundling phase.  When this happens the release binary is already
-  // built.  Fall back to manual .app assembly.
-  if (isMac && (hasCrashExitCode || hasSegfaultExitCode) && subcommand === "build") {
-    const hasBinary = hasBuiltReleaseBinary(explicitTarget);
-    if (hasBinary) {
-      // First, try compile-only to ensure binary is ready (may be a no-op)
-      try {
-        runTauriWithArgs([...removeBundleArg(finalArgs, bundleArg), "--no-bundle"]);
-      } catch (_) {
-        /* binary already exists, ignore */
-      }
-
-      if (assembleMacOsApp()) {
-        process.exit(0);
-      }
-    }
-  }
-
-  if (hasSingleBundleTarget && hasSegfaultExitCode) {
-    const target = bundleTargets[0];
-    const hasArtifacts = hasBundleArtifacts(explicitTarget, target);
-    if (hasArtifacts) {
+    if (isExpectedTuiShutdown) {
       process.exit(0);
     }
 
-    try {
-      tryLinuxBundleSubcommandFallback(baseArgs, target);
-      if (hasBundleArtifacts(explicitTarget, target)) {
-        process.exit(0);
-      }
-    } catch (bundleError) {
-      const bundleSegfault = Number(bundleError?.status) === 139;
-      const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, target);
-      if (bundleSegfault && recoveredAfterBundleSegfault) {
-        process.exit(0);
-      }
+    const hasSegfaultExitCode = Number(error?.status) === 139;
+    const hasCrashExitCode = Number(error?.status) === 134; // SIGABRT (stack overflow)
+    const baseArgs = bundleArg ? removeBundleArg(finalArgs, bundleArg) : [...finalArgs];
 
-      maybeTreatLinuxCrashAsCompileOnlySuccess(
-        bundleError,
-        `single-target fallback 'tauri bundle --bundles ${target}'`,
-      );
-      throw bundleError;
+    // ── macOS: Tauri CLI bundler stack-overflow recovery ────────────────────
+    // The Tauri CLI itself (not our app) can stack-overflow during the
+    // .app bundling phase.  When this happens the release binary is already
+    // built.  Fall back to manual .app assembly.
+    if (isMac && (hasCrashExitCode || hasSegfaultExitCode) && subcommand === "build") {
+      const hasBinary = hasBuiltReleaseBinary(explicitTarget);
+      if (hasBinary) {
+        // First, try compile-only to ensure binary is ready (may be a no-op)
+        try {
+          runTauriWithArgs([...removeBundleArg(finalArgs, bundleArg), "--no-bundle"]);
+        } catch (_) {
+          /* binary already exists, ignore */
+        }
+
+        if (assembleMacOsApp()) {
+          process.exit(0);
+        }
+      }
     }
-  }
 
-  maybeTreatLinuxCrashAsCompileOnlySuccess(error, "initial tauri build");
+    if (hasSingleBundleTarget && hasSegfaultExitCode) {
+      const target = bundleTargets[0];
+      const hasArtifacts = hasBundleArtifacts(explicitTarget, target);
+      if (hasArtifacts) {
+        process.exit(0);
+      }
 
-  if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
-    throw error;
-  }
+      try {
+        tryLinuxBundleSubcommandFallback(baseArgs, target);
+        if (hasBundleArtifacts(explicitTarget, target)) {
+          process.exit(0);
+        }
+      } catch (bundleError) {
+        const bundleSegfault = Number(bundleError?.status) === 139;
+        const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, target);
+        if (bundleSegfault && recoveredAfterBundleSegfault) {
+          process.exit(0);
+        }
 
-  for (const target of bundleTargets) {
-    runBundleTargetWithLinuxSegfaultFallback(baseArgs, target);
+        maybeTreatLinuxCrashAsCompileOnlySuccess(
+          bundleError,
+          `single-target fallback 'tauri bundle --bundles ${target}'`,
+        );
+        throw bundleError;
+      }
+    }
+
+    maybeTreatLinuxCrashAsCompileOnlySuccess(error, "initial tauri build");
+
+    if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
+      throw error;
+    }
+
+    for (const target of bundleTargets) {
+      runBundleTargetWithLinuxSegfaultFallback(baseArgs, target);
+    }
   }
 }

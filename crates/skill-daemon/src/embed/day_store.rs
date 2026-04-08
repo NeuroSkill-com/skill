@@ -55,7 +55,6 @@ fn rebuild_hnsw_from_sqlite(
     idx
 }
 
-
 /// Per-day storage for embeddings (SQLite) + ANN index (HNSW).
 pub(super) struct DayStore {
     pub conn: rusqlite::Connection,

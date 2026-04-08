@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.0.86",
+  "version": "0.0.87",
   "description": "",
   "type": "module",
   "scripts": {
@@ -50,6 +50,8 @@
     "audit:i18n:check": "npx tsx scripts/audit-i18n.ts --check",
     "sync:llm:catalog": "node scripts/sync-llm-catalog.js --write",
     "sync:llm:catalog:check": "node scripts/sync-llm-catalog.js --check",
+    "sync:readme:supported": "node scripts/sync-readme-supported.js",
+    "sync:readme:supported:check": "node scripts/sync-readme-supported.js --check",
     "setup": "bash scripts/setup-dev.sh",
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
     "setup:llama-prebuilt": "bash scripts/download-llama-prebuilt.sh",

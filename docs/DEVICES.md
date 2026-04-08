@@ -6,7 +6,7 @@ All devices feed into the same unified pipeline:
 
 ```
 Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
-    → EXG Embeddings (ZUNA/LUNA/REVE/OSF/NeuroRVQ/…) → HNSW Index
+    → EXG Embeddings (see `src-tauri/exg_catalog.json`) → HNSW Index
     → Hook Triggers → WebSocket Broadcast → Frontend
 ```
 
@@ -145,17 +145,28 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 
 ## EXG Embedding Backends
 
-All device data feeds into the EXG embedding pipeline. Available backends:
+All device data feeds into the EXG embedding pipeline.
+Canonical catalog: `src-tauri/exg_catalog.json`.
 
-| Backend | Crate | Architecture | HF Repo |
-|---------|-------|-------------|---------|
-| **ZUNA** | zuna-rs | Transformer encoder | Zyphra/ZUNA |
-| **LUNA** | luna-rs | Topology-agnostic | PulpBio/LUNA |
-| **REVE** | reve-rs | 4D Fourier positional | brain-bzh/reve-base |
-| **OSF** | osf-rs | ViT-Base (PSG) | yang-ai-lab/OSF-Base |
-| **SleepLM** | sleeplm | Contrastive (PSG) | yang-ai-lab/SleepLM |
-| **ST-EEGFormer** | steegformer | ViT-based EEG | eugenehp/ST-EEGFormer |
-| **NeuroRVQ** | skill-exg (`neurorvq` module) | Residual VQ | eugenehp/NeuroRVQ |
+Supported model families:
+
+| Family | Repo |
+|--------|------|
+| **ZUNA** | `Zyphra/ZUNA` |
+| **LUNA Base / Large / Huge** | `PulpBio/LUNA` |
+| **REVE Base / Large** | `brain-bzh/reve-base`, `brain-bzh/reve-large` |
+| **ST-EEGFormer Small / Base / Large** | `eugenehp/ST-EEGFormer` |
+| **CBraMod** | `braindecode/cbramod-pretrained` |
+| **EEGPT** | `braindecode/eegpt-pretrained` |
+| **LaBraM** | `braindecode/labram-pretrained` |
+| **SignalJEPA** | `braindecode/SignalJEPA-PreLocal-pretrained` |
+| **OpenTSLM** | `StanfordBDHG/OpenTSLM` |
+| **SensorLM** | `google/sensorlm` |
+| **SleepFM** | `zou-group/sleepfm-clinical` |
+| **SleepLM** | `yang-ai-lab/SleepLM` |
+| **OSF Base** | `yang-ai-lab/OSF-Base` |
+| **NeuroRVQ** | `eugenehp/NeuroRVQ` |
+| **TRIBE v2** | `eugenehp/tribev2` |
 
 ## Adding a New Device
 

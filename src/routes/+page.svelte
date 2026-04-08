@@ -33,6 +33,7 @@ import {
   MW75_COLOR,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { getDevices, pairDevice as pairDeviceCmd } from "$lib/daemon/devices";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   ArtifactEvents,
@@ -429,6 +430,10 @@ const todayTotalSecs = $derived(todayRecordedSecs + uptimeSec);
 // Daily goal (minutes) — persisted in ~/.skill/settings.json via Rust
 let dailyGoalMin = $state(60);
 let goalNotified = false; // true once notification fired this session
+let batteryWarnedDeviceId: string | null = null;
+let hadGoodSignalThisSession = false;
+let badSignalSinceMs = 0;
+let signalWarnedDeviceId: string | null = null;
 
 // Load persisted goal + today's notification state from Rust on mount
 daemonInvoke<number>("get_daily_goal")
@@ -458,6 +463,80 @@ $effect(() => {
       });
     } catch {
       /* notification not available */
+    }
+  }
+});
+
+$effect(() => {
+  const devId = status.device_id ?? status.target_id ?? status.device_name ?? null;
+
+  if (status.state !== "connected") {
+    hadGoodSignalThisSession = false;
+    badSignalSinceMs = 0;
+    return;
+  }
+
+  // Low-battery warning (once per connected device, resets after recharge/disconnect).
+  const batt = status.battery ?? 0;
+  if (devId && batt > 0 && batt <= 15 && batteryWarnedDeviceId !== devId) {
+    batteryWarnedDeviceId = devId;
+    addToast(
+      "warning",
+      t("alerts.lowBatteryTitle"),
+      t("alerts.lowBatteryBody", {
+        name: status.device_name ?? t("alerts.deviceGeneric"),
+        pct: String(Math.round(batt)),
+      }),
+      8000,
+    );
+    try {
+      sendNotification({
+        title: `🔋 ${t("alerts.lowBatteryTitle")}`,
+        body: t("alerts.lowBatteryBody", {
+          name: status.device_name ?? t("alerts.deviceGeneric"),
+          pct: String(Math.round(batt)),
+        }),
+      });
+    } catch {
+      /* notification not available */
+    }
+  }
+  if (batt >= 25 && batteryWarnedDeviceId === devId) {
+    batteryWarnedDeviceId = null;
+  }
+
+  // Signal quality degradation warning: notify only after we had good signal,
+  // then sustained poor/no-signal for 20s while streaming.
+  const q = status.channel_quality ?? [];
+  const good = q.filter((x) => x === "good").length;
+  const bad = q.filter((x) => x === "poor" || x === "no_signal").length;
+
+  if (good >= 2) hadGoodSignalThisSession = true;
+
+  const sustainedRecording =
+    (status.sample_count ?? 0) >= Math.max(1, Math.round((status.eeg_sample_rate_hz ?? 256) * 10));
+  const nowMs = Date.now();
+  const isBadNow = hadGoodSignalThisSession && sustainedRecording && bad >= 2;
+
+  if (isBadNow) {
+    if (badSignalSinceMs === 0) badSignalSinceMs = nowMs;
+    const badForMs = nowMs - badSignalSinceMs;
+    if (devId && badForMs >= 20_000 && signalWarnedDeviceId !== devId) {
+      signalWarnedDeviceId = devId;
+      addToast("warning", t("alerts.signalDroppedTitle"), t("alerts.signalDroppedBody"), 10000);
+      try {
+        sendNotification({
+          title: `⚠️ ${t("alerts.signalDroppedTitle")}`,
+          body: t("alerts.signalDroppedBody"),
+        });
+      } catch {
+        /* notification not available */
+      }
+    }
+  } else {
+    badSignalSinceMs = 0;
+    if (devId && signalWarnedDeviceId === devId && good >= 2) {
+      signalWarnedDeviceId = null;
     }
   }
 });
@@ -771,6 +850,12 @@ let onboardSteps = $derived([
 
 // Track unpaired device IDs we've already toasted about so we don't spam.
 const knownUnpairedIds = new Set<string>();
+let dashboardDiscovered = $state<DiscoveredDevice[]>([]);
+const dashboardUnpaired = $derived(
+  dashboardDiscovered.filter(
+    (d) => !d.is_paired && d.last_rssi !== 0 && d.id !== "neurosky" && d.id !== "brainvision:127.0.0.1:51244",
+  ),
+);
 
 async function retryConnect() {
   await daemonInvoke("retry_connect");
@@ -781,6 +866,9 @@ async function cancelRetry() {
 async function forgetDevice(id: string) {
   status = await daemonInvoke<DeviceStatus>("forget_device", { id });
 }
+async function setDefaultDevice(id: string) {
+  await daemonInvoke("set_preferred_device", { id });
+}
 async function connectDevice(id: string) {
   // If currently connected or scanning, cancel first before switching
   if (status.state === "connected" || status.state === "scanning" || status.state === "connecting") {
@@ -790,6 +878,12 @@ async function connectDevice(id: string) {
   }
   await daemonInvoke("set_preferred_device", { id });
   await daemonInvoke("retry_connect");
+}
+
+async function pairFromDashboard(id: string) {
+  await pairDeviceCmd<DiscoveredDevice>(id);
+  // Fast path to streaming: pair -> set default -> connect.
+  await connectDevice(id);
 }
 
 // ── Event markers (labels, calibration, search) ────────────────────────────
@@ -955,6 +1049,7 @@ onMount(async () => {
   );
 
   await refreshStatus();
+  dashboardDiscovered = await getDevices().catch(() => []);
   appVersion = await invoke<string>("get_app_version");
   mainWindowAutoFit = await daemonInvoke<boolean>("get_main_window_auto_fit").catch(() => true);
 
@@ -1091,6 +1186,7 @@ onMount(async () => {
   // know so they can go to Settings → Devices and pair it.
   unlisteners.push(
     await listen<DiscoveredDevice[]>("devices-updated", (ev) => {
+      dashboardDiscovered = ev.payload;
       const unpaired = ev.payload.filter((d) => !d.is_paired && d.last_rssi !== 0);
       for (const dev of unpaired) {
         if (!knownUnpairedIds.has(dev.id)) {
@@ -1663,7 +1759,7 @@ useWindowTitle("window.title.main");
         {/if}
 
       <!-- ════ SCANNING / RETRY COUNTDOWN ════════════════════════════════ -->
-      {:else if status.state === "scanning" || status.state === "connecting"}
+      {:else if status.state === "scanning" || status.state === "connecting" || status.retry_countdown_secs > 0}
         <div class="flex flex-col items-center gap-3 py-3">
           {#if status.retry_countdown_secs > 0}
             <!-- Retry countdown -->
@@ -2152,6 +2248,11 @@ useWindowTitle("window.title.main");
                   <span class="font-mono text-[0.57rem] text-muted-foreground/60 truncate">{dev.id}</span>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
+                  <Button size="sm" variant="outline"
+                    class="h-5 px-2 text-[0.56rem]"
+                    onclick={() => setDefaultDevice(dev.id)}>
+                    {t("settings.setDefault")}
+                  </Button>
                   <Button size="sm"
                     class="h-5 px-2 text-[0.56rem]"
                     onclick={() => connectDevice(dev.id)}>
@@ -2164,14 +2265,57 @@ useWindowTitle("window.title.main");
               </div>
             {/each}
           </div>
-          <Button size="sm" variant="outline" class="w-full text-[0.65rem]" onclick={retryConnect}>
-            {t("dashboard.scanForNew")}
-          </Button>
+          {#if dashboardUnpaired.length > 0}
+            <div class="mt-1 flex flex-col gap-1.5">
+              <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground">
+                {t("devices.discoveredDevices")}
+              </p>
+              {#each dashboardUnpaired.slice(0, 4) as dev (dev.id)}
+                <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-[#1a1a28] px-3 py-1.5">
+                  <div class="min-w-0 flex flex-col">
+                    <span class="text-[0.68rem] font-semibold text-foreground/80 truncate">{dev.name}</span>
+                    <span class="font-mono text-[0.52rem] text-muted-foreground/60 truncate">{dev.id}</span>
+                  </div>
+                  <Button size="sm" variant="outline" class="h-5 px-2 text-[0.56rem]" onclick={() => pairFromDashboard(dev.id)}>
+                    {t("settings.pair")}
+                  </Button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <div class="flex gap-2">
+            <Button size="sm" variant="outline" class="flex-1 text-[0.65rem]" onclick={retryConnect}>
+              {t("dashboard.scanForNew")}
+            </Button>
+            <Button size="sm" variant="outline" class="text-[0.65rem]" onclick={() => invoke('open_settings_window')}>
+              {t("settingsTabs.settings")}
+            </Button>
+          </div>
         {:else}
           <div class="flex flex-col items-center gap-3 py-4">
             <p class="text-[0.72rem] text-muted-foreground text-center leading-relaxed">
               {t("dashboard.noDevicesPaired")}
             </p>
+
+            {#if dashboardUnpaired.length > 0}
+              <div class="w-full flex flex-col gap-1.5">
+                <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground text-center">
+                  {t("devices.discoveredDevices")}
+                </p>
+                {#each dashboardUnpaired.slice(0, 5) as dev (dev.id)}
+                  <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-[#1a1a28] px-3 py-1.5">
+                    <div class="min-w-0 flex flex-col">
+                      <span class="text-[0.68rem] font-semibold text-foreground/80 truncate">{dev.name}</span>
+                      <span class="font-mono text-[0.52rem] text-muted-foreground/60 truncate">{dev.id}</span>
+                    </div>
+                    <Button size="sm" variant="outline" class="h-5 px-2 text-[0.56rem]" onclick={() => pairFromDashboard(dev.id)}>
+                      {t("settings.pair")}
+                    </Button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
             <div class="flex gap-2">
               <Button size="sm" onclick={retryConnect}>{t("dashboard.scanForMuse")}</Button>
               <Button size="sm" variant="outline" onclick={() => invoke('open_settings_window')}>

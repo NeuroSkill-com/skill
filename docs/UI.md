@@ -78,7 +78,7 @@ When enabled, the app automatically activates your system's Focus/DND mode once 
 <details>
 <summary>Paired & Discovered Devices</summary>
 
-View all paired EEG headsets, see BLE-discovered nearby devices, and browse the full catalog of supported devices by manufacturer (InterAxon, OpenBCI, Emotiv, Neurosity, IDUN, BrainBit). Each company section expands to show pairing instructions specific to that hardware.
+View all paired EEG headsets, see BLE-discovered nearby devices, and browse the full catalog of supported devices by manufacturer (InteraXon, OpenBCI, Emotiv, Neurosity, IDUN, BrainBit). Each company section expands to show pairing instructions specific to that hardware.
 
 ![Devices list](screenshots/gifs/settings-devices-list-light.gif)
 

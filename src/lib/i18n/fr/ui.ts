@@ -306,6 +306,13 @@ const ui: Record<string, string> = {
   "cmdK.lslIrohStart": "Start iroh Remote Sink",
   "cmdK.lslIrohStop": "Stop iroh Remote Sink",
 
+  "alerts.deviceGeneric": "Appareil",
+  "alerts.lowBatteryTitle": "Batterie faible",
+  "alerts.lowBatteryBody": "La batterie de {name} est à {pct}%.",
+  "alerts.signalDroppedTitle": "Qualité du signal dégradée",
+  "alerts.signalDroppedBody":
+    "Le signal EEG s'est dégradé pendant l'enregistrement. Repositionnez les électrodes / ajustez le casque.",
+
   "devices.iosOnly": "via iOS uniquement",
 
   "invite.copyLink": "Copier le lien d'invitation",

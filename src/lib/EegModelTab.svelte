@@ -242,19 +242,15 @@ onMount(async () => {
   const maybeToastHnswRecovery = (count: number) => {
     if (hnswRecoveryToastShown) return;
     hnswRecoveryToastShown = true;
-    addToast(
-      "warning",
-      t("model.hnswRecoveredTitle"),
-      t("model.hnswRecoveredMsg", { n: count.toLocaleString() }),
-      0,
-    );
+    addToast("warning", t("model.hnswRecoveredTitle"), t("model.hnswRecoveredMsg", { n: count.toLocaleString() }), 0);
   };
 
   const unlistenEmbedStatus = onDaemonEvent("EmbedWorkerStatus", (ev) => {
     const p = ev.payload as { hnsw_rebuilt?: boolean; recovered_embeddings?: number };
     if (typeof p.hnsw_rebuilt === "boolean") {
       hnswRebuilt = p.hnsw_rebuilt;
-      if (p.hnsw_rebuilt) maybeToastHnswRecovery(typeof p.recovered_embeddings === "number" ? p.recovered_embeddings : 0);
+      if (p.hnsw_rebuilt)
+        maybeToastHnswRecovery(typeof p.recovered_embeddings === "number" ? p.recovered_embeddings : 0);
     }
     if (typeof p.recovered_embeddings === "number") recoveredEmbeddings = p.recovered_embeddings;
   });

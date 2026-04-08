@@ -596,23 +596,35 @@ fn resolve_target_fields(state: &AppState, target: Option<&str>) -> (Option<Stri
     // ID-like targets (ble:/usb:/wifi:/...) should preserve their id and try
     // to resolve a human-friendly name from the paired list.
     if t.contains(':') {
-        let display = state.status.lock().ok().and_then(|s| {
-            s.paired_devices
-                .iter()
-                .find(|d| d.id == t)
-                .map(|d| d.name.clone())
-        });
+        let display = state
+            .status
+            .lock()
+            .ok()
+            .and_then(|s| s.paired_devices.iter().find(|d| d.id == t).map(|d| d.name.clone()));
         return (Some(t.to_string()), display.or_else(|| Some(t.to_string())));
     }
 
     // Name-like targets: keep display name and backfill id from paired devices.
-    let id = state.status.lock().ok().and_then(|s| {
-        s.paired_devices
-            .iter()
-            .find(|d| d.name == t)
-            .map(|d| d.id.clone())
-    });
+    let id = state
+        .status
+        .lock()
+        .ok()
+        .and_then(|s| s.paired_devices.iter().find(|d| d.name == t).map(|d| d.id.clone()));
     (id, Some(t.to_string()))
+}
+
+fn target_requires_pairing(target: &str) -> bool {
+    let lower = target.to_ascii_lowercase();
+    lower.contains(':') || lower == "neurosky" || lower.starts_with("muse")
+}
+
+fn is_paired_target(state: &AppState, target: &str) -> bool {
+    state
+        .status
+        .lock()
+        .ok()
+        .map(|s| s.paired_devices.iter().any(|d| d.id == target || d.name == target))
+        .unwrap_or(false)
 }
 
 async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResponse> {
@@ -625,27 +637,71 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         }
     }
 
-    // Retry target resolution (in order):
-    // 1) Last explicit target_id from status (new canonical field)
-    // 2) Legacy target_name fallback
-    // 3) Preferred device from current discovered-device list
-    // 4) First paired device as fallback
-    let status_target = state
+    // Snapshot paired order + previous target from status.
+    let (status_target, paired_order): (Option<String>, Vec<String>) = state
         .status
         .lock()
         .ok()
-        .and_then(|s| s.target_id.clone().or_else(|| s.target_name.clone()));
+        .map(|s| {
+            (
+                s.target_id.clone().or_else(|| s.target_name.clone()),
+                s.paired_devices.iter().map(|d| d.id.clone()).collect(),
+            )
+        })
+        .unwrap_or_default();
+
+    // Preferred target from discovered list (paired-only).
     let preferred_target = state
         .devices
         .lock()
         .ok()
-        .and_then(|d| d.iter().find(|x| x.is_preferred).map(|x| x.id.clone()));
-    let paired_fallback = state
-        .status
+        .and_then(|d| d.iter().find(|x| x.is_preferred && x.is_paired).map(|x| x.id.clone()));
+
+    // Availability snapshot from currently discovered paired devices.
+    let available: std::collections::HashSet<String> = state
+        .devices
         .lock()
         .ok()
-        .and_then(|s| s.paired_devices.first().map(|d| d.id.clone()));
-    let target = status_target.or(preferred_target).or(paired_fallback);
+        .map(|d| d.iter().filter(|x| x.is_paired).map(|x| x.id.clone()).collect())
+        .unwrap_or_default();
+
+    // Base preference: previous target -> preferred -> first paired.
+    let mut target = status_target
+        .or(preferred_target)
+        .or_else(|| paired_order.first().cloned());
+
+    // Never auto-connect an unpaired target.
+    if let Some(current) = target.as_ref() {
+        if !is_paired_target(&state, current) {
+            push_device_log(
+                &state,
+                "session",
+                &format!("retry-connect dropped unpaired target={current}"),
+            );
+            target = None;
+        }
+    }
+
+    // If default target is unavailable, fall back to next paired+available.
+    if let Some(current) = target.as_ref() {
+        if !available.contains(current) {
+            if let Some(next) = paired_order.iter().find(|id| available.contains(*id)) {
+                push_device_log(
+                    &state,
+                    "session",
+                    &format!("retry-connect fallback: {current} unavailable, using {next}"),
+                );
+                target = Some(next.clone());
+            }
+        }
+    } else if let Some(next) = paired_order.iter().find(|id| available.contains(*id)) {
+        push_device_log(
+            &state,
+            "session",
+            &format!("retry-connect auto-selected paired available target={next}"),
+        );
+        target = Some(next.clone());
+    }
 
     if let Some(ref t) = target {
         push_device_log(&state, "session", &format!("retry-connect target={t}"));
@@ -653,7 +709,9 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         push_device_log(&state, "session", "retry-connect skipped: no target device");
     }
 
-    let resolved_target = target.as_deref().map(|t| (t.to_string(), resolve_target_fields(&state, Some(t))));
+    let resolved_target = target
+        .as_deref()
+        .map(|t| (t.to_string(), resolve_target_fields(&state, Some(t))));
 
     if let Ok(mut status) = state.status.lock() {
         status.retry_attempt = 0;
@@ -737,6 +795,14 @@ async fn control_start_session(
                 let _ = std::fs::write(path, json);
             }
         }
+        if target_requires_pairing(t) && !is_paired_target(&state, t) {
+            if let Ok(mut status) = state.status.lock() {
+                status.state = "disconnected".to_string();
+                status.device_error = Some("Target device is not paired. Pair it first in Settings → Devices.".into());
+                out = status.clone();
+            }
+            return Json(out);
+        }
     }
 
     let (target_id, target_display_name) = resolve_target_fields(&state, target.as_deref());
@@ -767,6 +833,17 @@ async fn control_switch_session(
 
     let mut out = default_status("connecting");
     let target = req.target.clone();
+
+    if let Some(ref t) = target {
+        if target_requires_pairing(t) && !is_paired_target(&state, t) {
+            if let Ok(mut status) = state.status.lock() {
+                status.state = "disconnected".to_string();
+                status.device_error = Some("Target device is not paired. Pair it first in Settings → Devices.".into());
+                out = status.clone();
+            }
+            return Json(out);
+        }
+    }
 
     let (target_id, target_display_name) = resolve_target_fields(&state, target.as_deref());
     if let Ok(mut status) = state.status.lock() {

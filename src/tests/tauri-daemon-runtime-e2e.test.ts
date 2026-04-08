@@ -133,6 +133,8 @@ describe.skipIf(!canRun)("tauri runtime e2e via real daemon", () => {
         "sample_count",
         "serial_number",
         "state",
+        "target_display_name",
+        "target_id",
         "target_name",
       ]
     `);

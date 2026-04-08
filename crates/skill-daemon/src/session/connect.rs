@@ -24,10 +24,7 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
             let target_id = if target.contains(':') {
                 Some(target.clone())
             } else {
-                s.paired_devices
-                    .iter()
-                    .find(|d| d.name == target)
-                    .map(|d| d.id.clone())
+                s.paired_devices.iter().find(|d| d.name == target).map(|d| d.id.clone())
             };
             let target_display_name = if target.contains(':') {
                 s.paired_devices
@@ -63,7 +60,11 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
             }
             Err(e) => {
                 error!(%e, %target, "device connect failed");
-                push_device_log_static(&state2, "session", &format!("connect failed: target={target:?} err={e}"));
+                push_device_log_static(
+                    &state2,
+                    "session",
+                    &format!("connect failed: target={target:?} err={e}"),
+                );
                 if let Ok(mut s) = state2.status.lock() {
                     s.state = "disconnected".into();
                     s.device_error = Some(e.to_string());
@@ -78,8 +79,30 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
     Some(SessionHandle { cancel_tx })
 }
 
+fn requires_pairing(target: &str) -> bool {
+    let lower = target.to_ascii_lowercase();
+    // LSL streams are logical network sources, not pairable hardware.
+    !(lower == "lsl" || lower.starts_with("lsl:"))
+}
+
+fn is_paired(state: &AppState, target: &str) -> bool {
+    state
+        .status
+        .lock()
+        .ok()
+        .map(|s| s.paired_devices.iter().any(|d| d.id == target || d.name == target))
+        .unwrap_or(false)
+}
+
 async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     let lower = target.to_lowercase();
+
+    // Defense-in-depth: session control endpoints already enforce pairing for
+    // scanner/device targets. Keep the same invariant here in case connect
+    // paths are called from future internal entry points.
+    if requires_pairing(target) && !is_paired(state, target) {
+        anyhow::bail!("Target device is not paired. Pair it first in Settings → Devices.");
+    }
 
     // Devices that use their own BLE scanner (btleplug CBCentralManager) need
     // the background BLE listener scan to be stopped first.  On macOS, two

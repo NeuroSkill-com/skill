@@ -301,6 +301,13 @@ const ui: Record<string, string> = {
   "devices.deviceSingular": "device",
   "devices.devicePlural": "devices",
 
+  // ── Alerts / notifications ─────────────────────────────────────────────
+  "alerts.deviceGeneric": "Device",
+  "alerts.lowBatteryTitle": "Low battery",
+  "alerts.lowBatteryBody": "{name} battery is at {pct}%.",
+  "alerts.signalDroppedTitle": "Signal quality dropped",
+  "alerts.signalDroppedBody": "EEG signal became poor during recording. Re-seat electrodes / adjust fit.",
+
   // ── Invite link (Clients tab) ──────────────────────────────────────────
   "devices.iosOnly": "via iOS only",
 

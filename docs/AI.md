@@ -49,7 +49,13 @@ Families marked with **✅** above ship separate `mmproj-*.gguf` files. These ar
 
 ---
 
-## 2. EEG Foundation Model — ZUNA (`skill-exg`, `skill-eeg`)
+## 2. EXG/BCI Foundation Models (`skill-exg`, `skill-eeg`)
+
+NeuroSkill supports multiple EXG/BCI model families. The canonical list lives in `src-tauri/exg_catalog.json`.
+
+Current families include: ZUNA, LUNA, REVE, ST-EEGFormer, CBraMod, EEGPT, LaBraM, SignalJEPA, OpenTSLM, SensorLM, SleepFM, SleepLM, OSF, NeuroRVQ, and TRIBE v2.
+
+### Default model — ZUNA
 
 | Property | Value |
 |----------|-------|
