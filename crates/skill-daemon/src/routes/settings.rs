@@ -6,7 +6,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use base64::Engine as _;
 use serde::Deserialize;
 use skill_data::{
     active_window::ActiveWindowInfo,
@@ -14,10 +13,26 @@ use skill_data::{
 };
 use skill_eeg::{
     eeg_filter::{FilterConfig, PowerlineFreq},
-    eeg_model_config::{load_model_config, save_model_config, EegModelStatus, ExgModelConfig},
+    eeg_model_config::{EegModelStatus, ExgModelConfig},
 };
 
-use crate::state::AppState;
+use crate::{
+    routes::{
+        settings_exg,
+        settings_io::{load_user_settings, save_user_settings},
+        settings_llm::{
+            get_exg_inference_device, get_hf_endpoint, get_inference_device, get_llm_config, set_exg_inference_device,
+            set_hf_endpoint, set_inference_device, set_llm_config,
+        },
+        settings_llm_chat, settings_llm_runtime,
+        settings_lsl::{
+            get_lsl_config, get_lsl_idle_timeout, lsl_iroh_start, lsl_iroh_status, lsl_iroh_stop, lsl_pair_stream,
+            lsl_unpair_stream, lsl_virtual_source_running, lsl_virtual_source_start, lsl_virtual_source_stop,
+            set_lsl_auto_connect, set_lsl_idle_timeout,
+        },
+    },
+    state::AppState,
+};
 
 #[derive(Debug, Deserialize)]
 struct HookLogRequest {
@@ -48,64 +63,40 @@ struct ActivityBucketsRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatIdRequest {
-    id: i64,
+pub(crate) struct ChatIdRequest {
+    pub(crate) id: i64,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatRenameRequest {
-    id: i64,
-    title: String,
+pub(crate) struct ChatRenameRequest {
+    pub(crate) id: i64,
+    pub(crate) title: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatSaveMessageRequest {
-    session_id: i64,
-    role: String,
-    content: String,
-    thinking: Option<String>,
+pub(crate) struct ChatSaveMessageRequest {
+    pub(crate) session_id: i64,
+    pub(crate) role: String,
+    pub(crate) content: String,
+    pub(crate) thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatSessionParamsRequest {
-    id: i64,
-    params_json: String,
+pub(crate) struct ChatSessionParamsRequest {
+    pub(crate) id: i64,
+    pub(crate) params_json: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatSaveToolCallsRequest {
-    message_id: i64,
-    tool_calls: Vec<skill_llm::chat_store::StoredToolCall>,
+pub(crate) struct ChatSaveToolCallsRequest {
+    pub(crate) message_id: i64,
+    pub(crate) tool_calls: Vec<skill_llm::chat_store::StoredToolCall>,
 }
 
 #[derive(Debug, serde::Serialize)]
-struct ChatSessionResponse {
-    session_id: i64,
-    messages: Vec<skill_llm::chat_store::StoredMessage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LslAutoConnectRequest {
-    enabled: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct LslPairRequest {
-    source_id: String,
-    name: String,
-    stream_type: String,
-    channels: usize,
-    sample_rate: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct LslUnpairRequest {
-    source_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct LslIdleTimeoutRequest {
-    secs: Option<u64>,
+pub(crate) struct ChatSessionResponse {
+    pub(crate) session_id: i64,
+    pub(crate) messages: Vec<skill_llm::chat_store::StoredMessage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,13 +105,13 @@ struct U64ValueRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct BoolValueRequest {
-    value: bool,
+pub(crate) struct BoolValueRequest {
+    pub(crate) value: bool,
 }
 
 #[derive(Debug, Deserialize)]
-struct StringValueRequest {
-    value: String,
+pub(crate) struct StringValueRequest {
+    pub(crate) value: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,73 +166,45 @@ struct WsConfigRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct FilenameRequest {
-    filename: String,
+pub(crate) struct FilenameRequest {
+    pub(crate) filename: String,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-struct ChatCompletionsRequest {
-    messages: Vec<serde_json::Value>,
-    params: serde_json::Value,
+pub(crate) struct ChatCompletionsRequest {
+    pub(crate) messages: Vec<serde_json::Value>,
+    pub(crate) params: serde_json::Value,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-struct ToolCancelRequest {
-    tool_call_id: String,
+pub(crate) struct ToolCancelRequest {
+    pub(crate) tool_call_id: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct LlmAddModelRequest {
-    repo: String,
-    filename: String,
-    size_gb: Option<f32>,
-    mmproj: Option<String>,
-    download: Option<bool>,
+pub(crate) struct LlmAddModelRequest {
+    pub(crate) repo: String,
+    pub(crate) filename: String,
+    pub(crate) size_gb: Option<f32>,
+    pub(crate) mmproj: Option<String>,
+    pub(crate) download: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
-struct LlmFilenameRequest {
-    filename: String,
+pub(crate) struct LlmFilenameRequest {
+    pub(crate) filename: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct LlmImageRequest {
-    png_base64: String,
-}
-
-#[cfg(feature = "llm")]
-#[derive(Clone)]
-struct DaemonLlmEmitter {
-    events_tx: tokio::sync::broadcast::Sender<skill_daemon_common::EventEnvelope>,
-}
-
-#[cfg(feature = "llm")]
-impl skill_llm::LlmEventEmitter for DaemonLlmEmitter {
-    fn emit_event(&self, event: &str, payload: serde_json::Value) {
-        let _ = self.events_tx.send(skill_daemon_common::EventEnvelope {
-            r#type: format!("Llm{}", event.replace(':', "_")),
-            ts_unix_ms: now_unix_ms(),
-            correlation_id: None,
-            payload,
-        });
-    }
+pub(crate) struct LlmImageRequest {
+    pub(crate) png_base64: String,
 }
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/models/config",
-            get(get_model_config).put(set_model_config).post(set_model_config),
-        )
-        .route("/models/status", get(get_model_status))
-        .route("/models/trigger-reembed", post(trigger_reembed))
-        .route("/models/trigger-weights-download", post(trigger_weights_download))
-        .route("/models/cancel-weights-download", post(cancel_weights_download))
-        .route("/models/estimate-reembed", get(estimate_reembed))
-        .route("/models/rebuild-index", post(rebuild_index))
-        .route("/models/exg-catalog", get(get_exg_catalog))
+        .merge(exg_routes())
         .route("/hooks", get(get_hooks).put(set_hooks))
         .route("/hooks/statuses", get(get_hook_statuses))
         .route("/hooks/log", post(get_hook_log))
@@ -370,6 +333,28 @@ pub fn router() -> Router<AppState> {
         .route("/skills/list", get(list_skills))
         .route("/skills/license", get(get_skills_license))
         .route("/skills/disabled", get(get_disabled_skills).post(set_disabled_skills))
+        .route("/device/serial-ports", get(list_serial_ports))
+        .merge(llm_routes())
+        .merge(lsl_routes())
+}
+
+fn exg_routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/models/config",
+            get(get_model_config).put(set_model_config).post(set_model_config),
+        )
+        .route("/models/status", get(get_model_status))
+        .route("/models/trigger-reembed", post(trigger_reembed))
+        .route("/models/trigger-weights-download", post(trigger_weights_download))
+        .route("/models/cancel-weights-download", post(cancel_weights_download))
+        .route("/models/estimate-reembed", get(estimate_reembed))
+        .route("/models/rebuild-index", post(rebuild_index))
+        .route("/models/exg-catalog", get(get_exg_catalog))
+}
+
+fn llm_routes() -> Router<AppState> {
+    Router::new()
         .route("/llm/server/start", post(llm_server_start))
         .route("/llm/server/stop", post(llm_server_stop))
         .route("/llm/server/status", get(llm_server_status))
@@ -406,7 +391,10 @@ pub fn router() -> Router<AppState> {
         .route("/llm/ocr", post(llm_ocr))
         .route("/llm/abort-stream", post(llm_abort_stream))
         .route("/llm/cancel-tool-call", post(llm_cancel_tool_call))
-        .route("/device/serial-ports", get(list_serial_ports))
+}
+
+fn lsl_routes() -> Router<AppState> {
+    Router::new()
         .route("/lsl/config", get(get_lsl_config))
         .route("/lsl/auto-connect", post(set_lsl_auto_connect))
         .route("/lsl/pair", post(lsl_pair_stream))
@@ -423,363 +411,45 @@ pub fn router() -> Router<AppState> {
         .route("/lsl/iroh/stop", post(lsl_iroh_stop))
 }
 
-async fn get_model_config(State(state): State<AppState>) -> Json<ExgModelConfig> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(load_model_config(&skill_dir))
+async fn get_model_config(state: State<AppState>) -> Json<ExgModelConfig> {
+    settings_exg::get_model_config_impl(state).await
 }
 
-async fn set_model_config(
-    State(state): State<AppState>,
-    Json(config): Json<ExgModelConfig>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    save_model_config(&skill_dir, &config);
-    Json(serde_json::json!({"ok": true}))
+async fn set_model_config(state: State<AppState>, config: Json<ExgModelConfig>) -> Json<serde_json::Value> {
+    settings_exg::set_model_config_impl(state, config).await
 }
 
-async fn get_model_status(State(state): State<AppState>) -> Json<EegModelStatus> {
-    let mut st = state.exg_model_status.lock().map(|g| g.clone()).unwrap_or_default();
-
-    // If the shared status doesn't know about weights yet (e.g. no download
-    // has been triggered and no embed worker has run), probe the HF cache
-    // so the UI shows the correct state on first load.
-    if !st.weights_found && !st.downloading_weights {
-        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-        let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
-        let found = probe_weights_for_config(&config);
-        if let Some((weights_path, backend_str)) = found {
-            st.weights_found = true;
-            st.weights_path = Some(weights_path);
-            st.active_model_backend = Some(backend_str);
-            // Persist back so subsequent polls don't re-probe
-            if let Ok(mut shared) = state.exg_model_status.lock() {
-                shared.weights_found = true;
-                shared.weights_path = st.weights_path.clone();
-                shared.active_model_backend = st.active_model_backend.clone();
-            }
-        }
-    }
-
-    Json(st)
+async fn get_model_status(state: State<AppState>) -> Json<EegModelStatus> {
+    settings_exg::get_model_status_impl(state).await
 }
 
-/// Check whether weights for the currently configured model backend exist in
-/// the HuggingFace disk cache.  Returns `(path_display, backend_str)` if found.
-///
 /// Public so `main.rs` can call it during daemon startup.
 pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, String)> {
-    let catalog: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).ok()?;
-    let backend = config.model_backend.as_str();
-    let family_id = if backend == "luna" {
-        format!("luna-{}", config.luna_variant)
-    } else {
-        let families = catalog.get("families")?.as_object()?;
-        families
-            .keys()
-            .find(|id| family_id_to_backend(id) == backend)
-            .cloned()
-            .unwrap_or_else(|| backend.to_string())
-    };
-
-    let fam = catalog.get("families")?.get(&family_id)?;
-    let repo = fam.get("repo")?.as_str()?;
-    let wf = fam.get("weights_file")?.as_str()?;
-
-    let snaps_dir = skill_data::util::hf_model_dir(repo).join("snapshots");
-    let entries = std::fs::read_dir(&snaps_dir).ok()?;
-    for entry in entries.filter_map(|e| e.ok()) {
-        let wp = entry.path().join(wf);
-        if skill_exg::validate_or_remove(&wp) {
-            return Some((wp.display().to_string(), backend.to_string()));
-        }
-    }
-    None
+    settings_exg::probe_weights_for_config(config)
 }
 
 async fn trigger_reembed() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "message": "reembed queued in daemon" }))
+    settings_exg::trigger_reembed_impl().await
 }
 
-async fn trigger_weights_download(State(state): State<AppState>) -> Json<serde_json::Value> {
-    use std::sync::atomic::Ordering;
-
-    // Reset cancel flag
-    state.exg_download_cancel.store(false, Ordering::Relaxed);
-
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
-    let status = state.exg_model_status.clone();
-    let cancel = state.exg_download_cancel.clone();
-
-    // Check if already downloading
-    {
-        if let Ok(st) = status.lock() {
-            if st.downloading_weights {
-                return Json(serde_json::json!({ "ok": false, "message": "download already in progress" }));
-            }
-        }
-    }
-
-    // Resolve repo + weights_file from the catalog based on current config
-    let catalog: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).unwrap_or_default();
-    let backend_str = config.model_backend.as_str().to_string();
-    let (hf_repo, weights_file, config_file) = resolve_download_target(&catalog, &config);
-
-    spawn_exg_download(state, hf_repo, weights_file, config_file, backend_str, status, cancel);
-
-    Json(serde_json::json!({ "ok": true, "message": "weights download started" }))
+async fn trigger_weights_download(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_exg::trigger_weights_download_impl(state).await
 }
 
-/// Spawn the EXG weights download on a blocking thread with a 200 ms progress
-/// emission loop that pushes `ExgDownloadProgress` events over the daemon
-/// WebSocket so the Tauri frontend can show real-time progress.
-fn spawn_exg_download(
-    state: AppState,
-    hf_repo: String,
-    weights_file: String,
-    config_file: String,
-    backend_str: String,
-    status: std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
-    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-) {
-    tokio::spawn(async move {
-        let status_for_thread = status.clone();
-        let cancel_for_thread = cancel.clone();
-
-        let mut job = tokio::task::spawn_blocking(move || {
-            skill_exg::download_hf_weights_files(
-                &hf_repo,
-                &weights_file,
-                &config_file,
-                &status_for_thread,
-                &cancel_for_thread,
-                false, // don't mark needs_restart — we reload in-place
-            )
-        });
-
-        // Poll the shared status and emit events every 200 ms until the
-        // blocking task finishes.
-        loop {
-            if job.is_finished() {
-                break;
-            }
-
-            if let Ok(st) = status.lock() {
-                emit_daemon_event(
-                    &state,
-                    "ExgDownloadProgress",
-                    serde_json::json!({
-                        "backend": backend_str,
-                        "downloading": st.downloading_weights,
-                        "progress": st.download_progress,
-                        "status_msg": st.download_status_msg,
-                        "weights_found": st.weights_found,
-                        "needs_restart": false,
-                    }),
-                );
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-
-        // Read final result
-        let result = (&mut job).await;
-        let succeeded = matches!(result, Ok(Some(_)));
-
-        // After successful download, ensure status reflects the new state
-        // immediately — no restart required.
-        if succeeded {
-            if let Ok(mut st) = status.lock() {
-                st.download_needs_restart = false;
-                st.weights_found = true;
-                st.active_model_backend = Some(backend_str.clone());
-            }
-        }
-
-        // Emit final event
-        if let Ok(st) = status.lock() {
-            emit_daemon_event(
-                &state,
-                if succeeded {
-                    "ExgDownloadCompleted"
-                } else {
-                    "ExgDownloadFailed"
-                },
-                serde_json::json!({
-                    "backend": backend_str,
-                    "downloading": st.downloading_weights,
-                    "progress": st.download_progress,
-                    "status_msg": st.download_status_msg,
-                    "weights_found": st.weights_found,
-                    "needs_restart": false,
-                }),
-            );
-        }
-
-        if succeeded {
-            tracing::info!("[exg] weights download complete for {backend_str}");
-        } else {
-            tracing::warn!("[exg] weights download failed or cancelled for {backend_str}");
-        }
-    });
+async fn cancel_weights_download(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_exg::cancel_weights_download_impl(state).await
 }
 
-/// Determine repo, weights_file, config_file from catalog + current model config.
-fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig) -> (String, String, String) {
-    let backend = config.model_backend.as_str();
-
-    // For luna, use variant to find the right family entry
-    let family_id = if backend == "luna" {
-        format!("luna-{}", config.luna_variant)
-    } else {
-        // Find matching family by checking familyToBackend equivalent
-        let families = catalog.get("families").and_then(|f| f.as_object());
-        if let Some(fams) = families {
-            fams.keys()
-                .find(|id| family_id_to_backend(id) == backend)
-                .cloned()
-                .unwrap_or_else(|| backend.to_string())
-        } else {
-            backend.to_string()
-        }
-    };
-
-    if let Some(fam) = catalog.get("families").and_then(|f| f.get(&family_id)) {
-        let repo = fam.get("repo").and_then(|v| v.as_str()).unwrap_or(&config.hf_repo);
-        let wf = fam
-            .get("weights_file")
-            .and_then(|v| v.as_str())
-            .unwrap_or("model-00001-of-00001.safetensors");
-        let cf = fam.get("config_file").and_then(|v| v.as_str()).unwrap_or("config.json");
-        (repo.to_string(), wf.to_string(), cf.to_string())
-    } else if backend == "luna" {
-        (
-            config.luna_hf_repo.clone(),
-            config.luna_weights_file().to_string(),
-            "config.json".to_string(),
-        )
-    } else {
-        (
-            config.hf_repo.clone(),
-            "model-00001-of-00001.safetensors".to_string(),
-            "config.json".to_string(),
-        )
-    }
-}
-
-/// Map catalog family ID → backend string (mirrors the frontend familyToBackend).
-fn family_id_to_backend(id: &str) -> &str {
-    if id == "zuna" {
-        return "zuna";
-    }
-    if id.starts_with("luna-") {
-        return "luna";
-    }
-    if id == "reve-base" || id == "reve-large" {
-        return "reve";
-    }
-    if id == "osf-base" {
-        return "osf";
-    }
-    if id.starts_with("steegformer-") {
-        return "steegformer";
-    }
-    id
-}
-
-async fn cancel_weights_download(State(state): State<AppState>) -> Json<serde_json::Value> {
-    state
-        .exg_download_cancel
-        .store(true, std::sync::atomic::Ordering::Relaxed);
-    Json(serde_json::json!({ "ok": true, "message": "weights download cancellation requested" }))
-}
-
-async fn estimate_reembed(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let sessions = tokio::task::spawn_blocking(move || skill_history::list_all_sessions(&skill_dir, None))
-        .await
-        .unwrap_or_default();
-    Json(serde_json::json!({
-        "sessions_total": sessions.len(),
-        "embeddings_needed": 0,
-    }))
+async fn estimate_reembed(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_exg::estimate_reembed_impl(state).await
 }
 
 async fn rebuild_index() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "message": "index rebuild queued in daemon" }))
+    settings_exg::rebuild_index_impl().await
 }
 
-async fn get_exg_catalog(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-
-    let v = tokio::task::spawn_blocking(move || {
-        const BUNDLED: &str = include_str!("../../../../src-tauri/exg_catalog.json");
-        let mut v: serde_json::Value = serde_json::from_str(BUNDLED).unwrap_or_default();
-
-        // Enrich each family with `weights_cached` by probing the HF disk cache.
-        if let Some(families) = v.get_mut("families").and_then(|f| f.as_object_mut()) {
-            for (_id, fam) in families.iter_mut() {
-                let repo = fam.get("repo").and_then(|r| r.as_str()).unwrap_or("");
-                let weights_file = fam.get("weights_file").and_then(|w| w.as_str()).unwrap_or("");
-                let cached = if !repo.is_empty() && !weights_file.is_empty() {
-                    let snaps_dir = skill_data::util::hf_model_dir(repo).join("snapshots");
-                    std::fs::read_dir(&snaps_dir)
-                        .ok()
-                        .map(|entries| {
-                            entries.filter_map(|e| e.ok()).any(|e| {
-                                let p = e.path().join(weights_file);
-                                skill_exg::validate_or_remove(&p)
-                            })
-                        })
-                        .unwrap_or(false)
-                } else {
-                    false
-                };
-                if let Some(obj) = fam.as_object_mut() {
-                    obj.insert("weights_cached".to_string(), serde_json::json!(cached));
-                }
-            }
-        }
-
-        // Set active_model based on current config
-        let config = skill_eeg::eeg_model_config::load_model_config(&skill_dir);
-        let active_name = match config.model_backend {
-            skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
-                if let Some(fam) = v
-                    .get("families")
-                    .and_then(|f| f.get(format!("luna-{}", config.luna_variant)))
-                {
-                    fam.get("name").and_then(|n| n.as_str()).unwrap_or("LUNA").to_string()
-                } else {
-                    "LUNA".to_string()
-                }
-            }
-            _ => {
-                let backend_str = config.model_backend.as_str();
-                if let Some(families) = v.get("families").and_then(|f| f.as_object()) {
-                    families
-                        .iter()
-                        .find(|(id, _)| family_id_to_backend(id) == backend_str)
-                        .and_then(|(_, fam)| fam.get("name").and_then(|n| n.as_str()))
-                        .unwrap_or("ZUNA")
-                        .to_string()
-                } else {
-                    "ZUNA".to_string()
-                }
-            }
-        };
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert("active_model".to_string(), serde_json::json!(active_name));
-        }
-
-        v
-    })
-    .await
-    .unwrap_or_default();
-
-    Json(v)
+async fn get_exg_catalog(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_exg::get_exg_catalog_impl(state).await
 }
 
 async fn get_hooks(State(state): State<AppState>) -> Json<Vec<skill_settings::HookRule>> {
@@ -1098,19 +768,6 @@ async fn get_latest_bands(State(state): State<AppState>) -> Json<serde_json::Val
     }
 }
 
-fn load_user_settings(state: &AppState) -> skill_settings::UserSettings {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    skill_settings::load_settings(&skill_dir)
-}
-
-fn save_user_settings(state: &AppState, settings: &skill_settings::UserSettings) {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let path = skill_settings::settings_path(&skill_dir);
-    if let Ok(json) = serde_json::to_string_pretty(settings) {
-        let _ = std::fs::write(path, json);
-    }
-}
-
 async fn get_filter_config(State(state): State<AppState>) -> Json<FilterConfig> {
     Json(load_user_settings(&state).filter_config)
 }
@@ -1270,42 +927,6 @@ async fn set_neutts_config(
     Json(serde_json::json!({"ok": true}))
 }
 
-async fn get_llm_config(State(state): State<AppState>) -> Json<skill_settings::LlmConfig> {
-    Json(load_user_settings(&state).llm)
-}
-
-async fn set_llm_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::LlmConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm = config.clone();
-    save_user_settings(&state, &settings);
-
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            *cfg = config.clone();
-        }
-
-        if let Ok(guard) = state.llm_state_cell.lock() {
-            if let Some(server) = guard.clone() {
-                let prev_port = server.allowed_tools.lock().map(|t| t.skill_api_port).unwrap_or(18445);
-                let mut new_tools = config.tools.clone();
-                new_tools.skill_api_port = prev_port;
-                if !settings.location_enabled {
-                    new_tools.location = false;
-                }
-                if let Ok(mut tools) = server.allowed_tools.lock() {
-                    *tools = new_tools;
-                }
-            }
-        }
-    }
-
-    Json(serde_json::json!({"ok": true}))
-}
-
 async fn get_tts_preload(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({"value": load_user_settings(&state).tts_preload}))
 }
@@ -1329,46 +950,6 @@ async fn set_sleep_config(
     settings.sleep = config;
     save_user_settings(&state, &settings);
     Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_inference_device(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).inference_device}))
-}
-
-async fn set_inference_device(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let is_cpu = req.value == "cpu";
-    let mut settings = load_user_settings(&state);
-    settings.inference_device = if is_cpu { "cpu".into() } else { "gpu".into() };
-    if is_cpu {
-        let cur_layers = settings.llm.n_gpu_layers;
-        if cur_layers != 0 {
-            settings.llm_gpu_layers_saved = cur_layers;
-        }
-        settings.llm.n_gpu_layers = 0;
-    } else {
-        settings.llm.n_gpu_layers = settings.llm_gpu_layers_saved;
-    }
-    let out = settings.inference_device.clone();
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": out}))
-}
-
-async fn get_exg_inference_device(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).exg_inference_device}))
-}
-
-async fn set_exg_inference_device(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.exg_inference_device = if req.value == "cpu" { "cpu".into() } else { "gpu".into() };
-    let out = settings.exg_inference_device.clone();
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": out}))
 }
 
 async fn get_ws_config(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -1510,30 +1091,6 @@ async fn set_api_token(State(state): State<AppState>, Json(req): Json<StringValu
     settings.api_token = req.value;
     save_user_settings(&state, &settings);
     Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_hf_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    let endpoint = if settings.hf_endpoint.trim().is_empty() {
-        skill_settings::default_hf_endpoint()
-    } else {
-        settings.hf_endpoint
-    };
-    Json(serde_json::json!({"value": endpoint}))
-}
-
-async fn set_hf_endpoint(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.hf_endpoint = if req.value.trim().is_empty() {
-        skill_settings::default_hf_endpoint()
-    } else {
-        req.value.trim().to_string()
-    };
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": settings.hf_endpoint}))
 }
 
 async fn get_umap_config(State(state): State<AppState>) -> Json<skill_settings::UmapUserConfig> {
@@ -2161,538 +1718,103 @@ async fn set_disabled_skills(
     Json(serde_json::json!({"ok": true, "value": req.values}))
 }
 
-async fn llm_server_start(State(state): State<AppState>) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        let cfg = state.llm_config.lock().map(|g| g.clone()).unwrap_or_default();
-        let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-        let cell = state.llm_state_cell.clone();
-        let log_buf = state.llm_log_buffer.clone();
-
-        if cell.lock().ok().and_then(|g| g.clone()).is_some() {
-            return Json(serde_json::json!({"ok": true, "result": "already_running"}));
-        }
-
-        let emitter: std::sync::Arc<dyn skill_llm::LlmEventEmitter> = std::sync::Arc::new(DaemonLlmEmitter {
-            events_tx: state.events_tx.clone(),
-        });
-        match tokio::task::spawn_blocking(move || skill_llm::init(&cfg, &cat, emitter, log_buf, &skill_dir)).await {
-            Ok(Some(srv)) => {
-                let model_name = srv.model_name.clone();
-                if let Ok(mut g) = cell.lock() {
-                    *g = Some(srv);
-                }
-                if let Ok(mut st) = state.llm_status.lock() {
-                    *st = "running".to_string();
-                }
-                if let Ok(mut m) = state.llm_model_name.lock() {
-                    *m = model_name;
-                }
-                return Json(serde_json::json!({"ok": true, "result": "starting"}));
-            }
-            Ok(None) => {
-                return Json(serde_json::json!({"ok": false, "result": "failed", "error": "init returned none"}));
-            }
-            Err(e) => {
-                return Json(serde_json::json!({"ok": false, "result": "failed", "error": e.to_string()}));
-            }
-        }
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        if let Ok(mut st) = state.llm_status.lock() {
-            *st = "running".to_string();
-        }
-        Json(serde_json::json!({"ok": true, "result": "starting"}))
-    }
+async fn llm_server_start(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_server_start_impl(state).await
 }
 
-async fn llm_server_stop(State(state): State<AppState>) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        skill_llm::shutdown_cell(&state.llm_state_cell);
-    }
-    if let Ok(mut st) = state.llm_status.lock() {
-        *st = "stopped".to_string();
-    }
-    Json(serde_json::json!({"ok": true}))
+async fn llm_server_stop(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_server_stop_impl(state).await
 }
 
-async fn llm_server_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        use std::sync::atomic::Ordering;
-        let (status, model_name) = skill_llm::cell_status(&state.llm_state_cell);
-        let (n_ctx, supports_vision, supports_tools) = state
-            .llm_state_cell
-            .lock()
-            .ok()
-            .and_then(|g| {
-                g.as_ref().map(|srv| {
-                    (
-                        srv.n_ctx.load(Ordering::Relaxed),
-                        srv.vision_ready.load(Ordering::Relaxed),
-                        srv.is_ready(),
-                    )
-                })
-            })
-            .unwrap_or((0, false, false));
-
-        return Json(serde_json::json!({
-            "status": serde_json::to_value(status).unwrap_or(serde_json::json!("stopped")),
-            "model_name": model_name,
-            "n_ctx": n_ctx,
-            "supports_vision": supports_vision,
-            "supports_tools": supports_tools,
-            "start_error": serde_json::Value::Null
-        }));
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        let status = state
-            .llm_status
-            .lock()
-            .map(|g| g.clone())
-            .unwrap_or_else(|_| "stopped".into());
-        let model_name = state.llm_model_name.lock().map(|g| g.clone()).unwrap_or_default();
-        let supports_vision = state.llm_mmproj_name.lock().map(|g| g.is_some()).unwrap_or(false);
-        let supports_tools = status == "running";
-        Json(serde_json::json!({
-            "status": status,
-            "model_name": model_name,
-            "n_ctx": if supports_tools { 8192 } else { 0 },
-            "supports_vision": supports_vision,
-            "supports_tools": supports_tools,
-            "start_error": serde_json::Value::Null
-        }))
-    }
+async fn llm_server_status(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_server_status_impl(state).await
 }
 
-async fn llm_server_logs(State(state): State<AppState>) -> Json<Vec<serde_json::Value>> {
-    #[cfg(feature = "llm")]
-    {
-        let logs = state
-            .llm_log_buffer
-            .lock()
-            .map(|q| q.iter().filter_map(|e| serde_json::to_value(e).ok()).collect())
-            .unwrap_or_default();
-        return Json(logs);
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        Json(state.llm_logs.lock().map(|g| g.clone()).unwrap_or_default())
-    }
+async fn llm_server_logs(state: State<AppState>) -> Json<Vec<serde_json::Value>> {
+    settings_llm_runtime::llm_server_logs_impl(state).await
 }
 
-async fn llm_server_switch_model(
-    State(state): State<AppState>,
-    Json(req): Json<FilenameRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        cat.active_model = req.filename.clone();
-        if !cat.active_mmproj_matches_active_model() {
-            cat.active_mmproj.clear();
-        }
-    }
-    persist_llm_catalog(&state);
-
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-            cfg.model_path = cat.active_model_path();
-            cfg.mmproj = if cfg.autoload_mmproj {
-                cat.active_mmproj_path()
-            } else {
-                None
-            };
-        }
-        skill_llm::shutdown_cell(&state.llm_state_cell);
-        let _ = llm_server_start(State(state.clone())).await;
-    }
-
-    Json(serde_json::json!({"ok": true, "result": "switching"}))
+async fn llm_server_switch_model(state: State<AppState>, req: Json<FilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_server_switch_model_impl(state, req).await
 }
 
-async fn llm_server_switch_mmproj(
-    State(state): State<AppState>,
-    Json(req): Json<FilenameRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        cat.active_mmproj = req.filename.clone();
-    }
-    persist_llm_catalog(&state);
-
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-            cfg.mmproj = if cfg.autoload_mmproj {
-                cat.active_mmproj_path()
-            } else {
-                None
-            };
-        }
-        skill_llm::shutdown_cell(&state.llm_state_cell);
-        let _ = llm_server_start(State(state.clone())).await;
-    }
-
-    Json(serde_json::json!({"ok": true, "result": "switching"}))
+async fn llm_server_switch_mmproj(state: State<AppState>, req: Json<FilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_server_switch_mmproj_impl(state, req).await
 }
 
-async fn chat_last_session(State(state): State<AppState>) -> Json<ChatSessionResponse> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) else {
-            return ChatSessionResponse {
-                session_id: 0,
-                messages: vec![],
-            };
-        };
-        let session_id = store.get_or_create_last_session();
-        let messages = store.load_session(session_id);
-        ChatSessionResponse { session_id, messages }
-    })
-    .await
-    .unwrap_or(ChatSessionResponse {
-        session_id: 0,
-        messages: vec![],
-    });
-    Json(out)
+async fn chat_last_session(state: State<AppState>) -> Json<ChatSessionResponse> {
+    settings_llm_chat::chat_last_session_impl(state).await
 }
 
-async fn chat_load_session(State(state): State<AppState>, Json(req): Json<ChatIdRequest>) -> Json<ChatSessionResponse> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) else {
-            return ChatSessionResponse {
-                session_id: req.id,
-                messages: vec![],
-            };
-        };
-        let messages = store.load_session(req.id);
-        ChatSessionResponse {
-            session_id: req.id,
-            messages,
-        }
-    })
-    .await
-    .unwrap_or(ChatSessionResponse {
-        session_id: req.id,
-        messages: vec![],
-    });
-    Json(out)
+async fn chat_load_session(state: State<AppState>, req: Json<ChatIdRequest>) -> Json<ChatSessionResponse> {
+    settings_llm_chat::chat_load_session_impl(state, req).await
 }
 
-async fn chat_list_sessions(State(state): State<AppState>) -> Json<Vec<skill_llm::chat_store::SessionSummary>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        skill_llm::chat_store::ChatStore::open(&skill_dir)
-            .map(|mut store| store.list_sessions())
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
+async fn chat_list_sessions(state: State<AppState>) -> Json<Vec<skill_llm::chat_store::SessionSummary>> {
+    settings_llm_chat::chat_list_sessions_impl(state).await
 }
 
-async fn chat_rename_session(
-    State(state): State<AppState>,
-    Json(req): Json<ChatRenameRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.rename_session(req.id, &req.title);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+async fn chat_rename_session(state: State<AppState>, req: Json<ChatRenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_rename_session_impl(state, req).await
 }
 
-async fn chat_delete_session(State(state): State<AppState>, Json(req): Json<ChatIdRequest>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.delete_session(req.id);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+async fn chat_delete_session(state: State<AppState>, req: Json<ChatIdRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_delete_session_impl(state, req).await
 }
 
-async fn chat_archive_session(
-    State(state): State<AppState>,
-    Json(req): Json<ChatIdRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.archive_session(req.id);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+async fn chat_archive_session(state: State<AppState>, req: Json<ChatIdRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_archive_session_impl(state, req).await
 }
 
-async fn chat_unarchive_session(
-    State(state): State<AppState>,
-    Json(req): Json<ChatIdRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.unarchive_session(req.id);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+async fn chat_unarchive_session(state: State<AppState>, req: Json<ChatIdRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_unarchive_session_impl(state, req).await
 }
 
-async fn chat_list_archived_sessions(
-    State(state): State<AppState>,
-) -> Json<Vec<skill_llm::chat_store::SessionSummary>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        skill_llm::chat_store::ChatStore::open(&skill_dir)
-            .map(|mut store| store.list_archived_sessions())
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
+async fn chat_list_archived_sessions(state: State<AppState>) -> Json<Vec<skill_llm::chat_store::SessionSummary>> {
+    settings_llm_chat::chat_list_archived_sessions_impl(state).await
 }
 
-async fn chat_save_message(
-    State(state): State<AppState>,
-    Json(req): Json<ChatSaveMessageRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let id = tokio::task::spawn_blocking(move || {
-        skill_llm::chat_store::ChatStore::open(&skill_dir)
-            .map(|mut store| store.save_message(req.session_id, &req.role, &req.content, req.thinking.as_deref()))
-            .unwrap_or(0)
-    })
-    .await
-    .unwrap_or(0);
-    Json(serde_json::json!({"id": id}))
+async fn chat_save_message(state: State<AppState>, req: Json<ChatSaveMessageRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_save_message_impl(state, req).await
 }
 
-async fn chat_get_session_params(
-    State(state): State<AppState>,
-    Json(req): Json<ChatIdRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let value = tokio::task::spawn_blocking(move || {
-        skill_llm::chat_store::ChatStore::open(&skill_dir)
-            .map(|store| store.get_session_params(req.id))
-            .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(serde_json::json!({"value": value}))
+async fn chat_get_session_params(state: State<AppState>, req: Json<ChatIdRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_get_session_params_impl(state, req).await
 }
 
 async fn chat_set_session_params(
-    State(state): State<AppState>,
-    Json(req): Json<ChatSessionParamsRequest>,
+    state: State<AppState>,
+    req: Json<ChatSessionParamsRequest>,
 ) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.set_session_params(req.id, &req.params_json);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+    settings_llm_chat::chat_set_session_params_impl(state, req).await
 }
 
-async fn chat_new_session(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let id = tokio::task::spawn_blocking(move || {
-        skill_llm::chat_store::ChatStore::open(&skill_dir)
-            .map(|mut store| store.new_session())
-            .unwrap_or(0)
-    })
-    .await
-    .unwrap_or(0);
-    Json(serde_json::json!({"id": id}))
+async fn chat_new_session(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_new_session_impl(state).await
 }
 
-async fn chat_save_tool_calls(
-    State(state): State<AppState>,
-    Json(req): Json<ChatSaveToolCallsRequest>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Some(mut store) = skill_llm::chat_store::ChatStore::open(&skill_dir) {
-            store.save_tool_calls(req.message_id, &req.tool_calls);
-        }
-    })
-    .await;
-    Json(serde_json::json!({"ok": true}))
+async fn chat_save_tool_calls(state: State<AppState>, req: Json<ChatSaveToolCallsRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::chat_save_tool_calls_impl(state, req).await
 }
 
-async fn llm_chat_completions(
-    State(state): State<AppState>,
-    Json(req): Json<ChatCompletionsRequest>,
-) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        let srv_opt = state.llm_state_cell.lock().ok().and_then(|g| g.clone());
-        let Some(srv) = srv_opt else {
-            return Json(serde_json::json!({"error":"LLM server not running"}));
-        };
-
-        let params: skill_llm::GenParams = serde_json::from_value(req.params).unwrap_or_default();
-        let result =
-            skill_llm::run_chat_with_builtin_tools(&srv, req.messages, params, Vec::new(), |_delta| {}, |_evt| {})
-                .await;
-
-        return match result {
-            Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => Json(serde_json::json!({
-                "content": text,
-                "finish_reason": finish_reason,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "n_ctx": n_ctx
-            })),
-            Err(e) => Json(serde_json::json!({"error": e.to_string()})),
-        };
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        let _ = req;
-        let _ = state;
-        Json(serde_json::json!({
-            "content": "Daemon LLM unavailable (compiled without llm feature)",
-            "finish_reason": "stop",
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "n_ctx": 0
-        }))
-    }
+async fn llm_chat_completions(state: State<AppState>, req: Json<ChatCompletionsRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::llm_chat_completions_impl(state, req).await
 }
 
-async fn llm_embed_image(State(_state): State<AppState>, Json(req): Json<LlmImageRequest>) -> Json<serde_json::Value> {
-    let bytes = match base64::engine::general_purpose::STANDARD.decode(req.png_base64.as_bytes()) {
-        Ok(b) => b,
-        Err(e) => return Json(serde_json::json!({"error": format!("invalid base64: {e}")})),
-    };
-
-    #[cfg(feature = "llm")]
-    {
-        let srv_opt = _state.llm_state_cell.lock().ok().and_then(|g| g.clone());
-        let Some(srv) = srv_opt else {
-            return Json(serde_json::json!({"error":"LLM server not running"}));
-        };
-        if !srv.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {
-            return Json(serde_json::json!({"error":"vision not ready"}));
-        }
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        if srv
-            .req_tx
-            .send(skill_llm::InferRequest::EmbedImage { bytes, result_tx: tx })
-            .is_err()
-        {
-            return Json(serde_json::json!({"error":"failed to queue embed request"}));
-        }
-        return match rx.await {
-            Ok(Some(v)) => Json(serde_json::json!({"embedding": v})),
-            Ok(None) => Json(serde_json::json!({"embedding": serde_json::Value::Null})),
-            Err(e) => Json(serde_json::json!({"error": e.to_string()})),
-        };
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        let _ = bytes;
-        Json(serde_json::json!({"error":"LLM unavailable"}))
-    }
+async fn llm_embed_image(state: State<AppState>, req: Json<LlmImageRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::llm_embed_image_impl(state, req).await
 }
 
-async fn llm_ocr(State(_state): State<AppState>, Json(req): Json<LlmImageRequest>) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        let srv_opt = _state.llm_state_cell.lock().ok().and_then(|g| g.clone());
-        let Some(srv) = srv_opt else {
-            return Json(serde_json::json!({"error":"LLM server not running"}));
-        };
-
-        let data_url = format!("data:image/png;base64,{}", req.png_base64);
-        let messages = vec![
-            serde_json::json!({
-                "role": "system",
-                "content": "You are an OCR assistant. Extract ALL visible text from the image exactly as it appears. Output only the extracted text, nothing else. Preserve line breaks. If no text is visible, output an empty string."
-            }),
-            serde_json::json!({
-                "role": "user",
-                "content": [
-                    {"type":"image_url","image_url":{"url": data_url}},
-                    {"type":"text","text":"Extract all visible text from this screenshot."}
-                ]
-            }),
-        ];
-
-        let params = skill_llm::GenParams {
-            max_tokens: 2048,
-            temperature: 0.0,
-            thinking_budget: Some(0),
-            ..Default::default()
-        };
-
-        let result =
-            skill_llm::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |_delta| {}, |_evt| {}).await;
-
-        return match result {
-            Ok((text, ..)) => Json(serde_json::json!({"text": text.trim()})),
-            Err(e) => Json(serde_json::json!({"error": e.to_string()})),
-        };
-    }
-
-    #[cfg(not(feature = "llm"))]
-    {
-        let _ = req;
-        Json(serde_json::json!({"error":"LLM unavailable"}))
-    }
+async fn llm_ocr(state: State<AppState>, req: Json<LlmImageRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::llm_ocr_impl(state, req).await
 }
 
-async fn llm_abort_stream(State(_state): State<AppState>) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(guard) = _state.llm_state_cell.lock() {
-            if let Some(srv) = guard.as_ref() {
-                srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
-            }
-        }
-    }
-    Json(serde_json::json!({"ok": true}))
+async fn llm_abort_stream(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_chat::llm_abort_stream_impl(state).await
 }
 
-async fn llm_cancel_tool_call(
-    State(_state): State<AppState>,
-    Json(req): Json<ToolCancelRequest>,
-) -> Json<serde_json::Value> {
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(guard) = _state.llm_state_cell.lock() {
-            if let Some(srv) = guard.as_ref() {
-                if let Ok(mut c) = srv.cancelled_tool_calls.lock() {
-                    c.insert(req.tool_call_id);
-                }
-            }
-        }
-    }
-    #[cfg(not(feature = "llm"))]
-    {
-        let _ = req;
-    }
-    Json(serde_json::json!({"ok": true}))
+async fn llm_cancel_tool_call(state: State<AppState>, req: Json<ToolCancelRequest>) -> Json<serde_json::Value> {
+    settings_llm_chat::llm_cancel_tool_call_impl(state, req).await
 }
 
 fn now_unix() -> u64 {
@@ -2709,443 +1831,52 @@ fn now_unix_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn emit_daemon_event(state: &AppState, event_type: &str, payload: serde_json::Value) {
-    let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
-        r#type: event_type.to_string(),
-        ts_unix_ms: now_unix_ms(),
-        correlation_id: None,
-        payload,
-    });
+async fn llm_get_catalog(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_get_catalog_impl(state).await
 }
 
-fn persist_llm_catalog(state: &AppState) {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    if let Ok(cat) = state.llm_catalog.lock() {
-        cat.save(&skill_dir);
-    }
+async fn llm_refresh_catalog(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_refresh_catalog_impl(state).await
 }
 
-async fn llm_get_catalog(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(serde_json::to_value(cat).unwrap_or_default())
+async fn llm_add_model(state: State<AppState>, req: Json<LlmAddModelRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_add_model_impl(state, req).await
 }
 
-async fn llm_refresh_catalog(State(state): State<AppState>) -> Json<serde_json::Value> {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        cat.refresh_cache();
-        cat.auto_select();
-    }
-    persist_llm_catalog(&state);
-    Json(serde_json::json!({"ok": true}))
+async fn llm_get_downloads(state: State<AppState>) -> Json<Vec<serde_json::Value>> {
+    settings_llm_runtime::llm_get_downloads_impl(state).await
 }
 
-fn infer_quant(filename: &str) -> String {
-    let upper = filename.to_uppercase();
-    for q in [
-        "IQ4_NL", "IQ4_XS", "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S", "IQ2_XXS", "IQ2_XS", "IQ2_M", "IQ2_S", "Q6_K_L",
-        "Q6_K", "Q5_K_L", "Q5_K_M", "Q5_K_S", "Q4_K_L", "Q4_K_M", "Q4_K_S", "Q4_0", "Q4_1", "Q3_K_XL", "Q3_K_L",
-        "Q3_K_M", "Q3_K_S", "Q2_K_L", "Q2_K", "Q8_0", "Q8_1", "BF16", "F16", "F32",
-    ] {
-        if upper.contains(q) {
-            return q.to_string();
-        }
-    }
-    "unknown".to_string()
+async fn llm_download_start(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_download_start_impl(state, req).await
 }
 
-async fn llm_add_model(State(state): State<AppState>, Json(req): Json<LlmAddModelRequest>) -> Json<serde_json::Value> {
-    let should_download = req.download.unwrap_or(false);
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        if !cat.entries.iter().any(|e| e.filename == req.filename) {
-            let entry = skill_llm::catalog::LlmModelEntry {
-                repo: req.repo.clone(),
-                filename: req.filename.clone(),
-                quant: infer_quant(&req.filename),
-                size_gb: req.size_gb.unwrap_or(0.0),
-                description: "External model".to_string(),
-                family_id: req
-                    .repo
-                    .split('/')
-                    .next_back()
-                    .unwrap_or("external")
-                    .to_lowercase()
-                    .replace(' ', "-"),
-                family_name: req
-                    .repo
-                    .split('/')
-                    .next_back()
-                    .unwrap_or("External")
-                    .replace(['_', '-'], " "),
-                family_desc: String::new(),
-                tags: vec!["external".to_string()],
-                is_mmproj: req.mmproj.as_ref().map(|m| m == &req.filename).unwrap_or(false)
-                    || req.filename.to_ascii_lowercase().contains("mmproj"),
-                recommended: false,
-                advanced: false,
-                params_b: 0.0,
-                max_context_length: 0,
-                shard_files: Vec::new(),
-                local_path: None,
-                state: if should_download {
-                    skill_llm::catalog::DownloadState::Downloading
-                } else {
-                    skill_llm::catalog::DownloadState::NotDownloaded
-                },
-                status_msg: if should_download {
-                    Some("Queued in daemon".to_string())
-                } else {
-                    None
-                },
-                progress: 0.0,
-                initiated_at_unix: Some(now_unix()),
-            };
-            cat.entries.push(entry);
-        }
-        cat.auto_select();
-    }
-    persist_llm_catalog(&state);
-    Json(serde_json::json!({"ok": true, "filename": req.filename}))
+async fn llm_download_cancel(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_download_cancel_impl(state, req).await
 }
 
-async fn llm_get_downloads(State(state): State<AppState>) -> Json<Vec<serde_json::Value>> {
-    let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-    let downloads = state.llm_downloads.lock().map(|g| g.clone()).unwrap_or_default();
-    let items = cat
-        .entries
-        .into_iter()
-        .filter(|e| {
-            use skill_llm::catalog::DownloadState;
-            matches!(
-                e.state,
-                DownloadState::Downloading
-                    | DownloadState::Paused
-                    | DownloadState::Failed
-                    | DownloadState::Cancelled
-                    | DownloadState::Downloaded
-            )
-        })
-        .map(|e| {
-            let live = downloads
-                .get(&e.filename)
-                .and_then(|p| p.lock().ok().map(|g| g.clone()));
-            serde_json::json!({
-                "repo": e.repo,
-                "filename": e.filename,
-                "quant": e.quant,
-                "size_gb": e.size_gb,
-                "description": e.description,
-                "is_mmproj": e.is_mmproj,
-                "state": live.as_ref().map(|p| p.state.clone()).unwrap_or(e.state.clone()),
-                "status_msg": live.as_ref().and_then(|p| p.status_msg.clone()).or(e.status_msg.clone()),
-                "progress": live.as_ref().map(|p| p.progress).unwrap_or(e.progress),
-                "initiated_at_unix": e.initiated_at_unix,
-                "local_path": e.local_path,
-                "shard_count": e.shard_count(),
-                "current_shard": live.as_ref().map(|p| p.current_shard).unwrap_or(0)
-            })
-        })
-        .collect();
-    Json(items)
+async fn llm_download_pause(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_download_pause_impl(state, req).await
 }
 
-fn set_download_state(
-    state: &AppState,
-    filename: &str,
-    new_state: skill_llm::catalog::DownloadState,
-    msg: Option<String>,
-) {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        if let Some(e) = cat.entries.iter_mut().find(|e| e.filename == filename) {
-            e.state = new_state.clone();
-            e.status_msg = msg.clone();
-            e.initiated_at_unix = Some(now_unix());
-            if matches!(e.state, skill_llm::catalog::DownloadState::Downloaded) {
-                e.progress = 1.0;
-            }
-        }
-    }
-    persist_llm_catalog(state);
-    emit_daemon_event(
-        state,
-        "LlmDownloadUpdated",
-        serde_json::json!({
-            "filename": filename,
-            "state": new_state,
-            "status_msg": msg
-        }),
-    );
+async fn llm_download_resume(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_download_resume_impl(state, req).await
 }
 
-fn set_live_download_cancel_flags(state: &AppState, filename: &str, cancelled: bool, pause_requested: bool) {
-    let progress_opt = state.llm_downloads.lock().ok().and_then(|m| m.get(filename).cloned());
-    if let Some(progress) = progress_opt {
-        if let Ok(mut p) = progress.lock() {
-            p.cancelled = cancelled;
-            p.pause_requested = pause_requested;
-        }
-    }
+async fn llm_download_delete(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_download_delete_impl(state, req).await
 }
 
-fn spawn_model_download(state: AppState, filename: String) {
-    tokio::spawn(async move {
-        let entry_opt = state
-            .llm_catalog
-            .lock()
-            .ok()
-            .and_then(|cat| cat.entries.iter().find(|e| e.filename == filename).cloned());
-        let Some(entry) = entry_opt else {
-            return;
-        };
-
-        let progress = std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress {
-            filename: entry.filename.clone(),
-            state: skill_llm::catalog::DownloadState::Downloading,
-            ..Default::default()
-        }));
-
-        if let Ok(mut m) = state.llm_downloads.lock() {
-            m.insert(filename.clone(), progress.clone());
-        }
-
-        let progress_for_job = progress.clone();
-        let entry_for_job = entry.clone();
-        let mut job =
-            tokio::task::spawn_blocking(move || skill_llm::catalog::download_model(&entry_for_job, &progress_for_job));
-
-        loop {
-            if job.is_finished() {
-                break;
-            }
-            if let Ok(p) = progress.lock() {
-                if let Ok(mut cat) = state.llm_catalog.lock() {
-                    if let Some(e) = cat.entries.iter_mut().find(|e| e.filename == filename) {
-                        e.state = p.state.clone();
-                        e.progress = p.progress;
-                        e.status_msg = p.status_msg.clone();
-                        e.initiated_at_unix = Some(now_unix());
-                    }
-                }
-                emit_daemon_event(
-                    &state,
-                    "LlmDownloadProgress",
-                    serde_json::json!({
-                        "filename": filename.clone(),
-                        "state": p.state.clone(),
-                        "progress": p.progress,
-                        "status_msg": p.status_msg.clone(),
-                        "current_shard": p.current_shard,
-                        "shard_count": p.total_shards
-                    }),
-                );
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-
-        let res = (&mut job).await;
-
-        if let Ok(mut m) = state.llm_downloads.lock() {
-            m.remove(&filename);
-        }
-
-        match res {
-            Ok(Ok(path)) => {
-                if let Ok(mut cat) = state.llm_catalog.lock() {
-                    if let Some(e) = cat.entries.iter_mut().find(|e| e.filename == filename) {
-                        e.state = skill_llm::catalog::DownloadState::Downloaded;
-                        e.progress = 1.0;
-                        e.local_path = Some(path);
-                        e.status_msg = Some("Downloaded".to_string());
-                    }
-                }
-                persist_llm_catalog(&state);
-                emit_daemon_event(
-                    &state,
-                    "LlmDownloadCompleted",
-                    serde_json::json!({"filename": filename.clone()}),
-                );
-            }
-            Ok(Err(err)) => {
-                let msg = err.to_string();
-                let st = if msg.contains("paused") {
-                    skill_llm::catalog::DownloadState::Paused
-                } else if msg.contains("cancelled") {
-                    skill_llm::catalog::DownloadState::Cancelled
-                } else {
-                    skill_llm::catalog::DownloadState::Failed
-                };
-                set_download_state(&state, &filename, st, Some(msg));
-            }
-            Err(err) => {
-                set_download_state(
-                    &state,
-                    &filename,
-                    skill_llm::catalog::DownloadState::Failed,
-                    Some(err.to_string()),
-                );
-            }
-        }
-    });
+async fn llm_set_active_model(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_set_active_model_impl(state, req).await
 }
 
-async fn llm_download_start(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    let is_active = state
-        .llm_downloads
-        .lock()
-        .ok()
-        .map(|m| m.contains_key(&req.filename))
-        .unwrap_or(false);
-    if is_active {
-        return Json(serde_json::json!({"ok": true, "result": "already_downloading"}));
-    }
-
-    set_download_state(
-        &state,
-        &req.filename,
-        skill_llm::catalog::DownloadState::Downloading,
-        Some("Queued in daemon".into()),
-    );
-    spawn_model_download(state.clone(), req.filename.clone());
-    Json(serde_json::json!({"ok": true}))
+async fn llm_set_active_mmproj(state: State<AppState>, req: Json<LlmFilenameRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_set_active_mmproj_impl(state, req).await
 }
 
-async fn llm_download_cancel(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    set_live_download_cancel_flags(&state, &req.filename, true, false);
-    set_download_state(
-        &state,
-        &req.filename,
-        skill_llm::catalog::DownloadState::Cancelled,
-        Some("Cancelling".into()),
-    );
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_download_pause(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    set_live_download_cancel_flags(&state, &req.filename, true, true);
-    set_download_state(
-        &state,
-        &req.filename,
-        skill_llm::catalog::DownloadState::Paused,
-        Some("Pausing".into()),
-    );
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_download_resume(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    let is_active = state
-        .llm_downloads
-        .lock()
-        .ok()
-        .map(|m| m.contains_key(&req.filename))
-        .unwrap_or(false);
-    if !is_active {
-        set_download_state(
-            &state,
-            &req.filename,
-            skill_llm::catalog::DownloadState::Downloading,
-            Some("Resumed".into()),
-        );
-        spawn_model_download(state.clone(), req.filename.clone());
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_download_delete(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    set_live_download_cancel_flags(&state, &req.filename, true, false);
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        if let Some(e) = cat.entries.iter_mut().find(|e| e.filename == req.filename) {
-            e.state = skill_llm::catalog::DownloadState::NotDownloaded;
-            e.status_msg = None;
-            e.progress = 0.0;
-            e.local_path = None;
-        }
-    }
-    if let Ok(mut m) = state.llm_downloads.lock() {
-        m.remove(&req.filename);
-    }
-    persist_llm_catalog(&state);
-    emit_daemon_event(
-        &state,
-        "LlmDownloadDeleted",
-        serde_json::json!({"filename": req.filename}),
-    );
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_set_active_model(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        cat.active_model = req.filename;
-        if !cat.active_mmproj_matches_active_model() {
-            cat.active_mmproj.clear();
-        }
-    }
-    persist_llm_catalog(&state);
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-            cfg.model_path = cat.active_model_path();
-        }
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_set_active_mmproj(
-    State(state): State<AppState>,
-    Json(req): Json<LlmFilenameRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut cat) = state.llm_catalog.lock() {
-        cat.active_mmproj = req.filename;
-    }
-    persist_llm_catalog(&state);
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-            cfg.mmproj = if cfg.autoload_mmproj {
-                cat.active_mmproj_path()
-            } else {
-                None
-            };
-        }
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn llm_set_autoload_mmproj(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.autoload_mmproj = req.value;
-    save_user_settings(&state, &settings);
-    #[cfg(feature = "llm")]
-    {
-        if let Ok(mut cfg) = state.llm_config.lock() {
-            cfg.autoload_mmproj = req.value;
-            if !req.value {
-                cfg.mmproj = None;
-            }
-        }
-    }
-    Json(serde_json::json!({"ok": true, "value": req.value}))
+async fn llm_set_autoload_mmproj(state: State<AppState>, req: Json<BoolValueRequest>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_set_autoload_mmproj_impl(state, req).await
 }
 
 async fn list_serial_ports() -> Json<Vec<String>> {
@@ -3170,156 +1901,10 @@ async fn list_serial_ports() -> Json<Vec<String>> {
     Json(ports)
 }
 
-fn persist_lsl_settings(state: &AppState) {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.lsl_auto_connect = state.lsl_auto_connect.lock().map(|g| *g).unwrap_or(false);
-    settings.lsl_paired_streams = state.lsl_paired_streams.lock().map(|g| g.clone()).unwrap_or_default();
-    settings.lsl_idle_timeout_secs = state
-        .lsl_idle_timeout_secs
-        .lock()
-        .map(|g| *g)
-        .unwrap_or(skill_settings::default_lsl_idle_timeout_secs());
-    let path = skill_settings::settings_path(&skill_dir);
-    if let Ok(json) = serde_json::to_string_pretty(&settings) {
-        let _ = std::fs::write(path, json);
-    }
-}
-
-async fn get_lsl_config(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let auto_connect = state.lsl_auto_connect.lock().map(|g| *g).unwrap_or(false);
-    let paired_streams = state.lsl_paired_streams.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(serde_json::json!({"auto_connect": auto_connect, "paired_streams": paired_streams}))
-}
-
-async fn set_lsl_auto_connect(
-    State(state): State<AppState>,
-    Json(req): Json<LslAutoConnectRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.lsl_auto_connect.lock() {
-        *g = req.enabled;
-    }
-    persist_lsl_settings(&state);
-    Json(serde_json::json!({"ok": true, "auto_connect": req.enabled}))
-}
-
-async fn lsl_pair_stream(State(state): State<AppState>, Json(req): Json<LslPairRequest>) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.lsl_paired_streams.lock() {
-        if let Some(existing) = g.iter_mut().find(|p| p.source_id == req.source_id) {
-            existing.name = req.name;
-            existing.stream_type = req.stream_type;
-            existing.channels = req.channels;
-            existing.sample_rate = req.sample_rate;
-        } else {
-            g.push(skill_settings::LslPairedStream {
-                source_id: req.source_id,
-                name: req.name,
-                stream_type: req.stream_type,
-                channels: req.channels,
-                sample_rate: req.sample_rate,
-            });
-        }
-    }
-    persist_lsl_settings(&state);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn lsl_unpair_stream(
-    State(state): State<AppState>,
-    Json(req): Json<LslUnpairRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.lsl_paired_streams.lock() {
-        g.retain(|p| p.source_id != req.source_id);
-    }
-    persist_lsl_settings(&state);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_lsl_idle_timeout(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let secs = state.lsl_idle_timeout_secs.lock().map(|g| *g).unwrap_or(None);
-    Json(serde_json::json!({"secs": secs}))
-}
-
-async fn set_lsl_idle_timeout(
-    State(state): State<AppState>,
-    Json(req): Json<LslIdleTimeoutRequest>,
-) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.lsl_idle_timeout_secs.lock() {
-        *g = req.secs;
-    }
-    persist_lsl_settings(&state);
-    Json(serde_json::json!({"ok": true, "secs": req.secs}))
-}
-
-async fn lsl_virtual_source_start(
-    State(state): State<AppState>,
-    body: Option<axum::extract::Json<serde_json::Value>>,
-) -> Json<serde_json::Value> {
-    let Ok(mut g) = state.lsl_virtual_source.lock() else {
-        return Json(serde_json::json!({"ok": false, "running": false}));
-    };
-    if g.is_some() {
-        return Json(serde_json::json!({"ok": true, "running": true, "started": false}));
-    }
-    // Parse config from the request body; fall back to defaults if absent / invalid.
-    let config: skill_lsl::VirtualSourceConfig =
-        body.and_then(|b| serde_json::from_value(b.0).ok()).unwrap_or_default();
-    match skill_lsl::VirtualLslSource::start(config) {
-        Ok(src) => {
-            *g = Some(src);
-            Json(serde_json::json!({"ok": true, "running": true, "started": true}))
-        }
-        Err(e) => Json(serde_json::json!({"ok": false, "running": false, "error": e.to_string()})),
-    }
-}
-
-async fn lsl_virtual_source_stop(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let Ok(mut g) = state.lsl_virtual_source.lock() else {
-        return Json(serde_json::json!({"ok": false, "running": false}));
-    };
-    let was_running = g.is_some();
-    *g = None;
-    Json(serde_json::json!({"ok": true, "running": false, "was_running": was_running}))
-}
-
-async fn lsl_virtual_source_running(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let running = state.lsl_virtual_source.lock().map(|g| g.is_some()).unwrap_or(false);
-    Json(serde_json::json!({"running": running}))
-}
-
-async fn lsl_iroh_start(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let mut guard = state.lsl_iroh_endpoint_id.lock().ok();
-    if let Some(ref mut g) = guard {
-        if g.is_none() {
-            let id: String = (0..16)
-                .map(|_| {
-                    const CH: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-                    let i = (rand::random::<u64>() as usize) % CH.len();
-                    CH[i] as char
-                })
-                .collect();
-            **g = Some(id);
-        }
-        return Json(serde_json::json!({"running": true, "endpoint_id": **g }));
-    }
-    Json(serde_json::json!({"running": false, "endpoint_id": serde_json::Value::Null}))
-}
-
-async fn lsl_iroh_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let eid = state.lsl_iroh_endpoint_id.lock().ok().and_then(|g| g.clone());
-    Json(serde_json::json!({"running": eid.is_some(), "endpoint_id": eid}))
-}
-
-async fn lsl_iroh_stop(State(state): State<AppState>) -> Json<serde_json::Value> {
-    if let Ok(mut g) = state.lsl_iroh_endpoint_id.lock() {
-        *g = None;
-    }
-    Json(serde_json::json!({"running": false, "endpoint_id": serde_json::Value::Null}))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routes::settings_lsl::{LslAutoConnectRequest, LslIdleTimeoutRequest, LslPairRequest, LslUnpairRequest};
     use std::sync::atomic::Ordering;
     use tempfile::TempDir;
 
@@ -3860,5 +2445,112 @@ mod tests {
 
         let Json(cur) = get_inference_device(State(st)).await;
         assert_eq!(cur["value"], "gpu");
+    }
+
+    #[tokio::test]
+    async fn exg_routes_smoke_config_status_and_catalog() {
+        let (_td, st) = mk_state();
+
+        let Json(cfg) = get_model_config(State(st.clone())).await;
+        let Json(set_ok) = set_model_config(State(st.clone()), Json(cfg.clone())).await;
+        assert_eq!(set_ok["ok"], true);
+
+        let Json(status) = get_model_status(State(st.clone())).await;
+        let _ = status.weights_found;
+
+        let Json(catalog) = get_exg_catalog(State(st.clone())).await;
+        assert!(catalog.get("families").is_some());
+
+        let Json(r1) = trigger_reembed().await;
+        assert_eq!(r1["ok"], true);
+
+        let Json(r2) = rebuild_index().await;
+        assert_eq!(r2["ok"], true);
+
+        let Json(est) = estimate_reembed(State(st)).await;
+        assert!(est.get("sessions_total").is_some());
+    }
+
+    #[tokio::test]
+    async fn llm_download_start_already_downloading_short_circuits() {
+        let (_td, st) = mk_state();
+        if let Ok(mut m) = st.llm_downloads.lock() {
+            m.insert(
+                "model.gguf".into(),
+                std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress::default())),
+            );
+        }
+
+        let Json(v) = llm_download_start(
+            State(st),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["result"], "already_downloading");
+    }
+
+    #[tokio::test]
+    async fn llm_pause_cancel_update_live_flags() {
+        let (_td, st) = mk_state();
+        let progress = std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress::default()));
+        if let Ok(mut m) = st.llm_downloads.lock() {
+            m.insert("model.gguf".into(), progress.clone());
+        }
+
+        let _ = llm_download_pause(
+            State(st.clone()),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        {
+            let p = progress.lock().unwrap();
+            assert!(p.cancelled);
+            assert!(p.pause_requested);
+        }
+
+        let _ = llm_download_cancel(
+            State(st),
+            Json(LlmFilenameRequest {
+                filename: "model.gguf".into(),
+            }),
+        )
+        .await;
+        let p = progress.lock().unwrap();
+        assert!(p.cancelled);
+        assert!(!p.pause_requested);
+    }
+
+    #[tokio::test]
+    async fn settings_router_contract_core_paths_exist() {
+        use axum::body::Body;
+        use tower::ServiceExt;
+
+        let (_td, st) = mk_state();
+        let app = router().with_state(st);
+
+        let cases = [
+            (axum::http::Method::GET, "/models/status"),
+            (axum::http::Method::POST, "/models/trigger-reembed"),
+            (axum::http::Method::GET, "/llm/catalog"),
+            (axum::http::Method::POST, "/llm/download/start"),
+            (axum::http::Method::GET, "/lsl/config"),
+            (axum::http::Method::POST, "/lsl/pair"),
+        ];
+
+        for (method, uri) in cases {
+            let req = axum::http::Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_ne!(resp.status(), axum::http::StatusCode::NOT_FOUND, "missing route {uri}");
+        }
     }
 }
