@@ -19,6 +19,10 @@ jobs:
   rust-coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # Repo-wide .cargo/config.toml enables sccache, but this workflow does not
+      # set it up. Disable wrapper here to avoid "sccache ... No such file".
+      RUSTC_WRAPPER: ""
 
     steps:
       - name: Checkout

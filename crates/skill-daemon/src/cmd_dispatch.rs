@@ -21,106 +21,64 @@ pub async fn dispatch(state: AppState, msg: Value) -> Value {
         return json!({ "command": "", "ok": false, "error": "missing command field" });
     }
 
-    let result = match cmd.as_str() {
-        // ── Core status / sessions ──────────────────────────────────────
-        "status" => cmd_status(&state).await,
-        "sessions" => cmd_sessions(&state).await,
-        "session_metrics" => cmd_session_metrics(&state, &msg).await,
+    let result = if let Some(result) = dispatch_family_commands(&state, &msg, &cmd).await {
+        result
+    } else {
+        match cmd.as_str() {
+            // ── Core status / sessions ──────────────────────────────────────
+            "status" => cmd_status(&state).await,
+            "sessions" => cmd_sessions(&state).await,
+            "session_metrics" => cmd_session_metrics(&state, &msg).await,
 
-        // ── Device ──────────────────────────────────────────────────────
-        "devices" => cmd_devices(&state).await,
+            // ── Device ──────────────────────────────────────────────────────
+            "devices" => cmd_devices(&state).await,
 
-        // ── Labels ──────────────────────────────────────────────────────
-        "label" => cmd_label(&state, &msg).await,
-        "search_labels" => cmd_search_labels(&state, &msg).await,
+            // ── Labels ──────────────────────────────────────────────────────
+            "label" => cmd_label(&state, &msg).await,
+            "search_labels" => cmd_search_labels(&state, &msg).await,
 
-        // ── Screenshots ─────────────────────────────────────────────────
-        "search_screenshots" => cmd_search_screenshots(&state, &msg).await,
-        "screenshots_around" => cmd_screenshots_around(&state, &msg).await,
-        "screenshots_for_eeg" => cmd_screenshots_for_eeg(&state, &msg).await,
-        "eeg_for_screenshots" => cmd_eeg_for_screenshots(&state, &msg).await,
+            // ── Screenshots ─────────────────────────────────────────────────
+            "search_screenshots" => cmd_search_screenshots(&state, &msg).await,
+            "screenshots_around" => cmd_screenshots_around(&state, &msg).await,
+            "screenshots_for_eeg" => cmd_screenshots_for_eeg(&state, &msg).await,
+            "eeg_for_screenshots" => cmd_eeg_for_screenshots(&state, &msg).await,
 
-        // ── EEG search / compare / sleep / umap ─────────────────────────
-        "search" => cmd_search(&state, &msg).await,
-        "compare" => cmd_compare(&state, &msg).await,
-        "sleep" => cmd_sleep(&state, &msg).await,
-        "interactive_search" => cmd_interactive_search(&state, &msg).await,
-        "umap" => cmd_umap(&state, &msg).await,
-        "umap_poll" => cmd_umap_poll(&state, &msg).await,
+            // ── EEG search / compare / sleep / umap ─────────────────────────
+            "search" => cmd_search(&state, &msg).await,
+            "compare" => cmd_compare(&state, &msg).await,
+            "sleep" => cmd_sleep(&state, &msg).await,
+            "interactive_search" => cmd_interactive_search(&state, &msg).await,
+            "umap" => cmd_umap(&state, &msg).await,
+            "umap_poll" => cmd_umap_poll(&state, &msg).await,
 
-        // ── Hooks ───────────────────────────────────────────────────────
-        "hooks_status" => cmd_hooks_status(&state).await,
-        "hooks_get" => cmd_hooks_get(&state).await,
-        "hooks_set" => cmd_hooks_set(&state, &msg).await,
-        "hooks_suggest" => cmd_hooks_suggest(&state, &msg).await,
-        "hooks_log" => cmd_hooks_log(&state, &msg).await,
+            // ── Calibrations ────────────────────────────────────────────────
+            "list_calibrations" => cmd_list_calibrations(&state).await,
+            "get_calibration" => cmd_get_calibration(&state, &msg).await,
+            "create_calibration" => cmd_create_calibration(&state, &msg).await,
+            "update_calibration" => cmd_update_calibration(&state, &msg).await,
+            "delete_calibration" => cmd_delete_calibration(&state, &msg).await,
+            "run_calibration" => cmd_stub(&cmd, "calibration requires GUI").await,
 
-        // ── Calibrations ────────────────────────────────────────────────
-        "list_calibrations" => cmd_list_calibrations(&state).await,
-        "get_calibration" => cmd_get_calibration(&state, &msg).await,
-        "create_calibration" => cmd_create_calibration(&state, &msg).await,
-        "update_calibration" => cmd_update_calibration(&state, &msg).await,
-        "delete_calibration" => cmd_delete_calibration(&state, &msg).await,
-        "run_calibration" => cmd_stub(&cmd, "calibration requires GUI").await,
+            // ── TTS / Notify / Timer ────────────────────────────────────────
+            "say" => cmd_say(&state, &msg).await,
+            "notify" => cmd_notify(&msg).await,
+            "timer" => cmd_stub(&cmd, "timer requires GUI").await,
 
-        // ── TTS / Notify / Timer ────────────────────────────────────────
-        "say" => cmd_say(&state, &msg).await,
-        "notify" => cmd_notify(&msg).await,
-        "timer" => cmd_stub(&cmd, "timer requires GUI").await,
+            // ── Health / Oura / Calendar ────────────────────────────────────
+            "health_query" => cmd_health_query(&state, &msg).await,
+            "health_summary" => cmd_health_summary(&state, &msg).await,
+            "health_metric_types" => cmd_health_metric_types(&state).await,
+            "oura_status" => cmd_oura_status(&state).await,
+            "oura_sync" => cmd_oura_sync(&state, &msg).await,
+            "calendar_status" => cmd_calendar_status().await,
+            "calendar_request_permission" => cmd_calendar_permission().await,
+            "calendar_events" => cmd_calendar_events(&msg).await,
 
-        // ── Sleep schedule ──────────────────────────────────────────────
-        "sleep_schedule" => cmd_sleep_schedule(&state).await,
-        "sleep_schedule_set" => cmd_sleep_schedule_set(&state, &msg).await,
+            // ── Subscribe (WS-only, acknowledge) ────────────────────────────
+            "subscribe" => Ok(json!({ "subscribed": true })),
 
-        // ── Health / Oura / Calendar ────────────────────────────────────
-        "health_query" => cmd_health_query(&state, &msg).await,
-        "health_summary" => cmd_health_summary(&state, &msg).await,
-        "health_metric_types" => cmd_health_metric_types(&state).await,
-        "oura_status" => cmd_oura_status(&state).await,
-        "oura_sync" => cmd_oura_sync(&state, &msg).await,
-        "calendar_status" => cmd_calendar_status().await,
-        "calendar_request_permission" => cmd_calendar_permission().await,
-        "calendar_events" => cmd_calendar_events(&msg).await,
-
-        // ── DND ─────────────────────────────────────────────────────────
-        "dnd" => cmd_dnd(&state).await,
-        "dnd_set" => cmd_dnd_set(&msg).await,
-
-        // ── Subscribe (WS-only, acknowledge) ────────────────────────────
-        "subscribe" => Ok(json!({ "subscribed": true })),
-
-        // ── Iroh ────────────────────────────────────────────────────────
-        "iroh_info" => cmd_iroh_info(&state).await,
-        "iroh_totp_list" => cmd_stub(&cmd, "iroh TOTP not available in daemon-only mode").await,
-        "iroh_totp_create" => cmd_stub(&cmd, "iroh TOTP not available in daemon-only mode").await,
-        "iroh_totp_qr" => cmd_stub(&cmd, "iroh TOTP not available in daemon-only mode").await,
-        "iroh_totp_revoke" => cmd_stub(&cmd, "iroh TOTP not available in daemon-only mode").await,
-        "iroh_clients_list" => cmd_stub(&cmd, "iroh clients not available in daemon-only mode").await,
-        "iroh_client_register" => cmd_stub(&cmd, "iroh clients not available in daemon-only mode").await,
-        "iroh_client_revoke" => cmd_stub(&cmd, "iroh clients not available in daemon-only mode").await,
-        "iroh_client_set_scope" => cmd_stub(&cmd, "iroh clients not available in daemon-only mode").await,
-
-        // ── LLM ─────────────────────────────────────────────────────────
-        "llm_status" => cmd_llm_status(&state).await,
-        "llm_start" => cmd_llm_start(&state).await,
-        "llm_stop" => cmd_llm_stop(&state).await,
-        "llm_catalog" => cmd_llm_catalog(&state).await,
-        "llm_add_model" => cmd_llm_add_model(&state, &msg).await,
-        "llm_select_model" => cmd_llm_select_model(&state, &msg).await,
-        "llm_select_mmproj" => cmd_llm_select_mmproj(&state, &msg).await,
-        "llm_set_autoload_mmproj" => cmd_llm_set_autoload_mmproj(&state, &msg).await,
-        "llm_download" => cmd_llm_download(&state, &msg).await,
-        "llm_pause_download" => cmd_llm_pause_download(&state, &msg).await,
-        "llm_resume_download" => cmd_llm_resume_download(&state, &msg).await,
-        "llm_cancel_download" => cmd_llm_cancel_download(&state, &msg).await,
-        "llm_delete" => cmd_llm_delete(&state, &msg).await,
-        "llm_downloads" => cmd_llm_downloads(&state).await,
-        "llm_refresh_catalog" => cmd_llm_refresh(&state).await,
-        "llm_hardware_fit" => cmd_llm_hardware_fit(&state).await,
-        "llm_logs" => cmd_llm_logs(&state).await,
-        "llm_chat" => cmd_llm_chat(&state, &msg).await,
-
-        _ => Err(format!("unknown command: {cmd}")),
+            _ => Err(format!("unknown command: {cmd}")),
+        }
     };
 
     match result {
@@ -163,8 +121,68 @@ fn bool_field(msg: &Value, key: &str) -> Option<bool> {
     msg.get(key).and_then(Value::as_bool)
 }
 
+fn is_iroh_totp_stub(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "iroh_totp_list" | "iroh_totp_create" | "iroh_totp_qr" | "iroh_totp_revoke"
+    )
+}
+
+fn is_iroh_client_stub(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "iroh_clients_list" | "iroh_client_register" | "iroh_client_revoke" | "iroh_client_set_scope"
+    )
+}
+
 async fn cmd_stub(cmd: &str, note: &str) -> Result<Value, String> {
     Ok(json!({ "command": cmd, "ok": false, "error": note }))
+}
+
+async fn dispatch_family_commands(state: &AppState, msg: &Value, cmd: &str) -> Option<Result<Value, String>> {
+    match cmd {
+        // Hooks
+        "hooks_status" => Some(cmd_hooks_status(state).await),
+        "hooks_get" => Some(cmd_hooks_get(state).await),
+        "hooks_set" => Some(cmd_hooks_set(state, msg).await),
+        "hooks_suggest" => Some(cmd_hooks_suggest(state, msg).await),
+        "hooks_log" => Some(cmd_hooks_log(state, msg).await),
+
+        // Sleep schedule
+        "sleep_schedule" => Some(cmd_sleep_schedule(state).await),
+        "sleep_schedule_set" => Some(cmd_sleep_schedule_set(state, msg).await),
+
+        // DND
+        "dnd" => Some(cmd_dnd(state).await),
+        "dnd_set" => Some(cmd_dnd_set(msg).await),
+
+        // Iroh
+        "iroh_info" => Some(cmd_iroh_info(state).await),
+        c if is_iroh_totp_stub(c) => Some(cmd_stub(cmd, "iroh TOTP not available in daemon-only mode").await),
+        c if is_iroh_client_stub(c) => Some(cmd_stub(cmd, "iroh clients not available in daemon-only mode").await),
+
+        // LLM
+        "llm_status" => Some(cmd_llm_status(state).await),
+        "llm_start" => Some(cmd_llm_start(state).await),
+        "llm_stop" => Some(cmd_llm_stop(state).await),
+        "llm_catalog" => Some(cmd_llm_catalog(state).await),
+        "llm_add_model" => Some(cmd_llm_add_model(state, msg).await),
+        "llm_select_model" => Some(cmd_llm_select_model(state, msg).await),
+        "llm_select_mmproj" => Some(cmd_llm_select_mmproj(state, msg).await),
+        "llm_set_autoload_mmproj" => Some(cmd_llm_set_autoload_mmproj(state, msg).await),
+        "llm_download" => Some(cmd_llm_download(state, msg).await),
+        "llm_pause_download" => Some(cmd_llm_pause_download(state, msg).await),
+        "llm_resume_download" => Some(cmd_llm_resume_download(state, msg).await),
+        "llm_cancel_download" => Some(cmd_llm_cancel_download(state, msg).await),
+        "llm_delete" => Some(cmd_llm_delete(state, msg).await),
+        "llm_downloads" => Some(cmd_llm_downloads(state).await),
+        "llm_refresh_catalog" => Some(cmd_llm_refresh(state).await),
+        "llm_hardware_fit" => Some(cmd_llm_hardware_fit(state).await),
+        "llm_logs" => Some(cmd_llm_logs(state).await),
+        "llm_chat" => Some(cmd_llm_chat(state, msg).await),
+
+        _ => None,
+    }
 }
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -2061,5 +2079,26 @@ mod tests {
         let listed2 = dispatch(state, json!({"command":"list_calibrations"})).await;
         assert_eq!(listed2["ok"], true);
         assert_eq!(listed2["profiles"].as_array().map(|a| a.len()).unwrap_or(0), 0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_family_router_handles_known_groups() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let hooks = dispatch_family_commands(&state, &json!({}), "hooks_status").await;
+        assert!(hooks.is_some());
+
+        let dnd = dispatch_family_commands(&state, &json!({"enabled":false}), "dnd_set").await;
+        assert!(dnd.is_some());
+
+        let iroh_stub = dispatch_family_commands(&state, &json!({}), "iroh_totp_list").await;
+        assert!(iroh_stub.is_some());
+
+        let llm = dispatch_family_commands(&state, &json!({}), "llm_status").await;
+        assert!(llm.is_some());
+
+        let unknown = dispatch_family_commands(&state, &json!({}), "not-a-family-command").await;
+        assert!(unknown.is_none());
     }
 }

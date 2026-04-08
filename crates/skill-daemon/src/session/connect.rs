@@ -108,58 +108,131 @@ fn paired_name_for(state: &AppState, target: &str) -> Option<String> {
         .and_then(|s| s.paired_devices.iter().find(|d| d.id == target).map(|d| d.name.clone()))
 }
 
-async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
-    if lower == "openbci" || lower.starts_with("usb:") {
-        return connect_openbci(state, target).await;
-    }
-    if lower.starts_with("cgx:") {
-        return connect_cognionics(target).await;
-    }
-    if lower.starts_with("cortex:") {
-        return connect_emotiv(state).await;
-    }
-    if lower == "ganglion" {
-        return connect_ganglion(state).await;
-    }
-    if lower.starts_with("lsl:") || lower == "lsl" {
-        return connect_lsl(target).await;
-    }
-    if lower.starts_with("brainmaster:") || lower.contains("brainmaster") {
-        return connect_brainmaster(state, target).await;
-    }
-    if lower.starts_with("brainbit:") || lower.contains("brainbit") {
-        return connect_brainbit(target).await;
-    }
-    if lower.starts_with("neurosky:") || lower == "neurosky" || lower.contains("mindwave") {
-        return connect_neurosky(target).await;
-    }
-    if lower.starts_with("neurosity:") || lower == "neurosity" || lower.contains("crown") || lower.contains("notion") {
-        return connect_neurosity(state, target).await;
-    }
-    if lower.starts_with("brainvision:") || lower == "brainvision" || lower.starts_with("rda:") {
-        return connect_brainvision(target).await;
-    }
-    if lower.starts_with("neurofield:") || lower.contains("neurofield") {
-        return connect_neurofield(target).await;
-    }
-    if lower.starts_with("gtec:") || lower.contains("unicorn") {
-        return connect_gtec(target).await;
-    }
-    if lower.contains("mw75") || lower.contains("neurable") {
-        return connect_mw75(paired_name_for(state, target)).await;
-    }
-    if lower.contains("hermes") {
-        return connect_hermes(paired_name_for(state, target)).await;
-    }
-    if lower.contains("idun") || lower.contains("guardian") {
-        return connect_idun(state, paired_name_for(state, target)).await;
-    }
-    if lower.contains("mendi") {
-        return connect_mendi(paired_name_for(state, target)).await;
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConnectRoute {
+    OpenBci,
+    Cognionics,
+    Emotiv,
+    Ganglion,
+    Lsl,
+    Brainmaster,
+    Brainbit,
+    Neurosky,
+    Neurosity,
+    Brainvision,
+    Neurofield,
+    Gtec,
+    Mw75,
+    Hermes,
+    Idun,
+    Mendi,
+    Muse,
+}
 
-    // Default: Muse
-    connect_muse(target, paired_name_for(state, target)).await
+type ConnectPredicate = fn(&str) -> bool;
+
+fn is_openbci(s: &str) -> bool {
+    s == "openbci" || s.starts_with("usb:")
+}
+fn is_cognionics(s: &str) -> bool {
+    s.starts_with("cgx:")
+}
+fn is_emotiv(s: &str) -> bool {
+    s.starts_with("cortex:")
+}
+fn is_ganglion(s: &str) -> bool {
+    s == "ganglion"
+}
+fn is_lsl(s: &str) -> bool {
+    s.starts_with("lsl:") || s == "lsl"
+}
+fn is_brainmaster(s: &str) -> bool {
+    s.starts_with("brainmaster:") || s.contains("brainmaster")
+}
+fn is_brainbit(s: &str) -> bool {
+    s.starts_with("brainbit:") || s.contains("brainbit")
+}
+fn is_neurosky(s: &str) -> bool {
+    s.starts_with("neurosky:") || s == "neurosky" || s.contains("mindwave")
+}
+fn is_neurosity(s: &str) -> bool {
+    s.starts_with("neurosity:") || s == "neurosity" || s.contains("crown") || s.contains("notion")
+}
+fn is_brainvision(s: &str) -> bool {
+    s.starts_with("brainvision:") || s == "brainvision" || s.starts_with("rda:")
+}
+fn is_neurofield(s: &str) -> bool {
+    s.starts_with("neurofield:") || s.contains("neurofield")
+}
+fn is_gtec(s: &str) -> bool {
+    s.starts_with("gtec:") || s.contains("unicorn")
+}
+fn is_mw75(s: &str) -> bool {
+    s.contains("mw75") || s.contains("neurable")
+}
+fn is_hermes(s: &str) -> bool {
+    s.contains("hermes")
+}
+fn is_idun(s: &str) -> bool {
+    s.contains("idun") || s.contains("guardian")
+}
+fn is_mendi(s: &str) -> bool {
+    s.contains("mendi")
+}
+
+const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
+    (is_openbci, ConnectRoute::OpenBci),
+    (is_cognionics, ConnectRoute::Cognionics),
+    (is_emotiv, ConnectRoute::Emotiv),
+    (is_ganglion, ConnectRoute::Ganglion),
+    (is_lsl, ConnectRoute::Lsl),
+    (is_brainmaster, ConnectRoute::Brainmaster),
+    (is_brainbit, ConnectRoute::Brainbit),
+    (is_neurosky, ConnectRoute::Neurosky),
+    (is_neurosity, ConnectRoute::Neurosity),
+    (is_brainvision, ConnectRoute::Brainvision),
+    (is_neurofield, ConnectRoute::Neurofield),
+    (is_gtec, ConnectRoute::Gtec),
+    (is_mw75, ConnectRoute::Mw75),
+    (is_hermes, ConnectRoute::Hermes),
+    (is_idun, ConnectRoute::Idun),
+    (is_mendi, ConnectRoute::Mendi),
+];
+
+fn matching_connect_routes(lower: &str) -> Vec<ConnectRoute> {
+    CONNECT_ROUTE_RULES
+        .iter()
+        .filter_map(|(pred, route)| pred(lower).then_some(*route))
+        .collect()
+}
+
+fn select_connect_route(lower: &str) -> ConnectRoute {
+    matching_connect_routes(lower)
+        .into_iter()
+        .next()
+        .unwrap_or(ConnectRoute::Muse)
+}
+
+async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    match select_connect_route(lower) {
+        ConnectRoute::OpenBci => connect_openbci(state, target).await,
+        ConnectRoute::Cognionics => connect_cognionics(target).await,
+        ConnectRoute::Emotiv => connect_emotiv(state).await,
+        ConnectRoute::Ganglion => connect_ganglion(state).await,
+        ConnectRoute::Lsl => connect_lsl(target).await,
+        ConnectRoute::Brainmaster => connect_brainmaster(state, target).await,
+        ConnectRoute::Brainbit => connect_brainbit(target).await,
+        ConnectRoute::Neurosky => connect_neurosky(target).await,
+        ConnectRoute::Neurosity => connect_neurosity(state, target).await,
+        ConnectRoute::Brainvision => connect_brainvision(target).await,
+        ConnectRoute::Neurofield => connect_neurofield(target).await,
+        ConnectRoute::Gtec => connect_gtec(target).await,
+        ConnectRoute::Mw75 => connect_mw75(paired_name_for(state, target)).await,
+        ConnectRoute::Hermes => connect_hermes(paired_name_for(state, target)).await,
+        ConnectRoute::Idun => connect_idun(state, paired_name_for(state, target)).await,
+        ConnectRoute::Mendi => connect_mendi(paired_name_for(state, target)).await,
+        ConnectRoute::Muse => connect_muse(target, paired_name_for(state, target)).await,
+    }
 }
 
 // ── Muse (BLE) ──────────────────────────────────────────────────────────────
@@ -1587,6 +1660,69 @@ mod tests {
         assert_eq!(infer_kind_from_target("CGX:/dev/ttyUSB0"), "cognionics");
         assert_eq!(infer_kind_from_target("LSL:MyStream"), "lsl");
         assert_eq!(infer_kind_from_target("USB:COM4"), "openbci/cyton");
+    }
+
+    #[test]
+    fn select_connect_route_covers_aliases_and_prefixes() {
+        let cases = [
+            ("openbci", ConnectRoute::OpenBci),
+            ("usb:COM3", ConnectRoute::OpenBci),
+            ("cgx:/dev/ttyUSB1", ConnectRoute::Cognionics),
+            ("cortex:emotiv", ConnectRoute::Emotiv),
+            ("ganglion", ConnectRoute::Ganglion),
+            ("lsl", ConnectRoute::Lsl),
+            ("lsl:SkillVirtualEEG", ConnectRoute::Lsl),
+            ("brainmaster:/dev/ttyUSB0", ConnectRoute::Brainmaster),
+            ("brainbit:AA:BB", ConnectRoute::Brainbit),
+            ("neurosky:/dev/ttyUSB0", ConnectRoute::Neurosky),
+            ("neurosity:device123", ConnectRoute::Neurosity),
+            ("brainvision:127.0.0.1:51244", ConnectRoute::Brainvision),
+            ("neurofield:USB1:5", ConnectRoute::Neurofield),
+            ("gtec:UN-123", ConnectRoute::Gtec),
+            ("MW75-ABCD", ConnectRoute::Mw75),
+            ("Hermes-001", ConnectRoute::Hermes),
+            ("Idun-Guardian", ConnectRoute::Idun),
+            ("Mendi-XY", ConnectRoute::Mendi),
+            ("totally-unknown-device", ConnectRoute::Muse),
+        ];
+
+        for (target, expected) in cases {
+            let lower = target.to_ascii_lowercase();
+            assert_eq!(select_connect_route(&lower), expected, "target={target}");
+        }
+    }
+
+    #[test]
+    fn connect_route_rules_do_not_overlap_for_known_targets() {
+        let targets = [
+            "openbci",
+            "usb:COM3",
+            "cgx:/dev/ttyUSB1",
+            "cortex:emotiv",
+            "ganglion",
+            "lsl:SkillVirtualEEG",
+            "brainmaster:/dev/ttyUSB0",
+            "brainbit:AA:BB",
+            "neurosky:/dev/ttyUSB0",
+            "neurosity:device123",
+            "brainvision:127.0.0.1:51244",
+            "neurofield:USB1:5",
+            "gtec:UN-123",
+            "MW75-ABCD",
+            "Hermes-001",
+            "Idun-Guardian",
+            "Mendi-XY",
+        ];
+
+        for target in targets {
+            let lower = target.to_ascii_lowercase();
+            let matches = matching_connect_routes(&lower);
+            assert_eq!(
+                matches.len(),
+                1,
+                "ambiguous route rules for target={target}: {matches:?}"
+            );
+        }
     }
 
     #[test]
