@@ -169,3 +169,32 @@ async fn daily_recording_mins(
     .unwrap_or_default();
     Json(serde_json::Value::Array(out))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn list_sessions_empty_dir_returns_empty() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(rows) = list_sessions(State(state)).await;
+        assert!(rows.is_empty());
+    }
+
+    #[tokio::test]
+    async fn daily_recording_mins_respects_days_and_shape() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let Json(v) = daily_recording_mins(State(state), Json(DailyRecordingMinsRequest { days: Some(3) })).await;
+
+        let arr = v.as_array().cloned().unwrap_or_default();
+        assert_eq!(arr.len(), 3);
+        for row in arr {
+            assert!(row.get("day").and_then(|d| d.as_str()).unwrap_or("").len() >= 10);
+            assert!(row.get("minutes").and_then(|m| m.as_u64()).is_some());
+        }
+    }
+}

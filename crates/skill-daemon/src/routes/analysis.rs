@@ -241,3 +241,62 @@ async fn session_location(
     .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()}));
     Json(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn embedding_count_empty_dir_is_zero() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let Json(v) = embedding_count(
+            State(state),
+            Json(TimeRangeRequest {
+                start_utc: 1,
+                end_utc: 2,
+            }),
+        )
+        .await;
+        assert_eq!(v["count"], 0);
+    }
+
+    #[tokio::test]
+    async fn session_location_filters_points_and_sorts() {
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        let csv = td.path().join("dummy.csv");
+        std::fs::write(&csv, "").unwrap();
+        let sidecar = csv.with_extension("meta.jsonl");
+        let lines = [
+            serde_json::json!({"type":"location","timestamp":5.0,"latitude":1.0,"longitude":2.0}),
+            serde_json::json!({"type":"location","timestamp":3.0,"latitude":1.5,"longitude":2.5}),
+            serde_json::json!({"type":"location","timestamp":7.0,"latitude":999.0,"longitude":2.0}),
+            serde_json::json!({"type":"other","timestamp":4.0}),
+        ];
+        let body = lines
+            .iter()
+            .map(serde_json::Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&sidecar, body).unwrap();
+
+        let Json(v) = session_location(
+            State(state),
+            Json(SessionLocationRequest {
+                csv_path: csv.display().to_string(),
+                start_utc: 1,
+                end_utc: 6,
+            }),
+        )
+        .await;
+
+        let arr = v.as_array().cloned().unwrap_or_default();
+        assert_eq!(arr.len(), 2, "only valid in-range location points should remain");
+        let ts0 = arr[0]["ts"].as_f64().unwrap_or(0.0);
+        let ts1 = arr[1]["ts"].as_f64().unwrap_or(0.0);
+        assert!(ts0 <= ts1, "points should be sorted by timestamp");
+    }
+}

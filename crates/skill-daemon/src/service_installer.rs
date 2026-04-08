@@ -80,6 +80,24 @@ pub enum ServiceStatus {
     Unknown,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installer_new_sets_defaults() {
+        let s = ServiceInstaller::new(PathBuf::from("/tmp/skill-daemon"));
+        assert_eq!(s.service_name, "com.skill.daemon");
+        assert_eq!(s.daemon_addr, "127.0.0.1:18444");
+    }
+
+    #[test]
+    fn service_status_serializes_snake_case() {
+        let v = serde_json::to_value(ServiceStatus::NotInstalled).unwrap();
+        assert_eq!(v, serde_json::json!("not_installed"));
+    }
+}
+
 // ── macOS LaunchAgent ─────────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]

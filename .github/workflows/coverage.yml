@@ -1,0 +1,54 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+    inputs:
+      coverage_min_lines:
+        description: 'Minimum line coverage percentage gate'
+        required: false
+        default: '55'
+  push:
+    branches: [ main ]
+    paths:
+      - 'crates/**'
+      - '.github/workflows/coverage.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  rust-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Generate coverage (lcov + threshold)
+        env:
+          COVERAGE_MIN_LINES: ${{ github.event.inputs.coverage_min_lines || '55' }}
+        run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov \
+            --workspace \
+            --all-features \
+            --lcov \
+            --output-path lcov.info
+
+          cargo llvm-cov \
+            --workspace \
+            --all-features \
+            --summary-only \
+            --fail-under-lines ${COVERAGE_MIN_LINES}
+
+      - name: Upload lcov artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: lcov.info

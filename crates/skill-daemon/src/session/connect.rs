@@ -635,8 +635,15 @@ impl skill_devices::session::DeviceAdapter for BrainMasterAdapter {
 
 // ── LSL (Lab Streaming Layer) ──────────────────────────────────────────────
 
+fn lsl_query_from_target(target: &str) -> String {
+    if target.len() >= 4 && target[..4].eq_ignore_ascii_case("lsl:") {
+        return target[4..].to_string();
+    }
+    "".to_string()
+}
+
 async fn connect_lsl(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
-    let query = target.strip_prefix("lsl:").unwrap_or("").to_string();
+    let query = lsl_query_from_target(target);
     info!(query = %query, "connecting to LSL stream");
 
     let adapter = tokio::task::spawn_blocking(move || -> anyhow::Result<Box<dyn DeviceAdapter>> {
@@ -1435,6 +1442,15 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.starts_with("neurofield:") {
         return "neurofield";
     }
+    if lower.starts_with("neurosky:") || lower == "neurosky" {
+        return "neurosky";
+    }
+    if lower.starts_with("neurosity:") {
+        return "neurosity";
+    }
+    if lower.starts_with("brainvision:") {
+        return "brainvision";
+    }
     if lower.starts_with("brainbit:") {
         return "brainbit";
     }
@@ -1495,5 +1511,112 @@ fn push_device_log_static(state: &AppState, tag: &str, msg: &str) {
             guard.pop_front();
         }
         guard.push_back(entry);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infer_kind_covers_supported_device_targets() {
+        let cases = [
+            ("muse", "muse"),
+            ("MW75-ABCD", "mw75"),
+            ("Hermes-001", "hermes"),
+            ("Idun-Guardian", "idun"),
+            ("Mendi-XY", "mendi"),
+            ("ganglion", "ganglion"),
+            ("openbci", "openbci"),
+            ("usb:COM3", "openbci/cyton"),
+            ("lsl", "lsl"),
+            ("lsl:SkillVirtualEEG", "lsl"),
+            ("neurofield:USB1:5", "neurofield"),
+            ("brainbit:AA:BB", "brainbit"),
+            ("gtec:UN-123", "gtec"),
+            ("brainmaster:/dev/ttyUSB0", "brainmaster"),
+            ("cortex:emotiv", "emotiv"),
+            ("cgx:/dev/ttyUSB1", "cognionics"),
+            ("neurosky:/dev/ttyUSB0", "neurosky"),
+            ("neurosity:device123", "neurosity"),
+            ("brainvision:127.0.0.1:51244", "brainvision"),
+        ];
+
+        for (target, expected) in cases {
+            assert_eq!(infer_kind_from_target(target), expected, "target={target}");
+        }
+    }
+
+    #[test]
+    fn lsl_target_query_parsing_configurations() {
+        assert_eq!(lsl_query_from_target("lsl"), "");
+        assert_eq!(lsl_query_from_target("lsl:"), "");
+        assert_eq!(lsl_query_from_target("lsl:SkillVirtualEEG"), "SkillVirtualEEG");
+        assert_eq!(lsl_query_from_target("lsl:EEG-32ch@1kHz"), "EEG-32ch@1kHz");
+        assert_eq!(lsl_query_from_target("LSL:SkillVirtualEEG"), "SkillVirtualEEG");
+        assert_eq!(lsl_query_from_target("LsL:MixedCase"), "MixedCase");
+        assert_eq!(lsl_query_from_target("not-lsl"), "");
+    }
+
+    #[tokio::test]
+    async fn connect_lsl_missing_named_stream_returns_error() {
+        let t0 = std::time::Instant::now();
+        let res = connect_lsl("lsl:THIS_STREAM_SHOULD_NOT_EXIST_987654321").await;
+        let elapsed = t0.elapsed();
+        assert!(res.is_err(), "missing LSL stream should error");
+        let msg = res.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(msg.contains("No LSL stream matching"), "unexpected error: {msg}");
+        assert!(
+            elapsed < std::time::Duration::from_secs(8),
+            "LSL missing-stream failure too slow: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn infer_kind_unknown_defaults_to_muse() {
+        assert_eq!(infer_kind_from_target("totally-unknown-device"), "muse");
+    }
+
+    #[test]
+    fn infer_kind_prefixes_are_case_insensitive() {
+        assert_eq!(infer_kind_from_target("NEUROFIELD:USB1:1"), "neurofield");
+        assert_eq!(infer_kind_from_target("BRAINBIT:AA:BB"), "brainbit");
+        assert_eq!(infer_kind_from_target("GTEC:UN-1"), "gtec");
+        assert_eq!(infer_kind_from_target("BRAINMASTER:COM3"), "brainmaster");
+        assert_eq!(infer_kind_from_target("CORTEX:EMOTIV"), "emotiv");
+        assert_eq!(infer_kind_from_target("CGX:/dev/ttyUSB0"), "cognionics");
+        assert_eq!(infer_kind_from_target("LSL:MyStream"), "lsl");
+        assert_eq!(infer_kind_from_target("USB:COM4"), "openbci/cyton");
+    }
+
+    #[test]
+    fn paired_name_lookup_uses_status_paired_devices() {
+        let td = tempfile::tempdir().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+        if let Ok(mut s) = state.status.lock() {
+            s.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
+                id: "ble:abc".into(),
+                name: "Muse S Alice".into(),
+                last_seen: 0,
+            });
+        }
+
+        assert_eq!(paired_name_for(&state, "ble:abc").as_deref(), Some("Muse S Alice"));
+        assert_eq!(paired_name_for(&state, "ble:missing"), None);
+    }
+
+    #[test]
+    fn push_device_log_static_caps_to_256() {
+        let td = tempfile::tempdir().unwrap();
+        let state = AppState::new("t".into(), td.path().to_path_buf());
+
+        for i in 0..300 {
+            push_device_log_static(&state, "session", &format!("m{i}"));
+        }
+
+        let log = state.device_log.lock().unwrap();
+        assert_eq!(log.len(), 256);
+        assert_eq!(log.front().map(|e| e.msg.clone()), Some("m44".into()));
+        assert_eq!(log.back().map(|e| e.msg.clone()), Some("m299".into()));
     }
 }
