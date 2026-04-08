@@ -42,6 +42,10 @@ export interface DeviceStatus {
   paired_devices: PairedDevice[];
   device_error: string | null;
   target_name: string | null;
+  /** Canonical target id chosen by daemon for (re)connect attempts. */
+  target_id?: string | null;
+  /** Human-readable target name resolved by daemon from paired metadata. */
+  target_display_name?: string | null;
   filter_config: FilterConfig;
   /** Per-channel quality in electrode order [TP9, AF7, AF8, TP10].
    *  Values: "good" | "fair" | "poor" | "no_signal" */

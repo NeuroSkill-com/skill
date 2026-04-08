@@ -78,6 +78,8 @@ pub struct DeviceStatus {
     pub paired_devices: Vec<PairedDevice>,
     pub device_error: Option<String>,
     pub target_name: Option<String>,
+    pub target_id: Option<String>,
+    pub target_display_name: Option<String>,
     pub filter_config: FilterConfig,
     pub channel_quality: Vec<SignalQuality>,
     pub embedding_overlap_secs: f32,
@@ -163,6 +165,8 @@ impl Default for DeviceStatus {
             paired_devices: Vec::new(),
             device_error: None,
             target_name: None,
+            target_id: None,
+            target_display_name: None,
             filter_config: FilterConfig::default(),
             channel_quality: Vec::new(),
             embedding_overlap_secs: EMBEDDING_OVERLAP_SECS,
@@ -225,6 +229,8 @@ impl DeviceStatus {
         self.ppg_sample_count = 0;
         self.device_error = None;
         self.target_name = None;
+        self.target_id = None;
+        self.target_display_name = None;
         self.retry_attempt = 0;
         self.retry_countdown_secs = 0;
         self.channel_quality = Vec::new();
@@ -299,6 +305,8 @@ impl DeviceStatus {
                 .find(|d| d.id == id)
                 .map(|d| d.name.clone())
         });
+        self.target_id = preferred_id.map(str::to_string);
+        self.target_display_name = self.target_name.clone();
         // Populate capability flags from the device kind.
         self.apply_capabilities_from_kind();
     }

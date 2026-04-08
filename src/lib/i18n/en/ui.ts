@@ -296,6 +296,8 @@ const ui: Record<string, string> = {
   "devices.virtualDevicesHint":
     "Simulated devices for testing without hardware. Start one from the Virtual Devices window.",
   "devices.virtualBadge": "Virtual",
+  "devices.manualHints": "Manual connection hints",
+  "devices.manualHintsHint": "Known endpoints that may require external setup.",
   "devices.deviceSingular": "device",
   "devices.devicePlural": "devices",
 

@@ -18,6 +18,7 @@ import {
   getCortexWsState,
   getDeviceApiConfig,
   getDeviceLog,
+  getDeviceStatus,
   getDevices,
   getOpenbciConfig,
   getScannerConfig,
@@ -49,9 +50,18 @@ interface ConnectedInfo {
   serial_number: string | null;
   mac_address: string | null;
 }
+interface PairedDeviceInfo {
+  id: string;
+  name: string;
+  last_seen: number;
+}
+interface StatusPayload extends ConnectedInfo {
+  paired_devices?: PairedDeviceInfo[];
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 let devices = $state<DiscoveredDevice[]>([]);
+let pairedFromStatus = $state<PairedDeviceInfo[]>([]);
 let connected = $state<ConnectedInfo>({ device_id: null, serial_number: null, mac_address: null });
 let now = $state(Math.floor(Date.now() / 1000));
 let revealSN = $state(false);
@@ -597,15 +607,50 @@ const OPENBCI_IMAGES: Record<string, string> = {
   galea: "/devices/openbci-galea.jpg",
 };
 
+function inferTransport(id: string): DiscoveredDevice["transport"] {
+  if (id.startsWith("usb:") || id === "neurosky") return "usb_serial";
+  if (id.startsWith("wifi:") || id.startsWith("brainvision:")) return "wifi";
+  if (id.startsWith("cortex:")) return "cortex";
+  return "ble";
+}
+
+function mergePairedIntoDevices(base: DiscoveredDevice[], paired: PairedDeviceInfo[]): DiscoveredDevice[] {
+  const out = [...base];
+  const byId = new Set(out.map((d) => d.id));
+  for (const p of paired) {
+    if (!byId.has(p.id)) {
+      out.push({
+        id: p.id,
+        name: p.name,
+        last_seen: p.last_seen ?? 0,
+        last_rssi: 0,
+        is_paired: true,
+        is_preferred: false,
+        transport: inferTransport(p.id),
+      });
+      byId.add(p.id);
+    }
+  }
+  return out;
+}
+
+function isManualHint(d: DiscoveredDevice): boolean {
+  return d.id === "neurosky" || d.id === "brainvision:127.0.0.1:51244";
+}
+
 // ── Device lists ─────────────────────────────────────────────────────────────
+const allDevices = $derived(mergePairedIntoDevices(devices, pairedFromStatus));
 // Paired: real hardware always first, virtual devices at the bottom.
-const pairedDevices = $derived(sortDevicesRealFirst(devices.filter((d) => d.is_paired)));
+const pairedDevices = $derived(sortDevicesRealFirst(allDevices.filter((d) => d.is_paired)));
 // Discovered: split so the template renders real devices above the virtual subsection.
-const discoveredReal = $derived(devices.filter((d) => !d.is_paired && !isVirtualDevice(d)));
-const discoveredVirtual = $derived(devices.filter((d) => !d.is_paired && isVirtualDevice(d)));
-const discoveredDevices = $derived([...discoveredReal, ...discoveredVirtual]);
+const discoveredReal = $derived(allDevices.filter((d) => !d.is_paired && !isVirtualDevice(d) && !isManualHint(d)));
+const discoveredVirtual = $derived(allDevices.filter((d) => !d.is_paired && isVirtualDevice(d)));
+const manualHintDevices = $derived(allDevices.filter((d) => !d.is_paired && isManualHint(d)));
+const discoveredDevices = $derived([...discoveredReal, ...discoveredVirtual, ...manualHintDevices]);
 // "New device" banner only fires for real hardware — not virtual sources.
-const newUnpairedDevices = $derived(devices.filter((d) => !d.is_paired && d.last_rssi !== 0 && !isVirtualDevice(d)));
+const newUnpairedDevices = $derived(
+  allDevices.filter((d) => !d.is_paired && d.last_rssi !== 0 && !isVirtualDevice(d) && !isManualHint(d)),
+);
 const hasNewUnpaired = $derived(newUnpairedDevices.length > 0);
 
 function expandSupportedCompany(id: SupportedCompanyId) {
@@ -624,9 +669,16 @@ async function setPreferred(id: string) {
 async function forget(id: string) {
   await forgetDevice(id);
   devices = devices.map((d) => (d.id === id ? { ...d, is_paired: false } : d));
+  pairedFromStatus = pairedFromStatus.filter((p) => p.id !== id);
 }
 async function pairDevice(id: string) {
   devices = await pairDeviceCmd<DiscoveredDevice>(id);
+  try {
+    const status = await getDeviceStatus<StatusPayload>();
+    pairedFromStatus = status.paired_devices ?? pairedFromStatus;
+  } catch {
+    /* noop */
+  }
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -636,6 +688,8 @@ let nowTimer: ReturnType<typeof setInterval>;
 onMount(async () => {
   supportedCompanies = await loadSupportedCompanies();
   devices = await getDevices();
+  const status = await getDeviceStatus<StatusPayload>();
+  pairedFromStatus = status.paired_devices ?? [];
   openbci = await getOpenbciConfig();
   deviceApi = await getDeviceApiConfig();
   scannerConfig = await getScannerConfig();
@@ -650,12 +704,13 @@ onMount(async () => {
     await listen<DiscoveredDevice[]>("devices-updated", (ev) => {
       devices = ev.payload;
     }),
-    await listen<ConnectedInfo>("status", (ev) => {
+    await listen<StatusPayload>("status", (ev) => {
       connected = {
         device_id: ev.payload.device_id ?? null,
         serial_number: ev.payload.serial_number ?? null,
         mac_address: ev.payload.mac_address ?? null,
       };
+      pairedFromStatus = ev.payload.paired_devices ?? pairedFromStatus;
     }),
     await listen<CortexWsState>("cortex-ws-state", (ev) => {
       cortexWsState = ev.payload;
@@ -790,6 +845,26 @@ onDestroy(() => {
             <span class="text-[0.46rem] text-muted-foreground/35 leading-relaxed">— {t("devices.virtualDevicesHint")}</span>
           </div>
           {#each discoveredVirtual as dev, i (dev.id)}
+            {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+            {@render deviceRow(dev)}
+          {/each}
+        {/if}
+
+        <!-- Manual connection hints subsection -->
+        {#if manualHintDevices.length > 0}
+          {#if discoveredReal.length > 0 || discoveredVirtual.length > 0}
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+          <div class="flex items-center gap-2 px-4 py-2 bg-muted/30 dark:bg-white/[0.02]
+                      {(discoveredReal.length > 0 || discoveredVirtual.length > 0)
+                        ? 'border-t border-border dark:border-white/[0.05]'
+                        : ''}">
+            <span class="text-[0.46rem] font-bold tracking-widest uppercase text-muted-foreground/50">
+              🧭 {t("devices.manualHints")}
+            </span>
+            <span class="text-[0.46rem] text-muted-foreground/35 leading-relaxed">— {t("devices.manualHintsHint")}</span>
+          </div>
+          {#each manualHintDevices as dev, i (dev.id)}
             {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
             {@render deviceRow(dev)}
           {/each}

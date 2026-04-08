@@ -16,6 +16,7 @@ import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import ExgModelPickerSection from "$lib/exg/ExgModelPickerSection.svelte";
 import { t } from "$lib/i18n/index.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ExgModelConfig {
@@ -91,6 +92,11 @@ let modelConfigSaving = $state(false);
 let reembedEstimate = $state<ReembedEstimate | null>(null);
 let reembedProgress = $state<ReembedProgress | null>(null);
 let reembedRunning = $state(false);
+
+// One-shot startup recovery signal from embed worker.
+let hnswRebuilt = $state(false);
+let recoveredEmbeddings = $state(0);
+let hnswRecoveryToastShown = false;
 
 const HNSW_M_PRESETS: number[] = [8, 16, 32, 64];
 const HNSW_EF_PRESETS: number[] = [50, 100, 200, 400];
@@ -189,6 +195,7 @@ const encoderLoading = $derived(
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenReembed: (() => void) | undefined;
 let unlistenExgProgress: (() => void) | undefined;
+let unlistenEmbedRecovery: (() => void) | undefined;
 
 onMount(async () => {
   modelConfig = await daemonInvoke<ExgModelConfig>("get_eeg_model_config");
@@ -232,6 +239,40 @@ onMount(async () => {
   });
   const unlistenFailed = onDaemonEvent("ExgDownloadFailed", () => refreshStatus());
 
+  const maybeToastHnswRecovery = (count: number) => {
+    if (hnswRecoveryToastShown) return;
+    hnswRecoveryToastShown = true;
+    addToast(
+      "warning",
+      t("model.hnswRecoveredTitle"),
+      t("model.hnswRecoveredMsg", { n: count.toLocaleString() }),
+      0,
+    );
+  };
+
+  const unlistenEmbedStatus = onDaemonEvent("EmbedWorkerStatus", (ev) => {
+    const p = ev.payload as { hnsw_rebuilt?: boolean; recovered_embeddings?: number };
+    if (typeof p.hnsw_rebuilt === "boolean") {
+      hnswRebuilt = p.hnsw_rebuilt;
+      if (p.hnsw_rebuilt) maybeToastHnswRecovery(typeof p.recovered_embeddings === "number" ? p.recovered_embeddings : 0);
+    }
+    if (typeof p.recovered_embeddings === "number") recoveredEmbeddings = p.recovered_embeddings;
+  });
+
+  const unlistenEmbedWarning = onDaemonEvent("EmbedWorkerWarning", (ev) => {
+    const p = ev.payload as { code?: string; recovered_embeddings?: number };
+    if (p.code !== "hnsw_rebuilt") return;
+    hnswRebuilt = true;
+    const count = typeof p.recovered_embeddings === "number" ? p.recovered_embeddings : 0;
+    recoveredEmbeddings = count;
+    maybeToastHnswRecovery(count);
+  });
+
+  unlistenEmbedRecovery = () => {
+    unlistenEmbedStatus();
+    unlistenEmbedWarning();
+  };
+
   // Chain cleanup into the existing unsub.
   const origUnsub = unlistenExgProgress;
   unlistenExgProgress = () => {
@@ -244,6 +285,7 @@ onDestroy(() => {
   clearInterval(statusTimer);
   unlistenReembed?.();
   unlistenExgProgress?.();
+  unlistenEmbedRecovery?.();
 });
 </script>
 
@@ -591,6 +633,18 @@ onDestroy(() => {
           </span>
         </div>
       </div>
+
+      {#if hnswRebuilt}
+        <div class="flex items-center justify-between gap-2 px-4 py-2.5 bg-amber-500/8 border-t border-amber-500/20">
+          <Badge variant="outline"
+            class="text-[0.54rem] py-0 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+            {t("model.hnswRecoveredTitle")}
+          </Badge>
+          <span class="text-[0.6rem] text-amber-700/90 dark:text-amber-300/90 tabular-nums">
+            {t("model.hnswRecoveredMsg", { n: recoveredEmbeddings.toLocaleString() })}
+          </span>
+        </div>
+      {/if}
 
     </CardContent>
   </Card>

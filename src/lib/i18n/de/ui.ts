@@ -293,6 +293,8 @@ const ui: Record<string, string> = {
   "devices.virtualDevicesHint":
     'Simulierte Geräte zum Testen ohne Hardware. Starte eines im Fenster "Virtuelle Geräte".',
   "devices.virtualBadge": "Virtuell",
+  "devices.manualHints": "Manuelle Verbindungshinweise",
+  "devices.manualHintsHint": "Bekannte Endpunkte, die eine externe Einrichtung erfordern können.",
   "devices.deviceSingular": "Gerät",
   "devices.devicePlural": "Geräte",
 

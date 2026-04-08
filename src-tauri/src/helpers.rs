@@ -49,6 +49,8 @@ pub(crate) fn apply_daemon_status(
     local.battery = ds.battery;
     local.device_error = ds.device_error;
     local.target_name = ds.target_name;
+    local.target_id = ds.target_id;
+    local.target_display_name = ds.target_display_name;
     local.retry_attempt = ds.retry_attempt;
     local.retry_countdown_secs = ds.retry_countdown_secs;
     local.paired_devices = ds

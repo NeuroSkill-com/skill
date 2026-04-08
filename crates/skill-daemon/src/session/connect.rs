@@ -21,8 +21,27 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
 
     tokio::task::spawn(async move {
         if let Ok(mut s) = state2.status.lock() {
+            let target_id = if target.contains(':') {
+                Some(target.clone())
+            } else {
+                s.paired_devices
+                    .iter()
+                    .find(|d| d.name == target)
+                    .map(|d| d.id.clone())
+            };
+            let target_display_name = if target.contains(':') {
+                s.paired_devices
+                    .iter()
+                    .find(|d| d.id == target)
+                    .map(|d| d.name.clone())
+                    .or_else(|| Some(target.clone()))
+            } else {
+                Some(target.clone())
+            };
             s.state = "connecting".into();
             s.target_name = Some(target.clone());
+            s.target_id = target_id;
+            s.target_display_name = target_display_name;
             s.device_error = None;
         }
 
@@ -44,6 +63,7 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
             }
             Err(e) => {
                 error!(%e, %target, "device connect failed");
+                push_device_log_static(&state2, "session", &format!("connect failed: target={target:?} err={e}"));
                 if let Ok(mut s) = state2.status.lock() {
                     s.state = "disconnected".into();
                     s.device_error = Some(e.to_string());
@@ -255,6 +275,8 @@ async fn connect_muse(target: &str, paired_name: Option<String>) -> anyhow::Resu
         };
         let client = MuseClient::new(config);
         let (rx, handle) = client.connect().await.context("Muse connect")?;
+        handle.start(true, false).await.context("Muse start")?;
+        let _ = handle.request_device_info().await;
         return Ok(Box::new(MuseAdapter::new(rx, handle)));
     }
 
@@ -280,6 +302,8 @@ async fn connect_muse(target: &str, paired_name: Option<String>) -> anyhow::Resu
     };
     info!(name = %device.name, id = %device.id, "connecting to Muse");
     let (rx, handle) = client.connect_to(device).await.context("Muse connect")?;
+    handle.start(true, false).await.context("Muse start")?;
+    let _ = handle.request_device_info().await;
     Ok(Box::new(MuseAdapter::new(rx, handle)))
 }
 

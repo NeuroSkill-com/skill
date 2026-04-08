@@ -35,7 +35,9 @@ impl EmbedWorkerHandle {
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
     ) -> Self {
-        let (tx, rx) = mpsc::sync_channel::<EpochMsg>(4);
+        // Keep a larger pre-encoder buffer so epochs are not dropped while
+        // heavy models (e.g. ZUNA) are still loading.
+        let (tx, rx) = mpsc::sync_channel::<EpochMsg>(128);
         let thread = std::thread::Builder::new()
             .name("eeg-embed".into())
             .spawn(move || {
@@ -354,6 +356,25 @@ fn embed_worker_main(
             db = %s.db_path.display(),
             "day store opened"
         );
+
+        if s.hnsw_rebuilt() {
+            let recovered = s.hnsw_rebuilt_count();
+            warn!(
+                path = %s.index_path.display(),
+                recovered_embeddings = recovered,
+                "HNSW index was rebuilt after load failure; search quality may be temporarily reduced until enough new embeddings are inserted"
+            );
+            broadcast_ev(
+                &events_tx,
+                "EmbedWorkerWarning",
+                serde_json::json!({
+                    "code": "hnsw_rebuilt",
+                    "path": s.index_path.display().to_string(),
+                    "recovered_embeddings": recovered,
+                    "message": "HNSW index was rebuilt after load failure; search quality may be temporarily reduced until enough new embeddings are inserted"
+                }),
+            );
+        }
     }
 
     // Load encoder.
@@ -366,12 +387,23 @@ fn embed_worker_main(
         None
     };
 
+    let (hnsw_rebuilt, recovered_embeddings) = store
+        .as_ref()
+        .map(|s| (s.hnsw_rebuilt(), s.hnsw_rebuilt_count()))
+        .unwrap_or((false, 0));
+
+    if hnsw_rebuilt {
+        info!(recovered_embeddings, "startup HNSW recovery summary");
+    }
+
     broadcast_ev(
         &events_tx,
         "EmbedWorkerStatus",
         serde_json::json!({
             "status": if encoder.is_some() { "ready" } else { "metrics_only" },
             "backend": config.model_backend.as_str(),
+            "hnsw_rebuilt": hnsw_rebuilt,
+            "recovered_embeddings": recovered_embeddings,
         }),
     );
 
@@ -390,6 +422,26 @@ fn embed_worker_main(
             current_date = today;
             store = DayStore::open(&day_dir(&skill_dir), config.hnsw_m, config.hnsw_ef_construction);
             info!("day store rolled to {current_date}");
+            if let Some(ref s) = store {
+                if s.hnsw_rebuilt() {
+                    let recovered = s.hnsw_rebuilt_count();
+                    warn!(
+                        path = %s.index_path.display(),
+                        recovered_embeddings = recovered,
+                        "HNSW index was rebuilt after load failure; search quality may be temporarily reduced until enough new embeddings are inserted"
+                    );
+                    broadcast_ev(
+                        &events_tx,
+                        "EmbedWorkerWarning",
+                        serde_json::json!({
+                            "code": "hnsw_rebuilt",
+                            "path": s.index_path.display().to_string(),
+                            "recovered_embeddings": recovered,
+                            "message": "HNSW index was rebuilt after load failure; search quality may be temporarily reduced until enough new embeddings are inserted"
+                        }),
+                    );
+                }
+            }
         }
 
         // Compute epoch metrics from band snapshot.

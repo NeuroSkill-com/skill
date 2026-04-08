@@ -180,7 +180,7 @@ fn status_key(st: &DeviceStatus) -> String {
     };
     let name = st.device_name.as_deref().unwrap_or("");
     let tgt = if st.state == "scanning" {
-        st.target_name.as_deref().unwrap_or("")
+        st.target_display_name.as_deref().unwrap_or("")
     } else {
         ""
     };
@@ -283,7 +283,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     // ── Status info (always present — updated in-place by update_status_items) ──
     let info_text = match st.state.as_str() {
         "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
-        "scanning" => match &st.target_name {
+        "scanning" => match st.target_display_name.as_ref() {
             Some(n) => format!("Searching for {n}…"),
             None => "Scanning for BCI device…".into(),
         },
@@ -745,7 +745,7 @@ fn update_status_items(menu: &Menu<tauri::Wry>, st: &DeviceStatus) {
     if let Some(item) = menu.get("info").and_then(|k| k.as_menuitem().cloned()) {
         let text = match st.state.as_str() {
             "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
-            "scanning" => match &st.target_name {
+            "scanning" => match st.target_display_name.as_ref() {
                 Some(n) => format!("Searching for {n}…"),
                 None => "Scanning for BCI device…".into(),
             },

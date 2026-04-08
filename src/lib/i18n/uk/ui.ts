@@ -287,6 +287,8 @@ const ui: Record<string, string> = {
   "devices.virtualDevicesHint":
     "Імітовані пристрої для тестування без фізичного обладнання. Запустіть один у вікні Віртуальні пристрої.",
   "devices.virtualBadge": "Віртуал.",
+  "devices.manualHints": "Підказки для ручного підключення",
+  "devices.manualHintsHint": "Відомі кінцеві точки, які можуть вимагати зовнішнього налаштування.",
   "devices.deviceSingular": "пристрій",
   "devices.devicePlural": "пристроїв",
 

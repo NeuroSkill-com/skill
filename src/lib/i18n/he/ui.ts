@@ -279,6 +279,8 @@ const ui: Record<string, string> = {
   "devices.virtualDevices": "וירטואלי",
   "devices.virtualDevicesHint": "מכשירים מדומים לבדיקה ללא חומרה. הפעל אחד מחלון המכשירים הווירטואליים.",
   "devices.virtualBadge": "וירטואלי",
+  "devices.manualHints": "רמזים לחיבור ידני",
+  "devices.manualHintsHint": "נקודות קצה מוכרות שעשויות לדרוש הגדרה חיצונית.",
   "devices.deviceSingular": "מכשיר",
   "devices.devicePlural": "מכשירים",
 
