@@ -17,6 +17,8 @@ const llm: Record<string, string> = {
   "model.todaysDb": "La base de datos de hoy",
   "model.embeddingsToday": "Incrustaciones hoy",
   "model.hnswIndex": "Índice HNSW",
+  "model.hnswRecoveredTitle": "HNSW recuperado",
+  "model.hnswRecoveredMsg": "{n} incrustaciones restauradas desde SQLite",
   "model.takesEffectRestart": "entra en vigor al día siguiente o se reinicia",
   "model.connectivity": "Conectividad",
   "model.currently": "actualmente {n}",

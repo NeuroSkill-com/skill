@@ -17,6 +17,8 @@ const llm: Record<string, string> = {
   "model.todaysDb": "БД за сьогодні",
   "model.embeddingsToday": "Вбудовувань сьогодні",
   "model.hnswIndex": "Індекс HNSW",
+  "model.hnswRecoveredTitle": "HNSW відновлено",
+  "model.hnswRecoveredMsg": "{n} вбудовувань відновлено з SQLite",
   "model.takesEffectRestart": "Набуде чинності наступного дня або після перезапуску",
   "model.connectivity": "Зв'язність",
   "model.currently": "зараз {n}",

@@ -350,6 +350,8 @@ let status = $state<DeviceStatus>({
   paired_devices: [],
   device_error: null,
   target_name: null,
+  target_id: null,
+  target_display_name: null,
   filter_config: { ...DEFAULT_FILTER_CONFIG },
   channel_quality: ["no_signal", "no_signal", "no_signal", "no_signal"],
   retry_attempt: 0,
@@ -505,6 +507,28 @@ const sourceLabel = $derived.by(() => {
     default:
       return null;
   }
+});
+
+/** Resolve current canonical target to paired device metadata when available. */
+const targetDevice = $derived.by(() => {
+  const t = status.target_id ?? status.target_display_name;
+  if (!t) return null;
+  return status.paired_devices.find((d) => d.id === t) ?? status.paired_devices.find((d) => d.name === t) ?? null;
+});
+
+/** Friendly label + technical id for the "connecting" state. */
+const connectingTarget = $derived.by(() => {
+  const name = status.target_display_name ?? targetDevice?.name ?? null;
+  if (!name) return null;
+  const id = status.target_id ?? targetDevice?.id ?? null;
+  return { name, id: id && id !== name ? id : null };
+});
+
+/** Connected device id line (show under name when different from name). */
+const connectedDeviceId = $derived.by(() => {
+  const id = status.device_id ?? status.target_id ?? null;
+  if (id && id !== status.device_name) return id;
+  return null;
 });
 
 // Channel labels and colours — dynamic based on connected device.
@@ -1360,18 +1384,23 @@ useWindowTitle("window.title.main");
             />
           {/if}
           {#if status.device_name && status.state === "connected"}
-            <span class="text-[0.65rem] text-muted-foreground truncate min-w-0 flex-1">
-              {status.device_name}
-              {#if sourceLabel}
-                <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
-                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+            <div class="min-w-0 flex-1 leading-tight">
+              <div class="text-[0.65rem] text-muted-foreground truncate">
+                {status.device_name}
+                {#if sourceLabel}
+                  <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
+                               rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+                {/if}
+                {#if hasSecondary}
+                  <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
+                               rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
+                  <span class="text-[0.48rem] text-violet-500/60">+{secondarySessions.length}</span>
+                {/if}
+              </div>
+              {#if connectedDeviceId}
+                <div class="font-mono text-[0.5rem] text-muted-foreground/55 truncate">{connectedDeviceId}</div>
               {/if}
-              {#if hasSecondary}
-                <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
-                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
-                <span class="text-[0.48rem] text-violet-500/60">+{secondarySessions.length}</span>
-              {/if}
-            </span>
+            </div>
           {:else}
             <span class="flex-1"></span>
           {/if}
@@ -1441,17 +1470,22 @@ useWindowTitle("window.title.main");
           {/if}
 
           {#if status.device_name && status.state === "connected"}
-            <p class="text-[0.73rem] text-muted-foreground font-medium -mt-1">
-              {status.device_name}
-              {#if sourceLabel}
-                <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
-                             rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+            <div class="-mt-1 text-center">
+              <p class="text-[0.73rem] text-muted-foreground font-medium">
+                {status.device_name}
+                {#if sourceLabel}
+                  <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                               rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
+                {/if}
+                {#if hasSecondary}
+                  <span class="ml-1 text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                               rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
+                {/if}
+              </p>
+              {#if connectedDeviceId}
+                <p class="font-mono text-[0.58rem] text-muted-foreground/60">{connectedDeviceId}</p>
               {/if}
-              {#if hasSecondary}
-                <span class="ml-1 text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5
-                             rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
-              {/if}
-            </p>
+            </div>
             {#if status.serial_number || status.mac_address || status.firmware_version}
               <div class="flex flex-wrap justify-center gap-x-3 gap-y-0.5 -mt-0.5">
                 {#if status.serial_number}
@@ -1664,19 +1698,30 @@ useWindowTitle("window.title.main");
           {:else}
             <!-- Normal scanning spinner -->
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
-            <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
-              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : t("dashboard.lookingForMuse")}
-            </p>
+            {#if connectingTarget}
+              <div class="text-center leading-relaxed">
+                <p class="text-[0.73rem] text-muted-foreground">
+                  {t("dashboard.connectingTo", { name: connectingTarget.name })}
+                </p>
+                {#if connectingTarget.id}
+                  <p class="font-mono text-[0.58rem] text-muted-foreground/60">{connectingTarget.id}</p>
+                {/if}
+              </div>
+            {:else}
+              <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
+                {isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : t("dashboard.lookingForMuse")}
+              </p>
+            {/if}
             <Button size="sm" variant="outline" onclick={cancelRetry}>{t("common.cancel")}</Button>
 
             <!-- Switch to a different paired device while scanning -->
-            {#if status.paired_devices.length > 1 || (status.paired_devices.length > 0 && !status.target_name)}
+            {#if status.paired_devices.length > 1 || (status.paired_devices.length > 0 && !status.target_id)}
               <div class="w-full mt-1">
                 <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground mb-1.5 text-center">
                   {t("dashboard.connectDifferent")}
                 </p>
                 <div class="flex flex-col gap-1">
-                  {#each status.paired_devices.filter(d => d.name !== status.target_name) as dev}
+                  {#each status.paired_devices.filter(d => d.id !== status.target_id) as dev}
                     <button
                       onclick={() => connectDevice(dev.id)}
                       class="flex items-center justify-between gap-2 rounded-lg

@@ -588,6 +588,33 @@ fn default_status(state: &str) -> StatusResponse {
     }
 }
 
+/// Resolve canonical target fields for status/UI from a requested target.
+/// Returns `(target_id, target_display_name)`.
+fn resolve_target_fields(state: &AppState, target: Option<&str>) -> (Option<String>, Option<String>) {
+    let Some(t) = target else { return (None, None) };
+
+    // ID-like targets (ble:/usb:/wifi:/...) should preserve their id and try
+    // to resolve a human-friendly name from the paired list.
+    if t.contains(':') {
+        let display = state.status.lock().ok().and_then(|s| {
+            s.paired_devices
+                .iter()
+                .find(|d| d.id == t)
+                .map(|d| d.name.clone())
+        });
+        return (Some(t.to_string()), display.or_else(|| Some(t.to_string())));
+    }
+
+    // Name-like targets: keep display name and backfill id from paired devices.
+    let id = state.status.lock().ok().and_then(|s| {
+        s.paired_devices
+            .iter()
+            .find(|d| d.name == t)
+            .map(|d| d.id.clone())
+    });
+    (id, Some(t.to_string()))
+}
+
 async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResponse> {
     let mut out = default_status("connecting");
 
@@ -598,18 +625,57 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         }
     }
 
-    // Check if we have a preferred/target device to reconnect to.
-    let target = state.status.lock().ok().and_then(|s| s.target_name.clone());
+    // Retry target resolution (in order):
+    // 1) Last explicit target_id from status (new canonical field)
+    // 2) Legacy target_name fallback
+    // 3) Preferred device from current discovered-device list
+    // 4) First paired device as fallback
+    let status_target = state
+        .status
+        .lock()
+        .ok()
+        .and_then(|s| s.target_id.clone().or_else(|| s.target_name.clone()));
+    let preferred_target = state
+        .devices
+        .lock()
+        .ok()
+        .and_then(|d| d.iter().find(|x| x.is_preferred).map(|x| x.id.clone()));
+    let paired_fallback = state
+        .status
+        .lock()
+        .ok()
+        .and_then(|s| s.paired_devices.first().map(|d| d.id.clone()));
+    let target = status_target.or(preferred_target).or(paired_fallback);
+
+    if let Some(ref t) = target {
+        push_device_log(&state, "session", &format!("retry-connect target={t}"));
+    } else {
+        push_device_log(&state, "session", "retry-connect skipped: no target device");
+    }
+
+    let resolved_target = target.as_deref().map(|t| (t.to_string(), resolve_target_fields(&state, Some(t))));
 
     if let Ok(mut status) = state.status.lock() {
-        status.state = "connecting".to_string();
         status.retry_attempt = 0;
         status.retry_countdown_secs = 0;
         status.device_error = None;
+        if let Some((t, (target_id, target_display_name))) = resolved_target.clone() {
+            status.state = "connecting".to_string();
+            status.target_name = Some(t);
+            status.target_id = target_id;
+            status.target_display_name = target_display_name;
+        } else {
+            status.state = "disconnected".to_string();
+            status.target_id = None;
+            status.target_display_name = None;
+            status.device_error = Some("No target device selected. Set a default device and try again.".to_string());
+        }
         out = status.clone();
     }
 
-    spawn_session_for_target(&state, target.as_deref());
+    if let Some(t) = target {
+        spawn_session_for_target(&state, Some(&t));
+    }
 
     Json(out)
 }
@@ -673,9 +739,12 @@ async fn control_start_session(
         }
     }
 
+    let (target_id, target_display_name) = resolve_target_fields(&state, target.as_deref());
     if let Ok(mut status) = state.status.lock() {
         status.state = "connecting".to_string();
         status.target_name = req.target;
+        status.target_id = target_id;
+        status.target_display_name = target_display_name;
         status.device_error = None;
         out = status.clone();
     }
@@ -699,9 +768,12 @@ async fn control_switch_session(
     let mut out = default_status("connecting");
     let target = req.target.clone();
 
+    let (target_id, target_display_name) = resolve_target_fields(&state, target.as_deref());
     if let Ok(mut status) = state.status.lock() {
         status.state = "connecting".to_string();
         status.target_name = req.target;
+        status.target_id = target_id;
+        status.target_display_name = target_display_name;
         status.device_error = None;
         out = status.clone();
     }
@@ -724,6 +796,8 @@ async fn control_cancel_session(State(state): State<AppState>) -> Json<StatusRes
     if let Ok(mut status) = state.status.lock() {
         status.state = "disconnected".to_string();
         status.target_name = None;
+        status.target_id = None;
+        status.target_display_name = None;
         status.device_error = None;
         out = status.clone();
     }

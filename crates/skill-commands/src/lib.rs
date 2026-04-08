@@ -282,72 +282,6 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
     .unwrap_or_default()
 }
 
-/// Look up `device_id` and `device_name` for a specific `hnsw_id` in a day's SQLite.
-fn get_embedding_meta(db_path: &Path, hnsw_id: i64) -> (Option<String>, Option<String>) {
-    let Ok(conn) = skill_data::util::open_readonly(db_path) else {
-        return (None, None);
-    };
-
-    conn.query_row(
-        "SELECT device_id, device_name FROM embeddings WHERE hnsw_id = ?1 LIMIT 1",
-        params![hnsw_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )
-    .unwrap_or((None, None))
-}
-
-/// Fetch key EEG metrics for a single embedding by hnsw_id.
-fn get_embedding_metrics(db_path: &Path, hnsw_id: i64) -> Option<NeighborMetrics> {
-    let conn = skill_data::util::open_readonly(db_path).ok()?;
-
-    conn.query_row(
-        "SELECT json_extract(metrics_json, '$.relaxation_score'),
-                json_extract(metrics_json, '$.engagement_score'),
-                json_extract(metrics_json, '$.faa'),
-                json_extract(metrics_json, '$.tar'),
-                json_extract(metrics_json, '$.mood'),
-                json_extract(metrics_json, '$.meditation'),
-                json_extract(metrics_json, '$.cognitive_load'),
-                json_extract(metrics_json, '$.drowsiness'),
-                json_extract(metrics_json, '$.hr'),
-                json_extract(metrics_json, '$.snr'),
-                json_extract(metrics_json, '$.rel_alpha'),
-                json_extract(metrics_json, '$.rel_beta'),
-                json_extract(metrics_json, '$.rel_theta'),
-                json_extract(metrics_json, '$.headache_index'),
-                json_extract(metrics_json, '$.migraine_index'),
-                json_extract(metrics_json, '$.consciousness_lzc'),
-                json_extract(metrics_json, '$.consciousness_wakefulness'),
-                json_extract(metrics_json, '$.consciousness_integration')
-         FROM embeddings WHERE hnsw_id = ?1 LIMIT 1",
-        params![hnsw_id],
-        |row| {
-            let g = |i: usize| -> Option<f64> { row.get::<_, Option<f64>>(i).unwrap_or(None) };
-            Ok(NeighborMetrics {
-                relaxation: g(0),
-                engagement: g(1),
-                faa: g(2),
-                tar: g(3),
-                mood: g(4),
-                meditation: g(5),
-                cognitive_load: g(6),
-                drowsiness: g(7),
-                hr: g(8),
-                snr: g(9),
-                rel_alpha: g(10),
-                rel_beta: g(11),
-                rel_theta: g(12),
-                headache_index: g(13),
-                migraine_index: g(14),
-                consciousness_lzc: g(15),
-                consciousness_wakefulness: g(16),
-                consciousness_integration: g(17),
-            })
-        },
-    )
-    .ok()
-}
-
 /// Derive the `YYYYMMDD` date string from a `YYYYMMDDHHmmss` timestamp integer.
 fn date_from_ts(ts: i64) -> String {
     format!("{}", ts / 1_000_000)
@@ -584,15 +518,12 @@ pub fn search_embeddings_in_range_for(
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
-                if global_idx.is_some() {
-                    let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
-                    let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
-                    (hid as usize, did, dn, m)
-                } else {
-                    let (did, dn) = get_embedding_meta(&db_path, candidate_hnsw_id as i64);
-                    let m = get_embedding_metrics(&db_path, candidate_hnsw_id as i64);
-                    (candidate_hnsw_id, did, dn, m)
-                }
+                // Always hydrate by timestamp to stay robust when a day index was
+                // rebuilt (internal HNSW ids can diverge from SQLite ids).
+                let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
+                let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
+                let resolved_hid = if hid > 0 { hid as usize } else { candidate_hnsw_id };
+                (resolved_hid, did, dn, m)
             } else {
                 (candidate_hnsw_id, None, None, None)
             };
@@ -755,15 +686,12 @@ pub fn stream_search_inner_for(
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
-                if global_idx.is_some() {
-                    let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
-                    let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
-                    (hid as usize, did, dn, m)
-                } else {
-                    let (did, dn) = get_embedding_meta(&db_path, candidate_hnsw_id as i64);
-                    let m = get_embedding_metrics(&db_path, candidate_hnsw_id as i64);
-                    (candidate_hnsw_id, did, dn, m)
-                }
+                // Always hydrate by timestamp to stay robust when a day index was
+                // rebuilt (internal HNSW ids can diverge from SQLite ids).
+                let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
+                let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
+                let resolved_hid = if hid > 0 { hid as usize } else { candidate_hnsw_id };
+                (resolved_hid, did, dn, m)
             } else {
                 (candidate_hnsw_id, None, None, None)
             };

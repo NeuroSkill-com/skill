@@ -826,6 +826,8 @@ pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
         battery: local.battery,
         device_error: local.device_error.clone(),
         target_name: local.target_name.clone(),
+        target_id: local.target_id.clone(),
+        target_display_name: local.target_display_name.clone(),
         retry_attempt: local.retry_attempt,
         retry_countdown_secs: local.retry_countdown_secs,
         paired_devices: local

@@ -89,7 +89,14 @@ pub struct StatusResponse {
     pub sample_count: u64,
     pub battery: f32,
     pub device_error: Option<String>,
+    /// Legacy connect target field (historically overloaded with id or display name).
     pub target_name: Option<String>,
+    /// Canonical target device id for connection attempts (e.g. "ble:...", "usb:...").
+    #[serde(default)]
+    pub target_id: Option<String>,
+    /// Human-readable target name resolved from paired metadata when available.
+    #[serde(default)]
+    pub target_display_name: Option<String>,
     pub retry_attempt: u32,
     pub retry_countdown_secs: u32,
     pub paired_devices: Vec<PairedDeviceResponse>,
