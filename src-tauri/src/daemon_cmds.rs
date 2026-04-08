@@ -98,6 +98,99 @@ pub fn get_daemon_token_path() -> String {
         .unwrap_or_else(|_| "<unresolved>".to_string())
 }
 
+fn resolve_daemon_bin_path() -> String {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // Production: sidecar next to app binary (Tauri bundles it)
+            for name in &["skill-daemon", "skill-daemon.exe"] {
+                let candidate = dir.join(name);
+                if candidate.exists() {
+                    return candidate.display().to_string();
+                }
+            }
+            // macOS .app bundle: inside Contents/MacOS/
+            let mac_candidate = dir.join("../MacOS/skill-daemon");
+            if mac_candidate.exists() {
+                return mac_candidate
+                    .canonicalize()
+                    .unwrap_or(mac_candidate)
+                    .display()
+                    .to_string();
+            }
+        }
+    }
+
+    // Dev: look in target dir
+    let target_candidates = [
+        "src-tauri/target/debug/skill-daemon",
+        "src-tauri/target/debug/skill-daemon.exe",
+        "src-tauri/target/aarch64-apple-darwin/debug/skill-daemon",
+        "src-tauri/target/x86_64-pc-windows-msvc/debug/skill-daemon.exe",
+        "target/debug/skill-daemon",
+        "target/debug/skill-daemon.exe",
+    ];
+    for c in &target_candidates {
+        if std::path::Path::new(c).exists() {
+            return c.to_string();
+        }
+    }
+
+    if cfg!(target_os = "windows") {
+        "skill-daemon.exe".to_string()
+    } else {
+        "skill-daemon".to_string()
+    }
+}
+
+fn daemon_rollback_bin_path() -> Result<PathBuf, String> {
+    let base =
+        dirs::config_dir().ok_or_else(|| "unable to resolve config directory".to_string())?;
+    let mut p = base.join("skill").join("daemon").join("bin");
+    let name = if cfg!(target_os = "windows") {
+        "skill-daemon.rollback.exe"
+    } else {
+        "skill-daemon.rollback"
+    };
+    p.push(name);
+    Ok(p)
+}
+
+fn update_daemon_rollback_snapshot_best_effort() {
+    let src = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
+    let src_path = PathBuf::from(&src);
+    if !src_path.exists() {
+        return;
+    }
+
+    let Ok(dst_path) = daemon_rollback_bin_path() else {
+        return;
+    };
+
+    if src_path == dst_path {
+        return;
+    }
+
+    if let (Ok(src_meta), Ok(dst_meta)) =
+        (std::fs::metadata(&src_path), std::fs::metadata(&dst_path))
+    {
+        if src_meta.len() == dst_meta.len() {
+            return;
+        }
+    }
+
+    if let Some(parent) = dst_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::copy(&src_path, &dst_path).is_ok() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&dst_path, std::fs::Permissions::from_mode(0o755));
+        }
+        eprintln!("[daemon] updated rollback snapshot: {}", dst_path.display());
+    }
+}
+
 /// Ensure the daemon process is running.  If it's not reachable, attempt to
 /// spawn it.  Called once during `setup_app`.
 pub(crate) fn ensure_daemon_running() {
@@ -142,47 +235,7 @@ pub(crate) fn ensure_daemon_running() {
     // On Windows executables must end in `.exe`; the candidates below
     // include both the bare name and the `.exe` variant so the lookup
     // works on all platforms.
-    let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                // Production: sidecar next to app binary (Tauri bundles it)
-                for name in &["skill-daemon", "skill-daemon.exe"] {
-                    let candidate = dir.join(name);
-                    if candidate.exists() {
-                        return candidate.display().to_string();
-                    }
-                }
-                // macOS .app bundle: inside Contents/MacOS/
-                let mac_candidate = dir.join("../MacOS/skill-daemon");
-                if mac_candidate.exists() {
-                    return mac_candidate
-                        .canonicalize()
-                        .unwrap_or(mac_candidate)
-                        .display()
-                        .to_string();
-                }
-            }
-        }
-        // Dev: look in target dir
-        let target_candidates = [
-            "src-tauri/target/debug/skill-daemon",
-            "src-tauri/target/debug/skill-daemon.exe",
-            "src-tauri/target/aarch64-apple-darwin/debug/skill-daemon",
-            "src-tauri/target/x86_64-pc-windows-msvc/debug/skill-daemon.exe",
-            "target/debug/skill-daemon",
-            "target/debug/skill-daemon.exe",
-        ];
-        for c in &target_candidates {
-            if std::path::Path::new(c).exists() {
-                return c.to_string();
-            }
-        }
-        if cfg!(target_os = "windows") {
-            "skill-daemon.exe".to_string()
-        } else {
-            "skill-daemon".to_string()
-        }
-    });
+    let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
 
     eprintln!("[daemon] not reachable at {base_url}, spawning: {bin}");
     match std::process::Command::new(&bin)
@@ -1107,6 +1160,211 @@ pub(crate) fn daemon_service_status() -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())
 }
 
+fn wait_for_protocol_compatibility(timeout: Duration) -> Result<bool, String> {
+    let deadline = Instant::now() + timeout;
+    let mut last_err: Option<String> = None;
+
+    while Instant::now() < deadline {
+        match load_daemon_token().and_then(|token| fetch_version(&daemon_base_url(), &token)) {
+            Ok(v) => return Ok(v.protocol_version == PROTOCOL_VERSION),
+            Err(e) => last_err = Some(e),
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    Err(last_err.unwrap_or_else(|| "timed out waiting for daemon version".to_string()))
+}
+
+fn restart_daemon_process_best_effort() {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/IM", "skill-daemon.exe", "/F"])
+            .output();
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "skill-daemon"])
+            .output();
+    }
+}
+
+pub(crate) fn ensure_daemon_runtime_ready() {
+    ensure_daemon_running();
+
+    let mut compatible = false;
+    match wait_for_protocol_compatibility(Duration::from_secs(5)) {
+        Ok(true) => {
+            compatible = true;
+        }
+        Ok(false) => {
+            eprintln!("[daemon] protocol mismatch detected — attempting recovery restart");
+            restart_daemon_process_best_effort();
+            std::thread::sleep(Duration::from_millis(300));
+            ensure_daemon_running();
+            match wait_for_protocol_compatibility(Duration::from_secs(5)) {
+                Ok(true) => {
+                    compatible = true;
+                    eprintln!("[daemon] protocol compatibility restored after restart");
+                }
+                Ok(false) => {
+                    eprintln!(
+                        "[daemon] protocol still incompatible after restart — attempting rollback binary"
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[daemon] protocol check failed after restart: {e} — attempting rollback binary"
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[daemon] protocol check unavailable: {e}");
+        }
+    }
+
+    if !compatible {
+        if let Ok(rollback_bin) = daemon_rollback_bin_path() {
+            if rollback_bin.exists() {
+                eprintln!(
+                    "[daemon] attempting rollback daemon: {}",
+                    rollback_bin.display()
+                );
+                restart_daemon_process_best_effort();
+                std::thread::sleep(Duration::from_millis(300));
+
+                let prev = std::env::var("SKILL_DAEMON_BIN").ok();
+                std::env::set_var("SKILL_DAEMON_BIN", rollback_bin.display().to_string());
+                ensure_daemon_running();
+                if let Some(v) = prev {
+                    std::env::set_var("SKILL_DAEMON_BIN", v);
+                } else {
+                    std::env::remove_var("SKILL_DAEMON_BIN");
+                }
+
+                match wait_for_protocol_compatibility(Duration::from_secs(5)) {
+                    Ok(true) => {
+                        compatible = true;
+                        eprintln!("[daemon] rollback daemon restored compatibility");
+                    }
+                    Ok(false) => eprintln!("[daemon] rollback daemon still incompatible — continuing degraded"),
+                    Err(e) => eprintln!("[daemon] rollback daemon failed readiness check: {e} — continuing degraded"),
+                }
+            } else {
+                eprintln!(
+                    "[daemon] no rollback daemon snapshot found at {}",
+                    rollback_bin.display()
+                );
+            }
+        }
+    }
+
+    if compatible {
+        update_daemon_rollback_snapshot_best_effort();
+    }
+
+    ensure_daemon_background_service();
+}
+
+#[cfg(test)]
+fn ensure_daemon_runtime_ready_with_hooks<
+    FEnsure,
+    FWait,
+    FRestart,
+    FRollbackExists,
+    FRollbackLaunch,
+    FSnapshot,
+    FService,
+>(
+    mut ensure_running: FEnsure,
+    mut wait: FWait,
+    mut restart: FRestart,
+    rollback_exists: FRollbackExists,
+    mut launch_rollback: FRollbackLaunch,
+    mut snapshot: FSnapshot,
+    mut service: FService,
+) -> bool
+where
+    FEnsure: FnMut(),
+    FWait: FnMut() -> Result<bool, String>,
+    FRestart: FnMut(),
+    FRollbackExists: Fn() -> bool,
+    FRollbackLaunch: FnMut(),
+    FSnapshot: FnMut(),
+    FService: FnMut(),
+{
+    ensure_running();
+
+    let mut compatible = false;
+    match wait() {
+        Ok(true) => compatible = true,
+        Ok(false) => {
+            restart();
+            ensure_running();
+            if let Ok(true) = wait() {
+                compatible = true;
+            }
+        }
+        Err(_) => {}
+    }
+
+    if !compatible && rollback_exists() {
+        restart();
+        launch_rollback();
+        if let Ok(true) = wait() {
+            compatible = true;
+        }
+    }
+
+    if compatible {
+        snapshot();
+    }
+    service();
+    compatible
+}
+
+pub(crate) fn ensure_daemon_background_service() {
+    let autoinstall_enabled = std::env::var("SKILL_DAEMON_SERVICE_AUTOINSTALL")
+        .map(|v| {
+            let v = v.to_ascii_lowercase();
+            !(v == "0" || v == "false" || v == "no" || v == "off")
+        })
+        .unwrap_or(true);
+
+    if !autoinstall_enabled {
+        eprintln!("[daemon] background service auto-install disabled by env");
+        return;
+    }
+
+    let status = match daemon_service_status() {
+        Ok(v) => v
+            .get("status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        Err(e) => {
+            eprintln!("[daemon] service status unavailable: {e}");
+            return;
+        }
+    };
+
+    match status.as_str() {
+        "running" => {
+            // already good
+        }
+        "not_installed" | "stopped" => match install_daemon_service() {
+            Ok(_) => eprintln!("[daemon] background service installed/enabled ({status})"),
+            Err(e) => eprintln!("[daemon] background service install failed: {e}"),
+        },
+        _ => {
+            eprintln!("[daemon] background service status: {status}");
+        }
+    }
+}
+
 fn daemon_base_url() -> String {
     let addr = std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string());
     format!("http://{addr}")
@@ -1831,6 +2089,251 @@ mod tests {
         let _ = fetch_json_value_with_auth("/v1/version").unwrap();
 
         server.join().unwrap();
+    }
+
+    #[test]
+    fn service_autoinstall_installs_when_not_installed() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let expected = vec![
+            ExpectedReq {
+                method: "GET",
+                path: "/service/status",
+                response_json: "{\"status\":\"not_installed\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/service/install",
+                response_json: "{\"ok\":true}".into(),
+            },
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, _head, _body) = read_http_request(&mut stream);
+                if method.is_empty() {
+                    continue;
+                }
+                let e = &expected[i];
+                assert_eq!(method, e.method);
+                assert_eq!(path, e.path);
+                write_json_response(&mut stream, "200 OK", &e.response_json);
+                i += 1;
+            }
+        });
+
+        ensure_daemon_background_service();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_autoinstall_skips_when_running() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/service/status");
+            write_json_response(&mut stream, "200 OK", "{\"status\":\"running\"}");
+        });
+
+        ensure_daemon_background_service();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_autoinstall_installs_when_stopped() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let expected = vec![
+            ExpectedReq {
+                method: "GET",
+                path: "/service/status",
+                response_json: "{\"status\":\"stopped\"}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/service/install",
+                response_json: "{\"ok\":true}".into(),
+            },
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, _head, _body) = read_http_request(&mut stream);
+                if method.is_empty() {
+                    continue;
+                }
+                let e = &expected[i];
+                assert_eq!(method, e.method);
+                assert_eq!(path, e.path);
+                write_json_response(&mut stream, "200 OK", &e.response_json);
+                i += 1;
+            }
+        });
+
+        ensure_daemon_background_service();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn protocol_gate_reports_true_when_versions_match() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/v1/version");
+            assert!(head
+                .to_ascii_lowercase()
+                .contains("authorization: bearer test-token"));
+            write_json_response(
+                &mut stream,
+                "200 OK",
+                &format!(
+                    "{{\"daemon\":\"skill-daemon\",\"protocol_version\":{},\"daemon_version\":\"0.0.87\"}}",
+                    PROTOCOL_VERSION
+                ),
+            );
+        });
+
+        assert!(wait_for_protocol_compatibility(Duration::from_secs(1)).unwrap());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn protocol_gate_reports_false_on_version_mismatch() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/v1/version");
+            assert!(head
+                .to_ascii_lowercase()
+                .contains("authorization: bearer test-token"));
+            write_json_response(
+                &mut stream,
+                "200 OK",
+                &format!(
+                    "{{\"daemon\":\"skill-daemon\",\"protocol_version\":{},\"daemon_version\":\"0.0.10\"}}",
+                    PROTOCOL_VERSION + 1
+                ),
+            );
+        });
+
+        assert!(!wait_for_protocol_compatibility(Duration::from_secs(1)).unwrap());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn runtime_ready_attempts_rollback_after_restart_mismatch() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Ok(false), // initial check: mismatch
+            Ok(false), // after restart: still mismatch
+            Ok(true),  // after rollback launch: compatible
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(compatible);
+        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
+        assert_eq!(restart_count, 2, "restart path + rollback path");
+        assert_eq!(
+            rollback_launch_count, 1,
+            "rollback should be launched exactly once"
+        );
+        assert_eq!(
+            snapshot_count, 1,
+            "compatible runtime should refresh rollback snapshot"
+        );
+        assert_eq!(
+            service_count, 1,
+            "background service repair should always run"
+        );
     }
 
     #[test]

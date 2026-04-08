@@ -170,6 +170,23 @@ Generated installer output:
 
 - `src-tauri\target\...\release\bundle\nsis\`
 
+### Validate daemon sidecar in Windows packaging
+
+Run packaging checks:
+
+```powershell
+npm run test:daemon-packaging:win
+# or (build + verify)
+powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1 -Build
+```
+
+What is validated:
+
+- `skill-daemon.exe` exists next to `skill.exe` in release output
+- NSIS installer script includes `File "skill-daemon.exe"`
+- NSIS uninstall removes `skill-daemon.exe`
+- If `7z` is installed, installer payload is inspected for `skill-daemon.exe`
+
 ### Installer walkthrough (Windows)
 
 After running `npm run tauri:build:win:nsis`, open the generated installer and follow this flow:

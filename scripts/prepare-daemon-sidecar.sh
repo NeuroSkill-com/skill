@@ -52,9 +52,14 @@ chmod +x "$DST"
 
 # Also copy to the release binary directory so it's beside the app exe
 RELEASE_DIR="$TARGET_DIR/$TRIPLE/release"
+RELEASE_DST="$RELEASE_DIR/skill-daemon${EXT}"
 if [ -d "$RELEASE_DIR" ]; then
-  cp -f "$SRC" "$RELEASE_DIR/skill-daemon${EXT}"
-  echo "Copied to $RELEASE_DIR/skill-daemon${EXT}"
+  if [ "$SRC" != "$RELEASE_DST" ]; then
+    cp -f "$SRC" "$RELEASE_DST"
+    echo "Copied to $RELEASE_DST"
+  else
+    echo "Daemon already at $RELEASE_DST"
+  fi
 fi
 
 echo "✅ Daemon sidecar ready: $DST ($(du -h "$DST" | cut -f1))"

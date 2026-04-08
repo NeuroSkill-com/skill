@@ -158,6 +158,19 @@ Optional portable tarball package:
 npm run package:linux:portable:x64:native
 ```
 
+### Validate daemon sidecar in Linux packaging
+
+```bash
+npm run test:daemon-packaging:linux
+# or (build + verify)
+bash scripts/test-daemon-packaging.sh --os linux --build
+```
+
+Checks include:
+
+- `dist/linux/*/NeuroSkill/skill-daemon` exists and is executable
+- portable tarball contains `NeuroSkill/skill-daemon`
+
 Notes:
 
 - `tauri:build:linux:*` scripts now target AppImage-only bundling.

@@ -31,6 +31,21 @@
 ## Compatibility
 - Shared protocol models live in `crates/skill-daemon-common`
 - Client validates daemon protocol/version on connect
+- App startup runs a daemon readiness state machine:
+  1. ensure daemon is running
+  2. protocol gate (`/v1/version`)
+  3. restart daemon on mismatch
+  4. fallback to rollback daemon snapshot when mismatch persists
+  5. ensure OS background service is installed/running
+
+### Daemon service ownership (production)
+- macOS: LaunchAgent (`RunAtLoad`, `KeepAlive`)
+- Linux: `systemd --user` service (`Restart=on-failure`)
+- Windows: `sc.exe` auto-start service with failure restart policy
+
+Rollback snapshot location:
+- macOS/Linux: `~/.config/skill/daemon/bin/skill-daemon.rollback`
+- Windows: `%APPDATA%/skill/daemon/bin/skill-daemon.rollback.exe`
 
 ## Migration Status (2026-04-04)
 - ✅ Activity worker ownership moved to daemon (`crates/skill-daemon/src/activity.rs`)

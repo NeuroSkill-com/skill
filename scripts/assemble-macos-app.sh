@@ -46,10 +46,22 @@ RES_DIR="$CONTENTS/Resources"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
 
-# ── Copy binary ───────────────────────────────────────────────────────────
+# ── Copy main app binary ──────────────────────────────────────────────────
 cp "$BINARY" "$MACOS_DIR/$PRODUCT_NAME"
 chmod +x "$MACOS_DIR/$PRODUCT_NAME"
 echo "  ✓ binary"
+
+# ── Copy daemon sidecar ────────────────────────────────────────────────────
+# Keep the daemon next to the app executable so ensure_daemon_running() can
+# spawn it in production bundles.
+DAEMON_SRC="$TAURI_DIR/target/$TARGET/release/skill-daemon"
+if [[ -f "$DAEMON_SRC" ]]; then
+  cp "$DAEMON_SRC" "$MACOS_DIR/skill-daemon"
+  chmod +x "$MACOS_DIR/skill-daemon"
+  echo "  ✓ skill-daemon"
+else
+  echo "  ⚠ missing daemon sidecar: $DAEMON_SRC" >&2
+fi
 
 # ── Info.plist ────────────────────────────────────────────────────────────
 # Start from the project's custom Info.plist and inject required CFBundle keys

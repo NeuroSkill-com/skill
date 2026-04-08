@@ -25,6 +25,28 @@ npm run tauri dev
 npm run tauri build
 ```
 
+## Daemon packaging checks
+
+Validate that release artifacts include the `skill-daemon` sidecar:
+
+```bash
+# macOS/Linux auto-detect host OS
+npm run test:daemon-packaging
+
+# explicit targets
+npm run test:daemon-packaging:mac
+npm run test:daemon-packaging:linux
+npm run test:daemon-packaging:win
+```
+
+Build + verify in one step:
+
+```bash
+bash scripts/test-daemon-packaging.sh --os macos --build
+bash scripts/test-daemon-packaging.sh --os linux --build
+powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1 -Build
+```
+
 ## Optional build acceleration
 
 ```bash
@@ -37,6 +59,7 @@ Environment toggles:
 - `SKILL_NO_SCCACHE=1`
 - `SKILL_NO_MOLD=1`
 - `unset LLAMA_PREBUILT_DIR` (force local llama.cpp build)
+- `SKILL_DAEMON_SERVICE_AUTOINSTALL=0` (disable daemon background-service auto-install for local testing)
 
 ## Data health check
 

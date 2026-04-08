@@ -391,8 +391,8 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
         // LLM inference server ownership moved to daemon.
     }
 
-    // ── Auto-start daemon if not already running ───────────────────────
-    crate::daemon_cmds::ensure_daemon_running();
+    // ── Daemon runtime readiness (spawn → protocol gate → service repair) ──
+    crate::daemon_cmds::ensure_daemon_runtime_ready();
 
     let ws_port = crate::daemon_cmds::fetch_daemon_ws_port().unwrap_or(18444);
 

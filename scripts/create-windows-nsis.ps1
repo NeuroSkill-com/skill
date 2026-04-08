@@ -149,6 +149,26 @@ try {
     Copy-Item $Binary (Join-Path $Staging $BinaryName)
     Write-Host "  [ok] $BinaryName"
 
+    # Daemon sidecar (must sit next to skill.exe in installed dir)
+    $DaemonName = "skill-daemon.exe"
+    $DaemonCandidates = @(
+        (Join-Path $ReleaseDir $DaemonName),
+        (Join-Path $TauriDir "binaries/skill-daemon-$Target.exe")
+    )
+    $Daemon = $null
+    foreach ($candidate in $DaemonCandidates) {
+        if (Test-Path $candidate) {
+            $Daemon = $candidate
+            break
+        }
+    }
+    if ($Daemon) {
+        Copy-Item $Daemon (Join-Path $Staging $DaemonName) -Force
+        Write-Host "  [ok] $DaemonName"
+    } else {
+        Write-Warning "  Missing daemon sidecar (checked release + src-tauri/binaries)"
+    }
+
     # Icon
     $IconIco = Join-Path $TauriDir "icons/icon.ico"
     if (Test-Path $IconIco) {
@@ -402,6 +422,9 @@ print('  [ok] installer images generated')
     # Build the file/directory install commands and uninstall commands
     $installFiles = @('  SetOutPath "$INSTDIR"')
     $installFiles += '  File "skill.exe"'
+    if (Test-Path (Join-Path $Staging "skill-daemon.exe")) {
+        $installFiles += '  File "skill-daemon.exe"'
+    }
     if (Test-Path (Join-Path $Staging "icon.ico")) {
         $installFiles += '  File "icon.ico"'
     }
@@ -424,6 +447,7 @@ print('  [ok] installer images generated')
 
     $uninstallFiles = @()
     $uninstallFiles += '  Delete "$INSTDIR\skill.exe"'
+    $uninstallFiles += '  Delete "$INSTDIR\skill-daemon.exe"'
     $uninstallFiles += '  Delete "$INSTDIR\icon.ico"'
     $uninstallFiles += '  Delete "$INSTDIR\onnxruntime.dll"'
     foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE")) {
