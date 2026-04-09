@@ -212,25 +212,12 @@ jobs:
           rm -rf "dist/linux/x86_64-unknown-linux-gnu"
           echo "✓ Cleared stale target/dist outputs before Linux release build"
 
-      # ── Compile only (frontend + Rust) ───────────────────────────────────────
-      #
-      # Like macOS, Linux release avoids Tauri bundling and performs packaging
-      # with repository scripts after compile-only output is produced.
-      #
-      # --features custom-protocol: required — without it Tauri compiles in
-      #   dev mode and loads UI from localhost:1420 instead of the embedded
-      #   SvelteKit build output.
-      # --features llm-vulkan: enables Vulkan GPU offloading for LLM inference
-      #   (covers NVIDIA, AMD, Intel Arc without vendor-specific SDKs).
-      - name: Compile (frontend + Rust)
+      # ── Compile (frontend + Rust + daemon) ───────────────────────────────
+      - name: Compile (frontend + Rust + daemon)
         env:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Let sccache cache C/C++ compilations from cmake-based -sys crates
-          # (llama-cpp-sys, espeak-ng, etc.).  Without these, only rustc
-          # invocations go through sccache — the heavy cmake builds are
-          # re-done from scratch every time.
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
@@ -248,6 +235,60 @@ jobs:
               exit 1
             fi
           fi
+          # Build the skill-daemon sidecar
+          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu
+
+      # ── Stage files for packaging ─────────────────────────────────────---
+      - name: Stage files for packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGROOT="$RUNNER_TEMP/pkgroot"
+          mkdir -p "$PKGROOT/opt/NeuroSkill"
+          mkdir -p "$PKGROOT/usr/lib/neuroskill"
+          mkdir -p "$PKGROOT/etc/systemd/system"
+
+          # Copy Tauri app
+          cp -R src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/portable/NeuroSkill.AppImage "$PKGROOT/opt/NeuroSkill/NeuroSkill.AppImage"
+
+          # Copy daemon binary
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill-daemon "$PKGROOT/usr/lib/neuroskill/skill-daemon"
+
+          # Create systemd service file
+          cat > "$PKGROOT/etc/systemd/system/skill-daemon.service" <<EOF
+          [Unit]
+          Description=NeuroSkill Daemon
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/lib/neuroskill/skill-daemon
+          Restart=on-failure
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Show staged files
+          find "$PKGROOT"
+
+      # ── Build Linux portable tarball with daemon and service ─────────────
+      - name: Build Linux portable tarball (with daemon)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/pkgroot"
+          tar -czf "$GITHUB_WORKSPACE/NeuroSkill-linux-x86_64.tar.gz" .
+
+      # ── Upload Linux portable tarball to GitHub Release ─────────────────
+      - name: Upload Linux portable tarball
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_meta.outputs.tag }}
+          name: Skill v${{ steps.version_meta.outputs.version }} (Linux)
+          generate_release_notes: true
+          files: NeuroSkill-linux-x86_64.tar.gz
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile
