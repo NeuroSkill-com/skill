@@ -1,0 +1,7 @@
+#!/bin/bash
+# Post-install script for NeuroSkill PKG installer.
+# The .app bundle contains both the Tauri app and the daemon sidecar.
+# The daemon self-registers as a user LaunchAgent at runtime when the
+# app launches — no system-level service setup is needed here.
+
+exit 0
