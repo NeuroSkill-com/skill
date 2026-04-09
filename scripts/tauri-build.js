@@ -237,10 +237,10 @@ if (!needsSetup) {
   const passCmd =
     process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri")
       ? ["cargo", "tauri"]
-      : commandExists("npx")
-        ? ["npx", "tauri"]
-        : commandExists("npm")
-          ? ["npm", "exec", "--", "tauri"]
+      : commandExists("npm")
+        ? ["npm", "exec", "--", "tauri"]
+        : commandExists("npx")
+          ? ["npx", "tauri"]
           : null;
 
   if (!passCmd) {
@@ -584,10 +584,10 @@ if (hasLldLink) {
 const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
 const tauriCmd = useCargo
   ? ["cargo", "tauri"]
-  : commandExists("npx")
-    ? ["npx", "tauri"]
-    : commandExists("npm")
-      ? ["npm", "exec", "--", "tauri"]
+  : commandExists("npm")
+    ? ["npm", "exec", "--", "tauri"]
+    : commandExists("npx")
+      ? ["npx", "tauri"]
       : null;
 
 if (!tauriCmd) {

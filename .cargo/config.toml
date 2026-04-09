@@ -58,16 +58,15 @@ target-dir = "src-tauri/target"
 #
 # ── Build caching (sccache) ───────────────────────────────────────────────────
 #
-# sccache caches both rustc and C/C++ compilation outputs, dramatically
-# speeding up clean rebuilds (6 min → ~2m45s on a typical full build).
+# Do NOT hardcode `rustc-wrapper = "sccache"` here.
 #
-# We enable it workspace-wide here so ad-hoc cargo commands (`cargo build`,
-# `cargo clippy`, `cargo test`) benefit too, not only hooks/build scripts.
+# Some developer machines (especially fresh Windows setups) do not have
+# sccache installed, and a workspace-level rustc-wrapper makes *every* cargo
+# command fail with:
+#   "could not execute process `sccache ... rustc.exe -vV` (program not found)"
 #
-# Prerequisite: install sccache (`cargo install sccache` or `brew install sccache`).
-# If not installed, cargo will fail with "No such file or directory" for
-# rustc-wrapper.
-rustc-wrapper = "sccache"
+# Instead, scripts/tauri-build.js auto-detects sccache and sets
+# RUSTC_WRAPPER only when the executable is present.
 
 [env]
 # Dynamic CRT for cmake-based -sys crates (llama-cpp-sys, etc.).
