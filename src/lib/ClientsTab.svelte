@@ -39,12 +39,20 @@ type CommandGroup = {
   dangerous: boolean;
   commands: string[];
 };
+type IrohInfo = {
+  online?: boolean;
+  endpoint_id?: string;
+};
+type TotpListResponse = { totp?: Totp[] };
+type ClientsListResponse = { clients?: Client[] };
+type ScopeGroupsResponse = { groups?: CommandGroup[] };
+type PhoneInviteResponse = { qr_png_base64?: string; payload?: unknown };
 
 let port = $state(0);
 let token = $state("");
 let totp = $state<Totp[]>([]);
 let clients = $state<Client[]>([]);
-let irohInfo = $state<any>(null);
+let irohInfo = $state<IrohInfo | null>(null);
 let err = $state("");
 let loading = $state(true);
 
@@ -101,7 +109,12 @@ function ago(ts?: number | null) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-async function api<T = any>(path: string, method = "GET", body?: any): Promise<T> {
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+async function api<T = unknown>(path: string, method = "GET", body?: unknown): Promise<T> {
   if (method === "GET") return daemonGet<T>(path);
   return daemonPost<T>(path, body);
 }
@@ -118,7 +131,11 @@ let phoneInfo = $state<PhoneInfo | null>(null);
 async function refresh() {
   err = "";
   try {
-    const [info, t, c] = await Promise.all([api("/v1/iroh/info"), api("/v1/iroh/totp"), api("/v1/iroh/clients")]);
+    const [info, t, c] = await Promise.all([
+      api<IrohInfo>("/v1/iroh/info"),
+      api<TotpListResponse>("/v1/iroh/totp"),
+      api<ClientsListResponse>("/v1/iroh/clients"),
+    ]);
     irohInfo = info;
     totp = t.totp || [];
     clients = c.clients || [];
@@ -135,8 +152,8 @@ async function refresh() {
           os_version: null,
         }
       : null;
-  } catch (e: any) {
-    err = String(e?.message || e);
+  } catch (e: unknown) {
+    err = errorMessage(e);
   } finally {
     loading = false;
   }
@@ -144,7 +161,7 @@ async function refresh() {
 
 async function loadScopeGroups() {
   try {
-    const r = await api("/v1/iroh/scope-groups");
+    const r = await api<ScopeGroupsResponse>("/v1/iroh/scope-groups");
     scopeGroups = r.groups || [];
   } catch {
     /* ignore */
@@ -173,7 +190,7 @@ async function createInvite() {
       expiry: "quarter",
     });
 
-    const r = await api("/v1/iroh/phone-invite", "POST", {
+    const r = await api<PhoneInviteResponse>("/v1/iroh/phone-invite", "POST", {
       name: "Invite",
       scope: inviteScope,
       api_token: deviceToken.token,
@@ -188,8 +205,8 @@ async function createInvite() {
     }
     await refresh();
     startPolling();
-  } catch (e: any) {
-    err = String(e?.message || e);
+  } catch (e: unknown) {
+    err = errorMessage(e);
   } finally {
     creating = false;
   }
@@ -245,8 +262,8 @@ function stopPolling() {
 async function revokeDevice(clientId: string) {
   try {
     await api(`/v1/iroh/clients/${clientId}/revoke`, "POST");
-  } catch (e: any) {
-    err = String(e?.message || e);
+  } catch (e: unknown) {
+    err = errorMessage(e);
   }
   editingClientId = null;
   await refresh();
@@ -292,8 +309,8 @@ async function savePermissions() {
     });
     editingClientId = null;
     await refresh();
-  } catch (e: any) {
-    err = String(e?.message || e);
+  } catch (e: unknown) {
+    err = errorMessage(e);
   } finally {
     saving = false;
   }
