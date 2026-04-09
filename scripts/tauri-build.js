@@ -14,9 +14,9 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
-import { arch, cpus, platform, tmpdir } from "node:os";
+import { arch, cpus, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,8 +55,54 @@ function runPowerShell(args, options = {}) {
   return execFileSync(powerShellCommand, ["-NoProfile", "-ExecutionPolicy", "Bypass", ...args], {
     cwd: root,
     env: process.env,
+    windowsHide: true,
     ...options,
   });
+}
+
+function parseExecutableFromWrapper(rawWrapper) {
+  const wrapper = (rawWrapper || "").trim();
+  if (!wrapper) return "";
+
+  // Handle quoted path wrappers: "C:\\path with spaces\\sccache.exe" ...
+  if (wrapper.startsWith('"')) {
+    const closing = wrapper.indexOf('"', 1);
+    if (closing > 1) return wrapper.slice(1, closing);
+  }
+
+  // Unquoted wrapper: "sccache" or "sccache --start-server".
+  return wrapper.split(/\s+/)[0] || "";
+}
+
+function isExecutableResolvable(cmd) {
+  if (!cmd) return false;
+  if (existsSync(cmd)) return true;
+  return commandExists(cmd);
+}
+
+function detectWindowsVulkanSdkDir() {
+  if (!isWin) return null;
+
+  if (process.env.VULKAN_SDK && existsSync(resolve(process.env.VULKAN_SDK, "Include", "vulkan", "vulkan.h"))) {
+    return process.env.VULKAN_SDK;
+  }
+
+  const sdkRoot = "C:\\VulkanSDK";
+  if (!existsSync(sdkRoot)) return null;
+
+  const dirs = readdirSync(sdkRoot, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" }));
+
+  for (const versionDir of dirs) {
+    const candidate = resolve(sdkRoot, versionDir);
+    if (existsSync(resolve(candidate, "Include", "vulkan", "vulkan.h"))) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function linuxTrayRuntimeLooksPresent() {
@@ -273,53 +319,13 @@ if (isMingwTarget) {
     stdio: "inherit",
   });
 
-  // The install script sets $env:VULKAN_SDK inside its own child process, but
-  // that env var dies when the child exits.  Re-detect the SDK root here and
-  // inject it into process.env so cargo / CMake (grandchildren of this process)
-  // can find it without a shell restart.
-  //
-  // We write a temporary .ps1 file rather than using PowerShell's -Command
-  // flag because inline -Command quoting is fragile when passed through
-  // Node's execSync → Windows shell (registry paths, spaces, brackets all
-  // cause problems).  A file-based script has none of those issues.
+  // Ensure this process has VULKAN_SDK set for cargo/CMake grandchildren.
+  // (The install script may set machine/user env, but current process env is immutable.)
   if (!process.env.VULKAN_SDK) {
-    // Mirror the detection order used by install-vulkan-sdk.ps1:
-    //   1. Machine-level env var written by the LunarG installer
-    //   2. Registry key written by the LunarG installer (both 64- and 32-bit hives)
-    //   3. Newest versioned directory under C:\VulkanSDK\
-    const tmpScript = resolve(tmpdir(), `detect-vulkan-${Date.now()}.ps1`);
-    writeFileSync(
-      tmpScript,
-      `$p = [System.Environment]::GetEnvironmentVariable('VULKAN_SDK', 'Machine')\r\n` +
-        `if (-not $p) {\r\n` +
-        `  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK', 'HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {\r\n` +
-        `    if (Test-Path $reg) {\r\n` +
-        `      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath\r\n` +
-        `      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }\r\n` +
-        `    }\r\n` +
-        `  }\r\n` +
-        `}\r\n` +
-        `if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {\r\n` +
-        `  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1\r\n` +
-        `  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }\r\n` +
-        `}\r\n` +
-        `if ($p) { Write-Output $p }\r\n`,
-    );
-    try {
-      const detected = runPowerShell(["-File", tmpScript]).toString().trim();
-      if (detected) {
-        process.env.VULKAN_SDK = detected;
-      } else {
-      }
-    } catch (_e) {
-    } finally {
-      try {
-        unlinkSync(tmpScript);
-      } catch {
-        /* ignore */
-      }
+    const detected = detectWindowsVulkanSdkDir();
+    if (detected) {
+      process.env.VULKAN_SDK = detected;
     }
-  } else {
   }
 
   // ── Windows: skip Tauri bundling for `build` subcommand ────────────────────
@@ -467,6 +473,16 @@ function detectSccache() {
   return commandExists("sccache");
 }
 
+if (process.env.RUSTC_WRAPPER) {
+  const wrapperExe = parseExecutableFromWrapper(process.env.RUSTC_WRAPPER);
+  if (!isExecutableResolvable(wrapperExe)) {
+    console.warn(
+      `⚠ RUSTC_WRAPPER is set to '${process.env.RUSTC_WRAPPER}', but executable '${wrapperExe}' is not found in PATH. Ignoring RUSTC_WRAPPER for this run.`,
+    );
+    delete process.env.RUSTC_WRAPPER;
+  }
+}
+
 function detectMold() {
   if (!isLinux) return false;
   if (process.env.SKILL_NO_MOLD === "1") return false;
@@ -543,7 +559,19 @@ if (hasLldLink) {
 //
 // Set TAURI_USE_NPX=1 to force the old npx path.
 const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
-const tauriCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
+const tauriCmd = useCargo
+  ? ["cargo", "tauri"]
+  : commandExists("npx")
+    ? ["npx", "tauri"]
+    : commandExists("npm")
+      ? ["npm", "exec", "--", "tauri"]
+      : null;
+
+if (!tauriCmd) {
+  throw new Error(
+    "Could not find a Tauri CLI runner. Install one of: cargo-tauri, npx, or npm (for 'npm exec tauri').",
+  );
+}
 
 function runTauriWithArgs(args) {
   execFileSync(tauriCmd[0], [...tauriCmd.slice(1), subcommand, ...args], {
