@@ -50,7 +50,10 @@ jobs:
             libpipewire-0.3-dev libgbm-dev libegl1-mesa-dev
             cmake binutils mold clang
             protobuf-compiler
-          version: tauri-rust-check-v4
+            libvulkan-dev
+            glslang-tools
+            shaderc
+          version: tauri-rust-coverage-v4
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
