@@ -1391,12 +1391,21 @@ async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvel
 
                             if cmd_name == "llm_chat" {
                                 // LLM chat uses streaming: send deltas incrementally.
+                                // Spawned as a separate task so that ARM 2 of the select!
+                                // loop (stream_rx.recv()) can drain the mpsc channel and
+                                // forward delta tokens to the socket concurrently with
+                                // inference.  Without the spawn the select! loop is blocked
+                                // for the entire generation, stream_rx is never polled, and
+                                // blocking_send deadlocks once the 64-slot buffer is full.
                                 #[cfg(feature = "llm")]
                                 {
                                     let mut tx = stream_tx.clone();
-                                    cmd_dispatch::dispatch_llm_chat_streaming(
-                                        state.clone(), cmd, &mut tx,
-                                    ).await;
+                                    let state2 = state.clone();
+                                    tokio::spawn(async move {
+                                        cmd_dispatch::dispatch_llm_chat_streaming(
+                                            state2, cmd, &mut tx,
+                                        ).await;
+                                    });
                                 }
                                 #[cfg(not(feature = "llm"))]
                                 {
