@@ -17,13 +17,13 @@ pub fn router() -> Router<AppState> {
         .route("/iroh/info", get(iroh_info))
         .route("/iroh/phone-invite", post(iroh_phone_invite))
         .route("/iroh/totp", get(iroh_totp_list).post(iroh_totp_create))
-        .route("/iroh/totp/:id/qr", get(iroh_totp_qr))
-        .route("/iroh/totp/:id/revoke", post(iroh_totp_revoke))
+        .route("/iroh/totp/{id}/qr", get(iroh_totp_qr))
+        .route("/iroh/totp/{id}/revoke", post(iroh_totp_revoke))
         .route("/iroh/clients", get(iroh_clients_list))
         .route("/iroh/clients/register", post(iroh_client_register))
-        .route("/iroh/clients/:id/revoke", post(iroh_client_revoke))
-        .route("/iroh/clients/:id/scope", post(iroh_client_set_scope))
-        .route("/iroh/clients/:id/permissions", get(iroh_client_permissions))
+        .route("/iroh/clients/{id}/revoke", post(iroh_client_revoke))
+        .route("/iroh/clients/{id}/scope", post(iroh_client_set_scope))
+        .route("/iroh/clients/{id}/permissions", get(iroh_client_permissions))
         .route("/iroh/scope-groups", get(iroh_scope_groups))
 }
 
