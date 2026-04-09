@@ -39,7 +39,7 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      - name: Cache + install Tauri system deps
+      - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -47,13 +47,13 @@ jobs:
             librsvg2-dev patchelf libssl-dev
             libudev-dev libdbus-1-dev pkg-config
             libespeak-ng-dev libasound2-dev
-            libpipewire-0.3-dev libgbm-dev libegl1-mesa-dev
+            libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
             protobuf-compiler
-            libvulkan-dev
-            glslang-tools
-            shaderc
-          version: tauri-rust-coverage-v4
+          version: tauri-rust-check-v4
+
+      - name: Setup Vulkan SDK
+        uses: ./.github/actions/setup-vulkan-linux
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
