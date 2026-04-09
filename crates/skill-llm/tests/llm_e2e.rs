@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use skill_llm::catalog::{LlmCatalog, LlmModelEntry};
+use skill_llm::catalog::{DownloadState, LlmCatalog, LlmModelEntry};
 use skill_llm::config::LlmConfig;
 use skill_llm::engine::protocol::GenParams;
 use skill_llm::{init, new_log_buffer, run_chat_with_builtin_tools, LlmEventEmitter, NoopEmitter};
