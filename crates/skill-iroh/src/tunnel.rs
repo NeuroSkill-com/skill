@@ -201,18 +201,14 @@ async fn run(
                 eprintln!("[iroh] rejecting unauthorized device proxy from {peer}");
                 continue;
             }
-            let tx_guard = lock_or_recover(&device_event_tx);
-            if let Some(ref tx) = *tx_guard {
-                let tx2 = tx.clone();
-                let peer2 = peer.clone();
-                drop(tx_guard);
-                tokio::spawn(async move {
-                    crate::device_receiver::handle_device_proxy_connection(conn, tx2, peer2).await;
-                });
-            } else {
-                drop(tx_guard);
-                eprintln!("[iroh] device proxy channel not configured, rejecting {peer}");
-            }
+            // Pass the shared Arc so the handler re-reads the current tx on
+            // every message — the session runner replaces it when a session
+            // starts, so events flow through without a tunnel restart.
+            let device_tx2 = device_event_tx.clone();
+            let peer2 = peer.clone();
+            tokio::spawn(async move {
+                crate::device_receiver::handle_device_proxy_connection(conn, device_tx2, peer2).await;
+            });
             continue;
         }
 

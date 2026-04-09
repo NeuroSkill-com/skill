@@ -77,10 +77,6 @@ async fn main() -> anyhow::Result<()> {
     // peers to this daemon's HTTP port, enabling phone pairing and remote EEG.
     {
         let api_port = daemon_addr().port();
-        let (eeg_tx, _eeg_rx) = skill_iroh::event_channel();
-        if let Ok(mut g) = state.iroh_device_tx.lock() {
-            *g = Some(eeg_tx);
-        }
         skill_iroh::spawn(
             skill_dir.clone(),
             api_port,

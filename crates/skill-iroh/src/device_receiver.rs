@@ -75,7 +75,17 @@ pub fn event_channel() -> (RemoteEventTx, RemoteEventRx) {
 }
 
 /// Handle one incoming `skill/device-proxy/2` connection.
-pub async fn handle_device_proxy_connection(conn: iroh::endpoint::Connection, tx: RemoteEventTx, peer_id: String) {
+///
+/// Accepts `SharedDeviceEventTx` so it re-reads the current sender on every
+/// incoming message.  This means a session can replace the tx (by calling
+/// `connect_iroh_remote` which stores a fresh tx in the shared slot) and the
+/// very next message from the phone is delivered to the new session's rx
+/// without any tunnel restart.
+pub async fn handle_device_proxy_connection(
+    conn: iroh::endpoint::Connection,
+    device_tx: std::sync::Arc<std::sync::Mutex<Option<RemoteEventTx>>>,
+    peer_id: String,
+) {
     eprintln!("[iroh-device] peer {peer_id} connected on device-proxy channel");
 
     loop {
@@ -87,7 +97,11 @@ pub async fn handle_device_proxy_connection(conn: iroh::endpoint::Connection, tx
             }
         };
 
-        match handle_one_message(send, recv, &tx).await {
+        // Re-read the current tx on every message — the session runner replaces
+        // it with a fresh channel when connect_iroh_remote() is called.
+        let maybe_tx = device_tx.lock().ok().and_then(|g| g.clone());
+
+        match handle_one_message(send, recv, maybe_tx.as_ref()).await {
             Ok(_seq) => {
                 // Logged at trace level — sensor chunks arrive every 5s
             }
@@ -103,13 +117,16 @@ pub async fn handle_device_proxy_connection(conn: iroh::endpoint::Connection, tx
     // (e.g. app killed, phone out of range, iroh relay down).  Send a
     // synthetic disconnect so the session runner ends the recording
     // promptly instead of waiting for the data watchdog timeout.
-    let _ = tx.try_send(RemoteDeviceEvent::DeviceDisconnected { seq: 0, timestamp: 0 });
+    let maybe_tx = device_tx.lock().ok().and_then(|g| g.clone());
+    if let Some(tx) = maybe_tx {
+        let _ = tx.try_send(RemoteDeviceEvent::DeviceDisconnected { seq: 0, timestamp: 0 });
+    }
 }
 
 async fn handle_one_message(
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
-    tx: &RemoteEventTx,
+    tx: Option<&RemoteEventTx>,
 ) -> anyhow::Result<u64> {
     // 1. Read header
     let mut hdr_buf = [0u8; HEADER_SIZE];
@@ -217,17 +234,24 @@ async fn handle_one_message(
 
     // 6. Forward (non-blocking: prefer dropping a message over stalling
     //    the QUIC stream, which would block the phone's ACK and outbox).
-    match tx.try_send(event) {
-        Ok(_) => {}
-        Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
-            eprintln!(
-                "[iroh-device] event channel full, seq={} dropped (capacity={})",
-                hdr.seq, CHANNEL_CAPACITY
-            );
+    if let Some(tx) = tx {
+        match tx.try_send(event) {
+            Ok(_) => {}
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                eprintln!(
+                    "[iroh-device] event channel full, seq={} dropped (capacity={})",
+                    hdr.seq, CHANNEL_CAPACITY
+                );
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                eprintln!("[iroh-device] event channel closed, seq={} dropped", hdr.seq);
+            }
         }
-        Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-            eprintln!("[iroh-device] event channel closed, seq={} dropped", hdr.seq);
-        }
+    } else {
+        eprintln!(
+            "[iroh-device] no active session, seq={} dropped — start a session first",
+            hdr.seq
+        );
     }
 
     Ok(hdr.seq)

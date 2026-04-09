@@ -82,7 +82,8 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
 fn requires_pairing(target: &str) -> bool {
     let lower = target.to_ascii_lowercase();
     // LSL streams are logical network sources, not pairable hardware.
-    !(lower == "lsl" || lower.starts_with("lsl:"))
+    // Iroh remote peers are pre-authenticated by the iroh tunnel (TOTP-paired).
+    !(lower == "lsl" || lower.starts_with("lsl:") || lower.starts_with("peer:"))
 }
 
 fn is_paired(state: &AppState, target: &str) -> bool {
@@ -169,6 +170,7 @@ enum ConnectRoute {
     Hermes,
     Idun,
     Mendi,
+    IrohRemote,
     Muse,
 }
 
@@ -222,6 +224,9 @@ fn is_idun(s: &str) -> bool {
 fn is_mendi(s: &str) -> bool {
     s.contains("mendi")
 }
+fn is_iroh_remote(s: &str) -> bool {
+    s.starts_with("peer:")
+}
 
 const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_openbci, ConnectRoute::OpenBci),
@@ -240,6 +245,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_hermes, ConnectRoute::Hermes),
     (is_idun, ConnectRoute::Idun),
     (is_mendi, ConnectRoute::Mendi),
+    (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
 
 fn matching_connect_routes(lower: &str) -> Vec<ConnectRoute> {
@@ -274,6 +280,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Hermes => connect_hermes(paired_name_for(state, target)).await,
         ConnectRoute::Idun => connect_idun(state, paired_name_for(state, target)).await,
         ConnectRoute::Mendi => connect_mendi(paired_name_for(state, target)).await,
+        ConnectRoute::IrohRemote => connect_iroh_remote(state, target).await,
         ConnectRoute::Muse => connect_muse(target, paired_name_for(state, target)).await,
     }
 }
@@ -760,6 +767,25 @@ fn lsl_query_from_target(target: &str) -> String {
         return target[4..].to_string();
     }
     "".to_string()
+}
+
+// ── Iroh remote (iOS / phone streaming over iroh QUIC tunnel) ────────────────
+
+async fn connect_iroh_remote(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::session::iroh_remote::IrohRemoteAdapter;
+
+    let peer_id = target.strip_prefix("peer:").unwrap_or(target).to_string();
+    info!(peer_id = %peer_id, "connecting iroh remote adapter");
+
+    // Create a fresh channel pair and install the sender in the shared slot.
+    // The tunnel's per-message tx re-read will pick this up immediately so
+    // events from the phone start flowing into this session's rx.
+    let (tx, rx) = skill_iroh::event_channel();
+    if let Ok(mut g) = state.iroh_device_tx.lock() {
+        *g = Some(tx);
+    }
+
+    Ok(Box::new(IrohRemoteAdapter::new(rx, peer_id)))
 }
 
 async fn connect_lsl(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
@@ -1588,6 +1614,9 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     }
     if lower.starts_with("lsl:") || lower == "lsl" {
         return "lsl";
+    }
+    if lower.starts_with("peer:") {
+        return "iroh-remote";
     }
     if lower.starts_with("usb:") {
         return "openbci/cyton";
