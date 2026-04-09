@@ -108,6 +108,19 @@ mkdir -p \
 cp "$binary_path" "$stage_root/opt/neuroskill/skill"
 chmod +x "$stage_root/opt/neuroskill/skill"
 
+# ── Bundle skill-daemon sidecar ──────────────────────────────────────────────
+# The daemon binary sits next to the app binary. At runtime the Tauri app
+# starts it and calls /service/install which self-registers a systemd --user
+# service. No system-level unit file is needed in the package.
+daemon_path="$ROOT_DIR/src-tauri/target/$target/release/skill-daemon"
+if [[ -f "$daemon_path" ]]; then
+  cp "$daemon_path" "$stage_root/opt/neuroskill/skill-daemon"
+  chmod +x "$stage_root/opt/neuroskill/skill-daemon"
+  echo "✓ Bundled skill-daemon sidecar"
+else
+  echo "⚠ skill-daemon not found at $daemon_path" >&2
+fi
+
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
 # ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
 # The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).

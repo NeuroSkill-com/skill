@@ -274,108 +274,17 @@ jobs:
               exit 1
             fi
           fi
-          # Build the skill-daemon sidecar
-          cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin
-
-      # ── Stage files for PKG ───────────────────────────────────────────────
-      - name: Stage files for PKG
-        run: |
-          set -euo pipefail
-          APP_NAME="NeuroSkill"
-          PKGROOT="$RUNNER_TEMP/pkgroot"
-          mkdir -p "$PKGROOT/Applications"
-          mkdir -p "$PKGROOT/Library/PrivilegedHelperTools"
-          mkdir -p "$PKGROOT/Library/LaunchDaemons"
-
-          # Copy .app bundle
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
-          # (Re-use your .app bundle creation logic here, or copy from build output)
-          cp -R "$APP_BUNDLE" "$PKGROOT/Applications/"
-
-          # Copy daemon binary
-          cp "src-tauri/target/aarch64-apple-darwin/release/skill-daemon" "$PKGROOT/Library/PrivilegedHelperTools/skill-daemon"
-
-          # Copy daemon plist (with correct path)
-          sed "s|@@DAEMON_PATH@@|/Library/PrivilegedHelperTools/skill-daemon|g" src-tauri/resources/com.neuroskill.skill-daemon.plist > "$PKGROOT/Library/LaunchDaemons/com.neuroskill.skill-daemon.plist"
-
-          # Copy uninstall script (optional)
-          cp scripts/uninstall-skill-daemon-macos.sh "$PKGROOT/Applications/NeuroSkill.app/Contents/Resources/uninstall-skill-daemon-macos.sh"
-          chmod +x "$PKGROOT/Applications/NeuroSkill.app/Contents/Resources/uninstall-skill-daemon-macos.sh"
-
-          # Show staged files
-          find "$PKGROOT"
-
-      # ── Sign binaries and plist ───────────────────────────────────────────
-      - name: Sign binaries and plist
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          set -euo pipefail
-          codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/pkgroot/Applications/NeuroSkill.app"
-          codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/pkgroot/Library/PrivilegedHelperTools/skill-daemon"
-          codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/pkgroot/Library/LaunchDaemons/com.neuroskill.skill-daemon.plist"
-
-      # ── Build PKG ─────────────────────────────────────────────────────────
-      - name: Build PKG
-        run: |
-          set -euo pipefail
-          PKG_ID="com.neuroskill.skill"
-          PKG_VERSION="${{ steps.version_meta.outputs.version }}"
-          pkgbuild \
-            --root "$RUNNER_TEMP/pkgroot" \
-            --identifier "$PKG_ID" \
-            --version "$PKG_VERSION" \
-            --scripts scripts/pkg-scripts \
-            --install-location / \
-            NeuroSkill.pkg
-
-      # ── Sign PKG ─────────────────────────────────────────────────────────
-      - name: Sign PKG
-        env:
-          APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
-        run: |
-          set -euo pipefail
-          productsign --sign "$APPLE_INSTALLER_IDENTITY" NeuroSkill.pkg NeuroSkill-signed.pkg
-
-      # ── Notarize PKG ─────────────────────────────────────────────────────
-      - name: Notarize PKG
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          xcrun notarytool submit NeuroSkill-signed.pkg --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-
-      # ── Upload PKG to GitHub Release ─────────────────────────────────────
-      - name: Upload PKG to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version_meta.outputs.tag }}
-          name: Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes: true
-          files: NeuroSkill-signed.pkg
-
-      # ── Upload cargo build timings ─────────────────────────────────────────
-      # The --timings flag produces an HTML report showing per-crate compile
-      # durations.  Upload it so slow crates can be identified and targeted.
-      - name: Upload cargo build timings
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-timings-macos
-          path: src-tauri/target/cargo-timings/
-          retention-days: 30
+          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
+          cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --features llm-metal
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       #
       # Reproduces what the Tauri bundler would have done:
       #   • Contents/MacOS/skill          — the compiled binary
+      #   • Contents/MacOS/skill-daemon   — daemon sidecar binary
       #   • Contents/Resources/icon.icns  — app icon
       #   • Contents/Resources/app/        — built SvelteKit frontend (html/js/css/static)
-      #   • Contents/Resources/espeak-ng-data/   \  declared in
-      #   • Contents/Resources/neutts-samples/   /  tauri.conf.json
+      #   • Contents/Resources/neutts-samples/   — declared in tauri.conf.json
       #   • Contents/Info.plist           — Tauri CFBundle* keys merged with
       #                                     custom keys from src-tauri/Info.plist
       #
@@ -439,23 +348,20 @@ jobs:
                 "$APP_BUNDLE/Contents/Resources/"
 
           # Install LaunchDaemon plist for skill-daemon (with correct path)
+          # Note: The daemon plist is a template for reference only.
+          # At runtime the daemon self-registers as a LaunchAgent via
+          # its ServiceInstaller (~/Library/LaunchAgents/), so this
+          # bundled plist is not directly loaded by the system.
           DAEMON_PLIST_SRC="src-tauri/resources/com.neuroskill.skill-daemon.plist"
           DAEMON_PLIST_DEST="$APP_BUNDLE/Contents/Resources/com.neuroskill.skill-daemon.plist"
           if [ -f "$DAEMON_PLIST_SRC" ]; then
-            sed "s|@@DAEMON_PATH@@|$APP_BUNDLE/Contents/MacOS/skill-daemon|g" "$DAEMON_PLIST_SRC" > "$DAEMON_PLIST_DEST"
-            echo "✓ LaunchDaemon plist installed to .app bundle."
-          else
-            echo "::error::Daemon plist not found: $DAEMON_PLIST_SRC"
-            exit 1
+            cp "$DAEMON_PLIST_SRC" "$DAEMON_PLIST_DEST"
+            echo "✓ Daemon plist template bundled."
           fi
 
           # Info.plist: merge Tauri-required CFBundle* fields with the custom
           # keys already in src-tauri/Info.plist (NSBonjourServices, etc.).
           # Custom keys win when a key exists in both.
-          #
-          # NOTE: all lines inside <<'PYEOF' are indented 10 spaces so the YAML
-          # literal-block scalar does not end prematurely.  After YAML strips
-          # those 10 spaces the Python code lands at column 0, which is valid.
           python3 - "$APP_BUNDLE/Contents" "${{ steps.version_meta.outputs.version }}" <<'PYEOF'
           import plistlib, sys, os
           contents, version = sys.argv[1], sys.argv[2]
@@ -486,6 +392,95 @@ jobs:
 
           echo "Bundle contents:"
           find "$APP_BUNDLE" -maxdepth 3 | sort
+
+      # ── Stage files for PKG ───────────────────────────────────────────────
+      # The .app bundle already contains skill-daemon inside
+      # Contents/MacOS/.  The daemon self-registers as a LaunchAgent
+      # at runtime (via its /service/install HTTP endpoint called by
+      # the Tauri app), so no separate /Library/LaunchDaemons entry
+      # is needed here.
+      - name: Stage files for PKG
+        run: |
+          set -euo pipefail
+          APP_NAME="NeuroSkill"
+          PKGROOT="$RUNNER_TEMP/pkgroot"
+          mkdir -p "$PKGROOT/Applications"
+
+          # Copy .app bundle (includes skill + skill-daemon + resources)
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
+          cp -R "$APP_BUNDLE" "$PKGROOT/Applications/"
+
+          # Verify daemon sidecar is inside the .app bundle
+          if [ ! -f "$PKGROOT/Applications/${APP_NAME}.app/Contents/MacOS/skill-daemon" ]; then
+            echo "::error::skill-daemon not found inside .app bundle after staging"
+            exit 1
+          fi
+
+          # Show staged files
+          find "$PKGROOT"
+
+      # ── Sign binaries and plist ───────────────────────────────────────────
+      - name: Sign app bundle
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          # --deep signs all nested binaries including skill-daemon
+          codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" \
+            "$RUNNER_TEMP/pkgroot/Applications/NeuroSkill.app"
+
+      # ── Build PKG ─────────────────────────────────────────────────────────
+      - name: Build PKG
+        run: |
+          set -euo pipefail
+          PKG_ID="com.neuroskill.skill"
+          PKG_VERSION="${{ steps.version_meta.outputs.version }}"
+          pkgbuild \
+            --root "$RUNNER_TEMP/pkgroot" \
+            --identifier "$PKG_ID" \
+            --version "$PKG_VERSION" \
+            --scripts scripts/pkg-scripts \
+            --install-location / \
+            NeuroSkill.pkg
+
+      # ── Sign PKG ─────────────────────────────────────────────────────────
+      - name: Sign PKG
+        env:
+          APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          productsign --sign "$APPLE_INSTALLER_IDENTITY" NeuroSkill.pkg NeuroSkill-signed.pkg
+
+      # ── Notarize PKG ─────────────────────────────────────────────────────
+      - name: Notarize PKG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit NeuroSkill-signed.pkg --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+
+      # ── Upload PKG to GitHub Release ─────────────────────────────────────
+      - name: Upload PKG to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_meta.outputs.tag }}
+          name: Skill v${{ steps.version_meta.outputs.version }}
+          generate_release_notes: true
+          files: NeuroSkill-signed.pkg
+
+      # ── Upload cargo build timings ─────────────────────────────────────────
+      # The --timings flag produces an HTML report showing per-crate compile
+      # durations.  Upload it so slow crates can be identified and targeted.
+      - name: Upload cargo build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-macos
+          path: src-tauri/target/cargo-timings/
+          retention-days: 30
 
       # ── Sign .app + create DMG (background, README, CHANGELOG, LICENSE) ─────
       #
