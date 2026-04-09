@@ -819,6 +819,15 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
                             || s.status.device_name != daemon_status.device_name
                             || s.status.sample_count != daemon_status.sample_count
                             || s.status.device_error != daemon_status.device_error
+                            || s.status.iroh_client_name != daemon_status.iroh_client_name
+                            || s.status.phone_info != daemon_status.phone_info
+                            || s.status.iroh_tunnel_online != daemon_status.iroh_tunnel_online
+                            || s.status.iroh_connected_peers != daemon_status.iroh_connected_peers
+                            || s.status.iroh_remote_device_connected
+                                != daemon_status.iroh_remote_device_connected
+                            || s.status.iroh_streaming_active != daemon_status.iroh_streaming_active
+                            || s.status.iroh_eeg_streaming_active
+                                != daemon_status.iroh_eeg_streaming_active
                     };
                     if changed {
                         {

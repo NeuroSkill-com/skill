@@ -13,7 +13,10 @@ pub use auth::{
 };
 pub use device_proto::Location as IrohLocation;
 pub use device_proto::PhoneImuSample;
-pub use device_receiver::{event_channel, RemoteDeviceEvent, RemoteEventRx, RemoteEventTx};
+pub use device_receiver::{
+    cached_peer_ids_recent, connected_peer_ids, event_channel, flush_presession_for_peer, peer_activity_snapshot,
+    PeerActivityView, RemoteDeviceEvent, RemoteEventRx, RemoteEventTx,
+};
 pub use scope::ClientScope;
 pub use tunnel::{
     key_history, new_peer_map, rotate_secret_key, spawn, IrohPeerMap, IrohRuntimeState, SharedDeviceEventTx,

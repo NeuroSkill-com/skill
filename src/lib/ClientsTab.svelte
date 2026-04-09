@@ -195,7 +195,7 @@ async function createInvite() {
       scope: inviteScope,
       api_token: deviceToken.token,
     });
-    qr = r.qr_png_base64;
+    qr = r.qr_png_base64 ?? null;
     // Build a deep link from the invite payload so users can copy/paste
     // it when camera access is unavailable (e.g. simulator, no camera).
     if (r.payload) {
@@ -533,7 +533,7 @@ onDestroy(() => stopPolling());
           </Badge>
         </div>
         <p class="mt-2 text-[0.56rem] text-muted-foreground font-mono break-all leading-relaxed">
-          {irohInfo.endpoint_id}
+          {irohInfo?.endpoint_id ?? ""}
         </p>
       {/if}
     </CardContent>

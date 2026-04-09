@@ -34,7 +34,7 @@ use tokio::time::{timeout, Duration};
 /// No data watchdog: if the remote sends nothing for this duration the session
 /// ends cleanly.  Covers the case where the QUIC connection dropped without an
 /// explicit MSG_DEVICE_DISCONNECTED (e.g. phone out of range, app killed).
-const WATCHDOG_TIMEOUT: Duration = Duration::from_secs(60);
+const WATCHDOG_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct IrohRemoteAdapter {
     rx: mpsc::Receiver<RemoteDeviceEvent>,
@@ -43,6 +43,9 @@ pub struct IrohRemoteAdapter {
     peer_id: String,
     /// Whether we've received a DeviceConnected event from the remote.
     got_connected: bool,
+    /// Whether a real remote descriptor (MSG_DEVICE_CONNECTED) was received.
+    /// If false, we treat early sensor chunks as authoritative for channel count.
+    has_remote_descriptor: bool,
     /// Highest timestamp (compact YYYYMMDDHHmmss) we've emitted.
     /// Used to enforce monotonic ordering — backlog data that arrives
     /// with timestamps older than what we've already processed is
@@ -85,6 +88,7 @@ impl IrohRemoteAdapter {
             pending: VecDeque::new(),
             peer_id,
             got_connected: false,
+            has_remote_descriptor: false,
             last_emitted_ts: 0,
             cleanup_slot,
         }
@@ -106,11 +110,31 @@ impl IrohRemoteAdapter {
             return;
         }
 
-        // Update descriptor if parameters changed
-        if chunk.sample_rate as f64 != self.desc.eeg_sample_rate || ch != self.desc.eeg_channels {
-            self.desc.eeg_sample_rate = chunk.sample_rate as f64;
+        // Update descriptor if parameters changed.
+        self.desc.eeg_sample_rate = chunk.sample_rate as f64;
+
+        if !self.has_remote_descriptor {
+            // No remote descriptor yet: trust live chunk shape to avoid
+            // sticky fallback defaults (e.g. default 4ch while device streams 3ch).
             self.desc.eeg_channels = ch;
             self.desc.pipeline_channels = ch.min(skill_constants::EEG_CHANNELS);
+            if self.desc.channel_names.len() != ch {
+                self.desc.channel_names = (0..ch).map(|i| format!("ExG{i}")).collect();
+            }
+        } else if ch > self.desc.eeg_channels {
+            // Descriptor exists; only expand when upstream adds channels.
+            self.desc.eeg_channels = ch;
+            self.desc.pipeline_channels = ch.min(skill_constants::EEG_CHANNELS);
+            if self.desc.channel_names.len() < ch {
+                for i in self.desc.channel_names.len()..ch {
+                    self.desc.channel_names.push(format!("ExG{i}"));
+                }
+            }
+        }
+
+        let out_ch = self.desc.eeg_channels.max(ch);
+        if ch < out_ch {
+            eprintln!("[iroh-remote] short EEG chunk: got {ch} channels, expected {out_ch}; padding missing channels");
         }
 
         // Enforce monotonic ordering.  If the chunk is from the backlog
@@ -141,7 +165,9 @@ impl IrohRemoteAdapter {
         for i in 0..spc {
             let ts = base_ts + i as f64 * dt;
 
-            let channels: Vec<f64> = (0..ch).map(|c| chunk.eeg_data[c][i] as f64).collect();
+            let channels: Vec<f64> = (0..out_ch)
+                .map(|c| if c < ch { chunk.eeg_data[c][i] as f64 } else { 0.0 })
+                .collect();
             self.pending.push_back(DeviceEvent::Eeg(EegFrame {
                 channels,
                 timestamp_s: ts,
@@ -289,6 +315,7 @@ impl DeviceAdapter for IrohRemoteAdapter {
             match remote_ev {
                 RemoteDeviceEvent::DeviceConnected { descriptor_json, .. } => {
                     self.got_connected = true;
+                    self.has_remote_descriptor = true;
                     return Some(self.handle_device_connected(&descriptor_json));
                 }
                 RemoteDeviceEvent::DeviceDisconnected { .. } => {
@@ -514,6 +541,53 @@ mod tests {
                 assert!((json["latitude"].as_f64().unwrap() - 37.7749).abs() < 1e-4);
             }
             _ => panic!("expected Meta"),
+        }
+    }
+
+    #[tokio::test]
+    async fn adapter_pads_short_chunks_to_descriptor_channels() {
+        let (tx, rx) = mpsc::channel(8);
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
+
+        // Descriptor declares 6 EEG channels.
+        let json = serde_json::json!({
+            "kind": "attentivu",
+            "name": "AttentivU-053",
+            "id": "attn:test",
+            "sample_rate": 250.0,
+            "eeg_channels": ["ExG0", "ExG1", "ExG2", "ExG3", "ExG4", "ExG5"],
+            "caps": ["eeg", "imu", "battery"]
+        })
+        .to_string();
+        tx.send(RemoteDeviceEvent::DeviceConnected {
+            seq: 1,
+            timestamp: 20260315120000,
+            descriptor_json: json,
+        })
+        .await
+        .unwrap();
+        let _ = adapter.next_event().await.unwrap(); // Connected
+
+        // Chunk carries only 3 channels (upstream omitted inactive channels).
+        let chunk = skill_iroh::device_proto::SensorChunk {
+            sample_rate: 250.0,
+            eeg_data: vec![vec![1.0; 4], vec![2.0; 4], vec![3.0; 4]],
+            ppg_data: vec![],
+            imu_data: vec![],
+        };
+        tx.send(RemoteDeviceEvent::SensorChunk {
+            seq: 2,
+            timestamp: 20260315120001,
+            chunk,
+        })
+        .await
+        .unwrap();
+
+        // First EEG frame should be padded back to 6 channels.
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(f) => assert_eq!(f.channels.len(), 6),
+            _ => panic!("expected Eeg"),
         }
     }
 

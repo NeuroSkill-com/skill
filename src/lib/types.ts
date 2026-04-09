@@ -118,16 +118,33 @@ export interface DeviceStatus {
   phone_info?: {
     phone_model?: string;
     phone_name?: string;
+    phone_marketing_name?: string;
     os?: string;
     os_version?: string;
     app_version?: string;
     battery_level?: number;
     battery_state?: string;
     iroh_endpoint_id?: string;
+    photo_url?: string;
+    avatar_url?: string;
+    image_url?: string;
+    photo_base64?: string;
+    avatar_base64?: string;
+    image_base64?: string;
     [k: string]: unknown;
   } | null;
   /** Display name of the connected iroh client (from the auth store). */
   iroh_client_name?: string | null;
+  /** True when at least one iroh tunnel peer is currently online. */
+  iroh_tunnel_online?: boolean;
+  /** Count of active iroh device-proxy peers. */
+  iroh_connected_peers?: number;
+  /** True when iOS reports a remote BLE headset connected. */
+  iroh_remote_device_connected?: boolean;
+  /** True when recent sensor chunks are actively flowing over iroh. */
+  iroh_streaming_active?: boolean;
+  /** True when recent EEG-bearing chunks are actively flowing over iroh. */
+  iroh_eeg_streaming_active?: boolean;
   /** Catch-all for future fields not yet typed. */
   [k: string]: unknown;
 }

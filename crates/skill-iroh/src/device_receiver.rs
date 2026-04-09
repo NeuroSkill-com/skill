@@ -5,6 +5,8 @@
 //! standard [`DeviceEvent`]s for the DSP / CSV / embedding pipeline.
 
 use anyhow::Context as _;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Mutex, OnceLock};
 use tokio::sync::mpsc;
 
 use crate::device_proto::{self, *};
@@ -66,6 +68,175 @@ const MAX_DECOMPRESSED: usize = 8 * 1024 * 1024;
 /// location), 256 gives ~30s of buffer.
 const CHANNEL_CAPACITY: usize = 256;
 
+/// Small per-peer pre-session cache for messages that may arrive *before*
+/// the daemon installs an active session tx (common when clients send
+/// phone-info/device-connected immediately after tunnel connect).
+const PRESESSION_MAX_PER_PEER: usize = 64;
+
+type PresessionQueue = VecDeque<(u64, RemoteDeviceEvent)>;
+type PresessionCache = HashMap<String, PresessionQueue>;
+
+fn presession_cache() -> &'static Mutex<PresessionCache> {
+    static CACHE: OnceLock<Mutex<PresessionCache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PeerActivityView {
+    pub peer_id: String,
+    pub tunnel_connected: bool,
+    pub remote_device_connected: bool,
+    pub streaming_active: bool,
+    pub eeg_streaming_active: bool,
+    pub last_seen_unix: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PeerActivityState {
+    tunnel_connected: bool,
+    remote_device_connected: bool,
+    last_seen_unix: u64,
+    last_sensor_chunk_unix: u64,
+    last_eeg_chunk_unix: u64,
+}
+
+fn active_peers() -> &'static Mutex<HashSet<String>> {
+    static ACTIVE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    ACTIVE.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn peer_activity() -> &'static Mutex<HashMap<String, PeerActivityState>> {
+    static ACTIVITY: OnceLock<Mutex<HashMap<String, PeerActivityState>>> = OnceLock::new();
+    ACTIVITY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+const STREAM_ACTIVE_WINDOW_SECS: u64 = 3;
+
+fn mark_peer_connected(peer_id: &str) {
+    let now = crate::unix_secs();
+    if let Ok(mut g) = peer_activity().lock() {
+        let st = g.entry(peer_id.to_string()).or_default();
+        st.tunnel_connected = true;
+        st.last_seen_unix = now;
+    }
+}
+
+fn mark_peer_disconnected(peer_id: &str) {
+    if let Ok(mut g) = peer_activity().lock() {
+        if let Some(st) = g.get_mut(peer_id) {
+            st.tunnel_connected = false;
+        }
+    }
+}
+
+fn note_peer_event(peer_id: &str, event: &RemoteDeviceEvent) {
+    let now = crate::unix_secs();
+    if let Ok(mut g) = peer_activity().lock() {
+        let st = g.entry(peer_id.to_string()).or_default();
+        st.last_seen_unix = now;
+        match event {
+            RemoteDeviceEvent::DeviceConnected { .. } => st.remote_device_connected = true,
+            RemoteDeviceEvent::DeviceDisconnected { .. } => st.remote_device_connected = false,
+            RemoteDeviceEvent::SensorChunk { chunk, .. } => {
+                st.last_sensor_chunk_unix = now;
+                let has_eeg = chunk.eeg_data.iter().any(|ch| !ch.is_empty());
+                if has_eeg {
+                    st.last_eeg_chunk_unix = now;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn cache_presession_event(peer_id: &str, event: RemoteDeviceEvent) {
+    if let Ok(mut g) = presession_cache().lock() {
+        let q = g.entry(peer_id.to_string()).or_default();
+        if q.len() >= PRESESSION_MAX_PER_PEER {
+            q.pop_front();
+        }
+        q.push_back((crate::unix_secs(), event));
+    }
+}
+
+const PRESESSION_MAX_AGE_SECS: u64 = 20;
+
+fn flush_presession_events(peer_id: &str, tx: &RemoteEventTx) {
+    if let Ok(mut g) = presession_cache().lock() {
+        if let Some(mut q) = g.remove(peer_id) {
+            let now = crate::unix_secs();
+            while let Some((ts, ev)) = q.pop_front() {
+                // Avoid replaying stale buffered events from long-dead sessions.
+                if now.saturating_sub(ts) > PRESESSION_MAX_AGE_SECS {
+                    continue;
+                }
+                if tx.try_send(ev).is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Snapshot peer IDs that currently have *active* device-proxy connections.
+pub fn connected_peer_ids() -> Vec<String> {
+    active_peers()
+        .lock()
+        .map(|g| g.iter().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Snapshot per-peer iroh device-proxy activity for session routing + UI.
+pub fn peer_activity_snapshot() -> Vec<PeerActivityView> {
+    let now = crate::unix_secs();
+    peer_activity()
+        .lock()
+        .map(|g| {
+            g.iter()
+                .map(|(peer, st)| PeerActivityView {
+                    peer_id: peer.clone(),
+                    tunnel_connected: st.tunnel_connected,
+                    remote_device_connected: st.remote_device_connected,
+                    streaming_active: st.last_sensor_chunk_unix > 0
+                        && now.saturating_sub(st.last_sensor_chunk_unix) <= STREAM_ACTIVE_WINDOW_SECS,
+                    eeg_streaming_active: st.last_eeg_chunk_unix > 0
+                        && now.saturating_sub(st.last_eeg_chunk_unix) <= STREAM_ACTIVE_WINDOW_SECS,
+                    last_seen_unix: st.last_seen_unix,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Snapshot peer IDs that currently have *recent* pre-session cached events.
+pub fn cached_peer_ids_recent(max_age_secs: u64) -> Vec<String> {
+    let now = crate::unix_secs();
+    presession_cache()
+        .lock()
+        .map(|g| {
+            g.iter()
+                .filter_map(|(peer, q)| {
+                    let fresh = q
+                        .back()
+                        .map(|(ts, _)| now.saturating_sub(*ts) <= max_age_secs)
+                        .unwrap_or(false);
+                    if fresh {
+                        Some(peer.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Flush cached pre-session events for one peer into an active tx.
+/// Safe to call repeatedly.
+pub fn flush_presession_for_peer(peer_id: &str, tx: &RemoteEventTx) {
+    flush_presession_events(peer_id, tx);
+}
+
 pub type RemoteEventTx = mpsc::Sender<RemoteDeviceEvent>;
 pub type RemoteEventRx = mpsc::Receiver<RemoteDeviceEvent>;
 
@@ -87,6 +258,10 @@ pub async fn handle_device_proxy_connection(
     peer_id: String,
 ) {
     eprintln!("[iroh-device] peer {peer_id} connected on device-proxy channel");
+    if let Ok(mut g) = active_peers().lock() {
+        g.insert(peer_id.clone());
+    }
+    mark_peer_connected(&peer_id);
 
     loop {
         let (send, recv) = match conn.accept_bi().await {
@@ -101,7 +276,7 @@ pub async fn handle_device_proxy_connection(
         // it with a fresh channel when connect_iroh_remote() is called.
         let maybe_tx = device_tx.lock().ok().and_then(|g| g.clone());
 
-        match handle_one_message(send, recv, maybe_tx.as_ref()).await {
+        match handle_one_message(send, recv, maybe_tx.as_ref(), &peer_id).await {
             Ok(_seq) => {
                 // Logged at trace level — sensor chunks arrive every 5s
             }
@@ -117,6 +292,10 @@ pub async fn handle_device_proxy_connection(
     // immediately terminate the active session.  Instead, the session ends via:
     //   • an explicit MSG_DEVICE_DISCONNECTED from iOS, or
     //   • the IrohRemoteAdapter watchdog timeout (no data for 60 s).
+    if let Ok(mut g) = active_peers().lock() {
+        g.remove(&peer_id);
+    }
+    mark_peer_disconnected(&peer_id);
     eprintln!("[iroh-device] peer {peer_id} QUIC connection closed (transient — not ending session)");
 }
 
@@ -124,6 +303,7 @@ async fn handle_one_message(
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
     tx: Option<&RemoteEventTx>,
+    peer_id: &str,
 ) -> anyhow::Result<u64> {
     // 1. Read header
     let mut hdr_buf = [0u8; HEADER_SIZE];
@@ -231,7 +411,13 @@ async fn handle_one_message(
 
     // 6. Forward (non-blocking: prefer dropping a message over stalling
     //    the QUIC stream, which would block the phone's ACK and outbox).
+    note_peer_event(peer_id, &event);
+
     if let Some(tx) = tx {
+        // If this is the first event after session start, replay any queued
+        // pre-session messages (device descriptor / phone info / initial data).
+        flush_presession_events(peer_id, tx);
+
         match tx.try_send(event) {
             Ok(_) => {}
             Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
@@ -245,9 +431,11 @@ async fn handle_one_message(
             }
         }
     } else {
+        // Cache early events until a session is started, instead of dropping.
+        cache_presession_event(peer_id, event);
         eprintln!(
-            "[iroh-device] no active session, seq={} dropped — start a session first",
-            hdr.seq
+            "[iroh-device] no active session, seq={} cached (peer={})",
+            hdr.seq, peer_id
         );
     }
 

@@ -248,7 +248,7 @@ async fn handle_connection(
             }
         }
 
-        let (mut send, mut recv) = match conn.accept_bi().await {
+        let (send, recv) = match conn.accept_bi().await {
             Ok(s) => s,
             Err(e) => anyhow::bail!("accept_bi failed: {e}"),
         };
@@ -268,52 +268,72 @@ async fn handle_connection(
             was_ever_authorized = lock_or_recover(&auth).is_endpoint_allowed(&peer_id);
         }
 
-        let target = SocketAddr::from(([127, 0, 0, 1], local_port));
-        let tcp = TcpStream::connect(target)
-            .await
-            .with_context(|| format!("tcp connect {target} failed"))?;
-
-        // Register the local TCP source port → peer mapping so the axum
-        // server can look up which iroh peer this connection belongs to.
-        let local_src_port = tcp.local_addr().map(|a| a.port()).unwrap_or(0);
-        if local_src_port != 0 {
-            lock_or_recover(&peer_map).insert(local_src_port, peer_id.clone());
-        }
-
-        let (mut tcp_read, mut tcp_write) = tcp.into_split();
-
-        let uplink = async {
-            let mut buf = vec![0u8; 16 * 1024];
-            loop {
-                let n = tcp_read.read(&mut buf).await.context("tcp read failed")?;
-                if n == 0 {
-                    send.finish().context("send finish failed")?;
-                    return Ok::<(), anyhow::Error>(());
-                }
-                send.write_all(&buf[..n]).await.context("iroh write failed")?;
+        // Handle each accepted stream concurrently. This is critical for
+        // long-lived websocket streams (/v1/events): without spawning, one
+        // active WS stream blocks accept_bi for all other requests and causes
+        // client-side open_bi timeouts.
+        let peer_map2 = peer_map.clone();
+        let peer2 = peer_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = proxy_api_stream(send, recv, local_port, peer_map2, peer2).await {
+                eprintln!("[iroh] api stream proxy error: {e}");
             }
-        };
-
-        let downlink = async {
-            loop {
-                let maybe_chunk = recv.read_chunk(16 * 1024).await.context("iroh read failed")?;
-                let Some(chunk) = maybe_chunk else {
-                    tcp_write.shutdown().await.context("tcp shutdown failed")?;
-                    return Ok::<(), anyhow::Error>(());
-                };
-                tcp_write.write_all(&chunk.bytes).await.context("tcp write failed")?;
-            }
-        };
-
-        let result = tokio::try_join!(uplink, downlink);
-
-        // Clean up peer map entry
-        if local_src_port != 0 {
-            lock_or_recover(&peer_map).remove(&local_src_port);
-        }
-
-        result?;
+        });
     }
+}
+
+async fn proxy_api_stream(
+    mut send: iroh::endpoint::SendStream,
+    mut recv: iroh::endpoint::RecvStream,
+    local_port: u16,
+    peer_map: IrohPeerMap,
+    peer_id: String,
+) -> anyhow::Result<()> {
+    let target = SocketAddr::from(([127, 0, 0, 1], local_port));
+    let tcp = TcpStream::connect(target)
+        .await
+        .with_context(|| format!("tcp connect {target} failed"))?;
+
+    // Register the local TCP source port → peer mapping so the axum
+    // server can look up which iroh peer this connection belongs to.
+    let local_src_port = tcp.local_addr().map(|a| a.port()).unwrap_or(0);
+    if local_src_port != 0 {
+        lock_or_recover(&peer_map).insert(local_src_port, peer_id);
+    }
+
+    let (mut tcp_read, mut tcp_write) = tcp.into_split();
+
+    let uplink = async {
+        let mut buf = vec![0u8; 16 * 1024];
+        loop {
+            let n = tcp_read.read(&mut buf).await.context("tcp read failed")?;
+            if n == 0 {
+                send.finish().context("send finish failed")?;
+                return Ok::<(), anyhow::Error>(());
+            }
+            send.write_all(&buf[..n]).await.context("iroh write failed")?;
+        }
+    };
+
+    let downlink = async {
+        loop {
+            let maybe_chunk = recv.read_chunk(16 * 1024).await.context("iroh read failed")?;
+            let Some(chunk) = maybe_chunk else {
+                tcp_write.shutdown().await.context("tcp shutdown failed")?;
+                return Ok::<(), anyhow::Error>(());
+            };
+            tcp_write.write_all(&chunk.bytes).await.context("tcp write failed")?;
+        }
+    };
+
+    let result = tokio::try_join!(uplink, downlink);
+
+    // Clean up peer map entry.
+    if local_src_port != 0 {
+        lock_or_recover(&peer_map).remove(&local_src_port);
+    }
+
+    result.map(|_| ())
 }
 
 fn geo_from_remote_addr(remote: &IncomingAddr) -> Option<IrohGeo> {

@@ -297,9 +297,8 @@ pub(crate) async fn run_adapter_session(
     mut cancel_rx: oneshot::Receiver<()>,
     mut adapter: Box<dyn DeviceAdapter>,
 ) {
-    let desc = adapter.descriptor().clone();
-    let sample_rate = desc.eeg_sample_rate;
-    let device_kind = desc.kind.to_string();
+    let mut current_desc = adapter.descriptor().clone();
+    let mut sample_rate = current_desc.eeg_sample_rate;
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
 
@@ -326,6 +325,12 @@ pub(crate) async fn run_adapter_session(
 
                 match ev {
                     DeviceEvent::Connected(info) => {
+                        // Pull descriptor at connect-time (important for iroh-remote:
+                        // default descriptor is replaced once DeviceConnected/first chunk arrives).
+                        current_desc = adapter.descriptor().clone();
+                        sample_rate = current_desc.eeg_sample_rate;
+                        let device_kind = current_desc.kind.to_string();
+
                         info!(name = %info.name, kind = %device_kind, "device connected");
                         if let Ok(mut s) = state.status.lock() {
                             s.state = "connected".into();
@@ -334,14 +339,14 @@ pub(crate) async fn run_adapter_session(
                             s.device_id = Some(info.id.clone());
                             s.device_error = None;
                             // Device descriptor fields
-                            s.channel_names = desc.channel_names.clone();
-                            s.ppg_channel_names = desc.ppg_channel_names.clone();
-                            s.imu_channel_names = desc.imu_channel_names.clone();
-                            s.fnirs_channel_names = desc.fnirs_channel_names.clone();
-                            s.eeg_channel_count = desc.eeg_channels;
-                            s.eeg_sample_rate_hz = desc.eeg_sample_rate;
-                            s.has_ppg = desc.caps.contains(skill_devices::session::DeviceCaps::PPG);
-                            s.has_imu = desc.caps.contains(skill_devices::session::DeviceCaps::IMU);
+                            s.channel_names = current_desc.channel_names.clone();
+                            s.ppg_channel_names = current_desc.ppg_channel_names.clone();
+                            s.imu_channel_names = current_desc.imu_channel_names.clone();
+                            s.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
+                            s.eeg_channel_count = current_desc.eeg_channels;
+                            s.eeg_sample_rate_hz = current_desc.eeg_sample_rate;
+                            s.has_ppg = current_desc.caps.contains(skill_devices::session::DeviceCaps::PPG);
+                            s.has_imu = current_desc.caps.contains(skill_devices::session::DeviceCaps::IMU);
                             // Device identity
                             s.serial_number = info.serial_number.clone();
                             s.mac_address = info.mac_address.clone();
@@ -355,9 +360,9 @@ pub(crate) async fn run_adapter_session(
 
                         match Pipeline::open(
                             &skill_dir,
-                            desc.eeg_channels,
+                            current_desc.eeg_channels,
                             sample_rate,
-                            desc.channel_names.clone(),
+                            current_desc.channel_names.clone(),
                             info.name.clone(),
                             state.events_tx.clone(),
                             hooks.clone(),
@@ -366,7 +371,7 @@ pub(crate) async fn run_adapter_session(
                                 // Capture device identity and channel metadata.
                                 p.serial_number = info.serial_number.clone();
                                 p.firmware_version = info.firmware_version.clone();
-                                p.fnirs_channel_names = desc.fnirs_channel_names.clone();
+                                p.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.csv_path = Some(p.csv_path.display().to_string());
                                 }
@@ -497,6 +502,36 @@ pub(crate) async fn run_adapter_session(
                             }
                             broadcast_event(&state.events_tx, "StatusUpdate",
                                 &serde_json::json!({"firmware_version": fw}));
+                        }
+
+                        if val.get("type").and_then(|v| v.as_str()) == Some("phone_info") {
+                            if let Ok(mut s) = state.status.lock() {
+                                s.phone_info = Some(val.clone());
+                            }
+
+                            // Persist model for this iroh endpoint, if available.
+                            let endpoint_id = val
+                                .get("iroh_endpoint_id")
+                                .and_then(|v| v.as_str())
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty());
+                            let model = val
+                                .get("phone_marketing_name")
+                                .and_then(|v| v.as_str())
+                                .or_else(|| val.get("phone_model").and_then(|v| v.as_str()))
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty());
+
+                            if let (Some(endpoint_id), Some(model)) = (endpoint_id, model) {
+                                if let Ok(mut auth) = state.iroh_auth.lock() {
+                                    let _ = auth.update_client_device_model(endpoint_id, model);
+                                    if let Ok(mut s) = state.status.lock() {
+                                        if s.iroh_client_name.is_none() {
+                                            s.iroh_client_name = auth.client_name_for_endpoint(endpoint_id);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 

@@ -132,6 +132,16 @@ pub struct DeviceStatus {
     /// Set when a remote session starts via iroh's device-proxy channel.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub iroh_client_name: Option<String>,
+    /// True when at least one iroh tunnel peer is currently online.
+    pub iroh_tunnel_online: bool,
+    /// Number of active iroh device-proxy peers.
+    pub iroh_connected_peers: usize,
+    /// True when a remote BLE device is connected on any iroh peer.
+    pub iroh_remote_device_connected: bool,
+    /// True when recent sensor chunks are actively flowing over iroh.
+    pub iroh_streaming_active: bool,
+    /// True when recent EEG-bearing chunks are actively flowing over iroh.
+    pub iroh_eeg_streaming_active: bool,
     /// Hardware EEG channel count of the connected device.
     pub eeg_channel_count: usize,
     /// Hardware EEG sample rate of the connected device (Hz).
@@ -195,6 +205,11 @@ impl Default for DeviceStatus {
             fnirs_connectivity: 0.0,
             phone_info: None,
             iroh_client_name: None,
+            iroh_tunnel_online: false,
+            iroh_connected_peers: 0,
+            iroh_remote_device_connected: false,
+            iroh_streaming_active: false,
+            iroh_eeg_streaming_active: false,
             eeg_channel_count: 0,
             eeg_sample_rate_hz: 0.0,
             has_ppg: false,
@@ -250,6 +265,11 @@ impl DeviceStatus {
         self.fnirs_connectivity = 0.0;
         self.phone_info = None;
         self.iroh_client_name = None;
+        self.iroh_tunnel_online = false;
+        self.iroh_connected_peers = 0;
+        self.iroh_remote_device_connected = false;
+        self.iroh_streaming_active = false;
+        self.iroh_eeg_streaming_active = false;
         self.eeg_channel_count = 0;
         self.eeg_sample_rate_hz = 0.0;
         self.has_ppg = false;

@@ -337,6 +337,7 @@ interface SecondarySession {
   battery: number;
 }
 let secondarySessions = $state<SecondarySession[]>([]);
+let streamedEegChannels = $state(0);
 
 let status = $state<DeviceStatus>({
   state: "disconnected",
@@ -385,6 +386,11 @@ let status = $state<DeviceStatus>({
   has_imu: false,
   has_central_electrodes: false,
   has_full_montage: false,
+  iroh_tunnel_online: false,
+  iroh_connected_peers: 0,
+  iroh_remote_device_connected: false,
+  iroh_streaming_active: false,
+  iroh_eeg_streaming_active: false,
 });
 
 /** Capabilities of the currently connected (or last connected) device. */
@@ -597,10 +603,24 @@ const targetDevice = $derived.by(() => {
 
 /** Friendly label + technical id for the "connecting" state. */
 const connectingTarget = $derived.by(() => {
-  const name = status.target_display_name ?? targetDevice?.name ?? null;
-  if (!name) return null;
-  const id = status.target_id ?? targetDevice?.id ?? null;
-  return { name, id: id && id !== name ? id : null };
+  const rawName = status.target_display_name ?? targetDevice?.name ?? null;
+  if (!rawName) return null;
+  const rawId = status.target_id ?? targetDevice?.id ?? null;
+
+  const shortPeer = (v: string) => {
+    const p = v.startsWith("peer:") ? v.slice(5) : v;
+    if (/^[a-f0-9]{32,}$/i.test(p)) return `peer:${p.slice(0, 16)}…`;
+    return v;
+  };
+
+  const isPeer = rawName.startsWith("peer:") || rawId?.startsWith("peer:");
+  const name = isPeer
+    ? status.iroh_client_name
+      ? `${status.iroh_client_name} (iroh)`
+      : shortPeer(rawName)
+    : shortPeer(rawName);
+  const id = rawId && rawId !== rawName ? rawId : null;
+  return { name, id };
 });
 
 /** Connected device id line (show under name when different from name). */
@@ -610,21 +630,33 @@ const connectedDeviceId = $derived.by(() => {
   return null;
 });
 
+$effect(() => {
+  // New session / disconnected state: restart streamed-channel tracking.
+  if (status.state !== "connected") streamedEegChannels = 0;
+});
+
 // Channel labels and colours — dynamic based on connected device.
 // Use dynamic channel names from the device when available (handles
 // Emotiv Insight 5ch, EPOC 14ch, Flex 32ch, etc.), fall back to static
 // constants for known device kinds.
 const chLabels = $derived(
   (() => {
+    const streamed = streamedEegChannels;
     const dynamic = status.channel_names;
-    if (dynamic && dynamic.length > 0) return dynamic;
-    if (isMw75) return [...MW75_CH];
-    if (isHermes) return [...HERMES_CH];
-    if (isEmotiv) return [...EMOTIV_CH];
-    if (isIdun) return [...IDUN_CH];
-    if (isMendi) return [];
-    if (isGanglion) return [...GANGLION_CH];
-    return [...EEG_CH];
+
+    let base: string[];
+    if (dynamic && dynamic.length > 0) base = [...dynamic];
+    else if (isMw75) base = [...MW75_CH];
+    else if (isHermes) base = [...HERMES_CH];
+    else if (isEmotiv) base = [...EMOTIV_CH];
+    else if (isIdun) base = [...IDUN_CH];
+    else if (isMendi) base = [];
+    else if (isGanglion) base = [...GANGLION_CH];
+    else base = [...EEG_CH];
+
+    // Show only channels that have actually streamed in this session.
+    if (streamed > 0) return base.slice(0, streamed);
+    return base;
   })(),
 );
 const chColors = $derived(
@@ -1021,6 +1053,9 @@ onMount(async () => {
         next.set(eegLatest);
         eegLatest = next;
       }
+      if (pkt.electrode + 1 > streamedEegChannels) {
+        streamedEegChannels = pkt.electrode + 1;
+      }
       if (pkt.samples.length > 0) {
         eegLatest[pkt.electrode] = pkt.samples[pkt.samples.length - 1];
         eegDirty = true;
@@ -1320,6 +1355,33 @@ $effect(() => {
 
 const sc = $derived(STATE_COLORS[status.state]);
 
+function phoneBannerImage(
+  pi: Record<string, unknown> | null | undefined,
+  deviceName?: string | null,
+  deviceKind?: string | null,
+): string | null {
+  if (pi) {
+    const direct = ["photo_url", "avatar_url", "image_url"]
+      .map((k) => pi[k])
+      .find((v) => typeof v === "string" && v.length > 0) as string | undefined;
+    if (direct) return direct;
+
+    const b64 = ["photo_base64", "avatar_base64", "image_base64"]
+      .map((k) => pi[k])
+      .find((v) => typeof v === "string" && v.length > 0) as string | undefined;
+    if (b64) {
+      return b64.startsWith("data:") ? b64 : `data:image/jpeg;base64,${b64}`;
+    }
+  }
+
+  const n = `${deviceName ?? ""} ${deviceKind ?? ""}`.toLowerCase();
+  if (n.includes("attentiv")) return "/devices/attentivu-glasses.png";
+  if (n.includes("muse") || n.includes("athena")) return "/devices/muse-s-athena.jpg";
+  if (n.includes("idun")) return "/devices/idun-guardian.png";
+  if (n.includes("mw75") || n.includes("neurable")) return "/devices/muse-mw75.jpg";
+  return null;
+}
+
 // Keep the shared BT-off store in sync so the titlebar can react.
 $effect(() => {
   setBtOff(status.state === "bt_off");
@@ -1337,29 +1399,34 @@ useWindowTitle("window.title.main");
   </div>
 
   <!-- ── Connected iroh client banner ──────────────────────────────────── -->
-  {#if status.iroh_client_name && status.state === "connected"}
+  {#if status.state === "connected" && (status.device_kind === "iroh-remote" || status.iroh_client_name || status.phone_info)}
     {@const pi = status.phone_info}
     <div class="w-full max-w-[1200px] mb-1">
       <div class="flex items-center gap-2.5 rounded-xl
                   border border-indigo-400/30 bg-indigo-50/70 dark:bg-indigo-950/20
                   px-3 py-2">
-        <!-- iroh icon -->
-        <div class="flex items-center justify-center w-7 h-7 rounded-lg shrink-0
-                    bg-gradient-to-br from-indigo-500 to-violet-500
-                    shadow-sm shadow-indigo-500/20">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-               class="w-3.5 h-3.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
-        </div>
+        {#if phoneBannerImage((pi ?? null) as Record<string, unknown> | null, status.device_name, status.device_kind)}
+          <img src={phoneBannerImage((pi ?? null) as Record<string, unknown> | null, status.device_name, status.device_kind) ?? ""} alt="remote client"
+               class="w-7 h-7 rounded-lg shrink-0 object-cover border border-indigo-400/30" />
+        {:else}
+          <!-- iroh icon -->
+          <div class="flex items-center justify-center w-7 h-7 rounded-lg shrink-0
+                      bg-gradient-to-br from-indigo-500 to-violet-500
+                      shadow-sm shadow-indigo-500/20">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 class="w-3.5 h-3.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+        {/if}
 
         <div class="flex flex-col gap-0 flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="text-[0.7rem] font-semibold text-indigo-800 dark:text-indigo-300 truncate">
-              {status.iroh_client_name}
+              {status.device_name ?? status.iroh_client_name ?? "Remote device"}
             </span>
             <span class="relative flex h-1.5 w-1.5 shrink-0">
               <span class="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75 animate-ping"></span>
@@ -1367,11 +1434,10 @@ useWindowTitle("window.title.main");
             </span>
           </div>
           <span class="text-[0.54rem] text-indigo-600/60 dark:text-indigo-400/50 truncate">
-            {#if pi?.phone_model}
-              {pi.phone_model}{#if pi?.os_version} · {pi.os} {pi.os_version}{/if}{#if pi?.app_version} · v{pi.app_version}{/if}
-            {:else}
-              iroh remote client
-            {/if}
+            streamed from {pi?.phone_marketing_name ?? pi?.phone_name ?? status.iroh_client_name ?? "remote client"}
+            {#if pi?.os} · {pi.os}{#if pi?.os_version} {pi.os_version}{/if}{/if}
+            {#if pi?.app_version} · v{pi.app_version}{/if}
+            {#if status.iroh_eeg_streaming_active} · EEG live{:else if status.iroh_streaming_active} · link live{/if}
           </span>
         </div>
 
@@ -1674,6 +1740,16 @@ useWindowTitle("window.title.main");
     <!-- ── Main content ─────────────────────────────────────────────────────── -->
     <CardContent class="flex flex-col gap-3 px-4 py-3">
 
+      {#if status.iroh_tunnel_online && status.state !== "connected"}
+        <div class="rounded-lg border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-1.5">
+          <p class="text-[0.58rem] text-indigo-700 dark:text-indigo-300">
+            iroh online ({status.iroh_connected_peers ?? 1} peer{(status.iroh_connected_peers ?? 1) !== 1 ? "s" : ""})
+            {#if status.iroh_remote_device_connected} · iOS BLE connected{:else} · waiting for iOS BLE{/if}
+            {#if status.iroh_eeg_streaming_active} · EEG live{:else if status.iroh_streaming_active} · link live{:else} · idle{/if}
+          </p>
+        </div>
+      {/if}
+
       <!-- ════ BT OFF ═══════════════════════════════════════════════════════ -->
       {#if status.state === "bt_off"}
         <div class="flex flex-col items-center gap-3 py-5 px-4 rounded-2xl
@@ -1796,11 +1872,32 @@ useWindowTitle("window.title.main");
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
             {#if connectingTarget}
               <div class="text-center leading-relaxed">
-                <p class="text-[0.73rem] text-muted-foreground">
+                <p class="text-[0.73rem] text-muted-foreground max-w-full break-words">
                   {t("dashboard.connectingTo", { name: connectingTarget.name })}
                 </p>
                 {#if connectingTarget.id}
-                  <p class="font-mono text-[0.58rem] text-muted-foreground/60">{connectingTarget.id}</p>
+                  <p class="font-mono text-[0.58rem] text-muted-foreground/60 max-w-full break-all">{connectingTarget.id}</p>
+                {/if}
+                {#if (status.target_id?.startsWith("peer:") || status.target_name?.startsWith("peer:") || status.iroh_tunnel_online) && !status.device_name}
+                  <p class="text-[0.56rem] text-indigo-600/70 dark:text-indigo-300/70 mt-1">
+                    {#if status.iroh_tunnel_online}
+                      iroh tunnel online{#if status.iroh_client_name} ({status.iroh_client_name}){/if}
+                    {:else}
+                      iroh tunnel offline
+                    {/if}
+                    {#if status.iroh_remote_device_connected}
+                      · iOS BLE connected
+                    {:else}
+                      · waiting for iOS BLE
+                    {/if}
+                    {#if status.iroh_eeg_streaming_active}
+                      · EEG live
+                    {:else if status.iroh_streaming_active}
+                      · link live, EEG paused
+                    {:else}
+                      · no live stream yet
+                    {/if}
+                  </p>
                 {/if}
               </div>
             {:else}
@@ -1877,9 +1974,10 @@ useWindowTitle("window.title.main");
 
         {#if hasEeg}
           <!-- Signal quality -->
-          {@const qGood = status.channel_quality.filter(q => q === 'good').length}
-          {@const qFair = status.channel_quality.filter(q => q === 'fair').length}
-          {@const qPoor = status.channel_quality.filter(q => q === 'poor').length}
+          {@const visibleQ = status.channel_quality.slice(0, chLabels.length)}
+          {@const qGood = visibleQ.filter(q => q === 'good').length}
+          {@const qFair = visibleQ.filter(q => q === 'fair').length}
+          {@const qPoor = visibleQ.filter(q => q === 'poor').length}
           {@const qNone = chLabels.length - qGood - qFair - qPoor}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
                       bg-muted dark:bg-[#1a1a28] px-3 py-2.5"

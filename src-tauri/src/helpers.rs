@@ -88,6 +88,13 @@ pub(crate) fn apply_daemon_status(
     local.has_central_electrodes = ds.has_central_electrodes;
     local.has_full_montage = ds.has_full_montage;
     local.ppg_sample_count = ds.ppg_sample_count;
+    local.phone_info = ds.phone_info;
+    local.iroh_client_name = ds.iroh_client_name;
+    local.iroh_tunnel_online = ds.iroh_tunnel_online;
+    local.iroh_connected_peers = ds.iroh_connected_peers;
+    local.iroh_remote_device_connected = ds.iroh_remote_device_connected;
+    local.iroh_streaming_active = ds.iroh_streaming_active;
+    local.iroh_eeg_streaming_active = ds.iroh_eeg_streaming_active;
 }
 
 pub(crate) fn emit_status(app: &AppHandle) {

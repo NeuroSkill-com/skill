@@ -777,13 +777,26 @@ async fn connect_iroh_remote(state: &AppState, target: &str) -> anyhow::Result<B
     let peer_id = target.strip_prefix("peer:").unwrap_or(target).to_string();
     info!(peer_id = %peer_id, "connecting iroh remote adapter");
 
+    // Surface paired client identity immediately in status/UI.
+    if let Ok(auth) = state.iroh_auth.lock() {
+        let client_name = auth.client_name_for_endpoint(&peer_id);
+        drop(auth);
+        if let Ok(mut s) = state.status.lock() {
+            s.iroh_client_name = client_name;
+        }
+    }
+
     // Create a fresh channel pair and install the sender in the shared slot.
     // The tunnel's per-message tx re-read will pick this up immediately so
     // events from the phone start flowing into this session's rx.
     let (tx, rx) = skill_iroh::event_channel();
     if let Ok(mut g) = state.iroh_device_tx.lock() {
-        *g = Some(tx);
+        *g = Some(tx.clone());
     }
+    // Immediately replay any cached pre-session messages (device_connected /
+    // phone_info / first chunks) so the session doesn't depend on new traffic
+    // to hydrate metadata.
+    skill_iroh::flush_presession_for_peer(&peer_id, &tx);
 
     // Pass the shared slot so the adapter clears it on drop, turning
     // post-session iroh messages into "no active session" rather than

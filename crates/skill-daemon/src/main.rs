@@ -424,7 +424,35 @@ async fn get_log_recent(
 }
 
 async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
-    let current = state.status.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut current = state.status.lock().map(|g| g.clone()).unwrap_or_default();
+
+    let peer_activity = skill_iroh::peer_activity_snapshot();
+    current.iroh_connected_peers = peer_activity.iter().filter(|p| p.tunnel_connected).count();
+    current.iroh_tunnel_online = current.iroh_connected_peers > 0;
+    current.iroh_remote_device_connected = peer_activity.iter().any(|p| p.remote_device_connected);
+    current.iroh_streaming_active = peer_activity.iter().any(|p| p.streaming_active);
+    current.iroh_eeg_streaming_active = peer_activity.iter().any(|p| p.eeg_streaming_active);
+
+    // Surface live iroh tunnel peer presence even before a streaming session is
+    // fully connected, so UI can show "client online / waiting for stream".
+    if let Some(peer) = peer_activity
+        .iter()
+        .find(|p| p.tunnel_connected)
+        .map(|p| p.peer_id.clone())
+    {
+        if current.iroh_client_name.is_none() {
+            if let Ok(auth) = state.iroh_auth.lock() {
+                current.iroh_client_name = auth.client_name_for_endpoint(&peer);
+            }
+        }
+    } else if current.state != "connected" {
+        // Clear stale tunnel-only identity when no peer is currently online.
+        current.iroh_client_name = None;
+        if current.device_kind == "iroh-remote" {
+            current.phone_info = None;
+        }
+    }
+
     Json(current)
 }
 
@@ -577,14 +605,45 @@ fn persist_paired_devices(state: &AppState) {
 /// Spawn the appropriate session runner for the given target device.
 /// Cancels any existing session first.
 pub(crate) fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
+    let Some(t) = target else { return };
+
+    // Idempotency guard: if we're already connecting/connected to the same
+    // target and have an active session handle, do not cancel/restart.
+    let same_target_active = {
+        let status_same = state
+            .status
+            .lock()
+            .ok()
+            .map(|s| {
+                (s.state == "connecting" || s.state == "connected")
+                    && (s.target_id.as_deref() == Some(t)
+                        || s.target_name.as_deref() == Some(t)
+                        || s.target_display_name.as_deref() == Some(t))
+            })
+            .unwrap_or(false);
+        let handle_active = state
+            .session_handle
+            .lock()
+            .ok()
+            .map(|slot| slot.is_some())
+            .unwrap_or(false);
+        status_same && handle_active
+    };
+    if same_target_active {
+        push_device_log(
+            state,
+            "session",
+            &format!("spawn_session_for_target noop: already active target={t}"),
+        );
+        return;
+    }
+
     // Cancel any existing session.
     if let Ok(mut slot) = state.session_handle.lock() {
         if let Some(handle) = slot.take() {
             let _ = handle.cancel_tx.send(());
         }
     }
-
-    let Some(t) = target else { return };
 
     // All devices route through the generic adapter session runner.
     let handle = session::spawn_device_session(state.clone(), t.to_string());
@@ -646,28 +705,48 @@ pub(crate) fn is_paired_target(state: &AppState, target: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn preferred_peer_target(activity: &[skill_iroh::PeerActivityView], recent_peer_ids: &[String]) -> Option<String> {
+    activity
+        .iter()
+        .find(|p| p.tunnel_connected && p.remote_device_connected && p.streaming_active)
+        .map(|p| format!("peer:{}", p.peer_id))
+        .or_else(|| {
+            activity
+                .iter()
+                .find(|p| p.tunnel_connected && p.remote_device_connected)
+                .map(|p| format!("peer:{}", p.peer_id))
+        })
+        .or_else(|| {
+            activity
+                .iter()
+                .find(|p| p.tunnel_connected)
+                .map(|p| format!("peer:{}", p.peer_id))
+        })
+        .or_else(|| recent_peer_ids.first().map(|p| format!("peer:{p}")))
+}
+
 async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResponse> {
     let mut out = default_status("connecting");
 
-    // Cancel any existing session before retrying.
-    if let Ok(mut slot) = state.session_handle.lock() {
-        if let Some(handle) = slot.take() {
-            let _ = handle.cancel_tx.send(());
-        }
-    }
-
-    // Snapshot paired order + previous target from status.
-    let (status_target, paired_order): (Option<String>, Vec<String>) = state
+    // Snapshot status-derived preference + paired order.
+    let (status_target, status_state, status_error, paired_order): (
+        Option<String>,
+        String,
+        Option<String>,
+        Vec<String>,
+    ) = state
         .status
         .lock()
         .ok()
         .map(|s| {
             (
                 s.target_id.clone().or_else(|| s.target_name.clone()),
+                s.state.clone(),
+                s.device_error.clone(),
                 s.paired_devices.iter().map(|d| d.id.clone()).collect(),
             )
         })
-        .unwrap_or_default();
+        .unwrap_or_else(|| (None, "disconnected".to_string(), None, Vec::new()));
 
     // Preferred target from discovered list (paired-only).
     let preferred_target = state
@@ -684,14 +763,50 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         .map(|d| d.iter().filter(|x| x.is_paired).map(|x| x.id.clone()).collect())
         .unwrap_or_default();
 
-    // Base preference: previous target -> preferred -> first paired.
+    // Peer activity-based preference:
+    //   1) peer with remote BLE device connected + actively streaming
+    //   2) peer with remote BLE device connected
+    //   3) any live peer tunnel
+    //   4) recent peer cache fallback
+    let peer_activity = skill_iroh::peer_activity_snapshot();
+    let recent_peer_ids = skill_iroh::cached_peer_ids_recent(5);
+    let preferred_peer = preferred_peer_target(&peer_activity, &recent_peer_ids);
+    let live_peer_target = peer_activity
+        .iter()
+        .find(|p| p.tunnel_connected)
+        .map(|p| format!("peer:{}", p.peer_id));
+    let recent_peer_target = recent_peer_ids.into_iter().next().map(|peer| format!("peer:{peer}"));
+
+    // Default preference stays local-first to avoid breaking existing BLE flows
+    // unless a remote BLE device is already connected on iOS.
     let mut target = status_target
+        .clone()
         .or(preferred_target)
         .or_else(|| paired_order.first().cloned());
 
-    // Never auto-connect an unpaired target.
+    // If iOS already has a remote BLE device connected, prioritize that peer.
+    if let Some(peer) = preferred_peer.clone().filter(|p| {
+        peer_activity
+            .iter()
+            .any(|a| format!("peer:{}", a.peer_id) == *p && a.remote_device_connected)
+    }) {
+        target = Some(peer);
+    }
+
+    // If current target is a stale peer (not live/recent), fall back to local defaults.
     if let Some(current) = target.as_ref() {
-        if !is_paired_target(&state, current) {
+        if current.starts_with("peer:") {
+            let peer_is_live =
+                live_peer_target.as_ref() == Some(current) || recent_peer_target.as_ref() == Some(current);
+            if !peer_is_live {
+                target = paired_order.first().cloned();
+            }
+        }
+    }
+
+    // Never auto-connect an unpaired local target.
+    if let Some(current) = target.as_ref() {
+        if !current.starts_with("peer:") && !is_paired_target(&state, current) {
             push_device_log(
                 &state,
                 "session",
@@ -701,9 +816,9 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         }
     }
 
-    // If default target is unavailable, fall back to next paired+available.
+    // If default local target is unavailable, fall back to next paired+available.
     if let Some(current) = target.as_ref() {
-        if !available.contains(current) {
+        if !current.starts_with("peer:") && !available.contains(current) {
             if let Some(next) = paired_order.iter().find(|id| available.contains(*id)) {
                 push_device_log(
                     &state,
@@ -722,10 +837,37 @@ async fn control_retry_connect(State(state): State<AppState>) -> Json<StatusResp
         target = Some(next.clone());
     }
 
+    // If local reconnect is failing, allow live iroh stream to take over.
+    if status_error.is_some() {
+        if let Some(peer) = preferred_peer.or(live_peer_target).or(recent_peer_target) {
+            target = Some(peer);
+        }
+    }
+
     if let Some(ref t) = target {
+        // Avoid duplicate cancellation/restart loops for the same target.
+        let same_target_active =
+            (status_state == "connecting" || status_state == "connected") && (status_target.as_ref() == Some(t));
+        if same_target_active {
+            push_device_log(
+                &state,
+                "session",
+                &format!("retry-connect noop: already active target={t}"),
+            );
+            if let Ok(status) = state.status.lock() {
+                return Json(status.clone());
+            }
+        }
         push_device_log(&state, "session", &format!("retry-connect target={t}"));
     } else {
         push_device_log(&state, "session", "retry-connect skipped: no target device");
+    }
+
+    // Cancel any existing session only when we actually need to switch/retry.
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
     }
 
     let resolved_target = target
@@ -3158,5 +3300,37 @@ mod tests {
         assert_eq!(guard.len(), 256);
         assert_eq!(guard.front().map(|e| e.msg.as_str()), Some("msg-144"));
         assert_eq!(guard.back().map(|e| e.msg.as_str()), Some("msg-399"));
+    }
+
+    #[test]
+    fn preferred_peer_target_prioritizes_remote_ble_stream() {
+        let peers = vec![
+            skill_iroh::PeerActivityView {
+                peer_id: "p1".into(),
+                tunnel_connected: true,
+                remote_device_connected: false,
+                streaming_active: false,
+                eeg_streaming_active: false,
+                last_seen_unix: 1,
+            },
+            skill_iroh::PeerActivityView {
+                peer_id: "p2".into(),
+                tunnel_connected: true,
+                remote_device_connected: true,
+                streaming_active: true,
+                eeg_streaming_active: true,
+                last_seen_unix: 2,
+            },
+        ];
+        let chosen = preferred_peer_target(&peers, &[]);
+        assert_eq!(chosen.as_deref(), Some("peer:p2"));
+    }
+
+    #[test]
+    fn preferred_peer_target_falls_back_to_recent_when_no_live_peer() {
+        let peers: Vec<skill_iroh::PeerActivityView> = vec![];
+        let recent = vec!["abc".to_string()];
+        let chosen = preferred_peer_target(&peers, &recent);
+        assert_eq!(chosen.as_deref(), Some("peer:abc"));
     }
 }

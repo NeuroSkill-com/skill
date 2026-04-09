@@ -157,6 +157,28 @@ pub struct StatusResponse {
     /// PPG sample count this session.
     #[serde(default)]
     pub ppg_sample_count: u64,
+
+    /// Phone descriptor metadata for iroh-remote sessions.
+    #[serde(default)]
+    pub phone_info: Option<serde_json::Value>,
+    /// Display name of the active iroh client (from pairing/auth store).
+    #[serde(default)]
+    pub iroh_client_name: Option<String>,
+    /// True when at least one iroh device-proxy peer is currently online.
+    #[serde(default)]
+    pub iroh_tunnel_online: bool,
+    /// Number of currently connected iroh peers on the device-proxy ALPN.
+    #[serde(default)]
+    pub iroh_connected_peers: usize,
+    /// True when a remote BLE device is connected on any iroh peer.
+    #[serde(default)]
+    pub iroh_remote_device_connected: bool,
+    /// True when recent sensor chunks are flowing from any iroh peer.
+    #[serde(default)]
+    pub iroh_streaming_active: bool,
+    /// True when recent EEG-bearing chunks are flowing from any iroh peer.
+    #[serde(default)]
+    pub iroh_eeg_streaming_active: bool,
 }
 
 impl StatusResponse {
@@ -186,6 +208,13 @@ impl StatusResponse {
         self.sample_count = 0;
         self.battery = 0.0;
         self.ppg_sample_count = 0;
+        self.phone_info = None;
+        self.iroh_client_name = None;
+        self.iroh_tunnel_online = false;
+        self.iroh_connected_peers = 0;
+        self.iroh_remote_device_connected = false;
+        self.iroh_streaming_active = false;
+        self.iroh_eeg_streaming_active = false;
     }
 }
 

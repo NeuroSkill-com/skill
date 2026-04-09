@@ -913,6 +913,13 @@ pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
         has_central_electrodes: local.has_central_electrodes,
         has_full_montage: local.has_full_montage,
         ppg_sample_count: local.ppg_sample_count,
+        phone_info: local.phone_info.clone(),
+        iroh_client_name: local.iroh_client_name.clone(),
+        iroh_tunnel_online: local.iroh_tunnel_online,
+        iroh_connected_peers: local.iroh_connected_peers,
+        iroh_remote_device_connected: local.iroh_remote_device_connected,
+        iroh_streaming_active: local.iroh_streaming_active,
+        iroh_eeg_streaming_active: local.iroh_eeg_streaming_active,
     };
 
     let Ok(payload) = serde_json::to_string(&status) else {
