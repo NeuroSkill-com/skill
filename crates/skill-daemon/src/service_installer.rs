@@ -16,6 +16,9 @@ pub enum InstallResult {
 pub struct ServiceInstaller {
     pub binary_path: PathBuf,
     pub service_name: String,
+    // Used by macOS/Linux service templates. Windows service install path does
+    // not currently consume this value directly.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub daemon_addr: String,
 }
 
