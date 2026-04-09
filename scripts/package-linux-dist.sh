@@ -85,6 +85,16 @@ mkdir -p "$package_root/resources"
 cp "$binary_path" "$package_root/skill"
 chmod +x "$package_root/skill"
 
+# ── Bundle skill-daemon Tauri sidecar ─────────────────────────────────────────
+sidecar_bin="$ROOT_DIR/src-tauri/binaries/skill-daemon-${target}"
+if [[ -f "$sidecar_bin" ]]; then
+  cp "$sidecar_bin" "$package_root/skill-daemon"
+  chmod +x "$package_root/skill-daemon"
+  echo "✓ Bundled skill-daemon sidecar: $sidecar_bin"
+else
+  echo "⚠ skill-daemon sidecar not found for $target (expected at $sidecar_bin)" >&2
+fi
+
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
 # ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
 # The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).
