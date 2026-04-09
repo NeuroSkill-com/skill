@@ -203,17 +203,27 @@ for (const arg of rawSubArgs) {
   subArgs.push(arg);
 }
 
-const tuiEnabled = process.env.SKILL_TAURI_TUI !== "0";
-const shouldLaunchDevTui = subcommand === "dev" && !tuiPaneRole && tuiEnabled;
+const hasInteractiveTty = !!process.stdin.isTTY && !!process.stdout.isTTY;
+const tuiEnabledByDefault = !isWin; // Windows terminals still fail too often with raw-mode TUI panes.
+const tuiEnabled = process.env.SKILL_TAURI_TUI === "1" || (process.env.SKILL_TAURI_TUI !== "0" && tuiEnabledByDefault);
+const shouldLaunchDevTui = subcommand === "dev" && !tuiPaneRole && tuiEnabled && hasInteractiveTty;
 
 if (shouldLaunchDevTui) {
   const tuiScriptPath = resolve(__dirname, "tauri-dev-tui.js");
-  execFileSync(process.execPath, [tuiScriptPath, ...subArgs], {
-    cwd: root,
-    stdio: "inherit",
-    env: process.env,
-  });
-  process.exit(0);
+  try {
+    execFileSync(process.execPath, [tuiScriptPath, ...subArgs], {
+      cwd: root,
+      stdio: "inherit",
+      env: process.env,
+    });
+    process.exit(0);
+  } catch (e) {
+    if (isWin) {
+      console.warn("⚠ tauri-dev-tui failed on Windows; falling back to standard dev mode.");
+    } else {
+      throw e;
+    }
+  }
 }
 
 const tuiDaemonPane = tuiPaneRole === "daemon";
@@ -225,7 +235,20 @@ const needsSetup = subcommand === "dev" || subcommand === "build";
 // ── Pass-through for subcommands that don't need setup ───────────────────────
 if (!needsSetup) {
   const passCmd =
-    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri") ? ["cargo", "tauri"] : ["npx", "tauri"];
+    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri")
+      ? ["cargo", "tauri"]
+      : commandExists("npx")
+        ? ["npx", "tauri"]
+        : commandExists("npm")
+          ? ["npm", "exec", "--", "tauri"]
+          : null;
+
+  if (!passCmd) {
+    throw new Error(
+      "Could not find a Tauri CLI runner. Install one of: cargo-tauri, npx, or npm (for 'npm exec tauri').",
+    );
+  }
+
   execFileSync(passCmd[0], [...passCmd.slice(1), subcommand, ...subArgs].filter(Boolean), {
     cwd: root,
     stdio: "inherit",
