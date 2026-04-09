@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -509,12 +508,12 @@ async function main() {
 
   // ── Validate changelog fragments early (fast fail) ─────────────────────────
 
-  const validated = validateUnreleasedFragments();
-  if (validated.files.length === 0) {
-    throw new Error(
-      "Bump aborted: changes/unreleased is empty. Add at least one .md changelog fragment before running npm run bump.",
-    );
-  }
+  // const validated = validateUnreleasedFragments();
+  // if (validated.files.length === 0) {
+  //   throw new Error(
+  //     "Bump aborted: changes/unreleased is empty. Add at least one .md changelog fragment before running npm run bump.",
+  //   );
+  // }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
 

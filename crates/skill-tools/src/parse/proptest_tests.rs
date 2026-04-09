@@ -88,9 +88,14 @@ mod tests {
                 "[TOOL_CALL]{{\"name\":\"{name}\",\"arguments\":{{\"key\":\"value\"}}}}[/TOOL_CALL]"
             );
             let calls = extract_tool_calls(&input);
+            // If the name is an alias, expect 'skill' after redirection
+            let expected = match name.as_str() {
+                "dnd" | "focus" | "tts" | "calendar" | "vision" | "eeg" | "exg" | "oura" | "location" | "router" | "settings" | "constants" | "history" | "jobs" | "gpu" | "headless" | "health" | "label_index" | "llm" | "screenshot" | "tools" | "tray" | "autostart" | "devices" | "commands" => "skill",
+                _ => name.as_str(),
+            };
             prop_assert!(
-                calls.iter().any(|c| c.function.name == name),
-                "expected tool call with name={name} in {:?}", calls
+                calls.iter().any(|c| c.function.name == expected),
+                "expected tool call with name={expected} in {:?}", calls
             );
         }
 
@@ -102,9 +107,13 @@ mod tests {
         ) {
             let input = format!("<function={name}><parameter=key>{value}</parameter></function>");
             let calls = extract_tool_calls(&input);
+            let expected = match name.as_str() {
+                "dnd" | "focus" | "tts" | "calendar" | "vision" | "eeg" | "exg" | "oura" | "location" | "router" | "settings" | "constants" | "history" | "jobs" | "gpu" | "headless" | "health" | "label_index" | "llm" | "screenshot" | "tools" | "tray" | "autostart" | "devices" | "commands" => "skill",
+                _ => name.as_str(),
+            };
             prop_assert!(
-                calls.iter().any(|c| c.function.name == name),
-                "expected tool call with name={name} in {:?}", calls
+                calls.iter().any(|c| c.function.name == expected),
+                "expected tool call with name={expected} in {:?}", calls
             );
         }
 
