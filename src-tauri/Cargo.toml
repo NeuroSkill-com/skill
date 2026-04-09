@@ -2,7 +2,7 @@
 name = "skill"
 version = "0.0.87"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["NeuroSkill authors"]
 edition = "2021"
 license = "GPL-3.0-only"
 
