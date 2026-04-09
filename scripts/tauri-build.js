@@ -856,14 +856,15 @@ if (subcommand === "build") {
 }
 
 /**
- * Kill whatever process is currently bound to `port` so the freshly-built
- * local daemon can take ownership.  Cross-platform (Windows + Unix).
+ * Kill whatever process is currently bound to `port`.
+ * On macOS/Linux this is only needed for stray leftover dev daemons —
+ * the system service is intentionally left alone (see DEV_DAEMON_PORT below).
  */
 function killPortOwner(port) {
   try {
     if (platform() === "win32") {
       // netstat -ano prints lines like:
-      //   TCP  0.0.0.0:18444  ...  LISTENING  <PID>
+      //   TCP  0.0.0.0:18445  ...  LISTENING  <PID>
       const out = execSync(`netstat -ano`, { encoding: "utf8", timeout: 5000 });
       const re = new RegExp(`[:\\s]${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, "m");
       const m = out.match(re);
@@ -873,11 +874,12 @@ function killPortOwner(port) {
         execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
       }
     } else {
-      // lsof -t gives a bare PID list for processes holding the port.
+      // lsof -t may return multiple PIDs; join them with spaces for kill.
       const out = execSync(`lsof -t -i tcp:${port}`, { encoding: "utf8", timeout: 5000 }).trim();
       if (out) {
-        console.log(`[daemon] killing existing process on port ${port} (PID ${out})…`);
-        execSync(`kill -9 ${out}`, { stdio: "ignore" });
+        const pids = out.split("\n").filter(Boolean).join(" ");
+        console.log(`[daemon] killing existing process on port ${port} (PID ${pids})…`);
+        execSync(`kill -9 ${pids}`, { stdio: "ignore" });
       }
     }
     // Give the OS a moment to release the port.
@@ -888,6 +890,14 @@ function killPortOwner(port) {
   } catch {
     // Best-effort — ignore if nothing was found or kill failed.
   }
+}
+
+// Dev mode uses a dedicated port so the production daemon service (which has
+// KeepAlive=true in launchd/systemd and would fight for port 18444) is never
+// disturbed.  Override with SKILL_DAEMON_ADDR if you need a different address.
+const DEV_DAEMON_PORT = 18445;
+if (subcommand === "dev" && !process.env.SKILL_DAEMON_ADDR) {
+  process.env.SKILL_DAEMON_ADDR = `127.0.0.1:${DEV_DAEMON_PORT}`;
 }
 
 let daemonChild = null;
@@ -914,8 +924,8 @@ if (subcommand === "dev" && !tuiTauriPane) {
     } else {
       // Kill any stale daemon (system service or leftover dev session) so the
       // freshly-built local binary can bind the port.
-      const daemonAddr = process.env.SKILL_DAEMON_ADDR || "127.0.0.1:18444";
-      const daemonPort = parseInt(daemonAddr.split(":").pop(), 10) || 18444;
+      const daemonAddr = process.env.SKILL_DAEMON_ADDR || `127.0.0.1:${DEV_DAEMON_PORT}`;
+      const daemonPort = parseInt(daemonAddr.split(":").pop(), 10) || DEV_DAEMON_PORT;
       killPortOwner(daemonPort);
       // Tell Tauri's ensure_daemon_running to use this exact binary if it ever
       // needs to restart the daemon (e.g. after a crash).
@@ -928,7 +938,7 @@ if (subcommand === "dev" && !tuiTauriPane) {
       daemonChild = spawn(daemonBin, [], {
         cwd: root,
         stdio: ["ignore", "inherit", "inherit"],
-        env: { ...process.env, SKILL_DAEMON_ADDR: "127.0.0.1:18444", RUST_LOG: "skill_daemon=info,info" },
+        env: { ...process.env, RUST_LOG: "skill_daemon=info,info" },
         detached: false,
       });
       const exitCode = await new Promise((resolve) => {
@@ -943,16 +953,16 @@ if (subcommand === "dev" && !tuiTauriPane) {
       console.log(`\n🚀 Starting daemon: ${daemonBin}`);
       const { spawn } = await import("node:child_process");
       daemonChild = spawn(daemonBin, [], {
-        env: { ...process.env, SKILL_DAEMON_ADDR: "127.0.0.1:18444", RUST_LOG: "skill_daemon=info,info" },
+        env: { ...process.env, RUST_LOG: "skill_daemon=info,info" },
         stdio: ["ignore", "inherit", "inherit"],
         detached: false,
       });
       daemonChild.on("error", (e) => console.error(`[daemon] spawn error: ${e.message}`));
       daemonChild.on("exit", (code) => console.log(`[daemon] exited with code ${code}`));
-      const daemonAddrEnv = process.env.SKILL_DAEMON_ADDR || "127.0.0.1:18444";
+      const daemonAddrEnv = process.env.SKILL_DAEMON_ADDR || `127.0.0.1:${DEV_DAEMON_PORT}`;
       const lastColon = daemonAddrEnv.lastIndexOf(":");
       const daemonHost = daemonAddrEnv.slice(0, lastColon) || "127.0.0.1";
-      const daemonPort = parseInt(daemonAddrEnv.slice(lastColon + 1), 10) || 18444;
+      const daemonPort = parseInt(daemonAddrEnv.slice(lastColon + 1), 10) || DEV_DAEMON_PORT;
       let daemonReady = false;
       for (let i = 0; i < 100; i++) {
         await new Promise((r) => setTimeout(r, 100));
