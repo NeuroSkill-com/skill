@@ -64,14 +64,15 @@ function resolveTauriCliBaseCommand() {
   const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
   if (useCargo) return ["cargo", "tauri"];
 
-  // Prefer local project-installed CLI so we do not depend on npm/npx being on PATH.
+  // Prefer local project-installed JS entry so Windows does not need to
+  // spawn .cmd shims directly (can fail with EINVAL in some Node setups).
+  const localJs = resolve(root, "node_modules", "@tauri-apps", "cli", "tauri.js");
+  if (existsSync(localJs)) return [process.execPath, localJs];
+
   const localBin = isWin
     ? resolve(root, "node_modules", ".bin", "tauri.cmd")
     : resolve(root, "node_modules", ".bin", "tauri");
   if (existsSync(localBin)) return [localBin];
-
-  const localJs = resolve(root, "node_modules", "@tauri-apps", "cli", "tauri.js");
-  if (existsSync(localJs)) return [process.execPath, localJs];
 
   if (commandExists("npm")) return ["npm", "exec", "--", "tauri"];
   if (commandExists("npx")) return ["npx", "tauri"];
