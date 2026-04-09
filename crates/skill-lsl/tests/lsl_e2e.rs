@@ -264,7 +264,9 @@ async fn lsl_e2e_32ch_256hz() {
     // Fix: push all samples in the blocking thread, then hand the outlet to
     // the async side via a second channel so it is dropped only AFTER the
     // receive loop completes.
-    struct SendOutlet(StreamOutlet);
+    struct SendOutlet {
+        _inner: StreamOutlet,
+    }
     // SAFETY: StreamOutlet contains raw pointers managed by liblsl's C layer.
     // liblsl guarantees thread-safety of outlet handles; we simply move the
     // owning wrapper to the async side after all pushes are complete.
@@ -317,7 +319,7 @@ async fn lsl_e2e_32ch_256hz() {
         // Transfer outlet ownership to the async side so it is dropped
         // only after the receive loop finishes (prevents TCP session teardown
         // while the last chunk is still in transit).
-        outlet_tx.send(SendOutlet(outlet)).ok();
+        outlet_tx.send(SendOutlet { _inner: outlet }).ok();
     });
 
     let (_info, mut adapter) = match setup_rx.recv() {
@@ -439,16 +441,13 @@ async fn lsl_e2e_32ch_256hz() {
     // Drain the adapter channel: the inlet thread may still be mid-transfer
     // when the timed loop exits.  Keep reading with a tight per-event timeout
     // until 500 ms of silence confirms no more samples are in flight.
-    loop {
-        match tokio::time::timeout(Duration::from_millis(500), adapter.next_event()).await {
-            Ok(Some(DeviceEvent::Eeg(frame))) => {
-                let samples: Vec<f32> = frame.channels.into_iter().map(|v| v as f32).collect();
-                received.push((frame.timestamp_s, samples));
-                if received.len() >= TOTAL_SAMPLES {
-                    break;
-                }
-            }
-            _ => break,
+    while let Ok(Some(DeviceEvent::Eeg(frame))) =
+        tokio::time::timeout(Duration::from_millis(500), adapter.next_event()).await
+    {
+        let samples: Vec<f32> = frame.channels.into_iter().map(|v| v as f32).collect();
+        received.push((frame.timestamp_s, samples));
+        if received.len() >= TOTAL_SAMPLES {
+            break;
         }
     }
 
