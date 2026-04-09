@@ -216,14 +216,34 @@ fn spawn_model_download(state: AppState, filename: String) {
 pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
     #[cfg(feature = "llm")]
     {
-        let cfg = state.llm_config.lock().map(|g| g.clone()).unwrap_or_default();
+        let mut cfg = state.llm_config.lock().map(|g| g.clone()).unwrap_or_default();
         let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
         let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
         let cell = state.llm_state_cell.clone();
         let log_buf = state.llm_log_buffer.clone();
 
+        // UX: pressing “Start” should start the server even if the user left
+        // the global enable toggle off. Persist this so subsequent starts work.
+        if !cfg.enabled {
+            cfg.enabled = true;
+            if let Ok(mut g) = state.llm_config.lock() {
+                *g = cfg.clone();
+            }
+            let mut settings = load_user_settings(&state);
+            settings.llm = cfg.clone();
+            save_user_settings(&state, &settings);
+        }
+
         if cell.lock().ok().and_then(|g| g.clone()).is_some() {
             return Json(serde_json::json!({"ok": true, "result": "already_running"}));
+        }
+
+        if cat.active_model_path().or_else(|| cfg.model_path.clone()).is_none() {
+            return Json(serde_json::json!({
+                "ok": false,
+                "result": "failed",
+                "error": "no model selected (choose a downloaded model in Settings → LLM)",
+            }));
         }
 
         let emitter: std::sync::Arc<dyn skill_llm::LlmEventEmitter> = std::sync::Arc::new(DaemonLlmEmitter {

@@ -215,6 +215,21 @@ const CHANNEL_ROUTES: Record<string, string> = {
   stream_search_embeddings: "/v1/search/eeg",
 };
 
+// Commands that must never fall back to Tauri invoke() when daemon HTTP fails.
+// Fallback can produce confusing errors such as "Command start_llm_server not found"
+// even though the real issue is daemon connectivity/route failure.
+const DAEMON_ONLY_COMMANDS = new Set<string>([
+  "get_llm_server_status",
+  "start_llm_server",
+  "stop_llm_server",
+  "get_llm_logs",
+  "abort_llm_stream",
+  "switch_llm_model",
+  "switch_llm_mmproj",
+  "chat_completions_ipc",
+  "cancel_tool_call",
+]);
+
 function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
   const path = CHANNEL_ROUTES[cmd];
   const { channel, onProgress, ...rest } = args;
@@ -225,6 +240,10 @@ function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
   return daemonPost<AnyArgs>(path, rest)
     .then((result) => {
       if (cmd === "chat_completions_ipc") {
+        if (result?.error) {
+          emit({ type: "error", message: String(result.error) });
+          return;
+        }
         const content = result?.content ?? "";
         if (content) emit({ type: "delta", content });
         emit({
@@ -293,7 +312,10 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
   if (route) {
     try {
       return route[0] === "GET" ? await daemonGet<T>(route[1]) : await daemonPost<T>(route[1], args ?? {});
-    } catch (_daemonErr) {
+    } catch (daemonErr) {
+      if (DAEMON_ONLY_COMMANDS.has(cmd)) {
+        throw daemonErr;
+      }
       // Daemon HTTP failed — try Tauri invoke as fallback.
       // If Tauri invoke also fails, throw the Tauri error (more specific).
       const { invoke } = await import("@tauri-apps/api/core");

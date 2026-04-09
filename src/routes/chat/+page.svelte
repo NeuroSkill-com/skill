@@ -347,6 +347,103 @@ function autoResizeInput() {
   inputBarRef?.autoResize();
 }
 
+function buildApiMessagesForDraft(draftText: string, draftAttachments: Attachment[] = [], includeDraft = true) {
+  const historyMsgs = messages
+    .filter((m) => !m.pending)
+    .map((m) => {
+      if (m.role === "user" && m.attachments?.length) {
+        return { role: m.role, content: buildUserContent(m.content, m.attachments) };
+      }
+      return { role: m.role, content: m.content };
+    });
+
+  const systemParts: string[] = [];
+  if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
+  if (eegActive && latestBands) systemParts.push(buildEegBlock(latestBands));
+
+  const draftContent = draftAttachments.length ? buildUserContent(draftText, draftAttachments) : draftText;
+  return [
+    ...(systemParts.length ? [{ role: "system", content: systemParts.join("\n\n") }] : []),
+    ...historyMsgs,
+    ...(includeDraft ? [{ role: "user", content: draftContent }] : []),
+  ];
+}
+
+let prefillTimer: ReturnType<typeof setTimeout> | undefined;
+let prefillSeq = 0;
+let prefillInFlight = false;
+let lastPrefillSignature = "";
+
+async function runDraftPrefill(snapshotInput: string) {
+  const text = snapshotInput.trim();
+  if (!text || text.length < 8) return;
+  if (status !== "running" || generating) return;
+  if (attachments.length > 0) return; // avoid expensive image re-embeds while typing
+  if (text.length > 1600) return; // huge drafts are unlikely to benefit
+  if (nCtx > 0 && estimatedPromptTokens >= Math.floor(nCtx * 0.72)) return; // near context limit
+
+  const signature = `${sessionId}|${messages.length}|${text}`;
+  if (signature === lastPrefillSignature) return;
+
+  const seq = ++prefillSeq;
+  prefillInFlight = true;
+
+  try {
+    await daemonInvoke("chat_completions_ipc", {
+      messages: buildApiMessagesForDraft(text),
+      // Prefill-only warm pass: no output tokens, deterministic, lightweight.
+      params: { temperature: 0, max_tokens: 0, top_k: 1, top_p: 1, thinking_budget: 0 },
+      channel: { onmessage: null },
+    });
+    if (seq === prefillSeq) {
+      lastPrefillSignature = signature;
+    }
+  } catch (e) {
+    // best-effort only
+  } finally {
+    if (seq === prefillSeq) prefillInFlight = false;
+  }
+}
+
+function scheduleDraftPrefill() {
+  if (prefillTimer) {
+    clearTimeout(prefillTimer);
+    prefillTimer = undefined;
+  }
+  if (status !== "running" || generating) return;
+  if (attachments.length > 0) return;
+
+  const text = input.trim();
+  if (text.length < 8) return;
+  if (text.length > 1600) return;
+  if (nCtx > 0 && estimatedPromptTokens >= Math.floor(nCtx * 0.72)) return;
+
+  const lastChar = input.at(-1) ?? "";
+  const midWord = !!lastChar && /[\p{L}\p{N}_]/u.test(lastChar);
+  const delayMs = midWord ? 650 : 280;
+
+  prefillTimer = setTimeout(() => {
+    prefillTimer = undefined;
+    void runDraftPrefill(input);
+  }, delayMs);
+}
+
+$effect(() => {
+  void input;
+  scheduleDraftPrefill();
+});
+
+$effect(() => {
+  void status;
+  if (status === "running") return;
+  if (prefillTimer) {
+    clearTimeout(prefillTimer);
+    prefillTimer = undefined;
+  }
+  prefillSeq += 1;
+  prefillInFlight = false;
+});
+
 /** Cancel a specific tool call. */
 async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
   if (!toolCallId) return;
@@ -640,23 +737,17 @@ async function sendMessage() {
   let ttft: number | undefined;
 
   // Build API messages
-  const historyMsgs = messages
-    .filter((m) => !m.pending)
-    .map((m) => {
-      if (m.role === "user" && m.attachments?.length) {
-        return { role: m.role, content: buildUserContent(m.content, m.attachments) };
-      }
-      return { role: m.role, content: m.content };
-    });
+  if (prefillTimer) {
+    clearTimeout(prefillTimer);
+    prefillTimer = undefined;
+  }
+  if (prefillInFlight) {
+    prefillSeq += 1;
+    prefillInFlight = false;
+    await daemonInvoke("abort_llm_stream").catch((_e) => {});
+  }
 
-  const systemParts: string[] = [];
-  if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
-  if (eegActive && latestBands) systemParts.push(buildEegBlock(latestBands));
-
-  const apiMessages = [
-    ...(systemParts.length ? [{ role: "system", content: systemParts.join("\n\n") }] : []),
-    ...historyMsgs,
-  ];
+  const apiMessages = buildApiMessagesForDraft(text, sentAttachments, false);
 
   let rawAcc = "";
   let usage: UsageInfo | undefined;
@@ -1199,7 +1290,11 @@ onDestroy(() => {
   unlistenBands?.();
   clearInterval(pollTimer);
   stopTypingLabelTimer();
-  if (generating) daemonInvoke("abort_llm_stream").catch((_e) => {});
+  if (prefillTimer) {
+    clearTimeout(prefillTimer);
+    prefillTimer = undefined;
+  }
+  if (generating || prefillInFlight) daemonInvoke("abort_llm_stream").catch((_e) => {});
 });
 </script>
 

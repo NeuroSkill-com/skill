@@ -44,6 +44,8 @@ let {
 let inputEl = $state<HTMLTextAreaElement | null>(null);
 let fileInputEl = $state<HTMLInputElement | null>(null);
 let promptLibRef = $state<PromptLibrary | null>(null);
+let isMultiline = $state(false);
+let singleLineHeightPx = $state(20);
 
 export function focus() {
   inputEl?.focus();
@@ -55,7 +57,9 @@ export function getInputEl() {
 export function autoResize() {
   if (!inputEl) return;
   inputEl.style.height = "auto";
-  inputEl.style.height = `${Math.min(inputEl.scrollHeight, 200)}px`;
+  const nextHeight = Math.min(inputEl.scrollHeight, 200);
+  inputEl.style.height = `${nextHeight}px`;
+  isMultiline = nextHeight > singleLineHeightPx + 6;
 }
 
 function openFilePicker() {
@@ -93,6 +97,17 @@ async function selectPrompt(text: string) {
   inputEl?.focus();
   inputEl?.setSelectionRange(input.length, input.length);
 }
+
+$effect(() => {
+  void input;
+  tick().then(() => autoResize());
+});
+
+$effect(() => {
+  if (!inputEl) return;
+  const lh = Number.parseFloat(getComputedStyle(inputEl).lineHeight);
+  if (Number.isFinite(lh) && lh > 0) singleLineHeightPx = lh;
+});
 </script>
 
 <footer class="relative shrink-0 border-t border-border dark:border-white/[0.06]
@@ -192,10 +207,11 @@ async function selectPrompt(text: string) {
     </span>
   </div>
 
-  <div class="flex items-end gap-2 rounded-xl border border-border dark:border-white/[0.08]
+  <div class="flex gap-2 rounded-xl border border-border dark:border-white/[0.08]
               bg-background px-3 py-2
               focus-within:ring-1 focus-within:ring-violet-500/50
-              focus-within:border-violet-500/30 transition-all">
+              focus-within:border-violet-500/30 transition-all
+              {isMultiline ? 'items-start' : 'items-end'}">
 
     <!-- Image attach button -->
     <button
@@ -246,7 +262,7 @@ async function selectPrompt(text: string) {
                    : t("chat.inputPlaceholderStopped")}
       disabled={status !== "running" || generating || eegBlocked}
       rows="1"
-      class="flex-1 bg-transparent text-[0.78rem] text-foreground resize-none
+      class="flex-1 bg-transparent text-[0.78rem] text-foreground resize-none overflow-y-auto
              placeholder:text-muted-foreground/40 focus:outline-none
              disabled:opacity-50 disabled:cursor-not-allowed
              max-h-48 leading-relaxed"
