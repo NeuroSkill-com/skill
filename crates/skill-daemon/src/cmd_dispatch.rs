@@ -121,20 +121,6 @@ fn bool_field(msg: &Value, key: &str) -> Option<bool> {
     msg.get(key).and_then(Value::as_bool)
 }
 
-fn is_iroh_totp_stub(cmd: &str) -> bool {
-    matches!(
-        cmd,
-        "iroh_totp_list" | "iroh_totp_create" | "iroh_totp_qr" | "iroh_totp_revoke"
-    )
-}
-
-fn is_iroh_client_stub(cmd: &str) -> bool {
-    matches!(
-        cmd,
-        "iroh_clients_list" | "iroh_client_register" | "iroh_client_revoke" | "iroh_client_set_scope"
-    )
-}
-
 async fn cmd_stub(cmd: &str, note: &str) -> Result<Value, String> {
     Ok(json!({ "command": cmd, "ok": false, "error": note }))
 }
@@ -158,8 +144,33 @@ async fn dispatch_family_commands(state: &AppState, msg: &Value, cmd: &str) -> O
 
         // Iroh
         "iroh_info" => Some(cmd_iroh_info(state).await),
-        c if is_iroh_totp_stub(c) => Some(cmd_stub(cmd, "iroh TOTP not available in daemon-only mode").await),
-        c if is_iroh_client_stub(c) => Some(cmd_stub(cmd, "iroh clients not available in daemon-only mode").await),
+        "iroh_totp_list" => Some(cmd_iroh(skill_iroh::commands::iroh_totp_list(&state.iroh_auth))),
+        "iroh_totp_create" => Some(cmd_iroh(skill_iroh::commands::iroh_totp_create(&state.iroh_auth, msg))),
+        "iroh_totp_qr" => Some(cmd_iroh(skill_iroh::commands::iroh_totp_qr(&state.iroh_auth, msg))),
+        "iroh_totp_revoke" => Some(cmd_iroh(skill_iroh::commands::iroh_totp_revoke(&state.iroh_auth, msg))),
+        "iroh_clients_list" => Some(cmd_iroh(skill_iroh::commands::iroh_clients_list(&state.iroh_auth))),
+        "iroh_client_register" => Some(cmd_iroh(skill_iroh::commands::iroh_client_register(
+            &state.iroh_auth,
+            msg,
+        ))),
+        "iroh_client_revoke" => Some(cmd_iroh(skill_iroh::commands::iroh_client_revoke(
+            &state.iroh_auth,
+            msg,
+        ))),
+        "iroh_client_set_scope" => Some(cmd_iroh(skill_iroh::commands::iroh_client_set_scope(
+            &state.iroh_auth,
+            msg,
+        ))),
+        "iroh_scope_groups" => Some(cmd_iroh(skill_iroh::commands::iroh_scope_groups(&state.iroh_auth))),
+        "iroh_client_permissions" => Some(cmd_iroh(skill_iroh::commands::iroh_client_permissions(
+            &state.iroh_auth,
+            msg,
+        ))),
+        "iroh_phone_invite" => Some(cmd_iroh(skill_iroh::commands::iroh_phone_invite(
+            &state.iroh_auth,
+            &state.iroh_runtime,
+            msg,
+        ))),
 
         // LLM
         "llm_status" => Some(cmd_llm_status(state).await),
@@ -1238,12 +1249,12 @@ async fn cmd_dnd_set(msg: &Value) -> Result<Value, String> {
 
 // ── Iroh ─────────────────────────────────────────────────────────────────────
 
+fn cmd_iroh(result: anyhow::Result<Value>) -> Result<Value, String> {
+    result.map_err(|e| e.to_string())
+}
+
 async fn cmd_iroh_info(state: &AppState) -> Result<Value, String> {
-    let eid = state.lsl_iroh_endpoint_id.lock().ok().and_then(|g| g.clone());
-    Ok(json!({
-        "endpoint_id": eid,
-        "running": eid.is_some(),
-    }))
+    skill_iroh::commands::iroh_info(&state.iroh_auth, &state.iroh_runtime).map_err(|e| e.to_string())
 }
 
 // ── LLM ──────────────────────────────────────────────────────────────────────
@@ -1979,7 +1990,8 @@ mod tests {
 
         let iroh = dispatch(state, json!({"command":"iroh_info"})).await;
         assert_eq!(iroh["ok"], true);
-        assert_eq!(iroh["running"], false);
+        // online=false because the tunnel hasn't started in tests
+        assert_eq!(iroh["online"], false);
     }
 
     #[tokio::test]
@@ -2092,8 +2104,8 @@ mod tests {
         let dnd = dispatch_family_commands(&state, &json!({"enabled":false}), "dnd_set").await;
         assert!(dnd.is_some());
 
-        let iroh_stub = dispatch_family_commands(&state, &json!({}), "iroh_totp_list").await;
-        assert!(iroh_stub.is_some());
+        let iroh_totp = dispatch_family_commands(&state, &json!({}), "iroh_totp_list").await;
+        assert!(iroh_totp.is_some());
 
         let llm = dispatch_family_commands(&state, &json!({}), "llm_status").await;
         assert!(llm.is_some());

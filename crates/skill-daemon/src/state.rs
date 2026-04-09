@@ -17,6 +17,8 @@ use skill_daemon_common::{
     DeviceLogEntry, DiscoveredDeviceResponse, EventEnvelope, ScannerCortexConfigRequest, ScannerWifiConfigRequest,
     StatusResponse,
 };
+use skill_iroh::{IrohPeerMap, IrohRuntimeState};
+use skill_iroh::{SharedDeviceEventTx, SharedIrohAuth, SharedIrohRuntime};
 use skill_settings::{HookRule, LslPairedStream};
 
 #[cfg(feature = "llm")]
@@ -53,6 +55,14 @@ pub struct AppState {
     pub skill_dir: Arc<Mutex<PathBuf>>,
     /// Hook rules (daemon-authoritative).
     pub hooks: Arc<Mutex<Vec<HookRule>>>,
+    /// Remote-access iroh auth store (phone pairing, TOTP, client registry).
+    pub iroh_auth: SharedIrohAuth,
+    /// Live state of the remote-access iroh tunnel (online flag, endpoint_id, …).
+    pub iroh_runtime: SharedIrohRuntime,
+    /// Maps local TCP source port → iroh peer endpoint_id for axum middleware.
+    pub iroh_peer_map: IrohPeerMap,
+    /// Sender half of the device-proxy event channel consumed by the session runner.
+    pub iroh_device_tx: SharedDeviceEventTx,
     /// rlsl-iroh sink endpoint id when running.
     pub lsl_iroh_endpoint_id: Arc<Mutex<Option<String>>>,
     pub lsl_auto_connect: Arc<Mutex<bool>>,
@@ -121,8 +131,12 @@ impl AppState {
                 emotiv_client_secret: String::new(),
             })),
             device_log: Arc::new(Mutex::new(VecDeque::with_capacity(256))),
-            skill_dir: Arc::new(Mutex::new(skill_dir)),
+            skill_dir: Arc::new(Mutex::new(skill_dir.clone())),
             hooks: Arc::new(Mutex::new(hooks)),
+            iroh_auth: Arc::new(Mutex::new(skill_iroh::IrohAuthStore::open(&skill_dir))),
+            iroh_runtime: Arc::new(Mutex::new(IrohRuntimeState::default())),
+            iroh_peer_map: skill_iroh::new_peer_map(),
+            iroh_device_tx: Arc::new(Mutex::new(None)),
             lsl_iroh_endpoint_id: Arc::new(Mutex::new(None)),
             lsl_auto_connect: Arc::new(Mutex::new(settings.lsl_auto_connect)),
             lsl_paired_streams: Arc::new(Mutex::new(settings.lsl_paired_streams.clone())),

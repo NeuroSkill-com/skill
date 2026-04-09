@@ -73,6 +73,24 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::new(load_or_create_token()?, skill_dir.clone());
     init_tracing(state.app_log.clone());
 
+    // Spawn the remote-access iroh tunnel.  It proxies authenticated iroh
+    // peers to this daemon's HTTP port, enabling phone pairing and remote EEG.
+    {
+        let api_port = daemon_addr().port();
+        let (eeg_tx, _eeg_rx) = skill_iroh::event_channel();
+        if let Ok(mut g) = state.iroh_device_tx.lock() {
+            *g = Some(eeg_tx);
+        }
+        skill_iroh::spawn(
+            skill_dir.clone(),
+            api_port,
+            state.iroh_auth.clone(),
+            state.iroh_runtime.clone(),
+            state.iroh_peer_map.clone(),
+            state.iroh_device_tx.clone(),
+        );
+    }
+
     // Restore paired devices from paired_devices.json (fast path) or fall back
     // to settings.json (written by older builds / Tauri side).
     {
@@ -167,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::api::router())
         .merge(routes::analysis::router())
         .merge(routes::search::router())
+        .merge(routes::iroh::router())
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     // Root-level command tunnel for CLI HTTP mode (POST / with JSON body)

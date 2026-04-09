@@ -2,6 +2,7 @@
 pub mod analysis;
 pub mod api;
 pub mod history;
+pub(crate) mod iroh;
 pub mod labels;
 pub mod search;
 pub mod settings;

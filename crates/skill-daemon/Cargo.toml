@@ -96,6 +96,7 @@ skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
 skill-tts            = { path = "../skill-tts" }
 skill-calendar       = { path = "../skill-calendar" }
+skill-iroh           = { path = "../skill-iroh" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
 sysinfo              = "0.33"
@@ -105,7 +106,6 @@ tempfile             = "3"
 mendi                = { version = "0.0.2", features = ["simulate"] }
 mw75                 = { version = "0.0.6" }
 rlsl                 = { version = "0.0.4" }
-skill-iroh           = { path = "../skill-iroh" }
 tokio-tungstenite    = "0.24"
 
 [lints]

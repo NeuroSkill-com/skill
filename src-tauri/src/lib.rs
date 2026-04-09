@@ -380,9 +380,8 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
         }
     }
 
-    let skill_dir_for_iroh = app.app_state().lock_or_recover().skill_dir.clone();
-
     // ── LLM server ownership moved to daemon ───────────────────────────
+    // ── iroh tunnel ownership moved to daemon ──────────────────────────
 
     let broadcaster = ws_server::WsBroadcaster;
 
@@ -394,37 +393,6 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
     // ── Daemon runtime readiness (spawn → protocol gate → service repair) ──
     crate::daemon_cmds::ensure_daemon_runtime_ready();
 
-    let ws_port = crate::daemon_cmds::fetch_daemon_ws_port().unwrap_or(18444);
-
-    // NAT-traversing P2P bridge — proxies iroh peers to the single API port.
-    // The peer map lets the axum server identify which iroh client is on each
-    // TCP connection so it can enforce per-command permissions.
-    let iroh_auth = std::sync::Arc::new(std::sync::Mutex::new(skill_iroh::IrohAuthStore::open(
-        &skill_dir_for_iroh,
-    )));
-    let iroh_runtime = std::sync::Arc::new(std::sync::Mutex::new(
-        skill_iroh::IrohRuntimeState::default(),
-    ));
-    let iroh_peer_map = skill_iroh::new_peer_map();
-    let (iroh_eeg_tx, iroh_eeg_rx) = skill_iroh::event_channel();
-    let shared_device_tx: skill_iroh::SharedDeviceEventTx =
-        std::sync::Arc::new(std::sync::Mutex::new(Some(iroh_eeg_tx)));
-    skill_iroh::spawn(
-        skill_dir_for_iroh.clone(),
-        ws_port,
-        iroh_auth.clone(),
-        iroh_runtime.clone(),
-        iroh_peer_map.clone(),
-        shared_device_tx.clone(),
-    );
-
-    app.manage(iroh_auth);
-    app.manage(iroh_runtime);
-    app.manage(iroh_peer_map);
-    app.manage(shared_device_tx);
-    app.manage(std::sync::Arc::new(tokio::sync::Mutex::new(Some(
-        iroh_eeg_rx,
-    ))));
     app.manage(broadcaster);
 
     let (logger_arc, skill_dir) = {
