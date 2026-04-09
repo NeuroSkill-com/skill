@@ -2337,6 +2337,358 @@ mod tests {
     }
 
     #[test]
+    fn runtime_ready_degraded_when_wait_errors_and_no_rollback() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Err("unreachable".to_string()),
+            Err("still unreachable".to_string()),
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || false,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(!compatible);
+        assert_eq!(ensure_count, 1, "no restart when initial wait errors");
+        assert_eq!(restart_count, 0);
+        assert_eq!(rollback_launch_count, 0);
+        assert_eq!(snapshot_count, 0, "no snapshot refresh on degraded startup");
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn runtime_ready_happy_path_no_restart_or_rollback() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([Ok(true)]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(compatible);
+        assert_eq!(ensure_count, 1);
+        assert_eq!(restart_count, 0);
+        assert_eq!(rollback_launch_count, 0);
+        assert_eq!(snapshot_count, 1);
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn runtime_ready_recovers_after_single_restart_without_rollback() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([Ok(false), Ok(true)]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(compatible);
+        assert_eq!(ensure_count, 2);
+        assert_eq!(restart_count, 1);
+        assert_eq!(rollback_launch_count, 0);
+        assert_eq!(snapshot_count, 1);
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn service_autoinstall_disabled_by_env_is_noop() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+        std::env::set_var("SKILL_DAEMON_SERVICE_AUTOINSTALL", "0");
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        ensure_daemon_background_service();
+
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+    }
+
+    #[test]
+    fn rollback_snapshot_copies_current_daemon_bin() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let fake_bin = td.path().join(if cfg!(target_os = "windows") {
+            "skill-daemon.exe"
+        } else {
+            "skill-daemon"
+        });
+        std::fs::write(&fake_bin, b"daemon-binary").unwrap();
+        std::env::set_var("SKILL_DAEMON_BIN", &fake_bin);
+
+        update_daemon_rollback_snapshot_best_effort();
+
+        let rollback = daemon_rollback_bin_path().unwrap();
+        assert!(rollback.exists(), "rollback snapshot should exist");
+
+        let src = std::fs::read(&fake_bin).unwrap();
+        let dst = std::fs::read(&rollback).unwrap();
+        assert_eq!(src, dst);
+
+        std::env::remove_var("SKILL_DAEMON_BIN");
+    }
+
+    #[test]
+    fn runtime_ready_fails_when_rollback_also_incompatible() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Ok(false), // initial mismatch
+            Ok(false), // after restart mismatch
+            Ok(false), // rollback also mismatch
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(!compatible);
+        assert_eq!(ensure_count, 2);
+        assert_eq!(restart_count, 2);
+        assert_eq!(rollback_launch_count, 1);
+        assert_eq!(
+            snapshot_count, 0,
+            "no snapshot update on incompatible runtime"
+        );
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn rollback_snapshot_noop_when_source_missing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let fake_missing = td.path().join(if cfg!(target_os = "windows") {
+            "missing-daemon.exe"
+        } else {
+            "missing-daemon"
+        });
+        std::env::set_var("SKILL_DAEMON_BIN", &fake_missing);
+
+        let rollback = daemon_rollback_bin_path().unwrap();
+        if rollback.exists() {
+            let _ = std::fs::remove_file(&rollback);
+        }
+
+        update_daemon_rollback_snapshot_best_effort();
+
+        assert!(
+            !rollback.exists(),
+            "rollback snapshot should not be created when source binary is missing"
+        );
+
+        std::env::remove_var("SKILL_DAEMON_BIN");
+    }
+
+    #[test]
+    fn runtime_ready_uses_rollback_when_initial_probe_errors() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Err("initial probe failed".to_string()),
+            Ok(true), // rollback probe succeeds
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(compatible);
+        assert_eq!(
+            ensure_count, 1,
+            "no normal restart ensure pass on probe error"
+        );
+        assert_eq!(
+            restart_count, 1,
+            "rollback branch performs one restart attempt"
+        );
+        assert_eq!(rollback_launch_count, 1);
+        assert_eq!(snapshot_count, 1);
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn service_autoinstall_unknown_status_does_not_install() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/service/status");
+            write_json_response(&mut stream, "200 OK", "{\"status\":\"unknown\"}");
+        });
+
+        ensure_daemon_background_service();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn daemon_required_env_parsing() {
+        std::env::remove_var("SKILL_DAEMON_REQUIRED");
+        assert!(!daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "true");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "1");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "off");
+        assert!(!daemon_required_env());
+
+        std::env::remove_var("SKILL_DAEMON_REQUIRED");
+    }
+
+    #[test]
+    fn runtime_ready_degraded_after_restart_error_without_rollback() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Ok(false), // initial mismatch
+            Err("restart probe failed".to_string()),
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || false,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(!compatible);
+        assert_eq!(ensure_count, 2);
+        assert_eq!(restart_count, 1);
+        assert_eq!(rollback_launch_count, 0);
+        assert_eq!(snapshot_count, 0);
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn wait_for_protocol_compatibility_times_out_without_token() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        let err = wait_for_protocol_compatibility(Duration::from_millis(1)).unwrap_err();
+        assert!(
+            err.contains("timed out")
+                || err.contains("token")
+                || err.contains("No such file")
+                || err.contains("os error"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn service_autoinstall_env_parsing_variants() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        std::env::set_var("SKILL_DAEMON_SERVICE_AUTOINSTALL", "false");
+        ensure_daemon_background_service();
+
+        std::env::set_var("SKILL_DAEMON_SERVICE_AUTOINSTALL", "no");
+        ensure_daemon_background_service();
+
+        std::env::set_var("SKILL_DAEMON_SERVICE_AUTOINSTALL", "off");
+        ensure_daemon_background_service();
+
+        std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+    }
+
+    #[test]
     fn async_proxy_helpers_are_used_for_v1_routes() {
         let src = include_str!("daemon_cmds.rs");
         assert!(src.contains("async fn daemon_get_async"));

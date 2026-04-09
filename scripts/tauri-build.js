@@ -13,7 +13,7 @@
  *   npm run tauri info
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { arch, cpus, platform, tmpdir } from "node:os";
@@ -24,9 +24,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
 function runMarkdownRendererGuard() {
-  execSync("node scripts/check-markdown-renderer.js", {
+  execFileSync(process.execPath, ["scripts/check-markdown-renderer.js"], {
     cwd: root,
     stdio: "inherit",
+    env: process.env,
   });
 }
 
@@ -44,8 +45,18 @@ function commandExists(cmd) {
   }
 }
 
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+const powerShellCommand = isWin ? (commandExists("pwsh") ? "pwsh" : "powershell") : null;
+
+function runPowerShell(args, options = {}) {
+  if (!isWin || !powerShellCommand) {
+    throw new Error("runPowerShell() called on non-Windows host");
+  }
+
+  return execFileSync(powerShellCommand, ["-NoProfile", "-ExecutionPolicy", "Bypass", ...args], {
+    cwd: root,
+    env: process.env,
+    ...options,
+  });
 }
 
 function linuxTrayRuntimeLooksPresent() {
@@ -151,9 +162,11 @@ const shouldLaunchDevTui = subcommand === "dev" && !tuiPaneRole && tuiEnabled;
 
 if (shouldLaunchDevTui) {
   const tuiScriptPath = resolve(__dirname, "tauri-dev-tui.js");
-  const forwarded = subArgs.map((arg) => shellQuote(arg)).join(" ");
-  const cmd = `${shellQuote(process.execPath)} ${shellQuote(tuiScriptPath)}${forwarded ? ` ${forwarded}` : ""}`;
-  execSync(cmd, { cwd: root, stdio: "inherit", env: process.env });
+  execFileSync(process.execPath, [tuiScriptPath, ...subArgs], {
+    cwd: root,
+    stdio: "inherit",
+    env: process.env,
+  });
   process.exit(0);
 }
 
@@ -167,8 +180,11 @@ const needsSetup = subcommand === "dev" || subcommand === "build";
 if (!needsSetup) {
   const passCmd =
     process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri") ? ["cargo", "tauri"] : ["npx", "tauri"];
-  const cmd = [...passCmd, subcommand, ...subArgs].filter(Boolean).join(" ");
-  execSync(cmd, { cwd: root, stdio: "inherit" });
+  execFileSync(passCmd[0], [...passCmd.slice(1), subcommand, ...subArgs].filter(Boolean), {
+    cwd: root,
+    stdio: "inherit",
+    env: process.env,
+  });
   process.exit(0);
 }
 
@@ -253,8 +269,7 @@ if (isMingwTarget) {
     platformFlags = [...platformFlags, "--no-bundle"];
   }
 } else if (isWin) {
-  execSync("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\install-vulkan-sdk.ps1", {
-    cwd: root,
+  runPowerShell(["-File", "scripts\\install-vulkan-sdk.ps1"], {
     stdio: "inherit",
   });
 
@@ -291,9 +306,7 @@ if (isMingwTarget) {
         `if ($p) { Write-Output $p }\r\n`,
     );
     try {
-      const detected = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`, { cwd: root })
-        .toString()
-        .trim();
+      const detected = runPowerShell(["-File", tmpScript]).toString().trim();
       if (detected) {
         process.env.VULKAN_SDK = detected;
       } else {
@@ -371,9 +384,10 @@ if (isMingwTarget) {
       process.env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
     }
   }
-  execSync("bash scripts/install-vulkan-sdk.sh", {
+  execFileSync("bash", ["scripts/install-vulkan-sdk.sh"], {
     cwd: root,
     stdio: "inherit",
+    env: process.env,
   });
 
   // ── Linux: enable Vulkan GPU offloading for LLM inference ────────────────
@@ -532,8 +546,7 @@ const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri
 const tauriCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
 
 function runTauriWithArgs(args) {
-  const cmd = [...tauriCmd, subcommand, ...args].join(" ").trimEnd();
-  execSync(cmd, {
+  execFileSync(tauriCmd[0], [...tauriCmd.slice(1), subcommand, ...args], {
     cwd: root,
     stdio: "inherit",
     env: process.env,
@@ -541,8 +554,7 @@ function runTauriWithArgs(args) {
 }
 
 function runTauriSubcommand(command, args) {
-  const cmd = [...tauriCmd, command, ...args].join(" ").trimEnd();
-  execSync(cmd, {
+  execFileSync(tauriCmd[0], [...tauriCmd.slice(1), command, ...args], {
     cwd: root,
     stdio: "inherit",
     env: process.env,
@@ -776,7 +788,11 @@ function assembleMacOsApp() {
 if (subcommand === "build") {
   console.log("\n🔧 Building daemon sidecar for release…");
   try {
-    execSync("bash scripts/prepare-daemon-sidecar.sh", { cwd: root, stdio: "inherit", env: process.env });
+    execFileSync(process.execPath, ["scripts/prepare-daemon-sidecar.js"], {
+      cwd: root,
+      stdio: "inherit",
+      env: process.env,
+    });
   } catch (e) {
     console.warn(`⚠ Daemon sidecar build failed: ${e.message}`);
   }
@@ -788,7 +804,7 @@ if (subcommand === "dev" && !tuiTauriPane) {
   try {
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
-    execSync(["cargo", ...daemonBuildArgs].join(" "), { cwd: root, stdio: "inherit", env: process.env });
+    execFileSync("cargo", daemonBuildArgs, { cwd: root, stdio: "inherit", env: process.env });
 
     // Find the built binary (target-dir = src-tauri/target per .cargo/config.toml)
     const targetDir = resolve(root, "src-tauri", "target");
