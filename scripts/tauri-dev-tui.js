@@ -48,7 +48,19 @@ let renderQueued = false;
 let forceKillTimer = null;
 
 const ESC = String.fromCharCode(27);
-const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+// Strip all ANSI/VT escape sequences:
+//   CSI:  ESC [ <params> <final-byte>   e.g. \x1b[1;32m  \x1b[K  \x1b[2J
+//   OSC:  ESC ] <body> BEL              e.g. \x1b]8;;url\x07text\x1b]8;;\x07
+//         ESC ] <body> ST               e.g. \x1b]8;;url\x1b\\text\x1b]8;;\x1b\\
+// Modern cargo uses OSC 8 hyperlinks (\x1b]8;;…\x1b\\) which the old
+// colour-only regex left intact, inflating visibleLength and garbling layout.
+const ANSI_RE = new RegExp(
+  `${ESC}(?:` +
+    `\\[[0-9;]*[A-Za-z]` + // CSI sequence
+    `|\\][^\\x07]*(?:\\x07|${ESC}\\\\)` + // OSC sequence (BEL or ST terminator)
+    `)`,
+  "g",
+);
 
 function stripAnsi(s) {
   return s.replace(ANSI_RE, "").replace(/\r/g, "");
@@ -81,8 +93,12 @@ function takeVisible(text, maxVisible) {
     }
     if (truncated) break;
 
-    out += match[0];
-    hadAnsi = true;
+    // Keep CSI colour/style codes in output; drop OSC (hyperlinks etc.)
+    const isOsc = match[0].charCodeAt(1) === 0x5d; // ESC ]
+    if (!isOsc) {
+      out += match[0];
+      hadAnsi = true;
+    }
     idx = mIdx + match[0].length;
   }
 
