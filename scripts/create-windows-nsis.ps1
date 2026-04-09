@@ -566,6 +566,7 @@ Function KillRunningInstance
     Sleep 2000
     ; Force-kill if still running
     nsExec::ExecToLog 'taskkill /F /IM skill.exe'
+    nsExec::ExecToLog 'taskkill /F /IM skill-daemon.exe'
     Sleep 500
   not_running:
 FunctionEnd
@@ -620,6 +621,8 @@ $($installFiles -join "`n")
   ; launch.  Failure is non-fatal (user can allow manually).
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName"'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="$ProductName" dir=in action=allow program="`$INSTDIR\skill.exe" enable=yes profile=private,public'
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName Daemon"'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="$ProductName Daemon" dir=in action=allow program="`$INSTDIR\skill-daemon.exe" enable=yes profile=private,public'
 SectionEnd
 
 ; ── Vulkan Runtime section (optional, auto-selected when missing) ───────
@@ -771,6 +774,10 @@ FunctionEnd
 ; ── Uninstall: kill running instance ─────────────────────────────────────
 Function un.KillRunningInstance
   nsExec::ExecToLog 'taskkill /F /IM skill.exe'
+  nsExec::ExecToLog 'taskkill /F /IM skill-daemon.exe'
+  ; Remove the daemon Windows service if it was registered at runtime
+  nsExec::ExecToLog 'sc.exe stop com.skill.daemon'
+  nsExec::ExecToLog 'sc.exe delete com.skill.daemon'
   Sleep 500
 FunctionEnd
 
@@ -788,8 +795,9 @@ $($uninstallFiles -join "`n")
   RMDir "`$SMPROGRAMS\$ProductName"
   Delete "`$DESKTOP\$ProductName.lnk"
 
-  ; Firewall rule
+  ; Firewall rules
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName"'
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="$ProductName Daemon"'
 
   ; Autostart registry entry (the app registers as "skill" in HKCU\...\Run)
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "skill"

@@ -235,40 +235,31 @@ jobs:
               exit 1
             fi
           fi
-          # Build the skill-daemon sidecar
-          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu
+          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
+          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
 
       # ── Stage files for packaging ─────────────────────────────────────---
+      # The daemon binary sits next to the app binary.  At runtime the
+      # Tauri app starts the daemon and calls its /service/install endpoint
+      # which self-registers a systemd --user service.  No system-level
+      # service file is needed in the package.
       - name: Stage files for packaging
         shell: bash
         run: |
           set -euo pipefail
           PKGROOT="$RUNNER_TEMP/pkgroot"
           mkdir -p "$PKGROOT/opt/NeuroSkill"
-          mkdir -p "$PKGROOT/usr/lib/neuroskill"
-          mkdir -p "$PKGROOT/etc/systemd/system"
 
-          # Copy Tauri app
-          cp -R src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/portable/NeuroSkill.AppImage "$PKGROOT/opt/NeuroSkill/NeuroSkill.AppImage"
+          # Copy Tauri app binary
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill "$PKGROOT/opt/NeuroSkill/skill"
+          chmod +x "$PKGROOT/opt/NeuroSkill/skill"
 
-          # Copy daemon binary
-          cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill-daemon "$PKGROOT/usr/lib/neuroskill/skill-daemon"
+          # Copy daemon binary next to the app binary
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill-daemon "$PKGROOT/opt/NeuroSkill/skill-daemon"
+          chmod +x "$PKGROOT/opt/NeuroSkill/skill-daemon"
 
-          # Create systemd service file
-          cat > "$PKGROOT/etc/systemd/system/skill-daemon.service" <<EOF
-          [Unit]
-          Description=NeuroSkill Daemon
-          After=network.target
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/lib/neuroskill/skill-daemon
-          Restart=on-failure
-          User=root
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
+          # Verify both binaries are present
+          ls -la "$PKGROOT/opt/NeuroSkill/skill" "$PKGROOT/opt/NeuroSkill/skill-daemon"
 
           # Show staged files
           find "$PKGROOT"

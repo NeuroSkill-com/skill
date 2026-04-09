@@ -334,57 +334,6 @@ jobs:
       - name: Verify Tauri frontend bundle structure
         run: npm run -s verify:tauri:frontend
 
-      # ── Compile (frontend + Rust + daemon) ───────────────────────────────
-      - name: Compile (frontend + Rust + daemon)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,llm-vulkan,screenshots
-          cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc
-
-      # ── Stage files for packaging ─────────────────────────────────────---
-      - name: Stage files for packaging
-        shell: bash
-        run: |
-          set -euo pipefail
-          PKGROOT="$RUNNER_TEMP/pkgroot"
-          mkdir -p "$PKGROOT/NeuroSkill"
-          mkdir -p "$PKGROOT/daemon"
-          mkdir -p "$PKGROOT/service"
-
-          # Copy Tauri app
-          cp src-tauri/target/x86_64-pc-windows-msvc/release/skill.exe "$PKGROOT/NeuroSkill/NeuroSkill.exe"
-
-          # Copy daemon binary
-          cp src-tauri/target/x86_64-pc-windows-msvc/release/skill-daemon.exe "$PKGROOT/daemon/skill-daemon.exe"
-
-          # Create Windows service install script
-          cat > "$PKGROOT/service/install-daemon-service.bat" <<EOF
-          @echo off
-          sc create "NeuroSkillDaemon" binPath= "%cd%\daemon\skill-daemon.exe" start= auto
-          sc start "NeuroSkillDaemon"
-          EOF
-
-          # Show staged files
-          ls -R "$PKGROOT"
-
-      # ── Build Windows portable zip with daemon and service ─────────────--
-      - name: Build Windows portable zip (with daemon)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/pkgroot"
-          zip -r "$GITHUB_WORKSPACE/NeuroSkill-windows-x86_64.zip" .
-
-      # ── Upload Windows portable zip to GitHub Release ─────────────────--
-      - name: Upload Windows portable zip
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version_meta.outputs.tag }}
-          name: Skill v${{ steps.version_meta.outputs.version }} (Windows)
-          generate_release_notes: true
-          files: NeuroSkill-windows-x86_64.zip
-
       # ── NSIS + Vulkan SDK (parallel install) ─────────────────────────────────
       # NSIS and the Vulkan SDK are independent of each other and of the Rust
       # toolchain.  Installing them in a single step via background jobs cuts
@@ -742,7 +691,7 @@ jobs:
           sccache --show-stats || true
 
           run_cmd() {
-            cargo build -p skill --release --locked --features custom-protocol,llm-vulkan,screenshots --timings
+            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,llm-vulkan,screenshots --timings
           }
 
           if ! run_cmd; then
@@ -754,6 +703,9 @@ jobs:
               exit 1
             fi
           fi
+
+          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
+          cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features llm-vulkan
 
           sccache --show-stats || true
 

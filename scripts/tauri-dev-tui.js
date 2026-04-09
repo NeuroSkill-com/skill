@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
+import { platform } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const isWin = platform() === "win32";
 
 const __dirname = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const root = resolve(__dirname, "..");
@@ -316,7 +319,11 @@ function startProcess(role, pane, writer) {
         CARGO_TERM_COLOR: process.env.CARGO_TERM_COLOR || "always",
       },
       stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
+      // Unix: detached creates a process group so we can kill the tree with -pid.
+      // Windows: detached opens a new console window — don't use it; taskkill /T
+      // handles tree killing instead.
+      detached: !isWin,
+      windowsHide: true,
     },
   );
 
@@ -356,13 +363,29 @@ function maybeExit() {
 
 function killChildTree(child, signal = "SIGTERM") {
   if (!child || child.exitCode !== null || !child.pid) return;
-  try {
-    process.kill(-child.pid, signal);
-  } catch {
+  if (isWin) {
+    // Windows: use taskkill /T to kill the whole process tree.
+    // process.kill(-pid) is not supported on Windows.
     try {
-      child.kill(signal);
+      const flag = signal === "SIGKILL" ? "/F" : "/F"; // always force on Windows
+      execSync(`taskkill /T ${flag} /PID ${child.pid}`, { stdio: "ignore", timeout: 5000 });
     } catch {
-      // ignore
+      try {
+        child.kill();
+      } catch {
+        /* ignore */
+      }
+    }
+  } else {
+    // Unix: kill the process group (negative PID).
+    try {
+      process.kill(-child.pid, signal);
+    } catch {
+      try {
+        child.kill(signal);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -374,7 +397,11 @@ function finalizeExit(code = 0) {
   }
   daemonLog.end();
   tauriLog.end();
-  process.stdout.write("\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+  try {
+    process.stdout.write("\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+  } catch {
+    /* terminal may already be gone */
+  }
   console.log(`\nLogs saved:\n  ${daemonLogPath}\n  ${tauriLogPath}`);
   process.exit(code);
 }
@@ -414,8 +441,17 @@ function cleanupAndExit(code = 0) {
 
 process.on("SIGINT", () => cleanupAndExit(130));
 process.on("SIGTERM", () => cleanupAndExit(143));
+if (isWin) {
+  // Windows doesn't have real POSIX signals. Catch SIGHUP (console close)
+  // which Node.js does emulate on Windows.
+  process.on("SIGHUP", () => cleanupAndExit(129));
+}
 process.on("exit", () => {
-  if (!shuttingDown) process.stdout.write("\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+  if (!shuttingDown) {
+    try {
+      process.stdout.write("\x1b[0m\x1b[?1000l\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+    } catch {}
+  }
 });
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -423,11 +459,23 @@ if (!process.stdin.isTTY || !process.stdout.isTTY) {
   process.exit(1);
 }
 
-process.stdout.write("\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[2J\x1b[H");
+// Enable alternate screen buffer, mouse tracking, and hide cursor.
+// On Windows Terminal these are fully supported; on legacy cmd.exe
+// they are no-ops (harmless).
+try {
+  process.stdout.write("\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[2J\x1b[H");
+} catch {
+  // Ignore — terminal may not support these sequences.
+}
 
-process.stdin.setEncoding("utf8");
-process.stdin.setRawMode(true);
-process.stdin.resume();
+try {
+  process.stdin.setEncoding("utf8");
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+} catch (e) {
+  console.error(`Failed to set raw mode: ${e.message}`);
+  process.exit(1);
+}
 process.stdin.on("data", (input) => {
   let handled = false;
   const mouseRe = new RegExp(`${ESC}\\[<(\\d+);(\\d+);(\\d+)([mM])`, "g");

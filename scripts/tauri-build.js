@@ -224,7 +224,7 @@ for (const arg of rawSubArgs) {
 }
 
 const hasInteractiveTty = !!process.stdin.isTTY && !!process.stdout.isTTY;
-const tuiEnabledByDefault = !isWin; // Windows terminals still fail too often with raw-mode TUI panes.
+const tuiEnabledByDefault = true; // TUI dev mode for all platforms (Windows Terminal, iTerm2, most Linux terminals)
 const tuiEnabled = process.env.SKILL_TAURI_TUI === "1" || (process.env.SKILL_TAURI_TUI !== "0" && tuiEnabledByDefault);
 const shouldLaunchDevTui = subcommand === "dev" && !tuiPaneRole && tuiEnabled && hasInteractiveTty;
 
@@ -238,11 +238,9 @@ if (shouldLaunchDevTui) {
     });
     process.exit(0);
   } catch (e) {
-    if (isWin) {
-      console.warn("⚠ tauri-dev-tui failed on Windows; falling back to standard dev mode.");
-    } else {
-      throw e;
-    }
+    // TUI failed — fall back to standard (non-TUI) dev mode.
+    // This handles terminals that don't support raw mode or alternate screen.
+    console.warn(`⚠ TUI dev mode failed (${e.message ?? e}); falling back to standard dev mode.`);
   }
 }
 
