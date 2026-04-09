@@ -12481,7 +12481,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skill"
-version = "0.0.87"
+version = "0.0.88"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -17504,9 +17504,9 @@ dependencies = [
 
 [[package]]
 name = "xcap"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "669eca0840c322f46ab68505a7e4328421b86127eeead1faed6bfc827dc77713"
+checksum = "03d20dc4057d755e2b78da287f9057065a89c507af69e1a5eac19e868c21cd8a"
 dependencies = [
  "dispatch2",
  "image",
