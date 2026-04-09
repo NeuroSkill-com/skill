@@ -60,6 +60,25 @@ function runPowerShell(args, options = {}) {
   });
 }
 
+function resolveTauriCliBaseCommand() {
+  const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
+  if (useCargo) return ["cargo", "tauri"];
+
+  // Prefer local project-installed CLI so we do not depend on npm/npx being on PATH.
+  const localBin = isWin
+    ? resolve(root, "node_modules", ".bin", "tauri.cmd")
+    : resolve(root, "node_modules", ".bin", "tauri");
+  if (existsSync(localBin)) return [localBin];
+
+  const localJs = resolve(root, "node_modules", "@tauri-apps", "cli", "tauri.js");
+  if (existsSync(localJs)) return [process.execPath, localJs];
+
+  if (commandExists("npm")) return ["npm", "exec", "--", "tauri"];
+  if (commandExists("npx")) return ["npx", "tauri"];
+
+  return null;
+}
+
 function parseExecutableFromWrapper(rawWrapper) {
   const wrapper = (rawWrapper || "").trim();
   if (!wrapper) return "";
@@ -234,18 +253,11 @@ const needsSetup = subcommand === "dev" || subcommand === "build";
 
 // ── Pass-through for subcommands that don't need setup ───────────────────────
 if (!needsSetup) {
-  const passCmd =
-    process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri")
-      ? ["cargo", "tauri"]
-      : commandExists("npm")
-        ? ["npm", "exec", "--", "tauri"]
-        : commandExists("npx")
-          ? ["npx", "tauri"]
-          : null;
+  const passCmd = resolveTauriCliBaseCommand();
 
   if (!passCmd) {
     throw new Error(
-      "Could not find a Tauri CLI runner. Install one of: cargo-tauri, npx, or npm (for 'npm exec tauri').",
+      "Could not find a Tauri CLI runner. Install one of: cargo-tauri, local @tauri-apps/cli, npx, or npm.",
     );
   }
 
@@ -581,18 +593,11 @@ if (hasLldLink) {
 // locally so it always matches the host CPU.
 //
 // Set TAURI_USE_NPX=1 to force the old npx path.
-const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
-const tauriCmd = useCargo
-  ? ["cargo", "tauri"]
-  : commandExists("npm")
-    ? ["npm", "exec", "--", "tauri"]
-    : commandExists("npx")
-      ? ["npx", "tauri"]
-      : null;
+const tauriCmd = resolveTauriCliBaseCommand();
 
 if (!tauriCmd) {
   throw new Error(
-    "Could not find a Tauri CLI runner. Install one of: cargo-tauri, npx, or npm (for 'npm exec tauri').",
+    "Could not find a Tauri CLI runner. Install one of: cargo-tauri, local @tauri-apps/cli, npx, or npm.",
   );
 }
 
