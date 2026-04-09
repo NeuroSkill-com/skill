@@ -244,7 +244,7 @@ function stopPolling() {
 // ── Device actions ─────────────────────────────────────────────────────────
 async function revokeDevice(clientId: string) {
   try {
-    await api("/v1/iroh/clients/revoke", "POST", { id: clientId });
+    await api(`/v1/iroh/clients/${clientId}/revoke`, "POST");
   } catch (e: any) {
     err = String(e?.message || e);
   }
@@ -284,8 +284,7 @@ async function savePermissions() {
   saving = true;
   err = "";
   try {
-    await api("/v1/iroh/clients/scope", "POST", {
-      id: editingClientId,
+    await api(`/v1/iroh/clients/${editingClientId}/scope`, "POST", {
       scope: editScope,
       groups: editScope === "custom" ? [...editGroups] : undefined,
       allow: editScope === "custom" && editAllow.length ? editAllow : undefined,

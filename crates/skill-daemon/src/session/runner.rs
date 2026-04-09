@@ -1712,7 +1712,11 @@ mod tests {
         .await
         .unwrap();
 
-        let adapter = IrohRemoteAdapter::new(rx, "peer:test".to_string());
+        let adapter = IrohRemoteAdapter::new(
+            rx,
+            "peer:test".to_string(),
+            std::sync::Arc::new(std::sync::Mutex::new(None)),
+        );
 
         let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
         run_adapter_session(state, cancel_rx, Box::new(adapter)).await;

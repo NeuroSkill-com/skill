@@ -25,10 +25,16 @@ use super::{
     BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame, PpgFrame,
 };
 
-use skill_iroh::RemoteDeviceEvent;
+use skill_iroh::{RemoteDeviceEvent, SharedDeviceEventTx};
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 
 // ── IrohRemoteAdapter ─────────────────────────────────────────────────────────
+
+/// No data watchdog: if the remote sends nothing for this duration the session
+/// ends cleanly.  Covers the case where the QUIC connection dropped without an
+/// explicit MSG_DEVICE_DISCONNECTED (e.g. phone out of range, app killed).
+const WATCHDOG_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct IrohRemoteAdapter {
     rx: mpsc::Receiver<RemoteDeviceEvent>,
@@ -43,14 +49,19 @@ pub struct IrohRemoteAdapter {
     /// re-stamped to `last_ts + epsilon` so the pipeline never sees
     /// out-of-order data.
     last_emitted_ts: i64,
+    /// Shared tx slot — cleared in Drop so subsequent iroh messages get
+    /// "no active session" instead of "event channel closed".
+    cleanup_slot: SharedDeviceEventTx,
 }
 
 impl IrohRemoteAdapter {
     /// Create a new adapter that reads events from the given receiver.
     ///
-    /// Starts with a default Muse-like descriptor.  If a `DeviceConnected`
-    /// event arrives, the descriptor is updated to match the actual device.
-    pub fn new(rx: mpsc::Receiver<RemoteDeviceEvent>, peer_id: String) -> Self {
+    /// `cleanup_slot` is the shared tx slot in the daemon state.  When this
+    /// adapter is dropped (session ends), the slot is cleared to `None` so
+    /// any subsequent iroh messages log "no active session" rather than
+    /// "event channel closed".
+    pub fn new(rx: mpsc::Receiver<RemoteDeviceEvent>, peer_id: String, cleanup_slot: SharedDeviceEventTx) -> Self {
         Self {
             rx,
             desc: DeviceDescriptor {
@@ -75,6 +86,7 @@ impl IrohRemoteAdapter {
             peer_id,
             got_connected: false,
             last_emitted_ts: 0,
+            cleanup_slot,
         }
     }
 
@@ -235,6 +247,16 @@ impl IrohRemoteAdapter {
     }
 }
 
+impl Drop for IrohRemoteAdapter {
+    fn drop(&mut self) {
+        // Clear the shared tx slot so subsequent iroh messages log
+        // "no active session" instead of "event channel closed".
+        if let Ok(mut g) = self.cleanup_slot.lock() {
+            *g = None;
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl DeviceAdapter for IrohRemoteAdapter {
     fn descriptor(&self) -> &DeviceDescriptor {
@@ -248,8 +270,21 @@ impl DeviceAdapter for IrohRemoteAdapter {
                 return Some(ev);
             }
 
-            // Wait for next remote event
-            let remote_ev = self.rx.recv().await?;
+            // Wait for next remote event — bounded by a watchdog timeout.
+            // If no data arrives within WATCHDOG_TIMEOUT, the QUIC tunnel
+            // is assumed dead and we return None to end the session cleanly.
+            let remote_ev = match timeout(WATCHDOG_TIMEOUT, self.rx.recv()).await {
+                Ok(Some(ev)) => ev,
+                Ok(None) => return None, // channel closed (tx dropped)
+                Err(_elapsed) => {
+                    eprintln!(
+                        "[iroh-remote] no data for {}s — ending session (peer: {})",
+                        WATCHDOG_TIMEOUT.as_secs(),
+                        self.peer_id
+                    );
+                    return None;
+                }
+            };
 
             match remote_ev {
                 RemoteDeviceEvent::DeviceConnected { descriptor_json, .. } => {
@@ -385,7 +420,8 @@ mod tests {
     #[tokio::test]
     async fn adapter_handles_sensor_chunk() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test-peer".into());
+        let mut adapter =
+            IrohRemoteAdapter::new(rx, "test-peer".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         // Send a sensor chunk
         let chunk = skill_iroh::device_proto::SensorChunk {
@@ -416,7 +452,8 @@ mod tests {
     #[tokio::test]
     async fn adapter_handles_device_connected_json() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test-peer".into());
+        let mut adapter =
+            IrohRemoteAdapter::new(rx, "test-peer".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         let json = serde_json::json!({
             "kind": "muse",
@@ -452,7 +489,8 @@ mod tests {
     #[tokio::test]
     async fn adapter_handles_location() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test-peer".into());
+        let mut adapter =
+            IrohRemoteAdapter::new(rx, "test-peer".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         tx.send(RemoteDeviceEvent::Location {
             seq: 1,
@@ -482,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_interleaves_imu() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         let chunk = skill_iroh::device_proto::SensorChunk {
             sample_rate: 256.0,
@@ -523,7 +561,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_monotonic_timestamps_backlog() {
         let (tx, rx) = mpsc::channel(8);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         // Send a "live" chunk at timestamp T=120500
         let live_chunk = skill_iroh::device_proto::SensorChunk {
@@ -584,7 +622,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_monotonic_same_timestamp() {
         let (tx, rx) = mpsc::channel(8);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         let ts = 20260315120000i64;
         for seq in 1..=2 {
@@ -637,7 +675,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_disconnect_returns_none() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         tx.send(RemoteDeviceEvent::DeviceDisconnected {
             seq: 1,
@@ -654,7 +692,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_channel_close_returns_none() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         drop(tx); // simulate tunnel drop
 
@@ -666,7 +704,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_attentivu_descriptor() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         let json = serde_json::json!({
             "kind": "attentivu",
@@ -707,7 +745,7 @@ mod tests {
     #[tokio::test]
     async fn adapter_phone_info() {
         let (tx, rx) = mpsc::channel(4);
-        let mut adapter = IrohRemoteAdapter::new(rx, "test".into());
+        let mut adapter = IrohRemoteAdapter::new(rx, "test".into(), std::sync::Arc::new(std::sync::Mutex::new(None)));
 
         let info_json = serde_json::json!({
             "phone_model": "iPhone16,1",

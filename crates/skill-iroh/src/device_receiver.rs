@@ -111,16 +111,13 @@ pub async fn handle_device_proxy_connection(
         }
     }
 
-    eprintln!("[iroh-device] peer {peer_id} disconnected — sending synthetic DeviceDisconnected");
-
-    // The phone may not have had a chance to send MSG_DEVICE_DISCONNECTED
-    // (e.g. app killed, phone out of range, iroh relay down).  Send a
-    // synthetic disconnect so the session runner ends the recording
-    // promptly instead of waiting for the data watchdog timeout.
-    let maybe_tx = device_tx.lock().ok().and_then(|g| g.clone());
-    if let Some(tx) = maybe_tx {
-        let _ = tx.try_send(RemoteDeviceEvent::DeviceDisconnected { seq: 0, timestamp: 0 });
-    }
+    // QUIC connections are transient — the phone may reconnect and a new
+    // handle_device_proxy_connection task will be spawned for it.  We do NOT
+    // send a synthetic DeviceDisconnected here because doing so would
+    // immediately terminate the active session.  Instead, the session ends via:
+    //   • an explicit MSG_DEVICE_DISCONNECTED from iOS, or
+    //   • the IrohRemoteAdapter watchdog timeout (no data for 60 s).
+    eprintln!("[iroh-device] peer {peer_id} QUIC connection closed (transient — not ending session)");
 }
 
 async fn handle_one_message(

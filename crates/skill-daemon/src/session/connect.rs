@@ -785,7 +785,14 @@ async fn connect_iroh_remote(state: &AppState, target: &str) -> anyhow::Result<B
         *g = Some(tx);
     }
 
-    Ok(Box::new(IrohRemoteAdapter::new(rx, peer_id)))
+    // Pass the shared slot so the adapter clears it on drop, turning
+    // post-session iroh messages into "no active session" rather than
+    // "event channel closed".
+    Ok(Box::new(IrohRemoteAdapter::new(
+        rx,
+        peer_id,
+        state.iroh_device_tx.clone(),
+    )))
 }
 
 async fn connect_lsl(target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
