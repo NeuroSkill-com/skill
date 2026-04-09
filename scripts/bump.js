@@ -2,6 +2,8 @@
 import { execSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 
+// import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function readText(path) {
