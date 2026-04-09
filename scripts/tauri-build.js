@@ -952,13 +952,16 @@ if (!tuiDaemonPane) {
   try {
     runTauriWithArgs(finalArgs);
   } catch (error) {
+    // 0xc000013a = STATUS_CONTROL_C_EXIT — Windows Ctrl+C graceful exit
+    const isWindowsCtrlC = Number(error?.status) === 3221225786;
     const isExpectedTuiShutdown =
       subcommand === "dev" &&
-      (tuiTauriPane || tuiDaemonPane) &&
-      (error?.signal === "SIGTERM" ||
-        error?.signal === "SIGINT" ||
-        Number(error?.status) === 143 ||
-        Number(error?.status) === 130);
+      (isWindowsCtrlC ||
+        ((tuiTauriPane || tuiDaemonPane) &&
+          (error?.signal === "SIGTERM" ||
+            error?.signal === "SIGINT" ||
+            Number(error?.status) === 143 ||
+            Number(error?.status) === 130)));
 
     if (isExpectedTuiShutdown) {
       process.exit(0);
