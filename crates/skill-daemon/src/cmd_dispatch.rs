@@ -1748,8 +1748,8 @@ pub async fn dispatch_llm_chat_streaming(
     let tx_for_delta = ws_tx.clone();
     let delta_callback = move |delta: &str| {
         let msg = json!({ "command": "llm_chat", "type": "delta", "text": delta });
-        // Use blocking send since the callback is sync.
-        let _ = tx_for_delta.blocking_send(serde_json::to_string(&msg).unwrap_or_default());
+        // Use try_send (non-blocking) — safe from async context; drops token if buffer full.
+        let _ = tx_for_delta.try_send(serde_json::to_string(&msg).unwrap_or_default());
     };
 
     let result =
