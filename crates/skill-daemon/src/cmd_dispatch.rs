@@ -30,8 +30,10 @@ pub async fn dispatch(state: AppState, msg: Value) -> Value {
             "sessions" => cmd_sessions(&state).await,
             "session_metrics" => cmd_session_metrics(&state, &msg).await,
 
-            // ── Device ──────────────────────────────────────────────────────
+            // ── Device / session control ─────────────────────────────────────
             "devices" => cmd_devices(&state).await,
+            "start_session" => cmd_start_session(&state, &msg).await,
+            "cancel_session" => cmd_cancel_session(&state).await,
 
             // ── Labels ──────────────────────────────────────────────────────
             "label" => cmd_label(&state, &msg).await,
@@ -310,6 +312,37 @@ async fn cmd_session_metrics(state: &AppState, msg: &Value) -> Result<Value, Str
 async fn cmd_devices(state: &AppState) -> Result<Value, String> {
     let devices = state.devices.lock().map(|g| g.clone()).unwrap_or_default();
     Ok(json!({ "devices": devices }))
+}
+
+// ── Session control ──────────────────────────────────────────────────────────
+
+/// Start (or restart) a device session.  The `target` field selects the device:
+/// e.g. `"peer:<endpoint_id>"` for an iroh-remote phone stream.
+/// Mirrors `POST /v1/control/start-session` for WS / cmd clients.
+async fn cmd_start_session(state: &AppState, msg: &Value) -> Result<Value, String> {
+    let target = str_field(msg, "target");
+
+    // Reject unpaired hardware targets (same guard as the HTTP route).
+    if let Some(ref t) = target {
+        if crate::target_requires_pairing(t) && !crate::is_paired_target(state, t) {
+            return Err("Target device is not paired. Pair it first in Settings → Devices.".into());
+        }
+    }
+
+    crate::spawn_session_for_target(state, target.as_deref());
+
+    let state_str = if target.is_some() { "connecting" } else { "disconnected" };
+    Ok(json!({ "state": state_str, "target": target }))
+}
+
+/// Cancel the running device session (if any).
+async fn cmd_cancel_session(state: &AppState) -> Result<Value, String> {
+    if let Ok(mut slot) = state.session_handle.lock() {
+        if let Some(handle) = slot.take() {
+            let _ = handle.cancel_tx.send(());
+        }
+    }
+    Ok(json!({ "state": "disconnected" }))
 }
 
 // ── Labels ───────────────────────────────────────────────────────────────────

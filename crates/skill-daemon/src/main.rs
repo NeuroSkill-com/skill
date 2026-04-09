@@ -576,7 +576,7 @@ fn persist_paired_devices(state: &AppState) {
 
 /// Spawn the appropriate session runner for the given target device.
 /// Cancels any existing session first.
-fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
+pub(crate) fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
     // Cancel any existing session.
     if let Ok(mut slot) = state.session_handle.lock() {
         if let Some(handle) = slot.take() {
@@ -628,12 +628,16 @@ fn resolve_target_fields(state: &AppState, target: Option<&str>) -> (Option<Stri
     (id, Some(t.to_string()))
 }
 
-fn target_requires_pairing(target: &str) -> bool {
+pub(crate) fn target_requires_pairing(target: &str) -> bool {
     let lower = target.to_ascii_lowercase();
+    // Iroh remote peers are pre-authenticated by the iroh tunnel (TOTP-paired).
+    if lower.starts_with("peer:") {
+        return false;
+    }
     lower.contains(':') || lower == "neurosky" || lower.starts_with("muse")
 }
 
-fn is_paired_target(state: &AppState, target: &str) -> bool {
+pub(crate) fn is_paired_target(state: &AppState, target: &str) -> bool {
     state
         .status
         .lock()
