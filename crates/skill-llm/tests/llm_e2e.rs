@@ -18,12 +18,12 @@
 
 #![cfg(feature = "llm")]
 
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{atomic::Ordering, Arc};
 use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use skill_llm::catalog::{DownloadProgress, DownloadState, LlmCatalog, LlmModelEntry};
+use skill_llm::catalog::{LlmCatalog, LlmModelEntry};
 use skill_llm::config::LlmConfig;
 use skill_llm::engine::protocol::GenParams;
 use skill_llm::{init, new_log_buffer, run_chat_with_builtin_tools, LlmEventEmitter, NoopEmitter};
@@ -355,26 +355,24 @@ async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn best_test_model(catalog: &LlmCatalog) -> Option<&LlmModelEntry> {
-    let non_mmproj: Vec<&LlmModelEntry> = catalog.entries.iter().filter(|e| !e.is_mmproj()).collect();
-    // Smallest recommended model with params >= 1.5B — needs to be large
-    // enough for reliable tool-call generation.  Models below 1.5B (e.g.
-    // 1.2B) fail to produce tool calls consistently on CPU.
-    let mut capable: Vec<&&LlmModelEntry> = non_mmproj
+fn best_cached_test_model(catalog: &LlmCatalog) -> Option<&LlmModelEntry> {
+    let cached_non_mmproj: Vec<&LlmModelEntry> = catalog
+        .entries
         .iter()
-        .filter(|e| e.recommended && e.params_b >= 1.5)
+        .filter(|e| !e.is_mmproj() && e.resolve_cached().is_some())
         .collect();
+
+    // Smallest cached model with params >= 1.5B — needs to be large enough
+    // for reliable tool-call generation. Models below 1.5B (e.g. 1.2B)
+    // can fail to produce tool calls consistently on CPU.
+    let mut capable: Vec<&&LlmModelEntry> = cached_non_mmproj.iter().filter(|e| e.params_b >= 1.5).collect();
     capable.sort_by(|a, b| a.size_gb.total_cmp(&b.size_gb));
     if let Some(e) = capable.first() {
         return Some(e);
     }
-    // Fallback: smallest recommended
-    let mut rec: Vec<&&LlmModelEntry> = non_mmproj.iter().filter(|e| e.recommended).collect();
-    rec.sort_by(|a, b| a.size_gb.total_cmp(&b.size_gb));
-    if let Some(e) = rec.first() {
-        return Some(e);
-    }
-    non_mmproj
+
+    // Fallback: smallest cached non-mmproj model.
+    cached_non_mmproj
         .iter()
         .min_by(|a, b| a.size_gb.total_cmp(&b.size_gb))
         .copied()
@@ -718,12 +716,25 @@ async fn e2e_download_start_and_chat() {
         detail: format!("port={mock_port}"),
     });
 
-    // ── 3. Load catalog and find test model ──────────────────────────────────
+    // ── 3. Load catalog and select a cached test model (offline-only) ──────
     let t = Instant::now();
     let mut catalog = LlmCatalog::load(&skill_dir);
-    let entry = best_test_model(&catalog)
-        .expect("catalog should contain at least one suitable model")
-        .clone();
+    let Some(entry) = best_cached_test_model(&catalog).cloned() else {
+        let detail = "no cached non-mmproj model found; skipping offline e2e run".to_string();
+        eprintln!("[step 3] ⚠️  {detail}");
+        report.steps.push(Step {
+            name: "Load catalog + select cached model",
+            duration: t.elapsed(),
+            status: StepStatus::Warn(detail),
+            detail: "Set HF_HOME (or seed HF cache) to run full llm_e2e offline.".into(),
+        });
+
+        let _ = mock_shutdown.send(());
+        let _ = std::fs::remove_dir_all(&skill_dir);
+        report.print_final();
+        return;
+    };
+
     report.model_name = entry.filename.clone();
     report.model_size = entry.size_gb;
     report.model_quant = entry.quant.clone();
@@ -731,44 +742,24 @@ async fn e2e_download_start_and_chat() {
         "{} ({:.2} GB, quant={}, params={:.1}B, family={}, max_ctx={})",
         entry.filename, entry.size_gb, entry.quant, entry.params_b, entry.family_name, entry.max_context_length,
     );
-    eprintln!("[step 3] selected: {detail}");
+    eprintln!("[step 3] selected cached: {detail}");
     report.steps.push(Step {
-        name: "Load catalog + select model",
+        name: "Load catalog + select cached model",
         duration: t.elapsed(),
         status: StepStatus::Ok,
         detail,
     });
 
-    // ── 4. Download the model ────────────────────────────────────────────────
+    // ── 4. Resolve cached model path (no network, no HF metadata API) ───────
     let t = Instant::now();
-    let progress = Arc::new(Mutex::new(DownloadProgress {
-        filename: entry.filename.clone(),
-        state: DownloadState::Downloading,
-        status_msg: None,
-        progress: 0.0,
-        cancelled: false,
-        pause_requested: false,
-        current_shard: 0,
-        total_shards: entry.shard_count() as u16,
-    }));
-    eprintln!("[step 4] downloading {} ({:.2} GB) …", entry.filename, entry.size_gb);
-    let local_path = skill_llm::catalog::download_model(&entry, &progress).expect("download should succeed");
-    let dl_dur = t.elapsed();
-    let dl_speed = if dl_dur.as_secs_f64() > 0.0 {
-        (entry.size_gb as f64 * 1024.0) / dl_dur.as_secs_f64()
-    } else {
-        0.0
-    };
-    let detail = format!(
-        "{:.1}s ({:.1} MB/s) → {}",
-        dl_dur.as_secs_f64(),
-        dl_speed,
-        local_path.display()
-    );
-    eprintln!("[step 4] done: {detail}");
+    let local_path = entry
+        .resolve_cached()
+        .expect("selected cached model should resolve from local HF cache");
+    let detail = format!("offline cache hit → {}", local_path.display());
+    eprintln!("[step 4] {detail}");
     report.steps.push(Step {
-        name: "Download model",
-        duration: dl_dur,
+        name: "Resolve cached model",
+        duration: t.elapsed(),
         status: StepStatus::Ok,
         detail,
     });
