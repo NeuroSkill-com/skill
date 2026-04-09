@@ -60,15 +60,16 @@ jobs:
           COVERAGE_MIN_LINES: ${{ github.event.inputs.coverage_min_lines || '55' }}
         run: |
           cargo llvm-cov clean --workspace
+          # Use default feature sets in CI coverage.
+          # `--all-features` enables CUDA-only paths (llm-cuda) that fail on
+          # GitHub-hosted Linux runners without the CUDA toolkit.
           cargo llvm-cov \
             --workspace \
-            --all-features \
             --lcov \
             --output-path lcov.info
 
           cargo llvm-cov \
             --workspace \
-            --all-features \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 
