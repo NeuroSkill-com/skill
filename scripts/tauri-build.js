@@ -855,6 +855,41 @@ if (subcommand === "build") {
   }
 }
 
+/**
+ * Kill whatever process is currently bound to `port` so the freshly-built
+ * local daemon can take ownership.  Cross-platform (Windows + Unix).
+ */
+function killPortOwner(port) {
+  try {
+    if (platform() === "win32") {
+      // netstat -ano prints lines like:
+      //   TCP  0.0.0.0:18444  ...  LISTENING  <PID>
+      const out = execSync(`netstat -ano`, { encoding: "utf8", timeout: 5000 });
+      const re = new RegExp(`[:\\s]${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, "m");
+      const m = out.match(re);
+      if (m) {
+        const pid = m[1];
+        console.log(`[daemon] killing existing process on port ${port} (PID ${pid})…`);
+        execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
+      }
+    } else {
+      // lsof -t gives a bare PID list for processes holding the port.
+      const out = execSync(`lsof -t -i tcp:${port}`, { encoding: "utf8", timeout: 5000 }).trim();
+      if (out) {
+        console.log(`[daemon] killing existing process on port ${port} (PID ${out})…`);
+        execSync(`kill -9 ${out}`, { stdio: "ignore" });
+      }
+    }
+    // Give the OS a moment to release the port.
+    execSync(platform() === "win32" ? "ping -n 2 127.0.0.1 > nul" : "sleep 0.3", {
+      stdio: "ignore",
+      timeout: 2000,
+    });
+  } catch {
+    // Best-effort — ignore if nothing was found or kill failed.
+  }
+}
+
 let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
   console.log("\n🔧 Building skill-daemon…");
@@ -876,7 +911,18 @@ if (subcommand === "dev" && !tuiTauriPane) {
 
     if (!daemonBin) {
       console.warn("⚠ skill-daemon binary not found after build — Tauri will attempt auto-launch");
-    } else if (tuiDaemonPane) {
+    } else {
+      // Kill any stale daemon (system service or leftover dev session) so the
+      // freshly-built local binary can bind the port.
+      const daemonAddr = process.env.SKILL_DAEMON_ADDR || "127.0.0.1:18444";
+      const daemonPort = parseInt(daemonAddr.split(":").pop(), 10) || 18444;
+      killPortOwner(daemonPort);
+      // Tell Tauri's ensure_daemon_running to use this exact binary if it ever
+      // needs to restart the daemon (e.g. after a crash).
+      process.env.SKILL_DAEMON_BIN = daemonBin;
+    }
+
+    if (daemonBin && tuiDaemonPane) {
       console.log(`\n🚀 Starting daemon (TUI pane): ${daemonBin}`);
       const { spawn } = await import("node:child_process");
       daemonChild = spawn(daemonBin, [], {
@@ -893,7 +939,7 @@ if (subcommand === "dev" && !tuiTauriPane) {
         daemonChild.once("error", () => resolve(1));
       });
       process.exit(exitCode);
-    } else {
+    } else if (daemonBin) {
       console.log(`\n🚀 Starting daemon: ${daemonBin}`);
       const { spawn } = await import("node:child_process");
       daemonChild = spawn(daemonBin, [], {
