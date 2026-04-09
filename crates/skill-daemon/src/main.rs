@@ -2178,6 +2178,40 @@ enum AuthDecision {
 }
 
 fn auth_decision(headers: &HeaderMap, request: &axum::extract::Request, state: &AppState) -> AuthDecision {
+    // ── Iroh peer bypass ──────────────────────────────────────────────────
+    // Requests arriving through the iroh tunnel originate from a local TCP
+    // connection whose source port is registered in iroh_peer_map.
+    // The iroh tunnel already provides end-to-end encrypted, cryptographically
+    // verified peer identity, so we trust it in place of a bearer token.
+    // Registered peers get full access; unregistered peers may only reach the
+    // registration endpoint so they can complete the TOTP handshake.
+    let src_port = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.port())
+        .unwrap_or(0);
+    if src_port != 0 {
+        let maybe_peer = state.iroh_peer_map.lock().ok().and_then(|m| m.get(&src_port).cloned());
+        if let Some(peer_id) = maybe_peer {
+            let is_registered = state
+                .iroh_auth
+                .lock()
+                .map(|a| a.is_endpoint_allowed(&peer_id))
+                .unwrap_or(false);
+            if is_registered {
+                return AuthDecision::Allowed;
+            }
+            // Unregistered peer — only the registration endpoint is open.
+            let path = request.uri().path();
+            let stripped = path.strip_prefix("/v1").unwrap_or(path);
+            if stripped == "/iroh/clients/register" {
+                return AuthDecision::Allowed;
+            }
+            return AuthDecision::MissingOrInvalid;
+        }
+    }
+
+    // ── Bearer token auth ─────────────────────────────────────────────────
     let Some(token) = extract_bearer_token(headers, request) else {
         return AuthDecision::MissingOrInvalid;
     };
@@ -2577,6 +2611,94 @@ mod tests {
             auth_decision(&headers, &req_post, &state),
             AuthDecision::Forbidden
         ));
+    }
+
+    #[test]
+    fn auth_decision_iroh_registered_peer_allowed() {
+        use std::net::SocketAddr;
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+
+        // Register a client in iroh_auth
+        let peer_id = "aabbccdd1122334455667788aabbccdd1122334455667788aabbccdd11223344";
+        {
+            let mut auth = state.iroh_auth.lock().unwrap();
+            let (_, _, _) = auth.create_totp("test").unwrap();
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(td.path().join("iroh_auth.json")).unwrap()).unwrap();
+            let entry = skill_iroh::IrohTotpEntry {
+                id: raw["totp"][0]["id"].as_str().unwrap().to_string(),
+                name: "test".into(),
+                secret_b32: raw["totp"][0]["secret_b32"].as_str().unwrap().to_string(),
+                created_at: 0,
+                revoked_at: None,
+                last_used_at: None,
+            };
+            let otp = skill_iroh::totp_from_entry(&entry).unwrap().generate_current().unwrap();
+            let totp_id = raw["totp"][0]["id"].as_str().unwrap().to_string();
+            auth.register_client(peer_id, &otp, Some(&totp_id), Some("phone"), None)
+                .unwrap();
+        }
+
+        // Simulate iroh peer: register port 54321 → peer_id in peer_map
+        state.iroh_peer_map.lock().unwrap().insert(54321, peer_id.to_string());
+
+        // Build a request that looks like it comes from that local port
+        let addr: SocketAddr = "127.0.0.1:54321".parse().unwrap();
+        let req = Request::builder()
+            .uri("/v1/status")
+            .extension(ConnectInfo(addr))
+            .body(Body::empty())
+            .unwrap();
+        assert!(
+            matches!(auth_decision(&HeaderMap::new(), &req, &state), AuthDecision::Allowed),
+            "registered iroh peer should be allowed without bearer token"
+        );
+    }
+
+    #[test]
+    fn auth_decision_iroh_unregistered_peer_registration_only() {
+        use std::net::SocketAddr;
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+
+        // Register port for an unknown/unregistered peer
+        state
+            .iroh_peer_map
+            .lock()
+            .unwrap()
+            .insert(54322, "unregistered-peer-id".to_string());
+
+        let addr: SocketAddr = "127.0.0.1:54322".parse().unwrap();
+
+        // Registration endpoint should be allowed
+        let req_reg = Request::builder()
+            .method("POST")
+            .uri("/v1/iroh/clients/register")
+            .extension(ConnectInfo(addr))
+            .body(Body::empty())
+            .unwrap();
+        assert!(
+            matches!(
+                auth_decision(&HeaderMap::new(), &req_reg, &state),
+                AuthDecision::Allowed
+            ),
+            "unregistered iroh peer should reach registration endpoint"
+        );
+
+        // Any other endpoint should be denied
+        let req_status = Request::builder()
+            .uri("/v1/status")
+            .extension(ConnectInfo(addr))
+            .body(Body::empty())
+            .unwrap();
+        assert!(
+            matches!(
+                auth_decision(&HeaderMap::new(), &req_status, &state),
+                AuthDecision::MissingOrInvalid
+            ),
+            "unregistered iroh peer should be denied non-registration endpoints"
+        );
     }
 
     fn test_app(state: AppState) -> Router {
