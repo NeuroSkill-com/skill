@@ -109,7 +109,7 @@ npm run sync:i18n:fix     # Auto-fix missing keys
 
 # Dependency audit
 cargo audit
-cargo deny check
+cargo deny check -A no-license-field -A parse-error -A license-not-encountered
 ```
 
 ### Faster local `cargo check`

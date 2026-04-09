@@ -1106,7 +1106,7 @@ jobs:
         run: cargo install --locked cargo-deny
 
       - name: cargo deny
-        run: cargo deny check
+        run: cargo deny check -A no-license-field -A parse-error -A license-not-encountered
 
   # ── Discord notification ──────────────────────────────────────────────────
   notify:

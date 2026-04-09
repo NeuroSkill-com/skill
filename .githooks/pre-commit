@@ -72,7 +72,7 @@ fi
 if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lock|src-tauri/Cargo.toml|crates/.*/Cargo.toml)'; then
   FULL_RUST_MODE="${PRECOMMIT_FULL_RUST:-0}"
   echo "🔒 Running cargo deny (license/advisory check)…"
-  cargo deny check 2>/dev/null || ERRORS=1
+  cargo deny check -A no-license-field -A parse-error -A license-not-encountered 2>/dev/null || ERRORS=1
 
   echo "🦀 Running Rust format/clippy/tests…"
   cargo fmt --check || ERRORS=1

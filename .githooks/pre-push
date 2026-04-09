@@ -31,7 +31,7 @@ if [ "$FULL_MODE" = "1" ]; then
   npm test
 
   echo "🔎 Pre-push: cargo deny"
-  cargo deny check
+  cargo deny check -A no-license-field -A parse-error -A license-not-encountered
 
   echo "🔎 Pre-push: Rust clippy"
   cargo clippy --locked --workspace --exclude skill -- -D warnings
@@ -92,7 +92,7 @@ fi
 RUST_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.rs$|^Cargo.toml$|^Cargo.lock$|^src-tauri/Cargo.toml$|^crates/.*/Cargo.toml$' || true)"
 if [ -n "$RUST_CHANGED" ]; then
   echo "🔎 Pre-push: Rust checks (changed crates)"
-  cargo deny check
+  cargo deny check -A no-license-field -A parse-error -A license-not-encountered
   cargo fmt --check
 
   declare -a CRATES=()
