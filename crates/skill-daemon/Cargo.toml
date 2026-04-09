@@ -74,7 +74,7 @@ skill-oura          = { path = "../skill-oura" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-exg           = { path = "../skill-exg" }
 neurofield          = { version = "0.0.1", default-features = false }
-brainbit            = { version = "0.0.1", default-features = false }
+brainbit            = { version = "0.0.2", default-features = false }
 gtec                = { version = "0.0.2", default-features = false }
 neurosky            = { version = "0.0.1", default-features = false }
 neurosity           = { version = "0.0.1", default-features = false }

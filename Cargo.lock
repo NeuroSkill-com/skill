@@ -1050,10 +1050,11 @@ checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
 name = "brainbit"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd4a0fe309c3c602e988f7593bdbf451d08ec75232f786015378f0d2bc2457be"
+checksum = "bc1683e979143ca36761fe3c0bd473c5a4b468c135318ea6556fbcdf5823dfac"
 dependencies = [
+ "ctrlc",
  "env_logger",
  "libc",
  "libloading 0.8.9",
