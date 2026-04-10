@@ -241,14 +241,13 @@ async function startCalibration() {
       if (!(await runCountdown(action.duration_secs))) break;
       try {
         const actionEnd = Math.floor(Date.now() / 1000);
-        await daemonInvoke("submit_label", { 
-          labelStartUtc: actionStart, 
+        await daemonInvoke("submit_label", {
+          labelStartUtc: actionStart,
           text: action.label,
           eeg_start: actionStart,
-          eeg_end: actionEnd
+          eeg_end: actionEnd,
         });
       } catch (e) {
-        console.error("Failed to submit label to daemon:", e);
         running = false;
         phase = { kind: "idle", actionIndex: 0, loop: 1 };
         ttsSpeak("Error: Failed to record calibration data. Please check daemon connection.");
