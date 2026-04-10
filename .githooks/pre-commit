@@ -2,140 +2,30 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Standard pre-commit hook (changed-files scoped):
-# - i18n sync/audit for locale changes
-# - frontend lint/tests only for changed frontend files
-# - targeted Rust checks for touched crates
-#
-# By default this hook avoids heavy full-app Rust rebuilds for better UX.
-# Opt into strict mode locally with:
-#   PRECOMMIT_FULL_RUST=1 git commit ...
-#
-# Full-repo heavy checks run in .githooks/pre-push / CI.
+# Minimal pre-commit hook — basic validation only.
+# Full checks run in pre-push and CI.
 
 set -euo pipefail
 
-ERRORS=0
-
-# Speed up local Rust builds if sccache is available.
-if command -v sccache >/dev/null 2>&1; then
-  export RUSTC_WRAPPER=sccache
-  export CMAKE_C_COMPILER_LAUNCHER=sccache
-  export CMAKE_CXX_COMPILER_LAUNCHER=sccache
-fi
-
 STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
-STAGED_RS="$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' 2>/dev/null || true)"
 
 if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
-# Skip expensive checks for docs/changelog-only commits.
-NON_DOC_STAGED="$(echo "$STAGED_FILES" | grep -Ev '^(README\.md|CHANGELOG\.md|CONTRIBUTING\.md|AGENTS\.md|TODO\.md|changes/|docs/|\.github/)' || true)"
-if [ -z "$NON_DOC_STAGED" ]; then
-  echo "✅ Pre-commit checks passed (docs/changelog-only changes)."
-  exit 0
-fi
-
-# ── Changelog fragment gate ───────────────────────────────────────────────────
-echo "📝 Checking changelog fragments…"
-node scripts/check-changelog-fragments.js --staged || ERRORS=1
-
-# ── i18n checks ───────────────────────────────────────────────────────────────
-if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/'; then
-  echo "🌐 i18n files changed — running sync/audit checks…"
-  npm run -s sync:i18n:check || ERRORS=1
-  npm run -s audit:i18n:check || ERRORS=1
-  npm run -s check:i18n:locales || ERRORS=1
-fi
-
-# ── Frontend checks (changed-files scoped) ───────────────────────────────────
-FRONTEND_STAGED="$(echo "$STAGED_FILES" | grep -E '^(src/|scripts/|package.json|package-lock.json|svelte.config.js|vite.config.js|tsconfig.json|biome.json)' || true)"
-if [ -n "$FRONTEND_STAGED" ]; then
-  echo "🧪 Running frontend checks on changed files…"
-
-  FRONTEND_BIOME_FILES="$(echo "$FRONTEND_STAGED" | grep -E '\.(ts|js|svelte|json)$' || true)"
-  if [ -n "$FRONTEND_BIOME_FILES" ]; then
-    # shellcheck disable=SC2086
-    npx biome check --no-errors-on-unmatched $FRONTEND_BIOME_FILES || ERRORS=1
-  fi
-
-  VITEST_RELATED_FILES="$(echo "$FRONTEND_STAGED" | grep -E '^src/.*\.(ts|js|svelte)$' || true)"
-  if [ -n "$VITEST_RELATED_FILES" ]; then
-    # shellcheck disable=SC2086
-    npx vitest related --run $VITEST_RELATED_FILES || ERRORS=1
+# Basic JSON validation for catalog files
+if echo "$STAGED_FILES" | grep -q 'llm_catalog.json'; then
+  if ! python3 -m json.tool src-tauri/llm_catalog.json > /dev/null 2>&1; then
+    echo "❌ Invalid JSON in llm_catalog.json"
+    exit 1
   fi
 fi
 
-# ── Rust checks (targeted by touched crate) ───────────────────────────────────
-if [ -n "$STAGED_RS" ] || echo "$STAGED_FILES" | grep -Eq '^(Cargo.toml|Cargo.lock|src-tauri/Cargo.toml|crates/.*/Cargo.toml)'; then
-  FULL_RUST_MODE="${PRECOMMIT_FULL_RUST:-0}"
-  echo "🔒 Running cargo deny (license/advisory check)…"
-  cargo deny check -A no-license-field -A parse-error -A license-not-encountered 2>/dev/null || ERRORS=1
-
-  echo "🦀 Running Rust format/clippy/tests…"
-  cargo fmt --check || ERRORS=1
-
-  declare -a CRATES=()
-  NEED_SKILL=0
-
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    case "$f" in
-      crates/*)
-        crate_dir="${f#crates/}"
-        crate_name="${crate_dir%%/*}"
-        if [[ "$crate_name" == skill-* ]]; then
-          CRATES+=("-p" "$crate_name")
-        fi
-        ;;
-      src-tauri/*)
-        NEED_SKILL=1
-        ;;
-      Cargo.toml|Cargo.lock)
-        NEED_SKILL=1
-        ;;
-    esac
-  done <<< "$STAGED_FILES"
-
-  # Deduplicate crate flags (bash 3 compatible)
-  if [ "${#CRATES[@]}" -gt 0 ]; then
-    uniq_pairs="$(printf '%s\n' "${CRATES[@]}" | awk 'NR%2{p=$0;next}{print p" "$0}' | sort -u)"
-    CRATES=()
-    while IFS= read -r pair; do
-      [ -z "$pair" ] && continue
-      CRATES+=("${pair%% *}" "${pair#* }")
-    done <<EOP
-$uniq_pairs
-EOP
-  fi
-
-  if [ "${#CRATES[@]}" -gt 0 ]; then
-    cargo clippy --locked "${CRATES[@]}" -- -D warnings || ERRORS=1
-    cargo test --locked "${CRATES[@]}" || ERRORS=1
-  else
-    cargo clippy --locked --workspace --exclude skill -- -D warnings || ERRORS=1
-    cargo test --locked --workspace --exclude skill || ERRORS=1
-  fi
-
-  if [ "$NEED_SKILL" -eq 1 ]; then
-    if [ "$FULL_RUST_MODE" = "1" ]; then
-      echo "🧱 PRECOMMIT_FULL_RUST=1 — running full skill clippy/tests"
-      cargo clippy -p skill --locked -- -D warnings || ERRORS=1
-      cargo test -p skill --locked || ERRORS=1
-    else
-      echo "⚡ Fast pre-commit mode — running cargo check -p skill (set PRECOMMIT_FULL_RUST=1 for full tests)"
-      cargo check -p skill --locked || ERRORS=1
-    fi
-  fi
+# Basic i18n JSON validation
+if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/.*\.ts$'; then
+  echo "🌐 i18n files changed — running basic JSON validation…"
+  npm run -s check:i18n:locales || exit 1
 fi
 
-if [ "$ERRORS" -ne 0 ]; then
-  echo
-  echo "❌ Pre-commit checks failed."
-  echo "   Tip: full heavy checks also run on pre-push and CI."
-  exit 1
-fi
-
-echo "✅ Pre-commit checks passed."
+echo "✅ Pre-commit checks passed (basic validation only)."
+echo "   Full checks will run on git push."

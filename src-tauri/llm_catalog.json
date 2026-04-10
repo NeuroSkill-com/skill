@@ -378,6 +378,19 @@
       "is_mmproj": false,
       "params_b": 1.72,
       "max_context_length": 32768
+    },
+    "nemotron-3-nano-4b": {
+      "name": "Nemotron-3-Nano-4B",
+      "description": "NVIDIA's compact 4B model optimized for efficiency and performance. Ideal for edge devices and resource-constrained environments.",
+      "repo": "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small"
+      ],
+      "is_mmproj": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     }
   },
   "models": [
@@ -3630,6 +3643,14 @@
       "quant": "Q1_0_G128",
       "size_gb": 0.24,
       "description": "1-bit quantization — 13.9× smaller than FP16, runs on any device",
+      "recommended": true
+    },
+    {
+      "family": "nemotron-3-nano-4b",
+      "filename": "NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 2.8,
+      "description": "Recommended — only available quant",
       "recommended": true
     }
   ]
