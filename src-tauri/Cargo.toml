@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.102"
+version = "0.0.103"
 description = "A Tauri App"
 authors = ["NeuroSkill authors"]
 edition = "2021"
@@ -250,7 +250,7 @@ async-stream      = "0.3"
 # neutts 0.1.0 uses llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2.36", optional = true }
+llama-cpp-4 = { version = "0.2.42", optional = true }
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"
@@ -360,7 +360,7 @@ ort = { version = "=2.0.0-rc.11", default-features = false, features = ["coreml"
 # llama-cpp-4 with Metal GPU offload — merged with the base [dependencies] entry
 # so that when the `llm` feature is active the Metal backend is compiled in
 # automatically on macOS.
-llama-cpp-4 = { version = "0.2.36", optional = true, features = ["metal"] }
+llama-cpp-4 = { version = "0.2.42", optional = true, features = ["metal"] }
 # Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no
 # private frameworks.  Replaces the hand-rolled Assertions.json writer.
 macos-focus = "0.0.1"
@@ -387,7 +387,7 @@ ort = { version = "=2.0.0-rc.11", default-features = false, features = ["downloa
 # llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
 # entry so that when the `llm` feature is active the Vulkan backend is compiled
 # in automatically on Linux and Windows.
-llama-cpp-4 = { version = "0.2.36", optional = true, features = ["vulkan"] }
+llama-cpp-4 = { version = "0.2.42", optional = true, features = ["vulkan"] }
 
 [dev-dependencies]
 tempfile = "3"

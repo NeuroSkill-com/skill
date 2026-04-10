@@ -514,7 +514,7 @@ function generateFragmentFromGitLog(currentVersion) {
     try {
       // Try to find the last version tag
       const lastTag = execSync("git describe --tags --abbrev=0 2>/dev/null", { encoding: "utf8" }).trim();
-      if (lastTag && lastTag.startsWith("v")) {
+      if (lastTag?.startsWith("v")) {
         range = `${lastTag}..HEAD`;
       }
     } catch {
@@ -543,20 +543,20 @@ function generateFragmentFromGitLog(currentVersion) {
   for (const commit of commitMessages) {
     const lines = commit.split("\n").filter(Boolean);
     if (lines.length === 0) continue;
-    
+
     const subject = lines[0];
-    
+
     // Skip version-only commits
     if (/^\d+\.\d+\.\d+$/.test(subject)) continue;
-    
+
     // Skip if we've already seen this subject
     if (seen.has(subject)) continue;
     seen.add(subject);
-    
+
     // Use the full commit message if it's a conventional commit
     // Otherwise just use the subject line
     if (/^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert|WIP):/.test(subject)) {
-      bullets.push(`- ${commit.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`);
+      bullets.push(`- ${commit.replace(/\n/g, " ").replace(/\s+/g, " ").trim()}`);
     } else {
       bullets.push(`- ${subject}`);
     }
@@ -602,7 +602,9 @@ async function main() {
     console.log("[bump] No changelog fragments found \u2014 generating from git commit history\u2026");
     generateFragmentFromGitLog(currentVersion);
   } else {
-    console.log(`[bump] Found ${validated.files.length} changelog fragment${validated.files.length === 1 ? '' : 's'} — will use these instead of git log`);
+    console.log(
+      `[bump] Found ${validated.files.length} changelog fragment${validated.files.length === 1 ? "" : "s"} — will use these instead of git log`,
+    );
   }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
