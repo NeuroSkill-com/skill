@@ -8,6 +8,13 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.100] — 2026-04-10
+
+### Features
+
+- mtmd fix
+- improved windows TUI
+
 ## [0.0.99] — 2026-04-10
 
 ### Features
