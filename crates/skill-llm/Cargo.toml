@@ -12,6 +12,7 @@ llm-metal  = ["llm", "llama-cpp-4?/metal"]
 llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
 llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
 llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
+llm-native = ["llm", "llama-cpp-4?/native"]
 
 [dependencies]
 anyhow = { workspace = true }
