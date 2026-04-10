@@ -40,6 +40,30 @@ pub use skill_llm::{
     LlmStateCell, LlmStatus, ToolEvent,
 };
 
+// ── Lightweight types for daemon-proxy commands (no engine dependency) ───────
+
+/// LLM server status — mirrors the daemon's status strings.
+/// Defined here so Tauri commands work without the `llm` engine feature.
+#[cfg(not(feature = "llm"))]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmStatus {
+    Running,
+    Loading,
+    Stopped,
+}
+
+/// Stub log buffer type when the engine is not compiled in.
+#[cfg(not(feature = "llm"))]
+pub type LlmLogBuffer =
+    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<serde_json::Value>>>;
+
+/// Create an empty log buffer stub.
+#[cfg(not(feature = "llm"))]
+pub fn new_log_buffer() -> LlmLogBuffer {
+    std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()))
+}
+
 // ── Tauri commands ────────────────────────────────────────────────────────────
 pub mod cmds;
 

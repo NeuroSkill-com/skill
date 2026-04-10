@@ -634,7 +634,7 @@ pub(crate) fn llm_server_switch_mmproj(filename: String) -> Result<String, Strin
         .to_string())
 }
 
-pub(crate) fn llm_get_catalog() -> Result<crate::llm::catalog::LlmCatalog, String> {
+pub(crate) fn llm_get_catalog() -> Result<skill_llm::catalog::LlmCatalog, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     fetch_json_with_auth(&base_url, &token, "/v1/llm/catalog")

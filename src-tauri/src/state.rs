@@ -583,9 +583,7 @@ pub struct DndRuntimeState {
 
 pub struct LlmState {
     pub config: crate::settings::LlmConfig,
-    #[cfg(feature = "llm")]
     pub catalog: crate::llm::catalog::LlmCatalog,
-    #[cfg(feature = "llm")]
     #[allow(dead_code)]
     pub logs: crate::llm::LlmLogBuffer,
     #[cfg(feature = "llm")]
@@ -597,23 +595,15 @@ pub struct LlmState {
 }
 
 impl LlmState {
-    /// Create a new `LlmState` initialised from the given data directory.
-    #[cfg(feature = "llm")]
     pub fn new(skill_dir: &std::path::Path) -> Self {
         Self {
             config: crate::settings::LlmConfig::default(),
             logs: crate::llm::new_log_buffer(),
-            loading: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            start_error: std::sync::Arc::new(std::sync::Mutex::new(None)),
             catalog: crate::llm::catalog::LlmCatalog::load(skill_dir),
-        }
-    }
-
-    /// Create a new `LlmState` when the `llm` feature is disabled.
-    #[cfg(not(feature = "llm"))]
-    pub fn new(_skill_dir: &std::path::Path) -> Self {
-        Self {
-            config: crate::settings::LlmConfig::default(),
+            #[cfg(feature = "llm")]
+            loading: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(feature = "llm")]
+            start_error: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }

@@ -267,7 +267,8 @@ jobs:
           # (with mtmd + metal + q1).  Two separate invocations can cause cargo
           # to reuse a cached llama-cpp-sys-4 static lib that lacks mtmd symbols.
           run_cmd() {
-            cargo build -p skill -p skill-daemon --release --locked --target aarch64-apple-darwin --features custom-protocol,llm-metal --timings
+            cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings
+            cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --features llm-metal --timings
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then

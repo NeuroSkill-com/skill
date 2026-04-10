@@ -692,7 +692,8 @@ jobs:
 
           # Build both in one invocation for consistent feature unification
           run_cmd() {
-            cargo build -p skill -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,llm-vulkan,screenshots --timings
+            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,screenshots --timings
+            cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features llm-vulkan --timings
           }
 
           if ! run_cmd; then

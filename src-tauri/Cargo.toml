@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.95"
+version = "0.0.96"
 description = "A Tauri App"
 authors = ["NeuroSkill authors"]
 edition = "2021"
@@ -32,7 +32,9 @@ license = "GPL-3.0-only"
 #                conflict; both features can be active simultaneously.
 #
 [features]
-default    = ["tts-kitten", "tts-neutts", "llm", "mw75-rfcomm", "screenshots", "gps"]
+# LLM inference + NeuTTS (llama-cpp backbone) + EXG embedding now run
+# exclusively in skill-daemon.  The Tauri binary is a thin UI.
+default    = ["tts-kitten", "mw75-rfcomm", "screenshots", "gps"]
 gps        = ["skill-data/gps"]
 screenshots = ["skill-screenshots/capture"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
@@ -210,7 +212,7 @@ skill-commands  = { path = "../crates/skill-commands" }
 skill-history   = { path = "../crates/skill-history" }
 skill-router    = { path = "../crates/skill-router" }
 skill-tray      = { path = "../crates/skill-tray" }
-skill-exg       = { path = "../crates/skill-exg" }
+# skill-exg removed — EXG embedding runs in skill-daemon only.
 skill-devices   = { path = "../crates/skill-devices" }
 skill-autostart     = { path = "../crates/skill-autostart" }
 skill-calendar      = { path = "../crates/skill-calendar" }

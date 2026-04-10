@@ -75,14 +75,11 @@ pub enum ChatChunk {
 #[tauri::command]
 pub async fn chat_completions_ipc(
     messages: Vec<serde_json::Value>,
-    params: crate::llm::GenParams,
+    params: serde_json::Value,
     channel: tauri::ipc::Channel<ChatChunk>,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let body = crate::daemon_cmds::llm_chat_completions(
-        messages,
-        serde_json::to_value(params).unwrap_or_default(),
-    )?;
+    let body = crate::daemon_cmds::llm_chat_completions(messages, params)?;
 
     let content = body
         .get("content")

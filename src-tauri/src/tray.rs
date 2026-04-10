@@ -21,6 +21,7 @@ use tauri::{
 use crate::DeviceStatus;
 
 // ── Re-exports from skill-tray ────────────────────────────────────────────────
+#[allow(unused_imports)]
 pub use skill_tray::{ellipsize_middle, progress_bucket, progress_percent};
 
 // ── Tray-update deduplication ─────────────────────────────────────────────────

@@ -50,8 +50,9 @@ mod ws_server;
 
 #[allow(dead_code, unused_imports)]
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
-/// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
-#[cfg(feature = "llm")]
+/// LLM module — Tauri commands that proxy to the daemon over HTTP.
+/// The engine/init code inside is gated behind `#[cfg(feature = "llm")]`
+/// but catalog, server commands, downloads, and streaming work without it.
 mod llm;
 
 use ws_server::WsBroadcaster;
@@ -404,8 +405,11 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
 
     // Route TTS and LLM log output through the unified SkillLogger.
     crate::tts::init_tts_logger(app.handle());
-    crate::llm::init_llm_logger(app.handle());
-    crate::llm::init_tool_logger(app.handle());
+    #[cfg(feature = "llm")]
+    {
+        crate::llm::init_llm_logger(app.handle());
+        crate::llm::init_tool_logger(app.handle());
+    }
 
     load_and_apply_settings(app, &skill_dir);
 
@@ -452,19 +456,9 @@ fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
     // Label HNSW indices are now owned by the daemon — no Tauri-side load.
 
     // ── Startup weights probe ─────────────────────────────────────────
-    std::thread::Builder::new()
-        .name("weights-probe".into())
-        .spawn(move || {
-            if let Some((w, _c)) = skill_exg::probe_hf_weights(&hf_repo) {
-                let mut st = model_status.lock_or_recover();
-                st.weights_found = true;
-                st.weights_path = Some(w.display().to_string());
-                eprintln!("[embedder] startup probe: weights found at {}", w.display());
-            } else {
-                eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
-            }
-        })
-        .expect("[weights-probe] failed to spawn");
+    // EXG weight probing now runs in the daemon; the Tauri app queries
+    // the daemon's /v1/embedding/status endpoint instead.
+    let _ = (model_status, hf_repo);
 
     if let Err(e) = apply_all_shortcuts(app.handle()) {
         eprintln!("[shortcut] failed to register shortcuts: {e}");
