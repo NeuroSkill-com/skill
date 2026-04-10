@@ -74,10 +74,11 @@ function resolveTauriCliBaseCommand() {
     : resolve(root, "node_modules", ".bin", "tauri");
   if (existsSync(localBin)) return [localBin];
 
-  // On Windows, npm/npx are .cmd shims — must use the .cmd extension
-  // for execFileSync (which doesn't use shell resolution).
-  if (commandExists("npm")) return [isWin ? "npm.cmd" : "npm", "exec", "--", "tauri"];
+  // npm exec / npx fallback — only works if @tauri-apps/cli is installed.
+  // On Windows, npm/npx are .cmd shims that require shell: true (handled
+  // by tauriCmdNeedsShell below) or the .cmd extension for execFileSync.
   if (commandExists("npx")) return [isWin ? "npx.cmd" : "npx", "tauri"];
+  if (commandExists("npm")) return [isWin ? "npm.cmd" : "npm", "exec", "--", "tauri"];
 
   return null;
 }
@@ -398,24 +399,9 @@ if (isMingwTarget) {
     platformFlags = ["--no-bundle"];
   }
 
-  // ── Windows: enable Vulkan GPU offloading for LLM inference ────────────────
-  //
-  // Without an explicit GPU feature flag llama-cpp-4 compiles in CPU-only
-  // mode.  Vulkan is the broadest Windows GPU backend — it covers NVIDIA,
-  // AMD, and Intel Arc GPUs without requiring vendor-specific SDKs (no CUDA
-  // toolkit, no ROCm install needed at build time beyond the Vulkan SDK /
-  // headers that ship with the Windows SDK and most GPU driver packages).
-  //
-  // The Vulkan SDK (https://vulkan.lunarg.com) must be installed so that
-  // the CMake find-module inside llama.cpp can locate the Vulkan headers and
-  // the vulkan-1.lib import library.  At runtime, any Vulkan-capable GPU
-  // driver works; llama.cpp falls back to CPU automatically if no Vulkan
-  // device is found.
-  //
-  // Only inject the flag when the caller hasn't already passed --features.
-  if (!subArgs.includes("--features")) {
-    platformFlags = [...platformFlags, "--features", "llm-vulkan"];
-  }
+  // LLM inference runs in skill-daemon (not the Tauri app), so no
+  // --features llm-vulkan is injected here.  The Vulkan SDK is still
+  // installed above for the daemon build in release workflows.
 } else {
   // Linux native.
 
@@ -434,21 +420,8 @@ if (isMingwTarget) {
     env: process.env,
   });
 
-  // ── Linux: enable Vulkan GPU offloading for LLM inference ────────────────
-  //
-  // Vulkan is the broadest Linux GPU backend: it covers NVIDIA (via the
-  // official driver's Vulkan ICD), AMD (RADV in Mesa or the AMDVLK driver),
-  // and Intel Arc (ANV in Mesa) without requiring CUDA or ROCm at build time.
-  // llama.cpp falls back to CPU automatically if no Vulkan-capable device is
-  // found at runtime, so the binary is safe to ship on headless machines.
-  //
-  // cmake's FindVulkan module locates headers and the loader via pkg-config
-  // on Linux -- no VULKAN_SDK env var needs to be set (unlike Windows).
-  //
-  // Only inject the flag when the caller hasn't already passed --features.
-  if (!subArgs.includes("--features")) {
-    platformFlags = [...platformFlags, "--features", "llm-vulkan"];
-  }
+  // LLM inference runs in skill-daemon (not the Tauri app), so no
+  // --features llm-vulkan is injected here.
 
   // ── Linux: skip Tauri bundling for default local builds ───────────────────
   //
@@ -596,12 +569,30 @@ if (hasLldLink) {
 // locally so it always matches the host CPU.
 //
 // Set TAURI_USE_NPX=1 to force the old npx path.
-const tauriCmd = resolveTauriCliBaseCommand();
+let tauriCmd = resolveTauriCliBaseCommand();
 
 if (!tauriCmd) {
-  throw new Error(
-    "Could not find a Tauri CLI runner. Install one of: cargo-tauri, local @tauri-apps/cli, npx, or npm.",
-  );
+  // Try to install @tauri-apps/cli locally before giving up.
+  console.log("Tauri CLI not found — installing @tauri-apps/cli...");
+  try {
+    execFileSync(isWin ? "npm.cmd" : "npm", ["install", "--save-dev", "@tauri-apps/cli"], {
+      cwd: root,
+      stdio: "inherit",
+      env: process.env,
+      shell: isWin,
+    });
+    tauriCmd = resolveTauriCliBaseCommand();
+  } catch {
+    // ignore install failure — fall through to error
+  }
+
+  if (!tauriCmd) {
+    throw new Error(
+      "Could not find a Tauri CLI runner. Install one of:\n" +
+        "  npm install --save-dev @tauri-apps/cli\n" +
+        "  cargo install tauri-cli",
+    );
+  }
 }
 
 // .cmd shims on Windows require shell: true for execFileSync.

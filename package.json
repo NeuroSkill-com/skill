@@ -4,7 +4,7 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "postinstall": "git config core.hooksPath .githooks 2>/dev/null || true",
+    "postinstall": "node -e \"try{require('child_process').execSync('git config core.hooksPath .githooks')}catch{}\"",
     "copy:neutts-samples": "bash scripts/copy-neutts-samples.sh",
     "dev:guard": "npm run -s check:markdown-renderer",
     "dev": "npm run -s dev:guard && vite dev",

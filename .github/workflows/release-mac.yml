@@ -453,10 +453,10 @@ jobs:
       # ── Sign PKG ─────────────────────────────────────────────────────────
       - name: Sign PKG
         env:
-          APPLE_INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           set -euo pipefail
-          productsign --sign "$APPLE_INSTALLER_IDENTITY" NeuroSkill.pkg NeuroSkill-signed.pkg
+          productsign --sign "$APPLE_SIGNING_IDENTITY" NeuroSkill.pkg NeuroSkill-signed.pkg
 
       # ── Notarize PKG ─────────────────────────────────────────────────────
       - name: Notarize PKG
