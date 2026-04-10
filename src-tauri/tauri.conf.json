@@ -56,7 +56,11 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzQUVEMjRERUVDRDUzNEUKUldST1U4M3VUZEt1b3pGL0J2TUdlRmR5d1FBOExLZkZPcm9EODRyakxVTnFsY3JuY3BZaHB0ZmEK",
       "endpoints": [
         "https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json"
-      ]
+      ],
+      "hooks": {
+        "pre-update": "../hooks/pre-update.cjs",
+        "post-update": "../hooks/post-update.cjs"
+      }
     }
   }
 }

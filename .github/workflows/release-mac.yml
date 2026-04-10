@@ -402,83 +402,20 @@ jobs:
           echo "Bundle contents:"
           find "$APP_BUNDLE" -maxdepth 3 | sort
 
-      # ── Stage files for PKG ───────────────────────────────────────────────
-      # The .app bundle already contains skill-daemon inside
-      # Contents/MacOS/.  The daemon self-registers as a LaunchAgent
-      # at runtime (via its /service/install HTTP endpoint called by
-      # the Tauri app), so no separate /Library/LaunchDaemons entry
-      # is needed here.
-      - name: Stage files for PKG
-        run: |
-          set -euo pipefail
-          APP_NAME="NeuroSkill"
-          PKGROOT="$RUNNER_TEMP/pkgroot"
-          mkdir -p "$PKGROOT/Applications"
-
-          # Copy .app bundle (includes skill + skill-daemon + resources)
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
-          cp -R "$APP_BUNDLE" "$PKGROOT/Applications/"
-
-          # Verify daemon sidecar is inside the .app bundle
-          if [ ! -f "$PKGROOT/Applications/${APP_NAME}.app/Contents/MacOS/skill-daemon" ]; then
-            echo "::error::skill-daemon not found inside .app bundle after staging"
-            exit 1
-          fi
-
-          # Show staged files
-          find "$PKGROOT"
-
-      # ── Sign binaries and plist ───────────────────────────────────────────
-      - name: Sign app bundle
+      # ── Sign .app bundle for DMG ────────────────────────────────────────
+      - name: Sign .app bundle
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           set -euo pipefail
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+          
           # --deep signs all nested binaries including skill-daemon
           codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" \
-            "$RUNNER_TEMP/pkgroot/Applications/NeuroSkill.app"
-
-      # ── Build PKG ─────────────────────────────────────────────────────────
-      - name: Build PKG
-        run: |
-          set -euo pipefail
-          PKG_ID="com.neuroskill.skill"
-          PKG_VERSION="${{ steps.version_meta.outputs.version }}"
-          pkgbuild \
-            --root "$RUNNER_TEMP/pkgroot" \
-            --identifier "$PKG_ID" \
-            --version "$PKG_VERSION" \
-            --scripts scripts/pkg-scripts \
-            --install-location / \
-            NeuroSkill.pkg
-
-      # ── Sign PKG ─────────────────────────────────────────────────────────
-      - name: Sign PKG
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          set -euo pipefail
-          productsign --sign "$APPLE_SIGNING_IDENTITY" NeuroSkill.pkg NeuroSkill-signed.pkg
-
-      # ── Notarize PKG ─────────────────────────────────────────────────────
-      - name: Notarize PKG
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          xcrun notarytool submit NeuroSkill-signed.pkg --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-
-      # ── Upload PKG to GitHub Release ─────────────────────────────────────
-      - name: Upload PKG to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version_meta.outputs.tag }}
-          name: Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes: true
-          files: NeuroSkill-signed.pkg
+            --options runtime \
+            "$APP_BUNDLE"
+          echo "✓ Signed .app bundle at $APP_BUNDLE"
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile
@@ -491,20 +428,18 @@ jobs:
           path: src-tauri/target/cargo-timings/
           retention-days: 30
 
-      # ── Sign .app + create DMG (background, README, CHANGELOG, LICENSE) ─────
+      # ── Create DMG (background, README, CHANGELOG, LICENSE) ────────────────
       #
       # Uses sindresorhus/create-dmg via scripts/create-macos-dmg.sh which:
-      #   • Signs the .app (hardened runtime + timestamp when identity is set)
       #   • Creates DMG with composed icon, Retina background, SLA
-      #   • Signs the DMG and notarizes with Apple (staples both DMG and .app)
+      #   • Notarizes with Apple (staples both DMG and .app)
       - name: Install DMG dependencies
         run: |
           npm install --global appdmg
           pip3 install --quiet --break-system-packages Pillow
 
-      - name: Sign .app + Create DMG
+      - name: Create DMG
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID:               ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
