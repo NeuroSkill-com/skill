@@ -234,6 +234,8 @@ jobs:
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
               echo "::warning::Linux release compile failed with prebuilt llama; retrying with source build"
               unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
+              find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
+              find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
               run_cmd
             else
               exit 1
