@@ -8,6 +8,74 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.99] — 2026-04-10
+
+### Features
+
+- added postinstall
+- minor update
+- win + linux
+- mac
+- better coverage
+- improved coverage
+- try_send instead of blocking_send
+- fix: spawn llm_chat streaming as tokio task to prevent deadlock
+- feat: draft prefill, LLM start UX fixes, chat input multiline alignment
+- fix: align dev TUI header art
+- fix: stabilize iroh remote sessions and dashboard streaming status
+- chore: silence non-actionable cargo-deny license metadata warnings
+- chore: commit all pending changes
+- ci: run coverage without all-features on non-CUDA runners
+- chore: update tests, config, and clients tab
+- Fix iroh session stability, revoke/scope URLs, and metrics continuity
+- Add start_session / cancel_session WS commands; exempt peer: from pairing check
+- Wire IrohRemoteAdapter into daemon session runner
+- Authenticate iroh peers via tunnel identity instead of bearer token
+- Fix TUI line truncation caused by unstripped OSC hyperlink sequences
+- Fix axum 0.7 path param syntax in iroh routes (:{id} → {id})
+- Use dedicated port 18445 for dev daemon to avoid system service conflict
+- Kill stale daemon on dev startup and pin SKILL_DAEMON_BIN to local build
+
+## [0.0.98] — 2026-04-10
+
+### Features
+
+- added postinstall
+- minor update
+- win + linux
+- mac
+- better coverage
+- improved coverage
+- try_send instead of blocking_send
+- fix: spawn llm_chat streaming as tokio task to prevent deadlock
+- feat: draft prefill, LLM start UX fixes, chat input multiline alignment
+- fix: align dev TUI header art
+- fix: stabilize iroh remote sessions and dashboard streaming status
+- chore: silence non-actionable cargo-deny license metadata warnings
+- chore: commit all pending changes
+- ci: run coverage without all-features on non-CUDA runners
+- chore: update tests, config, and clients tab
+- Fix iroh session stability, revoke/scope URLs, and metrics continuity
+- Add start_session / cancel_session WS commands; exempt peer: from pairing check
+- Wire IrohRemoteAdapter into daemon session runner
+- Authenticate iroh peers via tunnel identity instead of bearer token
+- Fix TUI line truncation caused by unstripped OSC hyperlink sequences
+- Fix axum 0.7 path param syntax in iroh routes (:{id} → {id})
+- Use dedicated port 18445 for dev daemon to avoid system service conflict
+- Kill stale daemon on dev startup and pin SKILL_DAEMON_BIN to local build
+
+## [0.0.97] — 2026-04-10
+
+### Bugfixes
+
+- **Fix `spawnSync npm.cmd EINVAL` on Windows**. Added `shell: true` to `execFileSync` calls when the resolved Tauri CLI command is a `.cmd` shim. Windows `.cmd` files are batch scripts that require shell execution.
+
+- **Fix coverage CI: skip EXG embedding worker in tests**. Session runner tests panicked on headless CI (no GPU) because `cubecl-wgpu` tried to initialize a Vulkan adapter. Added `cfg!(test)` check to skip the embedding worker during test builds. Also supports `SKILL_SKIP_EMBED=1` env var for headless production environments.
+
+### Build
+
+- **Fix release CI: build daemon before Tauri app**. Reversed the build order so `skill-daemon` compiles first using its default features (which resolve `llama-cpp-sys-4` with `mtmd` + Metal/Vulkan + `q1` via `skill-llm`'s target-specific deps). The Tauri app build runs second and reuses cached native libs. Removed explicit `--features llm-metal`/`llm-vulkan` flags — daemon defaults handle GPU backend selection per platform automatically.
+
 ## [0.0.96] — 2026-04-10
 
 ### Bugfixes

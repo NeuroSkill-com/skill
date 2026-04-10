@@ -262,10 +262,12 @@ if (!needsSetup) {
     );
   }
 
+  const passCmdNeedsShell = isWin && passCmd[0].endsWith(".cmd");
   execFileSync(passCmd[0], [...passCmd.slice(1), subcommand, ...subArgs].filter(Boolean), {
     cwd: root,
     stdio: "inherit",
     env: process.env,
+    shell: passCmdNeedsShell,
   });
   process.exit(0);
 }
@@ -602,11 +604,15 @@ if (!tauriCmd) {
   );
 }
 
+// .cmd shims on Windows require shell: true for execFileSync.
+const tauriCmdNeedsShell = isWin && tauriCmd[0].endsWith(".cmd");
+
 function runTauriWithArgs(args) {
   execFileSync(tauriCmd[0], [...tauriCmd.slice(1), subcommand, ...args], {
     cwd: root,
     stdio: "inherit",
     env: process.env,
+    shell: tauriCmdNeedsShell,
   });
 }
 
@@ -615,6 +621,7 @@ function runTauriSubcommand(command, args) {
     cwd: root,
     stdio: "inherit",
     env: process.env,
+    shell: tauriCmdNeedsShell,
   });
 }
 

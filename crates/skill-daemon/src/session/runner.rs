@@ -127,8 +127,10 @@ impl Pipeline {
         // generated and not worth embedding, and ZUNA takes 60+ seconds to
         // load — starving the LLM of GPU while the virtual stream is active.
         let is_virtual = device_name.to_lowercase().contains("virtual");
+        let skip_embed =
+            is_virtual || cfg!(test) || std::env::var("SKILL_SKIP_EMBED").map(|v| v == "1").unwrap_or(false);
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
-        let (embed_worker_opt, acc) = if is_virtual {
+        let (embed_worker_opt, acc) = if skip_embed {
             (None, None)
         } else {
             let worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
