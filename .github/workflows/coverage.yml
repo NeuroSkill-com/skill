@@ -74,7 +74,7 @@ jobs:
             --exclude iroh_test_client \
             --exclude iroh-example-client \
             --no-default-features \
-            --features llm-native \
+            --features llm-native,skill-router/cpu \
             --lcov \
             --output-path lcov.info
 
@@ -83,7 +83,7 @@ jobs:
             --exclude iroh_test_client \
             --exclude iroh-example-client \
             --no-default-features \
-            --features llm-native \
+            --features llm-native,skill-router/cpu \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 

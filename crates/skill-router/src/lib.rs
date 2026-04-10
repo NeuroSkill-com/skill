@@ -354,7 +354,8 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 
 // ── UMAP compute ──────────────────────────────────────────────────────────────
 
-/// Backend type alias used by fast-umap (GPU-accelerated via wgpu / CubeCL).
+/// Backend type alias used by fast-umap.
+#[cfg(feature = "gpu")]
 type FastUmapBackend = burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>>;
 
 /// Inner UMAP compute — shared by both WS and Tauri IPC paths.
@@ -364,6 +365,9 @@ type FastUmapBackend = burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::
 ///
 /// Results are cached to `~/.skill/umap_cache/umap_{a}_{b}_{c}_{d}.json` so
 /// that repeated queries for the same session pair return instantly.
+///
+/// Note: This function is only available when the `gpu` feature is enabled.
+#[cfg(feature = "gpu")]
 pub fn umap_compute_inner(
     skill_dir: &Path,
     a_start: u64,
@@ -450,6 +454,7 @@ pub fn umap_compute_inner(
         })
         .collect();
 
+    #[cfg(feature = "gpu")]
     let fit_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let umap = fast_umap::Umap::<FastUmapBackend>::new(config);
         let (_exit_tx, exit_rx) = crossbeam_channel::unbounded::<()>();
@@ -460,7 +465,11 @@ pub fn umap_compute_inner(
         };
         fitted.into_embedding()
     }));
+    
+    #[cfg(not(feature = "gpu"))]
+    let fit_result: Result<Vec<Vec<f64>>, _> = Ok(Vec::new());
 
+    #[cfg(feature = "gpu")]
     let embedding = match fit_result {
         Ok(emb) => emb,
         Err(e) => {
@@ -476,6 +485,7 @@ pub fn umap_compute_inner(
         }
     };
 
+    #[cfg(feature = "gpu")]
     let points: Vec<serde_json::Value> = (0..n_use)
         .map(|i| {
             let mut pt = serde_json::json!({
@@ -494,11 +504,15 @@ pub fn umap_compute_inner(
         })
         .collect();
 
+    #[cfg(feature = "gpu")]
     let elapsed_ms = umap_start.elapsed().as_millis() as u64;
+    #[cfg(feature = "gpu")]
     eprintln!("[umap] projection done in {elapsed_ms} ms ({n_use} embeddings)");
 
+    #[cfg(feature = "gpu")]
     let analysis = analyze_umap_points(&embedding, &labels, &timestamps, n_a);
 
+    #[cfg(feature = "gpu")]
     let result = serde_json::json!({
         "points":     points,
         "n_a":        n_a,
@@ -507,11 +521,55 @@ pub fn umap_compute_inner(
         "elapsed_ms": elapsed_ms,
         "analysis":   analysis,
     });
+    
+    #[cfg(not(feature = "gpu"))]
+    let result = serde_json::json!({
+        "points": [],
+        "n_a": 0,
+        "n_b": 0,
+        "dim": 0,
+        "elapsed_ms": 0,
+        "analysis": {
+            "density_a": 0.0,
+            "density_b": 0.0,
+            "mixing_score": 0.0,
+            "cluster_count": 0,
+            "avg_distance": 0.0
+        }
+    });
 
     // ── Persist to cache ─────────────────────────────────────────────────
     umap_cache_store(&cache_path, &result);
 
     Ok(result)
+}
+
+// CPU-only UMAP stub (for CI coverage without GPU)
+#[cfg(not(feature = "gpu"))]
+pub fn umap_compute_inner(
+    _skill_dir: &Path,
+    _a_start: u64,
+    _a_end: u64,
+    _b_start: u64,
+    _b_end: u64,
+    _on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
+) -> anyhow::Result<serde_json::Value> {
+    // Return empty result for CPU-only builds (used in CI coverage)
+    // In production, the `gpu` feature is enabled by default
+    Ok(serde_json::json!({
+        "points": [],
+        "n_a": 0,
+        "n_b": 0,
+        "dim": 0,
+        "elapsed_ms": 0,
+        "analysis": {
+            "density_a": 0.0,
+            "density_b": 0.0,
+            "mixing_score": 0.0,
+            "cluster_count": 0,
+            "avg_distance": 0.0
+        }
+    }))
 }
 
 // ── Supported commands ────────────────────────────────────────────────────────
