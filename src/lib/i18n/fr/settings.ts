@@ -653,6 +653,7 @@ const settings: Record<string, string> = {
   "daemon.stateError": "error",
   "daemon.stateDisconnected": "offline",
   "daemon.titlePrefix": "Daemon",
+  "daemon.notConnectedWarning": "Le démon n'est pas connecté. Les données de calibration ne seront pas enregistrées.",
   "daemon.auth": "auth ✓",
   "daemon.protocol": "protocol",
 };

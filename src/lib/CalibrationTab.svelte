@@ -20,6 +20,7 @@ import {
 } from "$lib/constants";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
+import { daemonStatus } from "$lib/daemon/status";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CalibrationAction {
@@ -258,6 +259,23 @@ onDestroy(() => clearInterval(nowTimer));
 </script>
 
 <section class="flex flex-col gap-4">
+  {#if daemonStatus.state !== 'connected'}
+    <div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 flex items-center gap-2.5">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0">
+        <path d="M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>
+        <path d="M12 4V2m0 2v4"/>
+        <path d="m8 18 2-2 2 2"/>
+        <path d="M12 12v.01"/>
+        <path d="m16 14 1.5-1.5"/>
+        <path d="M18.5 11.5L20 10"/>
+      </svg>
+      <span class="text-[0.68rem] text-amber-600 dark:text-amber-400 font-medium">
+        {t("daemon.notConnectedWarning")}
+      </span>
+    </div>
+  {/if}
 
   <!-- ── Profile list ───────────────────────────────────────────────────────── -->
   {#if !editing}

@@ -616,6 +616,7 @@ const settings: Record<string, string> = {
   "daemon.stateError": "error",
   "daemon.stateDisconnected": "offline",
   "daemon.titlePrefix": "Daemon",
+  "daemon.notConnectedWarning": "השד לא מחובר. נתוני כיול לא יוקלטו.",
   "daemon.auth": "auth ✓",
   "daemon.protocol": "protocol",
 };

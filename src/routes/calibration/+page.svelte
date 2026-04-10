@@ -14,6 +14,7 @@ import { Button } from "$lib/components/ui/button";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { daemonStatus } from "$lib/daemon/status";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -195,6 +196,16 @@ async function startCalibration() {
   running = true;
   const p = profile;
 
+  // Check daemon connectivity before starting
+  try {
+    await daemonInvoke("get_status");
+  } catch (e) {
+    running = false;
+    ttsSpeak("Error: Daemon is not reachable. Please start the daemon and try again.");
+    await emitEvent("calibration-error", { error: "daemon_unreachable", phase: "preflight" });
+    return;
+  }
+
   // Announce calibration start and wait for it to finish so the first action
   // announcement doesn't overlap.
   await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
@@ -229,8 +240,21 @@ async function startCalibration() {
       const actionStart = Math.floor(Date.now() / 1000);
       if (!(await runCountdown(action.duration_secs))) break;
       try {
-        await daemonInvoke("submit_label", { labelStartUtc: actionStart, text: action.label });
-      } catch (e) {}
+        const actionEnd = Math.floor(Date.now() / 1000);
+        await daemonInvoke("submit_label", { 
+          labelStartUtc: actionStart, 
+          text: action.label,
+          eeg_start: actionStart,
+          eeg_end: actionEnd
+        });
+      } catch (e) {
+        console.error("Failed to submit label to daemon:", e);
+        running = false;
+        phase = { kind: "idle", actionIndex: 0, loop: 1 };
+        ttsSpeak("Error: Failed to record calibration data. Please check daemon connection.");
+        await emitEvent("calibration-error", { error: "daemon_unreachable", phase: "action_submission" });
+        return;
+      }
 
       // BREAK phase — skip only after the very last action of the very last loop
       const isLast = loop === p.loop_count && ai === p.actions.length - 1;
@@ -421,6 +445,23 @@ useWindowTitle("window.title.calibration");
       </span>
     {/if}
 
+    {#if daemonStatus.state !== 'connected'}
+      <span class="flex items-center gap-1 text-[0.52rem] text-red-600 dark:text-red-400
+                   font-medium" title={daemonStatus.lastError || "Daemon not connected"}>
+        <!-- server-off icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             class="w-3 h-3 shrink-0">
+          <path d="M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>
+          <path d="M12 4V2m0 2v4"/>
+          <path d="m8 18 2-2 2 2"/>
+          <path d="M12 12v.01"/>
+          <path d="m16 14 1.5-1.5"/>
+          <path d="M18.5 11.5L20 10"/>
+        </svg>
+        Daemon {daemonStatus.state}
+      </span>
+    {/if}
     <span class="ml-auto text-[0.62rem] text-muted-foreground/60 tabular-nums">
       {#if profile?.last_calibration_utc}
         {t("calibration.lastAgo", { ago: timeAgo(profile.last_calibration_utc) })}
