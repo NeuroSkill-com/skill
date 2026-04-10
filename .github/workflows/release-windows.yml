@@ -756,9 +756,21 @@ jobs:
       - name: Log binary dependencies
         shell: powershell
         run: |
-          $exe = "src-tauri/target/release/skill.exe"
-          if (-not (Test-Path $exe)) {
-            Write-Error "skill.exe not found at $exe"
+          $exeCandidates = @(
+            "src-tauri/target/x86_64-pc-windows-msvc/release/skill.exe",
+            "src-tauri/target/release/skill.exe"
+          )
+          
+          $exe = $null
+          foreach ($candidate in $exeCandidates) {
+            if (Test-Path $candidate) {
+              $exe = $candidate
+              break
+            }
+          }
+          
+          if (-not $exe) {
+            Write-Error "skill.exe not found. Checked: $(($exeCandidates -join ', '))"
             exit 1
           }
 
