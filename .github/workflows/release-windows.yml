@@ -690,8 +690,9 @@ jobs:
           fi
           sccache --show-stats || true
 
+          # Build both in one invocation for consistent feature unification
           run_cmd() {
-            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,llm-vulkan,screenshots --timings
+            cargo build -p skill -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,llm-vulkan,screenshots --timings
           }
 
           if ! run_cmd; then
@@ -703,9 +704,6 @@ jobs:
               exit 1
             fi
           fi
-
-          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
-          cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features llm-vulkan
 
           sccache --show-stats || true
 

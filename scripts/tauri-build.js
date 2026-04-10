@@ -74,8 +74,10 @@ function resolveTauriCliBaseCommand() {
     : resolve(root, "node_modules", ".bin", "tauri");
   if (existsSync(localBin)) return [localBin];
 
-  if (commandExists("npm")) return ["npm", "exec", "--", "tauri"];
-  if (commandExists("npx")) return ["npx", "tauri"];
+  // On Windows, npm/npx are .cmd shims — must use the .cmd extension
+  // for execFileSync (which doesn't use shell resolution).
+  if (commandExists("npm")) return [isWin ? "npm.cmd" : "npm", "exec", "--", "tauri"];
+  if (commandExists("npx")) return [isWin ? "npx.cmd" : "npx", "tauri"];
 
   return null;
 }

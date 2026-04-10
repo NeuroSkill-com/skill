@@ -223,8 +223,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Build both in one invocation for consistent feature unification
           run_cmd() {
-            cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots --timings
+            cargo build -p skill -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots --timings
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
@@ -235,8 +236,6 @@ jobs:
               exit 1
             fi
           fi
-          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
-          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
 
       # ── Stage files for packaging ─────────────────────────────────────---
       # The daemon binary sits next to the app binary.  At runtime the

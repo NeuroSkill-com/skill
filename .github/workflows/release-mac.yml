@@ -262,8 +262,12 @@ jobs:
           set -euo pipefail
           npm run build
           npm run -s verify:tauri:frontend
+          # Build both skill and skill-daemon in a single cargo invocation so
+          # feature unification produces one consistent llama-cpp-sys-4 build
+          # (with mtmd + metal + q1).  Two separate invocations can cause cargo
+          # to reuse a cached llama-cpp-sys-4 static lib that lacks mtmd symbols.
           run_cmd() {
-            cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol,llm-metal --timings
+            cargo build -p skill -p skill-daemon --release --locked --target aarch64-apple-darwin --features custom-protocol,llm-metal --timings
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
@@ -274,8 +278,6 @@ jobs:
               exit 1
             fi
           fi
-          # Build the skill-daemon sidecar (must pass matching LLM backend feature)
-          cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --features llm-metal
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       #
