@@ -8,6 +8,14 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.106] — 2026-04-10
+
+### Features
+
+- fix: add APPLE_SIGNING_IDENTITY to DMG creation step
+- The DMG creation step was missing the APPLE_SIGNING_IDENTITY environment
+- The script already supports using APPLE_SIGNING_IDENTITY via the SIGN_ID
+
 ## [0.0.104] — 2026-04-10
 
 ### Features
