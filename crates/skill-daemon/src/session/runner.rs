@@ -673,7 +673,18 @@ mod tests {
 
     fn test_state(dir: &std::path::Path) -> AppState {
         std::fs::create_dir_all(dir).unwrap();
-        AppState::new("test".to_string(), dir.to_path_buf())
+        let mut state = AppState::new("test".to_string(), dir.to_path_buf());
+        
+        // In CI environment, switch to CPU-only backend to avoid GPU initialization failures
+        if is_ci_environment() {
+            use skill_settings::UserSettings;
+            let mut settings = skill_settings::load_settings(dir);
+            settings.active_model_backend = Some("luna".to_string());
+            // Save the modified settings
+            settings.save(dir).ok();
+        }
+        
+        state
     }
 
     fn eeg_desc(kind: &'static str, ch: usize, rate: f64) -> DeviceDescriptor {
