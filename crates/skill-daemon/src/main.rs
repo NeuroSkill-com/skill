@@ -213,7 +213,26 @@ async fn main() -> anyhow::Result<()> {
         .nest("/v1", v1)
         .merge(root_cmd)
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
+
+    // ── Auto-start the LLM server if previously enabled ───────────────────────
+    //
+    // When the user starts the LLM server, `config.enabled` is persisted to
+    // disk.  On daemon restart we honour that flag and auto-start the server
+    // so the experience is seamless.  If no model is available the start is
+    // silently skipped.
+    #[cfg(feature = "llm")]
+    {
+        let llm_state = state.clone();
+        tokio::spawn(async move {
+            let cfg = llm_state.llm_config.lock().map(|g| g.clone()).unwrap_or_default();
+            if cfg.enabled {
+                info!("LLM server was enabled — auto-starting");
+                let _ =
+                    crate::routes::settings_llm_runtime::llm_server_start_impl(axum::extract::State(llm_state)).await;
+            }
+        });
+    }
 
     let addr = daemon_addr();
     info!(%addr, "skill daemon listening");

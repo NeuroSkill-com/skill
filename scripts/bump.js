@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-
-// import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
+import { join } from "node:path";
+import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -489,6 +489,71 @@ function parseArgs() {
   return { dryRun, clean, versionArg };
 }
 
+// ── auto-generate changelog fragment from git log ────────────────────────────
+
+function generateFragmentFromGitLog(currentVersion) {
+  const UNRELEASED_DIR = "changes/unreleased";
+
+  // Find the commit range: last version tag (or version-bump commit) to HEAD
+  let range = "";
+  try {
+    // Try tag first: v0.0.91
+    execSync(`git rev-parse "v${currentVersion}" 2>/dev/null`, { stdio: "ignore" });
+    range = `v${currentVersion}..HEAD`;
+  } catch {
+    try {
+      // Fallback: find the commit whose message is exactly the version string
+      const sha = execSync(`git log --all --format=%H --grep="^${currentVersion}$" --fixed-strings -1`, {
+        encoding: "utf8",
+      }).trim();
+      if (sha) {
+        range = `${sha}..HEAD`;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Collect commit subjects (skip merge commits)
+  let logCmd = "git log --no-merges --format=%s";
+  if (range) logCmd += ` ${range}`;
+  else logCmd += " -30"; // fallback: last 30 commits
+
+  let subjects;
+  try {
+    subjects = execSync(logCmd, { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+  } catch {
+    subjects = [];
+  }
+
+  if (subjects.length === 0) {
+    subjects = ["Minor updates and improvements"];
+  }
+
+  // Deduplicate and filter out version-bump commits (e.g. "0.0.91")
+  const seen = new Set();
+  const bullets = [];
+  for (const s of subjects) {
+    if (/^\d+\.\d+\.\d+$/.test(s)) continue; // skip version-only commits
+    if (seen.has(s)) continue;
+    seen.add(s);
+    bullets.push(`- ${s}`);
+  }
+
+  if (bullets.length === 0) {
+    bullets.push("- Minor updates and improvements");
+  }
+
+  const fragment = `### Features\n\n${bullets.join("\n")}\n`;
+
+  // Write the auto-generated fragment
+  if (!existsSync(UNRELEASED_DIR)) {
+    execSync(`mkdir -p ${UNRELEASED_DIR}`);
+  }
+  writeText(join(UNRELEASED_DIR, "auto-git-log.md"), fragment);
+  console.log(`[bump] Generated changelog fragment with ${bullets.length} entries from git log`);
+}
+
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
@@ -510,12 +575,11 @@ async function main() {
 
   // ── Validate changelog fragments early (fast fail) ─────────────────────────
 
-  // const validated = validateUnreleasedFragments();
-  // if (validated.files.length === 0) {
-  //   throw new Error(
-  //     "Bump aborted: changes/unreleased is empty. Add at least one .md changelog fragment before running npm run bump.",
-  //   );
-  // }
+  const validated = validateUnreleasedFragments();
+  if (validated.files.length === 0) {
+    console.log("[bump] No changelog fragments found \u2014 generating from git commit history\u2026");
+    generateFragmentFromGitLog(currentVersion);
+  }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
 
@@ -527,70 +591,102 @@ async function main() {
     return;
   }
 
-  // ── package.json ────────────────────────────────────────────────────────────
+  // ── Snapshot git state so we can revert on failure ─────────────────────────
+  //
+  // Stash any uncommitted changes (there shouldn't be any blocking ones, but
+  // be safe), then record HEAD so we know where to reset if the bump fails
+  // after files have been mutated.
 
-  // Re-read in case something changed
-  const pkgFresh = JSON.parse(readText("package.json"));
-  pkgFresh.version = newVersion;
-  writeText("package.json", `${JSON.stringify(pkgFresh, null, 2)}\n`);
+  const headBefore = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
 
-  // ── src-tauri/tauri.conf.json ───────────────────────────────────────────────
+  // Track whether we've started mutating files
+  let mutationStarted = false;
 
-  const tauriConfPath = "src-tauri/tauri.conf.json";
-  const tauriConf = JSON.parse(readText(tauriConfPath));
-  tauriConf.version = newVersion;
-  writeText(tauriConfPath, `${JSON.stringify(tauriConf, null, 2)}\n`);
+  try {
+    mutationStarted = true;
 
-  // ── src-tauri/Cargo.toml ────────────────────────────────────────────────────
+    // ── package.json ──────────────────────────────────────────────────────────
 
-  const cargoPath = "src-tauri/Cargo.toml";
-  let cargo = readText(cargoPath);
+    // Re-read in case something changed
+    const pkgFresh = JSON.parse(readText("package.json"));
+    pkgFresh.version = newVersion;
+    writeText("package.json", `${JSON.stringify(pkgFresh, null, 2)}\n`);
 
-  const versionLine = /^version\s*=\s*"[^"]+"/m;
-  if (!versionLine.test(cargo)) {
-    throw new Error("Could not find package version in Cargo.toml");
-  }
-  cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
-  writeText(cargoPath, cargo);
+    // ── src-tauri/tauri.conf.json ─────────────────────────────────────────────
 
-  // ── CHANGELOG.md — compile fragments ───────────────────────────────────────
+    const tauriConfPath = "src-tauri/tauri.conf.json";
+    const tauriConf = JSON.parse(readText(tauriConfPath));
+    tauriConf.version = newVersion;
+    writeText(tauriConfPath, `${JSON.stringify(tauriConf, null, 2)}\n`);
 
-  const date = todayIsoDate();
-  const result = compileChangelog(newVersion, date);
+    // ── src-tauri/Cargo.toml ──────────────────────────────────────────────────
 
-  if (result.entryCount === 0) {
-    throw new Error(
-      "Bump aborted: no changelog entries were compiled. Ensure changes/unreleased contains valid markdown fragments.",
+    const cargoPath = "src-tauri/Cargo.toml";
+    let cargo = readText(cargoPath);
+
+    const versionLine = /^version\s*=\s*"[^"]+"/m;
+    if (!versionLine.test(cargo)) {
+      throw new Error("Could not find package version in Cargo.toml");
+    }
+    cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
+    writeText(cargoPath, cargo);
+
+    // ── CHANGELOG.md — compile fragments ─────────────────────────────────────
+
+    const date = todayIsoDate();
+    const result = compileChangelog(newVersion, date);
+
+    if (result.entryCount === 0) {
+      throw new Error(
+        "Bump aborted: no changelog entries were compiled. Ensure changes/unreleased contains valid markdown fragments.",
+      );
+    }
+
+    console.log(
+      `\n[bump] Compiled ${result.entryCount} changelog entr${result.entryCount === 1 ? "y" : "ies"} from ${result.consumedFiles.length} fragment${result.consumedFiles.length === 1 ? "" : "s"}:`,
     );
+    for (const file of result.consumedFiles) {
+      console.log(`[bump]   - ${file}`);
+    }
+    console.log("[bump] Category counts:");
+    for (const [category, count] of Object.entries(result.categoryCounts)) {
+      console.log(`[bump]   - ${category}: ${count}`);
+    }
+    execSync("cargo generate-lockfile", { stdio: "inherit" });
+
+    // ── optionally clean Rust build artifacts to free disk space ──────────────
+
+    if (clean) {
+      execSync("npm run clean:rust", { stdio: "inherit" });
+    }
+
+    // ── create bump commit ────────────────────────────────────────────────────
+
+    execSync("git add -A", { stdio: "inherit" });
+    execSync(`git commit -m "${newVersion}"`, { stdio: "inherit" });
+
+    console.log(`\n\x1b[1;32m[bump] ✓ ${newVersion} committed successfully\x1b[0m`);
+  } catch (err) {
+    // ── Revert all file mutations on failure ──────────────────────────────────
+    if (mutationStarted) {
+      console.error(`\n\x1b[1;31m[bump] Failed — reverting all changes…\x1b[0m`);
+      try {
+        // Reset tracked files to pre-bump state
+        execSync(`git checkout -- .`, { stdio: "inherit" });
+        // Remove any untracked files created during bump (e.g. release archive)
+        execSync(`git clean -fd changes/releases`, { stdio: "ignore" });
+      } catch (revertErr) {
+        console.error(`\x1b[31m[bump] Revert failed: ${revertErr.message}. Manual cleanup may be needed.\x1b[0m`);
+        console.error(`[bump] To restore manually: git reset --hard ${headBefore}`);
+      }
+    }
+    throw err;
   }
-
-  console.log(
-    `\n[bump] Compiled ${result.entryCount} changelog entr${result.entryCount === 1 ? "y" : "ies"} from ${result.consumedFiles.length} fragment${result.consumedFiles.length === 1 ? "" : "s"}:`,
-  );
-  for (const file of result.consumedFiles) {
-    console.log(`[bump]   - ${file}`);
-  }
-  console.log("[bump] Category counts:");
-  for (const [category, count] of Object.entries(result.categoryCounts)) {
-    console.log(`[bump]   - ${category}: ${count}`);
-  }
-  execSync("cargo generate-lockfile", { stdio: "inherit" });
-
-  // ── optionally clean Rust build artifacts to free disk space ────────────────
-
-  if (clean) {
-    execSync("npm run clean:rust", { stdio: "inherit" });
-  }
-
-  // ── create bump commit ──────────────────────────────────────────────────────
-
-  execSync(
-    "git add -A package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml Cargo.lock CHANGELOG.md changes/releases changes/unreleased",
-    { stdio: "inherit" },
-  );
-  execSync(`git commit --no-verify -m "${newVersion}"`, { stdio: "inherit" });
 }
 
-main().catch((_err) => {
+main().catch((err) => {
+  if (err?.message) {
+    console.error(`\x1b[31m${err.message}\x1b[0m`);
+  }
   process.exit(1);
 });

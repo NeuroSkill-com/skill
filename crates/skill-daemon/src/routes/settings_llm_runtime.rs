@@ -285,6 +285,15 @@ pub(crate) async fn llm_server_stop_impl(State(state): State<AppState>) -> Json<
     #[cfg(feature = "llm")]
     {
         skill_llm::shutdown_cell(&state.llm_state_cell);
+
+        // Persist enabled = false so the server stays stopped across daemon
+        // restarts.  Mirrors the `enabled = true` write in llm_server_start_impl.
+        if let Ok(mut g) = state.llm_config.lock() {
+            g.enabled = false;
+        }
+        let mut settings = load_user_settings(&state);
+        settings.llm.enabled = false;
+        save_user_settings(&state, &settings);
     }
     if let Ok(mut st) = state.llm_status.lock() {
         *st = "stopped".to_string();
