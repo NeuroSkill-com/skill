@@ -68,6 +68,8 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 
 
 
+
+
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
 # Shared across multiple crates to ensure a single version + feature set.
