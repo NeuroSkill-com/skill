@@ -272,6 +272,26 @@ jobs:
             # Building skill second reuses the cached native libs.
             cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --timings
             cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings
+            
+            # Fix @rpath for skill-daemon immediately after build
+            # llama-cpp-4 builds .dylib files by default; we need to embed them
+            # in the .app bundle and update the binary's search paths
+            DAEMON_BIN="src-tauri/target/aarch64-apple-darwin/release/skill-daemon"
+            if [ -f "$DAEMON_BIN" ]; then
+              echo "Fixing @rpath for skill-daemon…"
+              
+              # Create Frameworks directory if it doesn't exist
+              mkdir -p "src-tauri/target/aarch64-apple-darwin/release/Frameworks"
+              
+              # Copy any .dylib files that the daemon depends on
+              for LIB in libggml-base.0.dylib libllama.1.dylib; do
+                if [ -f "src-tauri/target/aarch64-apple-darwin/release/$LIB" ]; then
+                  cp "src-tauri/target/aarch64-apple-darwin/release/$LIB" \
+                     "src-tauri/target/aarch64-apple-darwin/release/Frameworks/"
+                  install_name_tool -change @rpath/$LIB @executable_path/../Frameworks/$LIB "$DAEMON_BIN"
+                fi
+              done
+            fi
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
