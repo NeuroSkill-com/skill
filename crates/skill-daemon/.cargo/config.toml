@@ -16,10 +16,10 @@ panic = "abort"  # Reduce binary size
 lto = true       # Enable link-time optimization
 codegen-units = 1
 
-# When building for macOS, prefer static linking for system libraries
-# that llama-cpp might use
+# When building for macOS, prefer static linking for llama-cpp
+# Note: We cannot use -static on macOS as it conflicts with system frameworks
+# Instead, we rely on the llama-cpp-4 'native' feature for static linking
 [target.aarch64-apple-darwin]
 rustflags = [
-    "-C", "link-arg=-static",
     "-C", "link-arg=-Wl,-search_paths_first",
 ]
