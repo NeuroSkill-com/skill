@@ -73,6 +73,8 @@ jobs:
             --workspace \
             --exclude iroh_test_client \
             --exclude iroh-example-client \
+            --no-default-features \
+            --features llm,embed-luna,embed-reve,embed-osf,embed-sleepfm,embed-sleeplm,embed-steegformer,embed-tribev2,embed-neurorvq \
             --lcov \
             --output-path lcov.info
 
@@ -80,6 +82,8 @@ jobs:
             --workspace \
             --exclude iroh_test_client \
             --exclude iroh-example-client \
+            --no-default-features \
+            --features llm,embed-luna,embed-reve,embed-osf,embed-sleepfm,embed-sleeplm,embed-steegformer,embed-tribev2,embed-neurorvq \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 
