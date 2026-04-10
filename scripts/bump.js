@@ -494,20 +494,28 @@ function parseArgs() {
 function generateFragmentFromGitLog(currentVersion) {
   const UNRELEASED_DIR = "changes/unreleased";
 
-  // Find the commit range: last version tag (or version-bump commit) to HEAD
+  // Always generate from commit history since last version bump
+  // Find the last version bump commit (message exactly matches version string)
   let range = "";
   try {
-    // Try tag first: v0.0.91
-    execSync(`git rev-parse "v${currentVersion}" 2>/dev/null`, { stdio: "ignore" });
-    range = `v${currentVersion}..HEAD`;
+    // Find the most recent commit whose message is exactly the current version
+    const sha = execSync(`git log --all --format=%H --grep="^${currentVersion}$" --fixed-strings -1`, {
+      encoding: "utf8",
+    }).trim();
+    if (sha) {
+      range = `${sha}..HEAD`;
+    }
   } catch {
+    // ignore
+  }
+
+  // If we couldn't find a version bump commit, use the last version tag
+  if (!range) {
     try {
-      // Fallback: find the commit whose message is exactly the version string
-      const sha = execSync(`git log --all --format=%H --grep="^${currentVersion}$" --fixed-strings -1`, {
-        encoding: "utf8",
-      }).trim();
-      if (sha) {
-        range = `${sha}..HEAD`;
+      // Try to find the last version tag
+      const lastTag = execSync("git describe --tags --abbrev=0 2>/dev/null", { encoding: "utf8" }).trim();
+      if (lastTag && lastTag.startsWith("v")) {
+        range = `${lastTag}..HEAD`;
       }
     } catch {
       // ignore
@@ -515,29 +523,43 @@ function generateFragmentFromGitLog(currentVersion) {
   }
 
   // Collect commit subjects (skip merge commits)
-  let logCmd = "git log --no-merges --format=%s";
-  if (range) logCmd += ` ${range}`;
-  else logCmd += " -30"; // fallback: last 30 commits
+  let logCmd = "git log --no-merges --format=%B";
+  if (range) {
+    logCmd += ` ${range}`;
+  }
 
-  let subjects;
+  let commits;
   try {
-    subjects = execSync(logCmd, { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+    commits = execSync(logCmd, { encoding: "utf8" }).trim();
   } catch {
-    subjects = [];
+    commits = "";
   }
 
-  if (subjects.length === 0) {
-    subjects = ["Minor updates and improvements"];
-  }
-
-  // Deduplicate and filter out version-bump commits (e.g. "0.0.91")
-  const seen = new Set();
+  // Parse commit messages and create bullet points
+  const commitMessages = commits.split("\n\n").filter(Boolean);
   const bullets = [];
-  for (const s of subjects) {
-    if (/^\d+\.\d+\.\d+$/.test(s)) continue; // skip version-only commits
-    if (seen.has(s)) continue;
-    seen.add(s);
-    bullets.push(`- ${s}`);
+  const seen = new Set();
+
+  for (const commit of commitMessages) {
+    const lines = commit.split("\n").filter(Boolean);
+    if (lines.length === 0) continue;
+    
+    const subject = lines[0];
+    
+    // Skip version-only commits
+    if (/^\d+\.\d+\.\d+$/.test(subject)) continue;
+    
+    // Skip if we've already seen this subject
+    if (seen.has(subject)) continue;
+    seen.add(subject);
+    
+    // Use the full commit message if it's a conventional commit
+    // Otherwise just use the subject line
+    if (/^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert|WIP):/.test(subject)) {
+      bullets.push(`- ${commit.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`);
+    } else {
+      bullets.push(`- ${subject}`);
+    }
   }
 
   if (bullets.length === 0) {
@@ -579,6 +601,8 @@ async function main() {
   if (validated.files.length === 0) {
     console.log("[bump] No changelog fragments found \u2014 generating from git commit history\u2026");
     generateFragmentFromGitLog(currentVersion);
+  } else {
+    console.log(`[bump] Found ${validated.files.length} changelog fragment${validated.files.length === 1 ? '' : 's'} — will use these instead of git log`);
   }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
