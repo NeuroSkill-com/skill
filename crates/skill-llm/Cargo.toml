@@ -32,13 +32,13 @@ hf-hub     = "0.5"
 skill-tools  = { path = "../skill-tools", default-features = false }
 skill-skills = { path = "../skill-skills" }
 
-llama-cpp-4 = { version = "0.2.42", optional = true }
+llama-cpp-4 = { version = "0.2.42", optional = true, features = ["static"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-4 = { version = "0.2.42", optional = true, features = ["metal"] }
+llama-cpp-4 = { version = "0.2.42", optional = true, features = ["metal", "static"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-4 = { version = "0.2.42", optional = true, features = ["vulkan"] }
+llama-cpp-4 = { version = "0.2.42", optional = true, features = ["vulkan", "static"] }
 
 [dev-dependencies]
 tempfile = "3"
