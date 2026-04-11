@@ -8,6 +8,31 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.112] — 2026-04-11
+
+### Features
+
+- New daemon files created:
+- - crates/skill-daemon/src/reconnect.rs — Reconnect state machine (backoff, retry countdown, MAX_RETRY_ATTEMPTS) with background loop and REST endpoints
+- Daemon state.rs changes:
+- - Added broadcast() convenience method on AppState
+- Daemon main.rs changes:
+- - Registered new modules (reconnect, monitor, background)
+- Daemon session metadata enriched:
+- - write_session_meta_full() now accepts optional StatusResponse for richer metadata (battery, signal quality, device identity, phone info)
+- Tauri files simplified:
+- - lifecycle.rs — Removed reconnect state machine (130+ lines). go_disconnected now just cleans local state and delegates to daemon
+- updated coverage.ci
+-   Removed direct deps (37 total):
+- lean tauri
+- decouple tauri from wgpu
+- chinese
+- exclude skill from coverage ci
+- Both GPU and CPU modes compile. Here's a summary of all changes made:
+-   1. scripts/create-macos-dmg.sh — Fixed unbound CLEANUP_DIRS[@] under set -u
+- fixed ci
+- updated CI
+
 ## [0.0.111] — 2026-04-11
 
 ### Features
