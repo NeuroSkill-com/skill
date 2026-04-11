@@ -152,6 +152,18 @@ Every feature or bugfix **must** include a changelog fragment:
 
 At release time, `npm run bump` compiles fragments into versioned release notes.
 
+**Note**: The `bump` command includes safety checks to prevent accidental multiple bumps. It verifies that the current version has been properly tagged and pushed to the remote. If you need to bypass these checks (e.g., during recovery), use:
+
+```bash
+npm run bump --force
+```
+
+After bumping, always create and push the version tag:
+
+```bash
+npm run tag
+```
+
 ## Secrets & Keychain
 
 In **release builds**, API tokens and device credentials are stored in the

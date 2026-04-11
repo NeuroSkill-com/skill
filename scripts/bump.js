@@ -58,6 +58,59 @@ function ensureLinuxTauriDeps() {
   );
 }
 
+/**
+ * Check if the current version has been tagged and pushed to remote.
+ * This prevents accidental multiple bumps before the previous version is tagged.
+ */
+function checkVersionTagged(version) {
+  const tagName = `v${version}`;
+
+  // Check if tag exists locally
+  try {
+    execSync(`git rev-parse ${tagName}`, { stdio: "ignore" });
+  } catch {
+    throw new Error(
+      `Bump aborted: Current version ${version} is not tagged locally.` +
+        `\nRun 'npm run tag' to create and push the tag before bumping to a new version.`,
+    );
+  }
+
+  // Check if tag exists on at least one remote
+  try {
+    const remotes = execSync("git remote", { encoding: "utf8" })
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    let foundOnRemote = false;
+
+    for (const remote of remotes) {
+      try {
+        // Check if the tag exists on this remote
+        execSync(`git ls-remote --tags --exit-code ${remote} refs/tags/${tagName}`, { stdio: "ignore" });
+        foundOnRemote = true;
+        break;
+      } catch {
+        // Tag not on this remote, try next one
+      }
+    }
+
+    if (!foundOnRemote) {
+      throw new Error(
+        `Bump aborted: Tag ${tagName} exists locally but not on any remote.` +
+          `\nRun 'git push --tags' or 'npm run tag' to push the tag before bumping to a new version.`,
+      );
+    }
+  } catch (err) {
+    if (err.message.includes("Bump aborted")) {
+      throw err;
+    }
+    throw new Error(
+      `Bump aborted: Could not verify if tag ${tagName} exists on remote: ${err.message}`,
+    );
+  }
+}
+
 // Workspace crates that CI runs clippy + tests on (mirrors ci.yml).
 const WORKSPACE_CRATES = [
   "skill-eeg",
@@ -471,13 +524,31 @@ function parseArgs() {
   let dryRun = false;
   let clean = false;
   let versionArg = null;
+  let force = false;
 
   for (const a of args) {
     if (a === "--dry-run") {
       dryRun = true;
     } else if (a === "--clean") {
       clean = true;
+    } else if (a === "--force") {
+      force = true;
     } else if (a === "--help" || a === "-h") {
+      console.log(`
+Usage: npm run bump [version] [--dry-run] [--clean] [--force]
+
+Arguments:
+  version       Optional specific version (e.g., 1.2.3). If not provided, patches current version.
+
+Flags:
+  --dry-run     Run all checks without making any changes
+  --clean       Clean Rust build artifacts after successful bump
+  --force       Bypass version tag check (use with caution)
+
+Note: By default, bump will refuse to run if the current version is not tagged
+      and pushed to the remote. This prevents accidental multiple bumps. Use --force
+      to override this safety check.
+`);
       process.exit(0);
     } else if (!a.startsWith("-")) {
       versionArg = a;
@@ -486,7 +557,7 @@ function parseArgs() {
     }
   }
 
-  return { dryRun, clean, versionArg };
+  return { dryRun, clean, versionArg, force };
 }
 
 // ── auto-generate changelog fragment from git log ────────────────────────────
@@ -579,12 +650,19 @@ function generateFragmentFromGitLog(currentVersion) {
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
-  const { dryRun, clean, versionArg } = parseArgs();
+  const { dryRun, clean, versionArg, force } = parseArgs();
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
   const pkg = JSON.parse(readText("package.json"));
   const currentVersion = pkg.version;
+
+  // ── Check if current version is already tagged and pushed ─────────────────
+  if (!force) {
+    checkVersionTagged(currentVersion);
+  } else {
+    console.log("[bump] --force flag used: skipping version tag check");
+  }
 
   const newVersion = versionArg ? validateVersion(versionArg) : bumpPatch(currentVersion);
 

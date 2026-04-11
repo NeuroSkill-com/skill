@@ -96,6 +96,27 @@ npm run bump 1.2.0
 
 This syncs versions across app manifests and compiles changelog fragments.
 
+**Important**: The `bump` command now includes safety checks to prevent accidental multiple bumps:
+- It verifies that the current version has a git tag (`vX.X.X`) locally
+- It verifies that the tag has been pushed to a remote
+- If either check fails, the bump will be aborted with instructions
+
+To bypass these checks (use with caution):
+```bash
+npm run bump --force
+```
+
+After a successful bump, create and push the version tag:
+```bash
+npm run tag
+```
+
+Or manually:
+```bash
+git tag vX.X.X
+git push --tags
+```
+
 ## Release (local)
 
 ```bash
