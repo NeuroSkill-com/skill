@@ -17,6 +17,9 @@ llm-native = ["llm", "llama-cpp-4?/native"]
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+
+[build-dependencies]
+glob = "0.3"
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 serde      = { version = "1", features = ["derive"] }
