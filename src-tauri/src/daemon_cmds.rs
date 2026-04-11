@@ -14,13 +14,12 @@ pub fn push_event_to_daemon_erased(event_type: &str, payload: &dyn erased_serde:
 
 use serde::Serialize;
 use skill_daemon_common::{
-    DiscoveredDeviceResponse, ForgetDeviceRequest, PairedDeviceResponse, ScannerStateResponse,
-    ScannerWifiConfigRequest, SessionControlRequest, SetPreferredDeviceRequest, StatusResponse,
-    VersionResponse, WsPortResponse, PROTOCOL_VERSION,
+    DiscoveredDeviceResponse, ForgetDeviceRequest, ScannerStateResponse, ScannerWifiConfigRequest,
+    SessionControlRequest, SetPreferredDeviceRequest, StatusResponse, VersionResponse,
+    WsPortResponse, PROTOCOL_VERSION,
 };
 use std::{
     path::PathBuf,
-    sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
 #[derive(Debug, Clone, Serialize)]
@@ -887,153 +886,7 @@ pub(crate) fn scanner_set_wifi_config(
     )
 }
 
-struct MirrorState {
-    last_sent_at: Instant,
-    last_payload: String,
-}
-
-fn mirror_status_state() -> &'static Mutex<MirrorState> {
-    static STATE: OnceLock<Mutex<MirrorState>> = OnceLock::new();
-    STATE.get_or_init(|| {
-        Mutex::new(MirrorState {
-            last_sent_at: Instant::now() - Duration::from_secs(10),
-            last_payload: String::new(),
-        })
-    })
-}
-
-fn mirror_devices_state() -> &'static Mutex<MirrorState> {
-    static STATE: OnceLock<Mutex<MirrorState>> = OnceLock::new();
-    STATE.get_or_init(|| {
-        Mutex::new(MirrorState {
-            last_sent_at: Instant::now() - Duration::from_secs(10),
-            last_payload: String::new(),
-        })
-    })
-}
-
-pub(crate) fn mirror_status_to_daemon(local: &crate::DeviceStatus) {
-    let status = StatusResponse {
-        state: local.state.clone(),
-        device_name: local.device_name.clone(),
-        device_kind: local.device_kind.clone(),
-        device_id: local.device_id.clone(),
-        sample_count: local.sample_count,
-        battery: local.battery,
-        device_error: local.device_error.clone(),
-        target_name: local.target_name.clone(),
-        target_id: local.target_id.clone(),
-        target_display_name: local.target_display_name.clone(),
-        retry_attempt: local.retry_attempt,
-        retry_countdown_secs: local.retry_countdown_secs,
-        paired_devices: local
-            .paired_devices
-            .iter()
-            .map(|d| PairedDeviceResponse {
-                id: d.id.clone(),
-                name: d.name.clone(),
-                last_seen: d.last_seen,
-            })
-            .collect(),
-        csv_path: local.csv_path.clone(),
-        channel_names: local.channel_names.clone(),
-        ppg_channel_names: local.ppg_channel_names.clone(),
-        imu_channel_names: local.imu_channel_names.clone(),
-        fnirs_channel_names: local.fnirs_channel_names.clone(),
-        eeg_channel_count: local.eeg_channel_count,
-        eeg_sample_rate_hz: local.eeg_sample_rate_hz,
-        channel_quality: local
-            .channel_quality
-            .iter()
-            .map(|q| format!("{q:?}").to_lowercase())
-            .collect(),
-        serial_number: local.serial_number.clone(),
-        mac_address: local.mac_address.clone(),
-        firmware_version: local.firmware_version.clone(),
-        hardware_version: local.hardware_version.clone(),
-        has_ppg: local.has_ppg,
-        has_imu: local.has_imu,
-        has_central_electrodes: local.has_central_electrodes,
-        has_full_montage: local.has_full_montage,
-        ppg_sample_count: local.ppg_sample_count,
-        phone_info: local.phone_info.clone(),
-        iroh_client_name: local.iroh_client_name.clone(),
-        iroh_tunnel_online: local.iroh_tunnel_online,
-        iroh_connected_peers: local.iroh_connected_peers,
-        iroh_remote_device_connected: local.iroh_remote_device_connected,
-        iroh_streaming_active: local.iroh_streaming_active,
-        iroh_eeg_streaming_active: local.iroh_eeg_streaming_active,
-    };
-
-    let Ok(payload) = serde_json::to_string(&status) else {
-        return;
-    };
-
-    if let Ok(mut guard) = mirror_status_state().lock() {
-        let elapsed = guard.last_sent_at.elapsed();
-        if elapsed < Duration::from_millis(500) {
-            return;
-        }
-        if guard.last_payload == payload && elapsed < Duration::from_secs(5) {
-            return;
-        }
-        guard.last_payload = payload;
-        guard.last_sent_at = Instant::now();
-    }
-
-    let base_url = daemon_base_url();
-    let Ok(token) = load_daemon_token() else {
-        return;
-    };
-
-    let _ = post_json_with_auth::<StatusResponse>(&base_url, &token, "/v1/status", &status);
-}
-
-pub(crate) fn mirror_devices_to_daemon(local: &[crate::DiscoveredDevice]) {
-    let devices: Vec<DiscoveredDeviceResponse> = local
-        .iter()
-        .map(|d| DiscoveredDeviceResponse {
-            id: d.id.clone(),
-            name: d.name.clone(),
-            last_seen: d.last_seen,
-            last_rssi: d.last_rssi,
-            is_paired: d.is_paired,
-            is_preferred: d.is_preferred,
-            transport: serde_json::to_value(d.transport)
-                .ok()
-                .and_then(|v| v.as_str().map(std::string::ToString::to_string))
-                .unwrap_or_else(|| "ble".to_string()),
-        })
-        .collect();
-
-    let Ok(payload) = serde_json::to_string(&devices) else {
-        return;
-    };
-
-    if let Ok(mut guard) = mirror_devices_state().lock() {
-        let elapsed = guard.last_sent_at.elapsed();
-        if elapsed < Duration::from_millis(500) {
-            return;
-        }
-        if guard.last_payload == payload && elapsed < Duration::from_secs(5) {
-            return;
-        }
-        guard.last_payload = payload;
-        guard.last_sent_at = Instant::now();
-    }
-
-    let base_url = daemon_base_url();
-    let Ok(token) = load_daemon_token() else {
-        return;
-    };
-
-    let _ = post_json_with_auth::<Vec<DiscoveredDeviceResponse>>(
-        &base_url,
-        &token,
-        "/v1/devices",
-        &devices,
-    );
-}
+// Mirror state functions removed — daemon is sole authority for device/status state.
 
 fn fetch_version(base_url: &str, token: &str) -> Result<VersionResponse, String> {
     fetch_json_with_auth(base_url, token, "/v1/version")

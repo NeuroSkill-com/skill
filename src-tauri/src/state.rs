@@ -516,10 +516,6 @@ pub struct AppState {
     /// Inference device preference for EXG embeddings: `"gpu"` or `"cpu"`.
     pub exg_inference_device: String,
 
-    /// Emotiv Cortex WebSocket connection state for the UI.
-    /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
-    pub cortex_ws_state: String,
-
     // ── Smart alarm ────────────────────────────────────────────────────────
 
     // ── TTS ───────────────────────────────────────────────────────────────
@@ -636,7 +632,6 @@ impl Default for AppState {
             exg_inference_device: skill_settings::default_exg_inference_device(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
-            cortex_ws_state: "disconnected".into(),
             neutts_config: NeuttsConfig::default(),
             tts_preload: true,
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),

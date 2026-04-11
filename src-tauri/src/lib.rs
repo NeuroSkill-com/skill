@@ -73,9 +73,7 @@ mod session_analysis;
 mod autostart;
 mod settings;
 mod tts;
-pub(crate) use settings::{
-    default_skill_dir, new_profile_id, CalibrationConfig, CalibrationProfile,
-};
+pub(crate) use settings::{default_skill_dir, CalibrationConfig, CalibrationProfile};
 
 mod tray;
 

@@ -973,29 +973,28 @@ pub fn set_active_calibration(
 #[tauri::command]
 pub fn create_calibration_profile(
     profile: CalibrationProfile,
-    app: AppHandle,
+    _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
-    crate::calibration_service::create_profile(&app, profile)
+    crate::calibration_service::create_profile(profile).unwrap_or_default()
 }
 
 #[tauri::command]
 pub fn update_calibration_profile(
     profile: CalibrationProfile,
-    app: AppHandle,
+    _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    crate::calibration_service::update_profile(&app, profile)?;
-    Ok(())
+    crate::calibration_service::update_profile(profile)
 }
 
 #[tauri::command]
 pub fn delete_calibration_profile(
     id: String,
-    app: AppHandle,
+    _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    crate::calibration_service::delete_profile(&app, &id)
+    crate::calibration_service::delete_profile(&id)
 }
 
 #[tauri::command]

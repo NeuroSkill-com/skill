@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-use crate::settings::{save_secrets_from_settings, settings_path, CalibrationConfig, UserSettings};
+use crate::settings::{save_secrets_from_settings, settings_path};
 use crate::state::*;
 use crate::ws_server::WsBroadcaster;
 use crate::MutexExt;
@@ -97,31 +97,23 @@ pub(crate) fn apply_daemon_status(
     local.iroh_eeg_streaming_active = ds.iroh_eeg_streaming_active;
 }
 
+/// Emit status to the frontend and local WS clients.
+/// The daemon is the sole authority — no mirroring back.
 pub(crate) fn emit_status(app: &AppHandle) {
-    emit_status_inner(app, true);
-}
-
-/// Emit status to the frontend without mirroring back to the daemon.
-/// Used when the status data originated FROM the daemon (poll loop) to
-/// avoid overwriting the daemon's authoritative state.
-pub(crate) fn emit_status_from_daemon(app: &AppHandle) {
-    emit_status_inner(app, false);
-}
-
-fn emit_status_inner(app: &AppHandle, mirror: bool) {
     let s_ref = app.app_state();
     let st = {
         let g = s_ref.lock_or_recover();
         g.status.clone()
     };
-    // Renamed from "muse-status" to "status" — device-agnostic.
     let _ = app.emit("status", &st);
     app.state::<WsBroadcaster>().send("status", &st);
-    if mirror {
-        crate::daemon_cmds::mirror_status_to_daemon(&st);
-    }
     crate::daemon_cmds::push_event_to_daemon("status", &st);
     crate::tray::refresh_tray(app);
+}
+
+/// Alias kept for call-site clarity — both paths now behave identically.
+pub(crate) fn emit_status_from_daemon(app: &AppHandle) {
+    emit_status(app);
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {
@@ -131,62 +123,9 @@ pub(crate) fn emit_devices(app: &AppHandle) {
         g.discovered.clone()
     };
     let _ = app.emit("devices-updated", &d);
-    crate::daemon_cmds::mirror_devices_to_daemon(&d);
 }
 
-/// Emit the Cortex WebSocket connection state to the frontend.
-pub(crate) fn emit_cortex_ws_state(app: &AppHandle) {
-    let state = {
-        let s_ref = app.app_state();
-        let g = s_ref.lock_or_recover();
-        g.cortex_ws_state.clone()
-    };
-    let _ = app.emit("cortex-ws-state", &state);
-}
-
-/// Update the Cortex WS state in AppState and emit it to the frontend.
-/// Sends a toast notification on meaningful transitions (connected ↔ disconnected).
-#[allow(dead_code)]
-pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
-    let prev = {
-        let s_ref = app.app_state();
-        let mut g = s_ref.lock_or_recover();
-        if g.cortex_ws_state == state {
-            return;
-        }
-        let prev = g.cortex_ws_state.clone();
-        g.cortex_ws_state = state.to_owned();
-        prev
-    };
-    emit_cortex_ws_state(app);
-
-    // Notify the user on meaningful transitions.
-    match (prev.as_str(), state) {
-        ("connected", "disconnected") => {
-            // Remove stale Cortex-discovered devices so the UI doesn't show
-            // green "paired" badges for headsets that are no longer reachable.
-            remove_discovered_by_prefix(app, "cortex:");
-            send_toast(
-                app,
-                crate::ToastLevel::Warning,
-                "Emotiv Launcher Disconnected",
-                "The Cortex service is no longer reachable. Make sure EMOTIV Launcher is running.",
-            );
-        }
-        ("disconnected", "connected") => {
-            // Only toast on the first successful probe after being truly
-            // disconnected.  The scanner cycles through "connecting" →
-            // "connected" on every 10 s poll; we don't want a toast each time.
-            send_toast(
-                app,
-                crate::ToastLevel::Success,
-                "Emotiv Launcher Connected",
-                "Cortex service is reachable. Headsets will appear in the device list.",
-            );
-        }
-        _ => {}
-    }
-}
+// Cortex WS state management moved to skill-daemon scanner backend.
 
 // ── Toast / notification helpers ──────────────────────────────────────────────
 
@@ -292,87 +231,94 @@ pub(crate) fn save_settings(app: &AppHandle) {
 
 /// Immediately flush settings to disk (no debounce).  Called by the
 /// debounce timer and by shutdown paths that must persist before exit.
+///
+/// Uses read-modify-write: loads the existing settings from disk (which
+/// includes daemon-owned fields), overlays Tauri-owned UI/preference
+/// fields, and writes the result back.  This avoids clobbering fields
+/// that the daemon writes directly (hooks, LSL config, skills sync, etc.).
 pub(crate) fn save_settings_now(app: &AppHandle) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
-    let mut data = UserSettings {
-        paired: s.status.paired_devices.clone(),
-        preferred_id: s.preferred_id.clone(),
-        filter_config: s.status.filter_config,
-        embedding_overlap_secs: s.status.embedding_overlap_secs,
-        data_dir: None,
-        label_shortcut: s.shortcuts.label_shortcut.clone(),
-        search_shortcut: s.shortcuts.search_shortcut.clone(),
-        settings_shortcut: s.shortcuts.settings_shortcut.clone(),
-        calibration_shortcut: s.shortcuts.calibration_shortcut.clone(),
-        help_shortcut: s.shortcuts.help_shortcut.clone(),
-        history_shortcut: s.shortcuts.history_shortcut.clone(),
-        api_shortcut: s.shortcuts.api_shortcut.clone(),
-        theme_shortcut: s.shortcuts.theme_shortcut.clone(),
-        focus_timer_shortcut: s.shortcuts.focus_timer_shortcut.clone(),
-        #[cfg(feature = "llm")]
-        chat_shortcut: s.shortcuts.chat_shortcut.clone(),
-        calibration: CalibrationConfig::default(),
-        calibration_profiles: s.calibration_profiles.clone(),
-        active_calibration_id: s.active_calibration_id.clone(),
-        onboarding_complete: s.ui.onboarding_complete,
-        last_seen_whats_new_version: s.ui.last_seen_whats_new_version.clone(),
-        theme: s.ui.theme.clone(),
-        language: s.ui.language.clone(),
-        accent_color: s.ui.accent_color.clone(),
-        daily_goal_min: s.ui.daily_goal_min,
-        goal_notified_date: s.ui.goal_notified_date.clone(),
-        text_embedding_model: s.ui.text_embedding_model.clone(),
-        hooks: s.hooks.clone(),
-        ws_host: s.ws_host.clone(),
-        ws_port: s.ws_port,
-        api_token: s.api_token.clone(),
-        hf_endpoint: s.hf_endpoint.clone(),
-        update_check_interval_secs: s.update_check_interval_secs,
-        openbci: s.openbci_config.clone(),
-        device_api: s.device_api_config.clone(),
-        neutts: s.neutts_config.clone(),
-        tts_preload: s.tts_preload,
-        track_active_window: s.input.track_active_window,
-        track_input_activity: s.input.track_input_activity,
-        main_window_auto_fit: s.ui.main_window_auto_fit,
-        do_not_disturb: s.dnd.lock_or_recover().config.clone(),
-        llm: {
-            let __a = s.llm.clone();
-            let __r = __a.lock_or_recover().config.clone();
-            __r
-        },
-        screenshot: s.screenshot_config.clone(),
-        sleep: s.sleep_config.clone(),
-        storage_format: s.settings_storage_format.clone(),
-        scanner: s.scanner_config.clone(),
-        location_enabled: s.location_enabled,
-        lsl_auto_connect: false,
-        lsl_paired_streams: Vec::new(),
-        lsl_idle_timeout_secs: skill_settings::default_lsl_idle_timeout_secs(),
-        inference_device: s.inference_device.clone(),
-        llm_gpu_layers_saved: s.llm_gpu_layers_saved,
-        exg_inference_device: s.exg_inference_device.clone(),
-    };
-    let path = settings_path(&s.skill_dir);
-    drop(s);
+    let skill_dir = s.skill_dir.clone();
+    let path = settings_path(&skill_dir);
 
-    // Daemon-owned fields: read current values from settings.json so we
-    // don't overwrite daemon authority.  Previously we polled the daemon at
-    // save time, but now the daemon is authoritative for these fields and
-    // writes them directly to settings.json.
+    // Start from the on-disk state so daemon-owned fields are preserved.
+    let mut data = skill_settings::load_settings(&skill_dir);
+
+    // ── Overlay Tauri-owned fields ───────────────────────────────────────
+    // Device / session state (daemon also reads these at startup)
+    data.paired = s.status.paired_devices.clone();
+    data.preferred_id = s.preferred_id.clone();
+    data.filter_config = s.status.filter_config;
+    data.embedding_overlap_secs = s.status.embedding_overlap_secs;
+
+    // Keyboard shortcuts
+    data.label_shortcut = s.shortcuts.label_shortcut.clone();
+    data.search_shortcut = s.shortcuts.search_shortcut.clone();
+    data.settings_shortcut = s.shortcuts.settings_shortcut.clone();
+    data.calibration_shortcut = s.shortcuts.calibration_shortcut.clone();
+    data.help_shortcut = s.shortcuts.help_shortcut.clone();
+    data.history_shortcut = s.shortcuts.history_shortcut.clone();
+    data.api_shortcut = s.shortcuts.api_shortcut.clone();
+    data.theme_shortcut = s.shortcuts.theme_shortcut.clone();
+    data.focus_timer_shortcut = s.shortcuts.focus_timer_shortcut.clone();
+    #[cfg(feature = "llm")]
     {
-        let skill_dir = app.app_state().lock_or_recover().skill_dir.clone();
-        let existing = skill_settings::load_settings(&skill_dir);
-        data.hooks = existing.hooks;
-        data.lsl_auto_connect = existing.lsl_auto_connect;
-        data.lsl_paired_streams = existing.lsl_paired_streams;
-        data.lsl_idle_timeout_secs = existing.lsl_idle_timeout_secs;
-        data.llm.tools.skills_refresh_interval_secs =
-            existing.llm.tools.skills_refresh_interval_secs;
-        data.llm.tools.skills_sync_on_launch = existing.llm.tools.skills_sync_on_launch;
-        data.llm.tools.disabled_skills = existing.llm.tools.disabled_skills;
+        data.chat_shortcut = s.shortcuts.chat_shortcut.clone();
     }
+
+    // Calibration
+    data.calibration_profiles = s.calibration_profiles.clone();
+    data.active_calibration_id = s.active_calibration_id.clone();
+
+    // UI preferences
+    data.onboarding_complete = s.ui.onboarding_complete;
+    data.last_seen_whats_new_version = s.ui.last_seen_whats_new_version.clone();
+    data.theme = s.ui.theme.clone();
+    data.language = s.ui.language.clone();
+    data.accent_color = s.ui.accent_color.clone();
+    data.daily_goal_min = s.ui.daily_goal_min;
+    data.goal_notified_date = s.ui.goal_notified_date.clone();
+    data.text_embedding_model = s.ui.text_embedding_model.clone();
+    data.main_window_auto_fit = s.ui.main_window_auto_fit;
+
+    // Infrastructure / server config
+    data.ws_host = s.ws_host.clone();
+    data.ws_port = s.ws_port;
+    data.api_token = s.api_token.clone();
+    data.hf_endpoint = s.hf_endpoint.clone();
+    data.update_check_interval_secs = s.update_check_interval_secs;
+
+    // Hardware / device config
+    data.openbci = s.openbci_config.clone();
+    data.device_api = s.device_api_config.clone();
+    data.neutts = s.neutts_config.clone();
+    data.tts_preload = s.tts_preload;
+    data.screenshot = s.screenshot_config.clone();
+    data.sleep = s.sleep_config.clone();
+    data.storage_format = s.settings_storage_format.clone();
+    data.scanner = s.scanner_config.clone();
+    data.location_enabled = s.location_enabled;
+    data.inference_device = s.inference_device.clone();
+    data.llm_gpu_layers_saved = s.llm_gpu_layers_saved;
+    data.exg_inference_device = s.exg_inference_device.clone();
+
+    // Input tracking
+    data.track_active_window = s.input.track_active_window;
+    data.track_input_activity = s.input.track_input_activity;
+
+    // DND
+    data.do_not_disturb = s.dnd.lock_or_recover().config.clone();
+
+    // LLM config: overlay everything except `tools` (daemon-owned).
+    {
+        let llm_guard = s.llm.lock_or_recover();
+        let tools_backup = data.llm.tools.clone();
+        data.llm = llm_guard.config.clone();
+        data.llm.tools = tools_backup;
+    }
+
+    drop(s);
 
     // Persist secrets to the system keychain (encrypted, survives updates).
     save_secrets_from_settings(&data);
@@ -403,103 +349,4 @@ pub(crate) fn transport_from_id(id: &str) -> skill_daemon_common::DeviceTranspor
     }
 }
 
-// ── Paired device upsert ──────────────────────────────────────────────────────
-
-#[allow(dead_code)]
-pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
-    let now = unix_secs();
-    let transport = transport_from_id(id);
-    let s_ref = app.app_state();
-    let mut s = s_ref.lock_or_recover();
-    if let Some(d) = s.status.paired_devices.iter_mut().find(|d| d.id == id) {
-        d.last_seen = now;
-        d.name = name.to_owned();
-    } else {
-        s.status.paired_devices.push(PairedDevice {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            last_seen: now,
-        });
-    }
-    let pref = s.preferred_id.clone();
-    for d in s.discovered.iter_mut() {
-        if d.id == id {
-            d.is_paired = true;
-            d.last_seen = now;
-            d.name = name.to_owned();
-        }
-        d.is_preferred = pref.as_deref() == Some(&d.id);
-    }
-    if !s.discovered.iter().any(|d| d.id == id) {
-        s.discovered.push(DiscoveredDevice {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            last_seen: now,
-            last_rssi: 0,
-            is_paired: true,
-            is_preferred: pref.as_deref() == Some(id),
-            transport,
-        });
-        s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
-    }
-    drop(s);
-    save_settings(app);
-}
-
-/// Update a discovered device entry (called from device scanner backends).
-#[allow(dead_code)]
-pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16) {
-    let now = unix_secs();
-    let transport = transport_from_id(id);
-    let s_ref = app.app_state();
-    let mut s = s_ref.lock_or_recover();
-    // Exact match first; for Cortex devices also accept a legacy
-    // "cortex:emotiv" paired entry as a match for any "cortex:<headset>"
-    // discovered device (the legacy entry was created before individual
-    // headset IDs were tracked).
-    let is_paired = s.status.paired_devices.iter().any(|d| d.id == id)
-        || (id.starts_with("cortex:")
-            && id != "cortex:emotiv"
-            && s.status
-                .paired_devices
-                .iter()
-                .any(|d| d.id == "cortex:emotiv"));
-    let is_preferred = s.preferred_id.as_deref() == Some(id)
-        || (id.starts_with("cortex:") && s.preferred_id.as_deref() == Some("cortex:emotiv"));
-    if let Some(d) = s.discovered.iter_mut().find(|d| d.id == id) {
-        d.last_seen = now;
-        d.last_rssi = rssi;
-        d.is_paired = is_paired;
-        d.is_preferred = is_preferred;
-        d.name = name.to_owned();
-        d.transport = transport;
-    } else {
-        s.discovered.push(DiscoveredDevice {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            last_seen: now,
-            last_rssi: rssi,
-            is_paired,
-            is_preferred,
-            transport,
-        });
-    }
-    s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
-}
-
-/// Remove all discovered devices whose id starts with `prefix`.
-/// Used when a scanner backend goes offline (e.g. Cortex Launcher disconnects)
-/// so stale entries don't linger in the device list with green badges.
-#[allow(dead_code)]
-pub(crate) fn remove_discovered_by_prefix(app: &AppHandle, prefix: &str) {
-    let changed = {
-        let s_ref = app.app_state();
-        let mut s = s_ref.lock_or_recover();
-        let before = s.discovered.len();
-        s.discovered.retain(|d| !d.id.starts_with(prefix));
-        s.discovered.len() != before
-    };
-    if changed {
-        emit_devices(app);
-    }
-}
+// Device upsert helpers removed — device discovery/pairing is daemon-owned.
