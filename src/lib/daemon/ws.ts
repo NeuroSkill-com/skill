@@ -94,7 +94,7 @@ function scheduleReconnect() {
 /** Subscribe to a specific event type. Returns an unsubscribe function. */
 export function onDaemonEvent(type: string, handler: EventHandler): () => void {
   if (!_handlers.has(type)) _handlers.set(type, new Set());
-  _handlers.get(type)!.add(handler);
+  _handlers.get(type)?.add(handler);
   // Auto-connect on first subscription
   connectDaemonWs().catch(() => {});
   return () => {
