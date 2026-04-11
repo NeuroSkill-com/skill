@@ -75,6 +75,7 @@ jobs:
             --workspace \
             --exclude iroh_test_client \
             --exclude iroh-example-client \
+            --exclude skill \
             --no-default-features \
             --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
             --lcov \
@@ -84,6 +85,7 @@ jobs:
             --workspace \
             --exclude iroh_test_client \
             --exclude iroh-example-client \
+            --exclude skill \
             --no-default-features \
             --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
             --summary-only \

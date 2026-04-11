@@ -5,6 +5,7 @@
 
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
 use crate::constants;
 use crate::helpers::AppStateExt;
 use crate::settings::{load_settings, CalibrationProfile};

@@ -87,14 +87,21 @@ pub(crate) fn install_windows_crash_handler() {
             if info.is_null() {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
+            // SAFETY: `info` is non-null (checked above) and points to a valid
+            // EXCEPTION_POINTERS struct provided by the Windows SEH runtime.
             let record = unsafe { (*info).exception_record };
             if record.is_null() {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
+            // SAFETY: `record` is non-null (checked above) and points to a valid
+            // EXCEPTION_RECORD struct provided by the Windows SEH runtime.
             let code = unsafe { (*record).exception_code };
             if code == EXCEPTION_ACCESS_VIOLATION {
+                // SAFETY: `record` is a valid EXCEPTION_RECORD pointer (non-null, checked above).
                 let addr = unsafe { (*record).exception_address as usize };
+                // SAFETY: `record` is a valid EXCEPTION_RECORD; exception_information[0] holds the access type.
                 let info0 = unsafe { (*record).exception_information[0] };
+                // SAFETY: `record` is a valid EXCEPTION_RECORD; exception_information[1] holds the faulting address.
                 let info1 = unsafe { (*record).exception_information[1] };
                 let op = match info0 {
                     0 => "reading",
