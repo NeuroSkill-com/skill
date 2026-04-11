@@ -31,8 +31,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow     = { workspace = true }
 thiserror  = { workspace = true }
-
-[build-dependencies]
 glob = "0.3"
 futures = "0.3"
 axum = { version = "0.8", features = ["ws"] }
@@ -103,6 +101,8 @@ skill-iroh           = { path = "../skill-iroh" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
 sysinfo              = "0.33"
+
+[build-dependencies]
 
 [dev-dependencies]
 tempfile             = "3"

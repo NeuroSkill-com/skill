@@ -17,8 +17,6 @@ llm-native = ["llm", "llama-cpp-4?/native"]
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-
-[build-dependencies]
 glob = "0.3"
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
@@ -35,6 +33,8 @@ either     = "1"
 hf-hub     = "0.5"
 skill-tools  = { path = "../skill-tools", default-features = false }
 skill-skills = { path = "../skill-skills" }
+
+[build-dependencies]
 
 llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "native"] }
 
