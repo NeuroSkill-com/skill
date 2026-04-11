@@ -8,6 +8,18 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.114] — 2026-04-11
+
+### Features
+
+- migrated to nomic-ai/nomic-embed-text-v1.5 model for text and image embeddings
+- cleanup
+- Task 8 — Removed mirror state (~150 lines)
+- Task 9 — Removed device upsert helpers (~90 lines)
+- Task 10 — Removed Cortex WS state (~55 lines)
+- Task 11 — Refactored settings persistence
+- Task 12 — Removed calibration profile local cache
+
 ## [0.0.113] — 2026-04-11
 
 ### Features
