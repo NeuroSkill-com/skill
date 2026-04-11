@@ -13,8 +13,8 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
-cpu-only = ["dep:skill-exg"]
+embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+cpu-only = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
@@ -69,7 +69,7 @@ skill-jobs          = { path = "../skill-jobs" }
 skill-commands      = { path = "../skill-commands" }
 skill-health        = { path = "../skill-health" }
 skill-screenshots   = { path = "../skill-screenshots", default-features = false }
-skill-router        = { path = "../skill-router" }
+skill-router        = { path = "../skill-router", default-features = false }
 skill-skills        = { path = "../skill-skills", features = ["sync"] }
 skill-tools         = { path = "../skill-tools" }
 skill-oura          = { path = "../skill-oura" }
