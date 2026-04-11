@@ -626,13 +626,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_location_enabled_toggles() {
+    async fn set_location_disabled_roundtrip() {
         let (_td, state) = mk_state();
-        let req = BoolValueRequest { value: true };
-        let _ = set_location_enabled(State(state.clone()), Json(req)).await;
-        let res = get_location_enabled(State(state.clone())).await.0;
-        assert_eq!(res["value"], true);
-
+        // Only test disabling — enabling calls skill_location::request_access()
+        // which blocks waiting for a system permission dialog.
         let req = BoolValueRequest { value: false };
         let _ = set_location_enabled(State(state.clone()), Json(req)).await;
         let res = get_location_enabled(State(state.clone())).await.0;
