@@ -6,8 +6,59 @@ use super::helpers::*;
 use super::safety::*;
 use super::safety::{clear_bash_edit_hook, request_bash_edit, set_bash_edit_hook};
 use super::status::format_status_as_text;
+use super::tools_web::{exec_web_fetch, exec_web_search};
 use super::truncate::*;
+use crate::types::LlmToolConfig;
 use serde_json::json;
+use tokio;
+
+fn mock_llm_tool_config() -> LlmToolConfig {
+    let mut config = LlmToolConfig::default();
+    config.web_search_provider.backend = "duckduckgo".to_string();
+    config.retry.max_retries = 0;
+    config.retry.base_delay_ms = 1;
+    config
+}
+
+#[tokio::test]
+async fn test_exec_web_search_missing_query() {
+    let args = json!({});
+    let config = mock_llm_tool_config();
+    let result = exec_web_search(&args, &config).await;
+    assert_eq!(result["ok"], false);
+    assert_eq!(result["tool"], "web_search");
+    assert!(result["error"].as_str().unwrap().contains("missing query"));
+}
+
+#[tokio::test]
+async fn test_exec_web_search_valid_query() {
+    let args = json!({"query": "rust programming"});
+    let config = mock_llm_tool_config();
+    let result = exec_web_search(&args, &config).await;
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["tool"], "web_search");
+    assert!(result["results"].is_array() || result["compact"].is_string());
+}
+
+#[tokio::test]
+async fn test_exec_web_fetch_invalid_url() {
+    let args = json!({"url": "ftp://example.com"});
+    let config = mock_llm_tool_config();
+    let result = exec_web_fetch(&args, &config).await;
+    assert_eq!(result["ok"], false);
+    assert_eq!(result["tool"], "web_fetch");
+    assert!(result["error"].as_str().unwrap().contains("http"));
+}
+
+#[tokio::test]
+async fn test_exec_web_fetch_missing_url() {
+    let args = json!({});
+    let config = mock_llm_tool_config();
+    let result = exec_web_fetch(&args, &config).await;
+    assert_eq!(result["ok"], false);
+    assert_eq!(result["tool"], "web_fetch");
+    assert!(result["error"].as_str().unwrap().contains("http"));
+}
 
 // ── truncate_text ─────────────────────────────────────────────────────────
 

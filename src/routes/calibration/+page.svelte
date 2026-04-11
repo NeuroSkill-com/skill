@@ -14,7 +14,7 @@ import { Button } from "$lib/components/ui/button";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { daemonStatus } from "$lib/daemon/status";
+import { daemonStatus } from "$lib/daemon/status.svelte";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";

@@ -7,6 +7,9 @@
 //! serial open, Cortex WS, PCAN, …) and return a `Box<dyn DeviceAdapter>`.
 
 mod connect;
+mod connect_ble;
+mod connect_wired;
+pub(crate) mod pipeline;
 mod runner;
 pub(crate) mod shared;
 

@@ -33,5 +33,11 @@
 //! ```
 
 mod store;
+pub mod store_db;
+pub mod store_types;
+pub mod store_util;
 
 pub use store::*;
+pub use store_types::{
+    HealthMetric, HealthSyncPayload, HeartRateSample, MindfulnessSample, SleepSample, StepsSample, Workout,
+};

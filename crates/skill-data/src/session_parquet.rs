@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
+
 //! Parquet recording writer — drop-in alternative to CSV.
 //!
 //! Stores EEG, PPG, and metrics data in columnar Apache Parquet files with

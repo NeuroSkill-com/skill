@@ -18,7 +18,7 @@ import {
   CALIBRATION_BREAK_DURATION_SECS,
   CALIBRATION_LOOP_COUNT,
 } from "$lib/constants";
-import { daemonStatus } from "$lib/daemon/status";
+import { daemonStatus } from "$lib/daemon/status.svelte";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 

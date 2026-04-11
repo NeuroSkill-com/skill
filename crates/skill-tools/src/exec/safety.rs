@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! Safety checks, user-approval dialogs, and bash-edit hook for tool operations.
+/// Safety checks, user-approval dialogs, and bash-edit hook for tool operations.
 
 use serde_json::json;
 use std::sync::{Arc, Mutex};
@@ -163,4 +163,27 @@ pub async fn request_tool_approval(tool_name: &str, reason: &str, detail: &str) 
 #[allow(dead_code)]
 pub(crate) fn blocked_json(tool_name: &str, reason: &str) -> serde_json::Value {
     json!({ "ok": false, "tool": tool_name, "error": reason })
+}
+
+#[cfg(test)]
+mod path_validation_tests {
+
+
+    #[test]
+    fn detects_dangerous_patterns() {
+        let dangerous = ["rm -rf /", "sudo reboot", "dd if=/dev/zero of=/dev/sda"];
+        for cmd in dangerous.iter() {
+            let result = super::check_bash_safety(cmd);
+            assert!(result.is_some(), "Should detect dangerous: {}", cmd);
+        }
+    }
+
+    #[test]
+    fn allows_safe_patterns() {
+        let safe = ["ls -l", "echo hello", "cat file.txt"];
+        for cmd in safe.iter() {
+            let result = super::check_bash_safety(cmd);
+            assert!(result.is_none(), "Should allow safe: {}", cmd);
+        }
+    }
 }

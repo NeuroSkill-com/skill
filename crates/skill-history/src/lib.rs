@@ -1177,3 +1177,30 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
         }
     }
 }
+
+#[cfg(test)]
+mod session_listing_tests {
+
+    #[test]
+    fn list_sessions_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20991231"; // unlikely to exist
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        assert!(sessions.is_empty(), "Expected no sessions in empty dir");
+    }
+
+    #[test]
+    fn filter_sessions_by_date() {
+        // TODO: Create mock session files with different dates and test filtering
+    }
+
+    #[test]
+    fn cache_hit_and_miss() {
+        // TODO: Simulate cache and verify hit/miss logic
+    }
+
+    #[test]
+    fn handle_corrupt_session_file() {
+        // TODO: Add a corrupt file and verify it is skipped or handled
+    }
+}

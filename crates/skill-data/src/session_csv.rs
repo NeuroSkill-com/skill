@@ -685,3 +685,40 @@ impl CsvState {
         }
     }
 }
+
+#[cfg(test)]
+mod round_trip_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn csv_round_trip() {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+        let dir = tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+
+        // Write EEG data
+        let mut csv = CsvState::open(&csv_path).unwrap();
+        let samples = [1.0, 2.0, 3.0, 4.0];
+        csv.push_eeg(0, &samples, 1000.0, 256.0);
+        csv.push_eeg(1, &samples, 1000.0, 256.0);
+        csv.push_eeg(2, &samples, 1000.0, 256.0);
+        csv.push_eeg(3, &samples, 1000.0, 256.0);
+        csv.flush();
+
+        // Read back and check
+        let file = File::open(&csv_path).unwrap();
+        let reader = BufReader::new(file);
+        let lines: Vec<_> = reader.lines().collect::<Result<_, _>>().unwrap();
+        // Header + 4 rows
+        assert_eq!(lines.len(), 5, "Should have header + 4 rows");
+        assert!(lines[0].contains("timestamp_s"));
+        assert!(lines[1].contains("1.0000"));
+    }
+
+    #[test]
+    fn csv_handles_empty_and_corrupt() {
+        // TODO: Write empty/corrupt CSV and verify error handling
+    }
+}

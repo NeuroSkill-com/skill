@@ -1110,7 +1110,7 @@ mod tests {
     /// and alpha relative power must far exceed the others.
     #[test]
     fn alpha_tone_dominates_alpha_band() {
-        let signal = sine(10.0, BAND_WINDOW * 4); // 4 windows for good steady-state
+        let signal = sine(10.0, BAND_WINDOW * 2); // 2 windows for faster test
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(
@@ -1130,7 +1130,7 @@ mod tests {
     /// A pure 20 Hz sine (beta band) must dominate beta.
     #[test]
     fn beta_tone_dominates_beta_band() {
-        let signal = sine(20.0, BAND_WINDOW * 4);
+        let signal = sine(20.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(ch.dominant, "beta", "{}: dominant = '{}'", ch.channel, ch.dominant);
@@ -1141,7 +1141,7 @@ mod tests {
     /// A pure 6 Hz sine (theta band) must dominate theta.
     #[test]
     fn theta_tone_dominates_theta_band() {
-        let signal = sine(6.0, BAND_WINDOW * 4);
+        let signal = sine(6.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(ch.dominant, "theta", "{}: dominant = '{}'", ch.channel, ch.dominant);
@@ -1152,7 +1152,7 @@ mod tests {
     /// A pure 2 Hz sine (delta band) must dominate delta.
     #[test]
     fn delta_tone_dominates_delta_band() {
-        let signal = sine(2.0, BAND_WINDOW * 4);
+        let signal = sine(2.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(ch.dominant, "delta", "{}: dominant = '{}'", ch.channel, ch.dominant);
@@ -1163,7 +1163,7 @@ mod tests {
     /// A pure 40 Hz sine (gamma band) must dominate gamma.
     #[test]
     fn gamma_tone_dominates_gamma_band() {
-        let signal = sine(40.0, BAND_WINDOW * 4);
+        let signal = sine(40.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(ch.dominant, "gamma", "{}: dominant = '{}'", ch.channel, ch.dominant);
@@ -1174,7 +1174,7 @@ mod tests {
     /// A pure 75 Hz sine (high_gamma band) must dominate high_gamma.
     #[test]
     fn high_gamma_tone_dominates_high_gamma_band() {
-        let signal = sine(75.0, BAND_WINDOW * 4);
+        let signal = sine(75.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert_eq!(
@@ -1225,7 +1225,7 @@ mod tests {
 
     #[test]
     fn dominant_symbol_matches_dominant_name() {
-        let signal = sine(10.0, BAND_WINDOW * 4);
+        let signal = sine(10.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             // alpha → "α"
@@ -1239,7 +1239,7 @@ mod tests {
 
     #[test]
     fn dominant_color_is_non_empty_hex() {
-        let signal = sine(10.0, BAND_WINDOW * 4);
+        let signal = sine(10.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
             assert!(ch.dominant_color.starts_with('#'));

@@ -14,10 +14,7 @@ pub mod lsl_cmds;
 
 // Re-export extracted commands so `use settings_cmds::X` keeps working in lib.rs.
 pub use activity_cmds::{get_input_buckets, get_recent_active_windows, get_recent_input_activity};
-pub use device_cmds::{
-    cancel_retry, forget_device, get_device_capabilities, get_supported_companies, retry_connect,
-    set_preferred_device,
-};
+pub use device_cmds::{get_device_capabilities, get_supported_companies};
 pub use dnd_cmds::pick_ref_wav_file;
 pub use location_cmds::test_location;
 

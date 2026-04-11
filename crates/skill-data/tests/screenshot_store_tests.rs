@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Tests for the ScreenshotStore.
-#![allow(clippy::unwrap_used)]
-
+/// Tests for the ScreenshotStore.
+#[allow(clippy::unwrap_used)]
 use skill_data::screenshot_store::{ScreenshotRow, ScreenshotStore};
 use tempfile::tempdir;
 
@@ -402,4 +401,80 @@ fn source_and_caption_stored() {
 
     // Verify it was stored (indirectly, via count)
     assert_eq!(store.count_all(), 1);
+}
+
+#[test]
+fn rows_without_embedding_finds_correct_rows() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+
+    // One with embedding, one without
+    let mut row1 = make_row(1700000100, "emb.webp");
+    row1.embedding = Some(vec![0.1, 0.2]);
+    row1.embedding_dim = 2;
+    store.insert(&row1);
+
+    let row2 = make_row(1700000101, "noemb.webp");
+    let id2 = store.insert(&row2).unwrap();
+
+    let rows = store.rows_without_embedding();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].filename, "noemb.webp");
+    assert_eq!(rows[0].id, id2);
+}
+
+#[test]
+fn rows_without_ocr_finds_correct_rows() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+
+    // One with OCR, one without
+    let mut row1 = make_row(1700000200, "ocr.webp");
+    row1.ocr_text = "text".into();
+    store.insert(&row1);
+
+    let row2 = make_row(1700000201, "noocr.webp");
+    let id2 = store.insert(&row2).unwrap();
+
+    let rows = store.rows_without_ocr();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].filename, "noocr.webp");
+    assert_eq!(rows[0].id, id2);
+}
+
+#[test]
+fn get_embedding_and_ocr_returns_data() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+
+    let mut row = make_row(1700000300, "embocr.webp");
+    row.embedding = Some(vec![0.1, 0.2]);
+    row.embedding_dim = 2;
+    row.model_backend = "backend".into();
+    row.model_id = "modelid".into();
+    row.image_size = 123;
+    row.ocr_text = "ocrtext".into();
+    row.ocr_embedding = Some(vec![0.3, 0.4]);
+    row.ocr_embedding_dim = 2;
+    let id = store.insert(&row).unwrap();
+
+    let data = store.get_embedding_and_ocr(id).expect("data");
+    assert_eq!(data.embedding.as_ref().unwrap().len(), 2);
+    assert_eq!(data.model_backend, "backend");
+    assert_eq!(data.model_id, "modelid");
+    assert_eq!(data.image_size, 123);
+    assert_eq!(data.ocr_text, "ocrtext");
+    assert_eq!(data.ocr_embedding.as_ref().unwrap().len(), 2);
+}
+
+#[test]
+fn get_timestamp_returns_correct_value() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+
+    let row = make_row(1700000400, "ts.webp");
+    let id = store.insert(&row).unwrap();
+
+    let ts = store.get_timestamp(id).expect("timestamp");
+    assert_eq!(ts, 1700000400);
 }

@@ -465,7 +465,7 @@ pub fn umap_compute_inner(
         };
         fitted.into_embedding()
     }));
-    
+
     #[cfg(not(feature = "gpu"))]
     let fit_result: Result<Vec<Vec<f64>>, _> = Ok(Vec::new());
 
@@ -521,7 +521,7 @@ pub fn umap_compute_inner(
         "elapsed_ms": elapsed_ms,
         "analysis":   analysis,
     });
-    
+
     #[cfg(not(feature = "gpu"))]
     let result = serde_json::json!({
         "points": [],

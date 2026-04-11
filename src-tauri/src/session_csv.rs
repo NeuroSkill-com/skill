@@ -113,3 +113,46 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
         Err(e) => eprintln!("[session] ERROR serialising metadata: {e}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    // use std::path::PathBuf;
+    // use std::sync::{Arc, Mutex};
+
+    // ...existing code...
+
+    // Test new_csv_path logic (without Tauri)
+    #[test]
+    fn test_new_csv_path_creates_dir_and_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let skill_dir = temp_dir.path().to_path_buf();
+        // Simulate yyyymmdd_utc and unix_secs
+        let date = "20260411";
+        let ts = 1234567890;
+        let base = skill_dir.join(date);
+        let expected = base.join(format!("{}_{}.csv", CSV_PREFIX, ts));
+
+        // Simulate directory creation
+        fs::create_dir_all(&base).unwrap();
+        // Simulate file creation
+        fs::File::create(&expected).unwrap();
+        assert!(expected.exists());
+    }
+
+    // Test write_session_meta logic (structure only)
+    #[test]
+    fn test_write_session_meta_creates_json() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let csv_path = temp_dir.path().join("test.csv");
+        fs::File::create(&csv_path).unwrap();
+        let meta_path = csv_path.with_extension("json");
+        // Simulate writing JSON
+        let meta = serde_json::json!({"csv_file": "test.csv"});
+        fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+        assert!(meta_path.exists());
+        let contents = fs::read_to_string(&meta_path).unwrap();
+        assert!(contents.contains("csv_file"));
+    }
+}

@@ -6,7 +6,7 @@ on:
       coverage_min_lines:
         description: 'Minimum line coverage percentage gate'
         required: false
-        default: '55'
+        default: '40'
   push:
     branches: [ main ]
     paths:

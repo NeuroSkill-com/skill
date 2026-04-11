@@ -1,373 +1,16 @@
-// SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 NeuroSkill.com
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, version 3 only.
-//! Persistent Apple HealthKit data store — `~/.skill/health.sqlite`.
-//!
-//! All timestamps are stored as UTC unix seconds (i64).  The iOS app is
-//! expected to convert `HKSample.startDate`/`endDate` before sending.
-//! GPS coordinates use WGS-84 (the standard used by CoreLocation).
-//!
-//! # Sync protocol
-//!
-//! The iOS companion app calls `POST /v1/health/sync` with a JSON body
-//! containing arrays of typed samples.  The server upserts by
-//! `(source_id, start_utc, end_utc)` so the same payload can be sent
-//! repeatedly without creating duplicates (idempotent sync).
-
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
 
-// ── Mutex helper ──────────────────────────────────────────────────────────────
-
-/// Acquire a Mutex lock, recovering from poison.
-fn lock_or_recover<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-/// Filename for the health database inside `~/.skill/`.
-pub const HEALTH_SQLITE: &str = "health.sqlite";
-
-// ── DDL ───────────────────────────────────────────────────────────────────────
-
-const DDL: &str = "
-CREATE TABLE IF NOT EXISTS sleep_samples (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id  TEXT    NOT NULL DEFAULT '',
-    start_utc  INTEGER NOT NULL,
-    end_utc    INTEGER NOT NULL,
-    value      TEXT    NOT NULL,  -- InBed, Asleep, Awake, REM, Core, Deep
-    created_at INTEGER NOT NULL,
-    UNIQUE(source_id, start_utc, end_utc, value)
-);
-CREATE INDEX IF NOT EXISTS idx_sleep_start ON sleep_samples (start_utc);
-
-CREATE TABLE IF NOT EXISTS workouts (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id         TEXT    NOT NULL DEFAULT '',
-    workout_type      TEXT    NOT NULL,  -- e.g. Running, Walking, Cycling, HIIT, Yoga
-    start_utc         INTEGER NOT NULL,
-    end_utc           INTEGER NOT NULL,
-    duration_secs     REAL    NOT NULL DEFAULT 0,
-    total_calories    REAL,             -- kcal (active + basal)
-    active_calories   REAL,             -- kcal (active energy only)
-    distance_meters   REAL,
-    avg_heart_rate    REAL,
-    max_heart_rate    REAL,
-    metadata          TEXT,             -- arbitrary JSON from HealthKit
-    created_at        INTEGER NOT NULL,
-    UNIQUE(source_id, start_utc, end_utc, workout_type)
-);
-CREATE INDEX IF NOT EXISTS idx_workouts_start ON workouts (start_utc);
-
-CREATE TABLE IF NOT EXISTS heart_rate_samples (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id  TEXT    NOT NULL DEFAULT '',
-    timestamp  INTEGER NOT NULL,
-    bpm        REAL    NOT NULL,
-    context    TEXT,                    -- e.g. sedentary, active, workout
-    created_at INTEGER NOT NULL,
-    UNIQUE(source_id, timestamp, context)
-);
-CREATE INDEX IF NOT EXISTS idx_hr_ts ON heart_rate_samples (timestamp);
-
-CREATE TABLE IF NOT EXISTS steps_samples (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id  TEXT    NOT NULL DEFAULT '',
-    start_utc  INTEGER NOT NULL,
-    end_utc    INTEGER NOT NULL,
-    count      INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    UNIQUE(source_id, start_utc, end_utc)
-);
-CREATE INDEX IF NOT EXISTS idx_steps_start ON steps_samples (start_utc);
-
-CREATE TABLE IF NOT EXISTS mindfulness_samples (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id  TEXT    NOT NULL DEFAULT '',
-    start_utc  INTEGER NOT NULL,
-    end_utc    INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    UNIQUE(source_id, start_utc, end_utc)
-);
-CREATE INDEX IF NOT EXISTS idx_mindful_start ON mindfulness_samples (start_utc);
-
-CREATE TABLE IF NOT EXISTS health_metrics (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id     TEXT    NOT NULL DEFAULT '',
-    metric_type   TEXT    NOT NULL,  -- e.g. restingHeartRate, hrv, vo2Max, bodyMass, bloodPressureSystolic, ...
-    timestamp     INTEGER NOT NULL,
-    value         REAL    NOT NULL,
-    unit          TEXT    NOT NULL DEFAULT '',
-    metadata      TEXT,
-    created_at    INTEGER NOT NULL,
-    UNIQUE(source_id, metric_type, timestamp)
-);
-CREATE INDEX IF NOT EXISTS idx_hm_type_ts ON health_metrics (metric_type, timestamp);
-
-";
-
-/// DDL applied only when the `gps` feature is enabled.
-#[cfg(feature = "gps")]
-const DDL_GPS: &str = "
-CREATE TABLE IF NOT EXISTS location_samples (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id           TEXT    NOT NULL DEFAULT '',
-    timestamp           INTEGER NOT NULL,  -- UTC unix seconds
-    latitude            REAL    NOT NULL,  -- WGS-84 degrees
-    longitude           REAL    NOT NULL,  -- WGS-84 degrees
-    altitude            REAL,              -- metres above sea level
-    horizontal_accuracy REAL,              -- metres (negative = invalid)
-    vertical_accuracy   REAL,              -- metres (negative = invalid)
-    speed               REAL,              -- m/s (negative = invalid)
-    course              REAL,              -- degrees from true north (negative = invalid)
-    created_at          INTEGER NOT NULL,
-    UNIQUE(source_id, timestamp)
-);
-CREATE INDEX IF NOT EXISTS idx_loc_ts ON location_samples (timestamp);
-";
-
-// ── Data types ────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SleepSample {
-    #[serde(default)]
-    pub source_id: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    pub value: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Workout {
-    #[serde(default)]
-    pub source_id: String,
-    pub workout_type: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    #[serde(default)]
-    pub duration_secs: f64,
-    pub total_calories: Option<f64>,
-    pub active_calories: Option<f64>,
-    pub distance_meters: Option<f64>,
-    pub avg_heart_rate: Option<f64>,
-    pub max_heart_rate: Option<f64>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HeartRateSample {
-    #[serde(default)]
-    pub source_id: String,
-    pub timestamp: i64,
-    pub bpm: f64,
-    pub context: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StepsSample {
-    #[serde(default)]
-    pub source_id: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    pub count: i64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MindfulnessSample {
-    #[serde(default)]
-    pub source_id: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HealthMetric {
-    #[serde(default)]
-    pub source_id: String,
-    pub metric_type: String,
-    pub timestamp: i64,
-    pub value: f64,
-    #[serde(default)]
-    pub unit: String,
-    pub metadata: Option<serde_json::Value>,
-}
-
-/// A GPS fix recorded by the iOS companion app (CoreLocation / CLLocation).
-///
-/// All fields follow Apple's `CLLocation` conventions:
-/// - coordinates are WGS-84 degrees
-/// - `horizontal_accuracy` / `vertical_accuracy` are in metres; a negative
-///   value means the measurement is invalid
-/// - `speed` is metres-per-second; negative = invalid
-/// - `course` is degrees clockwise from true north; negative = invalid
-#[cfg(feature = "gps")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LocationSample {
-    #[serde(default)]
-    pub source_id: String,
-    /// UTC unix timestamp (seconds).
-    pub timestamp: i64,
-    pub latitude: f64,
-    pub longitude: f64,
-    pub altitude: Option<f64>,
-    pub horizontal_accuracy: Option<f64>,
-    pub vertical_accuracy: Option<f64>,
-    pub speed: Option<f64>,
-    pub course: Option<f64>,
-}
-
-/// A GPS location row returned from the database.
-#[cfg(feature = "gps")]
-#[derive(Clone, Debug, Serialize)]
-pub struct LocationRow {
-    pub id: i64,
-    pub source_id: String,
-    pub timestamp: i64,
-    pub latitude: f64,
-    pub longitude: f64,
-    pub altitude: Option<f64>,
-    pub horizontal_accuracy: Option<f64>,
-    pub vertical_accuracy: Option<f64>,
-    pub speed: Option<f64>,
-    pub course: Option<f64>,
-    pub created_at: i64,
-}
-
-#[cfg(feature = "gps")]
-impl LocationSample {
-    /// Returns `true` when this fix carries valid, finite data safe to store.
-    ///
-    /// Rejects:
-    /// - non-finite (NaN / Inf) latitude or longitude
-    /// - latitude outside `[-90, 90]` or longitude outside `[-180, 180]`
-    /// - timestamp ≤ 0 (before the Unix epoch)
-    /// - NaN or Inf in any present optional field
-    ///
-    /// Negative values in `horizontal_accuracy`, `vertical_accuracy`, `speed`,
-    /// and `course` are intentionally accepted — CoreLocation uses `-1` as an
-    /// "invalid / unavailable" sentinel and callers may wish to store that fact.
-    pub fn is_valid(&self) -> bool {
-        self.latitude.is_finite()
-            && self.longitude.is_finite()
-            && (-90.0..=90.0).contains(&self.latitude)
-            && (-180.0..=180.0).contains(&self.longitude)
-            && self.timestamp > 0
-            && self.altitude.is_none_or(f64::is_finite)
-            && self.horizontal_accuracy.is_none_or(f64::is_finite)
-            && self.vertical_accuracy.is_none_or(f64::is_finite)
-            && self.speed.is_none_or(f64::is_finite)
-            && self.course.is_none_or(f64::is_finite)
-    }
-}
-
-/// Batch sync payload sent by the iOS companion app.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct HealthSyncPayload {
-    #[serde(default)]
-    pub sleep: Vec<SleepSample>,
-    #[serde(default)]
-    pub workouts: Vec<Workout>,
-    #[serde(default)]
-    pub heart_rate: Vec<HeartRateSample>,
-    #[serde(default)]
-    pub steps: Vec<StepsSample>,
-    #[serde(default)]
-    pub mindfulness: Vec<MindfulnessSample>,
-    #[serde(default)]
-    pub metrics: Vec<HealthMetric>,
-    /// GPS fixes from CoreLocation (optional — only sent when location
-    /// permission has been granted and fixes are available).
-    #[cfg(feature = "gps")]
-    #[serde(default)]
-    pub location: Vec<LocationSample>,
-}
-
-/// Summary returned after a sync.
-#[derive(Clone, Debug, Serialize)]
-pub struct SyncResult {
-    pub sleep_upserted: usize,
-    pub workouts_upserted: usize,
-    pub heart_rate_upserted: usize,
-    pub steps_upserted: usize,
-    pub mindfulness_upserted: usize,
-    pub metrics_upserted: usize,
-    #[cfg(feature = "gps")]
-    pub location_upserted: usize,
-}
-
-/// Row returned by query endpoints (includes the DB id).
-#[derive(Clone, Debug, Serialize)]
-pub struct SleepRow {
-    pub id: i64,
-    pub source_id: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    pub value: String,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct WorkoutRow {
-    pub id: i64,
-    pub source_id: String,
-    pub workout_type: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    pub duration_secs: f64,
-    pub total_calories: Option<f64>,
-    pub active_calories: Option<f64>,
-    pub distance_meters: Option<f64>,
-    pub avg_heart_rate: Option<f64>,
-    pub max_heart_rate: Option<f64>,
-    pub metadata: Option<String>,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct HeartRateRow {
-    pub id: i64,
-    pub source_id: String,
-    pub timestamp: i64,
-    pub bpm: f64,
-    pub context: Option<String>,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct StepsRow {
-    pub id: i64,
-    pub source_id: String,
-    pub start_utc: i64,
-    pub end_utc: i64,
-    pub count: i64,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct HealthMetricRow {
-    pub id: i64,
-    pub source_id: String,
-    pub metric_type: String,
-    pub timestamp: i64,
-    pub value: f64,
-    pub unit: String,
-    pub metadata: Option<String>,
-    pub created_at: i64,
-}
-
-// ── Store ─────────────────────────────────────────────────────────────────────
+use super::store_db::*;
+use super::store_types::*;
+use super::store_util::*;
 
 pub struct HealthStore {
     conn: Mutex<Connection>,
 }
 
+/// Upsert a batch of HealthKit samples (idempotent).
 impl HealthStore {
     /// Open (or create) the health database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
@@ -384,8 +27,6 @@ impl HealthStore {
         conn.execute_batch(DDL).ok()?;
         #[cfg(feature = "gps")]
         if let Err(e) = conn.execute_batch(DDL_GPS) {
-            // Non-fatal: base health tables are unaffected; GPS fixes simply
-            // won't be persisted until the issue is resolved on next open.
             eprintln!("[health] GPS DDL failed — location data will not be stored: {e}");
         }
         Some(Self { conn: Mutex::new(conn) })
@@ -546,7 +187,7 @@ impl HealthStore {
             ) {
                 for loc in &payload.location {
                     if !loc.is_valid() {
-                        continue; // skip fixes with out-of-range or non-finite coordinates
+                        continue;
                     }
                     if stmt
                         .execute(params![
@@ -571,8 +212,6 @@ impl HealthStore {
 
         result
     }
-
-    // ── Query helpers ─────────────────────────────────────────────────────────
 
     pub fn query_sleep(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<SleepRow> {
         let conn = lock_or_recover(&self.conn);
@@ -700,7 +339,6 @@ impl HealthStore {
         .unwrap_or_default()
     }
 
-    /// Query GPS location samples in the given UTC time range.
     #[cfg(feature = "gps")]
     pub fn query_location(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<LocationRow> {
         let conn = lock_or_recover(&self.conn);

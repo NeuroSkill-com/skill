@@ -55,7 +55,7 @@ async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unk
     port = b.port;
     token = b.token;
   } catch (e) {
-    import("./status").then(({ notifyDaemonError }) => notifyDaemonError("bootstrap failed")).catch(() => {});
+    import("./status.svelte").then(({ notifyDaemonError }) => notifyDaemonError("bootstrap failed")).catch(() => {});
     throw e;
   }
   const url = `http://127.0.0.1:${port}${path.startsWith("/") ? path : `/${path}`}`;
@@ -75,13 +75,13 @@ async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unk
   if (!resp.ok) {
     const msg = json?.error || json?.message || `${resp.status} ${resp.statusText}`;
     if (resp.status === 401) {
-      import("./status").then(({ notifyDaemonError }) => notifyDaemonError("authentication failed")).catch(() => {});
+      import("./status.svelte").then(({ notifyDaemonError }) => notifyDaemonError("authentication failed")).catch(() => {});
     }
     throw new Error(msg);
   }
 
   // Mark connected on success
-  import("./status").then(({ setDaemonConnected }) => setDaemonConnected()).catch(() => {});
+  import("./status.svelte").then(({ setDaemonConnected }) => setDaemonConnected()).catch(() => {});
 
   if (json && typeof json === "object" && json.ok === false) {
     throw new Error(json.error || json.message || "Request failed");

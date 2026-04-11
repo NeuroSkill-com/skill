@@ -11,14 +11,11 @@ use skill_data::{
     active_window::ActiveWindowInfo,
     activity_store::{ActiveWindowRow, ActivityStore, InputActivityRow, InputBucketRow},
 };
-use skill_eeg::{
-    eeg_filter::{FilterConfig, PowerlineFreq},
-    eeg_model_config::{EegModelStatus, ExgModelConfig},
-};
+use skill_eeg::eeg_model_config::{EegModelStatus, ExgModelConfig};
 
 use crate::{
     routes::{
-        settings_exg, settings_hooks_activity,
+        settings_device, settings_exg, settings_hooks_activity,
         settings_io::{load_user_settings, save_user_settings},
         settings_llm::{
             get_exg_inference_device, get_hf_endpoint, get_inference_device, get_llm_config, set_exg_inference_device,
@@ -30,6 +27,7 @@ use crate::{
             lsl_unpair_stream, lsl_virtual_source_running, lsl_virtual_source_start, lsl_virtual_source_stop,
             set_lsl_auto_connect, set_lsl_idle_timeout,
         },
+        settings_screenshots, settings_ui,
     },
     state::AppState,
 };
@@ -100,11 +98,6 @@ pub(crate) struct ChatSessionResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct U64ValueRequest {
-    value: u64,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct BoolValueRequest {
     pub(crate) value: bool,
 }
@@ -112,57 +105,6 @@ pub(crate) struct BoolValueRequest {
 #[derive(Debug, Deserialize)]
 pub(crate) struct StringValueRequest {
     pub(crate) value: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct StringListRequest {
-    values: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StringKeyRequest {
-    key: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DndTestRequest {
-    enabled: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct NotchPresetRequest {
-    value: Option<PowerlineFreq>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ScreenshotAroundRequest {
-    timestamp: i64,
-    window_secs: i32,
-}
-
-#[derive(Debug, Deserialize)]
-struct ScreenshotImageSearchRequest {
-    image_bytes: Vec<u8>,
-    k: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct ScreenshotTextSearchRequest {
-    query: String,
-    k: Option<usize>,
-    mode: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ScreenshotVectorSearchRequest {
-    vector: Vec<f32>,
-    k: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct WsConfigRequest {
-    host: String,
-    port: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -225,46 +167,58 @@ pub fn router() -> Router<AppState> {
         .route("/activity/current-window", get(get_current_active_window))
         .route("/activity/last-input", get(get_last_input_activity))
         .route("/activity/latest-bands", get(get_latest_bands))
-        .route("/settings/api-token", get(get_api_token).post(set_api_token))
+        .route(
+            "/settings/api-token",
+            get(settings_ui::get_api_token).post(settings_ui::set_api_token),
+        )
         .route("/settings/hf-endpoint", get(get_hf_endpoint).post(set_hf_endpoint))
         .route(
             "/settings/filter-config",
-            get(get_filter_config).post(set_filter_config),
+            get(settings_device::get_filter_config).post(settings_device::set_filter_config),
         )
-        .route("/settings/notch-preset", post(set_notch_preset))
+        .route("/settings/notch-preset", post(settings_device::set_notch_preset))
         .route(
             "/settings/storage-format",
-            get(get_storage_format).post(set_storage_format),
+            get(settings_device::get_storage_format).post(settings_device::set_storage_format),
         )
         .route(
             "/settings/embedding-overlap",
-            get(get_embedding_overlap).post(set_embedding_overlap),
+            get(settings_device::get_embedding_overlap).post(settings_device::set_embedding_overlap),
         )
         .route(
             "/settings/update-check-interval",
-            get(get_update_check_interval).post(set_update_check_interval),
+            get(settings_device::get_update_check_interval).post(settings_device::set_update_check_interval),
         )
         .route(
             "/settings/openbci-config",
-            get(get_openbci_config).post(set_openbci_config),
+            get(settings_device::get_openbci_config).post(settings_device::set_openbci_config),
         )
         .route(
             "/settings/device-api-config",
-            get(get_device_api_config).post(set_device_api_config),
+            get(settings_device::get_device_api_config).post(settings_device::set_device_api_config),
         )
         .route(
             "/settings/scanner-config",
-            get(get_scanner_config).post(set_scanner_config),
+            get(settings_device::get_scanner_config).post(settings_device::set_scanner_config),
         )
-        .route("/settings/device-log", get(get_device_log))
+        .route("/settings/device-log", get(settings_device::get_device_log))
         .route(
             "/settings/neutts-config",
-            get(get_neutts_config).post(set_neutts_config),
+            get(settings_ui::get_neutts_config).post(settings_ui::set_neutts_config),
         )
         .route("/settings/llm-config", get(get_llm_config).post(set_llm_config))
-        .route("/settings/tts-preload", get(get_tts_preload).post(set_tts_preload))
-        .route("/settings/sleep-config", get(get_sleep_config).post(set_sleep_config))
-        .route("/settings/ws-config", get(get_ws_config).post(set_ws_config))
+        .route(
+            "/settings/tts-preload",
+            get(settings_ui::get_tts_preload).post(settings_ui::set_tts_preload),
+        )
+        .route(
+            "/settings/sleep-config",
+            get(settings_ui::get_sleep_config).post(settings_ui::set_sleep_config),
+        )
+        .route(
+            "/settings/ws-config",
+            get(settings_ui::get_ws_config).post(settings_ui::set_ws_config),
+        )
         .route(
             "/settings/inference-device",
             get(get_inference_device).post(set_inference_device),
@@ -275,65 +229,110 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/settings/location-enabled",
-            get(get_location_enabled).post(set_location_enabled),
+            get(settings_ui::get_location_enabled).post(settings_ui::set_location_enabled),
         )
-        .route("/settings/location-test", post(test_location))
-        .route("/settings/umap-config", get(get_umap_config).post(set_umap_config))
-        .route("/settings/gpu-stats", get(get_gpu_stats))
-        .route("/settings/web-cache/stats", get(web_cache_stats))
-        .route("/settings/web-cache/list", get(web_cache_list))
-        .route("/settings/web-cache/clear", post(web_cache_clear))
-        .route("/settings/web-cache/remove-domain", post(web_cache_remove_domain))
-        .route("/settings/web-cache/remove-entry", post(web_cache_remove_entry))
-        .route("/settings/dnd/focus-modes", get(get_dnd_focus_modes))
-        .route("/settings/dnd/config", get(get_dnd_config).post(set_dnd_config))
-        .route("/settings/dnd/active", get(get_dnd_active))
-        .route("/settings/dnd/status", get(get_dnd_status))
-        .route("/settings/dnd/test", post(test_dnd))
+        .route("/settings/location-test", post(settings_ui::test_location))
+        .route(
+            "/settings/umap-config",
+            get(settings_ui::get_umap_config).post(settings_ui::set_umap_config),
+        )
+        .route("/settings/gpu-stats", get(settings_ui::get_gpu_stats))
+        .route("/settings/web-cache/stats", get(settings_ui::web_cache_stats))
+        .route("/settings/web-cache/list", get(settings_ui::web_cache_list))
+        .route("/settings/web-cache/clear", post(settings_ui::web_cache_clear))
+        .route(
+            "/settings/web-cache/remove-domain",
+            post(settings_ui::web_cache_remove_domain),
+        )
+        .route(
+            "/settings/web-cache/remove-entry",
+            post(settings_ui::web_cache_remove_entry),
+        )
+        .route("/settings/dnd/focus-modes", get(settings_ui::get_dnd_focus_modes))
+        .route(
+            "/settings/dnd/config",
+            get(settings_ui::get_dnd_config).post(settings_ui::set_dnd_config),
+        )
+        .route("/settings/dnd/active", get(settings_ui::get_dnd_active))
+        .route("/settings/dnd/status", get(settings_ui::get_dnd_status))
+        .route("/settings/dnd/test", post(settings_ui::test_dnd))
         .route(
             "/settings/screenshot/config",
-            get(get_screenshot_config).post(set_screenshot_config),
+            get(settings_screenshots::get_screenshot_config).post(settings_screenshots::set_screenshot_config),
         )
         .route(
             "/settings/screenshot/estimate-reembed",
-            get(estimate_screenshot_reembed),
+            get(settings_screenshots::estimate_screenshot_reembed),
         )
         .route(
             "/settings/screenshot/rebuild-embeddings",
-            post(rebuild_screenshot_embeddings),
+            post(settings_screenshots::rebuild_screenshot_embeddings),
         )
-        .route("/settings/screenshot/around", post(get_screenshots_around))
-        .route("/settings/screenshot/search-image", post(search_screenshots_by_image))
-        .route("/settings/screenshot/metrics", get(get_screenshot_metrics))
-        .route("/settings/screenshot/ocr-ready", get(check_ocr_models_ready))
-        .route("/settings/screenshot/download-ocr", post(download_ocr_models))
-        .route("/settings/screenshot/search-text", post(search_screenshots_by_text))
-        .route("/settings/screenshot/dir", get(get_screenshots_dir))
-        .route("/settings/screenshot/search-vector", post(search_screenshots_by_vector))
-        .route("/ui/accent-color", get(get_accent_color).post(set_accent_color))
-        .route("/ui/daily-goal", get(get_daily_goal).post(set_daily_goal))
+        .route(
+            "/settings/screenshot/around",
+            post(settings_screenshots::get_screenshots_around),
+        )
+        .route(
+            "/settings/screenshot/search-image",
+            post(settings_screenshots::search_screenshots_by_image),
+        )
+        .route(
+            "/settings/screenshot/metrics",
+            get(settings_screenshots::get_screenshot_metrics),
+        )
+        .route(
+            "/settings/screenshot/ocr-ready",
+            get(settings_screenshots::check_ocr_models_ready),
+        )
+        .route(
+            "/settings/screenshot/download-ocr",
+            post(settings_screenshots::download_ocr_models),
+        )
+        .route(
+            "/settings/screenshot/search-text",
+            post(settings_screenshots::search_screenshots_by_text),
+        )
+        .route(
+            "/settings/screenshot/dir",
+            get(settings_screenshots::get_screenshots_dir),
+        )
+        .route(
+            "/settings/screenshot/search-vector",
+            post(settings_screenshots::search_screenshots_by_vector),
+        )
+        .route(
+            "/ui/accent-color",
+            get(settings_ui::get_accent_color).post(settings_ui::set_accent_color),
+        )
+        .route(
+            "/ui/daily-goal",
+            get(settings_ui::get_daily_goal).post(settings_ui::set_daily_goal),
+        )
         .route(
             "/ui/goal-notified-date",
-            get(get_goal_notified_date).post(set_goal_notified_date),
+            get(settings_ui::get_goal_notified_date).post(settings_ui::set_goal_notified_date),
         )
         .route(
             "/ui/main-window-auto-fit",
-            get(get_main_window_auto_fit).post(set_main_window_auto_fit),
+            get(settings_ui::get_main_window_auto_fit).post(settings_ui::set_main_window_auto_fit),
         )
         .route(
             "/skills/refresh-interval",
-            get(get_skills_refresh_interval).post(set_skills_refresh_interval),
+            get(settings_ui::get_skills_refresh_interval).post(settings_ui::set_skills_refresh_interval),
         )
         .route(
             "/skills/sync-on-launch",
-            get(get_skills_sync_on_launch).post(set_skills_sync_on_launch),
+            get(settings_ui::get_skills_sync_on_launch).post(settings_ui::set_skills_sync_on_launch),
         )
-        .route("/skills/last-sync", get(get_skills_last_sync))
-        .route("/skills/sync-now", post(sync_skills_now))
-        .route("/skills/list", get(list_skills))
-        .route("/skills/license", get(get_skills_license))
-        .route("/skills/disabled", get(get_disabled_skills).post(set_disabled_skills))
-        .route("/device/serial-ports", get(list_serial_ports))
+        .route("/skills/last-sync", get(settings_ui::get_skills_last_sync))
+        .route("/skills/sync-now", post(settings_ui::sync_skills_now))
+        .route("/skills/list", get(settings_ui::list_skills))
+        .route("/skills/license", get(settings_ui::get_skills_license))
+        .route(
+            "/skills/disabled",
+            get(settings_ui::get_disabled_skills).post(settings_ui::set_disabled_skills),
+        )
+        .route("/device/serial-ports", get(settings_device::list_serial_ports))
         .merge(llm_routes())
         .merge(lsl_routes())
 }
@@ -586,956 +585,6 @@ async fn get_latest_bands(State(state): State<AppState>) -> Json<serde_json::Val
     }
 }
 
-async fn get_filter_config(State(state): State<AppState>) -> Json<FilterConfig> {
-    Json(load_user_settings(&state).filter_config)
-}
-
-async fn set_filter_config(State(state): State<AppState>, Json(config): Json<FilterConfig>) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.filter_config = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn set_notch_preset(
-    State(state): State<AppState>,
-    Json(req): Json<NotchPresetRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.filter_config.notch = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_storage_format(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).storage_format}))
-}
-
-async fn set_storage_format(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let fmt = match req.value.to_ascii_lowercase().as_str() {
-        "parquet" => "parquet",
-        "both" => "both",
-        _ => "csv",
-    };
-    let mut settings = load_user_settings(&state);
-    settings.storage_format = fmt.to_string();
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": fmt}))
-}
-
-async fn get_embedding_overlap(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).embedding_overlap_secs}))
-}
-
-async fn set_embedding_overlap(
-    State(state): State<AppState>,
-    Json(req): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
-    let overlap = req
-        .get("value")
-        .and_then(serde_json::Value::as_f64)
-        .unwrap_or(skill_constants::EMBEDDING_OVERLAP_SECS as f64) as f32;
-    let clamped = overlap.clamp(
-        skill_constants::EMBEDDING_OVERLAP_MIN_SECS,
-        skill_constants::EMBEDDING_OVERLAP_MAX_SECS,
-    );
-    let mut settings = load_user_settings(&state);
-    settings.embedding_overlap_secs = clamped;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": clamped}))
-}
-
-async fn get_update_check_interval(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).update_check_interval_secs}))
-}
-
-async fn set_update_check_interval(
-    State(state): State<AppState>,
-    Json(req): Json<U64ValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.update_check_interval_secs = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-async fn get_openbci_config(State(state): State<AppState>) -> Json<skill_settings::OpenBciConfig> {
-    Json(load_user_settings(&state).openbci)
-}
-
-async fn set_openbci_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::OpenBciConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.openbci = config.clone();
-    save_user_settings(&state, &settings);
-    if let Ok(mut wifi) = state.scanner_wifi_config.lock() {
-        wifi.wifi_shield_ip = config.wifi_shield_ip;
-        wifi.galea_ip = config.galea_ip;
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_device_api_config(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let c = load_user_settings(&state).device_api;
-    Json(serde_json::json!({
-        "emotiv_client_id": c.emotiv_client_id,
-        "emotiv_client_secret": c.emotiv_client_secret,
-        "idun_api_token": c.idun_api_token,
-        "oura_access_token": c.oura_access_token,
-        "neurosity_email": c.neurosity_email,
-        "neurosity_password": c.neurosity_password,
-        "neurosity_device_id": c.neurosity_device_id,
-        "brainmaster_model": c.brainmaster_model,
-    }))
-}
-
-async fn set_device_api_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::DeviceApiConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.device_api = config.clone();
-    save_user_settings(&state, &settings);
-    if let Ok(mut cortex) = state.scanner_cortex_config.lock() {
-        cortex.emotiv_client_id = config.emotiv_client_id;
-        cortex.emotiv_client_secret = config.emotiv_client_secret;
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_scanner_config(State(state): State<AppState>) -> Json<skill_settings::ScannerConfig> {
-    Json(load_user_settings(&state).scanner)
-}
-
-async fn get_device_log(State(state): State<AppState>) -> Json<Vec<skill_daemon_common::DeviceLogEntry>> {
-    let out = state
-        .device_log
-        .lock()
-        .map(|g| g.iter().cloned().collect())
-        .unwrap_or_default();
-    Json(out)
-}
-
-async fn set_scanner_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::ScannerConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.scanner = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_neutts_config(State(state): State<AppState>) -> Json<skill_settings::NeuttsConfig> {
-    Json(load_user_settings(&state).neutts)
-}
-
-async fn set_neutts_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::NeuttsConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.neutts = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_tts_preload(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).tts_preload}))
-}
-
-async fn set_tts_preload(State(state): State<AppState>, Json(req): Json<BoolValueRequest>) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.tts_preload = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-async fn get_sleep_config(State(state): State<AppState>) -> Json<skill_settings::SleepConfig> {
-    Json(load_user_settings(&state).sleep)
-}
-
-async fn set_sleep_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::SleepConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.sleep = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_ws_config(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"host": settings.ws_host, "port": settings.ws_port}))
-}
-
-async fn set_ws_config(State(state): State<AppState>, Json(req): Json<WsConfigRequest>) -> Json<serde_json::Value> {
-    let host = req.host.trim().to_string();
-    if host != "127.0.0.1" && host != "0.0.0.0" {
-        return Json(
-            serde_json::json!({"ok": false, "error": format!("invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'")}),
-        );
-    }
-    if req.port < 1024 {
-        return Json(
-            serde_json::json!({"ok": false, "error": format!("port {} is reserved; use 1024–65535", req.port)}),
-        );
-    }
-    let mut settings = load_user_settings(&state);
-    settings.ws_host = host;
-    settings.ws_port = req.port;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "port": req.port}))
-}
-
-async fn get_location_enabled(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.location_enabled}))
-}
-
-async fn set_location_enabled(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    use serde_json::json;
-    if !req.value {
-        let mut settings = load_user_settings(&state);
-        settings.location_enabled = false;
-        save_user_settings(&state, &settings);
-        return Json(json!({"enabled": false}));
-    }
-
-    let result = tokio::task::spawn_blocking(|| {
-        let auth = skill_location::auth_status();
-        match auth {
-            skill_location::LocationAuthStatus::Denied => {
-                return json!({"enabled": false, "permission": "denied", "error": "Location permission denied."});
-            }
-            skill_location::LocationAuthStatus::Restricted => {
-                return json!({"enabled": false, "permission": "restricted", "error": "Location access is restricted."});
-            }
-            _ => {}
-        }
-
-        if skill_location::auth_status() == skill_location::LocationAuthStatus::NotDetermined {
-            skill_location::request_access(30.0);
-        }
-
-        let post_auth = skill_location::auth_status();
-        let perm_str = match post_auth {
-            skill_location::LocationAuthStatus::Authorized => "authorized",
-            skill_location::LocationAuthStatus::Denied => "denied",
-            skill_location::LocationAuthStatus::Restricted => "restricted",
-            skill_location::LocationAuthStatus::NotDetermined => "not_determined",
-        };
-
-        if matches!(
-            post_auth,
-            skill_location::LocationAuthStatus::Denied | skill_location::LocationAuthStatus::Restricted
-        ) {
-            return json!({"enabled": false, "permission": perm_str, "error": "Location permission denied."});
-        }
-
-        match skill_location::fetch_location(10.0) {
-            Ok(fix) => json!({
-                "enabled": true,
-                "permission": perm_str,
-                "fix": {
-                    "latitude": fix.latitude,
-                    "longitude": fix.longitude,
-                    "source": format!("{:?}", fix.source),
-                    "country": fix.country,
-                    "region": fix.region,
-                    "city": fix.city,
-                    "timezone": fix.timezone,
-                    "horizontal_accuracy": fix.horizontal_accuracy,
-                    "altitude": fix.altitude,
-                }
-            }),
-            Err(e) => json!({"enabled": true, "permission": perm_str, "error": e.to_string()}),
-        }
-    })
-    .await
-    .unwrap_or_else(|e| json!({"enabled": false, "error": format!("location task error: {e}")}));
-
-    let enabled_result = result
-        .get("enabled")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-    if enabled_result {
-        let mut settings = load_user_settings(&state);
-        settings.location_enabled = true;
-        save_user_settings(&state, &settings);
-    }
-
-    Json(result)
-}
-
-async fn test_location() -> Json<serde_json::Value> {
-    use serde_json::json;
-    let v = tokio::task::spawn_blocking(|| match skill_location::fetch_location(10.0) {
-        Ok(fix) => json!({
-            "ok": true,
-            "source": format!("{:?}", fix.source),
-            "latitude": fix.latitude,
-            "longitude": fix.longitude,
-            "country": fix.country,
-            "region": fix.region,
-            "city": fix.city,
-            "timezone": fix.timezone,
-            "horizontal_accuracy": fix.horizontal_accuracy,
-            "altitude": fix.altitude,
-        }),
-        Err(e) => json!({"ok": false, "error": e.to_string()}),
-    })
-    .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("location task error: {e}")}));
-    Json(v)
-}
-
-async fn get_api_token(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.api_token}))
-}
-
-async fn set_api_token(State(state): State<AppState>, Json(req): Json<StringValueRequest>) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.api_token = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_umap_config(State(state): State<AppState>) -> Json<skill_settings::UmapUserConfig> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(skill_settings::load_umap_config(&skill_dir))
-}
-
-async fn set_umap_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::UmapUserConfig>,
-) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    skill_settings::save_umap_config(&skill_dir, &config);
-    let cache_dir = skill_dir.join("umap_cache");
-    if cache_dir.exists() {
-        let _ = std::fs::remove_dir_all(&cache_dir);
-    }
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_gpu_stats() -> Json<serde_json::Value> {
-    Json(serde_json::to_value(skill_data::gpu_stats::read()).unwrap_or(serde_json::Value::Null))
-}
-
-async fn web_cache_stats() -> Json<serde_json::Value> {
-    let v = match skill_tools::web_cache::global() {
-        Some(cache) => serde_json::to_value(cache.stats()).unwrap_or_default(),
-        None => serde_json::json!({"total_entries": 0, "expired_entries": 0, "total_bytes": 0}),
-    };
-    Json(v)
-}
-
-async fn web_cache_list() -> Json<Vec<serde_json::Value>> {
-    let v = match skill_tools::web_cache::global() {
-        Some(cache) => cache
-            .list_entries()
-            .into_iter()
-            .filter_map(|e| serde_json::to_value(e).ok())
-            .collect(),
-        None => Vec::new(),
-    };
-    Json(v)
-}
-
-async fn web_cache_clear() -> Json<serde_json::Value> {
-    let removed = if let Some(cache) = skill_tools::web_cache::global() {
-        let stats = cache.stats();
-        cache.clear();
-        stats.total_entries
-    } else {
-        0
-    };
-    Json(serde_json::json!({"removed": removed}))
-}
-
-async fn web_cache_remove_domain(Json(req): Json<StringValueRequest>) -> Json<serde_json::Value> {
-    let removed = match skill_tools::web_cache::global() {
-        Some(cache) => cache.remove_by_domain(&req.value),
-        None => 0,
-    };
-    Json(serde_json::json!({"removed": removed}))
-}
-
-async fn web_cache_remove_entry(Json(req): Json<StringKeyRequest>) -> Json<serde_json::Value> {
-    let removed = match skill_tools::web_cache::global() {
-        Some(cache) => cache.remove_entry(&req.key),
-        None => false,
-    };
-    Json(serde_json::json!({"removed": removed}))
-}
-
-async fn get_dnd_focus_modes() -> Json<Vec<skill_data::dnd::FocusModeOption>> {
-    Json(skill_data::dnd::list_focus_modes())
-}
-
-async fn get_dnd_config(State(state): State<AppState>) -> Json<skill_settings::DoNotDisturbConfig> {
-    let settings = load_user_settings(&state);
-    Json(settings.do_not_disturb)
-}
-
-async fn set_dnd_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::DoNotDisturbConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.do_not_disturb = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_dnd_active() -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": skill_data::dnd::query_os_active().unwrap_or(false)}))
-}
-
-async fn get_dnd_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let cfg = load_user_settings(&state).do_not_disturb;
-    let os_active = skill_data::dnd::query_os_active();
-    let dnd_active = os_active.unwrap_or(false);
-    Json(serde_json::json!({
-        "enabled": cfg.enabled,
-        "avg_score": 0.0,
-        "threshold": cfg.focus_threshold as f64,
-        "sample_count": 0,
-        "window_size": (cfg.duration_secs as usize * 4).max(8),
-        "duration_secs": cfg.duration_secs,
-        "dnd_active": dnd_active,
-        "os_active": os_active,
-        "last_error": serde_json::Value::Null,
-        "exit_duration_secs": cfg.exit_duration_secs,
-        "below_ticks": 0,
-        "exit_window_size": (cfg.exit_duration_secs as usize * 4).max(4),
-        "exit_secs_remaining": 0.0,
-        "focus_lookback_secs": cfg.focus_lookback_secs,
-        "exit_held_by_lookback": false,
-    }))
-}
-
-async fn test_dnd(Json(req): Json<DndTestRequest>) -> Json<serde_json::Value> {
-    if req.enabled {
-        return Json(serde_json::json!({"ok": false, "value": false}));
-    }
-    let ok = skill_data::dnd::set_dnd(false, "");
-    Json(serde_json::json!({"ok": ok, "value": ok}))
-}
-
-#[derive(Clone)]
-struct DaemonScreenshotContext {
-    config: skill_settings::ScreenshotConfig,
-    events_tx: tokio::sync::broadcast::Sender<skill_daemon_common::EventEnvelope>,
-}
-
-impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
-    fn config(&self) -> skill_screenshots::ScreenshotConfig {
-        self.config.clone()
-    }
-    fn is_session_active(&self) -> bool {
-        false
-    }
-    fn active_window(&self) -> skill_screenshots::ActiveWindowInfo {
-        skill_screenshots::ActiveWindowInfo::default()
-    }
-    fn emit_event(&self, event: &str, payload: serde_json::Value) {
-        let _ = self.events_tx.send(skill_daemon_common::EventEnvelope {
-            r#type: event.to_string(),
-            ts_unix_ms: now_unix_ms(),
-            correlation_id: None,
-            payload,
-        });
-    }
-    fn embed_image_via_llm(&self, _png_bytes: &[u8]) -> Option<Vec<f32>> {
-        None
-    }
-}
-
-async fn get_screenshot_config(State(state): State<AppState>) -> Json<skill_settings::ScreenshotConfig> {
-    Json(load_user_settings(&state).screenshot)
-}
-
-async fn set_screenshot_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::ScreenshotConfig>,
-) -> Json<skill_data::screenshot_store::ConfigChangeResult> {
-    let mut settings = load_user_settings(&state);
-    let old_backend = settings.screenshot.embed_backend.clone();
-    let old_model = settings.screenshot.model_id();
-    let new_backend = config.embed_backend.clone();
-    let new_model = config.model_id();
-    let model_changed = old_backend != new_backend || old_model != new_model;
-
-    settings.screenshot = config;
-    save_user_settings(&state, &settings);
-
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let stale_count = if model_changed {
-        skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)
-            .map(|s| s.count_stale(&new_backend, &new_model))
-            .unwrap_or(0)
-    } else {
-        0
-    };
-
-    Json(skill_data::screenshot_store::ConfigChangeResult {
-        model_changed,
-        stale_count,
-    })
-}
-
-async fn estimate_screenshot_reembed(
-    State(state): State<AppState>,
-) -> Json<Option<skill_data::screenshot_store::ReembedEstimate>> {
-    let settings = load_user_settings(&state);
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)?;
-        Some(skill_screenshots::capture::estimate_reembed(
-            &store,
-            &settings.screenshot,
-            &skill_dir,
-        ))
-    })
-    .await
-    .unwrap_or(None);
-    Json(out)
-}
-
-async fn rebuild_screenshot_embeddings(
-    State(state): State<AppState>,
-) -> Json<Option<skill_data::screenshot_store::ReembedResult>> {
-    let settings = load_user_settings(&state);
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let events_tx = state.events_tx.clone();
-    let out = tokio::task::spawn_blocking(move || {
-        let store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)?;
-        let ctx = DaemonScreenshotContext {
-            config: settings.screenshot.clone(),
-            events_tx,
-        };
-        Some(skill_screenshots::capture::rebuild_embeddings(
-            &store,
-            &settings.screenshot,
-            &skill_dir,
-            &ctx,
-        ))
-    })
-    .await
-    .unwrap_or(None);
-    Json(out)
-}
-
-async fn get_screenshots_around(
-    State(state): State<AppState>,
-    Json(req): Json<ScreenshotAroundRequest>,
-) -> Json<Vec<skill_data::screenshot_store::ScreenshotResult>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-            return vec![];
-        };
-        skill_screenshots::capture::get_around(&store, req.timestamp, req.window_secs)
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
-}
-
-async fn search_screenshots_by_image(
-    State(state): State<AppState>,
-    Json(req): Json<ScreenshotImageSearchRequest>,
-) -> Json<Vec<skill_data::screenshot_store::ScreenshotResult>> {
-    let settings = load_user_settings(&state);
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(mut encoder) = skill_screenshots::capture::load_fastembed_image_pub(&settings.screenshot, &skill_dir)
-        else {
-            return vec![];
-        };
-        let Some(query) = skill_screenshots::capture::fastembed_embed_pub(&mut encoder, &req.image_bytes) else {
-            return vec![];
-        };
-        let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-            return vec![];
-        };
-        let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
-        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
-            &hnsw_path,
-            fast_hnsw::distance::Cosine,
-        ) else {
-            return vec![];
-        };
-        skill_screenshots::capture::search_by_vector(&hnsw, &store, &query, req.k)
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
-}
-
-async fn get_screenshot_metrics(State(state): State<AppState>) -> Json<skill_screenshots::capture::MetricsSnapshot> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let (captures, embeds, last_capture_unix, last_embed_unix) = tokio::task::spawn_blocking(move || {
-        let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-            return (0u64, 0u64, 0u64, 0u64);
-        };
-        let summary = store.summary_counts();
-        let db_path = skill_dir.join(skill_constants::SCREENSHOTS_SQLITE);
-        let mut last_capture = 0u64;
-        let mut last_embed = 0u64;
-        if let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
-            last_capture = conn
-                .query_row("SELECT COALESCE(MAX(unix_ts), 0) FROM screenshots", [], |r| {
-                    r.get::<_, i64>(0)
-                })
-                .unwrap_or(0)
-                .max(0) as u64;
-            last_embed = conn
-                .query_row(
-                    "SELECT COALESCE(MAX(unix_ts), 0) FROM screenshots WHERE embedding IS NOT NULL",
-                    [],
-                    |r| r.get::<_, i64>(0),
-                )
-                .unwrap_or(0)
-                .max(0) as u64;
-        }
-        (summary.total, summary.with_embedding, last_capture, last_embed)
-    })
-    .await
-    .unwrap_or((0, 0, 0, 0));
-
-    Json(skill_screenshots::capture::MetricsSnapshot {
-        captures,
-        capture_errors: 0,
-        drops: 0,
-        capture_us: 0,
-        ocr_us: 0,
-        resize_us: 0,
-        save_us: 0,
-        capture_total_us: 0,
-        embeds,
-        embed_errors: 0,
-        vision_embed_us: 0,
-        text_embed_us: 0,
-        embed_total_us: 0,
-        queue_depth: 0,
-        last_capture_unix,
-        last_embed_unix,
-        backoff_multiplier: 0,
-    })
-}
-
-async fn check_ocr_models_ready(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let ocr_dir = skill_dir.join("ocr_models");
-    Json(
-        serde_json::json!({"value": ocr_dir.join(skill_constants::OCR_DETECTION_MODEL_FILE).exists() && ocr_dir.join(skill_constants::OCR_RECOGNITION_MODEL_FILE).exists()}),
-    )
-}
-
-async fn download_ocr_models(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let ok = tokio::task::spawn_blocking(move || {
-        let ocr_dir = skill_dir.join("ocr_models");
-        let _ = std::fs::create_dir_all(&ocr_dir);
-        let det_path = ocr_dir.join(skill_constants::OCR_DETECTION_MODEL_FILE);
-        let rec_path = ocr_dir.join(skill_constants::OCR_RECOGNITION_MODEL_FILE);
-        let det_ok =
-            skill_screenshots::capture::download_ocr_model_pub(skill_constants::OCR_DETECTION_MODEL_URL, &det_path);
-        let rec_ok =
-            skill_screenshots::capture::download_ocr_model_pub(skill_constants::OCR_RECOGNITION_MODEL_URL, &rec_path);
-        det_ok && rec_ok
-    })
-    .await
-    .unwrap_or(false);
-    Json(serde_json::json!({"value": ok}))
-}
-
-async fn search_screenshots_by_text(
-    State(state): State<AppState>,
-    Json(req): Json<ScreenshotTextSearchRequest>,
-) -> Json<Vec<skill_data::screenshot_store::ScreenshotResult>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let settings = load_user_settings(&state);
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-            return vec![];
-        };
-        let k = req.k.unwrap_or(20);
-        let mode = req.mode.unwrap_or_else(|| "semantic".into());
-        if mode == "substring" {
-            return skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
-        }
-
-        let cache_dir = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".cache")
-            .join("fastembed");
-        let te = match fastembed::TextEmbedding::try_new(
-            fastembed::TextInitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
-                .with_cache_dir(cache_dir)
-                .with_show_download_progress(false),
-        ) {
-            Ok(te) => std::sync::Mutex::new(te),
-            Err(_) => {
-                return skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
-            }
-        };
-
-        let embed_fn = |text: &str| -> Option<Vec<f32>> {
-            let mut guard = te.lock().ok()?;
-            let mut vecs = guard.embed(vec![text], None).ok()?;
-            if vecs.is_empty() {
-                None
-            } else {
-                Some(vecs.remove(0))
-            }
-        };
-
-        let mut results =
-            skill_screenshots::capture::search_by_ocr_text_embedding(&skill_dir, &store, &req.query, k, &embed_fn);
-
-        if results.is_empty() {
-            results = skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
-        }
-
-        if settings.text_embedding_model != "Xenova/bge-small-en-v1.5" {
-            eprintln!(
-                "[screenshot-search] semantic mode currently uses BGESmallENV15; requested model={} ",
-                settings.text_embedding_model
-            );
-        }
-        results
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
-}
-
-async fn get_screenshots_dir(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let dir = skill_dir
-        .join(skill_constants::SCREENSHOTS_DIR)
-        .to_string_lossy()
-        .into_owned();
-    let port = std::env::var("SKILL_DAEMON_ADDR")
-        .ok()
-        .and_then(|v| v.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()))
-        .unwrap_or(18444);
-    Json(serde_json::json!({"dir": dir, "port": port}))
-}
-
-async fn search_screenshots_by_vector(
-    State(state): State<AppState>,
-    Json(req): Json<ScreenshotVectorSearchRequest>,
-) -> Json<Vec<skill_data::screenshot_store::ScreenshotResult>> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let out = tokio::task::spawn_blocking(move || {
-        let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-            return vec![];
-        };
-        let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
-        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
-            &hnsw_path,
-            fast_hnsw::distance::Cosine,
-        ) else {
-            return vec![];
-        };
-        skill_screenshots::capture::search_by_vector(&hnsw, &store, &req.vector, req.k)
-    })
-    .await
-    .unwrap_or_default();
-    Json(out)
-}
-
-async fn get_accent_color(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.accent_color}))
-}
-
-async fn set_accent_color(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.accent_color = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_daily_goal(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.daily_goal_min}))
-}
-
-async fn set_daily_goal(State(state): State<AppState>, Json(req): Json<U64ValueRequest>) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    let clamped = (req.value as u32).min(480);
-    settings.daily_goal_min = clamped;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": clamped}))
-}
-
-async fn get_goal_notified_date(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.goal_notified_date}))
-}
-
-async fn set_goal_notified_date(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.goal_notified_date = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-async fn get_main_window_auto_fit(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.main_window_auto_fit}))
-}
-
-async fn set_main_window_auto_fit(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.main_window_auto_fit = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-async fn get_skills_refresh_interval(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.skills_refresh_interval_secs}))
-}
-
-async fn set_skills_refresh_interval(
-    State(state): State<AppState>,
-    Json(req): Json<U64ValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.skills_refresh_interval_secs = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-async fn get_skills_sync_on_launch(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.skills_sync_on_launch}))
-}
-
-async fn set_skills_sync_on_launch(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.skills_sync_on_launch = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-async fn get_skills_last_sync(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(serde_json::json!({"value": skill_skills::sync::last_sync_ts(&skill_dir)}))
-}
-
-async fn sync_skills_now(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let outcome = tokio::task::spawn_blocking(move || skill_skills::sync::sync_skills(&skill_dir, 0, None)).await;
-    match outcome {
-        Ok(skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. }) => {
-            Json(serde_json::json!({"status": "updated", "message": format!("updated in {elapsed_ms} ms")}))
-        }
-        Ok(skill_skills::sync::SyncOutcome::Fresh { .. }) => {
-            Json(serde_json::json!({"status": "fresh", "message": "already up to date"}))
-        }
-        Ok(skill_skills::sync::SyncOutcome::Failed(e)) => Json(serde_json::json!({"status": "failed", "message": e})),
-        Err(e) => Json(serde_json::json!({"status": "failed", "message": e.to_string()})),
-    }
-}
-
-async fn list_skills(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    let disabled = settings.llm.tools.disabled_skills;
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
-    let bundled_dir = exe_dir
-        .as_ref()
-        .map(|d| d.join(skill_constants::SKILLS_SUBDIR))
-        .filter(|d| d.is_dir())
-        .or_else(|| {
-            let cwd = std::env::current_dir().ok()?;
-            let p = cwd.join(skill_constants::SKILLS_SUBDIR);
-            if p.is_dir() {
-                Some(p)
-            } else {
-                None
-            }
-        });
-
-    let result = skill_skills::load_skills(&skill_skills::LoadSkillsOptions {
-        cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-        skill_dir: skill_dir.to_path_buf(),
-        bundled_dir,
-        skill_paths: Vec::new(),
-        include_defaults: true,
-    });
-
-    Json(serde_json::Value::Array(
-        result
-            .skills
-            .into_iter()
-            .map(|s| {
-                let enabled = !disabled.iter().any(|d| d == &s.name);
-                serde_json::json!({
-                    "name": s.name,
-                    "description": s.description,
-                    "source": s.source,
-                    "enabled": enabled
-                })
-            })
-            .collect(),
-    ))
-}
-
-async fn get_skills_license(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let license_path = skill_dir.join(skill_constants::SKILLS_SUBDIR).join("LICENSE");
-    Json(serde_json::json!({"value": std::fs::read_to_string(&license_path).ok()}))
-}
-
-async fn get_disabled_skills(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.disabled_skills}))
-}
-
-async fn set_disabled_skills(
-    State(state): State<AppState>,
-    Json(req): Json<StringListRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.disabled_skills = req.values.clone();
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.values}))
-}
-
 async fn llm_server_start(state: State<AppState>) -> Json<serde_json::Value> {
     settings_llm_runtime::llm_server_start_impl(state).await
 }
@@ -1635,13 +684,6 @@ async fn llm_cancel_tool_call(state: State<AppState>, req: Json<ToolCancelReques
     settings_llm_chat::llm_cancel_tool_call_impl(state, req).await
 }
 
-fn now_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 async fn llm_get_catalog(state: State<AppState>) -> Json<serde_json::Value> {
     settings_llm_runtime::llm_get_catalog_impl(state).await
 }
@@ -1690,32 +732,12 @@ async fn llm_set_autoload_mmproj(state: State<AppState>, req: Json<BoolValueRequ
     settings_llm_runtime::llm_set_autoload_mmproj_impl(state, req).await
 }
 
-async fn list_serial_ports() -> Json<Vec<String>> {
-    // `serialport::available_ports()` performs blocking I/O (Windows registry
-    // queries / Linux sysfs reads) and can stall for several seconds if a
-    // USB driver is misbehaving.  Run it off the async runtime with a timeout.
-    let ports = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        tokio::task::spawn_blocking(|| {
-            serialport::available_ports()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|p| p.port_name)
-                .collect::<Vec<String>>()
-        }),
-    )
-    .await
-    .ok()
-    .and_then(std::result::Result::ok)
-    .unwrap_or_default();
-
-    Json(ports)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routes::settings_device::*;
     use crate::routes::settings_lsl::{LslAutoConnectRequest, LslIdleTimeoutRequest, LslPairRequest, LslUnpairRequest};
+    use crate::routes::settings_ui::*;
     use std::sync::atomic::Ordering;
     use tempfile::TempDir;
 
