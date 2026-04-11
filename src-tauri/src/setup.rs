@@ -231,6 +231,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
     if llm_autostart && llm_has_model {
         #[cfg(feature = "llm")]
         {
+            use crate::state::AppState;
+            use std::sync::Mutex;
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;

@@ -77,10 +77,23 @@ device-agnostic.
 |---|---|---|---|---|
 | **Muse** (S, 2, 2016) | 4 (TP9, AF7, AF8, TP10) | 256 Hz | BLE | Default device. PPG + IMU included. |
 | **OpenBCI Ganglion** | 4 | 200 Hz | BLE | Open-source research-grade board. |
+| **OpenBCI Cyton / Cyton+Daisy** | 8 / 16 | 250 Hz | Serial / WiFi | Full 10-20 montage capable. |
 | **Neurable MW75 Neuro** | 12 (FT7/T7/TP7/CP5/P7/C5, FT8/T8/TP8/CP6/P8/C6) | 500 Hz | BLE + RFCOMM | Noise-cancelling headphones with EEG. Behind `mw75-rfcomm` feature flag. |
-| **Hermes V1** | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE GATT | ADS1299 + 9-DOF IMU. BLE scanner recognises "Hermes" prefix. |
+| **RE-AK Nucleus Hermes** | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE GATT | ADS1299 + 9-DOF IMU. |
+| **Emotiv** (EPOC/Insight/Flex/MN8) | 14 / 5 / 32 | 128 Hz | Cortex WebSocket | IMU included. Connected via Emotiv Cortex API. |
+| **IDUN Guardian** | 1 (bipolar in-ear) | 250 Hz | BLE | Single-channel earbud EEG + 6-DOF IMU. |
+| **Mendi** | — (fNIRS optical) | — | BLE | Frontal fNIRS headband with IMU + battery telemetry. Not traditional EEG. |
+| **Cognionics / CGX** (Quick-20/32r/8r, AIM-2, Patch) | 2–30 | up to 500 Hz | USB Serial (FTDI) | Research-grade; full 10-20 montage on Quick-20+. IMU on r/m variants. |
+| **AttentivU** | 4 ExG | 250 Hz | BLE | EEG glasses with 9-axis IMU. |
+| **BrainBit** (Original, 2, Pro, Flex 4/8) | 4 (O1, O2, T3, T4) | 250 Hz | BLE (NeuroSDK2) | Consumer EEG headband. |
+| **g.tec Unicorn Hybrid Black** | 8 | 250 Hz | BLE (Unicorn API) | Research-grade headset with IMU. |
+| **NeuroField Q21** | 20 | 256 Hz | PCAN-USB (CAN bus) | Full 10-20 montage. |
+| **BrainMaster** (Atlantis/Discovery/Freedom) | 2–24 | 256 Hz | USB Serial | Neurofeedback amplifiers. Discovery/Freedom support up to 24 channels. |
+| **NeuroSky MindWave** | 1 (Fp1) | 512 Hz | Serial (ThinkGear) | Single-channel consumer headset. |
+| **Neurosity** (Crown / Notion) | 8 (CP3, C3, F5, PO3, PO4, F6, C4, CP4) | 256 Hz | Cloud-streamed | IMU included. |
+| **Brain Products BrainVision** | 16 | 500 Hz | TCP/IP (RDA) | Research-grade; full 10-20 montage. |
 
-The DSP pipeline dynamically scales to the active channel count (4, 8, or 12).
+The DSP pipeline dynamically scales to the active channel count (1–32).
 Inactive channels have zero overhead.
 
 ---

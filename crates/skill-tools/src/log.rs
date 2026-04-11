@@ -20,7 +20,7 @@
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    OnceLock,
+    Mutex,
 };
 
 // \u2500\u2500 Types \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -34,7 +34,7 @@ pub type LogCallback = dyn Fn(&str, &str) + Send + Sync + 'static;
 // \u2500\u2500 Statics \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
-static CALLBACK: OnceLock<Box<LogCallback>> = OnceLock::new();
+static CALLBACK: Mutex<Option<Box<LogCallback>>> = Mutex::new(None);
 
 // \u2500\u2500 Public API \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -59,7 +59,10 @@ pub fn set_log_callback<F>(cb: F)
 where
     F: Fn(&str, &str) + Send + Sync + 'static,
 {
-    let _ = CALLBACK.set(Box::new(cb));
+    let mut lock = CALLBACK.lock().unwrap();
+    if lock.is_none() {
+        *lock = Some(Box::new(cb));
+    }
 }
 
 /// Write a single log line.  Prefer the `tool_log!` macro instead.
@@ -71,8 +74,15 @@ pub fn write_log(tag: &str, msg: &str) {
     if !ENABLED.load(Ordering::Relaxed) {
         return;
     }
-    match CALLBACK.get() {
+    let lock = CALLBACK.lock().unwrap();
+    match &*lock {
         Some(cb) => cb(tag, msg),
         None => eprintln!("[{tag}] {msg}"),
     }
+}
+
+/// Test-only: Reset the log callback for test isolation.
+pub fn reset_log_callback_for_test() {
+    let mut lock = CALLBACK.lock().unwrap();
+    *lock = None;
 }

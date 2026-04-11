@@ -27,7 +27,7 @@ CONF="$TAURI_DIR/tauri.conf.json"
 
 # ── Cleanup tracking ─────────────────────────────────────────────────────
 CLEANUP_DIRS=()
-cleanup() { for d in "${CLEANUP_DIRS[@]}"; do rm -rf "$d"; done; }
+cleanup() { for d in "${CLEANUP_DIRS[@]+"${CLEANUP_DIRS[@]}"}"; do rm -rf "$d"; done; }
 trap cleanup EXIT
 
 # ── Read config ───────────────────────────────────────────────────────────
