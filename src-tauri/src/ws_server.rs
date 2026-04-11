@@ -7,7 +7,7 @@
 use serde::Serialize;
 
 thread_local! {
-    pub static LAST_EVENT: std::cell::RefCell<Option<(String, String)>> = std::cell::RefCell::new(None);
+    pub static LAST_EVENT: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Stub WS broadcaster that forwards all events to daemon via push endpoint.
@@ -19,12 +19,18 @@ where
     push_fn: F,
 }
 
+impl Default for WsBroadcaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WsBroadcaster {
     /// Create a new broadcaster using the real daemon push.
     pub fn new() -> Self {
         Self {
             push_fn: |event, payload| {
-                crate::daemon_cmds::push_event_to_daemon_erased(event, payload)
+                crate::daemon_cmds::push_event_to_daemon_erased(event, payload);
             },
         }
     }

@@ -400,9 +400,8 @@ mod tests {
     #[tokio::test]
     async fn screenshot_config_default_has_interval() {
         let (_td, state) = mk_state();
-        let cfg = get_screenshot_config(State(state.clone())).await.0;
-        // Default interval should be non-negative
-        assert!(cfg.interval_secs >= 0);
+        let _cfg = get_screenshot_config(State(state.clone())).await.0;
+        // Default interval is always non-negative (unsigned type)
     }
 
     #[test]
@@ -413,8 +412,8 @@ mod tests {
             config: skill_settings::ScreenshotConfig::default(),
             events_tx: tx,
         };
-        let cfg = ctx.config();
-        assert!(cfg.interval_secs >= 0);
+        let _cfg = ctx.config();
+        // interval_secs is always non-negative (unsigned type)
     }
 
     #[test]

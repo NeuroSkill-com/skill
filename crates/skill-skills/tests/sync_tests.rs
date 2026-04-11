@@ -37,6 +37,7 @@ fn sync_skills_download_failure() {
 
 #[test]
 fn sync_skills_fresh_skips_download() {
+    use serde_json::json;
     use std::fs::File;
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
