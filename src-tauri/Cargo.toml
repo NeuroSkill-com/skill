@@ -100,11 +100,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 
 # Cross-platform GPU detection (VRAM, unified memory, backend).
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
-# llmfit-core covers NVIDIA (nvidia-smi + sysfs), AMD (rocm-smi + sysfs),
-# Intel Arc (sysfs), Apple Silicon (system_profiler), and Windows WMI.
 llmfit-core = "0.8.4"
-# sysinfo is already compiled as an indirect dep via llmfit-core; listing it
-# directly gives gpu_stats.rs access to System::refresh_memory() for the
+# sysinfo gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
 sysinfo = "0.38"
 
@@ -175,11 +172,6 @@ hound = { version = "3", optional = true }
 #   Linux/Windows → download-binaries (see target.'cfg(not(...))')
 # No base entry here — cargo merges the target-specific feature sets.
 
-# OCR engine — extract text from screenshots before downsizing.
-# Models (~10 MB each) are auto-downloaded from S3 on first use.
-ocrs = "0.12.1"
-rten = "0.24.0"
-
 # Apple Vision framework OCR — compiled ObjC FFI, runs on GPU/ANE.
 # No-op on non-macOS platforms.  (Renamed from apple-ocr → skill-vision.)
 skill-vision = { path = "../crates/skill-vision" }
@@ -199,15 +191,12 @@ skill-settings = { path = "../crates/skill-settings" }
 skill-llm   = { path = "../crates/skill-llm" }
 skill-tools = { path = "../crates/skill-tools" }
 skill-headless = { path = "../crates/skill-headless" }
-skill-eeg  = { path = "../crates/skill-eeg", features = ["gpu"] }
+skill-eeg  = { path = "../crates/skill-eeg" }
 skill-tts  = { path = "../crates/skill-tts" }
 skill-data      = { path = "../crates/skill-data" }
 skill-oura      = { path = "../crates/skill-oura" }
 oura-api        = "0.1.2"
 
-# Arrow / Parquet — used for reading EEG session files during re-embed.
-parquet     = { version = "58", default-features = false, features = ["arrow"] }
-arrow-array = "58"
 skill-commands  = { path = "../crates/skill-commands" }
 skill-history   = { path = "../crates/skill-history" }
 skill-router    = { path = "../crates/skill-router" }
@@ -234,9 +223,6 @@ base64 = { workspace = true }
 # is safe for all platforms.
 rfd = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
 
-# GPU-accelerated FFT for real-time EEG filtering (overlap-save, wgpu backend)
-gpu-fft = { version = "1.1.1", features = ["wgpu"] }
-
 # WebSocket broadcast server + HTTP REST API
 axum              = { version = "0.8", features = ["ws"] }
 tower-http        = { version = "0.6", features = ["cors"] }
@@ -259,87 +245,9 @@ mdns-sd = "0.18"
 skill-iroh = { path = "../crates/skill-iroh" }
 skill-lsl  = { path = "../crates/skill-lsl" }
 
-# ── EEG Embedding ─────────────────────────────────────────────────────────────
-
-# ZUNA EEG foundation model — encoder-only, wgpu GPU backend.
-# default-features = false drops the ndarray CPU backend; wgpu pulls
-# burn-wgpu → cubecl-wgpu → wgpu 26.0.1, the same version gpu-fft uses.
-zuna-rs   = { version = "0.0.2", default-features = false, features = ["wgpu"] }
-
-# LUNA EEG foundation model — topology-agnostic encoder, wgpu GPU backend.
-luna-rs   = { version = "0.0.3", default-features = false, features = ["wgpu"] }
-
-# REVE EEG foundation model — 4D Fourier positional encoding, wgpu GPU backend.
-reve-rs   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# CBraMod EEG foundation model — criss-cross attention, wgpu GPU backend.
-cbramod-rs = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# EEGPT EEG foundation model — dual self-supervised transformer, wgpu GPU backend.
-eegpt-rs  = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# LaBraM EEG foundation model — BEiTv2-style neural tokenization, wgpu GPU backend.
-labram-rs = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# SignalJEPA EEG foundation model — JEPA with dynamic spatial attention, wgpu GPU backend.
-signaljepa = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# OSF Sleep foundation model — multimodal PSG ViT-Base, wgpu GPU backend.
-osf-rs    = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# SleepFM foundation model — contrastive multimodal PSG, wgpu GPU backend.
-sleepfm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# SleepLM foundation model — CoCa PSG + language, wgpu GPU backend.
-sleeplm   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
-
-# TRIBE v2 multimodal fMRI brain-encoding foundation model (Meta AI) — wgpu GPU backend.
-tribev2       = { version = "0.0.4", default-features = false, features = ["wgpu"] }
-tribev2-audio = { version = "0.0.4", default-features = false, features = ["wgpu"] }
-tribev2-video = { version = "0.0.4", default-features = false, features = ["wgpu"] }
-
-# SensorLM and OpenTSLM use burn 0.14 — incompatible with workspace burn 0.20.1.
-# They will be re-added once the crates are updated.
-# sensorlm-rs = { version = "0.1.0", default-features = false, features = ["wgpu"] }
-# opentslm  = { version = "0.1.0", default-features = false }
-
-# Pure-Rust HNSW approximate nearest-neighbour index with binary persistence.
-fast-hnsw = { version = "1.0.1" }
-
-# SQLite — bundled so no system lib required; stores daily embedding records.
-rusqlite  = { workspace = true }
-
-# HuggingFace Hub client — used to auto-download ZUNA weights on first run.
-# The sync API (default feature) is used; no async/tokio dependency required.
-# 0.4+ fixes "relative URL without a base" when the CDN returns a relative
-# Location header during the metadata redirect dance (hf-hub#issue/relative-url).
-hf-hub    = "0.5"
-
 # HTTP client used by the resumable LLM model downloader.
-# ureq 2.12.1 is already compiled transitively (hf-hub 0.4, openbci), so
-# adding it here costs zero extra compile time.
 ureq      = { version = "3", features = ["native-tls"] }
 
-# ndarray Array2<f32> is required by zuna_rs::load_from_named_tensor.
-ndarray   = "0.17"
-
-# GPU-accelerated parametric UMAP (burn + CubeCL / wgpu backend).
-# Uses the fast-map repo's local checkout to avoid burn-optim 0.20.1 ABI mismatch
-# on crates.io.  Repository: https://github.com/eugenehp/fast-map
-fast-umap = { version = "1.2.3", default-features = false }
-
-# Direct access to burn::backend::{Wgpu, wgpu::WgpuDevice} in eeg_embeddings.rs.
-burn      = { version = "0.20.1", default-features = false, features = ["wgpu"] }
-# Direct dep on wgpu for manual device init with validation flags control.
-wgpu      = "26.0.1"
-pollster  = "0.4"
-
-# Raw CubeBackend + WgpuRuntime needed for fast-umap's AutodiffBackend bound
-# (the Fusion<CubeBackend> wrapper from burn::backend::Wgpu is not supported).
-burn-cubecl    = "0.20.1"
-cubecl         = { version = "0.9.0", features = ["wgpu"] }
-cubecl-runtime = "0.9.0"
-crossbeam-channel = "0.5.15"
 erased-serde = "0.4.10"
 
 # ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────

@@ -290,6 +290,10 @@ export const EXEMPT_KEYS = new Set([
   "settings.deviceApi.ouraTitle", // brand name "Oura Ring" — same in all locales
   "settings.supportedDevices.company.oura", // brand name "Ōura"
   "settings.supportedDevices.device.ouraRing", // product name "Oura Ring (Gen 3 / Gen 4)"
+  "about.copyright", // "© 2025–2026 NeuroSkill.com" — same in all locales
+  "dashboard.rec", // "● REC" — universal recording indicator
+  "ttsTab.apiExampleWs", // API code example — language-neutral
+  "ttsTab.apiExampleHttp", // API code example — language-neutral
 ]);
 
 /** Patterns for values that are inherently language-neutral. */

@@ -1826,22 +1826,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cbramod-rs"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df52767383a2d1d052c91adf9260a7f7c138f9d580c4a5ddac75c47b117a5f7c"
-dependencies = [
- "anyhow",
- "burn",
- "clap 4.6.0",
- "half",
- "rustfft",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3767,21 +3751,6 @@ dependencies = [
  "signature",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "eegpt-rs"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "212f2bb84c79f10d8ce8321b40628cf64e9266996b43d6a4e1ee93c7df683dfd"
-dependencies = [
- "anyhow",
- "burn",
- "clap 4.6.0",
- "half",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -6998,21 +6967,6 @@ name = "lab"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf36173d4167ed999940f804952e6b08197cae5ad5d572eb4db150ce8ad5d58f"
-
-[[package]]
-name = "labram-rs"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7e561fb36c2fbe5f8c49c19c490e2850a726bbfda76dbdfe2555240d9ed30d5"
-dependencies = [
- "anyhow",
- "burn",
- "clap 4.6.0",
- "half",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "lazy_static"
@@ -10719,15 +10673,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "realfft"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f821338fddb99d089116342c46e9f1fbf3828dba077674613e734e01d6ea8677"
-dependencies = [
- "rustfft",
-]
-
-[[package]]
 name = "reborrow"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11249,18 +11194,6 @@ checksum = "9574ddebf5671bc08ceb76e2e1638fadc57fdeff318634eab2c29e9a803cff64"
 dependencies = [
  "rten-base",
  "rten-simd",
-]
-
-[[package]]
-name = "rubato"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5258099699851cfd0082aeb645feb9c084d9a5e1f1b8d5372086b989fc5e56a1"
-dependencies = [
- "num-complex",
- "num-integer",
- "num-traits",
- "realfft",
 ]
 
 [[package]]
@@ -12029,20 +11962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signaljepa"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63c176ebd9742a60a44e0f75a726ad049fb32b631a225f89626c7d0092d8a065"
-dependencies = [
- "anyhow",
- "burn",
- "half",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "signature"
 version = "3.0.0-rc.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12095,66 +12014,43 @@ name = "skill"
 version = "0.0.111"
 dependencies = [
  "anyhow",
- "arrow-array",
  "async-stream",
  "axum",
  "base64 0.22.1",
- "burn",
- "burn-cubecl",
- "cbramod-rs",
  "chrono",
  "cognionics",
- "crossbeam-channel",
  "csv",
- "cubecl",
- "cubecl-runtime",
  "dirs",
  "dispatch2",
- "eegpt-rs",
  "erased-serde",
- "fast-hnsw",
- "fast-umap",
  "fastembed",
  "futures-util",
- "gpu-fft",
- "hf-hub 0.5.0",
  "hound",
  "image",
  "jsonschema",
  "kittentts",
- "labram-rs",
  "libc",
  "llama-cpp-4",
  "llmfit-core",
  "log",
- "luna-rs",
  "macos-focus",
  "mdns-sd",
- "ndarray 0.17.2",
  "neutts",
  "objc2 0.6.4",
  "objc2-app-kit",
  "objc2-foundation 0.3.2",
- "ocrs",
  "ort",
- "osf-rs",
  "oura-api",
- "parquet",
  "png 0.18.1",
- "pollster",
  "regex",
- "reve-rs",
  "rfd",
  "rodio",
- "rten",
- "rusqlite",
  "rustls",
  "serde",
  "serde_json",
  "serde_yaml",
  "serialport",
  "sha2 0.10.9",
- "signaljepa",
  "skill-autostart",
  "skill-calendar",
  "skill-commands",
@@ -12180,8 +12076,6 @@ dependencies = [
  "skill-tray",
  "skill-tts",
  "skill-vision",
- "sleepfm",
- "sleeplm",
  "stacker",
  "sysinfo 0.38.4",
  "tauri",
@@ -12196,13 +12090,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower-http",
- "tribev2",
- "tribev2-audio",
- "tribev2-video",
  "ureq 3.3.0",
- "wgpu",
  "zip 4.6.1",
- "zuna-rs",
 ]
 
 [[package]]
@@ -14740,38 +14629,6 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tracing",
-]
-
-[[package]]
-name = "tribev2-audio"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56a8ba08d9d31c9f94f9d51c9803349704dda349c6627210479f3a77c5438fd0"
-dependencies = [
- "anyhow",
- "burn",
- "half",
- "hound",
- "rubato",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "tribev2-video"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e12b42d7a07a55218d858cfda54ae9ee5d4bf92869a4bda15fd4a050ab55ffb5"
-dependencies = [
- "anyhow",
- "burn",
- "half",
- "image",
- "safetensors 0.7.0",
- "serde",
- "serde_json",
 ]
 
 [[package]]
