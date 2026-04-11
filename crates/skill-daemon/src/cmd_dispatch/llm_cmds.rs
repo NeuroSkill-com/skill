@@ -662,9 +662,8 @@ mod tests {
     #[test]
     fn infer_quant_handles_all_known_types() {
         let types = [
-            "IQ4_NL", "IQ4_XS", "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S",
-            "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S", "Q4_0",
-            "Q3_K_M", "Q3_K_S", "Q2_K", "Q8_0", "BF16", "F16", "F32",
+            "IQ4_NL", "IQ4_XS", "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S",
+            "Q4_0", "Q3_K_M", "Q3_K_S", "Q2_K", "Q8_0", "BF16", "F16", "F32",
         ];
         for t in types {
             let filename = format!("model-{t}.gguf");

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 /// Safety checks, user-approval dialogs, and bash-edit hook for tool operations.
-
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
@@ -167,7 +166,6 @@ pub(crate) fn blocked_json(tool_name: &str, reason: &str) -> serde_json::Value {
 
 #[cfg(test)]
 mod path_validation_tests {
-
 
     #[test]
     fn detects_dangerous_patterns() {

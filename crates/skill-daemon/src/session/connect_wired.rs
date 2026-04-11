@@ -989,7 +989,10 @@ mod tests {
         // Exactly 4 chars with prefix
         assert_eq!(lsl_query_from_target("lsl:"), "");
         // With spaces
-        assert_eq!(lsl_query_from_target("lsl: name='Test Device' "), " name='Test Device' ");
+        assert_eq!(
+            lsl_query_from_target("lsl: name='Test Device' "),
+            " name='Test Device' "
+        );
     }
 
     #[tokio::test]

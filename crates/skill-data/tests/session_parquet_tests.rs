@@ -4,10 +4,10 @@
 
 //! Tests for session_parquet.rs
 
+use skill_data::session_parquet::{eeg_parquet_path, ParquetState};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
-use skill_data::session_parquet::{ParquetState, eeg_parquet_path};
 
 #[test]
 fn test_eeg_parquet_path() {

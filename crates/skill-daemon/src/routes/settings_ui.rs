@@ -606,7 +606,10 @@ mod tests {
     #[tokio::test]
     async fn ws_config_accepts_all_zeros_host() {
         let (_td, state) = mk_state();
-        let req = WsConfigRequest { host: "0.0.0.0".into(), port: 9090 };
+        let req = WsConfigRequest {
+            host: "0.0.0.0".into(),
+            port: 9090,
+        };
         let res = set_ws_config(State(state.clone()), Json(req)).await.0;
         assert_eq!(res["ok"], true);
     }
@@ -614,7 +617,10 @@ mod tests {
     #[tokio::test]
     async fn ws_config_trims_whitespace() {
         let (_td, state) = mk_state();
-        let req = WsConfigRequest { host: "  127.0.0.1  ".into(), port: 8080 };
+        let req = WsConfigRequest {
+            host: "  127.0.0.1  ".into(),
+            port: 8080,
+        };
         let res = set_ws_config(State(state.clone()), Json(req)).await.0;
         assert_eq!(res["ok"], true);
     }

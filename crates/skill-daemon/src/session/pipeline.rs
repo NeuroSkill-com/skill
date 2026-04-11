@@ -367,10 +367,15 @@ mod tests {
 
         let (tx, _rx) = broadcast::channel(16);
         let mut pipe = Pipeline::open(
-            dir.path(), 4, 256.0,
+            dir.path(),
+            4,
+            256.0,
             vec!["Ch1".into(), "Ch2".into(), "Ch3".into(), "Ch4".into()],
-            "TestDevice".into(), tx, Vec::new(),
-        ).unwrap();
+            "TestDevice".into(),
+            tx,
+            Vec::new(),
+        )
+        .unwrap();
 
         for i in 0..100 {
             pipe.push_eeg(&[1.0, 2.0, 3.0, 4.0], i as f64 / 256.0);
@@ -390,10 +395,15 @@ mod tests {
 
         let (tx, _rx) = broadcast::channel(16);
         let mut pipe = Pipeline::open(
-            dir.path(), 2, 128.0,
+            dir.path(),
+            2,
+            128.0,
             vec!["Ch1".into(), "Ch2".into()],
-            "TestDevice".into(), tx, Vec::new(),
-        ).unwrap();
+            "TestDevice".into(),
+            tx,
+            Vec::new(),
+        )
+        .unwrap();
 
         for i in 0..50 {
             pipe.push_eeg(&[1.0, 2.0], i as f64 / 128.0);
@@ -423,10 +433,15 @@ mod tests {
 
         let (tx, _rx) = broadcast::channel(16);
         let pipe = Pipeline::open(
-            dir.path(), 4, 256.0,
+            dir.path(),
+            4,
+            256.0,
             vec!["Ch1".into(), "Ch2".into(), "Ch3".into(), "Ch4".into()],
-            "Test".into(), tx, Vec::new(),
-        ).unwrap();
+            "Test".into(),
+            tx,
+            Vec::new(),
+        )
+        .unwrap();
 
         let q = pipe.channel_quality();
         assert_eq!(q.len(), 4);

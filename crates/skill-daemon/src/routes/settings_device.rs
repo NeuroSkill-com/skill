@@ -255,7 +255,9 @@ mod tests {
     async fn storage_format_set_and_get() {
         let (_td, state) = mk_state();
         // Set format to "parquet"
-        let req = super::super::settings::StringValueRequest { value: "parquet".into() };
+        let req = super::super::settings::StringValueRequest {
+            value: "parquet".into(),
+        };
         let _ = set_storage_format(State(state.clone()), Json(req)).await;
         let res = get_storage_format(State(state.clone())).await.0;
         assert_eq!(res["value"], "parquet");
