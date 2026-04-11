@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           run_cmd() {
-            cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots -- -D warnings
+            cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
@@ -241,7 +241,7 @@ jobs:
             BASE=""
           fi
 
-          ALL_CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg -p skill-screenshots"
+          ALL_CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg"
 
           if [[ "${{ inputs.run_all_tests }}" == "true" ]]; then
             # Manual dispatch with run_all_tests — test everything
@@ -264,7 +264,7 @@ jobs:
 
           # Filter for crates that have integration tests (tests/*.rs).
           # skill-llm E2E is excluded — it's gated by manual dispatch.
-          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-screenshots skill-history skill-settings skill-router skill-label-index skill-skills skill-tools skill-commands skill-llm"
+          INT_CRATES="skill-eeg skill-data skill-headless skill-jobs skill-history skill-settings skill-router skill-label-index skill-skills skill-tools skill-commands skill-llm"
           INT_FLAGS=""
           for c in $INT_CRATES; do
             if echo "$CRATE_FLAGS" | grep -qw "\-p $c"; then
@@ -838,7 +838,7 @@ jobs:
           run_cmd() {
             cargo clippy -p skill \
               --target x86_64-pc-windows-msvc \
-              --features llm-vulkan,screenshots \
+              --features llm-vulkan \
               -- -D warnings
           }
           if ! run_cmd; then

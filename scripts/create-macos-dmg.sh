@@ -76,9 +76,9 @@ if ! node -e "require('appdmg')" 2>/dev/null; then
   npm install --global appdmg
 fi
 
-# Clean up any existing DMG files to avoid using cached versions
-rm -rf "$DMG_DIR" 2>/dev/null || true
-mkdir -p "$DMG_DIR"
+# Clean up any existing DMG files to avoid using cached versions.
+# (DMG_DIR is defined later; clean the known path directly.)
+rm -rf "$BUNDLE_DIR/dmg" 2>/dev/null || true
 # Resolve the global node_modules path so [stdin] can find it
 APPDMG_PATH="$(node -e "console.log(require.resolve('appdmg'))" 2>/dev/null || true)"
 if [[ -z "$APPDMG_PATH" ]]; then
@@ -91,7 +91,7 @@ fi
 STAGE="$(mktemp -d)"; CLEANUP_DIRS+=("$STAGE")
 
 # Clean up any existing cached files that might have old versions
-rm -rf "$DMG_DIR"/VolumeIcon.* "$DMG_DIR"/background*.png 2>/dev/null || true
+rm -rf "$BUNDLE_DIR/dmg"/VolumeIcon.* "$BUNDLE_DIR/dmg"/background*.png 2>/dev/null || true
 
 # ── Generate background image (logo + version) ───────────────────────────
 ICON_PNG="$TAURI_DIR/icons/icon.png"

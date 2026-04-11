@@ -50,21 +50,18 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // One-shot: check if daemon wants us to auto-start calibration.
-        if let Ok(resp) = tokio::task::spawn_blocking(|| {
+        if let Ok(Ok(val)) = tokio::task::spawn_blocking(|| {
             crate::daemon_cmds::fetch_json_value_with_auth("/v1/calibration/auto-start-pending")
         })
         .await
         {
-            if let Ok(val) = resp {
-                if let Some(id) = val.get("profile_id").and_then(|v| v.as_str()) {
-                    let id = id.to_owned();
-                    let a = app.clone();
-                    tokio::spawn(async move {
-                        let _ =
-                            crate::window_cmds::open_calibration_window_inner(&a, Some(id), false)
-                                .await;
-                    });
-                }
+            if let Some(id) = val.get("profile_id").and_then(|v| v.as_str()) {
+                let id = id.to_owned();
+                let a = app.clone();
+                tokio::spawn(async move {
+                    let _ = crate::window_cmds::open_calibration_window_inner(&a, Some(id), false)
+                        .await;
+                });
             }
         }
 

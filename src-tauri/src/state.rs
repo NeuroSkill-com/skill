@@ -19,11 +19,9 @@ use crate::settings::{
 use crate::skill_log::SkillLogger;
 use crate::tts::init_tts_dirs;
 use crate::{unix_secs, yyyymmdd_utc};
-use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_filter::FilterConfig;
 use skill_eeg::eeg_model_config::{load_model_config, EegModelStatus, ExgModelConfig};
 use skill_eeg::eeg_quality::SignalQuality;
-use std::collections::VecDeque;
 
 #[cfg(feature = "llm")]
 use crate::settings::default_chat_shortcut;
@@ -461,17 +459,6 @@ impl EmbeddingModelState {
 
 // ── Full app state (Mutex-managed) ────────────────────────────────────────────
 
-#[derive(Default)]
-#[allow(dead_code)]
-pub struct FnirsRuntime {
-    pub baseline_ir_left: Option<f64>,
-    pub baseline_red_left: Option<f64>,
-    pub baseline_ir_right: Option<f64>,
-    pub baseline_red_right: Option<f64>,
-    pub hbo_left_hist: VecDeque<f64>,
-    pub hbo_right_hist: VecDeque<f64>,
-}
-
 pub struct AppState {
     // ── Device session ────────────────────────────────────────────────────
     pub status: DeviceStatus,
@@ -480,15 +467,7 @@ pub struct AppState {
     pub scanner: Option<ScannerHandle>,
     pub discovered: Vec<DiscoveredDevice>,
     pub preferred_id: Option<String>,
-    pub battery_ema: Option<f32>,
-    pub latest_bands: Option<BandSnapshot>,
-    pub fnirs_runtime: FnirsRuntime,
     pub session_start_utc: Option<u64>,
-
-    /// Accumulated SNR (dB) for the current session — used to compute the
-    /// average SNR written to the session sidecar JSON for quality filtering.
-    pub snr_sum: f64,
-    pub snr_count: u64,
 
     // ── Infrastructure ────────────────────────────────────────────────────
     pub skill_dir: std::path::PathBuf,
@@ -630,12 +609,7 @@ impl Default for AppState {
             scanner: None,
             discovered: Vec::new(),
             preferred_id: None,
-            battery_ema: None,
-            latest_bands: None,
-            fnirs_runtime: FnirsRuntime::default(),
             session_start_utc: None,
-            snr_sum: 0.0,
-            snr_count: 0,
 
             shortcuts: ShortcutState::default(),
             ui: UiPrefsState::default(),
