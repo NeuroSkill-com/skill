@@ -1,3 +1,16 @@
+
+// Helper for erased_serde trait object serialization
+pub fn push_event_to_daemon_erased(event_type: &str, payload: &dyn erased_serde::Serialize) {
+    let mut buf = Vec::new();
+    {
+        let mut ser = serde_json::Serializer::new(&mut buf);
+        erased_serde::serialize(payload, &mut ser).unwrap();
+    }
+    let payload_json = String::from_utf8(buf).unwrap();
+    crate::ws_server::LAST_EVENT.with(|cell| {
+        *cell.borrow_mut() = Some((event_type.to_string(), payload_json));
+    });
+}
 // SPDX-License-Identifier: GPL-3.0-only
 
 use serde::Serialize;

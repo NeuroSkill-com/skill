@@ -57,7 +57,8 @@ pub(crate) use quit::confirm_and_quit;
 
 mod job_queue;
 mod label_index;
-mod ws_server;
+pub mod ws_server;
+pub use ws_server::WsBroadcaster;
 
 #[allow(dead_code, unused_imports)]
 mod llm;

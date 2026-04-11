@@ -12506,6 +12506,7 @@ dependencies = [
  "dirs",
  "dispatch2",
  "eegpt-rs",
+ "erased-serde",
  "fast-hnsw",
  "fast-umap",
  "fastembed",

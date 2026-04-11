@@ -176,7 +176,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
         }
     }
 
-    let broadcaster = ws_server::WsBroadcaster;
+    let broadcaster = ws_server::WsBroadcaster::new();
 
     #[cfg(feature = "llm")]
     {
