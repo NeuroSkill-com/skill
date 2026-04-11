@@ -38,6 +38,7 @@ export const SUPPORTED_LOCALES: LocaleMeta[] = [
   { code: "fr", name: "Français", flag: "🇫🇷", dir: "ltr" },
   { code: "uk", name: "Українська", flag: "🇺🇦", dir: "ltr" },
   { code: "he", name: "עברית", flag: "🇮🇱", dir: "rtl" },
+  { code: "zh", name: "中文", flag: "🇨🇳", dir: "ltr" },
 ];
 
 const STORAGE_KEY = "skill-lang";
@@ -81,6 +82,7 @@ const loaders: Record<string, () => Promise<{ default: Record<string, string> }>
   es: () => import("./es/index"),
   he: () => import("./he/index"),
   uk: () => import("./uk/index"),
+  zh: () => import("./zh/index"),
 };
 
 // ── Reactive state ─────────────────────────────────────────────────────────

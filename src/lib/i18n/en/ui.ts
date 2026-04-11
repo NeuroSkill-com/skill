@@ -263,6 +263,13 @@ const ui: Record<string, string> = {
   "about.license": "License",
   "about.acknowledgements": "Acknowledgements",
   "about.discord": "Discord",
+  "about.tagline":
+    "Real-time EXG State of Mind system and brain-state monitoring for Muse, OpenBCI, Emotiv, IDUN, and other BCI devices.",
+  "about.copyright": "© 2025–2026 NeuroSkill.com",
+  "about.role.eugene": "Lead developer & EEG signal processing",
+  "about.role.nataliya": "Neuroscience and Brain Computer Interfaces",
+  "about.ack":
+    "Built with Tauri, SvelteKit, and the ZUNA EEG foundation model by Zyphra. EEG band-power research based on work by Klimesch (1999), Pope et al. (1995), and Kosmyna & Maes (2019).",
 
   "downloads.windowTitle": "Downloads",
   "downloads.subtitle": "Manage active and completed model downloads.",

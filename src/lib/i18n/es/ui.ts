@@ -277,6 +277,13 @@ const ui: Record<string, string> = {
   "about.license": "Licencia",
   "about.acknowledgements": "Agradecimientos",
   "about.discord": "Discord",
+  "about.tagline":
+    "Sistema EXG State of Mind en tiempo real y monitorización del estado cerebral para Muse, OpenBCI, Emotiv, IDUN y otros dispositivos BCI.",
+  "about.copyright": "© 2025–2026 NeuroSkill.com",
+  "about.role.eugene": "Desarrollador principal y procesamiento de señales EEG",
+  "about.role.nataliya": "Neurociencia e interfaces cerebro-computadora",
+  "about.ack":
+    "Creado con Tauri, SvelteKit y el modelo fundacional ZUNA EEG de Zyphra. Investigación de potencia de bandas EEG basada en trabajos de Klimesch (1999), Pope et al. (1995) y Kosmyna & Maes (2019).",
 
   "downloads.windowTitle": "Descargas",
   "downloads.subtitle": "Gestione las descargas de modelos activos y completados.",

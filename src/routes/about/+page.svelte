@@ -13,6 +13,12 @@ import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
 useWindowTitle("window.title.about");
 
+/** Map author name → i18n key for their role description. */
+const roleKeys: Record<string, string> = {
+  "Eugene Hauptmann": "about.role.eugene",
+  "Nataliya Kosmyna": "about.role.nataliya",
+};
+
 interface AboutInfo {
   name: string;
   version: string;
@@ -54,7 +60,7 @@ onMount(async () => {
           <span class="text-[0.68rem] font-mono text-muted-foreground/45">v{info.version}</span>
         </div>
         <p class="text-[0.75rem] text-muted-foreground/75 max-w-sm leading-snug">
-          {info.tagline}
+          {t("about.tagline")}
         </p>
       </div>
 
@@ -98,7 +104,7 @@ onMount(async () => {
         <div class="grid gap-y-2" style="grid-template-columns: auto 1fr;">
           {#each info.authors as [name, role]}
             <span class="text-[0.82rem] font-medium pr-4 leading-snug">{name}</span>
-            <span class="text-[0.75rem] text-muted-foreground/65 leading-snug">{role}</span>
+            <span class="text-[0.75rem] text-muted-foreground/65 leading-snug">{roleKeys[name] ? t(roleKeys[name]) : role}</span>
           {/each}
         </div>
       </section>
@@ -129,14 +135,14 @@ onMount(async () => {
           {t("about.acknowledgements")}
         </p>
         <p class="text-[0.76rem] text-muted-foreground/65 leading-relaxed">
-          {info.acknowledgements}
+          {t("about.ack")}
         </p>
       </section>
 
       <!-- Copyright footer ---------------------------------------------------->
       <div class="mt-auto pt-3 border-t border-border/50 dark:border-white/[0.05]
                   text-center shrink-0">
-        <p class="text-[0.65rem] text-muted-foreground/35">{info.copyright}</p>
+        <p class="text-[0.65rem] text-muted-foreground/35">{t("about.copyright")}</p>
       </div>
 
     </div>

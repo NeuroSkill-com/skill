@@ -255,6 +255,13 @@ const ui: Record<string, string> = {
   "about.license": "רישיון",
   "about.acknowledgements": "תודות",
   "about.discord": "Discord",
+  "about.tagline":
+    "מערכת EXG State of Mind בזמן אמת וניטור מצב מוחי עבור Muse, OpenBCI, Emotiv, IDUN ומכשירי BCI אחרים.",
+  "about.copyright": "© 2025–2026 NeuroSkill.com",
+  "about.role.eugene": "מפתח ראשי ועיבוד אותות EEG",
+  "about.role.nataliya": "מדעי המוח וממשקי מוח-מחשב",
+  "about.ack":
+    "נבנה עם Tauri, SvelteKit ומודל הבסיס ZUNA EEG מבית Zyphra. מחקר עוצמת פסי תדר EEG מבוסס על עבודותיהם של Klimesch (1999), Pope et al. (1995) ו-Kosmyna & Maes (2019).",
 
   "svg.layerQuery": "שאילתה",
   "svg.layerTextMatches": "התאמות טקסט",
