@@ -882,7 +882,7 @@ mod tests {
     async fn cmd_list_calibrations_returns_array() {
         let (_td, state) = test_state();
         let result = cmd_list_calibrations(&state).await.unwrap();
-        assert!(result.get("calibrations").unwrap().is_array());
+        assert!(result.get("profiles").unwrap().is_array());
     }
 
     #[tokio::test]
