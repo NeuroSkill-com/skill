@@ -13,7 +13,8 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+cpu-only = ["dep:skill-exg"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
@@ -73,7 +74,7 @@ skill-skills        = { path = "../skill-skills", features = ["sync"] }
 skill-tools         = { path = "../skill-tools" }
 skill-oura          = { path = "../skill-oura" }
 skill-eeg           = { path = "../skill-eeg" }
-skill-exg           = { path = "../skill-exg" }
+skill-exg           = { path = "../skill-exg", optional = true }
 neurofield          = { version = "0.0.1", default-features = false }
 brainbit            = { version = "0.0.2", default-features = false }
 gtec                = { version = "0.0.2", default-features = false }

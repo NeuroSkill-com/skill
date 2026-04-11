@@ -215,6 +215,9 @@ jobs:
           # incrementing this value (e.g. after a toolchain or LLVM upgrade).
           echo "SCCACHE_GHA_VERSION=2" >> "$GITHUB_ENV"
 
+          # Debug: show initial sccache stats
+          sccache --show-stats || true
+
           # ── Fix sccache PATH on Windows ─────────────────────────────────────
           # sccache-action v0.0.9 on Windows fails to add the sccache directory
           # to the Windows Path variable.  Git Bash can find sccache via the

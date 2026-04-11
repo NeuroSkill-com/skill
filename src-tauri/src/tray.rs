@@ -776,3 +776,4 @@ fn update_status_items(menu: &Menu<tauri::Wry>, st: &DeviceStatus) {
         let _ = item.set_enabled(is_streaming);
     }
 }
+
