@@ -34,9 +34,8 @@ license = "GPL-3.0-only"
 [features]
 # LLM inference + NeuTTS (llama-cpp backbone) + EXG embedding now run
 # exclusively in skill-daemon.  The Tauri binary is a thin UI.
-default    = ["tts-kitten", "mw75-rfcomm", "screenshots", "gps"]
+default    = ["tts-kitten", "mw75-rfcomm", "gps"]
 gps        = ["skill-data/gps"]
-screenshots = ["skill-screenshots/capture"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
 tts-kitten = ["dep:kittentts", "dep:rodio", "skill-tts/tts-kitten"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound", "skill-tts/tts-neutts"]
@@ -165,13 +164,6 @@ sha2 = { version = "0.10", optional = true }
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }
 
-# ONNX Runtime — same version as fastembed; provides ExecutionProvider
-# types (CoreML, CPU) for GPU/CPU selection in image + text embeddings.
-# Strategy is split by platform:
-#   macOS        → CoreML (see target.'cfg(target_os = "macos")'.dependencies)
-#   Linux/Windows → download-binaries (see target.'cfg(not(...))')
-# No base entry here — cargo merges the target-specific feature sets.
-
 # Apple Vision framework OCR — compiled ObjC FFI, runs on GPU/ANE.
 # No-op on non-macOS platforms.  (Renamed from apple-ocr → skill-vision.)
 skill-vision = { path = "../crates/skill-vision" }
@@ -199,7 +191,6 @@ oura-api        = "0.1.2"
 
 skill-commands  = { path = "../crates/skill-commands" }
 skill-history   = { path = "../crates/skill-history" }
-skill-router    = { path = "../crates/skill-router" }
 skill-tray      = { path = "../crates/skill-tray" }
 # skill-exg removed — EXG embedding runs in skill-daemon only.
 skill-devices   = { path = "../crates/skill-devices" }
@@ -208,7 +199,7 @@ skill-calendar      = { path = "../crates/skill-calendar" }
 skill-location      = { path = "../crates/skill-location" }
 skill-constants     = { path = "../crates/skill-constants" }
 skill-label-index   = { path = "../crates/skill-label-index" }
-skill-screenshots   = { path = "../crates/skill-screenshots", default-features = false }
+# skill-screenshots removed — screenshot capture/OCR/embedding runs in skill-daemon only.
 skill-daemon-common = { path = "../crates/skill-daemon-common" }
 skill-skills        = { path = "../crates/skill-skills", features = ["sync"] }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -262,10 +253,6 @@ erased-serde = "0.4.10"
 # embeddings run on the Apple GPU via Metal Performance Shaders.
 # On Linux / Windows the default ort backend is used instead.
 [target.'cfg(target_os = "macos")'.dependencies]
-fastembed = { version = "5.11.0", features = ["metal"] }
-# ONNX Runtime with CoreML execution provider on macOS — runs image + text
-# embeddings on GPU / Apple Neural Engine instead of CPU.
-ort = { version = "=2.0.0-rc.11", default-features = false, features = ["coreml"] }
 # llama-cpp-4 with Metal GPU offload — merged with the base [dependencies] entry
 # so that when the `llm` feature is active the Metal backend is compiled in
 # automatically on macOS.
@@ -286,13 +273,6 @@ dispatch2        = "0.3.1"
 neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-# ort-download-binaries-native-tls enables both ort/download-binaries and
-# ort/tls-native, which is required: download-binaries alone triggers a
-# compile_error! in ort-sys demanding a TLS feature be selected.
-fastembed = { version = "5.11.0", features = ["ort-download-binaries-native-tls"] }
-# Explicit ort entry — mirrors the features fastembed already activates so
-# our own code can reference ort types directly without a separate TLS fix.
-ort = { version = "=2.0.0-rc.11", default-features = false, features = ["download-binaries", "tls-native"] }
 # llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
 # entry so that when the `llm` feature is active the Vulkan backend is compiled
 # in automatically on Linux and Windows.
