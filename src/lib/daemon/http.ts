@@ -75,7 +75,9 @@ async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unk
   if (!resp.ok) {
     const msg = json?.error || json?.message || `${resp.status} ${resp.statusText}`;
     if (resp.status === 401) {
-      import("./status.svelte").then(({ notifyDaemonError }) => notifyDaemonError("authentication failed")).catch(() => {});
+      import("./status.svelte")
+        .then(({ notifyDaemonError }) => notifyDaemonError("authentication failed"))
+        .catch(() => {});
     }
     throw new Error(msg);
   }

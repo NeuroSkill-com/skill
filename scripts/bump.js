@@ -105,9 +105,7 @@ function checkVersionTagged(version) {
     if (err.message.includes("Bump aborted")) {
       throw err;
     }
-    throw new Error(
-      `Bump aborted: Could not verify if tag ${tagName} exists on remote: ${err.message}`,
-    );
+    throw new Error(`Bump aborted: Could not verify if tag ${tagName} exists on remote: ${err.message}`);
   }
 }
 
