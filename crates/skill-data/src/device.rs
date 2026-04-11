@@ -118,6 +118,47 @@ impl DeviceKind {
     ///
     /// Matching is case-insensitive.  Returns [`DeviceKind::Unknown`] for
     /// `None` (not connected) or an unrecognised name.
+    /// Detect device kind from a transport-prefixed identifier and/or display name.
+    ///
+    /// The `device_id` carries a transport prefix (e.g. `"cortex:EPOCX-1234"`,
+    /// `"usb:/dev/ttyUSB0"`, `"cgx:/dev/ttyUSB0"`) that narrows the match
+    /// before falling back to `from_name` on the display name.
+    pub fn from_id_and_name(device_id: Option<&str>, device_name: Option<&str>) -> Self {
+        if let Some(id) = device_id.map(str::to_ascii_lowercase) {
+            if id.starts_with("neurofield:") {
+                return Self::NeuroField;
+            }
+            if id.starts_with("brainbit:") {
+                return Self::BrainBit;
+            }
+            if id.starts_with("gtec:") {
+                return Self::GTec;
+            }
+            if id.starts_with("brainmaster:") {
+                return Self::BrainMaster;
+            }
+            if id.starts_with("cortex:") {
+                return Self::Emotiv;
+            }
+            if id.starts_with("cgx:") {
+                return Self::Cognionics;
+            }
+            if id.starts_with("usb:") {
+                // USB devices need name-based disambiguation.
+                let n = device_name.map(str::to_ascii_lowercase).unwrap_or_default();
+                if n.contains("cyton") {
+                    return Self::OpenBci;
+                }
+                if n.contains("ganglion") || n.contains("simblee") {
+                    return Self::Ganglion;
+                }
+                return Self::OpenBci;
+            }
+        }
+        Self::from_name(device_name)
+    }
+
+    /// Detect device kind from a BLE advertising name or display name.
     pub fn from_name(name: Option<&str>) -> Self {
         let Some(n) = name else { return Self::Unknown };
         let n = n.to_lowercase();
@@ -974,6 +1015,58 @@ mod tests {
         // An advertising name should still work via fallback.
         assert_eq!(DeviceKind::from_kind_str("Muse-2-ABCD"), DeviceKind::Muse);
         assert_eq!(DeviceKind::from_kind_str("random-thing"), DeviceKind::Unknown);
+    }
+
+    // ── from_id_and_name ──────────────────────────────────────────────
+
+    #[test]
+    fn from_id_and_name_cortex_prefix() {
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("cortex:EPOCX-1234"), None),
+            DeviceKind::Emotiv
+        );
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("cortex:EPOCX-1234"), Some("unknown")),
+            DeviceKind::Emotiv
+        );
+    }
+
+    #[test]
+    fn from_id_and_name_usb_prefix() {
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("usb:/dev/ttyUSB0"), None),
+            DeviceKind::OpenBci
+        );
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("usb:COM3"), Some("Cyton-1234")),
+            DeviceKind::OpenBci
+        );
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("usb:/dev/ttyUSB0"), Some("Ganglion")),
+            DeviceKind::Ganglion
+        );
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("usb:COM4"), Some("Simblee-1234")),
+            DeviceKind::Ganglion
+        );
+    }
+
+    #[test]
+    fn from_id_and_name_cgx_prefix() {
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("cgx:/dev/ttyUSB0"), None),
+            DeviceKind::Cognionics
+        );
+    }
+
+    #[test]
+    fn from_id_and_name_falls_back_to_name() {
+        assert_eq!(
+            DeviceKind::from_id_and_name(None, Some("ganglion-1234")),
+            DeviceKind::Ganglion
+        );
+        assert_eq!(DeviceKind::from_id_and_name(None, Some("mendi")), DeviceKind::Mendi);
+        assert_eq!(DeviceKind::from_id_and_name(None, None), DeviceKind::Unknown);
     }
 
     #[test]

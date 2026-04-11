@@ -16,29 +16,7 @@ use crate::helpers::{apply_daemon_status, emit_status_from_daemon};
 use crate::state::AppState;
 use crate::MutexExt;
 
-// ── Pure decision logic ─────────────────────────────────────────────────────
-// Battery/signal warning logic moved to skill-daemon::monitor.
-// These test-only copies remain for backward-compatible test coverage.
-
-#[cfg(test)]
-fn should_warn_battery(batt: f32, dev_id: &str, warned_for: Option<&str>) -> bool {
-    !dev_id.is_empty() && batt > 0.0 && batt <= 15.0 && warned_for != Some(dev_id)
-}
-
-#[cfg(test)]
-fn should_clear_battery_warning(batt: f32, dev_id: &str, warned_for: Option<&str>) -> bool {
-    batt >= 25.0 && warned_for == Some(dev_id)
-}
-
-#[cfg(test)]
-fn count_signal_quality(quality: &[String]) -> (usize, usize) {
-    let good = quality.iter().filter(|x| x.as_str() == "good").count();
-    let bad = quality
-        .iter()
-        .filter(|x| x.as_str() == "poor" || x.as_str() == "no_signal")
-        .count();
-    (good, bad)
-}
+// Battery/signal warning logic lives in skill-daemon::monitor.
 
 /// Adaptive poll delay: 5 s when connected, 2 s otherwise.
 fn poll_delay_secs(state: &str) -> u64 {
@@ -302,102 +280,6 @@ fn spawn_dnd_poll(_handle: &AppHandle) {
 mod tests {
     use super::*;
 
-    // ── Battery warnings ─────────────────────────────────────────────────
-
-    #[test]
-    fn battery_warn_at_15_percent() {
-        assert!(should_warn_battery(15.0, "dev1", None));
-    }
-
-    #[test]
-    fn battery_warn_at_1_percent() {
-        assert!(should_warn_battery(1.0, "dev1", None));
-    }
-
-    #[test]
-    fn battery_no_warn_at_16_percent() {
-        assert!(!should_warn_battery(16.0, "dev1", None));
-    }
-
-    #[test]
-    fn battery_no_warn_at_zero() {
-        // battery == 0 means "unknown" — don't warn.
-        assert!(!should_warn_battery(0.0, "dev1", None));
-    }
-
-    #[test]
-    fn battery_no_warn_negative() {
-        assert!(!should_warn_battery(-1.0, "dev1", None));
-    }
-
-    #[test]
-    fn battery_no_warn_empty_device_id() {
-        assert!(!should_warn_battery(10.0, "", None));
-    }
-
-    #[test]
-    fn battery_no_warn_if_already_warned_same_device() {
-        assert!(!should_warn_battery(10.0, "dev1", Some("dev1")));
-    }
-
-    #[test]
-    fn battery_warn_if_warned_different_device() {
-        assert!(should_warn_battery(10.0, "dev2", Some("dev1")));
-    }
-
-    #[test]
-    fn battery_clear_at_25_percent() {
-        assert!(should_clear_battery_warning(25.0, "dev1", Some("dev1")));
-    }
-
-    #[test]
-    fn battery_no_clear_at_24_percent() {
-        assert!(!should_clear_battery_warning(24.0, "dev1", Some("dev1")));
-    }
-
-    #[test]
-    fn battery_no_clear_different_device() {
-        assert!(!should_clear_battery_warning(30.0, "dev2", Some("dev1")));
-    }
-
-    #[test]
-    fn battery_no_clear_when_not_warned() {
-        assert!(!should_clear_battery_warning(30.0, "dev1", None));
-    }
-
-    // ── Signal quality counting ──────────────────────────────────────────
-
-    #[test]
-    fn signal_quality_counts_good_and_bad() {
-        let q: Vec<String> = vec![
-            "good".into(),
-            "good".into(),
-            "poor".into(),
-            "no_signal".into(),
-            "fair".into(),
-        ];
-        assert_eq!(count_signal_quality(&q), (2, 2));
-    }
-
-    #[test]
-    fn signal_quality_empty() {
-        assert_eq!(count_signal_quality(&[]), (0, 0));
-    }
-
-    #[test]
-    fn signal_quality_all_good() {
-        let q: Vec<String> = vec!["good".into(); 4];
-        assert_eq!(count_signal_quality(&q), (4, 0));
-    }
-
-    #[test]
-    fn signal_quality_all_poor() {
-        let q: Vec<String> = vec!["poor".into(); 3];
-        assert_eq!(count_signal_quality(&q), (0, 3));
-    }
-
-    // ── Poll delay ───────────────────────────────────────────────────────
-
     #[test]
     fn poll_delay_connected() {
         assert_eq!(poll_delay_secs("connected"), 5);
@@ -412,6 +294,4 @@ mod tests {
     fn poll_delay_scanning() {
         assert_eq!(poll_delay_secs("scanning"), 2);
     }
-
-    // Reconnect state machine tests moved to skill-daemon::reconnect::tests
 }
