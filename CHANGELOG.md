@@ -8,6 +8,14 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.111] — 2026-04-11
+
+### Features
+
+- updated DMG version
+- fixed the build
+- llama linking fixed
+
 ## [0.0.110] — 2026-04-11
 
 ### Features

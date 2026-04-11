@@ -67,7 +67,7 @@ describe("daemon auth module (auth.rs)", () => {
 });
 
 describe("daemon auth middleware", () => {
-  const src = fs.readFileSync("crates/skill-daemon/src/main.rs", "utf-8");
+  const src = fs.readFileSync("crates/skill-daemon/src/auth_middleware.rs", "utf-8");
 
   it("checks Bearer header", () => {
     expect(src).toContain('strip_prefix("Bearer ")');
