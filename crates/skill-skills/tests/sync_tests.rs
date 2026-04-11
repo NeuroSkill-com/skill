@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 
+use skill_skills::sync::{last_sync_ts, sync_skills, SyncOutcome, DEFAULT_SKILLS_REFRESH_SECS};
 use std::fs;
 use std::path::PathBuf;
-use skill_skills::sync::{sync_skills, last_sync_ts, SyncOutcome, DEFAULT_SKILLS_REFRESH_SECS};
 
 fn temp_dir(tag: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
@@ -40,7 +40,6 @@ fn sync_skills_fresh_skips_download() {
     use std::fs::File;
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use serde_json::json;
 
     let dir = temp_dir("fresh-skip");
     let meta_path = dir.join(".skills_last_sync");

@@ -1,4 +1,3 @@
-
 // Helper for erased_serde trait object serialization
 pub fn push_event_to_daemon_erased(event_type: &str, payload: &dyn erased_serde::Serialize) {
     let mut buf = Vec::new();

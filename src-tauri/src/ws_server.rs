@@ -44,5 +44,3 @@ where
         (self.push_fn)(event, &payload);
     }
 }
-
-

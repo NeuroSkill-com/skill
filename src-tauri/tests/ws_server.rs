@@ -1,16 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Tests for ws_server.rs stub
 
-use serde::Serialize;
-
-
-
-// Removed local LAST_EVENT definition
-
-
-
-use skill_lib::ws_server::WsBroadcaster;
 use erased_serde::Serialize as ErasedSerialize;
+use serde::Serialize;
+use skill_lib::ws_server::WsBroadcaster;
 
 #[derive(Serialize)]
 struct DummyPayload {
