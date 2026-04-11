@@ -47,7 +47,13 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
         // Produces: [devices] [session] routing: target=… kind=…
         // Visible in the device log and tracing output so connection
         // failures are easy to diagnose.
-        let routed_kind = infer_kind_from_target(&target);
+        let routed_kind = if target.starts_with("ble:") {
+            paired_name_for(&state2, &target)
+                .map(|name| infer_kind_from_target(&name))
+                .unwrap_or("ble-unknown")
+        } else {
+            infer_kind_from_target(&target)
+        };
         push_device_log_static(
             &state2,
             "session",
@@ -119,6 +125,8 @@ async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dy
         || lower.contains("mendi")
         || lower.contains("idun")
         || lower.contains("guardian")
+        || lower.contains("awear")
+        || lower.starts_with("luca")
         || lower.starts_with("ige")
         || lower.starts_with("ble:")
         // catch generic Muse targets (device name used as target)
@@ -170,6 +178,7 @@ enum ConnectRoute {
     Mw75,
     Hermes,
     Idun,
+    Awear,
     Mendi,
     IrohRemote,
     Muse,
@@ -222,6 +231,9 @@ fn is_hermes(s: &str) -> bool {
 fn is_idun(s: &str) -> bool {
     s.contains("idun") || s.contains("guardian")
 }
+fn is_awear(s: &str) -> bool {
+    s.contains("awear") || s.starts_with("luca")
+}
 fn is_mendi(s: &str) -> bool {
     s.contains("mendi")
 }
@@ -245,6 +257,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_mw75, ConnectRoute::Mw75),
     (is_hermes, ConnectRoute::Hermes),
     (is_idun, ConnectRoute::Idun),
+    (is_awear, ConnectRoute::Awear),
     (is_mendi, ConnectRoute::Mendi),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
@@ -264,7 +277,17 @@ fn select_connect_route(lower: &str) -> ConnectRoute {
 }
 
 async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
-    match select_connect_route(lower) {
+    // For `ble:<uuid>` targets the UUID alone carries no device-kind
+    // information.  Look up the human-readable name from the paired
+    // devices list and route on that instead.
+    let route = if lower.starts_with("ble:") {
+        paired_name_for(state, target)
+            .map(|name| select_connect_route(&name.to_lowercase()))
+            .unwrap_or(ConnectRoute::Muse)
+    } else {
+        select_connect_route(lower)
+    };
+    match route {
         ConnectRoute::OpenBci => connect_wired::connect_openbci(state, target).await,
         ConnectRoute::Cognionics => connect_wired::connect_cognionics(target).await,
         ConnectRoute::Emotiv => connect_wired::connect_emotiv(state).await,
@@ -280,6 +303,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Mw75 => connect_ble::connect_mw75(paired_name_for(state, target)).await,
         ConnectRoute::Hermes => connect_ble::connect_hermes(paired_name_for(state, target)).await,
         ConnectRoute::Idun => connect_ble::connect_idun(state, paired_name_for(state, target)).await,
+        ConnectRoute::Awear => connect_ble::connect_awear(paired_name_for(state, target)).await,
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Muse => connect_ble::connect_muse(target, paired_name_for(state, target)).await,
@@ -345,6 +369,9 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.contains("idun") || lower.contains("guardian") {
         return "idun";
     }
+    if lower.contains("awear") || lower.starts_with("luca") {
+        return "awear";
+    }
     if lower.contains("mendi") {
         return "mendi";
     }
@@ -383,6 +410,7 @@ mod tests {
             ("MW75-ABCD", "mw75"),
             ("Hermes-001", "hermes"),
             ("Idun-Guardian", "idun"),
+            ("AWEAR-E04A8471", "awear"),
             ("Mendi-XY", "mendi"),
             ("ganglion", "ganglion"),
             ("openbci", "openbci"),
@@ -476,6 +504,7 @@ mod tests {
             ("MW75-ABCD", ConnectRoute::Mw75),
             ("Hermes-001", ConnectRoute::Hermes),
             ("Idun-Guardian", ConnectRoute::Idun),
+            ("AWEAR-E04A8471", ConnectRoute::Awear),
             ("Mendi-XY", ConnectRoute::Mendi),
             ("totally-unknown-device", ConnectRoute::Muse),
         ];
@@ -505,6 +534,7 @@ mod tests {
             "MW75-ABCD",
             "Hermes-001",
             "Idun-Guardian",
+            "AWEAR-E04A8471",
             "Mendi-XY",
         ];
 

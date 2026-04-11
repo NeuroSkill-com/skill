@@ -126,6 +126,15 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.attentivu3":
     "Los datos EEG se transmiten de las gafas → iPhone → escritorio a través del túnel cifrado iroh. Todo el procesamiento ocurre en este ordenador.",
 
+  // ── AWEAR ──
+  "settings.supportedDevices.company.awear": "AWEAR",
+  "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
+  "settings.supportedDevices.instruction.awear1":
+    "Encienda su dispositivo AWEAR EEG y asegúrese de que el Bluetooth esté activado en su ordenador.",
+  "settings.supportedDevices.instruction.awear2":
+    "Busque dispositivos BLE y conéctese a AWEAR. La autenticación se gestiona automáticamente mediante HMAC-SHA256.",
+
+  // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",

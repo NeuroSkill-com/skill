@@ -51,6 +51,9 @@ pub mod prelude {
         global_hnsw_file_for,
         hnsw_index_file_for,
         ACTIVITY_FILE,
+        AWEAR_CHANNEL_NAMES,
+        AWEAR_EEG_CHANNELS,
+        AWEAR_SAMPLE_RATE,
         BANDS,
         BAND_COLORS,
         BAND_HOP,
@@ -296,6 +299,15 @@ pub const IDUN_SAMPLE_RATE: f64 = 250.0;
 
 /// IDUN Guardian channel label (bipolar in-ear montage).
 pub const IDUN_CHANNEL_NAMES: [&str; IDUN_EEG_CHANNELS] = ["EEG"];
+
+/// AWEAR EEG channel count (single channel).
+pub const AWEAR_EEG_CHANNELS: usize = 1;
+
+/// AWEAR hardware sample rate (Hz).  ~256 samples per block.
+pub const AWEAR_SAMPLE_RATE: f64 = 256.0;
+
+/// AWEAR channel label.
+pub const AWEAR_CHANNEL_NAMES: [&str; AWEAR_EEG_CHANNELS] = ["EEG"];
 
 // ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
 
@@ -757,7 +769,7 @@ pub const AUTOSTART_PLIST_LABEL_PREFIX: &str = "com.neuroskill";
 
 pub const APP_DISPLAY_NAME: &str = "NeuroSkill™";
 pub const APP_TAGLINE: &str =
-    "Real-time EXG State of Mind system and brain-state monitoring for Muse, OpenBCI, Emotiv, IDUN, and other BCI devices.";
+    "Real-time EXG State of Mind system and brain-state monitoring for Muse, OpenBCI, Emotiv, IDUN, AWEAR, and other BCI devices.";
 pub const APP_WEBSITE: &str = "https://neuroskill.com";
 pub const APP_WEBSITE_LABEL: &str = "neuroskill.com";
 pub const APP_REPO_URL: &str = "https://github.com/NeuroSkill-com/skill";
@@ -931,6 +943,7 @@ mod tests {
         assert_eq!(EMOTIV_EPOC_CHANNEL_NAMES.len(), EMOTIV_EPOC_EEG_CHANNELS);
         assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
         assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
+        assert_eq!(AWEAR_CHANNEL_NAMES.len(), AWEAR_EEG_CHANNELS);
         assert!(CGX_MAX_EEG_CHANNELS >= 30); // Quick-32r has 30 EEG channels
     }
 

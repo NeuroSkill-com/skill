@@ -412,6 +412,15 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.attentivu3":
     "Дані EEG передаються з окулярів → iPhone → комп'ютер через зашифрований тунель iroh. Вся обробка відбувається на цьому комп'ютері.",
 
+  // ── AWEAR ──
+  "settings.supportedDevices.company.awear": "AWEAR",
+  "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
+  "settings.supportedDevices.instruction.awear1":
+    "Увімкніть пристрій AWEAR EEG та переконайтеся, що Bluetooth увімкнено на вашому комп'ютері.",
+  "settings.supportedDevices.instruction.awear2":
+    "Знайдіть BLE-пристрої та підключіться до AWEAR. Автентифікація виконується автоматично через HMAC-SHA256.",
+
+  // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",

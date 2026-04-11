@@ -126,6 +126,23 @@ pub(super) async fn connect_idun(
     Ok(Box::new(IdunAdapter::new(rx, handle)))
 }
 
+// ── AWEAR EEG (BLE) ─────────────────────────────────────────────────────────
+
+pub(super) async fn connect_awear(_paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::awear::prelude::*;
+    use skill_devices::session::awear::AwearAdapter;
+
+    let config = AwearClientConfig::default();
+    info!("connecting to AWEAR EEG…");
+    let client = AwearClient::new(config);
+    let (rx, handle) = client.connect().await.context("AWEAR connect")?;
+    // The device runs an HMAC-SHA256 challenge-response handshake after
+    // connecting.  Wait for it to complete before requesting data.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    handle.start().await.context("AWEAR start streaming")?;
+    Ok(Box::new(AwearAdapter::new(rx, handle)))
+}
+
 // ── Mendi fNIRS (BLE) ────────────────────────────────────────────────────────
 
 pub(super) async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {

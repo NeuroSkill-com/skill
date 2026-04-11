@@ -394,6 +394,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.attentivu3":
     "נתוני EEG זורמים מהמשקפיים → אייפון → שולחן עבודה דרך מנהרת iroh מוצפנת. כל העיבוד מתבצע במחשב זה.",
 
+  // ── AWEAR ──
+  "settings.supportedDevices.company.awear": "AWEAR",
+  "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
+  "settings.supportedDevices.instruction.awear1": "הפעילו את מכשיר ה-AWEAR EEG וודאו שה-Bluetooth מופעל במחשב שלכם.",
+  "settings.supportedDevices.instruction.awear2":
+    "סרקו מכשירי BLE והתחברו ל-AWEAR. האימות מתבצע אוטומטית באמצעות HMAC-SHA256.",
+
+  // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",

@@ -115,6 +115,13 @@ const settings: Record<string, string> = {
     "In the iOS app, scan for BLE devices and connect to your AttentivU glasses.",
   "settings.supportedDevices.instruction.attentivu3":
     "EEG data streams from the glasses → iPhone → desktop via the encrypted iroh tunnel. All processing happens on this computer.",
+  // ── AWEAR ──
+  "settings.supportedDevices.company.awear": "AWEAR",
+  "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
+  "settings.supportedDevices.instruction.awear1":
+    "Power on your AWEAR EEG device and ensure Bluetooth is enabled on your computer.",
+  "settings.supportedDevices.instruction.awear2":
+    "Scan for BLE devices and connect to AWEAR. Authentication is handled automatically via HMAC-SHA256.",
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
