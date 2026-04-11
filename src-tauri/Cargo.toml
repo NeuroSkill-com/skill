@@ -67,7 +67,7 @@ custom-protocol = ["tauri/custom-protocol"]
 # `llm-cuda`   — CUDA GPU offload (NVIDIA)
 # `llm-vulkan` — Vulkan GPU offload (cross-platform)
 # `llm-mtmd`   — multimodal: image/audio inputs via libmtmd
-llm        = ["dep:llama-cpp-4", "axum/multipart", "llm-mtmd", "skill-llm/llm", "skill-settings/llm"]
+llm        = ["dep:llama-cpp-4", "llm-mtmd", "skill-llm/llm", "skill-settings/llm"]
 llm-metal  = ["llm", "llama-cpp-4?/metal", "skill-llm/llm-metal"]
 llm-cuda   = ["llm", "llama-cpp-4?/cuda", "skill-llm/llm-cuda"]
 llm-vulkan = ["llm", "llama-cpp-4?/vulkan", "skill-llm/llm-vulkan"]
@@ -117,10 +117,6 @@ libc                         = "0.2"
 
 # Serial port enumeration (for Cyton board selection in settings)
 serialport = "4"
-
-# Cognionics / CGX EEG headsets (USB/FTDI serial) — used by the device scanner
-# for enumerate_devices() and by session_connect for CgxClient.
-cognionics = { version = "0.0.1", default-features = false }
 
 # Async runtime (Tauri re-exports tokio but we need 'full' for select! etc.)
 tokio      = { version = "1", features = ["full"] }
@@ -177,7 +173,6 @@ anyhow     = { workspace = true }
 serde      = { workspace = true, features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-jsonschema = "0.45"
 skill-jobs  = { path = "../crates/skill-jobs" }
 skill-settings = { path = "../crates/skill-settings" }
 skill-llm   = { path = "../crates/skill-llm" }
@@ -189,7 +184,6 @@ skill-data      = { path = "../crates/skill-data" }
 skill-oura      = { path = "../crates/skill-oura" }
 oura-api        = "0.1.2"
 
-skill-commands  = { path = "../crates/skill-commands" }
 skill-history   = { path = "../crates/skill-history" }
 skill-tray      = { path = "../crates/skill-tray" }
 # skill-exg removed — EXG embedding runs in skill-daemon only.
@@ -214,12 +208,6 @@ base64 = { workspace = true }
 # is safe for all platforms.
 rfd = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
 
-# WebSocket broadcast server + HTTP REST API
-axum              = { version = "0.8", features = ["ws"] }
-tower-http        = { version = "0.6", features = ["cors"] }
-futures-util      = { version = "0.3", default-features = false, features = ["sink", "std"] }
-# SSE streaming helpers used by the LLM server (zero cost when `llm` is off)
-async-stream      = "0.3"
 
 # ── LLM (OpenAI-compatible local inference via llama-cpp-4) ────────────────────
 # Optional — enabled by the `llm` feature flag (see [features] above).
@@ -229,29 +217,12 @@ async-stream      = "0.3"
 # Cargo deduplicates both into a single llama-cpp-4 package.
 llama-cpp-4 = { version = "0.2.42", optional = true }
 
-# mDNS / Bonjour service discovery
-mdns-sd = "0.18"
-
-# NAT-traversing P2P transport + TOTP access control.
-skill-iroh = { path = "../crates/skill-iroh" }
-skill-lsl  = { path = "../crates/skill-lsl" }
 
 # HTTP client used by the resumable LLM model downloader.
 ureq      = { version = "3", features = ["native-tls"] }
 
 erased-serde = "0.4.10"
 
-# ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────
-#
-# cubek-matmul 0.1.1 panics on Apple Silicon when the SimpleCyclicCmma tile
-# (40 KB) exceeds Metal's 32 KB shared-memory limit.  The patched fork extends
-# the 'auto' fallback chain:  SimpleCyclicCmma → SimpleUnit → Naive.
-#
-# ── fastembed: candle-Metal on macOS, ort-CPU everywhere else ─────────────────
-#
-# The `metal` feature activates candle-core/metal + candle-nn/metal so
-# embeddings run on the Apple GPU via Metal Performance Shaders.
-# On Linux / Windows the default ort backend is used instead.
 [target.'cfg(target_os = "macos")'.dependencies]
 # llama-cpp-4 with Metal GPU offload — merged with the base [dependencies] entry
 # so that when the `llm` feature is active the Metal backend is compiled in
