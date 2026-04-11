@@ -394,6 +394,28 @@ pub(crate) fn cancel_retry() -> Result<StatusResponse, String> {
     )
 }
 
+pub(crate) fn enable_reconnect() -> Result<(), String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth(
+        &base_url,
+        &token,
+        "/v1/control/enable-reconnect",
+        &serde_json::json!({}),
+    )
+}
+
+pub(crate) fn disable_reconnect() -> Result<(), String> {
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    post_json_with_auth(
+        &base_url,
+        &token,
+        "/v1/control/disable-reconnect",
+        &serde_json::json!({}),
+    )
+}
+
 pub(crate) fn cancel_session_sync() -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -571,6 +593,7 @@ pub(crate) fn fetch_input_buckets(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn fetch_hooks() -> Result<Vec<skill_settings::HookRule>, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -777,6 +800,7 @@ pub(crate) fn llm_cancel_tool_call(tool_call_id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub(crate) fn fetch_skills_refresh_interval() -> Result<u64, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -787,6 +811,7 @@ pub(crate) fn fetch_skills_refresh_interval() -> Result<u64, String> {
         .unwrap_or(0))
 }
 
+#[allow(dead_code)]
 pub(crate) fn fetch_skills_sync_on_launch() -> Result<bool, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -797,6 +822,7 @@ pub(crate) fn fetch_skills_sync_on_launch() -> Result<bool, String> {
         .unwrap_or(false))
 }
 
+#[allow(dead_code)]
 pub(crate) fn get_disabled_skills() -> Result<Vec<String>, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -804,12 +830,14 @@ pub(crate) fn get_disabled_skills() -> Result<Vec<String>, String> {
     Ok(serde_json::from_value(v.get("value").cloned().unwrap_or_default()).unwrap_or_default())
 }
 
+#[allow(dead_code)]
 pub(crate) fn fetch_lsl_config() -> Result<serde_json::Value, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     fetch_json_with_auth(&base_url, &token, "/v1/lsl/config")
 }
 
+#[allow(dead_code)]
 pub(crate) fn get_lsl_idle_timeout() -> Result<Option<u64>, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;

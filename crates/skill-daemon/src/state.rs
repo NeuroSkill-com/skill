@@ -97,9 +97,27 @@ pub struct AppState {
     pub exg_download_cancel: Arc<AtomicBool>,
     /// Daemon-owned HNSW indices for label search (text, context, EEG).
     pub label_index: Arc<LabelIndexState>,
+    /// Reconnect state machine (daemon-authoritative).
+    pub reconnect: Arc<Mutex<crate::reconnect::ReconnectState>>,
 }
 
 impl AppState {
+    /// Broadcast an event to all connected WebSocket clients.
+    ///
+    /// This is the canonical way to push state changes to the UI.  Failures
+    /// (no subscribers) are silently ignored.
+    pub fn broadcast(&self, event_type: &str, payload: impl serde::Serialize) {
+        let _ = self.events_tx.send(EventEnvelope {
+            r#type: event_type.to_string(),
+            ts_unix_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            correlation_id: None,
+            payload: serde_json::to_value(payload).unwrap_or_default(),
+        });
+    }
+
     pub fn new(auth_token: String, skill_dir: PathBuf) -> Self {
         let (events_tx, _) = broadcast::channel(4096);
         let settings = skill_settings::load_settings(&skill_dir);
@@ -164,6 +182,7 @@ impl AppState {
             exg_model_status: Arc::new(Mutex::new(skill_eeg::eeg_model_config::EegModelStatus::default())),
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             label_index: Arc::new(LabelIndexState::new()),
+            reconnect: Arc::new(Mutex::new(crate::reconnect::ReconnectState::default())),
         }
     }
 }

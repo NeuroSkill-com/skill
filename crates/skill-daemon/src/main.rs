@@ -5,9 +5,12 @@
 mod activity;
 mod auth;
 mod auth_middleware;
+pub(crate) mod background;
 pub(crate) mod cmd_dispatch;
 pub(crate) mod embed;
 mod handlers;
+pub(crate) mod monitor;
+pub(crate) mod reconnect;
 mod routes;
 mod scanner;
 mod service_installer;
@@ -88,6 +91,11 @@ async fn main() -> anyhow::Result<()> {
 
     activity::start_workers(state.clone());
 
+    // Spawn daemon-authoritative background loops.
+    reconnect::spawn_reconnect_loop(state.clone(), state.reconnect.clone());
+    monitor::spawn_status_monitor(state.clone());
+    background::spawn_all(state.clone());
+
     // Probe HF cache for the currently configured model weights so the UI
     // shows the correct state immediately on first load.
     {
@@ -133,6 +141,15 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/control/cancel-retry",
             axum::routing::post(handlers::control_cancel_retry),
+        )
+        .route("/reconnect-state", get(handlers::get_reconnect_state))
+        .route(
+            "/control/enable-reconnect",
+            axum::routing::post(handlers::enable_reconnect),
+        )
+        .route(
+            "/control/disable-reconnect",
+            axum::routing::post(handlers::disable_reconnect),
         )
         .route(
             "/control/start-session",

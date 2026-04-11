@@ -6,6 +6,7 @@ pub(crate) mod iroh;
 pub mod labels;
 pub mod search;
 pub mod settings;
+pub(crate) mod settings_calibration;
 pub(crate) mod settings_device;
 pub(crate) mod settings_exg;
 pub(crate) mod settings_hooks_activity;

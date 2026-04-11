@@ -483,8 +483,6 @@ pub struct AppState {
     pub battery_ema: Option<f32>,
     pub latest_bands: Option<BandSnapshot>,
     pub fnirs_runtime: FnirsRuntime,
-    pub pending_reconnect: bool,
-    pub retry_attempt: u32,
     pub session_start_utc: Option<u64>,
 
     /// Accumulated SNR (dB) for the current session — used to compute the
@@ -565,6 +563,7 @@ pub struct AppState {
 /// DND polling loop and session runner can access it without contending on the
 /// main `AppState` lock.
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct DndRuntimeState {
     pub config: DoNotDisturbConfig,
     pub active: bool,
@@ -634,8 +633,6 @@ impl Default for AppState {
             battery_ema: None,
             latest_bands: None,
             fnirs_runtime: FnirsRuntime::default(),
-            pending_reconnect: false,
-            retry_attempt: 0,
             session_start_utc: None,
             snr_sum: 0.0,
             snr_count: 0,
@@ -696,6 +693,7 @@ impl AppState {
     }
 
     /// Obtain a clone of the `DndRuntimeState` arc for independent locking.
+    #[allow(dead_code)]
     pub fn dnd_arc(&self) -> std::sync::Arc<std::sync::Mutex<DndRuntimeState>> {
         self.dnd.clone()
     }

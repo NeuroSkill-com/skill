@@ -112,11 +112,8 @@ pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
 
 #[tauri::command]
 pub fn cancel_retry(app: AppHandle) {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.pending_reconnect = false;
-    }
+    // Disable reconnect on daemon side.
+    let _ = crate::daemon_cmds::disable_reconnect();
 
     match crate::daemon_cmds::cancel_retry() {
         Ok(daemon_status) => apply_daemon_status_to_local(&app, daemon_status),
@@ -132,11 +129,8 @@ pub fn cancel_retry(app: AppHandle) {
 
 #[tauri::command]
 pub fn retry_connect(app: AppHandle) {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.pending_reconnect = true;
-    }
+    // Enable reconnect on daemon side.
+    let _ = crate::daemon_cmds::enable_reconnect();
 
     match crate::daemon_cmds::retry_connect() {
         Ok(daemon_status) => apply_daemon_status_to_local(&app, daemon_status),

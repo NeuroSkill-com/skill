@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Tests for skill-tools/src/log.rs
+//
+// These tests share a global mutable static (CALLBACK + ENABLED) and must
+// run serially to avoid data races between threads.
 
 use skill_tools::log;
 use std::sync::{Arc, Mutex};
 
+/// Guard that serializes all tests touching the global log state.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_log_enabled_toggle() {
+    let _lock = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     log::reset_log_callback_for_test();
     log::set_log_enabled(false);
     assert!(!log::log_enabled());
@@ -15,6 +22,7 @@ fn test_log_enabled_toggle() {
 
 #[test]
 fn test_set_log_callback_and_write_log() {
+    let _lock = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     log::reset_log_callback_for_test();
     let received: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(vec![]));
     let received_clone = received.clone();
@@ -31,6 +39,7 @@ fn test_set_log_callback_and_write_log() {
 
 #[test]
 fn test_write_log_disabled() {
+    let _lock = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     log::reset_log_callback_for_test();
     let received: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(vec![]));
     let received_clone = received.clone();

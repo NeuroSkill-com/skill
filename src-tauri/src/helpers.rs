@@ -357,32 +357,21 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     let path = settings_path(&s.skill_dir);
     drop(s);
 
-    // Preserve daemon-owned settings fields so Tauri UI saves don't overwrite
-    // daemon authority. Pull from daemon first; if unavailable, keep current
-    // in-memory values.
-    data.hooks = crate::daemon_cmds::fetch_hooks().unwrap_or_else(|_| data.hooks.clone());
-
-    if let Ok(lsl_cfg) = crate::daemon_cmds::fetch_lsl_config() {
-        data.lsl_auto_connect = lsl_cfg
-            .get("auto_connect")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(data.lsl_auto_connect);
-        data.lsl_paired_streams =
-            serde_json::from_value(lsl_cfg.get("paired_streams").cloned().unwrap_or_default())
-                .unwrap_or_else(|_| data.lsl_paired_streams.clone());
-    }
-    if let Ok(idle) = crate::daemon_cmds::get_lsl_idle_timeout() {
-        data.lsl_idle_timeout_secs = idle;
-    }
-
-    if let Ok(secs) = crate::daemon_cmds::fetch_skills_refresh_interval() {
-        data.llm.tools.skills_refresh_interval_secs = secs;
-    }
-    if let Ok(enabled) = crate::daemon_cmds::fetch_skills_sync_on_launch() {
-        data.llm.tools.skills_sync_on_launch = enabled;
-    }
-    if let Ok(disabled) = crate::daemon_cmds::get_disabled_skills() {
-        data.llm.tools.disabled_skills = disabled;
+    // Daemon-owned fields: read current values from settings.json so we
+    // don't overwrite daemon authority.  Previously we polled the daemon at
+    // save time, but now the daemon is authoritative for these fields and
+    // writes them directly to settings.json.
+    {
+        let skill_dir = app.app_state().lock_or_recover().skill_dir.clone();
+        let existing = skill_settings::load_settings(&skill_dir);
+        data.hooks = existing.hooks;
+        data.lsl_auto_connect = existing.lsl_auto_connect;
+        data.lsl_paired_streams = existing.lsl_paired_streams;
+        data.lsl_idle_timeout_secs = existing.lsl_idle_timeout_secs;
+        data.llm.tools.skills_refresh_interval_secs =
+            existing.llm.tools.skills_refresh_interval_secs;
+        data.llm.tools.skills_sync_on_launch = existing.llm.tools.skills_sync_on_launch;
+        data.llm.tools.disabled_skills = existing.llm.tools.disabled_skills;
     }
 
     // Persist secrets to the system keychain (encrypted, survives updates).

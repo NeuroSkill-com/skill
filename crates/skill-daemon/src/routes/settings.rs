@@ -333,6 +333,23 @@ pub fn router() -> Router<AppState> {
             get(settings_ui::get_disabled_skills).post(settings_ui::set_disabled_skills),
         )
         .route("/device/serial-ports", get(settings_device::list_serial_ports))
+        .route(
+            "/calibration/profiles",
+            get(super::settings_calibration::list_profiles).post(super::settings_calibration::create_profile),
+        )
+        .route(
+            "/calibration/profiles/update",
+            axum::routing::put(super::settings_calibration::update_profile),
+        )
+        .route(
+            "/calibration/profiles/delete",
+            axum::routing::post(super::settings_calibration::delete_profile),
+        )
+        .route(
+            "/calibration/active",
+            get(super::settings_calibration::get_active_profile_id)
+                .put(super::settings_calibration::set_active_profile),
+        )
         .merge(llm_routes())
         .merge(lsl_routes())
 }

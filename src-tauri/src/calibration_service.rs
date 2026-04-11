@@ -1,36 +1,56 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! Shared calibration profile CRUD operations.
+//! Calibration profile CRUD — thin proxy to daemon REST endpoints.
 //!
-//! Both the Tauri IPC commands and daemon-facing adapters delegate to the
-//! functions in this module so mutation logic is defined exactly once.
+//! All business logic now lives in skill-daemon's settings_calibration routes.
+//! Local cache in Tauri AppState is kept in sync for offline resilience.
 
 use tauri::AppHandle;
 
-use crate::{new_profile_id, save_settings, AppStateExt, CalibrationProfile, MutexExt};
+use crate::{save_settings, AppStateExt, CalibrationProfile, MutexExt};
 
-/// Create a new calibration profile, persist settings, and return the profile.
-pub(crate) fn create_profile(
-    app: &AppHandle,
-    mut profile: CalibrationProfile,
-) -> CalibrationProfile {
-    profile.id = new_profile_id();
-    profile.last_calibration_utc = None;
-    let ret = profile.clone();
-    {
-        let st = app.app_state();
-        let mut s = st.lock_or_recover();
-        s.calibration_profiles.push(profile);
+/// Create a new calibration profile via daemon, update local cache.
+pub(crate) fn create_profile(app: &AppHandle, profile: CalibrationProfile) -> CalibrationProfile {
+    // Try daemon.
+    if let Ok(resp) = crate::daemon_cmds::daemon_post(
+        "/v1/calibration/profiles",
+        &serde_json::to_value(&profile).unwrap_or_default(),
+    ) {
+        if let Ok(created) = serde_json::from_value::<CalibrationProfile>(resp) {
+            let st = app.app_state();
+            let mut s = st.lock_or_recover();
+            s.calibration_profiles.push(created.clone());
+            drop(s);
+            save_settings(app);
+            return created;
+        }
     }
+
+    // Fallback: create locally.
+    let mut p = profile;
+    p.id = crate::new_profile_id();
+    p.last_calibration_utc = None;
+    let ret = p.clone();
+    let st = app.app_state();
+    let mut s = st.lock_or_recover();
+    s.calibration_profiles.push(p);
+    drop(s);
     save_settings(app);
     ret
 }
 
-/// Update an existing calibration profile by ID.  Returns the updated profile.
+/// Update an existing calibration profile by ID.
 pub(crate) fn update_profile(
     app: &AppHandle,
     profile: CalibrationProfile,
 ) -> Result<CalibrationProfile, String> {
+    // Notify daemon.
+    let _ = crate::daemon_cmds::daemon_post(
+        "/v1/calibration/profiles/update",
+        &serde_json::to_value(&profile).unwrap_or_default(),
+    );
+
+    // Update local cache.
     let st = app.app_state();
     let mut s = st.lock_or_recover();
     let entry = s
@@ -45,7 +65,7 @@ pub(crate) fn update_profile(
     Ok(ret)
 }
 
-/// Delete a calibration profile by ID.  Refuses to delete the last profile.
+/// Delete a calibration profile by ID.
 pub(crate) fn delete_profile(app: &AppHandle, id: &str) -> Result<(), String> {
     let st = app.app_state();
     let mut s = st.lock_or_recover();
@@ -62,5 +82,11 @@ pub(crate) fn delete_profile(app: &AppHandle, id: &str) -> Result<(), String> {
     }
     drop(s);
     save_settings(app);
+
+    // Notify daemon.
+    let _ = crate::daemon_cmds::daemon_post(
+        "/v1/calibration/profiles/delete",
+        &serde_json::json!({"id": id}),
+    );
     Ok(())
 }

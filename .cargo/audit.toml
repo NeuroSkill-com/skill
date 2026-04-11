@@ -40,4 +40,7 @@ ignore = [
 
     # ── lru — unsound IterMut, patched in >=0.16.3; transitive dep ───────────
     "RUSTSEC-2026-0002", # lru
+
+    # ── rand — unsound with custom logger using rand::rng(); transitive dep ──
+    "RUSTSEC-2026-0097", # rand (0.7.3 via tauri/phf, 0.8.5 via keyring/emotiv/etc.)
 ]

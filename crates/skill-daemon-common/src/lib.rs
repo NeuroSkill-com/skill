@@ -254,7 +254,7 @@ pub struct ScannerStateResponse {
     pub running: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScannerWifiConfigRequest {
     pub wifi_shield_ip: String,
     pub galea_ip: String,

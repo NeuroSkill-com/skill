@@ -428,7 +428,43 @@ pub(crate) async fn control_cancel_retry(State(state): State<AppState>) -> Json<
         out = status.clone();
     }
 
+    // Also disable reconnect.
+    if let Ok(mut rc) = state.reconnect.lock() {
+        rc.pending = false;
+        rc.attempt = 0;
+        rc.countdown = 0;
+    }
+    state.broadcast("reconnect-state", crate::reconnect::ReconnectState::default());
+
     Json(out)
+}
+
+pub(crate) async fn get_reconnect_state(State(state): State<AppState>) -> Json<crate::reconnect::ReconnectState> {
+    let rc = state.reconnect.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    Json(rc)
+}
+
+pub(crate) async fn enable_reconnect(State(state): State<AppState>) -> Json<serde_json::Value> {
+    if let Ok(mut rc) = state.reconnect.lock() {
+        rc.pending = true;
+    }
+    state.broadcast("reconnect-state", &*state.reconnect.lock().unwrap());
+    Json(serde_json::json!({"ok": true}))
+}
+
+pub(crate) async fn disable_reconnect(State(state): State<AppState>) -> Json<serde_json::Value> {
+    if let Ok(mut rc) = state.reconnect.lock() {
+        rc.pending = false;
+        rc.attempt = 0;
+        rc.countdown = 0;
+    }
+    if let Ok(mut s) = state.status.lock() {
+        s.retry_attempt = 0;
+        s.retry_countdown_secs = 0;
+    }
+    state.broadcast("reconnect-state", crate::reconnect::ReconnectState::default());
+    state.broadcast("status", &*state.status.lock().unwrap());
+    Json(serde_json::json!({"ok": true}))
 }
 
 pub(crate) async fn control_start_session(

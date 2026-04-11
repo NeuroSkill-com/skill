@@ -112,6 +112,11 @@ pub struct SessionDeviceId<'a> {
     pub serial_number: Option<&'a str>,
 }
 
+/// Write comprehensive session metadata JSON sidecar next to CSV.
+///
+/// Includes device identity, battery, signal quality, filter config, and
+/// phone info from the daemon status snapshot.  Previously lived in Tauri's
+/// `session_csv.rs`; now fully daemon-authoritative.
 pub fn write_session_meta(
     csv_path: &Path,
     device_name: &str,
@@ -121,18 +126,68 @@ pub fn write_session_meta(
     total_samples: u64,
     device_id: &SessionDeviceId<'_>,
 ) {
-    let meta = serde_json::json!({
+    write_session_meta_full(
+        csv_path,
+        device_name,
+        channel_names,
+        sample_rate,
+        start_utc,
+        total_samples,
+        device_id,
+        None,
+    );
+}
+
+/// Extended session metadata writer with optional status snapshot.
+#[allow(clippy::too_many_arguments)]
+pub fn write_session_meta_full(
+    csv_path: &Path,
+    device_name: &str,
+    channel_names: &[String],
+    sample_rate: f64,
+    start_utc: u64,
+    total_samples: u64,
+    device_id: &SessionDeviceId<'_>,
+    status: Option<&skill_daemon_common::StatusResponse>,
+) {
+    let session_end = unix_secs();
+    let duration_secs = session_end.saturating_sub(start_utc);
+
+    let mut meta = serde_json::json!({
+        "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
         "session_start_utc": start_utc,
-        "session_end_utc": unix_secs(),
+        "session_end_utc": session_end,
+        "session_duration_s": duration_secs,
+        "total_samples": total_samples,
+        "sample_rate_hz": sample_rate,
         "device_name": device_name,
         "channel_names": channel_names,
-        "sample_rate": sample_rate,
-        "total_samples": total_samples,
-        "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
+        "channel_count": channel_names.len(),
         "firmware_version": device_id.firmware_version,
         "serial_number": device_id.serial_number,
         "daemon": true,
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
     });
+
+    // Enrich from status snapshot if available.
+    if let Some(s) = status {
+        if let Some(obj) = meta.as_object_mut() {
+            obj.insert("device_id".into(), serde_json::json!(s.device_id));
+            obj.insert("mac_address".into(), serde_json::json!(s.mac_address));
+            obj.insert("hardware_version".into(), serde_json::json!(s.hardware_version));
+            obj.insert("battery_pct_end".into(), serde_json::json!(s.battery));
+            obj.insert("channel_quality".into(), serde_json::json!(s.channel_quality));
+            obj.insert("ppg_total_samples".into(), serde_json::json!(s.ppg_sample_count));
+            obj.insert("ppg_channel_names".into(), serde_json::json!(s.ppg_channel_names));
+            obj.insert("imu_channel_names".into(), serde_json::json!(s.imu_channel_names));
+            obj.insert("fnirs_channel_names".into(), serde_json::json!(s.fnirs_channel_names));
+            obj.insert("phone_info".into(), serde_json::json!(s.phone_info));
+            obj.insert("eeg_channel_count".into(), serde_json::json!(s.eeg_channel_count));
+            obj.insert("eeg_sample_rate_hz".into(), serde_json::json!(s.eeg_sample_rate_hz));
+        }
+    }
+
     if let Ok(json) = serde_json::to_string_pretty(&meta) {
         let _ = std::fs::write(csv_path.with_extension("json"), json);
     }

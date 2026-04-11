@@ -1,186 +1,57 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
-//! Session lifecycle — start, cancel, disconnect, reconnect backoff.
-
-use std::time::Duration;
+//! Session lifecycle — disconnect handling.
+//!
+//! The reconnect state machine now lives in skill-daemon.  This module
+//! retains the Tauri-side disconnect handler (local state cleanup + UI
+//! refresh) and the device-kind detection heuristic.
 
 use tauri::AppHandle;
 
 use crate::{
-    helpers::{emit_status, emit_status_from_daemon, AppStateExt},
+    helpers::{emit_status, AppStateExt},
     tray::refresh_tray,
     MutexExt,
 };
 
-// ── Reconnect backoff ────────────────────────────────────────────────────────
+// ── Disconnect ──────────────────────────────────────────────────────────────
 
-/// Maximum number of automatic reconnect attempts before giving up and
-/// staying in the "disconnected" state.  After this many consecutive
-/// failures the user must manually re-connect.
-///
-/// 12 attempts ≈ 1 + 2 + 3 + 5×9 = 51 seconds of total backoff, which is
-/// enough to survive brief radio interference while not burning battery on
-/// a headset that was intentionally turned off.
-#[allow(dead_code)]
-pub(crate) const MAX_RETRY_ATTEMPTS: u32 = 12;
-
-/// Reconnect backoff: 1 s → 2 s → 3 s → 5 s, then stays at 5 s indefinitely.
-#[allow(dead_code)]
-pub(crate) fn retry_delay_secs(attempt: u32) -> u32 {
-    match attempt {
-        0 => 1,
-        1 => 2,
-        2 => 3,
-        _ => 5,
-    }
-}
-
-// ── Disconnect / retry ────────────────────────────────────────────────────────
-
+/// Handle a device disconnect.  Cleans up local Tauri state and refreshes
+/// the UI.  The daemon's reconnect loop handles retry scheduling.
 #[allow(dead_code)]
 pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
-    // Tell the daemon to cancel any active session so it transitions
-    // cleanly.  This is a no-op if no session is running.
+    // Tell the daemon to cancel any active session.
     let _ = crate::daemon_cmds::cancel_session_sync();
-
-    let (mut retry, attempt) = {
-        let r = app.app_state();
-        let s = r.lock_or_recover();
-        (s.pending_reconnect && !is_bt, s.retry_attempt)
-    };
-
-    // Give up after MAX_RETRY_ATTEMPTS consecutive failures.
-    if retry && attempt >= MAX_RETRY_ATTEMPTS {
-        app_log!(
-            app,
-            "devices",
-            "[reconnect] giving up after {attempt} consecutive attempts"
-        );
-        crate::send_toast(
-            app,
-            crate::ToastLevel::Error,
-            "Reconnect Failed",
-            "Could not reconnect after multiple attempts. Please reconnect manually.",
-        );
-        retry = false;
-    }
-
-    let delay = if retry { retry_delay_secs(attempt) } else { 0 };
 
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        if is_bt {
-            s.pending_reconnect = false;
-            s.retry_attempt = 0;
-        } else if !retry {
-            s.retry_attempt = 0;
-        }
 
-        // Reset all device identity / telemetry fields in one call.
-        let new_state = if retry {
-            "scanning"
-        } else if is_bt {
-            "bt_off"
-        } else {
-            "disconnected"
-        };
+        let new_state = if is_bt { "bt_off" } else { "disconnected" };
         s.status.reset_disconnected(new_state);
-
-        // Override the defaults set by reset_disconnected for retry-specific values.
-        if !retry {
+        if !is_bt {
             s.status.device_error = error;
         }
-        s.status.retry_attempt = if retry { attempt + 1 } else { 0 };
-        s.status.retry_countdown_secs = delay;
-        s.status.channel_quality = Vec::new();
-
         s.stream = None;
         s.battery_ema = None;
         s.latest_bands = None;
         s.fnirs_runtime = crate::state::FnirsRuntime::default();
-        // Reset session timestamp so screenshot "sessions only" gate works.
-        // Even during auto-reconnect the device is not streaming data,
-        // so this is not an active session.
         s.session_start_utc = None;
-        // DSP objects live in SessionDsp (session-local, lock-free).
-        // They are dropped when the session task exits; the next session
-        // creates a fresh set.  No reset needed here.
     }
     refresh_tray(app);
     emit_status(app);
 
-    if retry {
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            app_log!(
-                app,
-                "devices",
-                "[reconnect] scheduling attempt #{} in {}s (backoff schedule: 1→2→3→5s)",
-                attempt + 1,
-                delay
-            );
-            for remaining in (1..=delay).rev() {
-                {
-                    let r = app.app_state();
-                    if !r.lock_or_recover().pending_reconnect {
-                        return;
-                    }
-                }
-                app.app_state()
-                    .lock_or_recover()
-                    .status
-                    .retry_countdown_secs = remaining;
-                emit_status(&app);
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-            let preferred = {
-                let r = app.app_state();
-                let mut s = r.lock_or_recover();
-                if !s.pending_reconnect {
-                    return;
-                }
-                s.retry_attempt += 1;
-                s.status.retry_countdown_secs = 0;
-                s.preferred_id
-                    .clone()
-                    .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
-            };
-            app_log!(
-                app,
-                "devices",
-                "[reconnect] attempt #{} — waited {delay}s — target={preferred:?}",
-                attempt + 1
-            );
-
-            match crate::daemon_cmds::start_session_sync(preferred) {
-                Ok(daemon_status) => {
-                    let r = app.app_state();
-                    let mut s = r.lock_or_recover();
-                    crate::helpers::apply_daemon_status(&mut s.status, daemon_status);
-                    drop(s);
-                    emit_status_from_daemon(&app);
-                }
-                Err(err) => {
-                    let r = app.app_state();
-                    let mut s = r.lock_or_recover();
-                    s.status.state = "disconnected".into();
-                    s.status.device_error = Some(format!("daemon unavailable: {err}"));
-                    drop(s);
-                    emit_status(&app);
-                }
-            }
-        });
+    // Tell daemon to disable reconnect for BT-off; otherwise the daemon's
+    // reconnect loop handles it automatically.
+    if is_bt {
+        let _ = crate::daemon_cmds::disable_reconnect();
     }
 }
 
-// ── Session lifecycle ─────────────────────────────────────────────────────────
+// ── Session lifecycle ───────────────────────────────────────────────────────
 
 /// Best-effort device-kind detection from daemon identifier and/or display name.
-///
-/// This keeps UI routing resilient when the daemon can only provide partial
-/// identity metadata (for example: name without id, or vice versa).
 #[allow(dead_code)]
 pub(crate) fn detect_device_kind(
     device_id: Option<&str>,
@@ -203,9 +74,6 @@ pub(crate) fn detect_device_kind(
             return "emotiv";
         }
         if id.starts_with("usb:") {
-            // USB serial is used by both Ganglion and Cyton boards.
-            // Check the display name to distinguish; fall through to
-            // the name-based heuristics below when a name is available.
             let n = device_name.map(str::to_ascii_lowercase).unwrap_or_default();
             if n.contains("cyton") {
                 return "cyton";
@@ -213,8 +81,6 @@ pub(crate) fn detect_device_kind(
             if n.contains("ganglion") || n.contains("simblee") {
                 return "ganglion";
             }
-            // Default to "openbci" — the caller can inspect the user's
-            // board setting to decide whether this is Cyton or Ganglion.
             return "openbci";
         }
         if id.starts_with("cgx:") {
@@ -272,32 +138,11 @@ pub(crate) fn detect_device_kind(
     "muse"
 }
 
-// ── Secondary session management ─────────────────────────────────────────────
-
-// ── Unit tests ────────────────────────────────────────────────────────────────
+// ── Unit tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn backoff_schedule_1_2_3_5() {
-        assert_eq!(retry_delay_secs(0), 1, "attempt 0 → 1 s");
-        assert_eq!(retry_delay_secs(1), 2, "attempt 1 → 2 s");
-        assert_eq!(retry_delay_secs(2), 3, "attempt 2 → 3 s");
-        assert_eq!(retry_delay_secs(3), 5, "attempt 3 → 5 s");
-    }
-
-    #[test]
-    fn backoff_capped_at_5s() {
-        for attempt in 3u32..=100 {
-            assert_eq!(
-                retry_delay_secs(attempt),
-                5,
-                "attempt {attempt} should be capped at 5 s"
-            );
-        }
-    }
 
     #[test]
     fn detect_device_kind_ganglion() {
@@ -364,7 +209,6 @@ mod tests {
 
     #[test]
     fn detect_device_kind_by_id_prefix() {
-        // Cortex prefix → emotiv regardless of name.
         assert_eq!(
             detect_device_kind(Some("cortex:EPOCX-1234"), None),
             "emotiv"
@@ -373,12 +217,10 @@ mod tests {
             detect_device_kind(Some("cortex:EPOCX-1234"), Some("unknown")),
             "emotiv"
         );
-        // USB prefix without name → generic openbci (could be Cyton or Ganglion).
         assert_eq!(
             detect_device_kind(Some("usb:/dev/ttyUSB0"), None),
             "openbci"
         );
-        // USB prefix + Cyton name → cyton.
         assert_eq!(
             detect_device_kind(Some("usb:COM3"), Some("OpenBCI (COM3)")),
             "openbci"
@@ -387,14 +229,11 @@ mod tests {
             detect_device_kind(Some("usb:/dev/ttyUSB0"), Some("Cyton-1234")),
             "cyton"
         );
-        // USB prefix + Ganglion name → ganglion.
         assert_eq!(
             detect_device_kind(Some("usb:/dev/ttyUSB0"), Some("Ganglion-5678")),
             "ganglion"
         );
     }
-
-    // ── Cyton / OpenBCI device kind tests ─────────────────────────────────
 
     #[test]
     fn detect_device_kind_cyton_by_name() {
@@ -411,7 +250,6 @@ mod tests {
 
     #[test]
     fn detect_device_kind_usb_cyton_name() {
-        // USB prefix + "cyton" in name → cyton
         assert_eq!(
             detect_device_kind(Some("usb:COM3"), Some("Cyton-1234")),
             "cyton"
@@ -424,14 +262,12 @@ mod tests {
 
     #[test]
     fn detect_device_kind_usb_no_name_returns_openbci() {
-        // USB prefix without name → generic openbci
         assert_eq!(detect_device_kind(Some("usb:COM3"), None), "openbci");
         assert_eq!(detect_device_kind(Some("usb:COM5"), Some("")), "openbci");
     }
 
     #[test]
     fn detect_device_kind_usb_openbci_display_name() {
-        // Scanner-generated display names like "OpenBCI (COM3)"
         assert_eq!(
             detect_device_kind(Some("usb:COM3"), Some("OpenBCI (COM3)")),
             "openbci"
@@ -452,17 +288,7 @@ mod tests {
 
     #[test]
     fn detect_device_kind_windows_com_port() {
-        // COM port IDs should route to openbci, not ganglion
         assert_eq!(detect_device_kind(Some("usb:COM3"), None), "openbci");
         assert_eq!(detect_device_kind(Some("usb:COM10"), None), "openbci");
-    }
-
-    #[test]
-    fn max_retry_attempts_is_reasonable() {
-        // Total backoff time for MAX_RETRY_ATTEMPTS should be < 2 minutes
-        // so the user doesn't wait too long, but > 30 s to survive glitches.
-        let total: u32 = (0..MAX_RETRY_ATTEMPTS).map(retry_delay_secs).sum();
-        assert!(total >= 30, "total backoff {total}s should be >= 30s");
-        assert!(total <= 120, "total backoff {total}s should be <= 120s");
     }
 }

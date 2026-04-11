@@ -18,6 +18,7 @@ mod constants;
 #[macro_use]
 mod skill_log;
 
+#[allow(unused_macros)]
 /// Convenience wrapper around [`skill_log!`] for code that holds an
 /// `&AppHandle` but not a direct reference to the logger.
 macro_rules! app_log {
