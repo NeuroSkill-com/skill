@@ -4459,17 +4459,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "flume"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
-dependencies = [
- "futures-core",
- "futures-sink",
- "spin 0.9.8",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6204,16 +6193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "if-addrs"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
-dependencies = [
- "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "igd-next"
 version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6866,8 +6845,6 @@ dependencies = [
  "referencing",
  "regex",
  "regex-syntax",
- "reqwest 0.13.2",
- "rustls",
  "serde",
  "serde_json",
  "unicode-general-category",
@@ -7570,21 +7547,6 @@ name = "md5"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
-
-[[package]]
-name = "mdns-sd"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d797ab3274a16f4940f9650a29838e940223aeff31773df5c2827ad82150182f"
-dependencies = [
- "fastrand",
- "flume",
- "if-addrs",
- "log",
- "mio",
- "socket-pktinfo",
- "socket2 0.6.3",
-]
 
 [[package]]
 name = "memchr"
@@ -10890,10 +10852,8 @@ checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.4.13",
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
@@ -12014,26 +11974,20 @@ name = "skill"
 version = "0.0.111"
 dependencies = [
  "anyhow",
- "async-stream",
- "axum",
  "base64 0.22.1",
  "chrono",
- "cognionics",
  "csv",
  "dirs",
  "dispatch2",
  "erased-serde",
- "futures-util",
  "hound",
  "image",
- "jsonschema",
  "kittentts",
  "libc",
  "llama-cpp-4",
  "llmfit-core",
  "log",
  "macos-focus",
- "mdns-sd",
  "neutts",
  "objc2 0.6.4",
  "objc2-app-kit",
@@ -12051,7 +12005,6 @@ dependencies = [
  "sha2 0.10.9",
  "skill-autostart",
  "skill-calendar",
- "skill-commands",
  "skill-constants",
  "skill-daemon-common",
  "skill-data",
@@ -12059,12 +12012,10 @@ dependencies = [
  "skill-eeg",
  "skill-headless",
  "skill-history",
- "skill-iroh",
  "skill-jobs",
  "skill-label-index",
  "skill-llm",
  "skill-location",
- "skill-lsl",
  "skill-oura",
  "skill-settings",
  "skill-skills",
@@ -12085,7 +12036,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
- "tower-http",
  "ureq 3.3.0",
  "zip 4.6.1",
 ]
@@ -12667,17 +12617,6 @@ name = "snap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
-
-[[package]]
-name = "socket-pktinfo"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "927136cc2ae6a1b0e66ac6b1210902b75c3f726db004a73bc18686dcd0dcd22f"
-dependencies = [
- "libc",
- "socket2 0.6.3",
- "windows-sys 0.60.2",
-]
 
 [[package]]
 name = "socket2"
