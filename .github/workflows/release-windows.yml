@@ -203,8 +203,10 @@ jobs:
           Write-Host "[ok] ORT_LIB_LOCATION=$OrtRoot\lib"
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
+      # v0.0.9 had a Windows PATH bug requiring manual workarounds; v0.0.11
+      # fixes it and correctly sets SCCACHE_PATH + RUSTC_WRAPPER on all platforms.
       - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
+        uses: Mozilla-Actions/sccache-action@v0.0.11
 
       - name: Configure sccache for GitHub Actions cache
         shell: bash
@@ -215,49 +217,9 @@ jobs:
           # incrementing this value (e.g. after a toolchain or LLVM upgrade).
           echo "SCCACHE_GHA_VERSION=2" >> "$GITHUB_ENV"
 
-          # Debug: show initial sccache stats
-          sccache --show-stats || true
-
-          # ── Fix sccache PATH on Windows ─────────────────────────────────────
-          # sccache-action v0.0.9 on Windows fails to add the sccache directory
-          # to the Windows Path variable.  Git Bash can find sccache via the
-          # Unix-style PATH (prepended by GITHUB_PATH), but native Windows
-          # processes like cargo.exe cannot.  This means RUSTC_WRAPPER=sccache
-          # silently fails — cargo never routes compilations through sccache.
-          #
-          # Fix: resolve the sccache binary to its full Windows path and export
-          # RUSTC_WRAPPER as the absolute path so cargo.exe finds it directly,
-          # regardless of PATH resolution.
-          if [ -n "${SCCACHE_PATH:-}" ]; then
-            # SCCACHE_PATH is set by the action (e.g. C:\...\x64/sccache)
-            # — may have mixed separators and no .exe extension.  Resolve
-            # to the actual .exe on disk.
-            SCCACHE_DIR="$(dirname "$SCCACHE_PATH")"
-            if [ -f "$SCCACHE_DIR/sccache.exe" ]; then
-              # Convert to native Windows path for cargo.exe
-              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_DIR/sccache.exe")"
-              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
-              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
-              # Also add the directory to GITHUB_PATH so cmake and other
-              # native tools can find sccache by bare name.
-              echo "$SCCACHE_DIR" >> "$GITHUB_PATH"
-              echo "[ok] Added $SCCACHE_DIR to GITHUB_PATH"
-            elif [ -f "$SCCACHE_PATH.exe" ]; then
-              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_PATH.exe")"
-              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
-              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
-              SCCACHE_DIR2="$(dirname "$SCCACHE_PATH.exe")"
-              echo "$SCCACHE_DIR2" >> "$GITHUB_PATH"
-              echo "[ok] Added $SCCACHE_DIR2 to GITHUB_PATH"
-            else
-              echo "[warn] sccache binary not found at expected paths"
-              echo "[warn]   SCCACHE_PATH=$SCCACHE_PATH"
-              echo "[warn]   SCCACHE_DIR=$SCCACHE_DIR"
-              ls -la "$SCCACHE_DIR"/ 2>/dev/null || true
-            fi
-          else
-            echo "[warn] SCCACHE_PATH not set; RUSTC_WRAPPER will use bare 'sccache'"
-          fi
+          # Verify sccache is working
+          sccache --show-stats
+          echo "[ok] RUSTC_WRAPPER=${RUSTC_WRAPPER:-<not set>}"
 
       # ── Node.js + frontend build ─────────────────────────────────────────────
       # Moved before SDK installs so the frontend compiles while heavy SDKs
@@ -345,7 +307,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: C:\VulkanSDK
-          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
+          # Bump the suffix when upgrading the Vulkan SDK version, since the
+          # install script downloads "latest" and the cache would serve stale files.
+          key: windows-vulkan-sdk-v1-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
 
       - name: Install NSIS + Vulkan SDK (parallel)
         shell: powershell
@@ -575,80 +539,55 @@ jobs:
             exit 1
           }
 
-      # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
-      # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
-      # mmintrin.h references __builtin_ia32_* GCC-style intrinsics that
-      # clang-cl doesn't implement, causing bindgen (llama-cpp-sys-4) to panic
-      # with ~20 "use of undeclared identifier '__builtin_ia32_…'" errors.
+      # ── Standalone LLVM 19 for bindgen + lld-link ─────────────────────────────
+      # VS2022's bundled clang-cl can't handle __builtin_ia32_* intrinsics in
+      # mmintrin.h, causing bindgen (llama-cpp-sys-4) to fail.  Standalone
+      # LLVM 19 fixes this and also provides lld-link for faster linking.
       #
-      # Fix: standalone LLVM 19 (non-MSVC-compat) implements all those builtins
-      # AND its headers match the same version VS2022 ships, so there is no
-      # version mismatch.  KyleMayes/install-llvm-action downloads directly
-      # from the LLVM GitHub releases (no Chocolatey dependency), has its own
-      # built-in cache keyed on the version string, and installs to C:\LLVM
-      # (a path without spaces, which avoids quoting issues in env vars).
-      #
-      # clang-sys checks LIBCLANG_PATH before PATH, so the explicit export
-      # below guarantees bindgen finds standalone LLVM's libclang.dll even
-      # when ilammy/msvc-dev-cmd has already put VS's clang-cl on PATH.
+      # Cache the full install so subsequent runs skip the ~500 MB download.
+      - name: Cache LLVM 19
+        id: llvm-cache
+        uses: actions/cache@v5
+        with:
+          path: C:\LLVM
+          key: windows-llvm-19-v1
+
       - name: Install LLVM 19
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: KyleMayes/install-llvm-action@v2.0.9
         with:
           version: "19"
           directory: C:\LLVM
 
-      - name: Export LIBCLANG_PATH
+      - name: Export LLVM env vars
         shell: powershell
         run: |
-          # KyleMayes/install-llvm-action sets LLVM_PATH to the install root.
-          # libclang.dll lives in the bin/ subdirectory for Windows builds
-          # downloaded from LLVM GitHub releases.
-          $dll = Get-ChildItem "C:\LLVM" -Recurse -Filter "libclang.dll" `
-                   -ErrorAction SilentlyContinue |
-                   Select-Object -First 1
-          if (-not $dll) {
-            Write-Error "libclang.dll not found under C:\LLVM"
-            exit 1
+          $bin = "C:\LLVM\bin"
+          if (-not (Test-Path "$bin\libclang.dll")) {
+            # bin/ may be nested one level deeper
+            $dll = Get-ChildItem "C:\LLVM" -Recurse -Filter "libclang.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $dll) { Write-Error "libclang.dll not found under C:\LLVM"; exit 1 }
+            $bin = Split-Path $dll.FullName
           }
 
-          $dir = Split-Path $dll.FullName
-          "LIBCLANG_PATH=$dir" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] LIBCLANG_PATH=$dir  (libclang.dll at $($dll.FullName))"
+          @(
+            "LIBCLANG_PATH=$bin",
+            "LLVM_CONFIG=$bin\llvm-config.exe",
+            "CC=$bin\clang.exe",
+            "CXX=$bin\clang++.exe"
+          ) | ForEach-Object {
+            $_ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "[ok] $_"
+          }
 
-          # Also set LLVM_CONFIG to help with toolchain detection
-          "LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe"
-          
-          # Set additional environment to bypass issues in clang-cl with mmx intrinsics
-          "CC=C:\LLVM\bin\clang.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] CC=C:\LLVM\bin\clang.exe"
-          
-          "CXX=C:\LLVM\bin\clang++.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] CXX=C:\LLVM\bin\clang++.exe"
-
-      # ── Verify lld-link is available ────────────────────────────────────────
-      # LLVM 19 (installed above) ships lld-link.exe — a drop-in replacement
-      # for MSVC's link.exe that is significantly faster for large Rust
-      # projects.  Detect it and export the linker env var for cargo.
-      - name: Detect lld-link (fast LLVM linker)
-        shell: powershell
-        run: |
-          $lldLink = Get-ChildItem "C:\LLVM" -Recurse -Filter "lld-link.exe" `
-                       -ErrorAction SilentlyContinue |
-                       Select-Object -First 1
-          if ($lldLink) {
-            $dir = Split-Path $lldLink.FullName
-            # Cargo env-var form: CARGO_TARGET_<TRIPLE>_LINKER
-            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($lldLink.FullName)" |
+          # Use lld-link for faster linking if available
+          $lldLink = Join-Path $bin "lld-link.exe"
+          if (Test-Path $lldLink) {
+            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$lldLink" |
               Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            Write-Host "[ok] lld-link found: $($lldLink.FullName)"
-            Write-Host "[ok] Set CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER for fast linking"
+            Write-Host "[ok] CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$lldLink"
           } else {
-            Write-Host "[info] lld-link not found under C:\LLVM; falling back to MSVC link.exe"
+            Write-Host "[info] lld-link not found; falling back to MSVC link.exe"
           }
 
       # ── Compile Rust (cargo build only) ──────────────────────────────────────
@@ -665,11 +604,7 @@ jobs:
         env:
           VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
-          # RUSTC_WRAPPER is set via GITHUB_ENV in the "Configure sccache"
-          # step (absolute Windows path to sccache.exe).  Do NOT override it
-          # here with the bare name 'sccache' — cargo.exe on Windows cannot
-          # resolve it because sccache-action v0.0.9 fails to add the sccache
-          # directory to the Windows Path variable.
+          # RUSTC_WRAPPER is set automatically by sccache-action v0.0.11.
           SCCACHE_GHA_ENABLED: "true"
           SCCACHE_CACHE_SIZE:  "10G"
           # Dynamic CRT: native deps (DirectML, ONNX Runtime, Vulkan loader)
@@ -693,12 +628,10 @@ jobs:
           fi
           sccache --show-stats || true
 
-          # Build both in one invocation for consistent feature unification
+          # Build both packages in a single cargo invocation so feature
+          # unification happens once and shared dependencies compile only once.
           run_cmd() {
-            # Build daemon first — its default features compile llama-cpp-sys-4
-            # with mtmd+vulkan+q1 via skill-llm's target-specific deps.
-            cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --timings
-            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,screenshots --timings
+            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,screenshots --timings
           }
 
           if ! run_cmd; then
