@@ -104,6 +104,12 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.attentivu2": "在 iOS 应用中扫描 BLE 设备并连接到您的 AttentivU 眼镜。",
   "settings.supportedDevices.instruction.attentivu3":
     "EEG 数据从眼镜 → iPhone → 桌面通过加密的 iroh 隧道传输。所有处理都在此电脑上完成。",
+  // ── AWEAR ──
+  "settings.supportedDevices.company.awear": "AWEAR",
+  "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
+  "settings.supportedDevices.instruction.awear1": "打开您的 AWEAR EEG 设备，并确保电脑已开启蓝牙。",
+  "settings.supportedDevices.instruction.awear2": "扫描 BLE 设备并连接到 AWEAR。身份验证通过 HMAC-SHA256 自动完成。",
+
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",

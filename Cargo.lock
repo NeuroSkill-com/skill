@@ -662,6 +662,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "awear"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "043d42565d5b69e50bef486f4426451d3f902ba7dbb837a7d46e2449d671f24d"
+dependencies = [
+ "anyhow",
+ "btleplug 0.11.8",
+ "env_logger",
+ "futures",
+ "hex",
+ "hmac",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "aws-lc-rs"
 version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11980,7 +12000,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skill"
-version = "0.0.115"
+version = "0.0.116"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -12203,6 +12223,7 @@ name = "skill-devices"
 version = "0.0.1"
 dependencies = [
  "async-trait",
+ "awear",
  "bitflags 2.11.0",
  "cognionics",
  "emotiv",

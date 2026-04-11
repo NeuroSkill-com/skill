@@ -9,6 +9,8 @@ use futures::StreamExt;
 use skill_daemon_common::{DiscoveredDeviceResponse, ScannerWifiConfigRequest};
 use tokio::sync::oneshot;
 
+use tracing::debug;
+
 use crate::state::AppState;
 use crate::util::{now_unix_secs, push_device_log};
 
@@ -45,6 +47,9 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
         || n.starts_with("quick-")
         || n.starts_with("aim-")
         || n.starts_with("patch")
+        // AWEAR
+        || n.starts_with("awear")
+        || n.starts_with("luca")
         // AttentivU
         || n.starts_with("atu")
         || n.starts_with("attentivu")
@@ -148,14 +153,12 @@ async fn run_ble_listener_task(state: AppState) {
             // delegate callbacks, causing connections to hang.
             if state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
                 let _ = adapter.stop_scan().await;
-                while state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
-                    if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
-                        return;
-                    }
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                }
-                // Reconnection attempt finished — resume scan.
-                let _ = adapter.start_scan(ScanFilter::default()).await;
+                // Break out so `manager`, `adapter`, and `events` are
+                // dropped at the end of the outer scope.  On macOS a
+                // second CBCentralManager (created by device-crate
+                // connect() functions) cannot discover peripherals while
+                // the first one is still alive — even if scanning stopped.
+                break;
             }
 
             // Short timeout so ble_scan_paused and scanner_running are
@@ -181,6 +184,9 @@ async fn run_ble_listener_task(state: AppState) {
                                 rssi = rv;
                             }
                         }
+                        if let Some(ref n) = name {
+                            debug!(ble_name = %n, rssi, "BLE advertisement");
+                        }
                         let key = format!("ble:{}", id);
                         if let Ok(mut cache) = state.ble_device_cache.lock() {
                             let entry = cache.entry(key).or_insert((None, 0i16, 0u64));
@@ -199,7 +205,15 @@ async fn run_ble_listener_task(state: AppState) {
             }
         }
 
-        // Stream ended; brief pause before restarting.
+        // Stream ended (or paused for a BLE connect attempt).
+        // Wait for the pause flag to clear before recreating the manager.
+        while state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
+            if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        // Brief pause before restarting.
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }
@@ -818,6 +832,7 @@ mod tests {
         assert!(is_known_eeg_ble_name("IGE-Guardian"));
         assert!(is_known_eeg_ble_name("BrainBit-EEG"));
         assert!(is_known_eeg_ble_name("Unicorn-EEG"));
+        assert!(is_known_eeg_ble_name("AWEAR-E04A8471"));
     }
 
     #[test]

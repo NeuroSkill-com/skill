@@ -569,6 +569,9 @@ function deviceImage(name: string, hw?: string | null): string | null {
   if (muse) return muse;
 
   const n = name.toLowerCase();
+  if (n.includes("awear") || n.includes("luca")) {
+    return "/devices/awear-eeg.png";
+  }
   if (n.includes("idun") || n.includes("guardian") || n.startsWith("ige")) {
     return "/devices/idun-guardian.png";
   }

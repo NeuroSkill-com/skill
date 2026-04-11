@@ -93,6 +93,7 @@ exceptions = [
     # mw75 uses the deprecated "GPL-3.0" SPDX identifier (no license file),
     # so we allow both the deprecated alias and the canonical form.
     { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "mw75" },
+    { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "awear" },
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dicts" },

@@ -51,6 +51,8 @@ pub enum DeviceKind {
     Emotiv,
     /// IDUN Guardian — single-channel bipolar in-ear EEG earbud (1 ch @ 250 Hz, IMU).
     Idun,
+    /// AWEAR EEG wearable — single-channel BLE EEG (1 ch @ 256 Hz).
+    Awear,
     /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
     Mendi,
     /// Cognionics / CGX EEG headsets — Quick-20/20r/32r/8r, AIM-2, Patch, Dev Kit.
@@ -189,6 +191,9 @@ impl DeviceKind {
         if n.starts_with("idun") || n.starts_with("ige") || n.starts_with("guardian") {
             return Self::Idun;
         }
+        if n.starts_with("awear") || n.starts_with("luca") {
+            return Self::Awear;
+        }
         if n.starts_with("mendi") {
             return Self::Mendi;
         }
@@ -303,6 +308,16 @@ impl DeviceKind {
                 has_central_electrodes: false, // in-ear canal placement
                 has_full_montage: false,
                 sample_rate_hz: 250.0,
+                electrode_names: sv(&["EEG"]),
+            },
+            Self::Awear => DeviceCapabilities {
+                kind: Self::Awear,
+                channel_count: 1,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 256.0,
                 electrode_names: sv(&["EEG"]),
             },
             // Static defaults for the Quick-20r (most common CGX model).
@@ -452,6 +467,7 @@ impl DeviceKind {
             Self::Hermes => "hermes",
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
+            Self::Awear => "awear",
             Self::Cognionics => "cognionics",
             Self::Mendi => "mendi",
             Self::AttentivU => "attentivu",
@@ -481,6 +497,7 @@ impl DeviceKind {
             "hermes" => Self::Hermes,
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
+            "awear" => Self::Awear,
             "cognionics" => Self::Cognionics,
             "mendi" => Self::Mendi,
             "attentivu" => Self::AttentivU,
@@ -564,6 +581,20 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.attentivu1".into(),
                 "settings.supportedDevices.instruction.attentivu2".into(),
                 "settings.supportedDevices.instruction.attentivu3".into(),
+            ],
+        },
+        SupportedCompany {
+            id: "awear".into(),
+            name_key: "settings.supportedDevices.company.awear".into(),
+            logo: "/logos/awear.png".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.awearEeg".into(),
+                ios_only: false,
+                image: "/devices/awear-eeg.png".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.awear1".into(),
+                "settings.supportedDevices.instruction.awear2".into(),
             ],
         },
         // ── B ─────────────────────────────────────────────────────
