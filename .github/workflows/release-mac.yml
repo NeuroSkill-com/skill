@@ -1,4 +1,4 @@
-name: Release - Mac (PKG)
+name: Release - Mac
 
 on:
   push:

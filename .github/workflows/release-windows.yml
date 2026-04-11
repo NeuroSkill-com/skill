@@ -203,10 +203,8 @@ jobs:
           Write-Host "[ok] ORT_LIB_LOCATION=$OrtRoot\lib"
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
-      # v0.0.9 had a Windows PATH bug requiring manual workarounds; v0.0.11
-      # fixes it and correctly sets SCCACHE_PATH + RUSTC_WRAPPER on all platforms.
       - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.11
+        uses: Mozilla-Actions/sccache-action@v0.0.9
 
       - name: Configure sccache for GitHub Actions cache
         shell: bash
@@ -604,7 +602,7 @@ jobs:
         env:
           VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
-          # RUSTC_WRAPPER is set automatically by sccache-action v0.0.11.
+          # RUSTC_WRAPPER is set automatically by sccache-action.
           SCCACHE_GHA_ENABLED: "true"
           SCCACHE_CACHE_SIZE:  "10G"
           # Dynamic CRT: native deps (DirectML, ONNX Runtime, Vulkan loader)
