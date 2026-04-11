@@ -700,3 +700,34 @@ impl AppState {
         self.dnd.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_state_creation_does_not_panic() {
+        // Test that we can create an AppState without panicking
+        let state = AppState::default();
+        assert!(state.skill_dir.exists());
+    }
+
+    #[test]
+    fn test_app_state_new_boxed_does_not_panic() {
+        // Test that the boxed creation works
+        let state_boxed = AppState::new_boxed();
+        let _state = &*state_boxed;
+        // If we get here without panicking, the test passes
+    }
+
+    #[test]
+    fn test_dnd_arc_cloning_works() {
+        let state = AppState::default();
+        let dnd_arc = state.dnd_arc();
+        
+        // Verify we can lock both arcs
+        let _dnd_guard1 = state.dnd.lock().unwrap();
+        let _dnd_guard2 = dnd_arc.lock().unwrap();
+        // If we can lock both without deadlock, the test passes
+    }
+}

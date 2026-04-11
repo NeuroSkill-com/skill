@@ -514,3 +514,4 @@ pub(crate) fn remove_discovered_by_prefix(app: &AppHandle, prefix: &str) {
         emit_devices(app);
     }
 }
+

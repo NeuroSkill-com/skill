@@ -69,12 +69,14 @@ jobs:
           # Exclude e2e / integration-test crates that require network or
           # long-running services (iroh relay, LLM model, LSL streams).
           # These are tested separately via manual CI dispatch.
+          # Use cpu-only mode to avoid GPU dependencies (cubecl-runtime) that
+          # are unavailable in GitHub Actions runners.
           cargo llvm-cov \
             --workspace \
             --exclude iroh_test_client \
             --exclude iroh-example-client \
             --no-default-features \
-            --features llm-native,skill-router/cpu \
+            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
             --lcov \
             --output-path lcov.info
 
@@ -83,7 +85,7 @@ jobs:
             --exclude iroh_test_client \
             --exclude iroh-example-client \
             --no-default-features \
-            --features llm-native,skill-router/cpu \
+            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 

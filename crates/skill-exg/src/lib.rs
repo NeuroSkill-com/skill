@@ -665,6 +665,9 @@ pub fn download_hf_weights_files(
 /// `GlobalConfig` so cubecl never tries to write to an inaccessible path.
 ///
 /// Must be called **before** the first `WgpuDevice` access.
+///
+/// Note: This function is only available when the `cubecl` feature is enabled.
+#[cfg(feature = "cubecl")]
 pub fn configure_cubecl_cache(skill_dir: &Path) {
     use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -685,6 +688,13 @@ pub fn configure_cubecl_cache(skill_dir: &Path) {
         cfg.autotune.cache = CacheConfig::File(cache_dir);
         GlobalConfig::set(cfg);
     }
+}
+
+/// No-op stub for when the `cubecl` feature is disabled.
+#[cfg(not(feature = "cubecl"))]
+pub fn configure_cubecl_cache(_skill_dir: &Path) {
+    // CubeCL functionality is disabled in this build.
+    // This is used in CI/coverage builds where GPU drivers are unavailable.
 }
 
 // ── GPU panic flag ────────────────────────────────────────────────────────────
