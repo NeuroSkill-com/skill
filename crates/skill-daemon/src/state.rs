@@ -24,6 +24,7 @@ use skill_settings::{HookRule, LslPairedStream};
 #[cfg(feature = "llm")]
 use skill_llm::{LlmConfig, LlmLogBuffer, LlmStateCell};
 
+use crate::text_embedder::SharedTextEmbedder;
 use crate::tracker::DaemonTracker;
 use skill_label_index::LabelIndexState;
 
@@ -99,6 +100,9 @@ pub struct AppState {
     pub label_index: Arc<LabelIndexState>,
     /// Reconnect state machine (daemon-authoritative).
     pub reconnect: Arc<Mutex<crate::reconnect::ReconnectState>>,
+    /// Shared text embedder (nomic-embed-text-v1.5) used for labels, hooks,
+    /// screenshot OCR, and screenshot search.
+    pub text_embedder: SharedTextEmbedder,
 }
 
 impl AppState {
@@ -183,6 +187,7 @@ impl AppState {
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             label_index: Arc::new(LabelIndexState::new()),
             reconnect: Arc::new(Mutex::new(crate::reconnect::ReconnectState::default())),
+            text_embedder: SharedTextEmbedder::new(),
         }
     }
 }

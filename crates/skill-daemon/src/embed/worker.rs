@@ -34,6 +34,7 @@ impl EmbedWorkerHandle {
         config: ExgModelConfig,
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
+        text_embedder: crate::text_embedder::SharedTextEmbedder,
     ) -> Self {
         // Keep a larger pre-encoder buffer so epochs are not dropped while
         // heavy models (e.g. ZUNA) are still loading.
@@ -41,7 +42,7 @@ impl EmbedWorkerHandle {
         let thread = std::thread::Builder::new()
             .name("eeg-embed".into())
             .spawn(move || {
-                embed_worker_main(rx, skill_dir, config, events_tx, hooks);
+                embed_worker_main(rx, skill_dir, config, events_tx, hooks, text_embedder);
             })
             .expect("failed to spawn embed worker thread");
 
@@ -112,7 +113,7 @@ struct HookMatcher {
     skill_dir: PathBuf,
     hooks: Vec<HookRule>,
     label_state: skill_label_index::LabelIndexState,
-    text_embedder: Option<std::sync::Mutex<fastembed::TextEmbedding>>,
+    text_embedder: crate::text_embedder::SharedTextEmbedder,
     cache: Vec<HookReferenceSet>,
     last_refresh_unix: u64,
     last_fired_unix: HashMap<String, u64>,
@@ -121,23 +122,15 @@ struct HookMatcher {
 }
 
 impl HookMatcher {
-    fn new(skill_dir: PathBuf, hooks: Vec<HookRule>, events_tx: broadcast::Sender<EventEnvelope>) -> Self {
+    fn new(
+        skill_dir: PathBuf,
+        hooks: Vec<HookRule>,
+        events_tx: broadcast::Sender<EventEnvelope>,
+        text_embedder: crate::text_embedder::SharedTextEmbedder,
+    ) -> Self {
         let hooks_log = skill_data::hooks_log::HooksLog::open(&skill_dir);
         let label_state = skill_label_index::LabelIndexState::new();
         label_state.load(&skill_dir);
-
-        // Load text embedder for keyword → vector.
-        let cache_dir = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".cache")
-            .join("fastembed");
-        let text_embedder = fastembed::TextEmbedding::try_new(
-            fastembed::TextInitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
-                .with_cache_dir(cache_dir)
-                .with_show_download_progress(false),
-        )
-        .ok()
-        .map(std::sync::Mutex::new);
 
         Self {
             skill_dir,
@@ -160,10 +153,6 @@ impl HookMatcher {
         }
         self.last_refresh_unix = now;
 
-        let Some(ref te_mutex) = self.text_embedder else {
-            return;
-        };
-
         let mut next_cache: Vec<HookReferenceSet> = Vec::new();
 
         for hook in self.hooks.iter().filter(|h| h.enabled) {
@@ -179,12 +168,8 @@ impl HookMatcher {
 
             // Embed keywords.
             let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-            let embeddings = {
-                let Ok(mut te) = te_mutex.lock() else { continue };
-                match te.embed(query_refs, None) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                }
+            let Some(embeddings) = self.text_embedder.embed_batch(query_refs) else {
+                continue;
             };
 
             // Search label index for each keyword embedding.
@@ -339,6 +324,7 @@ fn embed_worker_main(
     config: ExgModelConfig,
     events_tx: broadcast::Sender<EventEnvelope>,
     hooks: Vec<HookRule>,
+    text_embedder: crate::text_embedder::SharedTextEmbedder,
 ) {
     info!(
         backend = config.model_backend.as_str(),
@@ -382,7 +368,12 @@ fn embed_worker_main(
 
     // Initialize hook matcher.
     let mut hook_matcher = if hooks.iter().any(|h| h.enabled) {
-        Some(HookMatcher::new(skill_dir.clone(), hooks, events_tx.clone()))
+        Some(HookMatcher::new(
+            skill_dir.clone(),
+            hooks,
+            events_tx.clone(),
+            text_embedder,
+        ))
     } else {
         None
     };

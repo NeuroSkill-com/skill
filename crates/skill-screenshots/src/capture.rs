@@ -75,15 +75,16 @@ fn resize_fit_pad_dyn(img: &DynamicImage, target: u32) -> DynamicImage {
     canvas
 }
 
-/// Legacy wrapper: resize + pad → PNG bytes.  Used by backfill / re-embed
-/// paths that still pass encoded bytes around.
+/// Legacy wrapper: resize + pad → PNG bytes.
+#[allow(dead_code)]
 fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> {
     let canvas = resize_fit_pad_image(raw_bytes, target)?;
     let png = encode_png(&canvas)?;
     Some((png, target, target))
 }
 
-/// Encode a `DynamicImage` as PNG bytes (for the vision encoder).
+/// Encode a `DynamicImage` as PNG bytes.
+#[allow(dead_code)]
 fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
     let mut buf = Vec::new();
     img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png).ok()?;
@@ -261,6 +262,7 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
 
 /// Embed a pre-decoded `DynamicImage` directly using fastembed — avoids the
 /// CPU-intensive PNG encode→decode round-trip that `embed_bytes` performs.
+#[allow(dead_code)]
 fn fastembed_embed_image(encoder: &mut fastembed::ImageEmbedding, img: DynamicImage) -> Option<Vec<f32>> {
     match encoder.embed_images(vec![img]) {
         Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
@@ -830,8 +832,6 @@ fn run_embed_thread(
     let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
     let mut ocr_hnsw = load_or_rebuild_ocr_hnsw(&skill_dir, &store);
 
-    // Load vision encoder
-    let mut fe_encoder = load_fastembed_image(&initial_config, &skill_dir);
     let mut last_backend = initial_config.embed_backend.clone();
     let mut last_model = initial_config.fastembed_model.clone();
 
@@ -869,32 +869,65 @@ fn run_embed_thread(
     if should_backfill {
         let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
 
-        // Backfill vision embeddings
-        let unembedded = store.rows_without_embedding();
-        if !unembedded.is_empty() {
+        // Backfill: OCR + text-embed for both vision and OCR HNSW.
+        // In fastembed mode the image embedding IS the text embedding of
+        // its OCR content, so we process OCR-less rows and embedding-less
+        // rows together.
+        let ocr_rows = store.rows_without_ocr();
+        let embed_rows = store.rows_without_embedding();
+        let needs_ocr: std::collections::HashSet<i64> = ocr_rows.iter().map(|r| r.id).collect();
+        let needs_embed: std::collections::HashSet<i64> = embed_rows.iter().map(|r| r.id).collect();
+
+        // Merge into a deduplicated list with filenames
+        let mut all_rows: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
+        for r in ocr_rows.iter().chain(embed_rows.iter()) {
+            all_rows.entry(r.id).or_insert_with(|| r.filename.clone());
+        }
+
+        if !all_rows.is_empty() && ocr_engine.is_some() {
             eprintln!(
-                "[screenshot-embed] backfill: {} screenshots without vision embedding",
-                unembedded.len()
+                "[screenshot-embed] backfill: {} screenshots need OCR/embedding",
+                all_rows.len()
             );
-            for row in &unembedded {
-                let webp_path = screenshots_dir.join(&row.filename);
+            for (&row_id, filename) in &all_rows {
+                let webp_path = screenshots_dir.join(filename);
                 if !webp_path.exists() {
                     continue;
                 }
                 let Ok(raw) = std::fs::read(&webp_path) else {
                     continue;
                 };
-                let Some((resized, _, _)) = resize_fit_pad(&raw, initial_config.image_size) else {
-                    continue;
+
+                // OCR if needed, otherwise fetch existing OCR text for embedding
+                let ocr_text = if needs_ocr.contains(&row_id) {
+                    if let Some(ref engine) = ocr_engine {
+                        run_ocr(engine, &raw).unwrap_or_default()
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    // Already has OCR — fetch existing text for the embedding
+                    store
+                        .get_embedding_and_ocr(row_id)
+                        .map(|e| e.ocr_text)
+                        .unwrap_or_default()
                 };
-                if let Some(ref mut fe) = fe_encoder {
-                    if let Some(emb) = fastembed_embed(fe, &resized) {
-                        let ts = store.get_timestamp(row.id).unwrap_or(0);
+
+                if ocr_text.is_empty() {
+                    continue;
+                }
+
+                // Embed the OCR text
+                if let Some(emb) = ctx.embed_text(&ocr_text) {
+                    let ts = store.get_timestamp(row_id).unwrap_or(0);
+
+                    // Update vision HNSW (image embedding = OCR text embedding)
+                    if needs_embed.contains(&row_id) {
                         let id = hnsw.len() as u64;
                         hnsw.insert(emb.clone(), ts);
                         inserts_since_save += 1;
                         store.update_embedding(
-                            row.id,
+                            row_id,
                             &emb,
                             Some(id),
                             &initial_config.embed_backend,
@@ -902,55 +935,27 @@ fn run_embed_thread(
                             initial_config.image_size,
                         );
                     }
+
+                    // Update OCR HNSW
+                    if needs_ocr.contains(&row_id) {
+                        let id = ocr_hnsw.len() as u64;
+                        ocr_hnsw.insert(emb.clone(), ts);
+                        ocr_inserts_since_save += 1;
+                        store.update_ocr(row_id, &ocr_text, Some(&emb), Some(id));
+                    }
+                } else if needs_ocr.contains(&row_id) {
+                    store.update_ocr(row_id, &ocr_text, None, None);
                 }
             }
             if inserts_since_save > 0 {
                 save_hnsw(&hnsw, &skill_dir);
                 inserts_since_save = 0;
             }
-            eprintln!("[screenshot-embed] backfill: vision embeddings done");
-        }
-
-        // Backfill OCR text + OCR embeddings
-        let no_ocr = store.rows_without_ocr();
-        if !no_ocr.is_empty() && ocr_engine.is_some() {
-            eprintln!(
-                "[screenshot-embed] backfill: {} screenshots without OCR text",
-                no_ocr.len()
-            );
-            for row in &no_ocr {
-                let webp_path = screenshots_dir.join(&row.filename);
-                if !webp_path.exists() {
-                    continue;
-                }
-                let Ok(raw) = std::fs::read(&webp_path) else {
-                    continue;
-                };
-                // OCR on the saved WebP image
-                let ocr_text = if let Some(ref engine) = ocr_engine {
-                    run_ocr(engine, &raw).unwrap_or_default()
-                } else {
-                    String::new()
-                };
-                if ocr_text.is_empty() {
-                    continue;
-                }
-                // Embed the OCR text via the shared app-wide embedder
-                if let Some(emb) = ctx.embed_text(&ocr_text) {
-                    let ts = store.get_timestamp(row.id).unwrap_or(0);
-                    let id = ocr_hnsw.len() as u64;
-                    ocr_hnsw.insert(emb.clone(), ts);
-                    ocr_inserts_since_save += 1;
-                    store.update_ocr(row.id, &ocr_text, Some(&emb), Some(id));
-                } else {
-                    store.update_ocr(row.id, &ocr_text, None, None);
-                }
-            }
             if ocr_inserts_since_save > 0 {
                 save_ocr_hnsw(&ocr_hnsw, &skill_dir);
                 ocr_inserts_since_save = 0;
             }
-            eprintln!("[screenshot-embed] backfill: OCR done");
+            eprintln!("[screenshot-embed] backfill: OCR + embeddings done");
         }
     } else if !should_backfill {
         eprintln!("[screenshot-embed] skipping backfill (disabled or session-gated with no active session)");
@@ -1024,10 +1029,12 @@ fn run_embed_thread(
             eprintln!("[screenshot-embed] copy source row {src_id} not found — running full pipeline");
         }
 
-        // Hot-reload vision encoder if model changed
+        // Track model changes for metadata
         if config.embed_backend != last_backend || config.fastembed_model != last_model {
-            eprintln!("[screenshot-embed] model changed — reloading encoder");
-            fe_encoder = load_fastembed_image(config, &skill_dir);
+            eprintln!(
+                "[screenshot-embed] model changed: {} / {}",
+                config.embed_backend, config.fastembed_model
+            );
             last_backend = config.embed_backend.clone();
             last_model = config.fastembed_model.clone();
         }
@@ -1037,72 +1044,9 @@ fn run_embed_thread(
         // LLM vision or OCR paths actually need it.
         let encoded_bytes_lazy = |img: &DynamicImage| -> Vec<u8> { encode_jpeg(img, 85).unwrap_or_default() };
 
-        // ── Vision embedding ──
-        let t0 = Instant::now();
-        let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
-            "fastembed" => {
-                if let Some(ref mut fe) = fe_encoder {
-                    // Pass DynamicImage directly — no encode→decode round-trip.
-                    let emb = job
-                        .resized_img
-                        .as_ref()
-                        .and_then(|img| fastembed_embed_image(fe, img.clone()));
-                    let mid = config.model_id();
-                    (emb, "fastembed".to_string(), mid)
-                } else {
-                    (None, String::new(), String::new())
-                }
-            }
-            "mmproj" | "llm-vlm" => {
-                let encoded = job.resized_img.as_ref().map(encoded_bytes_lazy).unwrap_or_default();
-                let result = if !encoded.is_empty() {
-                    ctx.embed_image_via_llm(&encoded)
-                } else {
-                    None
-                };
-                let backend = config.embed_backend.clone();
-                let mid = config.model_id();
-                if result.is_some() {
-                    (result, backend, mid)
-                } else {
-                    (None, String::new(), String::new())
-                }
-            }
-            _ => (None, String::new(), String::new()),
-        };
-
-        metrics
-            .vision_embed_us
-            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
-
-        // ── Backfill vision embedding ──
-        if let Some(ref emb) = embedding {
-            // If the vision model changed and produces a different embedding
-            // dimension, the existing HNSW is incompatible.  Reset to a fresh
-            // index so we don't panic on mismatched dimensions.
-            if !hnsw.is_empty() {
-                if let Some(dim) = hnsw.inner.dim() {
-                    if dim != emb.len() {
-                        eprintln!(
-                            "[screenshot] vision HNSW dimension mismatch (index={dim}, new={}); \
-                             resetting index — run re-embed to backfill",
-                            emb.len()
-                        );
-                        hnsw = fresh_hnsw();
-                    }
-                }
-            }
-            let id = hnsw.len() as u64;
-            hnsw.insert(emb.clone(), job.ts_i64);
-            inserts_since_save += 1;
-            if inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
-                save_hnsw(&hnsw, &skill_dir);
-                inserts_since_save = 0;
-            }
-            store.update_embedding(job.row_id, emb, Some(id), &model_backend, &model_id, config.image_size);
-        }
-
         // ── OCR extraction (on the resized image — typically 768px) ──
+        // OCR runs first so that the "fastembed" backend can use the OCR text
+        // as the image's embedding via nomic-embed-text-v1.5.
         let t_ocr = Instant::now();
         let ocr_text = if job.run_ocr {
             if config.embed_backend == "llm-vlm" || config.ocr_engine == "llm-vlm" {
@@ -1131,10 +1075,75 @@ fn run_embed_thread(
             .ocr_us
             .store(t_ocr.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // ── OCR text embedding + backfill ──
+        // ── Embed OCR text (used for both vision and OCR HNSW in fastembed mode) ──
         let t0 = Instant::now();
+        let ocr_embedding = if !ocr_text.is_empty() {
+            ctx.embed_text(&ocr_text)
+        } else {
+            None
+        };
+
+        // ── Vision embedding ──
+        // In "fastembed" mode the image embedding IS the text embedding of
+        // its OCR content (nomic-embed-text-v1.5), so image and text queries
+        // live in the same vector space.
+        let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
+            "fastembed" => {
+                let mid = config.model_id();
+                (ocr_embedding.clone(), "fastembed".to_string(), mid)
+            }
+            "mmproj" | "llm-vlm" => {
+                let encoded = job.resized_img.as_ref().map(encoded_bytes_lazy).unwrap_or_default();
+                let result = if !encoded.is_empty() {
+                    ctx.embed_image_via_llm(&encoded)
+                } else {
+                    None
+                };
+                let backend = config.embed_backend.clone();
+                let mid = config.model_id();
+                if result.is_some() {
+                    (result, backend, mid)
+                } else {
+                    (None, String::new(), String::new())
+                }
+            }
+            _ => (None, String::new(), String::new()),
+        };
+
+        metrics
+            .vision_embed_us
+            .store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+
+        // ── Store vision embedding in HNSW ──
+        if let Some(ref emb) = embedding {
+            // If the model changed and produces a different embedding
+            // dimension, the existing HNSW is incompatible.  Reset to a fresh
+            // index so we don't panic on mismatched dimensions.
+            if !hnsw.is_empty() {
+                if let Some(dim) = hnsw.inner.dim() {
+                    if dim != emb.len() {
+                        eprintln!(
+                            "[screenshot] vision HNSW dimension mismatch (index={dim}, new={}); \
+                             resetting index — run re-embed to backfill",
+                            emb.len()
+                        );
+                        hnsw = fresh_hnsw();
+                    }
+                }
+            }
+            let id = hnsw.len() as u64;
+            hnsw.insert(emb.clone(), job.ts_i64);
+            inserts_since_save += 1;
+            if inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
+                save_hnsw(&hnsw, &skill_dir);
+                inserts_since_save = 0;
+            }
+            store.update_embedding(job.row_id, emb, Some(id), &model_backend, &model_id, config.image_size);
+        }
+
+        // ── OCR text + OCR HNSW backfill ──
         if !ocr_text.is_empty() {
-            if let Some(emb) = ctx.embed_text(&ocr_text) {
+            if let Some(ref emb) = ocr_embedding {
                 // Guard against dimension mismatch if text embedding model changed.
                 if !ocr_hnsw.is_empty() {
                     if let Some(dim) = ocr_hnsw.inner.dim() {
@@ -1155,7 +1164,7 @@ fn run_embed_thread(
                     save_ocr_hnsw(&ocr_hnsw, &skill_dir);
                     ocr_inserts_since_save = 0;
                 }
-                store.update_ocr(job.row_id, &ocr_text, Some(&emb), Some(id));
+                store.update_ocr(job.row_id, &ocr_text, Some(emb), Some(id));
             } else {
                 // Shared embedder not available — still save the OCR text
                 store.update_ocr(job.row_id, &ocr_text, None, None);
@@ -1245,26 +1254,9 @@ pub fn estimate_reembed(store: &ScreenshotStore, config: &ScreenshotConfig, skil
     let stale = store.count_stale(backend, &mid);
     let unembedded = store.count_unembedded();
 
-    // Benchmark: embed 1 sample image
-    let per_image_ms = {
-        let mut encoder = load_fastembed_image(config, skill_dir);
-        if let Some(ref mut fe) = encoder {
-            // Create a tiny test image
-            let test_img = DynamicImage::new_rgb8(config.image_size, config.image_size);
-            let mut png = Vec::new();
-            test_img
-                .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
-                .ok();
-
-            let start = Instant::now();
-            for _ in 0..3 {
-                let _ = fastembed_embed(fe, &png);
-            }
-            start.elapsed().as_millis() as u64 / 3
-        } else {
-            250 // default estimate
-        }
-    };
+    // Estimate per-image time: OCR (~200ms) + text embedding (~50ms)
+    let _ = skill_dir; // used by previous vision-encoder benchmark
+    let per_image_ms = 250u64;
 
     let total_to_embed = stale + unembedded;
     let eta_secs = (total_to_embed as u64 * per_image_ms) / 1000;
@@ -1288,9 +1280,11 @@ pub fn rebuild_embeddings(
     let backend = &config.embed_backend;
     let mid = config.model_id();
 
-    let mut encoder = load_fastembed_image(config, skill_dir);
     let rows = store.rows_needing_embed(backend, &mid);
     let total = rows.len();
+
+    // Load OCR engine for re-extracting text from images
+    let ocr_engine = load_ocr_engine(skill_dir);
 
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
     let start = Instant::now();
@@ -1304,22 +1298,32 @@ pub fn rebuild_embeddings(
             continue;
         }
 
-        // Read + resize
-        let Ok(raw) = std::fs::read(&webp_path) else {
-            skipped += 1;
-            continue;
-        };
-        let Some((resized, _, _)) = resize_fit_pad(&raw, config.image_size) else {
+        // Try existing OCR text first, otherwise run OCR
+        let existing_ocr = store
+            .get_embedding_and_ocr(row.id)
+            .map(|e| e.ocr_text)
+            .unwrap_or_default();
+
+        let ocr_text = if !existing_ocr.is_empty() {
+            existing_ocr
+        } else if let Some(ref engine) = ocr_engine {
+            let Ok(raw) = std::fs::read(&webp_path) else {
+                skipped += 1;
+                continue;
+            };
+            run_ocr(engine, &raw).unwrap_or_default()
+        } else {
             skipped += 1;
             continue;
         };
 
-        // Embed
-        let emb = if let Some(ref mut fe) = encoder {
-            fastembed_embed(fe, &resized)
-        } else {
-            None
-        };
+        if ocr_text.is_empty() {
+            skipped += 1;
+            continue;
+        }
+
+        // Embed OCR text via shared text embedder
+        let emb = ctx.embed_text(&ocr_text);
 
         if let Some(emb) = emb {
             store.update_embedding(row.id, &emb, None, backend, &mid, config.image_size);

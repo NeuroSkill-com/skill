@@ -519,7 +519,7 @@ pub fn default_daily_goal_min() -> u32 {
     60
 }
 pub fn default_embedding_model() -> String {
-    "Xenova/bge-small-en-v1.5".into()
+    "nomic-ai/nomic-embed-text-v1.5".into()
 }
 pub fn default_overlap_secs() -> f32 {
     EMBEDDING_OVERLAP_SECS

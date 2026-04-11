@@ -26,7 +26,7 @@ pub fn default_screenshot_embed_backend() -> String {
     "fastembed".into()
 }
 pub fn default_screenshot_fastembed_model() -> String {
-    "clip-vit-b-32".into()
+    "nomic-embed-vision-v1.5".into()
 }
 pub fn default_screenshot_ocr_enabled() -> bool {
     true
@@ -162,7 +162,7 @@ impl ScreenshotConfig {
         match self.embed_backend.as_str() {
             "fastembed" => match self.fastembed_model.as_str() {
                 "clip-vit-b-32" => "Qdrant/clip-ViT-B-32-vision".into(),
-                "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-vision-v1.5".into(),
+                "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-text-v1.5".into(),
                 other => other.into(),
             },
             "mmproj" => "mmproj".into(),

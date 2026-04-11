@@ -67,12 +67,17 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
 
         // Battery/signal warnings now run daemon-side (monitor.rs).
         // This loop only syncs daemon status into local Tauri state for the UI.
+        // Watchdog: if the daemon is unreachable for several consecutive ticks,
+        // attempt to restart it so the app doesn't stay in a degraded state.
+        let mut consecutive_failures: u32 = 0;
+        const WATCHDOG_THRESHOLD: u32 = 3;
         loop {
             let poll_result = tokio::task::spawn_blocking(crate::daemon_cmds::fetch_daemon_status)
                 .await
                 .unwrap_or_else(|e| Err(e.to_string()));
             match poll_result {
                 Ok(daemon_status) => {
+                    consecutive_failures = 0;
                     let changed = {
                         let r = app.state::<Mutex<Box<AppState>>>();
                         let s = r.lock_or_recover();
@@ -99,7 +104,18 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
                         emit_status_from_daemon(&app);
                     }
                 }
-                Err(_) => { /* daemon unreachable — skip this tick */ }
+                Err(_) => {
+                    consecutive_failures += 1;
+                    if consecutive_failures == WATCHDOG_THRESHOLD {
+                        eprintln!(
+                            "[watchdog] daemon unreachable for {WATCHDOG_THRESHOLD} consecutive polls — restarting"
+                        );
+                        let _ = tokio::task::spawn_blocking(|| {
+                            crate::daemon_cmds::ensure_daemon_running();
+                        })
+                        .await;
+                    }
+                }
             }
             let delay = {
                 let r = app.state::<Mutex<Box<AppState>>>();

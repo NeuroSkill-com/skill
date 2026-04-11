@@ -75,6 +75,7 @@ pub(crate) struct Pipeline {
 }
 
 impl Pipeline {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn open(
         skill_dir: &Path,
         eeg_channels: usize,
@@ -83,6 +84,7 @@ impl Pipeline {
         device_name: String,
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
+        text_embedder: crate::text_embedder::SharedTextEmbedder,
     ) -> anyhow::Result<Self> {
         let day_dir = utc_date_dir(skill_dir);
         let start_utc = unix_secs();
@@ -128,7 +130,8 @@ impl Pipeline {
         let (embed_worker_opt, acc) = if skip_embed {
             (None, None)
         } else {
-            let worker = EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks);
+            let worker =
+                EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks, text_embedder);
             let mut acc = EpochAccumulator::new(
                 worker.tx.clone(),
                 eeg_channels,
@@ -346,6 +349,7 @@ mod tests {
             "TestMuse".into(),
             tx,
             Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
         );
         assert!(result.is_ok());
         let pipe = result.unwrap();
@@ -374,6 +378,7 @@ mod tests {
             "TestDevice".into(),
             tx,
             Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
         )
         .unwrap();
 
@@ -402,6 +407,7 @@ mod tests {
             "TestDevice".into(),
             tx,
             Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
         )
         .unwrap();
 
@@ -440,6 +446,7 @@ mod tests {
             "Test".into(),
             tx,
             Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
         )
         .unwrap();
 

@@ -17,6 +17,7 @@ mod service_installer;
 pub(crate) mod session;
 pub(crate) mod session_runner;
 mod state;
+pub(crate) mod text_embedder;
 mod tracker;
 pub(crate) mod util;
 

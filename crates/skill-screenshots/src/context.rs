@@ -34,7 +34,7 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     fn embed_image_via_llm(&self, png_bytes: &[u8]) -> Option<Vec<f32>>;
 
     /// Embed a short text string using the app-wide shared text embedder
-    /// (typically `bge-small-en-v1.5`).  Used for OCR text embeddings so the
+    /// (typically `nomic-embed-text-v1.5`).  Used for OCR text embeddings so the
     /// screenshot crate can reuse the same model instance as labels / hooks
     /// instead of loading a separate ~130 MB copy.
     ///

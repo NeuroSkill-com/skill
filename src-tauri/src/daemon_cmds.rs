@@ -22,6 +22,15 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+
+/// Return a ureq agent with a 5 s global timeout so that no HTTP call to the
+/// daemon can block the Tauri setup thread indefinitely.
+fn daemon_http_agent() -> ureq::Agent {
+    ureq::config::Config::builder()
+        .timeout_global(Some(Duration::from_secs(5)))
+        .build()
+        .new_agent()
+}
 #[derive(Debug, Clone, Serialize)]
 pub struct DaemonStatus {
     pub base_url: String,
@@ -184,7 +193,11 @@ fn update_daemon_rollback_snapshot_best_effort() {
     if let (Ok(src_meta), Ok(dst_meta)) =
         (std::fs::metadata(&src_path), std::fs::metadata(&dst_path))
     {
-        if src_meta.len() == dst_meta.len() {
+        // Skip copy when the source binary hasn't changed (same size AND same mtime).
+        let same_size = src_meta.len() == dst_meta.len();
+        let same_mtime =
+            src_meta.modified().ok() == dst_meta.modified().ok() && src_meta.modified().is_ok();
+        if same_size && same_mtime {
             return;
         }
     }
@@ -213,8 +226,23 @@ pub(crate) fn ensure_daemon_running() {
 
     // Quick health check — if the daemon is already up, nothing to do.
     if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
-        eprintln!("[daemon] already running at {base_url}");
-        return;
+        // Verify it is actually our daemon by trying a fast HTTP probe.
+        // If the port is held by a stale process or something unrelated,
+        // kill the occupant so we can spawn a fresh daemon.
+        let probe_ok = load_daemon_token()
+            .and_then(|tok| fetch_version(&base_url, &tok))
+            .is_ok();
+        if probe_ok {
+            eprintln!("[daemon] already running at {base_url}");
+            return;
+        }
+        eprintln!(
+            "[daemon] port {} is occupied but daemon is unresponsive — killing occupant",
+            addr.port()
+        );
+        kill_port_occupant(addr.port());
+        // Give the OS a moment to release the port.
+        std::thread::sleep(Duration::from_millis(500));
     }
 
     // The daemon may have been spawned by tauri-build.js moments ago but not
@@ -899,7 +927,8 @@ fn fetch_json_with_auth<T: serde::de::DeserializeOwned>(
 ) -> Result<T, String> {
     let url = format!("{base_url}{path}");
 
-    let mut response = ureq::get(&url)
+    let mut response = daemon_http_agent()
+        .get(&url)
         .header("Authorization", &format!("Bearer {token}"))
         .call()
         .map_err(|err| err.to_string())?;
@@ -956,7 +985,8 @@ pub(crate) fn push_event_to_daemon(event_type: &str, payload: &impl serde::Seria
         return;
     };
     // Fire-and-forget push via POST to a daemon events endpoint.
-    let _ = ureq::post(&format!("{base_url}/v1/events/push"))
+    let _ = daemon_http_agent()
+        .post(&format!("{base_url}/v1/events/push"))
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
         .send(body.as_str());
@@ -993,7 +1023,8 @@ fn post_json_with_auth<T: Serialize>(
     let url = format!("{base_url}{path}");
     let payload = serde_json::to_string(body).map_err(|err| err.to_string())?;
 
-    ureq::post(&url)
+    daemon_http_agent()
+        .post(&url)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
         .send(payload.as_str())
@@ -1011,7 +1042,8 @@ fn post_json_with_auth_response<TReq: Serialize, TResp: serde::de::DeserializeOw
     let url = format!("{base_url}{path}");
     let payload = serde_json::to_string(body).map_err(|err| err.to_string())?;
 
-    let mut response = ureq::post(&url)
+    let mut response = daemon_http_agent()
+        .post(&url)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
         .send(payload.as_str())
@@ -1034,7 +1066,8 @@ fn daemon_required_env() -> bool {
 
 pub(crate) fn install_daemon_service() -> Result<serde_json::Value, String> {
     let base_url = daemon_base_url();
-    let mut resp = ureq::post(&format!("{base_url}/service/install"))
+    let mut resp = daemon_http_agent()
+        .post(&format!("{base_url}/service/install"))
         .send("")
         .map_err(|e| e.to_string())?;
     resp.body_mut()
@@ -1044,7 +1077,8 @@ pub(crate) fn install_daemon_service() -> Result<serde_json::Value, String> {
 
 pub(crate) fn uninstall_daemon_service() -> Result<serde_json::Value, String> {
     let base_url = daemon_base_url();
-    let mut resp = ureq::post(&format!("{base_url}/service/uninstall"))
+    let mut resp = daemon_http_agent()
+        .post(&format!("{base_url}/service/uninstall"))
         .send("")
         .map_err(|e| e.to_string())?;
     resp.body_mut()
@@ -1054,7 +1088,8 @@ pub(crate) fn uninstall_daemon_service() -> Result<serde_json::Value, String> {
 
 pub(crate) fn daemon_service_status() -> Result<serde_json::Value, String> {
     let base_url = daemon_base_url();
-    let mut resp = ureq::get(&format!("{base_url}/service/status"))
+    let mut resp = daemon_http_agent()
+        .get(&format!("{base_url}/service/status"))
         .call()
         .map_err(|e| e.to_string())?;
     resp.body_mut()
@@ -1077,7 +1112,52 @@ fn wait_for_protocol_compatibility(timeout: Duration) -> Result<bool, String> {
     Err(last_err.unwrap_or_else(|| "timed out waiting for daemon version".to_string()))
 }
 
+/// Kill whatever process is listening on `port` (best-effort).
+/// Uses `lsof` on macOS/Linux and `netstat` on Windows to find the PID.
+fn kill_port_occupant(port: u16) {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        if let Ok(output) = std::process::Command::new("lsof")
+            .args(["-t", "-i", &format!("tcp:{port}")])
+            .output()
+        {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            for pid in pids.split_whitespace() {
+                eprintln!("[daemon] killing PID {pid} occupying port {port}");
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", pid])
+                    .output();
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let needle = format!(":{port}");
+            for line in text.lines() {
+                if line.contains(&needle) && line.contains("LISTENING") {
+                    if let Some(pid) = line.split_whitespace().last() {
+                        eprintln!("[daemon] killing PID {pid} occupying port {port}");
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/PID", pid, "/F"])
+                            .output();
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn restart_daemon_process_best_effort() {
+    // Unload the OS-level keep-alive service first, otherwise launchd /
+    // systemd will immediately respawn the daemon after we kill it.
+    unload_daemon_service_best_effort();
+
     #[cfg(target_os = "windows")]
     {
         let _ = std::process::Command::new("taskkill")
@@ -1089,6 +1169,40 @@ fn restart_daemon_process_best_effort() {
     {
         let _ = std::process::Command::new("pkill")
             .args(["-f", "skill-daemon"])
+            .output();
+    }
+
+    // Belt-and-suspenders: also kill by port in case the process name
+    // doesn't match (e.g. renamed binary, wrapper script).
+    let port: u16 = std::env::var("SKILL_DAEMON_ADDR")
+        .ok()
+        .and_then(|a| a.parse::<std::net::SocketAddr>().ok())
+        .map(|a| a.port())
+        .unwrap_or(18444);
+    kill_port_occupant(port);
+}
+
+/// Unload the daemon's OS-level keep-alive service so that killing the
+/// process doesn't cause an immediate respawn.  User-space only — no root.
+fn unload_daemon_service_best_effort() {
+    #[cfg(target_os = "macos")]
+    {
+        let plist = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("Library/LaunchAgents/com.skill.daemon.plist");
+        if plist.exists() {
+            eprintln!("[daemon] unloading LaunchAgent before kill");
+            let _ = std::process::Command::new("launchctl")
+                .args(["unload", "-w"])
+                .arg(&plist)
+                .output();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("systemctl")
+            .args(["--user", "stop", "skill-daemon.service"])
             .output();
     }
 }
@@ -1124,7 +1238,26 @@ pub(crate) fn ensure_daemon_runtime_ready() {
             }
         }
         Err(e) => {
-            eprintln!("[daemon] protocol check unavailable: {e}");
+            eprintln!("[daemon] protocol check unavailable: {e} — attempting recovery restart");
+            // Token file may not exist yet (fresh install over a running old
+            // daemon).  Kill the occupant, spawn the new binary, and re-check.
+            restart_daemon_process_best_effort();
+            std::thread::sleep(Duration::from_millis(300));
+            ensure_daemon_running();
+            match wait_for_protocol_compatibility(Duration::from_secs(5)) {
+                Ok(true) => {
+                    compatible = true;
+                    eprintln!("[daemon] protocol compatibility restored after error-path restart");
+                }
+                Ok(false) => {
+                    eprintln!(
+                        "[daemon] protocol mismatch after error-path restart — will try rollback"
+                    );
+                }
+                Err(e2) => {
+                    eprintln!("[daemon] protocol still unavailable after restart: {e2} — will try rollback");
+                }
+            }
         }
     }
 

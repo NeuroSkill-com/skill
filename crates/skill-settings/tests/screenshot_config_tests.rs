@@ -112,7 +112,7 @@ fn multiplier_at_max() {
 #[test]
 fn model_id_fastembed_default() {
     let cfg = ScreenshotConfig::default();
-    assert!(cfg.model_id().contains("clip"));
+    assert!(cfg.model_id().contains("nomic"));
 }
 
 #[test]

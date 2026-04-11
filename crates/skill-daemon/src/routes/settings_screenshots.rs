@@ -45,6 +45,7 @@ fn now_unix_ms() -> u64 {
 pub(crate) struct DaemonScreenshotContext {
     pub(crate) config: skill_settings::ScreenshotConfig,
     pub(crate) events_tx: tokio::sync::broadcast::Sender<skill_daemon_common::EventEnvelope>,
+    pub(crate) text_embedder: crate::text_embedder::SharedTextEmbedder,
 }
 
 impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
@@ -67,6 +68,9 @@ impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
     }
     fn embed_image_via_llm(&self, _png_bytes: &[u8]) -> Option<Vec<f32>> {
         None
+    }
+    fn embed_text(&self, text: &str) -> Option<Vec<f32>> {
+        self.text_embedder.embed(text)
     }
 }
 
@@ -127,11 +131,13 @@ pub(crate) async fn rebuild_screenshot_embeddings(
     let settings = load_user_settings(&state);
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let events_tx = state.events_tx.clone();
+    let embedder = state.text_embedder.clone();
     let out = tokio::task::spawn_blocking(move || {
         let store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)?;
         let ctx = DaemonScreenshotContext {
             config: settings.screenshot.clone(),
             events_tx,
+            text_embedder: embedder,
         };
         Some(skill_screenshots::capture::rebuild_embeddings(
             &store,
@@ -277,7 +283,7 @@ pub(crate) async fn search_screenshots_by_text(
     Json(req): Json<ScreenshotTextSearchRequest>,
 ) -> Json<Vec<skill_data::screenshot_store::ScreenshotResult>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let settings = load_user_settings(&state);
+    let embedder = state.text_embedder.clone();
     let out = tokio::task::spawn_blocking(move || {
         let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
             return vec![];
@@ -288,44 +294,33 @@ pub(crate) async fn search_screenshots_by_text(
             return skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
         }
 
-        let cache_dir = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".cache")
-            .join("fastembed");
-        let te = match fastembed::TextEmbedding::try_new(
-            fastembed::TextInitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
-                .with_cache_dir(cache_dir)
-                .with_show_download_progress(false),
+        let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed(text) };
+
+        // Try semantic search (text query → image embedding HNSW)
+        let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
+        let mut results = if let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
+            &hnsw_path,
+            fast_hnsw::distance::Cosine,
         ) {
-            Ok(te) => std::sync::Mutex::new(te),
-            Err(_) => {
-                return skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
-            }
-        };
-
-        let embed_fn = |text: &str| -> Option<Vec<f32>> {
-            let mut guard = te.lock().ok()?;
-            let mut vecs = guard.embed(vec![text], None).ok()?;
-            if vecs.is_empty() {
-                None
+            if let Some(query_vec) = embed_fn(&req.query) {
+                skill_screenshots::capture::search_by_vector(&hnsw, &store, &query_vec, k)
             } else {
-                Some(vecs.remove(0))
+                vec![]
             }
+        } else {
+            vec![]
         };
 
-        let mut results =
-            skill_screenshots::capture::search_by_ocr_text_embedding(&skill_dir, &store, &req.query, k, &embed_fn);
+        // Fall back to OCR text embedding search
+        if results.is_empty() {
+            results =
+                skill_screenshots::capture::search_by_ocr_text_embedding(&skill_dir, &store, &req.query, k, &embed_fn);
+        }
 
         if results.is_empty() {
             results = skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
         }
 
-        if settings.text_embedding_model != "Xenova/bge-small-en-v1.5" {
-            eprintln!(
-                "[screenshot-search] semantic mode currently uses BGESmallENV15; requested model={} ",
-                settings.text_embedding_model
-            );
-        }
         results
     })
     .await
@@ -411,9 +406,9 @@ mod tests {
         let ctx = DaemonScreenshotContext {
             config: skill_settings::ScreenshotConfig::default(),
             events_tx: tx,
+            text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
         };
         let _cfg = ctx.config();
-        // interval_secs is always non-negative (unsigned type)
     }
 
     #[test]
@@ -423,6 +418,7 @@ mod tests {
         let ctx = DaemonScreenshotContext {
             config: skill_settings::ScreenshotConfig::default(),
             events_tx: tx,
+            text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
         };
         assert!(!ctx.is_session_active());
     }

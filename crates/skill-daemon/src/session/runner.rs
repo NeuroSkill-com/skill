@@ -91,6 +91,7 @@ pub(crate) async fn run_adapter_session(
                             info.name.clone(),
                             state.events_tx.clone(),
                             hooks.clone(),
+                            state.text_embedder.clone(),
                         ) {
                             Ok(mut p) => {
                                 // Capture device identity and channel metadata.
