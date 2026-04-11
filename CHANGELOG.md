@@ -8,6 +8,55 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.110] — 2026-04-11
+
+### Features
+
+- feat: add CPU backend support to skill-router for CI coverage
+- Add a new  feature to skill-router that uses CPU-based UMAP
+- Changes:
+- The GPU backend remains the default for normal builds, while the
+- fix: disable all GPU-dependent features in coverage workflow
+- The coverage CI was still failing because the embedding features
+- Solution: Disable all embedding features in the coverage workflow
+- The embedding functionality will still be tested in local
+- fix: add llm-native feature and use it in coverage workflow
+- The coverage CI was failing because  is not a valid
+- Solution:
+- This ensures that llama-cpp-4 is statically linked in the coverage
+- fix: add native feature to llm in coverage workflow
+- The coverage CI was failing because it couldn't find libllama.so.0.
+- Solution: Change  to  in the coverage workflow's
+- This matches the Cargo.toml configuration where we added the native
+- fix: remove aggressive -static flag from macOS config
+- The -static flag in the macOS cargo config was causing issues and
+- Instead, we rely on:
+- This change ensures that:
+- Verified that skill-daemon runs without libllama.0.dylib present.
+- chore: enable static linking for llama-cpp-4
+- Add the  feature to llama-cpp-4 dependencies to enable static
+- This change:
+- Static linking improves:
+- The binary size will increase, but this is acceptable for a desktop
+- chore: update llama-cpp-4 to 0.2.43
+- Update llama-cpp-4 dependency from version 0.2.42 to 0.2.43.
+- This brings in the latest improvements and bug fixes from the
+- The update is applied to all feature variants (ggml, metal, vulkan).
+- fix: disable GPU features in coverage CI
+- The coverage CI was failing because tests that use GPU acceleration
+- Solution: Run coverage tests with CPU-only features by:
+- This allows the coverage workflow to complete successfully while still
+- revert: remove CI checks from tests
+- The previous approach of checking CI environment inside tests didn't work
+- This commit reverts the CI checks and we'll try a different approach
+- fix: use CPU-only backend in CI tests
+- The coverage CI was still failing because even though we added CI checks,
+- Solution: Modify test_state() to use the LUNA CPU-only backend instead of
+- LUNA is a topology-agnostic encoder that runs entirely on CPU, making it
+- fix: skip GPU tests in CI environment
+- Solution: Add a check for the CI environment variable at the beginning
+- Tests affected:
+
 ## [0.0.109] — 2026-04-10
 
 ### Features
