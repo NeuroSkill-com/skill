@@ -27,5 +27,12 @@ if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/.*\.ts$'; then
   npm run -s check:i18n:locales || exit 1
 fi
 
+# Run cargo fmt on staged Rust files
+if echo "$STAGED_FILES" | grep -q '\.rs$'; then
+  echo "🦀 Running cargo fmt…"
+  cargo fmt
+  git add $( echo "$STAGED_FILES" | grep '\.rs$' )
+fi
+
 echo "✅ Pre-commit checks passed (basic validation only)."
 echo "   Full checks will run on git push."
