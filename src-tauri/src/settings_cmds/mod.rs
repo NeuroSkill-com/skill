@@ -60,14 +60,8 @@ pub fn set_log_config(
     let config_path = s.skill_dir.join(LOG_CONFIG_FILE);
     // Propagate TTS, LLM, and tool logging flags to their crate-level runtime atomics.
     crate::tts::set_logging(config.tts);
-    // LLM/tool logging flags are no-ops when the llm feature is off —
-    // the log callbacks are simply never registered.  Keep the calls
-    // unconditional so the settings UI works regardless.
-    #[cfg(feature = "llm")]
-    {
-        crate::llm::set_llm_logging(config.llm || config.chat_store);
-        crate::llm::set_tool_logging(config.tools);
-    }
+    crate::llm::set_llm_logging(config.llm || config.chat_store);
+    crate::llm::set_tool_logging(config.tools);
     s.logger.set_config(config, &config_path);
 }
 

@@ -59,7 +59,6 @@ static LAST_STRUCTURE_KEY: Mutex<String> = Mutex::new(String::new());
 /// for in-place item updates without `TrayIcon::menu()` (which doesn't exist).
 static CURRENT_MENU: Mutex<Option<Menu<tauri::Wry>>> = Mutex::new(None);
 
-#[cfg(feature = "llm")]
 #[derive(Clone)]
 struct TrayDownloadItem {
     filename: String,
@@ -67,7 +66,6 @@ struct TrayDownloadItem {
     status_msg: Option<String>,
 }
 
-#[cfg(feature = "llm")]
 #[derive(serde::Deserialize)]
 struct DaemonDownloadItem {
     filename: String,
@@ -76,7 +74,6 @@ struct DaemonDownloadItem {
     status_msg: Option<String>,
 }
 
-#[cfg(feature = "llm")]
 fn tray_download_items(_app: &AppHandle) -> Vec<TrayDownloadItem> {
     let raw = crate::daemon_cmds::llm_get_downloads().unwrap_or_default();
     let mut items = raw
@@ -93,7 +90,6 @@ fn tray_download_items(_app: &AppHandle) -> Vec<TrayDownloadItem> {
     items
 }
 
-#[cfg(feature = "llm")]
 fn tray_download_fingerprint(app: &AppHandle) -> String {
     let items = tray_download_items(app);
     items
@@ -110,7 +106,6 @@ fn tray_download_fingerprint(app: &AppHandle) -> String {
         .join(",")
 }
 
-#[cfg(feature = "llm")]
 fn tray_download_icon_progress(app: &AppHandle) -> Option<(usize, f32)> {
     let items = tray_download_items(app);
     if items.is_empty() {
@@ -119,16 +114,6 @@ fn tray_download_icon_progress(app: &AppHandle) -> Option<(usize, f32)> {
 
     let avg = items.iter().map(|item| item.progress).sum::<f32>() / items.len() as f32;
     Some((items.len(), avg))
-}
-
-#[cfg(not(feature = "llm"))]
-fn tray_download_fingerprint(_app: &AppHandle) -> String {
-    String::new()
-}
-
-#[cfg(not(feature = "llm"))]
-fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
-    None
 }
 
 /// Structural key — things that change the number / identity of menu items.
@@ -145,10 +130,7 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let api = g.shortcuts.api_shortcut.clone();
     let ts = g.shortcuts.theme_shortcut.clone();
     let ft = g.shortcuts.focus_timer_shortcut.clone();
-    #[cfg(feature = "llm")]
     let chat = g.shortcuts.chat_shortcut.clone();
-    #[cfg(not(feature = "llm"))]
-    let chat = String::new();
     drop(g);
 
     let llm_downloads = tray_download_fingerprint(app);
@@ -264,7 +246,6 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
             g.shortcuts.focus_timer_shortcut.clone(),
         )
     };
-    #[cfg(feature = "llm")]
     let chat_shortcut = {
         let r = app.app_state();
         let s = r.lock_or_recover().shortcuts.chat_shortcut.clone();
@@ -397,7 +378,6 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         }
     }
 
-    #[cfg(feature = "llm")]
     {
         let downloads = tray_download_items(app);
         if !downloads.is_empty() {
@@ -535,7 +515,6 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         true,
         None::<&str>,
     )?)?;
-    #[cfg(feature = "llm")]
     {
         menu.append(&MenuItem::with_id(
             app,

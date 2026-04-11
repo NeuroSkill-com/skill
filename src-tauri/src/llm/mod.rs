@@ -21,30 +21,19 @@ pub use skill_llm::chat_store;
 #[allow(unused_imports)]
 pub use skill_llm::tools;
 
-#[cfg(feature = "llm")]
-#[allow(unused_imports)]
-pub use skill_llm::engine;
-
 // Re-export commonly used types at this module level so `crate::llm::Foo` works.
 #[allow(unused_imports)]
 pub use skill_llm::{LlmConfig, LlmToolConfig, ToolExecutionMode};
 #[allow(unused_imports)]
 pub use skill_llm::{LlmEventEmitter, NoopEmitter};
 
-#[cfg(feature = "llm")]
-#[allow(unused_imports)]
-pub use skill_llm::{
-    cell_status, extract_images_from_messages, init, new_log_buffer, new_state_cell, push_log,
-    router, run_chat_with_builtin_tools, shutdown_cell, AfterToolCallFn, BeforeToolCallFn,
-    GenParams, InferRequest, InferToken, LlmLogBuffer, LlmLogEntry, LlmLogFile, LlmServerState,
-    LlmStateCell, LlmStatus, ToolEvent,
-};
-
 // ── Lightweight types for daemon-proxy commands (no engine dependency) ───────
+//
+// LLM inference runs exclusively in skill-daemon.  The Tauri binary is a thin
+// UI client and never links llama-cpp-4.  These types exist so the proxy
+// commands compile without the engine crate.
 
 /// LLM server status — mirrors the daemon's status strings.
-/// Defined here so Tauri commands work without the `llm` engine feature.
-#[cfg(not(feature = "llm"))]
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LlmStatus {
@@ -53,13 +42,11 @@ pub enum LlmStatus {
     Stopped,
 }
 
-/// Stub log buffer type when the engine is not compiled in.
-#[cfg(not(feature = "llm"))]
+/// Log buffer type for LLM log entries.
 pub type LlmLogBuffer =
     std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<serde_json::Value>>>;
 
-/// Create an empty log buffer stub.
-#[cfg(not(feature = "llm"))]
+/// Create an empty log buffer.
 pub fn new_log_buffer() -> LlmLogBuffer {
     std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()))
 }

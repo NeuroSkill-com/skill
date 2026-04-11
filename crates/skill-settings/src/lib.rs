@@ -551,7 +551,6 @@ pub fn default_theme_shortcut() -> String {
 pub fn default_focus_timer_shortcut() -> String {
     "CmdOrCtrl+Shift+P".into()
 }
-#[cfg(feature = "llm")]
 pub fn default_chat_shortcut() -> String {
     "CmdOrCtrl+Shift+I".into()
 }
@@ -655,7 +654,6 @@ pub struct UserSettings {
     pub theme_shortcut: String,
     #[serde(default = "default_focus_timer_shortcut")]
     pub focus_timer_shortcut: String,
-    #[cfg(feature = "llm")]
     #[serde(default = "default_chat_shortcut")]
     pub chat_shortcut: String,
     /// Legacy two-action config — read once to migrate; never written back.
@@ -933,7 +931,6 @@ impl Default for UserSettings {
             api_shortcut: default_api_shortcut(),
             theme_shortcut: default_theme_shortcut(),
             focus_timer_shortcut: default_focus_timer_shortcut(),
-            #[cfg(feature = "llm")]
             chat_shortcut: default_chat_shortcut(),
             calibration: CalibrationConfig::default(),
             calibration_profiles: Vec::new(),

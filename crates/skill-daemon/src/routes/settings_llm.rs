@@ -19,6 +19,10 @@ pub(crate) async fn set_llm_config(
     State(state): State<AppState>,
     Json(config): Json<skill_settings::LlmConfig>,
 ) -> Json<serde_json::Value> {
+    // Detect whether n_gpu_layers changed (requires server restart).
+    #[cfg(feature = "llm")]
+    let prev_gpu_layers = state.llm_config.lock().map(|g| g.n_gpu_layers).unwrap_or(0);
+
     let mut settings = load_user_settings(&state);
     settings.llm = config.clone();
     save_user_settings(&state, &settings);
@@ -29,17 +33,32 @@ pub(crate) async fn set_llm_config(
             *cfg = config.clone();
         }
 
-        if let Ok(guard) = state.llm_state_cell.lock() {
-            if let Some(server) = guard.clone() {
-                let prev_port = server.allowed_tools.lock().map(|t| t.skill_api_port).unwrap_or(18445);
-                let mut new_tools = config.tools.clone();
-                new_tools.skill_api_port = prev_port;
-                if !settings.location_enabled {
-                    new_tools.location = false;
+        let is_running = state.llm_state_cell.lock().ok().and_then(|g| g.clone()).is_some();
+
+        if is_running {
+            // Hot-patch allowed tools on the running server.
+            if let Ok(guard) = state.llm_state_cell.lock() {
+                if let Some(server) = guard.clone() {
+                    let prev_port = server.allowed_tools.lock().map(|t| t.skill_api_port).unwrap_or(18445);
+                    let mut new_tools = config.tools.clone();
+                    new_tools.skill_api_port = prev_port;
+                    if !settings.location_enabled {
+                        new_tools.location = false;
+                    }
+                    if let Ok(mut tools) = server.allowed_tools.lock() {
+                        *tools = new_tools;
+                    }
                 }
-                if let Ok(mut tools) = server.allowed_tools.lock() {
-                    *tools = new_tools;
+            }
+
+            // If n_gpu_layers changed, the model must be reloaded.
+            if config.n_gpu_layers != prev_gpu_layers {
+                skill_llm::shutdown_cell(&state.llm_state_cell);
+                if let Ok(mut st) = state.llm_status.lock() {
+                    *st = "stopped".to_string();
                 }
+                state.broadcast("llm:status", serde_json::json!({"status": "loading"}));
+                let _ = super::settings_llm_runtime::llm_server_start_impl(State(state.clone())).await;
             }
         }
     }
@@ -68,7 +87,31 @@ pub(crate) async fn set_inference_device(
         settings.llm.n_gpu_layers = settings.llm_gpu_layers_saved;
     }
     let out = settings.inference_device.clone();
+
+    // Sync to in-memory llm_config so the next server start picks it up.
+    #[cfg(feature = "llm")]
+    if let Ok(mut cfg) = state.llm_config.lock() {
+        cfg.n_gpu_layers = settings.llm.n_gpu_layers;
+    }
+
     save_user_settings(&state, &settings);
+
+    // If the LLM server is already running, restart it so the device
+    // change takes effect immediately.
+    #[cfg(feature = "llm")]
+    {
+        let is_running = state.llm_state_cell.lock().ok().and_then(|g| g.clone()).is_some();
+        if is_running {
+            // Shut down without persisting enabled=false (this is a restart,
+            // not a user-initiated stop).
+            skill_llm::shutdown_cell(&state.llm_state_cell);
+            if let Ok(mut st) = state.llm_status.lock() {
+                *st = "stopped".to_string();
+            }
+            let _ = super::settings_llm_runtime::llm_server_start_impl(State(state.clone())).await;
+        }
+    }
+
     Json(serde_json::json!({"ok": true, "value": out}))
 }
 

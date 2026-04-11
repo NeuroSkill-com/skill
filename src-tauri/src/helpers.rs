@@ -250,10 +250,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     data.api_shortcut = s.shortcuts.api_shortcut.clone();
     data.theme_shortcut = s.shortcuts.theme_shortcut.clone();
     data.focus_timer_shortcut = s.shortcuts.focus_timer_shortcut.clone();
-    #[cfg(feature = "llm")]
-    {
-        data.chat_shortcut = s.shortcuts.chat_shortcut.clone();
-    }
+    data.chat_shortcut = s.shortcuts.chat_shortcut.clone();
 
     // Calibration
     data.calibration_profiles = s.calibration_profiles.clone();

@@ -46,7 +46,7 @@ async function closeWindow() {
 function effectiveTimestamp(): number {
   if (useCustomTime && customDatetime) {
     const d = new Date(customDatetime);
-    if (!isNaN(d.getTime())) return Math.floor(d.getTime() / 1000);
+    if (!Number.isNaN(d.getTime())) return Math.floor(d.getTime() / 1000);
   }
   return labelStartUtc;
 }
@@ -70,7 +70,8 @@ async function submit() {
 
 async function loadRecentLabels() {
   try {
-    recentLabels = await daemonInvoke<string[]>("get_recent_labels", { limit: 12 });
+    const raw = await daemonInvoke<(string | { text: string })[]>("get_recent_labels", { limit: 12 });
+    recentLabels = raw.map((l) => (typeof l === "string" ? l : l.text));
   } catch {
     recentLabels = [];
   }
@@ -155,7 +156,7 @@ onMount(() => {
   const tsParam = params.get("ts");
   if (tsParam) {
     const ts = parseInt(tsParam, 10);
-    if (!isNaN(ts) && ts > 0) {
+    if (!Number.isNaN(ts) && ts > 0) {
       useCustomTime = true;
       const d = new Date(ts * 1000);
       // Format as local datetime-local input value

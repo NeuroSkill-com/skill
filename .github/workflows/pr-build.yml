@@ -234,9 +234,9 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Install protoc + OpenMP runtime + GNU ar (macOS)
+      - name: Install protoc + GNU ar (macOS)
         run: |
-          brew install protobuf libomp binutils
+          brew install protobuf binutils
           # Use GNU ar to suppress "illegal option -- D" warnings from Apple's system ar
           echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
 

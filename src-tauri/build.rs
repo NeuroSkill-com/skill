@@ -14,7 +14,6 @@ fn main() {
     let t_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if t_os == "macos" {
         println!("cargo:rustc-link-arg-bins=-Wl,-stack_size,0x2000000");
-        link_openmp_runtime_macos();
     } else if t_os == "linux" {
         println!("cargo:rustc-link-arg-bins=-Wl,-z,stacksize=33554432");
     }
@@ -108,28 +107,6 @@ fn setup_vulkan_sdk_windows() {
     }
 
     let _ = std::fs::remove_file(&installer_path);
-}
-
-fn link_openmp_runtime_macos() {
-    // llama-cpp / ggml may enable OpenMP internally depending on feature
-    // combinations across transitive deps (e.g., NeuTTS backbone).  Ensure
-    // libomp is available at link time when present on the system.
-    let candidates = ["/opt/homebrew/opt/libomp/lib", "/usr/local/opt/libomp/lib"];
-    for dir in candidates {
-        let dylib = std::path::Path::new(dir).join("libomp.dylib");
-        let staticlib = std::path::Path::new(dir).join("libomp.a");
-        if dylib.exists() || staticlib.exists() {
-            println!("cargo:rustc-link-search={}", dir);
-            println!("cargo:rustc-link-lib=omp");
-            println!("cargo:warning=linking libomp from {}", dir);
-            return;
-        }
-    }
-
-    println!(
-        "cargo:warning=libomp not found in Homebrew default paths; \
-         if link fails with ___kmpc_* symbols, run: brew install libomp"
-    );
 }
 
 #[cfg(target_os = "linux")]

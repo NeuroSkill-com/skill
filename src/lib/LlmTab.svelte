@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
@@ -135,6 +136,7 @@ let config = $state<LlmConfig>({
 let configSaving = $state(false);
 let wsPort = $state(8375);
 let serverStatus = $state<"stopped" | "loading" | "running">("stopped");
+let serverBusy = $state(false);
 let startError = $state("");
 
 let logs = $state<LlmLogEntry[]>([]);
@@ -181,7 +183,7 @@ async function loadConfig() {
 async function saveConfig() {
   configSaving = true;
   try {
-    await daemonInvoke("set_llm_config", { config });
+    await daemonInvoke("set_llm_config", config);
   } finally {
     configSaving = false;
   }
@@ -233,20 +235,37 @@ async function refreshCache() {
   await loadCatalog();
 }
 
+function busyFallback() {
+  // Safety: reset serverBusy after 30s if no status event arrives.
+  return setTimeout(() => {
+    serverBusy = false;
+  }, 30_000);
+}
+
 async function startServer() {
   startError = "";
-  // start_llm_server is fire-and-forget on the Rust side — returns immediately
-  // with "starting"; the 2-second poll picks up Loading → Running transitions
-  // and surfaces any start_error from the background task.
-  daemonInvoke("start_llm_server").catch((e: unknown) => {
+  serverBusy = true;
+  serverStatus = "loading";
+  const fallback = busyFallback();
+  try {
+    await daemonInvoke("start_llm_server");
+  } catch (e: unknown) {
     startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Unknown error";
-  });
+    serverBusy = false;
+    clearTimeout(fallback);
+  }
 }
 
 async function stopServer() {
   startError = "";
-  // stop_llm_server is also fire-and-forget — actor join runs in background.
-  daemonInvoke("stop_llm_server").catch((_e) => {});
+  serverBusy = true;
+  const fallback = busyFallback();
+  try {
+    await daemonInvoke("stop_llm_server");
+  } catch {
+    serverBusy = false;
+    clearTimeout(fallback);
+  }
 }
 
 async function openChat() {
@@ -272,12 +291,34 @@ onMount(async () => {
     }>("get_llm_server_status");
     serverStatus = s.status;
     if (s.start_error) startError = s.start_error;
+    // If the server is already running (e.g. auto-started), ensure the
+    // enabled toggle reflects this.
+    if ((s.status === "running" || s.status === "loading") && !config.enabled) {
+      config = { ...config, enabled: true };
+    }
   } catch (e) {}
+  // Listen for LLM status changes from the daemon WebSocket.
+  unlistenStatus = onDaemonEvent("llm:status", (ev) => {
+    const s = ev.payload.status as string | undefined;
+    if (s) {
+      serverStatus = s as typeof serverStatus;
+      if (s === "running" || s === "stopped") serverBusy = false;
+    }
+  });
+  // Also listen via Tauri events as fallback.
   try {
-    unlistenStatus = await listen<{ status: string }>("llm:status", (ev) => {
+    const unlistenTauri = await listen<{ status: string }>("llm:status", (ev) => {
       const p = ev.payload as Record<string, string>;
-      if (p.status) serverStatus = p.status as typeof serverStatus;
+      if (p.status) {
+        serverStatus = p.status as typeof serverStatus;
+        if (p.status === "running" || p.status === "stopped") serverBusy = false;
+      }
     });
+    const origUnlisten = unlistenStatus;
+    unlistenStatus = () => {
+      origUnlisten();
+      unlistenTauri();
+    };
   } catch (e) {}
   try {
     logs = await daemonInvoke<LlmLogEntry[]>("get_llm_logs");
@@ -323,6 +364,7 @@ onDestroy(() => {
   hasActive={hasActive}
   activeModel={catalog.active_model}
   serverStatus={serverStatus}
+  {serverBusy}
   activeFamilyName={activeEntry?.family_name ?? null}
   activeQuant={activeEntry?.quant ?? null}
   activeSizeGb={activeEntry?.size_gb ?? null}

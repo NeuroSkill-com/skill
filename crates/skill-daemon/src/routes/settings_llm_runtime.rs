@@ -222,15 +222,15 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
         let cell = state.llm_state_cell.clone();
         let log_buf = state.llm_log_buffer.clone();
 
-        // UX: pressing “Start” should start the server even if the user left
+        // UX: pressing "Start" should start the server even if the user left
         // the global enable toggle off. Persist this so subsequent starts work.
         if !cfg.enabled {
             cfg.enabled = true;
             if let Ok(mut g) = state.llm_config.lock() {
-                *g = cfg.clone();
+                g.enabled = true;
             }
             let mut settings = load_user_settings(&state);
-            settings.llm = cfg.clone();
+            settings.llm.enabled = true;
             save_user_settings(&state, &settings);
         }
 
@@ -245,6 +245,12 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
                 "error": "no model selected (choose a downloaded model in Settings → LLM)",
             }));
         }
+
+        // Broadcast "loading" so the UI can immediately reflect the transition.
+        if let Ok(mut st) = state.llm_status.lock() {
+            *st = "loading".to_string();
+        }
+        state.broadcast("llm:status", serde_json::json!({"status": "loading"}));
 
         let emitter: std::sync::Arc<dyn skill_llm::LlmEventEmitter> = std::sync::Arc::new(DaemonLlmEmitter {
             events_tx: state.events_tx.clone(),
@@ -261,12 +267,21 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
                 if let Ok(mut m) = state.llm_model_name.lock() {
                     *m = model_name;
                 }
+                state.broadcast("llm:status", serde_json::json!({"status": "running"}));
                 return Json(serde_json::json!({"ok": true, "result": "starting"}));
             }
             Ok(None) => {
+                if let Ok(mut st) = state.llm_status.lock() {
+                    *st = "stopped".to_string();
+                }
+                state.broadcast("llm:status", serde_json::json!({"status": "stopped"}));
                 return Json(serde_json::json!({"ok": false, "result": "failed", "error": "init returned none"}));
             }
             Err(e) => {
+                if let Ok(mut st) = state.llm_status.lock() {
+                    *st = "stopped".to_string();
+                }
+                state.broadcast("llm:status", serde_json::json!({"status": "stopped"}));
                 return Json(serde_json::json!({"ok": false, "result": "failed", "error": e.to_string()}));
             }
         }
@@ -298,6 +313,7 @@ pub(crate) async fn llm_server_stop_impl(State(state): State<AppState>) -> Json<
     if let Ok(mut st) = state.llm_status.lock() {
         *st = "stopped".to_string();
     }
+    state.broadcast("llm:status", serde_json::json!({"status": "stopped"}));
     Json(serde_json::json!({"ok": true}))
 }
 

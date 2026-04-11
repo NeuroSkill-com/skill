@@ -12,7 +12,6 @@
 #
 #   macOS:
 #     - protobuf        (protoc compiler for gRPC / protobuf codegen)
-#     - libomp          (OpenMP runtime for llama.cpp)
 #     - binutils        (GNU ar — avoids "illegal option -- D" warnings)
 #     - sccache         (compilation cache, ~50% faster clean rebuilds)
 #
@@ -128,7 +127,6 @@ if [[ "$OS" == "Darwin" ]]; then
     fi
   done <<'DEPS'
 protobuf|protoc|Protocol Buffers compiler (protoc)
-libomp|/opt/homebrew/opt/libomp/lib/libomp.dylib|OpenMP runtime (required by llama.cpp)
 binutils|/opt/homebrew/opt/binutils/bin/gar|GNU ar (fixes 'illegal option -- D' warnings)
 sccache|sccache|Compilation cache (~50% faster clean rebuilds)
 DEPS

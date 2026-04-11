@@ -118,7 +118,6 @@ use history_cmds::{
     list_session_days, list_sessions_for_day, open_history_window, stream_sessions,
 };
 use label_cmds::{get_queue_stats, rebuild_label_index, search_labels_by_eeg};
-#[cfg(feature = "llm")]
 use llm::cmds::{open_chat_window, open_downloads_window};
 use session_analysis::{
     get_day_metrics_batch, open_compare_window, open_compare_window_with_sessions,
@@ -131,7 +130,6 @@ use shortcut_cmds::{
     set_help_shortcut, set_history_shortcut, set_label_shortcut, set_search_shortcut,
     set_settings_shortcut, set_theme_shortcut,
 };
-#[cfg(feature = "llm")]
 use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
 use shutdown::run_blocking_exit_shutdown;
 use tts::{
@@ -319,13 +317,9 @@ pub fn run() {
             cancel_session,
             pick_exg_weights_file,
             pick_gguf_file,
-            #[cfg(feature = "llm")]
             open_chat_window,
-            #[cfg(feature = "llm")]
             open_downloads_window,
-            #[cfg(feature = "llm")]
             get_chat_shortcut,
-            #[cfg(feature = "llm")]
             set_chat_shortcut,
             tts_unload,
             tts_get_voice,

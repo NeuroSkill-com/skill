@@ -11993,7 +11993,6 @@ dependencies = [
  "image",
  "kittentts",
  "libc",
- "llama-cpp-4",
  "llmfit-core",
  "log",
  "macos-focus",

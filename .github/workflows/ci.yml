@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           run_cmd() {
-            cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
+            cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu -- -D warnings
           }
           if ! run_cmd; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
@@ -838,7 +838,6 @@ jobs:
           run_cmd() {
             cargo clippy -p skill \
               --target x86_64-pc-windows-msvc \
-              --features llm-vulkan \
               -- -D warnings
           }
           if ! run_cmd; then

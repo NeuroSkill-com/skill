@@ -12,7 +12,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::history_cmds::open_history_window;
-#[cfg(feature = "llm")]
 use crate::llm::cmds::open_chat_window;
 use crate::tray::refresh_tray;
 use crate::window_cmds::{
@@ -136,7 +135,6 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         eprintln!("[shortcut] focus_timer: {e}");
     }
 
-    #[cfg(feature = "llm")]
     {
         let chat = {
             let r = app.app_state();
@@ -236,7 +234,6 @@ shortcut_pair!(
     "focus_timer"
 );
 
-#[cfg(feature = "llm")]
 shortcut_pair!(get_chat_shortcut, set_chat_shortcut, chat_shortcut, "chat");
 
 #[cfg(test)]

@@ -106,21 +106,15 @@ pub(crate) fn build_tray(
                     let _ = crate::window_cmds::open_virtual_devices_window(a).await;
                 });
             } else if id == "chat" {
-                #[cfg(feature = "llm")]
-                {
-                    let a = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _ = crate::llm::cmds::open_chat_window(a).await;
-                    });
-                }
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::llm::cmds::open_chat_window(a).await;
+                });
             } else if id == "downloads" {
-                #[cfg(feature = "llm")]
-                {
-                    let a = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _ = crate::llm::cmds::open_downloads_window(a).await;
-                    });
-                }
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::llm::cmds::open_downloads_window(a).await;
+                });
             } else if id == "focus_timer" {
                 let a = app.clone();
                 tauri::async_runtime::spawn(async move {

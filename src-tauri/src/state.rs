@@ -23,7 +23,6 @@ use skill_eeg::eeg_filter::FilterConfig;
 use skill_eeg::eeg_model_config::{load_model_config, EegModelStatus, ExgModelConfig};
 use skill_eeg::eeg_quality::SignalQuality;
 
-#[cfg(feature = "llm")]
 use crate::settings::default_chat_shortcut;
 
 // Re-export from skill-data (canonical definition).
@@ -236,7 +235,6 @@ pub struct ShortcutState {
     pub api_shortcut: String,
     pub theme_shortcut: String,
     pub focus_timer_shortcut: String,
-    #[cfg(feature = "llm")]
     pub chat_shortcut: String,
 }
 
@@ -252,7 +250,6 @@ impl Default for ShortcutState {
             api_shortcut: default_api_shortcut(),
             theme_shortcut: default_theme_shortcut(),
             focus_timer_shortcut: default_focus_timer_shortcut(),
-            #[cfg(feature = "llm")]
             chat_shortcut: default_chat_shortcut(),
         }
     }
@@ -438,10 +435,8 @@ pub struct LlmState {
     pub catalog: crate::llm::catalog::LlmCatalog,
     #[allow(dead_code)]
     pub logs: crate::llm::LlmLogBuffer,
-    #[cfg(feature = "llm")]
     #[allow(dead_code)]
     pub loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    #[cfg(feature = "llm")]
     #[allow(dead_code)]
     pub start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -452,9 +447,7 @@ impl LlmState {
             config: crate::settings::LlmConfig::default(),
             logs: crate::llm::new_log_buffer(),
             catalog: crate::llm::catalog::LlmCatalog::load(skill_dir),
-            #[cfg(feature = "llm")]
             loading: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            #[cfg(feature = "llm")]
             start_error: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }

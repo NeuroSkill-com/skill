@@ -179,11 +179,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
 
     let broadcaster = ws_server::WsBroadcaster::new();
 
-    #[cfg(feature = "llm")]
-    {
-        // LLM inference server ownership moved to daemon.
-    }
-
     // ── Daemon runtime readiness (spawn → protocol gate → service repair) ──
     crate::daemon_cmds::ensure_daemon_runtime_ready();
 
@@ -198,11 +193,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
 
     // Route TTS and LLM log output through the unified SkillLogger.
     crate::tts::init_tts_logger(app.handle());
-    #[cfg(feature = "llm")]
-    {
-        crate::llm::init_llm_logger(app.handle());
-        crate::llm::init_tool_logger(app.handle());
-    }
+    crate::llm::init_llm_logger(app.handle());
+    crate::llm::init_tool_logger(app.handle());
 
     load_and_apply_settings(app, &skill_dir);
 
@@ -230,7 +222,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
 
     // Auto-start the LLM server if configured and a model is available.
     if llm_autostart && llm_has_model {
-        #[cfg(feature = "llm")]
         {
             use crate::state::AppState;
             use std::sync::Mutex;

@@ -12,28 +12,12 @@ license = "GPL-3.0-only"
 #  tts-neutts  — enable NeuTTS   (GGUF backbone + NeuCodec, voice-cloning,
 #                                  multi-language, espeak-ng + cmake required)
 #
-#  All three are on by default.  To build without LLM support:
-#    cargo build --no-default-features --features tts-kitten,tts-neutts
 #
-#  llm         — OpenAI-compatible local LLM inference server embedded in the
-#                same HTTP port as the WebSocket API.  Uses llama-cpp-4 (Rust
-#                bindings for llama.cpp).  On by default.
-#                GPU offloading is automatic by platform:
-#                  macOS        → Metal  (via target-specific dep features)
-#                  Linux/Windows → Vulkan (via target-specific dep features)
-#                Manual override flags (pick at most one):
-#                  --features llm-metal   (macOS Metal)
-#                  --features llm-cuda    (NVIDIA CUDA)
-#                  --features llm-vulkan  (cross-platform Vulkan)
-#                Multimodal (image / audio inputs):
-#                  --features llm-mtmd
-#
-#                neutts 0.1.0 uses llama-cpp-4 too — no `links = "llama"`
-#                conflict; both features can be active simultaneously.
+# LLM inference runs exclusively in skill-daemon.  The Tauri binary is a
+# thin UI client that proxies LLM commands to the daemon over HTTP.
+# Chat, downloads, and shortcut UI are always compiled (no feature gate).
 #
 [features]
-# LLM inference + NeuTTS (llama-cpp backbone) + EXG embedding now run
-# exclusively in skill-daemon.  The Tauri binary is a thin UI.
 default    = ["tts-kitten", "mw75-rfcomm", "gps"]
 gps        = ["skill-data/gps"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
@@ -56,22 +40,6 @@ tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound", "skill-tts
 #
 custom-protocol = ["tauri/custom-protocol"]
 
-# ── LLM feature tree ──────────────────────────────────────────────────────────
-#
-# neutts 0.1.0 uses llama-cpp-4 for its backbone.
-# Both neutts and llama-cpp-4 now resolve to the same package — Cargo
-# deduplicates them, so the `links = "llama"` conflict is fully resolved.
-#
-# `llm`        — core: load GGUF model, run OpenAI-compatible HTTP server
-# `llm-metal`  — Metal GPU offload (macOS)
-# `llm-cuda`   — CUDA GPU offload (NVIDIA)
-# `llm-vulkan` — Vulkan GPU offload (cross-platform)
-# `llm-mtmd`   — multimodal: image/audio inputs via libmtmd
-llm        = ["dep:llama-cpp-4", "llm-mtmd", "skill-llm/llm", "skill-settings/llm"]
-llm-metal  = ["llm", "llama-cpp-4?/metal", "skill-llm/llm-metal"]
-llm-cuda   = ["llm", "llama-cpp-4?/cuda", "skill-llm/llm-cuda"]
-llm-vulkan = ["llm", "llama-cpp-4?/vulkan", "skill-llm/llm-vulkan"]
-llm-mtmd   = ["llm", "llama-cpp-4?/mtmd", "skill-llm/llm-mtmd"]
 
 [lib]
 name = "skill_lib"
@@ -174,7 +142,7 @@ serde      = { workspace = true, features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 skill-jobs  = { path = "../crates/skill-jobs" }
-skill-settings = { path = "../crates/skill-settings" }
+skill-settings = { path = "../crates/skill-settings", features = ["llm"] }
 skill-llm   = { path = "../crates/skill-llm" }
 skill-tools = { path = "../crates/skill-tools" }
 skill-headless = { path = "../crates/skill-headless" }
@@ -209,25 +177,12 @@ base64 = { workspace = true }
 rfd = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
 
 
-# ── LLM (OpenAI-compatible local inference via llama-cpp-4) ────────────────────
-# Optional — enabled by the `llm` feature flag (see [features] above).
-#
-# neutts 0.1.0 uses llama-cpp-4 so there is no longer
-# a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
-# Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2.42", optional = true }
-
-
 # HTTP client used by the resumable LLM model downloader.
 ureq      = { version = "3", features = ["native-tls"] }
 
 erased-serde = "0.4.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# llama-cpp-4 with Metal GPU offload — merged with the base [dependencies] entry
-# so that when the `llm` feature is active the Metal backend is compiled in
-# automatically on macOS.
-llama-cpp-4 = { version = "0.2.42", optional = true, features = ["metal"] }
 # Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no
 # private frameworks.  Replaces the hand-rolled Assertions.json writer.
 macos-focus = "0.0.1"
@@ -242,12 +197,6 @@ dispatch2        = "0.3.1"
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
 neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-# llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
-# entry so that when the `llm` feature is active the Vulkan backend is compiled
-# in automatically on Linux and Windows.
-llama-cpp-4 = { version = "0.2.42", optional = true, features = ["vulkan"] }
 
 [dev-dependencies]
 tempfile = "3"

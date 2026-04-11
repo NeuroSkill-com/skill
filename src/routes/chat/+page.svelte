@@ -116,7 +116,7 @@ async function updateToolConfig(patch: Partial<ToolConfig>) {
     // biome-ignore lint/suspicious/noExplicitAny: opaque backend config payload
     const cfg = await daemonInvoke<any>("get_llm_config");
     cfg.tools = { ...toolConfig };
-    await daemonInvoke("set_llm_config", { config: cfg });
+    await daemonInvoke("set_llm_config", cfg);
   } catch (e) {}
 }
 

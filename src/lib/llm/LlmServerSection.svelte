@@ -13,6 +13,7 @@ interface Props {
   hasActive: boolean;
   activeModel: string;
   serverStatus: "stopped" | "loading" | "running";
+  serverBusy?: boolean;
   activeFamilyName: string | null;
   activeQuant: string | null;
   activeSizeGb: number | null;
@@ -33,6 +34,7 @@ let {
   hasActive,
   activeModel,
   serverStatus,
+  serverBusy = false,
   activeFamilyName,
   activeQuant,
   activeSizeGb,
@@ -125,14 +127,15 @@ let {
             <Button size="sm"
               class="h-6 text-[0.62rem] px-2.5 bg-violet-600 hover:bg-violet-700 text-white
                      disabled:opacity-40 disabled:cursor-not-allowed"
-              onclick={onStart} disabled={!hasActive}>
-              Start
+              onclick={onStart} disabled={!hasActive || serverBusy}>
+              {serverBusy ? "Starting…" : "Start"}
             </Button>
           {:else}
             <Button size="sm" variant="outline"
-              class="h-6 text-[0.62rem] px-2 text-red-500 border-red-500/30 hover:bg-red-500/10"
-              onclick={onStop}>
-              {serverStatus === "loading" ? "Cancel" : "Stop"}
+              class="h-6 text-[0.62rem] px-2 text-red-500 border-red-500/30 hover:bg-red-500/10
+                     disabled:opacity-40 disabled:cursor-not-allowed"
+              onclick={onStop} disabled={serverBusy}>
+              {serverBusy ? "Stopping…" : serverStatus === "loading" ? "Cancel" : "Stop"}
             </Button>
           {/if}
           <Button size="sm" variant="outline"

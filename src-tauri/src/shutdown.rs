@@ -17,10 +17,7 @@ pub(crate) fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
     // Flush any pending debounced settings to disk before exit.
     save_settings_now(app);
 
-    #[cfg(feature = "llm")]
-    {
-        let _ = crate::daemon_cmds::llm_server_stop();
-    }
+    let _ = crate::daemon_cmds::llm_server_stop();
 
     tts_shutdown();
 }
