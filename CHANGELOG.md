@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.115] — 2026-04-11
+
+### Features
+
+- fixed a bug with the labels, libomp, cpu/gpu backend choice for llm
+
 ## [0.0.114] — 2026-04-11
 
 ### Features
