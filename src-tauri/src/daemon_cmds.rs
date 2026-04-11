@@ -978,7 +978,6 @@ pub(crate) fn post_json_value_with_auth(
     post_json_with_auth_response(&base_url, &token, path, body)
 }
 
-#[allow(dead_code)]
 pub(crate) fn fetch_json_value_with_auth(path: &str) -> Result<serde_json::Value, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;

@@ -180,13 +180,6 @@ pub(crate) trait AppStateExt: Manager<tauri::Wry> {
 
 impl<T: Manager<tauri::Wry>> AppStateExt for T {}
 
-/// Mutate `AppState` via a short-lived lock.
-#[allow(dead_code)]
-pub(crate) fn mutate_state(state: &Mutex<Box<AppState>>, f: impl FnOnce(&mut AppState)) {
-    let mut g = state.lock_or_recover();
-    f(&mut g);
-}
-
 /// Mutate `AppState` and auto-persist settings afterwards.
 pub(crate) fn mutate_and_save(app: &AppHandle, f: impl FnOnce(&mut AppState)) {
     {
@@ -205,11 +198,6 @@ const SETTINGS_DEBOUNCE_MS: u64 = 500;
 
 /// Atomic flag: `true` while a debounce timer is already pending.
 static SAVE_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-#[allow(dead_code)]
-pub fn save_settings_handle(app: &AppHandle) {
-    save_settings(app);
-}
 
 /// Schedule a settings save.  The actual disk write is debounced: if another
 /// `save_settings` call arrives within [`SETTINGS_DEBOUNCE_MS`], only one
