@@ -5,7 +5,6 @@
 //! Tests for session_parquet.rs
 
 use skill_data::session_parquet::{eeg_parquet_path, ParquetState};
-use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
