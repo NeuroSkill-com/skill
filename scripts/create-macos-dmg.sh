@@ -47,6 +47,16 @@ SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"
 ENTITLEMENTS="$TAURI_DIR/entitlements.plist"
 
 echo "→ Creating DMG for $PRODUCT_NAME v$VERSION ($TARGET)"
+echo "  Using config: $CONF"
+echo "  Version from config: $VERSION"
+
+# Double-check version by reading it again
+VERSION_CHECK=$(python3 -c "import json; print(json.load(open('$CONF'))['version'])")
+if [[ "$VERSION" != "$VERSION_CHECK" ]]; then
+  echo "  ⚠ Version mismatch: script has $VERSION, config has $VERSION_CHECK"
+  VERSION="$VERSION_CHECK"
+  echo "  Using config version: $VERSION"
+fi
 
 # ── Sign the .app ─────────────────────────────────────────────────────────
 echo "  Signing .app with identity: $SIGN_ID"
@@ -65,6 +75,10 @@ if ! node -e "require('appdmg')" 2>/dev/null; then
   echo "  Installing appdmg …"
   npm install --global appdmg
 fi
+
+# Clean up any existing DMG files to avoid using cached versions
+rm -rf "$DMG_DIR" 2>/dev/null || true
+mkdir -p "$DMG_DIR"
 # Resolve the global node_modules path so [stdin] can find it
 APPDMG_PATH="$(node -e "console.log(require.resolve('appdmg'))" 2>/dev/null || true)"
 if [[ -z "$APPDMG_PATH" ]]; then
@@ -75,6 +89,9 @@ fi
 
 # ── Prepare staging area ─────────────────────────────────────────────────
 STAGE="$(mktemp -d)"; CLEANUP_DIRS+=("$STAGE")
+
+# Clean up any existing cached files that might have old versions
+rm -rf "$DMG_DIR"/VolumeIcon.* "$DMG_DIR"/background*.png 2>/dev/null || true
 
 # ── Generate background image (logo + version) ───────────────────────────
 ICON_PNG="$TAURI_DIR/icons/icon.png"
@@ -89,6 +106,7 @@ if [[ -f "$ICON_PNG" ]]; then
 import sys, os
 
 icon_path, version, product_name, out_dir, appearance = sys.argv[1:6]
+print(f"  Debug: Background script received version: {version}")
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -180,6 +198,7 @@ if [[ -f "$ICON_PNG" ]]; then
 import sys, os, subprocess
 
 icon_path, version, out_dir = sys.argv[1:4]
+print(f"  Debug: Volume icon script received version: {version}")
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -282,8 +301,8 @@ const spec = {
   },
   'icon-size': 80,
   contents: [
-    { x: 180, y: 190, type: 'file', path: '${APP_DIR}' },
-    { x: 480, y: 190, type: 'link', path: '/Applications' },
+    { x: 180, y: 230, type: 'file', path: '${APP_DIR}' },
+    { x: 480, y: 230, type: 'link', path: '/Applications' },
   ]
 };
 
@@ -348,6 +367,16 @@ NODEJS
 if [[ ! -f "$DMG_OUT" ]]; then
   echo "ERROR: appdmg did not produce a DMG at $DMG_OUT"
   exit 1
+fi
+
+# Verify the version in generated files
+echo "  Verifying version in generated files:"
+echo "    Expected version: $VERSION"
+if [[ -f "$BG_2X" ]]; then
+  echo "    Background image: $BG_2X"
+fi
+if [[ -f "$VOL_ICNS" ]]; then
+  echo "    Volume icon: $VOL_ICNS"
 fi
 
 # ── Sign the DMG ──────────────────────────────────────────────────────────

@@ -464,7 +464,17 @@ jobs:
           APPLE_ID:               ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
-        run: bash scripts/create-macos-dmg.sh aarch64-apple-darwin
+        run: |
+          echo "Creating DMG with version ${{ steps.version_meta.outputs.version }}"
+          bash scripts/create-macos-dmg.sh aarch64-apple-darwin
+          # Verify the DMG was created with the correct version
+          DMG_FILE=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" -maxdepth 1 | head -1)
+          if [[ "$DMG_FILE" == *"${{ steps.version_meta.outputs.version }}"* ]]; then
+            echo "✓ DMG filename contains correct version: ${{ steps.version_meta.outputs.version }}"
+          else
+            echo "::error::DMG filename does not contain expected version"
+            exit 1
+          fi
 
       # ── Create updater artifact from the signed + stapled .app ─────────────
       #
@@ -493,7 +503,7 @@ jobs:
           # (U+2122) in the filename cause the Tauri updater to produce a 404
           # because its HTTP client rejects or misroutes an un-encoded URL.
           # The .app bundle inside the tar keeps its original NeuroSkill.app name.
-          VERSION="$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+          VERSION="${{ steps.version_meta.outputs.version }}"
           TAR_PATH="$BUNDLE_DIR/macos/NeuroSkill_${VERSION}_aarch64.app.tar.gz"
           tar -czf "$TAR_PATH" \
             -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
