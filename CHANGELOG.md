@@ -8,6 +8,21 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.113] — 2026-04-11
+
+### Features
+
+- updated CI
+- Daemon side (business logic added)
+-  crates/skill-daemon/src/background.rs:
+-  crates/skill-daemon/src/handlers.rs:
+-  crates/skill-daemon/src/routes/settings_calibration.rs:
+-  Tauri side (logic removed)
+-  src-tauri/src/background.rs:
+-  src-tauri/src/lifecycle.rs:
+- Moved to daemon / removed from Tauri
+- 1. detect_device_kind() — Added DeviceKind::from_id_and_name() to skill-data/src/device.rs with the ID-prefix logic (cortex:, usb:, cgx:, etc.) that was missing from the existing from_name(). Removed the dead function + 250
+
 ## [0.0.112] — 2026-04-11
 
 ### Features
