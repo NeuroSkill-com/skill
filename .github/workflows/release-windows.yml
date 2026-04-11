@@ -629,7 +629,7 @@ jobs:
           # Build both packages in a single cargo invocation so feature
           # unification happens once and shared dependencies compile only once.
           run_cmd() {
-            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol,screenshots --timings
+            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings
           }
 
           if ! run_cmd; then
