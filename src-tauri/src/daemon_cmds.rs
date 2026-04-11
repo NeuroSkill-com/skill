@@ -416,6 +416,7 @@ pub(crate) fn disable_reconnect() -> Result<(), String> {
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn cancel_session_sync() -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -446,6 +447,7 @@ pub async fn start_session(target: Option<String>) -> Result<StatusResponse, Str
         .map_err(|e| e.to_string())?
 }
 
+#[allow(dead_code)]
 pub(crate) fn scanner_start() -> Result<ScannerStateResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
@@ -867,6 +869,7 @@ pub(crate) fn fetch_daemon_estimate_reembed() -> Result<serde_json::Value, Strin
     fetch_json_with_auth(&base_url, &token, "/v1/models/estimate-reembed")
 }
 
+#[allow(dead_code)]
 pub(crate) fn scanner_set_wifi_config(
     wifi_shield_ip: String,
     galea_ip: String,

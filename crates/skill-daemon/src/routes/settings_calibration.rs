@@ -78,6 +78,19 @@ pub(crate) struct DeleteProfileRequest {
     pub(crate) id: String,
 }
 
+/// Returns the profile ID to auto-start calibration for, if any.
+/// Called once by Tauri at startup to check if the active profile has auto_start enabled.
+pub(crate) async fn auto_start_pending(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let settings = load_user_settings(&state);
+    let active_id = &settings.active_calibration_id;
+    let profile_id = settings
+        .calibration_profiles
+        .iter()
+        .find(|p| p.id == *active_id && p.auto_start)
+        .map(|p| p.id.clone());
+    Json(serde_json::json!({"profile_id": profile_id}))
+}
+
 pub(crate) async fn delete_profile(
     State(state): State<AppState>,
     Json(req): Json<DeleteProfileRequest>,

@@ -14,21 +14,83 @@ use crate::state::AppState;
 pub fn spawn_all(state: AppState) {
     spawn_skills_sync(state.clone());
     spawn_dnd_poll(state.clone());
-    spawn_auto_scanner(state);
+    spawn_auto_scanner(state.clone());
+    spawn_auto_connect(state.clone());
+    spawn_calibration_auto_start(state);
+}
+
+fn spawn_calibration_auto_start(state: AppState) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let settings = load_user_settings(&state);
+        let active_id = &settings.active_calibration_id;
+        let auto_start_id = settings
+            .calibration_profiles
+            .iter()
+            .find(|p| p.id == *active_id && p.auto_start)
+            .map(|p| p.id.clone());
+        if let Some(id) = auto_start_id {
+            info!("[calibration] auto-start profile: {id}");
+            state.broadcast("calibration-auto-start", serde_json::json!({"profile_id": id}));
+        }
+    });
+}
+
+fn spawn_auto_connect(state: AppState) {
+    tokio::spawn(async move {
+        // Wait for scanner to start discovering devices.
+        tokio::time::sleep(Duration::from_millis(900)).await;
+
+        let settings = load_user_settings(&state);
+        let preferred = settings
+            .preferred_id
+            .or_else(|| settings.paired.first().map(|d| d.id.clone()));
+
+        if let Some(preferred_id) = preferred {
+            info!("[auto-connect] preferred device: {preferred_id}");
+
+            // Set preferred in discovered devices list.
+            if let Ok(mut guard) = state.devices.lock() {
+                for d in guard.iter_mut() {
+                    d.is_preferred = d.id == preferred_id;
+                }
+            }
+
+            // Set target in status so retry-connect knows where to connect.
+            if let Ok(mut status) = state.status.lock() {
+                status.target_id = Some(preferred_id);
+            }
+
+            // Enable reconnect.
+            if let Ok(mut rc) = state.reconnect.lock() {
+                rc.pending = true;
+            }
+
+            // Trigger connect via the handler.
+            use axum::extract::State;
+            let _ = crate::handlers::control_retry_connect(State(state.clone())).await;
+            info!("[auto-connect] connect triggered");
+        }
+    });
 }
 
 fn spawn_auto_scanner(state: AppState) {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
-        // Start scanner automatically on daemon boot.
-        let wifi_config = state.scanner_wifi_config.lock().ok().map(|g| g.clone());
-        if let Some(cfg) = wifi_config {
-            if !cfg.wifi_shield_ip.is_empty() || !cfg.galea_ip.is_empty() {
-                info!("[scanner] auto-starting with wifi config");
+
+        // Load wifi config from settings and apply it before starting.
+        let settings = load_user_settings(&state);
+        if !settings.openbci.wifi_shield_ip.is_empty() || !settings.openbci.galea_ip.is_empty() {
+            if let Ok(mut guard) = state.scanner_wifi_config.lock() {
+                guard.wifi_shield_ip = settings.openbci.wifi_shield_ip.clone();
+                guard.galea_ip = settings.openbci.galea_ip.clone();
             }
+            info!("[scanner] applied wifi config from settings");
         }
-        // The scanner is started by Tauri's scanner_start command which calls
-        // POST /v1/control/scanner/start. We just ensure the daemon is ready.
+
+        // Auto-start the scanner so devices are discoverable immediately.
+        info!("[scanner] auto-starting on daemon boot");
+        crate::handlers::start_scanner_inner(&state);
     });
 }
 

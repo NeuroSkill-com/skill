@@ -31,65 +31,43 @@ fn poll_delay_secs(state: &str) -> u64 {
 
 /// Spawn every background task.  Called once from `setup_app`.
 pub(crate) fn spawn_all(app: &mut tauri::App) {
-    spawn_scanner_start(app.handle());
-    spawn_auto_connect(app.handle());
+    // Scanner start and auto-connect now run in skill-daemon (background.rs).
+
     spawn_daemon_status_poll(app.handle());
     // Reconnect loop now runs in skill-daemon; no Tauri-side loop needed.
     spawn_daemon_log_tail();
-    spawn_calibration_auto_start(app.handle());
     spawn_onboarding_check(app.handle());
     spawn_updater_poll(app.handle());
-    spawn_skills_sync(app.handle());
-    spawn_dnd_poll(app.handle());
+    // Skills sync and DND polling run in skill-daemon (background.rs).
 }
 
 // ── Individual tasks ─────────────────────────────────────────────────────────
-
-fn spawn_scanner_start(handle: &AppHandle) {
-    let app = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let (wifi_shield_ip, galea_ip) = {
-            let r = app.state::<Mutex<Box<AppState>>>();
-            let s = r.lock_or_recover();
-            (
-                s.openbci_config.wifi_shield_ip.clone(),
-                s.openbci_config.galea_ip.clone(),
-            )
-        };
-        let _ = crate::daemon_cmds::scanner_set_wifi_config(wifi_shield_ip, galea_ip);
-        let _ = crate::daemon_cmds::scanner_start();
-        // Start LSL auto-scanner if enabled in settings
-        crate::settings_cmds::lsl_cmds::maybe_start_lsl_auto_scanner(&app);
-    });
-}
-
-fn spawn_auto_connect(handle: &AppHandle) {
-    let app = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(900)).await;
-        let preferred = {
-            let r = app.state::<Mutex<Box<AppState>>>();
-            let s = r.lock_or_recover();
-            s.preferred_id
-                .clone()
-                .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
-        };
-        // Only auto-connect if there's a paired device.
-        if let Some(preferred) = preferred {
-            // Enable daemon reconnect and start session via daemon.
-            let _ = crate::daemon_cmds::enable_reconnect();
-            let _ = crate::settings_cmds::device_cmds::set_preferred_device(preferred, app.clone());
-            crate::settings_cmds::device_cmds::retry_connect(app.clone());
-        }
-    });
-}
 
 fn spawn_daemon_status_poll(handle: &AppHandle) {
     let app = handle.clone();
     tauri::async_runtime::spawn(async move {
         // Wait for daemon to be ready before polling.
         tokio::time::sleep(Duration::from_secs(2)).await;
+
+        // One-shot: check if daemon wants us to auto-start calibration.
+        if let Ok(resp) = tokio::task::spawn_blocking(|| {
+            crate::daemon_cmds::fetch_json_value_with_auth("/v1/calibration/auto-start-pending")
+        })
+        .await
+        {
+            if let Ok(val) = resp {
+                if let Some(id) = val.get("profile_id").and_then(|v| v.as_str()) {
+                    let id = id.to_owned();
+                    let a = app.clone();
+                    tokio::spawn(async move {
+                        let _ =
+                            crate::window_cmds::open_calibration_window_inner(&a, Some(id), false)
+                                .await;
+                    });
+                }
+            }
+        }
+
         // Battery/signal warnings now run daemon-side (monitor.rs).
         // This loop only syncs daemon status into local Tauri state for the UI.
         loop {
@@ -166,25 +144,10 @@ fn spawn_daemon_log_tail() {
     });
 }
 
-fn spawn_calibration_auto_start(handle: &AppHandle) {
-    let app = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let auto_start_id: Option<String> = {
-            let r = app.state::<Mutex<Box<AppState>>>();
-            let s = r.lock_or_recover();
-            let active_id = &s.active_calibration_id;
-            s.calibration_profiles
-                .iter()
-                .find(|p| &p.id == active_id)
-                .filter(|p| p.auto_start)
-                .map(|p| p.id.clone())
-        };
-        if let Some(id) = auto_start_id {
-            let _ = crate::window_cmds::open_calibration_window_inner(&app, Some(id), false).await;
-        }
-    });
-}
+// Calibration auto-start decision now lives in skill-daemon (background.rs).
+// The daemon broadcasts a "calibration-auto-start" event with { profile_id }.
+// The WS event listener (spawn_daemon_ws_listener) opens the calibration window
+// in response.
 
 fn spawn_onboarding_check(handle: &AppHandle) {
     let app = handle.clone();
@@ -263,17 +226,6 @@ fn spawn_updater_poll(handle: &AppHandle) {
             tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
         }
     });
-}
-
-fn spawn_skills_sync(_handle: &AppHandle) {
-    // Skills sync now runs in skill-daemon (background.rs).
-    // The daemon broadcasts "skills-updated" events via WebSocket.
-    // Tauri can subscribe to those events to refresh the UI.
-}
-
-fn spawn_dnd_poll(_handle: &AppHandle) {
-    // DND polling now runs in skill-daemon (background.rs).
-    // The daemon broadcasts "dnd-os-changed" events via WebSocket.
 }
 
 #[cfg(test)]

@@ -350,6 +350,10 @@ pub fn router() -> Router<AppState> {
             get(super::settings_calibration::get_active_profile_id)
                 .put(super::settings_calibration::set_active_profile),
         )
+        .route(
+            "/calibration/auto-start-pending",
+            get(super::settings_calibration::auto_start_pending),
+        )
         .merge(llm_routes())
         .merge(lsl_routes())
 }

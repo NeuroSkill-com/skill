@@ -6,4 +6,5 @@
 // skill-data so that `crate::session_csv::*` keeps working.
 
 // Re-export everything from the crate so `crate::session_csv::*` keeps working.
+#[allow(unused_imports)]
 pub use skill_data::session_csv::*;

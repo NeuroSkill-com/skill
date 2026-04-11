@@ -589,10 +589,16 @@ pub(crate) async fn control_cancel_session(State(state): State<AppState>) -> Jso
 // ── Scanner control ────────────────────────────────────────────────────────
 
 pub(crate) async fn control_scanner_start(State(state): State<AppState>) -> Json<ScannerStateResponse> {
+    Json(start_scanner_inner(&state))
+}
+
+/// Start the device scanner if not already running.  Called from the HTTP
+/// handler and from `background::spawn_auto_scanner` at daemon boot.
+pub fn start_scanner_inner(state: &AppState) -> ScannerStateResponse {
     let already_running = state.scanner_running.lock().map(|g| *g).unwrap_or(false);
     if already_running {
-        push_device_log(&state, "scanner", "start requested but scanner already running");
-        return Json(ScannerStateResponse { running: true });
+        push_device_log(state, "scanner", "start requested but scanner already running");
+        return ScannerStateResponse { running: true };
     }
 
     let (tx, rx) = oneshot::channel();
@@ -607,7 +613,7 @@ pub(crate) async fn control_scanner_start(State(state): State<AppState>) -> Json
     // spawned BLE listener task would stall waiting for the flag to clear.
     state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
 
-    push_device_log(&state, "scanner", "scanner started");
+    push_device_log(state, "scanner", "scanner started");
 
     let state2 = state.clone();
     tokio::spawn(async move {
@@ -620,7 +626,7 @@ pub(crate) async fn control_scanner_start(State(state): State<AppState>) -> Json
         }
     });
 
-    Json(ScannerStateResponse { running: true })
+    ScannerStateResponse { running: true }
 }
 
 pub(crate) async fn control_scanner_stop(State(state): State<AppState>) -> Json<ScannerStateResponse> {

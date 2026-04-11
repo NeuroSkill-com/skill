@@ -620,7 +620,7 @@ jobs:
           set -euo pipefail
 
           # Diagnostic: verify sccache is reachable by cargo
-          echo "[diag] RUSTC_WRAPPER=$RUSTC_WRAPPER"
+          echo "[diag] RUSTC_WRAPPER=${RUSTC_WRAPPER:-<not set>}"
           if [ -n "${RUSTC_WRAPPER:-}" ]; then
             "$RUSTC_WRAPPER" --version || echo "[warn] RUSTC_WRAPPER binary not executable"
           fi

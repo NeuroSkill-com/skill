@@ -4,6 +4,7 @@
 use tauri::AppHandle;
 
 /// No-op — LSL auto-connect scanner ownership moved to daemon.
+#[allow(dead_code)]
 pub(crate) fn maybe_start_lsl_auto_scanner(_app: &AppHandle) {
     // Daemon owns the auto-connect scanner; nothing to do here.
 }
