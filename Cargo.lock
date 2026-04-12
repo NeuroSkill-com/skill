@@ -663,9 +663,9 @@ dependencies = [
 
 [[package]]
 name = "awear"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043d42565d5b69e50bef486f4426451d3f902ba7dbb837a7d46e2449d671f24d"
+checksum = "11ad906bc59e0a2c78a3f671425351166b05040faea432178e37ca0ca81bccda"
 dependencies = [
  "anyhow",
  "btleplug 0.11.8",

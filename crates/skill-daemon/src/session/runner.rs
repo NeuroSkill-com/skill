@@ -30,6 +30,13 @@ pub(crate) async fn run_adapter_session(
     let mut pipeline: Option<Pipeline> = None;
     let mut sample_count: u64 = 0;
 
+    // Idle timeout: if no event arrives for this long after receiving at least
+    // one EEG frame, treat it as a silent disconnect (e.g. BLE out of range
+    // without a formal disconnect event).
+    const IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+    let idle_sleep = tokio::time::sleep(IDLE_TIMEOUT);
+    tokio::pin!(idle_sleep);
+
     loop {
         tokio::select! {
             biased;
@@ -38,7 +45,19 @@ pub(crate) async fn run_adapter_session(
                 adapter.disconnect().await;
                 break;
             }
+            () = &mut idle_sleep, if sample_count > 0 => {
+                info!("no data for {}s — treating as silent disconnect", IDLE_TIMEOUT.as_secs());
+                adapter.disconnect().await;
+                if let Ok(mut s) = state.status.lock() {
+                    s.clear_device();
+                }
+                broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({"reason": "idle_timeout"}));
+                break;
+            }
             ev = adapter.next_event() => {
+                // Reset idle timer on every event.
+                idle_sleep.as_mut().reset(tokio::time::Instant::now() + IDLE_TIMEOUT);
+
                 let Some(ev) = ev else {
                     info!("event stream ended");
                     if let Ok(mut s) = state.status.lock() {
