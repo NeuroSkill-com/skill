@@ -1,3 +1,9 @@
 [submodule "skills"]
 	path = skills
 	url = https://github.com/NeuroSkill-com/skills.git
+[submodule "neuroloop"]
+	path = neuroloop
+	url = https://github.com/NeuroSkill-com/neuroloop
+[submodule "neuroskill"]
+	path = neuroskill
+	url = https://github.com/NeuroSkill-com/neuroskill
