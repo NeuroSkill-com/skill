@@ -423,8 +423,8 @@ pub fn search_embeddings_in_range_for(
     global_index: GlobalIndexHandle,
     model_backend: &str,
 ) -> SearchResult {
-    let start_ts = unix_to_ts(start_utc);
-    let end_ts = unix_to_ts(end_utc);
+    let start_ts = (start_utc as i64) * 1000;
+    let end_ts = (end_utc as i64) * 1000;
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
@@ -475,7 +475,7 @@ pub fn search_embeddings_in_range_for(
     let mut results: Vec<QueryEntry> = Vec::with_capacity(query_count);
 
     for (_dd_idx, qemb) in &query_embs {
-        let ts_unix = ts_to_unix(qemb.timestamp);
+        let ts_unix = (qemb.timestamp / 1000) as u64;
 
         // Candidates: (date, dir, hnsw_id, timestamp, distance).
         // For the per-day branch we build lightweight tuples referencing
@@ -514,7 +514,7 @@ pub fn search_embeddings_in_range_for(
         // ── Hydrate each candidate ────────────────────────────────────────
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
-            let neighbor_unix = ts_to_unix(neighbor_ts);
+            let neighbor_unix = (neighbor_ts / 1000) as u64;
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
@@ -595,8 +595,8 @@ pub fn stream_search_inner_for(
     emit: &dyn Fn(SearchProgress),
     model_backend: &str,
 ) {
-    let start_ts = unix_to_ts(start_utc);
-    let end_ts = unix_to_ts(end_utc);
+    let start_ts = (start_utc as i64) * 1000;
+    let end_ts = (end_utc as i64) * 1000;
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
@@ -647,7 +647,7 @@ pub fn stream_search_inner_for(
     });
 
     for (idx, (_dd_idx, qemb)) in query_embs.iter().enumerate() {
-        let ts_unix = ts_to_unix(qemb.timestamp);
+        let ts_unix = (qemb.timestamp / 1000) as u64;
 
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
 
@@ -682,7 +682,7 @@ pub fn stream_search_inner_for(
 
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
-            let neighbor_unix = ts_to_unix(neighbor_ts);
+            let neighbor_unix = (neighbor_ts / 1000) as u64;
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {

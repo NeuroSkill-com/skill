@@ -334,7 +334,7 @@ async function loadMetricsBatch(csvPaths: string[]) {
   }
 
   try {
-    const results = await invoke<Record<string, CsvMetricsResult>>("get_day_metrics_batch", {
+    const results = await daemonInvoke<Record<string, CsvMetricsResult>>("get_day_metrics_batch", {
       csvPaths: needed,
       maxTsPoints: 360,
     });

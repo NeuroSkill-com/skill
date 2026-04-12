@@ -17,30 +17,67 @@ pub struct SessionSummary {
     pub session_end_utc: Option<u64>,
     pub device_name: Option<String>,
     pub total_samples: Option<u64>,
+    // Fields expected by compare page (EmbeddingSession shape)
+    pub start_utc: Option<u64>,
+    pub end_utc: Option<u64>,
+    pub n_epochs: Option<u64>,
+    pub day: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteSessionRequest {
     pub csv_path: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FindSessionRequest {
-    pub timestamp_utc: u64,
+    pub timestamp_unix: u64,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DailyRecordingMinsRequest {
     pub days: Option<u32>,
 }
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/history/sessions", get(list_sessions))
+        .route("/history/sessions", get(list_sessions).post(sessions_post))
         .route("/history/sessions/delete", post(delete_session))
         .route("/history/stats", get(history_stats))
         .route("/history/find-session", post(find_session))
         .route("/history/daily-recording-mins", post(daily_recording_mins))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionsPostRequest {
+    pub tz_offset_secs: Option<i64>,
+    pub local_key: Option<String>,
+}
+
+/// POST /history/sessions — dispatches to list_local_session_days or list_sessions_for_local_day
+async fn sessions_post(State(state): State<AppState>, Json(req): Json<SessionsPostRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let tz = req.tz_offset_secs.unwrap_or(0);
+
+    if let Some(local_key) = req.local_key {
+        // list_sessions_for_local_day
+        let sessions = tokio::task::spawn_blocking(move || {
+            skill_history::list_sessions_for_local_day(&local_key, tz, &skill_dir, None)
+        })
+        .await
+        .unwrap_or_default();
+        Json(serde_json::to_value(sessions).unwrap_or_default())
+    } else {
+        // list_local_session_days
+        let days = tokio::task::spawn_blocking(move || skill_history::list_local_session_days(&skill_dir, tz))
+            .await
+            .unwrap_or_default();
+        Json(serde_json::to_value(days).unwrap_or_default())
+    }
 }
 
 async fn list_sessions(State(state): State<AppState>) -> Json<Vec<SessionSummary>> {
@@ -49,15 +86,31 @@ async fn list_sessions(State(state): State<AppState>) -> Json<Vec<SessionSummary
         .await
         .unwrap_or_default();
 
+    // Also load embedding sessions for compare page compatibility
+    let skill_dir2 = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let emb_sessions = tokio::task::spawn_blocking(move || skill_history::list_embedding_sessions(&skill_dir2))
+        .await
+        .unwrap_or_default();
+
+    // Build a lookup from (start_utc) → EmbeddingSession for enrichment
+    let emb_map: std::collections::HashMap<u64, _> = emb_sessions.into_iter().map(|e| (e.start_utc, e)).collect();
+
     Json(
         sessions
             .into_iter()
-            .map(|s| SessionSummary {
-                csv_path: s.csv_path,
-                session_start_utc: s.session_start_utc,
-                session_end_utc: s.session_end_utc,
-                device_name: s.device_name,
-                total_samples: s.total_samples,
+            .map(|s| {
+                let emb = s.session_start_utc.and_then(|st| emb_map.get(&st));
+                SessionSummary {
+                    start_utc: s.session_start_utc,
+                    end_utc: s.session_end_utc,
+                    n_epochs: emb.map(|e| e.n_epochs),
+                    day: emb.map(|e| e.day.clone()),
+                    csv_path: s.csv_path,
+                    session_start_utc: s.session_start_utc,
+                    session_end_utc: s.session_end_utc,
+                    device_name: s.device_name,
+                    total_samples: s.total_samples,
+                }
             })
             .collect(),
     )
@@ -90,7 +143,7 @@ async fn history_stats(State(state): State<AppState>) -> Json<serde_json::Value>
 async fn find_session(State(state): State<AppState>, Json(req): Json<FindSessionRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let found = tokio::task::spawn_blocking(move || {
-        skill_history::find_session_csv_for_timestamp(&skill_dir, req.timestamp_utc)
+        skill_history::find_session_csv_for_timestamp(&skill_dir, req.timestamp_unix)
     })
     .await
     .unwrap_or(None);

@@ -13,7 +13,6 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use skill_commands::{ts_to_unix, unix_to_ts};
 use skill_constants::{LABELS_FILE, SQLITE_FILE};
 
 // ── Rounding helpers ──────────────────────────────────────────────────────────
@@ -111,8 +110,8 @@ pub struct RoundedScores {
 
 /// Load all embedding vectors from daily SQLite DBs in [start, end] UTC range.
 pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, Vec<f32>)> {
-    let ts_start = unix_to_ts(start_utc);
-    let ts_end = unix_to_ts(end_utc);
+    let ts_start = (start_utc as i64) * 1000;
+    let ts_end = (end_utc as i64) * 1000;
 
     let mut out: Vec<(u64, Vec<f32>)> = Vec::new();
     let Ok(entries) = std::fs::read_dir(skill_dir) else {
@@ -142,7 +141,7 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
             let ts: i64 = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
             let emb: Vec<f32> = skill_data::util::blob_to_f32(&blob);
-            Ok((ts_to_unix(ts), emb))
+            Ok(((ts / 1000) as u64, emb))
         });
         if let Ok(rows) = rows {
             for r in rows.flatten() {

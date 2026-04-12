@@ -10,7 +10,6 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use skill_data::label_store::LabelRow;
 use skill_data::session_csv::{metrics_csv_path, ppg_csv_path};
-use skill_data::util::ts_to_unix;
 
 mod local_days;
 pub use local_days::*;
@@ -696,8 +695,8 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         let (Some(s), Some(e)) = (*start, *end) else {
             continue;
         };
-        let ts_start = skill_data::util::unix_to_ts(s);
-        let ts_end = skill_data::util::unix_to_ts(e);
+        let ts_start = (s as i64) * 1000;
+        let ts_end = (e as i64) * 1000;
         if let Ok(avg) = stmt.query_row(rusqlite::params![ts_start, ts_end], |row| row.get::<_, Option<f64>>(0)) {
             session.avg_snr_db = avg;
         }
@@ -900,7 +899,7 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
         day_names.push(day_name);
         if let Ok(rows) = rows {
             for row in rows.filter_map(std::result::Result::ok) {
-                all_ts.push((ts_to_unix(row), day_idx));
+                all_ts.push(((row / 1000) as u64, day_idx));
             }
         }
     }

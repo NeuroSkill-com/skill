@@ -31,10 +31,10 @@ pub struct LabelEntry {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateLabelRequest {
     pub text: String,
     pub context: Option<String>,
-    #[serde(rename = "labelStartUtc", alias = "label_start_utc")]
     pub label_start_utc: Option<f64>,
     /// Optional EEG window boundaries (unix seconds).
     pub eeg_start: Option<u64>,
@@ -57,6 +57,7 @@ pub struct SearchLabelsRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchByEegRequest {
     pub start_utc: u64,
     pub end_utc: u64,

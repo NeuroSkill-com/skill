@@ -138,6 +138,53 @@ crate = "exg-luna"
 expression = "LicenseRef-AI100"
 license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
 
+# Device-driver crates that ship a LICENSE file but omit the `license` field
+# in Cargo.toml.  Hashes verified against the versions in Cargo.lock.
+[[licenses.clarify]]
+crate = "brainbit"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x3b94800f }]
+
+[[licenses.clarify]]
+crate = "brainvision"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0xa8b4c398 }]
+
+[[licenses.clarify]]
+crate = "cognionics"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x10f4a151 }]
+
+[[licenses.clarify]]
+crate = "gtec"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x3b94800f }]
+
+[[licenses.clarify]]
+crate = "muse-rs"
+expression = "Apache-2.0"
+license-files = [{ path = "LICENSE", hash = 0x6a929515 }]
+
+[[licenses.clarify]]
+crate = "neurofield"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0xe023fe1b }]
+
+[[licenses.clarify]]
+crate = "neurosity"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x3b94800f }]
+
+[[licenses.clarify]]
+crate = "neurosky"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x3b94800f }]
+
+[[licenses.clarify]]
+crate = "zuna-rs"
+expression = "Apache-2.0"
+license-files = [{ path = "LICENSE", hash = 0x6a929515 }]
+
 # ── Bans ──────────────────────────────────────────────────────────────────────
 [bans]
 # Duplicate versions are currently pervasive in transitive deps (Tauri/windows-* stack,

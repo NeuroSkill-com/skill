@@ -7,12 +7,14 @@ use serde::Deserialize;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeRangeRequest {
     pub start_utc: u64,
     pub end_utc: u64,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CompareRequest {
     a_start_utc: u64,
     a_end_utc: u64,
@@ -21,17 +23,20 @@ struct CompareRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CsvMetricsRequest {
     csv_path: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DayMetricsRequest {
     csv_paths: Vec<String>,
     max_ts_points: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SessionLocationRequest {
     csv_path: String,
     start_utc: u64,

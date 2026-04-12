@@ -55,6 +55,7 @@ pub(crate) struct ActivityRecentRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ActivityBucketsRequest {
     pub(crate) from_ts: Option<u64>,
     pub(crate) to_ts: Option<u64>,
@@ -72,6 +73,7 @@ pub(crate) struct ChatRenameRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ChatSaveMessageRequest {
     pub(crate) session_id: i64,
     pub(crate) role: String,
@@ -80,12 +82,14 @@ pub(crate) struct ChatSaveMessageRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ChatSessionParamsRequest {
     pub(crate) id: i64,
     pub(crate) params_json: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ChatSaveToolCallsRequest {
     pub(crate) message_id: i64,
     pub(crate) tool_calls: Vec<skill_llm::chat_store::StoredToolCall>,
@@ -121,11 +125,13 @@ pub(crate) struct ChatCompletionsRequest {
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ToolCancelRequest {
     pub(crate) tool_call_id: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LlmAddModelRequest {
     pub(crate) repo: String,
     pub(crate) filename: String,
@@ -140,6 +146,7 @@ pub(crate) struct LlmFilenameRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LlmImageRequest {
     pub(crate) png_base64: String,
 }

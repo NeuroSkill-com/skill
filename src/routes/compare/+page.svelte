@@ -414,7 +414,21 @@ let refreshing = $state(false);
 
 async function loadSessions(autoSelect = false) {
   // Primary source: sessions that have embeddings computed.
-  const embSessions = await daemonInvoke<EmbeddingSession[]>("list_embedding_sessions");
+  // The daemon returns a superset of fields; fill in computed defaults for any
+  // sessions missing n_epochs or day (e.g. sessions without embedding DBs).
+  const rawSessions = await daemonInvoke<(EmbeddingSession & { session_start_utc?: number; session_end_utc?: number })[]>("list_embedding_sessions");
+  const embSessions: EmbeddingSession[] = rawSessions
+    .filter((s) => (s.start_utc ?? s.session_start_utc) && (s.end_utc ?? s.session_end_utc))
+    .map((s) => {
+      const start = s.start_utc ?? s.session_start_utc!;
+      const end = s.end_utc ?? s.session_end_utc!;
+      return {
+        start_utc: start,
+        end_utc: end,
+        n_epochs: s.n_epochs ?? Math.floor((end - start) / 5),
+        day: s.day ?? localDateFromUtc(start),
+      };
+    });
 
   // Fallback: also pull from the unified session list (JSON sidecars) so that
   // sessions recorded today (whose embeddings haven't been computed yet) still
@@ -539,23 +553,32 @@ async function compare() {
   const sB = bStartUtc,
     eB = bEndUtc;
 
+  // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+  console.warn(`[compare] sA=${sA} eA=${eA} sB=${sB} eB=${eB}`);
+
   comparing = true;
   metricsA = null;
   metricsB = null;
   sleepA = null;
   sleepB = null;
 
-  const [ma, mb, sa, sb] = await Promise.all([
-    daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
-    daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
-    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
-    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
-  ]);
+  try {
+    const [ma, mb, sa, sb] = await Promise.all([
+      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
+      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
+      daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
+      daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
+    ]);
 
-  metricsA = ma;
-  metricsB = mb;
-  sleepA = sa.epochs.length > 0 ? sa : null;
-  sleepB = sb.epochs.length > 0 ? sb : null;
+    // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+    console.warn("[compare] metricsA:", ma?.n_epochs, "metricsB:", mb?.n_epochs);
+    metricsA = ma;
+    metricsB = mb;
+    sleepA = sa.epochs?.length > 0 ? sa : null;
+    sleepB = sb.epochs?.length > 0 ? sb : null;
+  } catch (e) {
+    console.error("compare() failed:", e);
+  }
   comparing = false;
 
   // Reset any previously computed UMAP — the user must request it again.
@@ -585,6 +608,8 @@ async function compare() {
 async function calculateUmap() {
   if (aRangeStart === null || aRangeEnd === null || bRangeStart === null || bRangeEnd === null) return;
 
+  // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+  console.warn("[umap] calculateUmap called, setting umapRequested+umapLoading=true");
   umapRequested = true;
   umapResult = null;
   umapLoading = true;
@@ -609,6 +634,8 @@ async function calculateUmap() {
   // support it yet, fall back to the synchronous compute_umap_compare.
   daemonInvoke<JobTicket>("enqueue_umap_compare", umapArgs)
     .then((ticket) => {
+      // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+      console.warn("[umap] enqueue ticket:", ticket);
       umapReadyUtc = ticket.estimated_ready_utc;
       startUmapTimer(ticket.estimated_secs);
 
@@ -634,7 +661,9 @@ async function calculateUmap() {
       }
       pollUmapJob(ticket.job_id);
     })
-    .catch(() => {
+    .catch((e) => {
+      // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+      console.warn("[umap] enqueue failed, falling back to direct:", e);
       // Job queue not available — fall back to direct (blocking) call
       umapEta = "computing 3D projection…";
       umapQueuePosition = 0;

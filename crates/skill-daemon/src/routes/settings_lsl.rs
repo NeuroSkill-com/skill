@@ -12,6 +12,7 @@ pub(crate) struct LslAutoConnectRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LslPairRequest {
     pub(crate) source_id: String,
     pub(crate) name: String,
@@ -21,6 +22,7 @@ pub(crate) struct LslPairRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LslUnpairRequest {
     pub(crate) source_id: String,
 }

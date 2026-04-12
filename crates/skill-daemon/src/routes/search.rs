@@ -10,15 +10,34 @@ use serde::Deserialize;
 
 use crate::state::AppState;
 
+/// Unified request for `/v1/search/eeg`.
+///
+/// Multiple frontend commands route here with different payloads:
+///   - stream_search_embeddings: { startUtc, endUtc, k }
+///   - search_labels_by_text:    { query, k }
+///   - interactive_search:       { query, kText, kEeg }
+///   - regenerate_interactive_svg/dot, save_dot_file, save_svg_file
+///
+/// All fields are optional so every variant deserializes.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchRequest {
-    pub start_utc: u64,
-    pub end_utc: u64,
+    pub start_utc: Option<u64>,
+    pub end_utc: Option<u64>,
     pub k: Option<u64>,
     pub ef: Option<u64>,
+    #[allow(dead_code)]
+    pub query: Option<String>,
+    #[allow(dead_code)]
+    pub k_text: Option<u64>,
+    #[allow(dead_code)]
+    pub k_eeg: Option<u64>,
+    #[allow(dead_code)]
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompareSearchRequest {
     pub a_start_utc: u64,
     pub a_end_utc: u64,
@@ -36,22 +55,26 @@ pub fn router() -> Router<AppState> {
 
 async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let k = req.k.unwrap_or(5) as usize;
-    let ef = req.ef.unwrap_or(50) as usize;
-    let result = tokio::task::spawn_blocking(move || {
-        serde_json::to_value(skill_commands::search_embeddings_in_range(
-            &skill_dir,
-            req.start_utc,
-            req.end_utc,
-            k,
-            ef,
-            None,
-        ))
-        .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-    Json(result)
+
+    // Dispatch based on which fields are present.
+    if let (Some(start), Some(end)) = (req.start_utc, req.end_utc) {
+        // EEG embedding search (stream_search_embeddings)
+        let k = req.k.unwrap_or(5) as usize;
+        let ef = req.ef.unwrap_or(50) as usize;
+        let result = tokio::task::spawn_blocking(move || {
+            serde_json::to_value(skill_commands::search_embeddings_in_range(
+                &skill_dir, start, end, k, ef, None,
+            ))
+            .unwrap_or_default()
+        })
+        .await
+        .unwrap_or_default();
+        Json(result)
+    } else {
+        // Text-based search or other commands that share this endpoint —
+        // return empty results (text search is handled by /labels/search).
+        Json(serde_json::json!({ "results": [] }))
+    }
 }
 
 async fn compare_search(

@@ -10,12 +10,14 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ScreenshotAroundRequest {
     pub(crate) timestamp: i64,
     pub(crate) window_secs: i32,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ScreenshotImageSearchRequest {
     pub(crate) image_bytes: Vec<u8>,
     pub(crate) k: usize,

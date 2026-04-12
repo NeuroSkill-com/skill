@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 // metrics_csv_path kept for backward compat if needed; find_metrics_path handles both formats.
-use skill_data::util::{ts_to_unix, unix_to_ts};
 
 use super::{
     find_metrics_path, load_metrics_csv, CsvMetricsResult, EpochRow, SessionMetrics, SleepEpoch, SleepStages,
@@ -96,8 +95,8 @@ fn migrate_embeddings_schema(conn: &rusqlite::Connection) {
 
 /// Return per-epoch time-series data for a session range (from SQLite).
 pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<EpochRow> {
-    let ts_start = unix_to_ts(start_utc);
-    let ts_end = unix_to_ts(end_utc);
+    let ts_start = (start_utc as i64) * 1000;
+    let ts_end = (end_utc as i64) * 1000;
     let mut rows: Vec<EpochRow> = Vec::new();
 
     let Ok(entries) = std::fs::read_dir(skill_dir) else {
@@ -179,7 +178,7 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
 
         let iter = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts_val: i64 = row.get(0)?;
-            let utc = ts_to_unix(ts_val);
+            let utc = (ts_val / 1000) as u64;
             let g = |i: usize| -> f64 { row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0) };
             Ok(EpochRow {
                 t: utc as f64,
@@ -250,8 +249,8 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
 
 /// Query aggregated band-power metrics from SQLite databases.
 pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> SessionMetrics {
-    let ts_start = unix_to_ts(start_utc);
-    let ts_end = unix_to_ts(end_utc);
+    let ts_start = (start_utc as i64) * 1000;
+    let ts_end = (end_utc as i64) * 1000;
 
     let mut total = SessionMetrics::default();
     let mut count = 0u64;
@@ -464,8 +463,8 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
 
 /// Classify each embedding epoch in `[start_utc, end_utc]` into a sleep stage.
 pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> SleepStages {
-    let ts_start = unix_to_ts(start_utc);
-    let ts_end = unix_to_ts(end_utc);
+    let ts_start = (start_utc as i64) * 1000;
+    let ts_end = (end_utc as i64) * 1000;
 
     struct RawEpoch {
         utc: u64,
@@ -523,7 +522,7 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
                     continue;
                 }
                 raw.push(RawEpoch {
-                    utc: ts_to_unix(ts),
+                    utc: (ts / 1000) as u64,
                     rd: rd.unwrap_or(0.0),
                     rt: rt.unwrap_or(0.0),
                     ra: ra.unwrap_or(0.0),

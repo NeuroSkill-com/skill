@@ -30,7 +30,7 @@ use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
 use rusqlite::params;
 use serde::Serialize;
 
-use skill_commands::{unix_to_ts, NeighborMetrics};
+use skill_commands::NeighborMetrics;
 use skill_constants::{
     HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE, LABEL_TEXT_INDEX_FILE,
     SQLITE_FILE,
@@ -137,8 +137,8 @@ use skill_data::util::blob_to_f32;
 /// `[eeg_start, eeg_end]` (unix seconds) and return their component-wise mean.
 /// Returns `None` if no epochs exist in that window.
 pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<Vec<f32>> {
-    let ts_start = unix_to_ts(eeg_start);
-    let ts_end = unix_to_ts(eeg_end);
+    let ts_start = (eeg_start as i64) * 1000;
+    let ts_end = (eeg_end as i64) * 1000;
 
     let mut sum: Vec<f32> = Vec::new();
     let mut count = 0usize;
@@ -192,8 +192,8 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
 
 /// Fetch EEG metrics averaged over `[eeg_start, eeg_end]` for label hydration.
 fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<NeighborMetrics> {
-    let ts_start = unix_to_ts(eeg_start);
-    let ts_end = unix_to_ts(eeg_end);
+    let ts_start = (eeg_start as i64) * 1000;
+    let ts_end = (eeg_end as i64) * 1000;
 
     // Accumulators
     let mut relax = 0f64;

@@ -85,6 +85,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   find_session_for_timestamp: [P, "/v1/history/find-session"],
 
   // Analysis
+  get_day_metrics_batch: [P, "/v1/analysis/day-metrics"],
   get_session_metrics: [P, "/v1/analysis/metrics"],
   get_session_timeseries: [P, "/v1/analysis/timeseries"],
   get_sleep_stages: [P, "/v1/analysis/sleep"],
