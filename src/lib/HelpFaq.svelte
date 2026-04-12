@@ -6,7 +6,10 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Help & FAQ content — mounted by the settings page's "Help & FAQ" tab. -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { getLocale, t } from "$lib/i18n/index.svelte";
+import { getFaqOldContent } from "$lib/help/help-loader";
+
+const faqEntries = $derived(getFaqOldContent(getLocale()));
 </script>
 
 <div class="prose-skill flex flex-col gap-6 pb-6">
@@ -179,32 +182,11 @@ umap_poll  — poll for UMAP result by job_id`}</pre>
     <div class="flex flex-col divide-y divide-border dark:divide-white/[0.05]
                 rounded-xl border border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#14141e] overflow-hidden">
-      {#each [
-        ["helpOld.hooksFaqQ", "helpOld.hooksFaqA"],
-        ["helpOld.faqQ1",  "helpOld.faqA1"],
-        ["helpOld.faqQ2",  "helpOld.faqA2"],
-        ["helpOld.faqQ3",  "helpOld.faqA3"],
-        ["helpOld.faqQ4",  "helpOld.faqA4"],
-        ["helpOld.faqQ5",  "helpOld.faqA5"],
-        ["helpOld.faqQ6",  "helpOld.faqA6"],
-        ["helpOld.faqQ7",  "helpOld.faqA7"],
-        ["helpOld.faqQ8",  "helpOld.faqA8"],
-        ["helpOld.faqQ9",  "helpOld.faqA9"],
-        ["helpOld.faqQ10", "helpOld.faqA10"],
-        ["helpOld.faqQ11", "helpOld.faqA11"],
-        ["helpOld.faqQ12", "helpOld.faqA12"],
-        ["helpOld.faqQ13", "helpOld.faqA13"],
-        ["helpOld.faqQ14", "helpOld.faqA14"],
-        ["helpOld.faqQ15", "helpOld.faqA15"],
-        ["helpOld.faqQ16", "helpOld.faqA16"],
-        ["helpOld.faqQ17", "helpOld.faqA17"],
-        ["helpOld.faqQ18", "helpOld.faqA18"],
-        ["helpOld.faqQ19", "helpOld.faqA19"],
-      ] as [qKey, aKey]}
+      {#each faqEntries as entry}
         <details class="group px-4 py-3 cursor-pointer">
           <summary class="flex items-center justify-between gap-3 text-[0.78rem]
                           font-semibold text-foreground list-none select-none">
-            {t(qKey)}
+            {entry.question}
             <svg class="w-4 h-4 shrink-0 text-muted-foreground transition-transform
                         group-open:rotate-180"
                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -212,7 +194,7 @@ umap_poll  — poll for UMAP result by job_id`}</pre>
             </svg>
           </summary>
           <p class="mt-2 text-[0.75rem] text-muted-foreground leading-relaxed">
-            {t(aKey)}
+            {entry.answer}
           </p>
         </details>
       {/each}

@@ -8,60 +8,45 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { Separator } from "$lib/components/ui/separator";
-import { t } from "$lib/i18n/index.svelte";
+import { getLocale } from "$lib/i18n/index.svelte";
+import { getHelpContent } from "./help-loader";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 
-const overviewKeys = [
-  ["helpHooks.whatIsTitle", "helpHooks.whatIsBody"],
-  ["helpHooks.howItWorksTitle", "helpHooks.howItWorksBody"],
-  ["helpHooks.scenariosTitle", "helpHooks.scenariosBody"],
-] as const;
-
-const configKeys = [
-  ["helpHooks.nameTitle", "helpHooks.nameBody"],
-  ["helpHooks.keywordsTitle", "helpHooks.keywordsBody"],
-  ["helpHooks.keywordSugTitle", "helpHooks.keywordSugBody"],
-  ["helpHooks.distanceTitle", "helpHooks.distanceBody"],
-  ["helpHooks.distanceSugTitle", "helpHooks.distanceSugBody"],
-  ["helpHooks.recentLimitTitle", "helpHooks.recentLimitBody"],
-  ["helpHooks.commandTitle", "helpHooks.commandBody"],
-  ["helpHooks.textTitle", "helpHooks.textBody"],
-] as const;
-
-const advancedKeys = [
-  ["helpHooks.examplesTitle", "helpHooks.examplesBody"],
-  ["helpHooks.historyTitle", "helpHooks.historyBody"],
-  ["helpHooks.wsEventsTitle", "helpHooks.wsEventsBody"],
-  ["helpHooks.tipsTitle", "helpHooks.tipsBody"],
-] as const;
+const sections = $derived(getHelpContent("hooks", getLocale()));
 </script>
 
 <div class="flex flex-col gap-6 pb-6">
 
-  <HelpSection title={t("helpHooks.overviewSection")}
-    description={t("helpHooks.overviewSectionDesc")}>
-    {#each overviewKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[0]}
+  <HelpSection title={sections[0].title}
+    description={sections[0].description}>
+    {#each sections[0].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpHooks.configSection")}
-    description={t("helpHooks.configSectionDesc")}>
-    {#each configKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[1]}
+  <HelpSection title={sections[1].title}
+    description={sections[1].description}>
+    {#each sections[1].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpHooks.advancedSection")}
-    description={t("helpHooks.advancedSectionDesc")}>
-    {#each advancedKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[2]}
+  <HelpSection title={sections[2].title}
+    description={sections[2].description}>
+    {#each sections[2].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
 </div>

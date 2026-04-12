@@ -8,88 +8,67 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { Separator } from "$lib/components/ui/separator";
-import { t } from "$lib/i18n/index.svelte";
+import { getLocale } from "$lib/i18n/index.svelte";
+import { getHelpContent } from "./help-loader";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 
-const overviewKeys = [
-  ["helpLlm.whatIsTitle", "helpLlm.whatIsBody"],
-  ["helpLlm.privacyTitle", "helpLlm.privacyBody"],
-  ["helpLlm.compatTitle", "helpLlm.compatBody"],
-] as const;
-
-const modelKeys = [
-  ["helpLlm.catalogTitle", "helpLlm.catalogBody"],
-  ["helpLlm.quantsTitle", "helpLlm.quantsBody"],
-  ["helpLlm.hardwareFitTitle", "helpLlm.hardwareFitBody"],
-  ["helpLlm.visionTitle", "helpLlm.visionBody"],
-  ["helpLlm.downloadTitle", "helpLlm.downloadBody"],
-] as const;
-
-const inferenceKeys = [
-  ["helpLlm.gpuLayersTitle", "helpLlm.gpuLayersBody"],
-  ["helpLlm.ctxSizeTitle", "helpLlm.ctxSizeBody"],
-  ["helpLlm.parallelTitle", "helpLlm.parallelBody"],
-  ["helpLlm.apiKeyTitle", "helpLlm.apiKeyBody"],
-] as const;
-
-const toolKeys = [
-  ["helpLlm.toolsOverviewTitle", "helpLlm.toolsOverviewBody"],
-  ["helpLlm.toolsSafeTitle", "helpLlm.toolsSafeBody"],
-  ["helpLlm.toolsDangerTitle", "helpLlm.toolsDangerBody"],
-  ["helpLlm.toolsExecModeTitle", "helpLlm.toolsExecModeBody"],
-] as const;
-
-const chatKeys = [
-  ["helpLlm.chatWindowTitle", "helpLlm.chatWindowBody"],
-  ["helpLlm.chatApiTitle", "helpLlm.chatApiBody"],
-  ["helpLlm.serverLogsTitle", "helpLlm.serverLogsBody"],
-] as const;
+const sections = $derived(getHelpContent("llm", getLocale()));
 </script>
 
 <div class="flex flex-col gap-6 pb-6">
 
-  <HelpSection title={t("helpLlm.overviewSection")}
-    description={t("helpLlm.overviewSectionDesc")}>
-    {#each overviewKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[0]}
+  <HelpSection title={sections[0].title}
+    description={sections[0].description}>
+    {#each sections[0].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpLlm.modelsSection")}
-    description={t("helpLlm.modelsSectionDesc")}>
-    {#each modelKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[1]}
+  <HelpSection title={sections[1].title}
+    description={sections[1].description}>
+    {#each sections[1].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpLlm.inferenceSection")}
-    description={t("helpLlm.inferenceSectionDesc")}>
-    {#each inferenceKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[2]}
+  <HelpSection title={sections[2].title}
+    description={sections[2].description}>
+    {#each sections[2].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpLlm.toolsSection")}
-    description={t("helpLlm.toolsSectionDesc")}>
-    {#each toolKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[3]}
+  <HelpSection title={sections[3].title}
+    description={sections[3].description}>
+    {#each sections[3].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
-  <HelpSection title={t("helpLlm.chatSection")}
-    description={t("helpLlm.chatSectionDesc")}>
-    {#each chatKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if sections[4]}
+  <HelpSection title={sections[4].title}
+    description={sections[4].description}>
+    {#each sections[4].items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
 </div>

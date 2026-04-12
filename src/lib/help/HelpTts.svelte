@@ -8,7 +8,8 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { Separator } from "$lib/components/ui/separator";
-import { t } from "$lib/i18n/index.svelte";
+import { getLocale, t } from "$lib/i18n/index.svelte";
+import { getHelpContent } from "./help-loader";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 import TtsTestWidget from "./TtsTestWidget.svelte";
@@ -86,15 +87,8 @@ ws.on("open", () => {
   },
 ];
 
-const infoKeys: [string, string][] = [
-  ["helpTts.overviewTitle", "helpTts.overviewBody"],
-  ["helpTts.howItWorksTitle", "helpTts.howItWorksBody"],
-  ["helpTts.modelTitle", "helpTts.modelBody"],
-  ["helpTts.requirementsTitle", "helpTts.requirementsBody"],
-  ["helpTts.calibrationTitle", "helpTts.calibrationBody"],
-  ["helpTts.apiTitle", "helpTts.apiBody"],
-  ["helpTts.loggingTitle", "helpTts.loggingBody"],
-] as const;
+const sections = $derived(getHelpContent("tts", getLocale()));
+const ttsSection = $derived(sections[0]);
 </script>
 
 <div class="flex flex-col gap-6 pb-6">
@@ -116,11 +110,13 @@ const infoKeys: [string, string][] = [
   </div>
 
   <!-- ── Reference items ──────────────────────────────────────────────────── -->
-  <HelpSection title={t("helpTts.overviewTitle")}>
-    {#each infoKeys as [titleKey, bodyKey]}
-      <HelpItem id={titleKey} title={t(titleKey)} body={t(bodyKey)} />
+  {#if ttsSection}
+  <HelpSection title={ttsSection.title}>
+    {#each ttsSection.items as item}
+      <HelpItem id={item.id} title={item.title} body={item.body} />
     {/each}
   </HelpSection>
+  {/if}
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 

@@ -21,7 +21,8 @@ import HelpReferences from "$lib/help/HelpReferences.svelte";
 import HelpSettings from "$lib/help/HelpSettings.svelte";
 import HelpTts from "$lib/help/HelpTts.svelte";
 import HelpWindows from "$lib/help/HelpWindows.svelte";
-import { t } from "$lib/i18n/index.svelte";
+import { getLocale, t } from "$lib/i18n/index.svelte";
+import { getHelpContent, getFaqContent } from "$lib/help/help-loader";
 import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
@@ -73,179 +74,34 @@ const TAB_ICONS: Record<Tab, string> = {
   faq: `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
 };
 
-// ── Searchable help item registry ────────────────────────────────────────
-type SearchEntry = { tab: Tab; titleKey: string; bodyKey: string };
+// ── Searchable help item registry (built dynamically from markdown) ──────
+type SearchEntry = { tab: Tab; id: string; title: string; body: string };
 
-const searchIndex: SearchEntry[] = [
-  // ── Dashboard ──────────────────────────────────────────────────────────
-  { tab: "dashboard", titleKey: "helpDash.statusHero", bodyKey: "helpDash.statusHeroBody" },
-  { tab: "dashboard", titleKey: "helpDash.battery", bodyKey: "helpDash.batteryBody" },
-  { tab: "dashboard", titleKey: "helpDash.signalQuality", bodyKey: "helpDash.signalQualityBody" },
-  { tab: "dashboard", titleKey: "helpDash.eegChannelGrid", bodyKey: "helpDash.eegChannelGridBody" },
-  { tab: "dashboard", titleKey: "helpDash.uptimeSamples", bodyKey: "helpDash.uptimeSamplesBody" },
-  { tab: "dashboard", titleKey: "helpDash.csvRecording", bodyKey: "helpDash.csvRecordingBody" },
-  { tab: "dashboard", titleKey: "helpDash.bandPowers", bodyKey: "helpDash.bandPowersBody" },
-  { tab: "dashboard", titleKey: "helpDash.faa", bodyKey: "helpDash.faaBody" },
-  { tab: "dashboard", titleKey: "helpDash.eegWaveforms", bodyKey: "helpDash.eegWaveformsBody" },
-  { tab: "dashboard", titleKey: "helpDash.gpuUtilisation", bodyKey: "helpDash.gpuUtilisationBody" },
-  { tab: "dashboard", titleKey: "helpDash.trayGrey", bodyKey: "helpDash.trayGreyDesc" },
-  { tab: "dashboard", titleKey: "helpDash.trayAmber", bodyKey: "helpDash.trayAmberDesc" },
-  { tab: "dashboard", titleKey: "helpDash.trayGreen", bodyKey: "helpDash.trayGreenDesc" },
-  { tab: "dashboard", titleKey: "helpDash.trayRed", bodyKey: "helpDash.trayRedDesc" },
-  // ── Settings ───────────────────────────────────────────────────────────
-  { tab: "settings", titleKey: "helpSettings.pairedDevices", bodyKey: "helpSettings.pairedDevicesBody" },
-  { tab: "settings", titleKey: "helpSettings.signalProcessing", bodyKey: "helpSettings.signalProcessingBody" },
-  { tab: "settings", titleKey: "helpSettings.eegEmbedding", bodyKey: "helpSettings.eegEmbeddingBody" },
-  { tab: "settings", titleKey: "helpSettings.calibration", bodyKey: "helpSettings.calibrationBody" },
-  { tab: "settings", titleKey: "helpSettings.calibrationTts", bodyKey: "helpSettings.calibrationTtsBody" },
-  { tab: "settings", titleKey: "helpSettings.globalShortcuts", bodyKey: "helpSettings.globalShortcutsBody" },
-  { tab: "settings", titleKey: "helpSettings.debugLogging", bodyKey: "helpSettings.debugLoggingBody" },
-  { tab: "settings", titleKey: "helpSettings.updates", bodyKey: "helpSettings.updatesBody" },
-  { tab: "settings", titleKey: "helpSettings.appearanceTab", bodyKey: "helpSettings.appearanceTabBody" },
-  { tab: "settings", titleKey: "helpSettings.goalsTab", bodyKey: "helpSettings.goalsTabBody" },
-  { tab: "settings", titleKey: "helpSettings.embeddingsTab", bodyKey: "helpSettings.embeddingsTabBody" },
-  { tab: "settings", titleKey: "helpSettings.shortcutsTab", bodyKey: "helpSettings.shortcutsTabBody" },
-  { tab: "settings", titleKey: "helpSettings.umapTab", bodyKey: "helpSettings.umapTabBody" },
-  { tab: "settings", titleKey: "helpSettings.encoderStatus", bodyKey: "helpSettings.encoderStatusBody" },
-  { tab: "settings", titleKey: "helpSettings.embeddingsToday", bodyKey: "helpSettings.embeddingsTodayBody" },
-  { tab: "settings", titleKey: "helpSettings.hnswParams", bodyKey: "helpSettings.hnswParamsBody" },
-  { tab: "settings", titleKey: "helpSettings.dataNorm", bodyKey: "helpSettings.dataNormBody" },
-  // ── OpenBCI ────────────────────────────────────────────────────────────
-  { tab: "settings", titleKey: "helpSettings.openbciBoard", bodyKey: "helpSettings.openbciBoardBody" },
-  { tab: "settings", titleKey: "helpSettings.openbciGanglion", bodyKey: "helpSettings.openbciGanglionBody" },
-  { tab: "settings", titleKey: "helpSettings.openbciSerial", bodyKey: "helpSettings.openbciSerialBody" },
-  { tab: "settings", titleKey: "helpSettings.openbciWifi", bodyKey: "helpSettings.openbciWifiBody" },
-  { tab: "settings", titleKey: "helpSettings.openbciGalea", bodyKey: "helpSettings.openbciGaleaBody" },
-  { tab: "settings", titleKey: "helpSettings.openbciChannels", bodyKey: "helpSettings.openbciChannelsBody" },
-  // ── Activity Tracking ──────────────────────────────────────────────────
-  { tab: "settings", titleKey: "helpSettings.activeWindowHelp", bodyKey: "helpSettings.activeWindowHelpBody" },
-  { tab: "settings", titleKey: "helpSettings.inputActivityHelp", bodyKey: "helpSettings.inputActivityHelpBody" },
-  { tab: "settings", titleKey: "helpSettings.activityStorageHelp", bodyKey: "helpSettings.activityStorageHelpBody" },
-  {
-    tab: "settings",
-    titleKey: "helpSettings.activityPermissionsHelp",
-    bodyKey: "helpSettings.activityPermissionsHelpBody",
-  },
-  {
-    tab: "settings",
-    titleKey: "helpSettings.activityDisablingHelp",
-    bodyKey: "helpSettings.activityDisablingHelpBody",
-  },
-  // ── Permissions tab ────────────────────────────────────────────────────
-  { tab: "faq", titleKey: "helpFaq.q51", bodyKey: "helpFaq.a51" },
-  { tab: "faq", titleKey: "helpFaq.q52", bodyKey: "helpFaq.a52" },
-  { tab: "faq", titleKey: "helpFaq.q53", bodyKey: "helpFaq.a53" },
-  { tab: "faq", titleKey: "helpFaq.q54", bodyKey: "helpFaq.a54" },
-  { tab: "faq", titleKey: "helpFaq.q55", bodyKey: "helpFaq.a55" },
-  // ── Windows ────────────────────────────────────────────────────────────
-  { tab: "windows", titleKey: "helpWindows.labelTitle", bodyKey: "helpWindows.labelBody" },
-  { tab: "windows", titleKey: "helpWindows.searchTitle", bodyKey: "helpWindows.searchBody" },
-  { tab: "windows", titleKey: "helpWindows.searchEegTitle", bodyKey: "helpWindows.searchEegBody" },
-  { tab: "windows", titleKey: "helpWindows.searchTextTitle", bodyKey: "helpWindows.searchTextBody" },
-  { tab: "windows", titleKey: "helpWindows.searchInteractiveTitle", bodyKey: "helpWindows.searchInteractiveBody" },
-  { tab: "windows", titleKey: "helpWindows.calTitle", bodyKey: "helpWindows.calBody" },
-  { tab: "windows", titleKey: "helpWindows.settingsTitle", bodyKey: "helpWindows.settingsBody" },
-  { tab: "windows", titleKey: "helpWindows.helpTitle", bodyKey: "helpWindows.helpBody" },
-  { tab: "windows", titleKey: "helpWindows.onboardingTitle", bodyKey: "helpWindows.onboardingBody" },
-  { tab: "windows", titleKey: "helpWindows.apiTitle", bodyKey: "helpWindows.apiBody" },
-  { tab: "windows", titleKey: "helpWindows.sleepTitle", bodyKey: "helpWindows.sleepBody" },
-  { tab: "windows", titleKey: "helpWindows.compareTitle", bodyKey: "helpWindows.compareBody" },
-  { tab: "windows", titleKey: "helpWindows.cmdPaletteTitle", bodyKey: "helpWindows.cmdPaletteBody" },
-  { tab: "windows", titleKey: "helpWindows.shortcutsOverlayTitle", bodyKey: "helpWindows.shortcutsOverlayBody" },
-  // ── API ────────────────────────────────────────────────────────────────
-  { tab: "api", titleKey: "helpApi.liveStreaming", bodyKey: "helpApi.liveStreamingBody" },
-  { tab: "api", titleKey: "helpApi.commands", bodyKey: "helpApi.commandsBody" },
-  { tab: "api", titleKey: "helpApi.cmdStatus", bodyKey: "helpApi.cmdStatusDesc" },
-  { tab: "api", titleKey: "helpApi.cmdCalibrate", bodyKey: "helpApi.cmdCalibrateDesc" },
-  { tab: "api", titleKey: "helpApi.cmdLabel", bodyKey: "helpApi.cmdLabelDesc" },
-  { tab: "api", titleKey: "helpApi.cmdSearch", bodyKey: "helpApi.cmdSearchDesc" },
-  { tab: "api", titleKey: "helpApi.cmdSessions", bodyKey: "helpApi.cmdSessionsDesc" },
-  { tab: "api", titleKey: "helpApi.cmdCompare", bodyKey: "helpApi.cmdCompareDesc" },
-  { tab: "api", titleKey: "helpApi.cmdSleep", bodyKey: "helpApi.cmdSleepDesc" },
-  { tab: "api", titleKey: "helpApi.cmdUmap", bodyKey: "helpApi.cmdUmapDesc" },
-  { tab: "api", titleKey: "helpApi.cmdUmapPoll", bodyKey: "helpApi.cmdUmapPollDesc" },
-  { tab: "api", titleKey: "helpApi.cmdSay", bodyKey: "helpApi.cmdSayDesc" },
-  // ── LLM ────────────────────────────────────────────────────────────────
-  { tab: "llm", titleKey: "helpLlm.whatIsTitle", bodyKey: "helpLlm.whatIsBody" },
-  { tab: "llm", titleKey: "helpLlm.privacyTitle", bodyKey: "helpLlm.privacyBody" },
-  { tab: "llm", titleKey: "helpLlm.compatTitle", bodyKey: "helpLlm.compatBody" },
-  { tab: "llm", titleKey: "helpLlm.catalogTitle", bodyKey: "helpLlm.catalogBody" },
-  { tab: "llm", titleKey: "helpLlm.quantsTitle", bodyKey: "helpLlm.quantsBody" },
-  { tab: "llm", titleKey: "helpLlm.hardwareFitTitle", bodyKey: "helpLlm.hardwareFitBody" },
-  { tab: "llm", titleKey: "helpLlm.visionTitle", bodyKey: "helpLlm.visionBody" },
-  { tab: "llm", titleKey: "helpLlm.downloadTitle", bodyKey: "helpLlm.downloadBody" },
-  { tab: "llm", titleKey: "helpLlm.gpuLayersTitle", bodyKey: "helpLlm.gpuLayersBody" },
-  { tab: "llm", titleKey: "helpLlm.ctxSizeTitle", bodyKey: "helpLlm.ctxSizeBody" },
-  { tab: "llm", titleKey: "helpLlm.parallelTitle", bodyKey: "helpLlm.parallelBody" },
-  { tab: "llm", titleKey: "helpLlm.apiKeyTitle", bodyKey: "helpLlm.apiKeyBody" },
-  { tab: "llm", titleKey: "helpLlm.toolsOverviewTitle", bodyKey: "helpLlm.toolsOverviewBody" },
-  { tab: "llm", titleKey: "helpLlm.toolsSafeTitle", bodyKey: "helpLlm.toolsSafeBody" },
-  { tab: "llm", titleKey: "helpLlm.toolsDangerTitle", bodyKey: "helpLlm.toolsDangerBody" },
-  { tab: "llm", titleKey: "helpLlm.toolsExecModeTitle", bodyKey: "helpLlm.toolsExecModeBody" },
-  { tab: "llm", titleKey: "helpLlm.chatWindowTitle", bodyKey: "helpLlm.chatWindowBody" },
-  { tab: "llm", titleKey: "helpLlm.chatApiTitle", bodyKey: "helpLlm.chatApiBody" },
-  { tab: "llm", titleKey: "helpLlm.serverLogsTitle", bodyKey: "helpLlm.serverLogsBody" },
-  // ── Proactive Hooks ────────────────────────────────────────────────────
-  { tab: "hooks", titleKey: "helpHooks.whatIsTitle", bodyKey: "helpHooks.whatIsBody" },
-  { tab: "hooks", titleKey: "helpHooks.howItWorksTitle", bodyKey: "helpHooks.howItWorksBody" },
-  { tab: "hooks", titleKey: "helpHooks.scenariosTitle", bodyKey: "helpHooks.scenariosBody" },
-  { tab: "hooks", titleKey: "helpHooks.nameTitle", bodyKey: "helpHooks.nameBody" },
-  { tab: "hooks", titleKey: "helpHooks.keywordsTitle", bodyKey: "helpHooks.keywordsBody" },
-  { tab: "hooks", titleKey: "helpHooks.keywordSugTitle", bodyKey: "helpHooks.keywordSugBody" },
-  { tab: "hooks", titleKey: "helpHooks.distanceTitle", bodyKey: "helpHooks.distanceBody" },
-  { tab: "hooks", titleKey: "helpHooks.distanceSugTitle", bodyKey: "helpHooks.distanceSugBody" },
-  { tab: "hooks", titleKey: "helpHooks.recentLimitTitle", bodyKey: "helpHooks.recentLimitBody" },
-  { tab: "hooks", titleKey: "helpHooks.commandTitle", bodyKey: "helpHooks.commandBody" },
-  { tab: "hooks", titleKey: "helpHooks.textTitle", bodyKey: "helpHooks.textBody" },
-  { tab: "hooks", titleKey: "helpHooks.examplesTitle", bodyKey: "helpHooks.examplesBody" },
-  { tab: "hooks", titleKey: "helpHooks.historyTitle", bodyKey: "helpHooks.historyBody" },
-  { tab: "hooks", titleKey: "helpHooks.wsEventsTitle", bodyKey: "helpHooks.wsEventsBody" },
-  { tab: "hooks", titleKey: "helpHooks.tipsTitle", bodyKey: "helpHooks.tipsBody" },
-  // ── Voice / TTS ────────────────────────────────────────────────────────
-  { tab: "tts", titleKey: "helpTts.overviewTitle", bodyKey: "helpTts.overviewBody" },
-  { tab: "tts", titleKey: "helpTts.howItWorksTitle", bodyKey: "helpTts.howItWorksBody" },
-  { tab: "tts", titleKey: "helpTts.modelTitle", bodyKey: "helpTts.modelBody" },
-  { tab: "tts", titleKey: "helpTts.requirementsTitle", bodyKey: "helpTts.requirementsBody" },
-  { tab: "tts", titleKey: "helpTts.calibrationTitle", bodyKey: "helpTts.calibrationBody" },
-  { tab: "tts", titleKey: "helpTts.apiTitle", bodyKey: "helpTts.apiBody" },
-  { tab: "tts", titleKey: "helpTts.loggingTitle", bodyKey: "helpTts.loggingBody" },
-  // ── Privacy ────────────────────────────────────────────────────────────
-  { tab: "privacy", titleKey: "helpPrivacy.allLocal", bodyKey: "helpPrivacy.allLocalBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.noAccounts", bodyKey: "helpPrivacy.noAccountsBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.dataLocation", bodyKey: "helpPrivacy.dataLocationBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.noTelemetry", bodyKey: "helpPrivacy.noTelemetryBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.localWs", bodyKey: "helpPrivacy.localWsBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.mdns", bodyKey: "helpPrivacy.mdnsBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.updateChecks", bodyKey: "helpPrivacy.updateChecksBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.ble", bodyKey: "helpPrivacy.bleBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.osPermissions", bodyKey: "helpPrivacy.osPermissionsBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.deviceIds", bodyKey: "helpPrivacy.deviceIdsBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.gpuLocal", bodyKey: "helpPrivacy.gpuLocalBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.filtering", bodyKey: "helpPrivacy.filteringBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.nnSearch", bodyKey: "helpPrivacy.nnSearchBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.access", bodyKey: "helpPrivacy.accessBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.delete", bodyKey: "helpPrivacy.deleteBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.export", bodyKey: "helpPrivacy.exportBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.encrypt", bodyKey: "helpPrivacy.encryptBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.activityTracking", bodyKey: "helpPrivacy.activityTrackingBody" },
-  { tab: "privacy", titleKey: "helpPrivacy.activityPermission", bodyKey: "helpPrivacy.activityPermissionBody" },
-  // ── FAQ ────────────────────────────────────────────────────────────────
-  ...Array.from({ length: 50 }, (_, i) => ({
-    tab: "faq" as Tab,
-    titleKey: `helpFaq.q${i + 1}`,
-    bodyKey: `helpFaq.a${i + 1}`,
-  })),
-];
+const SEARCH_TABS: Tab[] = ["dashboard", "settings", "windows", "api", "privacy", "hooks", "llm", "tts"];
 
-// ── Derived search results (reactive to locale changes via t()) ──────────
+const searchIndex = $derived.by(() => {
+  const loc = getLocale();
+  const entries: SearchEntry[] = [];
+  for (const tab of SEARCH_TABS) {
+    for (const section of getHelpContent(tab, loc)) {
+      for (const item of section.items) {
+        entries.push({ tab, id: item.id, title: item.title, body: item.body });
+      }
+    }
+  }
+  for (const entry of getFaqContent(loc)) {
+    entries.push({ tab: "faq", id: entry.id, title: entry.question, body: entry.answer });
+  }
+  return entries;
+});
+
+// ── Derived search results (reactive to locale changes) ─────────────────
 const searchResults = $derived.by(() => {
   const q = searchQuery.trim().toLowerCase();
   if (!q) return [] as SearchEntry[];
-  return searchIndex.filter((item) => {
-    const title = t(item.titleKey as Parameters<typeof t>[0]).toLowerCase();
-    const body = t(item.bodyKey as Parameters<typeof t>[0]).toLowerCase();
-    return title.includes(q) || body.includes(q);
-  });
+  return searchIndex.filter((item) =>
+    item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q),
+  );
 });
 
 function goToTab(id: Tab) {
@@ -256,8 +112,8 @@ function goToTab(id: Tab) {
 // ── Search-result navigation ──────────────────────────────────────────────
 let pendingScrollKey = "";
 
-function goToItem(targetTab: Tab, titleKey: string) {
-  pendingScrollKey = titleKey;
+function goToItem(targetTab: Tab, id: string) {
+  pendingScrollKey = id;
   tab = targetTab;
   helpTitlebarState.query = "";
 }
@@ -509,10 +365,8 @@ useWindowTitle("window.title.help");
             </p>
             {#each searchResults as item}
               {@const tLabel = helpTabLabel(item.tab)}
-              {@const title  = t(item.titleKey as Parameters<typeof t>[0])}
-              {@const body   = t(item.bodyKey  as Parameters<typeof t>[0])}
               <button
-                onclick={() => goToItem(item.tab, item.titleKey)}
+                onclick={() => goToItem(item.tab, item.id)}
                 class="group text-left rounded-xl border border-border dark:border-white/[0.06]
                        bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
                        hover:border-foreground/20 dark:hover:border-white/[0.12]
@@ -523,9 +377,9 @@ useWindowTitle("window.title.help");
                              text-violet-600 dark:text-violet-400 w-fit">
                   {tLabel}
                 </span>
-                <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{title}</span>
+                <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{item.title}</span>
                 <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
-                  {body.length > 160 ? body.slice(0, 160) + "…" : body}
+                  {item.body.length > 160 ? item.body.slice(0, 160) + "…" : item.body}
                 </span>
               </button>
             {/each}
