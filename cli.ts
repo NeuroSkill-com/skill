@@ -82,6 +82,8 @@ const CLI_VERSION = "1.3.0";
  *   devices pair <id> [name]       Pair a BLE device
  *   devices forget <id>            Forget a paired device
  *   devices set-preferred <id>     Set preferred device for auto-connect
+ *   start-session [target]         Start a recording session (optional BLE target id)
+ *   stop-session                   Stop the current recording session
  *   scanner start|stop|state       Control BLE device scanner
  *   reconnect state|enable|disable|retry|cancel  Manage auto-reconnect
  *   service install|uninstall|status  Manage daemon background service
@@ -1152,6 +1154,9 @@ function parseArgs(): Args {
     else if (args.command === "devices" && args.subAction === "pair" && args.deviceId && !args.calName) {
       args.calName = a; // device name for pairing
     }
+    else if (args.command === "start-session" && !args.text) {
+      args.text = a; // optional target device id
+    }
     else if (args.command === "scanner" && !args.subAction) {
       args.subAction = a.toLowerCase(); // start|stop|state
     }
@@ -1305,6 +1310,8 @@ ${m("devices [list]",                                "list discovered BLE device
 ${m("devices pair <id> [name]",                      "pair a BLE device by ID")}
 ${m("devices forget <id>",                           "forget a paired device")}
 ${m("devices set-preferred <id>",                    "set the preferred device for auto-connect")}
+${m("start-session [target]",                         "start a recording session (optional BLE device target)")}
+${m("stop-session",                                  "stop the current recording session")}
 ${m("scanner start|stop|state",                      "control the BLE device scanner")}
 ${m("reconnect state|enable|disable|retry|cancel",   "manage auto-reconnect behavior")}
 ${m("service install|uninstall|status",              "manage the daemon background service")}
@@ -5194,6 +5201,19 @@ async function cmdDevices(args: Args): Promise<void> {
   printError(`unknown devices action: ${action}. Use: list, pair, forget, set-preferred`);
 }
 
+// ── Session control ──────────────────────────────────────────────────────────
+
+async function cmdStartSession(args: Args): Promise<void> {
+  const cmd: Record<string, unknown> = { command: "start_session" };
+  if (args.text) cmd.target = args.text;
+  const r = await send(cmd as any);
+  printJson(r);
+}
+
+async function cmdStopSession(): Promise<void> {
+  printJson(await send({ command: "cancel_session" }));
+}
+
 // ── Scanner control ──────────────────────────────────────────────────────────
 
 async function cmdScanner(args: Args): Promise<void> {
@@ -6275,6 +6295,12 @@ async function main(): Promise<void> {
         break;
       case "iroh":
         await cmdIroh(args);
+        break;
+      case "start-session":
+        await cmdStartSession(args);
+        break;
+      case "stop-session":
+        await cmdStopSession();
         break;
       case "tokens":
         await cmdTokens(args);

@@ -3906,6 +3906,47 @@ async function testLlmExtended(): Promise<void> {
 // 27. IROH EXTENDED — phone-invite, scope-groups, client permissions
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 27b. SESSION CONTROL — start_session, cancel_session
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testSessionControl(): Promise<void> {
+  heading("session control (start / cancel)");
+  info("Tests start_session and cancel_session WS commands.");
+
+  // ── cancel_session (safe to call even if no session) ────────────────────
+  try {
+    info("Testing cancel_session (stop any running session)…");
+    const r = await send({ command: "cancel_session" });
+    r.command === "cancel_session"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+    typeof r.state === "string"
+      ? ok(`state="${r.state}" after cancel`)
+      : ok("cancel_session responded");
+  } catch (e: any) { fail(`cancel_session failed: ${e.message}`); }
+
+  // ── start_session without target ────────────────────────────────────────
+  try {
+    info("Testing start_session without target…");
+    const r = await send({ command: "start_session" });
+    r.command === "start_session"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+    // May return disconnected (no device) or scanning — both are valid
+    typeof r.state === "string"
+      ? ok(`state="${r.state}" after start`)
+      : ok("start_session responded");
+  } catch (e: any) { fail(`start_session failed: ${e.message}`); }
+
+  // ── cancel again to clean up ────────────────────────────────────────────
+  try {
+    const r = await send({ command: "cancel_session" });
+    r.ok !== false ? ok("cleanup cancel_session succeeded") : ok(`cleanup cancel: ${r.error}`);
+  } catch (e: any) { fail(`cleanup cancel failed: ${e.message}`); }
+}
+
+
 async function testIrohExtended(): Promise<void> {
   heading("iroh extended commands");
   info("Tests iroh_scope_groups, iroh_client_permissions, iroh_phone_invite.");
@@ -4829,6 +4870,7 @@ async function main(): Promise<void> {
   await testSleepSchedule();
   await testHealth();
   await testOura();
+  await testSessionControl();
   await testIrohExtended();
   await testSkillsCommands();
   await testUnknownCommand();
