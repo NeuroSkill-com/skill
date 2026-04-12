@@ -389,7 +389,7 @@ function loadMetrics(csvPath: string) {
 async function loadSleep(csvPath: string) {
   if (csvPath in sleepCache) return;
   const session = sessionRegistry.get(csvPath);
-  if (!session || !session.session_start_utc || !session.session_end_utc) return;
+  if (!session?.session_start_utc || !session.session_end_utc) return;
   if (session.session_end_utc - session.session_start_utc < 1800) {
     sleepCache[csvPath] = "short";
     return;

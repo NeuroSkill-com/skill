@@ -416,12 +416,15 @@ async function loadSessions(autoSelect = false) {
   // Primary source: sessions that have embeddings computed.
   // The daemon returns a superset of fields; fill in computed defaults for any
   // sessions missing n_epochs or day (e.g. sessions without embedding DBs).
-  const rawSessions = await daemonInvoke<(EmbeddingSession & { session_start_utc?: number; session_end_utc?: number })[]>("list_embedding_sessions");
+  const rawSessions =
+    await daemonInvoke<(EmbeddingSession & { session_start_utc?: number; session_end_utc?: number })[]>(
+      "list_embedding_sessions",
+    );
   const embSessions: EmbeddingSession[] = rawSessions
     .filter((s) => (s.start_utc ?? s.session_start_utc) && (s.end_utc ?? s.session_end_utc))
     .map((s) => {
-      const start = s.start_utc ?? s.session_start_utc!;
-      const end = s.end_utc ?? s.session_end_utc!;
+      const start = s.start_utc ?? s.session_start_utc ?? 0;
+      const end = s.end_utc ?? s.session_end_utc ?? 0;
       return {
         start_utc: start,
         end_utc: end,
@@ -577,6 +580,7 @@ async function compare() {
     sleepA = sa.epochs?.length > 0 ? sa : null;
     sleepB = sb.epochs?.length > 0 ? sb : null;
   } catch (e) {
+    // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
     console.error("compare() failed:", e);
   }
   comparing = false;
