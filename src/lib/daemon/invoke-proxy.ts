@@ -198,6 +198,15 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   delete_auth_token: [P, "/v1/auth/tokens/delete"],
   refresh_default_token: [P, "/v1/auth/default-token/refresh"],
 
+  // Iroh remote-access tunnel
+  get_iroh_info: [G, "/v1/iroh/info"],
+  iroh_phone_invite: [P, "/v1/iroh/phone-invite"],
+  list_iroh_totp: [G, "/v1/iroh/totp"],
+  create_iroh_totp: [P, "/v1/iroh/totp"],
+  get_iroh_scope_groups: [G, "/v1/iroh/scope-groups"],
+  list_iroh_clients: [G, "/v1/iroh/clients"],
+  register_iroh_client: [P, "/v1/iroh/clients/register"],
+
   // Misc
   get_gpu_stats: [G, "/v1/settings/gpu-stats"],
   get_main_window_auto_fit: [G, "/v1/ui/main-window-auto-fit"],

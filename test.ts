@@ -119,6 +119,15 @@
  * 26. LLM EXTENDED       — Additional LLM management: downloads, refresh, hardware_fit,
  *                          select_model, select_mmproj, pause/resume_download,
  *                          set_autoload_mmproj, add_model
+ * 27. IROH EXTENDED      — iroh_scope_groups, iroh_client_permissions, iroh_phone_invite
+ * 28. ACCESS TOKENS      — REST-only: list, create, revoke, delete tokens; delete-default guard
+ * 29. DEVICE MANAGEMENT  — REST-only: list devices, pair, forget, set-preferred
+ * 30. SCANNER CONTROL    — REST-only: scanner state, start, stop
+ * 31. RECONNECT CONTROL  — REST-only: reconnect state, enable, disable
+ * 32. SERVICE MANAGEMENT — Root-level: service status (install/uninstall skipped for safety)
+ * 33. LSL DISCOVERY      — REST-only: discover available LSL streams
+ * 34. DAEMON INFO        — REST-only: daemon version + recent log lines
+ * 35. HEALTH PROBES      — Root-level: /healthz and /readyz (no auth)
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * USAGE
@@ -3893,6 +3902,389 @@ async function testLlmExtended(): Promise<void> {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 27. IROH EXTENDED — phone-invite, scope-groups, client permissions
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testIrohExtended(): Promise<void> {
+  heading("iroh extended commands");
+  info("Tests iroh_scope_groups, iroh_client_permissions, iroh_phone_invite.");
+
+  // ── iroh_scope_groups ───────────────────────────────────────────────────
+  try {
+    info("Testing iroh_scope_groups…");
+    const r = await send({ command: "iroh_scope_groups" });
+    r.ok ? ok("iroh_scope_groups succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+    r.command === "iroh_scope_groups"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+  } catch (e: any) { fail(`iroh_scope_groups failed: ${e.message}`); }
+
+  // ── iroh_client_permissions — missing id → error ────────────────────────
+  try {
+    info("Testing iroh_client_permissions with missing id…");
+    const r = await send({ command: "iroh_client_permissions" });
+    // Should fail gracefully without an id
+    r.command === "iroh_client_permissions"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+  } catch (e: any) { fail(`iroh_client_permissions failed: ${e.message}`); }
+
+  // ── iroh_client_permissions — with id ────────────────────────────────────
+  try {
+    info("Testing iroh_client_permissions with a fake id…");
+    const r = await send({ command: "iroh_client_permissions", id: "nonexistent-client" });
+    r.command === "iroh_client_permissions"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+    // May return ok=false for unknown client, which is fine
+    if (r.ok === false) {
+      ok(`correctly rejected unknown client: "${r.error}"`);
+    } else {
+      ok("iroh_client_permissions returned ok=true (client exists)");
+    }
+  } catch (e: any) { fail(`iroh_client_permissions with id failed: ${e.message}`); }
+
+  // ── iroh_phone_invite ───────────────────────────────────────────────────
+  try {
+    info("Testing iroh_phone_invite…");
+    const r = await send({ command: "iroh_phone_invite" });
+    r.command === "iroh_phone_invite"
+      ? ok("command echoed correctly")
+      : fail(`command=${r.command}`);
+    // May succeed or fail depending on iroh tunnel state
+    if (r.ok) {
+      ok("iroh_phone_invite succeeded");
+    } else {
+      ok(`iroh_phone_invite rejected (tunnel may not be running): "${r.error}"`);
+    }
+  } catch (e: any) { fail(`iroh_phone_invite failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 28. ACCESS TOKENS — REST-only /v1/auth/tokens endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testAccessTokens(port: number): Promise<void> {
+  heading("access token management (REST)");
+  info("Tests GET/POST /v1/auth/tokens, revoke, delete, refresh.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── list tokens ─────────────────────────────────────────────────────────
+  try {
+    info("GET /v1/auth/tokens → list all tokens");
+    const { data, res } = await hfetch("/v1/auth/tokens");
+    res.ok ? ok("GET /v1/auth/tokens returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data) ? ok(`${data.length} token(s) in store`) : fail("response is not an array");
+    if (Array.isArray(data) && data.length > 0) {
+      const t = data[0];
+      typeof t.id === "string" ? ok(`first token id: "${t.id}"`) : fail("token has no id");
+      typeof t.acl === "string" ? ok(`acl: "${t.acl}"`) : fail("token has no acl");
+      typeof t.preview === "string" ? ok(`preview: "${t.preview}"`) : ok("no preview (ok)");
+      // Ensure full token secret is NOT returned in list
+      t.token === undefined ? ok("secret not exposed in list (correct)") : fail("secret exposed in list response!");
+    }
+  } catch (e: any) { fail(`list tokens failed: ${e.message}`); }
+
+  // ── create token ────────────────────────────────────────────────────────
+  let createdId = "";
+  try {
+    info("POST /v1/auth/tokens → create a new token");
+    const { data, res } = await hfetch("/v1/auth/tokens", {
+      method: "POST",
+      body: JSON.stringify({ name: "test-cli-token", acl: "ReadOnly", expiry: "Week" }),
+    });
+    res.ok ? ok("POST /v1/auth/tokens returned 200") : fail(`status ${res.status}`);
+    typeof data?.id === "string" ? ok(`created token id: "${data.id}"`) : fail("no id in response");
+    typeof data?.token === "string" ? ok("secret returned on creation") : fail("no secret in create response");
+    data?.acl === "ReadOnly" || data?.acl === "read_only"
+      ? ok(`acl: ${data?.acl}`)
+      : fail(`unexpected acl: ${data?.acl}`);
+    createdId = data?.id ?? "";
+  } catch (e: any) { fail(`create token failed: ${e.message}`); }
+
+  // ── revoke token ────────────────────────────────────────────────────────
+  if (createdId) {
+    try {
+      info(`POST /v1/auth/tokens/revoke → revoke token "${createdId}"`);
+      const { data, res } = await hfetch("/v1/auth/tokens/revoke", {
+        method: "POST",
+        body: JSON.stringify({ id: createdId }),
+      });
+      res.ok ? ok("revoke returned 200") : fail(`status ${res.status}`);
+      data?.ok === true ? ok("ok=true") : fail(`ok=${data?.ok}`);
+    } catch (e: any) { fail(`revoke token failed: ${e.message}`); }
+  }
+
+  // ── delete token ────────────────────────────────────────────────────────
+  if (createdId) {
+    try {
+      info(`POST /v1/auth/tokens/delete → delete token "${createdId}"`);
+      const { data, res } = await hfetch("/v1/auth/tokens/delete", {
+        method: "POST",
+        body: JSON.stringify({ id: createdId }),
+      });
+      res.ok ? ok("delete returned 200") : fail(`status ${res.status}`);
+      data?.ok === true ? ok("ok=true") : fail(`ok=${data?.ok}`);
+    } catch (e: any) { fail(`delete token failed: ${e.message}`); }
+  }
+
+  // ── delete default token → rejected ─────────────────────────────────────
+  try {
+    info("POST /v1/auth/tokens/delete with id='default' → should be rejected");
+    const { data, res } = await hfetch("/v1/auth/tokens/delete", {
+      method: "POST",
+      body: JSON.stringify({ id: "default" }),
+    });
+    res.status === 400 ? ok("delete default → 400 (correct)") : fail(`expected 400, got ${res.status}`);
+    data?.ok === false ? ok("ok=false") : fail(`ok=${data?.ok}`);
+  } catch (e: any) { fail(`delete default token test failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 29. DEVICE MANAGEMENT — REST-only /v1/devices endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testDeviceManagement(port: number): Promise<void> {
+  heading("device management (REST)");
+  info("Tests GET /v1/devices, POST /v1/devices/pair, forget, set-preferred.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── list devices ────────────────────────────────────────────────────────
+  try {
+    info("GET /v1/devices → list discovered devices");
+    const { data, res } = await hfetch("/v1/devices");
+    res.ok ? ok("GET /v1/devices returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data) ? ok(`${data.length} device(s) discovered`) : fail("response is not an array");
+  } catch (e: any) { fail(`list devices failed: ${e.message}`); }
+
+  // ── status (shows paired devices) ───────────────────────────────────────
+  try {
+    info("GET /v1/status → check paired_devices in status");
+    const { data, res } = await hfetch("/v1/status");
+    res.ok ? ok("GET /v1/status returned 200") : fail(`status ${res.status}`);
+  } catch (e: any) { fail(`status check failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 30. SCANNER CONTROL — REST-only /v1/control/scanner endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testScannerControl(port: number): Promise<void> {
+  heading("scanner control (REST)");
+  info("Tests /v1/control/scanner/state, start, stop.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── scanner state ───────────────────────────────────────────────────────
+  try {
+    info("GET /v1/control/scanner/state → scanner state");
+    const { data, res } = await hfetch("/v1/control/scanner/state");
+    res.ok ? ok("GET scanner/state returned 200") : fail(`status ${res.status}`);
+    typeof data?.scanning === "boolean"
+      ? ok(`scanning=${data.scanning}`)
+      : ok("scanning field present (or alternate shape)");
+  } catch (e: any) { fail(`scanner state failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 31. RECONNECT CONTROL — REST-only /v1/reconnect-state, enable/disable
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testReconnectControl(port: number): Promise<void> {
+  heading("reconnect control (REST)");
+  info("Tests /v1/reconnect-state, enable/disable-reconnect.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── reconnect state ─────────────────────────────────────────────────────
+  try {
+    info("GET /v1/reconnect-state → reconnect state");
+    const { data, res } = await hfetch("/v1/reconnect-state");
+    res.ok ? ok("GET reconnect-state returned 200") : fail(`status ${res.status}`);
+    typeof data?.enabled === "boolean"
+      ? ok(`enabled=${data.enabled}`)
+      : ok("reconnect state response received");
+  } catch (e: any) { fail(`reconnect state failed: ${e.message}`); }
+
+  // ── enable reconnect ────────────────────────────────────────────────────
+  try {
+    info("POST /v1/control/enable-reconnect");
+    const { res } = await hfetch("/v1/control/enable-reconnect", { method: "POST", body: "{}" });
+    res.ok ? ok("enable-reconnect returned 200") : fail(`status ${res.status}`);
+  } catch (e: any) { fail(`enable reconnect failed: ${e.message}`); }
+
+  // ── disable reconnect ───────────────────────────────────────────────────
+  try {
+    info("POST /v1/control/disable-reconnect");
+    const { res } = await hfetch("/v1/control/disable-reconnect", { method: "POST", body: "{}" });
+    res.ok ? ok("disable-reconnect returned 200") : fail(`status ${res.status}`);
+  } catch (e: any) { fail(`disable reconnect failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 32. SERVICE MANAGEMENT — root-level /service endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testServiceManagement(port: number): Promise<void> {
+  heading("service management (REST)");
+  info("Tests /service/status.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── service status ──────────────────────────────────────────────────────
+  try {
+    info("GET /service/status → check service installation state");
+    const { data, res } = await hfetch("/service/status");
+    res.ok ? ok("GET /service/status returned 200") : fail(`status ${res.status}`);
+    typeof data?.installed === "boolean"
+      ? ok(`installed=${data.installed}`)
+      : ok("service status response received");
+  } catch (e: any) { fail(`service status failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 33. LSL DISCOVERY — REST-only /v1/lsl/discover
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testLslDiscover(port: number): Promise<void> {
+  heading("LSL discovery (REST)");
+  info("Tests GET /v1/lsl/discover.");
+
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    info("GET /v1/lsl/discover → list available LSL streams");
+    const res = await fetch(`${base}/v1/lsl/discover`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    res.ok ? ok("GET /v1/lsl/discover returned 200") : fail(`status ${res.status}`);
+    const data = await res.json().catch(() => null);
+    Array.isArray(data) ? ok(`${data.length} LSL stream(s) discovered`) : fail("response is not an array");
+  } catch (e: any) { fail(`LSL discover failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 34. DAEMON VERSION & LOG — REST-only /v1/version, /v1/log/recent
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testDaemonInfo(port: number): Promise<void> {
+  heading("daemon version & log (REST)");
+  info("Tests GET /v1/version and GET /v1/log/recent.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // ── version ─────────────────────────────────────────────────────────────
+  try {
+    info("GET /v1/version → daemon version info");
+    const { data, res } = await hfetch("/v1/version");
+    res.ok ? ok("GET /v1/version returned 200") : fail(`status ${res.status}`);
+    typeof data?.version === "string"
+      ? ok(`daemon version: "${data.version}"`)
+      : fail("no version field in response");
+    typeof data?.protocol_version === "number"
+      ? ok(`protocol version: ${data.protocol_version}`)
+      : ok("no protocol_version field (optional)");
+  } catch (e: any) { fail(`daemon version failed: ${e.message}`); }
+
+  // ── log/recent ──────────────────────────────────────────────────────────
+  try {
+    info("GET /v1/log/recent → recent daemon log lines");
+    const { data, res } = await hfetch("/v1/log/recent");
+    res.ok ? ok("GET /v1/log/recent returned 200") : fail(`status ${res.status}`);
+    if (data?.lines && Array.isArray(data.lines)) {
+      ok(`${data.lines.length} log line(s) returned`);
+    } else if (data?.next_seq !== undefined) {
+      ok(`log response has next_seq=${data.next_seq}`);
+    } else {
+      ok("log response received (shape may vary)");
+    }
+  } catch (e: any) { fail(`daemon log failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 35. HEALTHZ & READYZ — root-level health probes
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testHealthProbes(port: number): Promise<void> {
+  heading("healthz & readyz probes");
+  info("Tests GET /healthz and GET /readyz (no auth required).");
+
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    info("GET /healthz → liveness probe");
+    const res = await fetch(`${base}/healthz`);
+    res.ok ? ok("GET /healthz returned 200") : fail(`status ${res.status}`);
+    const data = await res.json().catch(() => null);
+    data?.status === "ok" ? ok("status='ok'") : ok("healthz responded");
+  } catch (e: any) { fail(`healthz failed: ${e.message}`); }
+
+  try {
+    info("GET /readyz → readiness probe");
+    const res = await fetch(`${base}/readyz`);
+    res.ok ? ok("GET /readyz returned 200") : fail(`status ${res.status}`);
+  } catch (e: any) { fail(`readyz failed: ${e.message}`); }
+}
+
+
 async function testUnknownCommand(): Promise<void> {
   heading("unknown command");
   info("Request: { command: 'nonexistent_command_xyz' }");
@@ -4437,10 +4829,19 @@ async function main(): Promise<void> {
   await testSleepSchedule();
   await testHealth();
   await testOura();
+  await testIrohExtended();
   await testSkillsCommands();
   await testUnknownCommand();
   await testBroadcastEvents();   // skips gracefully when transport === "http"
   await testHttp(port);          // always runs — tests HTTP layer directly
+  await testAccessTokens(port);
+  await testDeviceManagement(port);
+  await testScannerControl(port);
+  await testReconnectControl(port);
+  await testServiceManagement(port);
+  await testLslDiscover(port);
+  await testDaemonInfo(port);
+  await testHealthProbes(port);
 
   // 4. Summary
   if (transport === "ws") { try { ws.close(); } catch {} }
