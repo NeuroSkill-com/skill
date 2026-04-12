@@ -5,7 +5,7 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
 /** Current CLI version — bump when breaking changes are made. */
-const CLI_VERSION = "1.2.0";
+const CLI_VERSION = "1.3.0";
 
 /**
  * cli.ts — Command-line interface for the Skill WebSocket API.
@@ -70,7 +70,24 @@ const CLI_VERSION = "1.2.0";
  *   dnd off                        Force-disable DND immediately
  *   iroh info                      Show iroh endpoint details and auth summary
  *   iroh totp ...                  Manage TOTP credentials (list/create/qr/revoke)
- *   iroh clients ...               Manage iroh clients (list/register/revoke/scope)
+ *   iroh clients ...               Manage iroh clients (list/register/revoke/scope/permissions)
+ *   iroh scope-groups              List available permission scope groups
+ *   iroh phone-invite              Generate a phone pairing invitation
+ *   tokens [list]                  List all access tokens (redacted)
+ *   tokens create <name> [opts]    Create a new access token (--acl, --expiry)
+ *   tokens revoke <id>             Revoke an access token
+ *   tokens delete <id>             Permanently delete an access token
+ *   tokens refresh                 Rotate the default daemon token
+ *   devices [list]                 List discovered BLE devices
+ *   devices pair <id> [name]       Pair a BLE device
+ *   devices forget <id>            Forget a paired device
+ *   devices set-preferred <id>     Set preferred device for auto-connect
+ *   scanner start|stop|state       Control BLE device scanner
+ *   reconnect state|enable|disable|retry|cancel  Manage auto-reconnect
+ *   service install|uninstall|status  Manage daemon background service
+ *   lsl                            Discover available LSL streams
+ *   daemon-version                 Show daemon version and protocol info
+ *   daemon-log [--limit N]         Show recent daemon log lines
  *   llm status                     LLM server status (stopped/loading/running)
  *   llm start                      Load active model and start LLM inference server
  *   llm stop                       Stop LLM inference server and free GPU memory
@@ -362,6 +379,14 @@ function printResult(data: unknown) {
 }
 
 /**
+ * Print a JSON value to stdout — colorized in normal mode, raw in `--json` mode.
+ * Convenience for commands that want to dump the full response as-is.
+ */
+function printJson(data: unknown) {
+  console.log(colorizeJson(data));
+}
+
+/**
  * Print a fatal error message, clean up resources, and exit with code 1.
  * In `--json` mode outputs `{"error":"..."}` to stdout for programmatic
  * consumption; otherwise prints a red-bold error to stderr.
@@ -510,6 +535,30 @@ async function sendHttp(cmd: { command: string; [k: string]: unknown }, _timeout
       `  Tip: use --port <n> to specify the port manually, or omit --http for auto-transport.`
     );
   }
+  return res.json();
+}
+
+// ── Direct REST helpers ──────────────────────────────────────────────────────
+// Some daemon endpoints are REST-only (no WS command equivalent).  These
+// helpers call them directly via HTTP GET/POST on the /v1/... path.
+
+async function restGet(path: string): Promise<any> {
+  const token = loadDaemonToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${httpBase}/v1${path}`, { headers });
+  return res.json();
+}
+
+async function restPost(path: string, body?: unknown): Promise<any> {
+  const token = loadDaemonToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${httpBase}/v1${path}`, {
+    method: "POST",
+    headers,
+    body: body != null ? JSON.stringify(body) : "{}",
+  });
   return res.json();
 }
 
@@ -789,6 +838,16 @@ interface Args {
   totpId?: string;
   /** Client scope for iroh authorization: read|full. */
   scope?: string;
+  /** Token ACL for `tokens create --acl <admin|read_only|data|stream>`. */
+  acl?: string;
+  /** Token expiry for `tokens create --expiry <week|month|quarter|never>`. */
+  expiry?: string;
+  /** Token name for `tokens create <name>`. */
+  tokenName?: string;
+  /** Token ID for `tokens revoke/delete <id>`. */
+  tokenId?: string;
+  /** Device ID for device commands. */
+  deviceId?: string;
   /** Bedtime for `sleep-schedule set --bedtime HH:MM` (24-h format). */
   bedtime?: string;
   /** Wake time for `sleep-schedule set --wake HH:MM` (24-h format). */
@@ -893,6 +952,7 @@ function parseArgs(): Args {
     "--bedtime", "--wake", "--preset",
     "--metric-type", "--oura-start", "--oura-end", "--otp", "--totp-id", "--scope",
     "--events", "--fields", "--max-hz",
+    "--acl", "--expiry", "--device-id",
   ]);
 
   let i = 0;
@@ -975,6 +1035,9 @@ function parseArgs(): Args {
     else if (a === "--scope")       { args.scope         = argv[++i]; }
     else if (a === "--events")      { args.subEvents     = argv[++i]; }
     else if (a === "--fields")      { args.subFields     = argv[++i]; }
+    else if (a === "--acl")         { args.acl            = argv[++i]; }
+    else if (a === "--expiry")      { args.expiry         = argv[++i]; }
+    else if (a === "--device-id")   { args.deviceId       = argv[++i]; }
     else if (a === "--max-hz")      {
       const raw = argv[++i];
       const n   = Number(raw);
@@ -1056,17 +1119,47 @@ function parseArgs(): Args {
     else if (args.command === "iroh" && !args.irohSub) {
       args.irohSub = a.toLowerCase();
     }
+    else if (args.command === "iroh" && args.irohSub === "phone-invite" && !args.text) {
+      args.text = a; // endpoint_id for phone invite
+    }
     else if (args.command === "iroh" && (args.irohSub === "totp" || args.irohSub === "clients") && !args.subAction) {
       args.subAction = a.toLowerCase();
     }
     else if (args.command === "iroh" && args.irohSub === "totp" && ["create", "qr", "revoke"].includes(args.subAction ?? "") && !args.text) {
       args.text = a;
     }
-    else if (args.command === "iroh" && args.irohSub === "clients" && ["register", "revoke", "scope"].includes(args.subAction ?? "") && !args.text) {
+    else if (args.command === "iroh" && args.irohSub === "clients" && ["register", "revoke", "scope", "permissions"].includes(args.subAction ?? "") && !args.text) {
       args.text = a;
     }
     else if (args.command === "iroh" && args.irohSub === "clients" && args.subAction === "scope" && !args.body) {
       args.body = a;
+    }
+    else if (args.command === "tokens" && !args.subAction) {
+      args.subAction = a.toLowerCase(); // list|create|revoke|delete|refresh
+    }
+    else if (args.command === "tokens" && args.subAction === "create" && !args.tokenName) {
+      args.tokenName = a; // token name
+    }
+    else if (args.command === "tokens" && (args.subAction === "revoke" || args.subAction === "delete") && !args.tokenId) {
+      args.tokenId = a; // token id
+    }
+    else if (args.command === "devices" && !args.subAction) {
+      args.subAction = a.toLowerCase(); // list|pair|forget|set-preferred
+    }
+    else if (args.command === "devices" && ["pair", "forget", "set-preferred"].includes(args.subAction ?? "") && !args.deviceId) {
+      args.deviceId = a;
+    }
+    else if (args.command === "devices" && args.subAction === "pair" && args.deviceId && !args.calName) {
+      args.calName = a; // device name for pairing
+    }
+    else if (args.command === "scanner" && !args.subAction) {
+      args.subAction = a.toLowerCase(); // start|stop|state
+    }
+    else if (args.command === "service" && !args.subAction) {
+      args.subAction = a.toLowerCase(); // install|uninstall|status
+    }
+    else if (args.command === "reconnect" && !args.subAction) {
+      args.subAction = a.toLowerCase(); // state|enable|disable|retry|cancel
     }
     else if (args.command === "calibrations"  && !args.subAction) {
       // calibrations [list|get|create|update|delete] [<id-or-name>]
@@ -1200,7 +1293,24 @@ ${m('hooks suggest "kw1,kw2"',                       "suggest threshold from mat
 ${m("hooks log [--limit <n>] [--offset <n>]",       "show hook trigger audit history from hooks.sqlite")}
 ${m("iroh info",                                     "show iroh endpoint + auth summary")}
 ${m("iroh totp list|create|qr|revoke",               "manage iroh TOTP credentials")}
-${m("iroh clients list|register|revoke|scope",       "manage iroh clients and permissions")}
+${m("iroh clients list|register|revoke|scope|permissions", "manage iroh clients and permissions")}
+${m("iroh scope-groups",                             "list available permission scope groups")}
+${m("iroh phone-invite",                             "generate a phone pairing invitation")}
+${m("tokens [list]",                                 "list all access tokens (redacted)")}
+${m("tokens create <name> [--acl admin|read_only|data|stream] [--expiry week|month|quarter|never]", "create a new token")}
+${m("tokens revoke <id>",                            "revoke an access token")}
+${m("tokens delete <id>",                            "permanently delete an access token")}
+${m("tokens refresh",                                "rotate the default daemon token")}
+${m("devices [list]",                                "list discovered BLE devices")}
+${m("devices pair <id> [name]",                      "pair a BLE device by ID")}
+${m("devices forget <id>",                           "forget a paired device")}
+${m("devices set-preferred <id>",                    "set the preferred device for auto-connect")}
+${m("scanner start|stop|state",                      "control the BLE device scanner")}
+${m("reconnect state|enable|disable|retry|cancel",   "manage auto-reconnect behavior")}
+${m("service install|uninstall|status",              "manage the daemon background service")}
+${m("lsl",                                           "discover available LSL streams")}
+${m("daemon-version",                                "show daemon version and protocol info")}
+${m("daemon-log [--limit <n>]",                      "show recent daemon log lines")}
 ${m("raw '{\"command\":\"status\"}'",                "send raw JSON, print full response")}
 
 ${BOLD}OPTIONS${RESET}
@@ -1251,6 +1361,9 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--otp <code>${RESET}       (iroh clients register) TOTP code from authenticator
   ${YELLOW}--totp-id <id>${RESET}    (iroh clients register) optional TOTP credential id
   ${YELLOW}--scope <read|full>${RESET} (iroh clients register/scope) permission scope
+  ${YELLOW}--acl <level>${RESET}     (tokens create) access level: admin | read_only | data | stream (default: admin)
+  ${YELLOW}--expiry <period>${RESET}  (tokens create) expiry period: week | month | quarter | never (default: never)
+  ${YELLOW}--device-id <id>${RESET}  (devices pair/forget/set-preferred) device identifier
 
 ${BOLD}EXAMPLES${RESET}
   When parameters are omitted, the CLI auto-selects ranges from your session
@@ -4958,10 +5071,189 @@ async function cmdIroh(args: Args): Promise<void> {
       if (!args.text || !args.body) printError("usage: cli.ts iroh clients scope <id> <read|full>");
       return printJson(await send({ command: "iroh_client_set_scope", id: args.text, scope: args.body }));
     }
+    if (a === "permissions") {
+      if (!args.text) printError("usage: cli.ts iroh clients permissions <id>");
+      return printJson(await send({ command: "iroh_client_permissions", id: args.text }));
+    }
     printError(`unknown iroh clients action: ${a}`);
   }
 
+  if (g === "scope-groups") {
+    return printJson(await send({ command: "iroh_scope_groups" }));
+  }
+
+  if (g === "phone-invite") {
+    const body: Record<string, unknown> = { command: "iroh_phone_invite" };
+    if (args.text) body.endpoint_id = args.text;
+    return printJson(await send(body));
+  }
+
   printError(`unknown iroh group: ${g}`);
+}
+
+// ── Token management ─────────────────────────────────────────────────────────
+
+async function cmdTokens(args: Args): Promise<void> {
+  const action = (args.subAction || "list").toLowerCase();
+
+  if (action === "list") {
+    const r = await restGet("/auth/tokens");
+    if (jsonMode) { console.log(JSON.stringify(r, null, 2)); return; }
+    if (!Array.isArray(r)) { printJson(r); return; }
+    print(`${BOLD}${r.length} token(s)${RESET}`);
+    for (const t of r) {
+      const status = t.revoked ? `${RED}revoked${RESET}` : `${GREEN}active${RESET}`;
+      const exp = t.expires_at ? new Date(t.expires_at * 1000).toISOString() : "never";
+      print(`  ${CYAN}${t.id}${RESET}  ${t.name ?? ""}  acl=${YELLOW}${t.acl}${RESET}  ${status}  expires=${DIM}${exp}${RESET}  preview=${DIM}${t.preview ?? ""}${RESET}`);
+    }
+    return;
+  }
+
+  if (action === "create") {
+    if (!args.tokenName) printError("usage: cli.ts tokens create <name> [--acl admin|read_only|data|stream] [--expiry week|month|quarter|never]");
+    const r = await restPost("/auth/tokens", {
+      name: args.tokenName,
+      acl: args.acl ?? "Admin",
+      expiry: args.expiry ?? "Never",
+    });
+    if (jsonMode) { console.log(JSON.stringify(r, null, 2)); return; }
+    if (r.ok === false) { printError(r.error ?? "failed to create token"); }
+    print(`${GREEN}token created${RESET}`);
+    print(`  id:     ${CYAN}${r.id}${RESET}`);
+    print(`  name:   ${r.name}`);
+    print(`  acl:    ${YELLOW}${r.acl}${RESET}`);
+    print(`  token:  ${BOLD}${r.token}${RESET}`);
+    print(`  ${DIM}(save this token now — it will not be shown again)${RESET}`);
+    return;
+  }
+
+  if (action === "revoke") {
+    if (!args.tokenId) printError("usage: cli.ts tokens revoke <id>");
+    const r = await restPost("/auth/tokens/revoke", { id: args.tokenId });
+    printJson(r);
+    return;
+  }
+
+  if (action === "delete") {
+    if (!args.tokenId) printError("usage: cli.ts tokens delete <id>");
+    const r = await restPost("/auth/tokens/delete", { id: args.tokenId });
+    printJson(r);
+    return;
+  }
+
+  if (action === "refresh") {
+    const r = await restPost("/auth/default-token/refresh");
+    if (jsonMode) { console.log(JSON.stringify(r, null, 2)); return; }
+    if (r.ok) {
+      print(`${GREEN}default token rotated${RESET}`);
+      print(`  new token: ${BOLD}${r.token}${RESET}`);
+      print(`  ${DIM}The auth.token file has been updated. Restart CLI clients to pick up the new token.${RESET}`);
+    } else {
+      printError(r.error ?? "failed to refresh token");
+    }
+    return;
+  }
+
+  printError(`unknown tokens action: ${action}. Use: list, create, revoke, delete, refresh`);
+}
+
+// ── Device management ────────────────────────────────────────────────────────
+
+async function cmdDevices(args: Args): Promise<void> {
+  const action = (args.subAction || "list").toLowerCase();
+
+  if (action === "list") {
+    const r = await restGet("/devices");
+    printJson(r);
+    return;
+  }
+
+  if (action === "pair") {
+    if (!args.deviceId) printError("usage: cli.ts devices pair <device-id> [name]");
+    const body: Record<string, unknown> = { id: args.deviceId };
+    if (args.calName) body.name = args.calName;
+    const r = await restPost("/devices/pair", body);
+    printJson(r);
+    return;
+  }
+
+  if (action === "forget") {
+    if (!args.deviceId) printError("usage: cli.ts devices forget <device-id>");
+    const r = await restPost("/devices/forget", { id: args.deviceId });
+    printJson(r);
+    return;
+  }
+
+  if (action === "set-preferred") {
+    if (!args.deviceId) printError("usage: cli.ts devices set-preferred <device-id>");
+    const r = await restPost("/devices/set-preferred", { id: args.deviceId });
+    printJson(r);
+    return;
+  }
+
+  printError(`unknown devices action: ${action}. Use: list, pair, forget, set-preferred`);
+}
+
+// ── Scanner control ──────────────────────────────────────────────────────────
+
+async function cmdScanner(args: Args): Promise<void> {
+  const action = (args.subAction || "state").toLowerCase();
+  if (action === "start") return printJson(await restPost("/control/scanner/start"));
+  if (action === "stop") return printJson(await restPost("/control/scanner/stop"));
+  if (action === "state") return printJson(await restGet("/control/scanner/state"));
+  printError(`unknown scanner action: ${action}. Use: start, stop, state`);
+}
+
+// ── Reconnect control ────────────────────────────────────────────────────────
+
+async function cmdReconnect(args: Args): Promise<void> {
+  const action = (args.subAction || "state").toLowerCase();
+  if (action === "state") return printJson(await restGet("/reconnect-state"));
+  if (action === "enable") return printJson(await restPost("/control/enable-reconnect"));
+  if (action === "disable") return printJson(await restPost("/control/disable-reconnect"));
+  if (action === "retry") return printJson(await restPost("/control/retry-connect"));
+  if (action === "cancel") return printJson(await restPost("/control/cancel-retry"));
+  printError(`unknown reconnect action: ${action}. Use: state, enable, disable, retry, cancel`);
+}
+
+// ── Service management ───────────────────────────────────────────────────────
+
+async function cmdService(args: Args): Promise<void> {
+  const action = (args.subAction || "status").toLowerCase();
+  // Service endpoints are at root level, not under /v1
+  const token = loadDaemonToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const doGet = async (p: string) => (await fetch(`${httpBase}${p}`, { headers })).json();
+  const doPost = async (p: string) => (await fetch(`${httpBase}${p}`, { method: "POST", headers, body: "{}" })).json();
+  if (action === "status") return printJson(await doGet("/service/status"));
+  if (action === "install") return printJson(await doPost("/service/install"));
+  if (action === "uninstall") return printJson(await doPost("/service/uninstall"));
+  printError(`unknown service action: ${action}. Use: install, uninstall, status`);
+}
+
+// ── LSL discover ─────────────────────────────────────────────────────────────
+
+async function cmdLsl(): Promise<void> {
+  printJson(await restGet("/lsl/discover"));
+}
+
+// ── Daemon version ───────────────────────────────────────────────────────────
+
+async function cmdDaemonVersion(): Promise<void> {
+  printJson(await restGet("/version"));
+}
+
+// ── Daemon log ───────────────────────────────────────────────────────────────
+
+async function cmdDaemonLog(_args: Args): Promise<void> {
+  const r = await restGet("/log/recent");
+  if (jsonMode) { console.log(JSON.stringify(r, null, 2)); return; }
+  if (r.lines && Array.isArray(r.lines)) {
+    for (const line of r.lines) console.log(line);
+  } else {
+    printJson(r);
+  }
 }
 
 async function cmdSubscribe(args: Args): Promise<void> {
@@ -5983,6 +6275,30 @@ async function main(): Promise<void> {
         break;
       case "iroh":
         await cmdIroh(args);
+        break;
+      case "tokens":
+        await cmdTokens(args);
+        break;
+      case "devices":
+        await cmdDevices(args);
+        break;
+      case "scanner":
+        await cmdScanner(args);
+        break;
+      case "reconnect":
+        await cmdReconnect(args);
+        break;
+      case "service":
+        await cmdService(args);
+        break;
+      case "lsl":
+        await cmdLsl();
+        break;
+      case "daemon-version":
+        await cmdDaemonVersion();
+        break;
+      case "daemon-log":
+        await cmdDaemonLog(args);
         break;
       case "llm":
         await cmdLlm(args);
