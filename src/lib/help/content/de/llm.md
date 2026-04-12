@@ -34,6 +34,9 @@ Optimieren Sie, wie der Server Modelle lädt und ausführt.
 ## GPU-Schichten
 Steuert, wie viele Transformer-Schichten auf die GPU ausgelagert werden. 'Alle' für maximale Geschwindigkeit, 0 für reine CPU-Inferenz. Zwischenwerte teilen das Modell zwischen GPU und CPU auf — nützlich, wenn das Modell die VRAM-Kapazität knapp übersteigt.
 
+## Inferenzgerät (CPU / GPU)
+Wählen Sie, ob die LLM-Inferenz auf CPU oder GPU laufen soll. Der Gerätewechsel wird sofort wirksam — der Server startet automatisch neu, wenn er bereits läuft. Auf der CPU laufen alle Transformer-Schichten auf dem Host-Prozessor (libomp wird für paralleles BLAS verwendet). Auf der GPU werden Schichten auf Metal (macOS) oder Vulkan (Linux/Windows) ausgelagert. Verwenden Sie den CPU-Modus, wenn der GPU-VRAM nicht ausreicht oder die GPU für EEG-Embedding reserviert ist.
+
 ## Kontextgröße
 Die KV-Cache-Größe in Token. 'Auto' verwendet den Standardwert des Modells. Größere Kontexte speichern mehr Gesprächsverlauf, verbrauchen aber mehr Speicher. Bei Speicherfehlern auf 4K oder 2K reduzieren.
 

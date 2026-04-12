@@ -34,6 +34,9 @@ Ajustez la façon dont le serveur charge et exécute les modèles.
 ## Couches GPU
 Nombre de couches transformer déchargées vers le GPU. 'Toutes' pour vitesse maximale, 0 pour CPU uniquement. Les valeurs intermédiaires répartissent le modèle entre GPU et CPU - utile quand le modèle dépasse légèrement la VRAM.
 
+## Périphérique d'inférence (CPU / GPU)
+Choisissez d'exécuter l'inférence LLM sur CPU ou GPU. Le changement prend effet immédiatement — le serveur redémarre automatiquement s'il est déjà en cours d'exécution. Sur CPU, toutes les couches transformer s'exécutent sur le processeur hôte (libomp est utilisé pour le BLAS parallèle). Sur GPU, les couches sont déchargées vers Metal (macOS) ou Vulkan (Linux/Windows). Utilisez le mode CPU lorsque la VRAM GPU est insuffisante ou lorsque le GPU est réservé à l'embedding EEG.
+
 ## Taille du contexte
 Taille du cache KV en tokens. 'Auto' choisit le plus grand contexte qui tient dans votre GPU/RAM en fonction de la taille et de la quantification du modèle. Des contextes plus grands mémorisent plus d'historique mais consomment plus de mémoire. Les options sont limitées au maximum entraîné du modèle. En cas d'erreurs mémoire, réduisez la taille du contexte.
 

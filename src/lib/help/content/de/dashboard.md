@@ -29,7 +29,7 @@ Eine mittig verankerte Anzeige der Echtzeit-FAA: ln(AF8 α) − ln(AF7 α). Posi
 Ein scrollendes Zeitbereichsdiagramm des gefilterten EEG-Signals für alle vier Kanäle mit Spektrogramm.
 
 ## GPU-Auslastung
-Ein kleines Diagramm oben im Hauptfenster mit der GPU-Auslastung. Nur sichtbar, wenn der ZUNA-Encoder aktiv ist.
+Ein kleines Diagramm ganz oben im Hauptfenster, das die GPU-Encoder- und Decoder-Auslastung zeigt. Nur sichtbar, wenn der EEG-Embedding-Encoder aktiv ist. Hilft zu überprüfen, ob die wgpu-Pipeline läuft.
 
 # Systemsymbol-Zustände
 

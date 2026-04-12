@@ -8,7 +8,7 @@ Opened via the tray menu, global shortcut, or the tag button on the main window.
 The Search window has three modes — EEG Similarity, Text, and Interactive — each querying your recorded data in a different way.
 
 ## EEG Similarity Search
-Pick a start/end date-time range and run an approximate nearest-neighbour search over all ZUNA embeddings recorded in that window. The HNSW index returns the k most similar 5-second EEG epochs from your entire history, ranked by cosine distance. Lower distance = more similar brain state. Any labels that overlap a result timestamp are shown inline. Useful for finding past moments that `felt` similar to a reference period.
+Pick a start/end date-time range and run an approximate nearest-neighbour search over all EEG embeddings recorded in that window. The HNSW index returns the k most similar 5-second EEG epochs from your entire history, ranked by cosine distance. Lower distance = more similar brain state. Any labels that overlap a result timestamp are shown inline. Useful for finding past moments that `felt` similar to a reference period.
 
 ## Text Embedding Search
 Type any concept, activity, or mental state in plain language (e.g. "deep focus", "anxious", "eyes closed meditation"). Your query is embedded by the same sentence-transformer model used for label indexing and matched against every annotation you have ever written via cosine similarity over the HNSW label index. Results are your own labels ranked by semantic closeness — not keyword matching. You can filter the list and re-sort by date or similarity. A 3D kNN graph visualises the neighbourhood structure: the query node sits at the centre, result labels radiate outward by distance.

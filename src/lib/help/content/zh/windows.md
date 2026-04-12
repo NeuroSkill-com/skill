@@ -2,22 +2,22 @@
 {app} 使用独立窗口执行特定任务。每个窗口都可以从托盘上下文菜单或通过全局键盘快捷键打开。
 
 ## 🏷  标签窗口
-Opened via the tray menu, global shortcut, or the tag button on the main window. Type a free-text label to annotate the current EEG moment (e.g. "meditation", "focused reading"). The label is saved to {dataDir}/labels.sqlite with the exact timestamp range. Submit with Ctrl/⌘+Enter or click Submit. Press Escape to cancel.
+通过托盘菜单、全局快捷键或主窗口上的标签按钮打开。输入自由文本标签以标注当前 EEG 时刻（如"冥想"、"专注阅读"）。标签以精确的时间戳范围保存到 {dataDir}/labels.sqlite。按 Ctrl/⌘+Enter 或点击提交。按 Escape 取消。
 
 ## 🔍  搜索窗口
 搜索窗口有三种模式——EEG 相似性、文本和交互式——每种模式以不同方式查询您的录制数据。
 
 ## EEG 相似性搜索
-Pick a start/end date-time range and run an approximate nearest-neighbour search over all ZUNA embeddings recorded in that window. The HNSW index returns the k most similar 5-second EEG epochs from your entire history, ranked by cosine distance. Lower distance = more similar brain state. Any labels that overlap a result timestamp are shown inline. Useful for finding past moments that `felt` similar to a reference period.
+选择开始/结束日期时间范围，对该窗口内录制的所有 EEG 嵌入运行近似最近邻搜索。HNSW 索引从您的全部历史记录中返回按余弦距离排名的 k 个最相似的 5 秒 EEG 时段。距离越低 = 脑状态越相似。与结果时间戳重叠的任何标签会内联显示。适用于查找与参考时段"感觉"相似的过去时刻。
 
 ## 文本嵌入搜索
-Type any concept, activity, or mental state in plain language (e.g. "deep focus", "anxious", "eyes closed meditation"). Your query is embedded by the same sentence-transformer model used for label indexing and matched against every annotation you have ever written via cosine similarity over the HNSW label index. Results are your own labels ranked by semantic closeness — not keyword matching. You can filter the list and re-sort by date or similarity. A 3D kNN graph visualises the neighbourhood structure: the query node sits at the centre, result labels radiate outward by distance.
+用自然语言输入任何概念、活动或心理状态（如"深度专注"、"焦虑"、"闭眼冥想"）。您的查询由用于标签索引的同一 sentence-transformer 模型嵌入，并通过 HNSW 标签索引上的余弦相似度与您所有标注进行匹配。结果按语义接近度排名——不是关键词匹配。您可以筛选列表并按日期或相似度重新排序。3D kNN 图可视化邻域结构：查询节点位于中心，结果标签按距离向外辐射。
 
 ## 交互式跨模态搜索
 输入自由文本概念，{app} 运行四步跨模态管线：(1) 查询被嵌入为文本向量；(2) 检索 k 个最语义相似的标签（text-k）；(3) 对于每个匹配的标签，计算其平均 EEG 嵌入并用于搜索每日 EEG HNSW 索引以找到 k 个最相似的 EEG 时刻（eeg-k）；(4) 对于每个 EEG 邻居，收集 ±reach 分钟范围内的附近标签（label-k）。结果是一个具有四个节点层的有向图——查询 → 文本匹配 → EEG 邻居 → 发现的标签——渲染为交互式 3D 可视化，可导出为 SVG 或 Graphviz DOT。使用 text-k / eeg-k / label-k 滑块控制图的密度，使用 ±reach 来扩大或缩小时间搜索窗口。
 
 ## 🎯  校准窗口
-Runs a guided calibration task: alternating action phases (e.g. "eyes open" → break → "eyes closed" → break) for a configurable number of loops. Requires a connected, streaming BCI device. Calibration events are emitted over the Tauri event bus and WebSocket so external tools can synchronise. The timestamp of the last completed calibration is saved in settings.
+运行引导式校准任务：交替进行动作阶段（如"睁眼" → 休息 → "闭眼" → 休息），可配置循环次数。需要已连接且正在流式传输的 BCI 设备。校准事件通过 Tauri 事件总线和 WebSocket 发出，以便外部工具同步。上次完成校准的时间戳保存在设置中。
 
 ## ⚙  设置窗口
 四个选项卡：设置、快捷键（全局热键、命令面板、应用内按键）、EEG 模型（编码器和 HNSW 状态）。从托盘菜单或主窗口上的齿轮按钮打开。
@@ -29,7 +29,7 @@ Runs a guided calibration task: alternating action phases (e.g. "eyes open" → 
 五步首次运行向导，引导您完成蓝牙配对、头戴设备佩戴和首次校准。首次启动时自动打开；可随时通过命令面板重新打开（⌘K → 设置向导）。
 
 ## 🌐  API 状态窗口
-A live dashboard showing all currently connected WebSocket clients and a scrollable request log. Displays the server port, protocol, and mDNS discovery info. Includes quick-connect snippets for ws:// and dns-sd. Auto-refreshes every 2 seconds. Open from the tray menu or command palette.
+实时仪表盘，显示所有当前连接的 WebSocket 客户端和可滚动的请求日志。显示服务器端口、协议和 mDNS 发现信息。包含 ws:// 和 dns-sd 的快速连接代码片段。每 2 秒自动刷新。从托盘菜单或命令面板打开。
 
 ## 🌙 睡眠分期
 对于持续 30 分钟或更长的会话，历史记录视图会显示自动生成的睡眠图——根据 Delta、Theta、Alpha 和 Beta 频段功率比分类的睡眠阶段（清醒 / N1 / N2 / N3 / REM）阶梯图。展开历史记录中的任何长会话可查看包含每阶段百分比和持续时间的睡眠图。注意：消费级 BCI 头戴设备（如 Muse）使用 4 个干电极，因此分期是近似的——这不是临床多导睡眠图。

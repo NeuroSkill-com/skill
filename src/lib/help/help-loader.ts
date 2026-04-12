@@ -44,8 +44,3 @@ export function getHelpContent(tab: string, locale: string): HelpSectionData[] {
 export function getFaqContent(locale: string): FaqEntry[] {
   return parseFaqMd(interpolate(getRaw("faq", locale)));
 }
-
-/** Get parsed legacy FAQ entries for a locale (settings-page FAQ). */
-export function getFaqOldContent(locale: string): FaqEntry[] {
-  return parseFaqMd(interpolate(getRaw("faq-old", locale)));
-}

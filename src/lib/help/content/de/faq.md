@@ -2,7 +2,7 @@
 Alles wird lokal in {dataDir}/ gespeichert — CSV-Aufnahmen, HNSW-Indizes, SQLite-Datenbanken, Labels, Logs und Einstellungen.
 
 ## Was macht der ZUNA-Encoder?
-ZUNA ist ein GPU-beschleunigter Transformer-Encoder, der 5-Sekunden-EEG-Epochen in kompakte Embedding-Vektoren umwandelt.
+ZUNA ist eines von mehreren EEG-Embedding-Backends in {app}. Es ist ein GPU-beschleunigter Transformer-Encoder, der 5-Sekunden-EEG-Epochen in kompakte Embedding-Vektoren umwandelt. Diese Vektoren erfassen die neuronale Signatur jedes Moments und treiben die Ähnlichkeitssuche an. Weitere Backends sind LUNA und NeuroRVQ.
 
 ## Warum erfordert die Kalibrierung ein verbundenes Gerät?
 Die Kalibrierung zeichnet gelabelte EEG-Daten auf. Ohne Live-Streaming gäbe es kein Neuralsignal zum Zuordnen.
@@ -25,11 +25,14 @@ Bluetooth ist ausgeschaltet. Aktivieren Sie es in den Systemeinstellungen → Bl
 ## Die App dreht sich, verbindet sich aber nicht — was tun?
 1. Gerät einschalten (Muse: Taste halten bis zur Vibration; Ganglion/Cyton: blaue LED). 2. Innerhalb von 5 m bleiben. 3. Bei Bedarf aus- und wieder einschalten.
 
+## Warum hat sich mein Gerät automatisch getrennt?
+Wenn nach dem Empfang mindestens eines EEG-Frames 30 Sekunden lang keine Daten eintreffen, betrachtet {app} das Gerät als stillschweigend getrennt (z. B. außerhalb der BLE-Reichweite oder ohne saubere Trennung ausgeschaltet). Das Systemsymbol wechselt zurück zu Grau und der Scan wird automatisch fortgesetzt.
+
 ## Wie erteile ich die Bluetooth-Berechtigung?
 macOS zeigt einen Berechtigungsdialog. Falls abgelehnt: Systemeinstellungen → Datenschutz → Bluetooth.
 
 ## Welche Metriken werden in der Datenbank gespeichert?
-Alle 2,5 s werden gespeichert: ZUNA-Embedding-Vektor (32-D), relative Bandleistungen (Delta, Theta, Alpha, Beta, Gamma, High-Gamma) kanalgemittelt, kanalweise Bandleistungen als JSON, abgeleitete Scores (Fokus, Entspannung, Engagement), FAA, Bandverhältnisse (TAR, BAR, DTR), Spektralform (PSE, APF, BPS, SNR), Kohärenz, Mu-Unterdrückung, Stimmungsindex und PPG-Mittelwerte.
+Jede 2,5-Sekunden-Epoche speichert: den EEG-Embedding-Vektor, relative Bandleistungen (Delta, Theta, Alpha, Beta, Gamma, High-Gamma) kanalgemittelt, Bandleistungen pro Kanal als JSON, abgeleitete Scores (Entspannung, Engagement), FAA, Kreuzband-Verhältnisse (TAR, BAR, DTR), Spektralform (PSE, APF, BPS, SNR), Kohärenz, Mu-Unterdrückung, Stimmungsindex und PPG-Durchschnittswerte falls verfügbar.
 
 ## Was ist der Sitzungsvergleich?
 Vergleichen (⌘⇧M) vergleicht zwei Zeitbereiche nebeneinander: Bandleistungsbalken mit Differenzen, alle Scores und Verhältnisse, FAA, Schlafphasen-Hypnogramme und Brain Nebula™ — eine 3D-UMAP-Embedding-Projektion.
@@ -128,13 +131,16 @@ macOS: Dongle erscheint als /dev/cu.usbserial-*. Falls nicht vorhanden, CP210x- 
 Galea ist ein 24-Kanal-Forschungsheadset (EEG + EMG + AUX) von OpenBCI, das per UDP überträgt. 1. Galea einschalten und mit dem lokalen Netzwerk verbinden. 2. In Einstellungen → OpenBCI 'Galea — 24K · UDP' auswählen. 3. IP-Adresse eingeben oder leer lassen. 4. Verbinden klicken. Kanäle 1–8 sind EEG (Echtzeit-Analyse); 9–16 EMG; 17–24 AUX. Alle 24 Kanäle werden in CSV gespeichert.
 
 ## Kann ich zwei BCI-Geräte gleichzeitig verwenden?
-Ja — NeuroSkill™ kann von beiden gleichzeitig streamen. Das zuerst verbundene Gerät treibt das Live-Dashboard und die ZUNA-Einbettungspipeline. Die Daten des zweiten Geräts werden für die Offline-Analyse in CSV gespeichert. Vollständige Mehrtgeräte-Analyse in Echtzeit ist für eine zukünftige Version geplant.
+Ja — NeuroSkill™ kann von beiden gleichzeitig streamen. Das zuerst verbundene Gerät steuert das Live-Dashboard, die Bandleistungsanzeige und die EEG-Embedding-Pipeline. Die Daten des zweiten Geräts werden zur Offline-Analyse in CSV aufgezeichnet. Gleichzeitige Multi-Geräte-Analyse in der Echtzeit-Pipeline ist für eine zukünftige Version geplant.
 
 ## Nur 4 der 8 Cyton-Kanäle werden für die Live-Analyse genutzt — warum?
-Die Echtzeit-Pipeline (Filter, Bandleistungen, ZUNA-Einbettungen, Signalqualität) ist derzeit für 4-Kanal-Eingaben ausgelegt, um dem Muse-Format zu entsprechen. Für Cyton (8K) und Cyton+Daisy (16K) speisen Kanäle 1–4 die Live-Pipeline; alle Kanäle werden in CSV gespeichert. Volle Mehrkanalunterstützung ist in Planung.
+Die Echtzeit-Analyse-Pipeline (Filter, Bandleistungen, EEG-Embeddings, Signalqualitätspunkte) ist derzeit für 4-Kanal-Eingaben ausgelegt, um dem Muse-Headset-Format zu entsprechen. Bei Cyton (8K) und Cyton+Daisy (16K) speisen die Kanäle 1–4 die Live-Pipeline; alle Kanäle werden für die Offline-Arbeit in CSV geschrieben. Vollständige Multi-Kanal-Pipeline-Unterstützung ist geplant.
 
 ## Wie verbessere ich die Signalqualität bei OpenBCI?
 1. Leitfähiges Gel an jedem Elektrodenstandort auftragen und Haare beiseiteschieben für direkten Hautkontakt. 2. Impedanz mit dem OpenBCI GUI prüfen (Ziel: < 20 kΩ). 3. SRB-Elektrode am Mastoid (hinter dem Ohr) befestigen. 4. Elektrodenkabel kurz halten und von Stromkabeln fernhalten. 5. Kerbfilter in Einstellungen → Signalverarbeitung aktivieren (50 Hz für Europa). 6. Beim Ganglion BLE: Board von USB-3.0-Ports fernhalten — sie stören das 2,4-GHz-Band.
+
+## Unterstützt {app} das AWEAR-Stirnband?
+Ja. AWEAR ist ein Einkanal-BLE-EEG-Gerät mit einer Abtastrate von 256 Hz. Die Verbindung funktioniert wie bei anderen BLE-Geräten — schalten Sie das Stirnband ein, erteilen Sie bei Aufforderung die Bluetooth-Berechtigung, und {app} erkennt und verbindet sich automatisch. Der einzelne EEG-Kanal treibt die Echtzeit-Analyse-Pipeline an.
 
 ## Die OpenBCI-Verbindung bricht häufig ab — wie stabilisiere ich sie?
 Ganglion BLE: Board innerhalb von 2 m halten; BLE-Adapter in einen USB-2.0-Port stecken (USB 3.0 stört 2,4 GHz). Cyton USB: Kurzes, hochwertiges USB-Kabel direkt am Computer anschließen, nicht über Hub. WiFi-Shield: WLAN-Kanal des Shields nicht mit dem Router überlappen lassen; Board nah am Computer positionieren. Allgemein: Keine wireless-intensiven Programme (Videokonferenzen, Datei-Sync) während der Aufnahme.

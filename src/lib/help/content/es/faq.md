@@ -2,7 +2,7 @@
 Todo se almacena localmente en {dataDir}/: grabaciones CSV sin procesar, índices vectoriales HNSW, bases de datos SQLite integradas, etiquetas, registros y configuraciones. No se envía nada a la nube.
 
 ## ¿Qué hace el codificador ZUNA?
-ZUNA es un codificador transformador acelerado por GPU que convierte épocas de EEG de 5 segundos en vectores de incrustación compactos. Estos vectores capturan la firma neuronal de cada momento y potencian la función de búsqueda de similitudes.
+ZUNA es uno de varios backends de incrustación de EEG disponibles en {app}. Es un codificador transformer acelerado por GPU que convierte épocas de EEG de 5 segundos en vectores de incrustación compactos. Estos vectores capturan la firma neuronal de cada momento y alimentan la función de búsqueda por similitud. Otros backends incluyen LUNA y NeuroRVQ.
 
 ## ¿Por qué la calibración requiere un dispositivo conectado?
 La calibración ejecuta una tarea cronometrada (por ejemplo, ojos abiertos/ojos cerrados) y registra datos de EEG etiquetados. Sin datos de transmisión en vivo, la calibración no tendría ninguna señal neuronal para asociar con cada fase.
@@ -25,11 +25,14 @@ Bluetooth está desactivado en su sistema. Abra Configuración del sistema → B
 ## La aplicación sigue girando pero nunca se conecta. ¿Qué debo hacer?
 1. Asegúrese de que el dispositivo esté encendido (Muse: mantenga presionado hasta que sienta una vibración; Ganglion/Cyton: verifique el LED azul). 2. Manténgalo a menos de 5 m. 3. Si aún falla, reinicie el dispositivo.
 
+## ¿Por qué mi dispositivo se desconectó automáticamente?
+Si no llegan datos durante 30 segundos después de haber recibido al menos una trama de EEG, {app} considera que el dispositivo se ha desconectado silenciosamente (por ejemplo, salió del rango BLE o se apagó sin una desconexión limpia). El ícono de la bandeja vuelve a gris y el escaneo se reanuda automáticamente.
+
 ## ¿Cómo otorgo permiso a Bluetooth?
 macOS mostrará un cuadro de diálogo de permiso la primera vez que {app} intente conectarse. Si lo descartó, vaya a Configuración del sistema → Privacidad y seguridad → Bluetooth y habilite {app}.
 
 ## ¿Qué métricas se almacenan en la base de datos?
-Cada época de 2,5 s almacena: el vector de incrustación ZUNA (32-D), potencias de banda relativas (delta, theta, alfa, beta, gamma, gamma alta) promediadas entre canales, potencias de banda por canal como JSON, puntuaciones derivadas (relajación, compromiso), FAA, relaciones de banda cruzada (TAR, BAR, DTR), forma espectral (PSE, APF, BPS, SNR), coherencia, supresión de Mu, estado de ánimo índice y promedios PPG si están disponibles.
+Cada época de 2,5 s almacena: el vector de incrustación de EEG, potencias de banda relativas (delta, theta, alfa, beta, gamma, gamma alta) promediadas entre canales, potencias de banda por canal como JSON, puntuaciones derivadas (relajación, compromiso), FAA, relaciones entre bandas (TAR, BAR, DTR), forma espectral (PSE, APF, BPS, SNR), coherencia, supresión Mu, índice de ánimo y promedios de PPG si están disponibles.
 
 ## ¿Qué es la comparación de sesiones?
 Comparar (⌘⇧M) le permite elegir dos rangos de tiempo y compararlos uno al lado del otro: barras de potencia de banda relativa con deltas, todas las puntuaciones y proporciones derivadas, asimetría alfa frontal, hipnogramas de estadificación del sueño y Brain Nebula™, una proyección de incorporación UMAP 3D.
@@ -128,13 +131,16 @@ macOS: el dongle aparece como /dev/cu.usbserial-*. Si no está presente, instale
 Galea de OpenBCI es un auricular de investigación de bioseñales de 24 canales que combina sensores EEG, EMG y AUX, que se transmiten a través de UDP. Para conectarse: 1. Encienda Galea y conéctelo a su red local. 2. En Configuración → OpenBCI seleccione "Galea — 24ch · UDP". 3. Ingrese la dirección IP de Galea (o déjela en blanco para aceptarla de cualquier remitente). 4. Haga clic en Conectar. Los canales 1 a 8 son EEG (impulsa el análisis en tiempo real); 9 a 16 son EMG; 17–24 son auxiliares. Los 24 se guardan en CSV.
 
 ## ¿Puedo utilizar dos dispositivos BCI al mismo tiempo?
-Sí, NeuroSkill™ puede transmitir desde ambos simultáneamente. Cualquiera que sea el dispositivo que se conecte primero, controlará el panel en vivo, la pantalla de potencia de banda y el canal de integración de ZUNA. Los datos del segundo dispositivo se registran en CSV para su análisis fuera de línea. Está previsto un análisis multidispositivo simultáneo en tiempo real para una versión futura.
+Sí — NeuroSkill™ puede transmitir desde ambos simultáneamente. El dispositivo que se conecte primero controla el panel en vivo, la visualización de potencia de banda y la canalización de incrustación de EEG. Los datos del segundo dispositivo se graban en CSV para análisis sin conexión. El análisis simultáneo de múltiples dispositivos en la canalización en tiempo real está planificado para una versión futura.
 
 ## Sólo 4 de los 8 canales de mi Cyton se utilizan para análisis en vivo, ¿por qué?
-El proceso de análisis en tiempo real (filtros, potencias de banda, incrustaciones de ZUNA, puntos de calidad de señal) está diseñado actualmente para entradas de 4 canales para que coincidan con el formato de los auriculares Muse. Para Cyton (8 canales) y Cyton+Daisy (16 canales), los canales 1 a 4 alimentan la canalización en vivo; Todos los canales están escritos en CSV para trabajar sin conexión. El soporte total de canalización multicanal está en la hoja de ruta.
+La canalización de análisis en tiempo real (filtros, potencias de banda, incrustaciones de EEG, puntos de calidad de señal) está diseñada actualmente para entradas de 4 canales para coincidir con el formato de los auriculares Muse. Para Cyton (8 canales) y Cyton+Daisy (16 canales), los canales 1 a 4 alimentan la canalización en vivo; todos los canales se escriben en CSV para trabajo sin conexión. El soporte completo de canalización multicanal está en la hoja de ruta.
 
 ## ¿Cómo mejoro la calidad de la señal en una placa OpenBCI?
 1. Aplique gel o pasta conductora en cada sitio del electrodo y separe el cabello para hacer contacto directo con el cuero cabelludo. 2. Verifique la impedancia con la verificación de impedancia de la GUI de OpenBCI antes de grabar; apunte a < 20 kΩ. 3. Conecte el electrodo de polarización SRB a la mastoides (detrás de la oreja) para obtener una referencia sólida. 4. Mantenga los cables de los electrodos cortos y alejados de las fuentes de alimentación. 5. Utilice el filtro de muesca en Configuración → Procesamiento de señal (50 Hz para Europa, 60 Hz para América). 6. Para Ganglion BLE: aleje la placa de los puertos USB 3.0, que emiten interferencias de 2,4 GHz.
+
+## ¿{app} es compatible con la diadema AWEAR?
+Sí. AWEAR es un dispositivo EEG BLE de un solo canal que muestrea a 256 Hz. La conexión funciona igual que con otros dispositivos BLE: encienda la diadema, otorgue permiso de Bluetooth si se solicita, y {app} la descubrirá y conectará automáticamente. El canal EEG único alimenta la canalización de análisis en tiempo real.
 
 ## Mi conexión OpenBCI se cae repetidamente: ¿cómo la estabilizo?
 Ganglion BLE: mantén la placa a menos de 2 m; conecta el adaptador BLE del equipo host a un puerto USB 2.0 (USB 3.0 emite ruido de 2,4 GHz que puede degradar BLE). Cyton USB: usa un cable USB corto y de alta calidad, conectado directamente al ordenador en lugar de un hub. WiFi Shield: asegúrate de que el canal de 2,4 GHz del shield no se superponga con tu router; acerca la placa. En general, evita ejecutar otras aplicaciones con alto uso inalámbrico (videollamadas, sincronización de archivos) durante las grabaciones.

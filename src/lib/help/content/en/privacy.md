@@ -4,7 +4,7 @@
 # Data Storage
 
 ## All data stays on your device
-Every piece of data {app} records — raw EEG samples (CSV), ZUNA embeddings (SQLite + HNSW index), text labels, calibration timestamps, logs, and settings — is stored locally in {dataDir}/. No data is uploaded to any cloud service, server, or third party.
+Every piece of data {app} records — raw EEG samples (CSV), EEG embeddings (SQLite + HNSW index), text labels, calibration timestamps, logs, and settings — is stored locally in {dataDir}/. No data is uploaded to any cloud service, server, or third party.
 
 ## No user accounts
 {app} does not require sign-up, login, or any form of account creation. There are no user identifiers, tokens, or authentication credentials stored or transmitted.
@@ -40,7 +40,7 @@ The device serial number and MAC address are received from the BCI headset and d
 # On-Device Processing
 
 ## GPU inference stays local
-The ZUNA embedding encoder runs entirely on your local GPU via wgpu. Model weights are loaded from the local Hugging Face cache (~/.cache/huggingface/). No EEG data is sent to any external inference API or cloud GPU.
+The EEG embedding encoder runs entirely on your local GPU via wgpu. Model weights are loaded from the local Hugging Face cache (~/.cache/huggingface/). No EEG data is sent to any external inference API or cloud GPU. Text embeddings for label search use nomic-embed-text-v1.5, also cached locally.
 
 ## Filtering and analysis
 All signal processing — overlap-save filtering, FFT band-power computation, spectrogram generation, and signal quality monitoring — runs locally on your CPU/GPU. No raw or processed EEG data leaves your machine.

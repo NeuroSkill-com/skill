@@ -4,7 +4,7 @@
 # 数据存储
 
 ## 所有数据都保留在您的设备上
-{app} 记录的每一项数据——原始 EEG 样本（CSV）、ZUNA 嵌入（SQLite + HNSW 索引）、文本标签、校准时间戳、日志和设置——都本地存储在 {dataDir}/ 中。没有数据上传到任何云服务、服务器或第三方。
+{app} 记录的每一条数据——原始 EEG 样本（CSV）、EEG 嵌入（SQLite + HNSW 索引）、文本标签、校准时间戳、日志和设置——都本地存储在 {dataDir}/ 中。没有任何数据上传到云服务、服务器或第三方。
 
 ## 无需用户账户
 {app} 不需要注册、登录或任何形式的账户创建。不存储或传输任何用户标识符、令牌或身份验证凭据。
@@ -24,7 +24,7 @@
 {app} 注册一个 _skill._tcp.local. mDNS 服务，以便局域网客户端自动发现 WebSocket 端口。此广播仅限本地（组播 DNS），在您的网络外部不可见。
 
 ## 更新检查
-When you click 'Check for Updates' in Settings, {app} contacts the configured update endpoint to check for a newer version. This is the only outbound internet request the app makes, and it only happens when you explicitly trigger it. Update bundles are verified with an Ed25519 signature before installation.
+当您在设置中点击"检查更新"时，{app} 会联系配置的更新端点以检查是否有新版本。这是应用发出的唯一出站互联网请求，且仅在您明确触发时才会发生。更新包在安装前通过 Ed25519 签名验证。
 
 # 蓝牙与设备安全
 
@@ -40,7 +40,7 @@ When you click 'Check for Updates' in Settings, {app} contacts the configured up
 # 设备端处理
 
 ## GPU 推理保持本地
-ZUNA 嵌入编码器完全通过 wgpu 在本地 GPU 上运行。模型权重从本地 Hugging Face 缓存（~/.cache/huggingface/）加载。没有 EEG 数据发送到任何外部推理 API 或云 GPU。
+EEG 嵌入编码器完全通过 wgpu 在本地 GPU 上运行。模型权重从本地 Hugging Face 缓存（~/.cache/huggingface/）加载。没有 EEG 数据发送到任何外部推理 API 或云 GPU。用于标签搜索的文本嵌入使用 nomic-embed-text-v1.5，同样本地缓存。
 
 ## 滤波和分析
 所有信号处理——重叠保存滤波、FFT 频段功率计算、频谱图生成和信号质量监控——都在您的 CPU/GPU 上本地运行。没有原始或处理过的 EEG 数据离开您的设备。

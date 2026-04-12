@@ -11,10 +11,10 @@
 调整连续 5 秒嵌入时段之间的重叠量。更高的重叠意味着每分钟更多的嵌入（搜索中更精细的时间分辨率），但会增加存储和计算开销。
 
 ## 校准
-Configure the calibration task: action labels (e.g. "eyes open", "eyes closed"), phase durations, number of repetitions, and whether to auto-start calibration on app launch.
+配置校准任务：动作标签（如"睁眼"、"闭眼"）、阶段时长、重复次数，以及是否在应用启动时自动开始校准。
 
 ## 校准语音引导（TTS）
-During calibration the app announces each phase by name using on-device English text-to-speech. The engine is powered by KittenTTS (tract-onnx, ~30 MB) with espeak-ng phonemisation. The model is downloaded from HuggingFace Hub on first launch and cached locally — no data leaves your device after that. Speech fires for: session start, each action phase, every break ("Break. Next: …"), and session completion. Requires espeak-ng on PATH (brew / apt / apk install espeak-ng). English only.
+校准期间，应用使用设备端英语文本转语音播报每个阶段的名称。引擎由 KittenTTS（tract-onnx，约 30 MB）驱动，使用 espeak-ng 进行音素化。模型在首次启动时从 HuggingFace Hub 下载并本地缓存——此后不会有数据离开您的设备。语音触发时机：会话开始、每个动作阶段、每次休息（"Break. Next: ..."）和会话完成。需要 espeak-ng 在 PATH 中（brew / apt / apk install espeak-ng）。仅支持英语。
 
 ## 全局快捷键
 设置系统级键盘快捷键，可从任何应用程序打开标签、搜索、设置和校准窗口。使用标准加速键格式（如 CmdOrCtrl+Shift+L）。
@@ -32,7 +32,7 @@ During calibration the app announces each phase by name using on-device English 
 设置每日录制目标（分钟）。流式传输期间仪表盘上会显示进度条，达到目标时会触发通知。最近 30 天图表显示哪些天达标（绿色）、达到一半（琥珀色）、有一些进度（暗色）或未记录（无）。
 
 ## 文本嵌入
-Select the sentence-transformer model used to embed your label text for semantic search. Smaller models (≤384-dim, e.g. all-MiniLM-L6-v2) are fast and sufficient for personal search. Larger models produce richer representations at the cost of download size and inference time. Weights are downloaded once from HuggingFace and cached locally. After switching models, run Re-embed All Labels to reindex.
+标签和搜索查询使用 nomic-embed-text-v1.5（约 130 MB ONNX 模型，768 维）进行嵌入。该模型从 HuggingFace Hub 下载一次并本地缓存。它驱动文本相似性搜索和 Proactive Hooks 使用的语义标签索引。
 
 ## 快捷键
 配置全局键盘快捷键（系统级热键），用于打开标签、搜索、设置和校准窗口。还显示所有应用内快捷键（⌘K 打开命令面板、? 打开快捷键浮层、⌘↵ 提交标签）。快捷键使用标准加速键格式——如 CmdOrCtrl+Shift+L。
@@ -44,7 +44,7 @@ NeuroSkill 可以选择性地记录哪个应用处于前台以及键盘和鼠标
 后台线程每秒唤醒一次，询问操作系统当前前台应用程序是什么。当应用名称或窗口标题发生变化时，会向 activity.sqlite 插入一行：应用显示名称（如 "Safari"）、应用程序包或可执行文件的完整路径、最前面窗口的标题（如文档名称或当前网页），以及记录该窗口变为活动状态的 Unix 秒时间戳。如果您停留在同一窗口中，则不会写入新行——在单个应用中空闲不会产生数据库活动。在 macOS 上，追踪器调用 osascript；应用名称和路径不需要辅助功能权限，但沙盒应用的窗口标题可能为空。在 Linux 上使用 xdotool 和 xprop（需要 X11 会话）。在 Windows 上使用 PowerShell GetForegroundWindow 调用。
 
 ## 键盘和鼠标活动追踪
-A global input hook (rdev) listens for every key press and mouse or trackpad event system-wide. It does not record what you typed, which keys you pressed, or where the cursor moved — it only updates two Unix-second timestamps in memory: one for the most recent keyboard event and one for the most recent mouse/trackpad event. These are flushed to activity.sqlite every 60 seconds, but only when at least one value has changed since the last flush, so idle periods leave no trace. The Settings panel receives a live update event (throttled to at most once per second) so the "Last keyboard" and "Last mouse" fields reflect activity in near-real-time.
+全局输入钩子（rdev）监听系统范围内的每次按键和鼠标或触控板事件。它不记录您输入了什么、按了哪些键或光标移动到哪里——它只更新内存中的两个 Unix 秒时间戳：一个用于最近的键盘事件，一个用于最近的鼠标/触控板事件。这些每 60 秒刷新到 activity.sqlite，但仅在自上次刷新以来至少有一个值发生变化时才写入，因此空闲期间不会留下任何痕迹。设置面板接收实时更新事件（节流为每秒最多一次），因此"上次键盘"和"上次鼠标"字段几乎实时反映活动。
 
 ## 数据存储位置
 所有活动数据存储在单个 SQLite 文件中：~/.skill/activity.sqlite。它永远不会被传输、同步或包含在任何分析中。维护两个表：active_windows（每次窗口焦点变化一行，包含应用名称、路径、标题和时间戳）和 input_activity（检测到活动时每 60 秒刷新一行，包含上次键盘和上次鼠标时间戳）。两个表在时间戳列上都有降序索引。启用 WAL 日志模式，因此后台写入永远不会阻塞读取。您可以随时使用任何 SQLite 浏览器打开、检查、导出或删除该文件。
@@ -61,10 +61,10 @@ macOS——活动窗口追踪（应用名称和路径）不需要特殊权限。
 控制会话比较中 3D UMAP 投影的参数：邻居数（控制局部与全局结构）、最小距离（点聚类的紧密程度）和度量（余弦或欧几里得）。更高的邻居数保留更多全局拓扑；更低的数值揭示细粒度的局部聚类。投影在后台任务中运行，结果会被缓存。
 
 # EEG 模型选项卡
-监控 ZUNA 编码器和 HNSW 向量索引状态。
+监控 EEG 嵌入编码器和 HNSW 向量索引状态。
 
 ## 编码器状态
-显示 ZUNA wgpu 编码器是否已加载、架构摘要（维度、层数、头数）以及 .safetensors 权重文件的路径。编码器完全在设备端通过 GPU 运行。
+显示 EEG 嵌入编码器是否已加载、架构摘要（维度、层数、注意力头数）以及 .safetensors 权重文件的路径。编码器完全在设备上使用您的 GPU 运行。
 
 ## 今日嵌入数
 实时计数器，显示今天有多少 5 秒 EEG 时段已嵌入到今天的 HNSW 索引中。每个嵌入是一个紧凑的向量，捕捉该时刻的神经特征。

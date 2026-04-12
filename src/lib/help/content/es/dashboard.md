@@ -29,7 +29,7 @@ Un medidor anclado en el centro que muestra el índice de asimetría frontal alf
 Un gráfico de desplazamiento en el dominio del tiempo de la señal EEG filtrada para todos los canales. Debajo de cada forma de onda hay una cinta de espectrograma que muestra el contenido de frecuencia a lo largo del tiempo. El gráfico muestra los ~4 segundos de datos más recientes.
 
 ## Utilización de GPU
-Un pequeño gráfico en la parte superior de la ventana principal que muestra la utilización del codificador y decodificador de GPU. Visible solo mientras el codificador de incorporación ZUNA está activo. Ayuda a verificar que la canalización wgpu se esté ejecutando.
+Un pequeño gráfico en la parte superior de la ventana principal que muestra la utilización del codificador y decodificador de GPU. Visible solo mientras el codificador de incrustación de EEG está activo. Ayuda a verificar que la canalización wgpu está funcionando.
 
 # Estados del icono de la bandeja
 
@@ -46,4 +46,4 @@ Transmisión de datos de EEG en vivo desde su dispositivo BCI.
 La radio Bluetooth está apagada. No es posible escanear ni conectar.
 
 # Comunidad
-Join the NeuroSkill Discord community to ask questions, share feedback, and connect with other users and developers.
+Únase a la comunidad de Discord de NeuroSkill para hacer preguntas, compartir comentarios y conectarse con otros usuarios y desarrolladores.

@@ -4,7 +4,7 @@
 # Stockage des données
 
 ## Toutes les données restent sur votre appareil
-Toutes les données enregistrées par {app} sont stockées localement dans {dataDir}/. Rien n'est envoyé au cloud.
+Toutes les données enregistrées par {app} — échantillons EEG bruts (CSV), embeddings EEG (SQLite + index HNSW), labels textuels, horodatages de calibration, journaux et paramètres — sont stockées localement dans {dataDir}/. Aucune donnée n'est envoyée vers un service cloud, un serveur ou un tiers.
 
 ## Aucun compte utilisateur
 {app} ne nécessite aucune inscription, connexion ou création de compte.
@@ -40,7 +40,7 @@ Le numéro de série et l'adresse MAC du casque BCI sont stockés uniquement loc
 # Traitement sur l'appareil
 
 ## Inférence GPU locale
-L'encodeur ZUNA fonctionne entièrement sur votre GPU local via wgpu.
+L'encodeur d'embedding EEG fonctionne entièrement sur votre GPU locale via wgpu. Les poids du modèle sont chargés depuis le cache local Hugging Face (~/.cache/huggingface/). Aucune donnée EEG n'est envoyée à une API d'inférence externe ou un GPU cloud. Les embeddings textuels pour la recherche de labels utilisent nomic-embed-text-v1.5, également mis en cache localement.
 
 ## Filtrage et analyse
 Tout le traitement du signal s'exécute localement sur votre CPU/GPU.

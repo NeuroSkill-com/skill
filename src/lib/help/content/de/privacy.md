@@ -4,7 +4,7 @@
 # Datenspeicherung
 
 ## Alle Daten bleiben auf Ihrem Gerät
-Alle von {app} aufgezeichneten Daten werden lokal in {dataDir}/ gespeichert. Nichts wird in die Cloud hochgeladen.
+Alle von {app} aufgezeichneten Daten — rohe EEG-Samples (CSV), EEG-Embeddings (SQLite + HNSW-Index), Text-Labels, Kalibrierungszeitstempel, Logs und Einstellungen — werden lokal in {dataDir}/ gespeichert. Keine Daten werden an einen Cloud-Dienst, Server oder Drittanbieter hochgeladen.
 
 ## Keine Benutzerkonten
 {app} erfordert keine Registrierung, Anmeldung oder Kontoerstellung.
@@ -24,7 +24,7 @@ Alle Dateien befinden sich unter {dataDir}/ auf macOS und Linux. Jeder Tag hat e
 {app} registriert einen _skill._tcp.local. mDNS-Dienst für die automatische Erkennung im lokalen Netzwerk.
 
 ## Update-Prüfungen
-When you click 'Check for Updates' in Settings, {app} contacts the configured update endpoint to check for a newer version. This is the only outbound internet request the app makes, and it only happens when you explicitly trigger it. Update bundles are verified with an Ed25519 signature before installation.
+Wenn Sie in den Einstellungen auf „Nach Updates suchen" klicken, kontaktiert {app} den konfigurierten Update-Endpunkt, um nach einer neueren Version zu suchen. Dies ist die einzige ausgehende Internetanfrage der App, und sie erfolgt nur, wenn Sie sie ausdrücklich auslösen. Update-Pakete werden vor der Installation mit einer Ed25519-Signatur verifiziert.
 
 # Bluetooth & Sicherheit
 
@@ -40,7 +40,7 @@ Seriennummer und MAC-Adresse des BCI-Headsets werden nur lokal gespeichert.
 # Verarbeitung auf dem Gerät
 
 ## GPU-Inferenz bleibt lokal
-Der ZUNA-Encoder läuft vollständig auf Ihrer lokalen GPU via wgpu.
+Der EEG-Embedding-Encoder läuft vollständig auf Ihrer lokalen GPU über wgpu. Modellgewichte werden aus dem lokalen Hugging Face Cache (~/.cache/huggingface/) geladen. Keine EEG-Daten werden an eine externe Inferenz-API oder Cloud-GPU gesendet. Texteinbettungen für die Label-Suche verwenden nomic-embed-text-v1.5, ebenfalls lokal zwischengespeichert.
 
 ## Filterung und Analyse
 Die gesamte Signalverarbeitung läuft lokal auf Ihrer CPU/GPU.

@@ -32,7 +32,7 @@ Elija un modo de color (Sistema / Claro / Oscuro), habilite Contraste alto para 
 Establezca un objetivo de grabación diario en minutos. Aparece una barra de progreso en el panel durante la transmisión y se activa una notificación cuando alcanzas tu objetivo. El gráfico de los últimos 30 días muestra qué días llegó (verde), llegó a la mitad (ámbar), realizó algún progreso (oscuro) o se perdió (ninguno).
 
 ## Incrustaciones de texto
-Seleccione el modelo de transformador de oración utilizado para incrustar el texto de su etiqueta para la búsqueda semántica. Los modelos más pequeños (≤384-dim, por ejemplo, All-MiniLM-L6-v2) son rápidos y suficientes para la búsqueda personal. Los modelos más grandes producen representaciones más ricas a costa del tamaño de descarga y el tiempo de inferencia. Los pesos se descargan una vez desde HuggingFace y se almacenan en caché localmente. Después de cambiar de modelo, ejecute Volver a incrustar todas las etiquetas para volver a indexar.
+Las etiquetas y las consultas de búsqueda se incrustan utilizando nomic-embed-text-v1.5 (modelo ONNX de ~130 MB, 768 dimensiones). El modelo se descarga una vez desde HuggingFace Hub y se almacena en caché localmente. Alimenta tanto la búsqueda por similitud de texto como el índice semántico de etiquetas utilizado por los Ganchos Proactivos.
 
 ## Atajos
 Configure atajos de teclado globales (teclas de acceso rápido para todo el sistema) para abrir las ventanas Etiqueta, Búsqueda, Configuración y Calibración. También muestra todos los atajos de la aplicación (⌘K para la paleta de comandos, ? para la superposición de atajos, ⌘↵ para enviar una etiqueta). Los atajos utilizan el formato de acelerador estándar, p. CmdOCtrl+Mayús+L.
@@ -61,10 +61,10 @@ Ambos cambios en Configuración → Seguimiento de actividad entran en vigor de 
 Parámetros de control para la proyección UMAP 3D utilizada en Comparación de sesiones: número de vecinos (controla la estructura local frente a la global), distancia mínima (con qué precisión se agrupan los puntos) y la métrica (coseno o euclidiana). Un mayor número de vecinos preserva una topología más global; los recuentos más bajos revelan grupos locales detallados. Las proyecciones se ejecutan en un trabajo en segundo plano y los resultados se almacenan en caché.
 
 # Pestaña Modelo EEG
-Supervise el codificador ZUNA y el estado del índice del vector HNSW.
+Monitoree el codificador de incrustación de EEG y el estado del índice vectorial HNSW.
 
 ## Estado del codificador
-Muestra si el codificador ZUNA wgpu está cargado, el resumen de la arquitectura (dimensión, capas, cabezales) y la ruta al archivo de peso .safetensors. El codificador se ejecuta completamente en el dispositivo utilizando su GPU.
+Muestra si el codificador de incrustación de EEG está cargado, el resumen de la arquitectura (dimensión, capas, cabezas) y la ruta al archivo de pesos .safetensors. El codificador se ejecuta completamente en el dispositivo usando su GPU.
 
 ## Incrustaciones hoy
 Un contador en vivo de cuántas épocas de EEG de 5 segundos se han incluido en el índice HNSW de hoy. Cada incorporación es un vector compacto que captura la firma neuronal de ese momento.

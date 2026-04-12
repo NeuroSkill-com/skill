@@ -34,6 +34,9 @@ Ajuste cómo el servidor carga y ejecuta modelos.
 ## Capas de GPU
 Controla cuántas capas de transformador se descargan a la GPU. Establezca en 'Todos' para obtener la velocidad máxima si el modelo cabe en VRAM. Establezca en 0 para inferencia solo de CPU. Los valores intermedios dividen el modelo entre GPU y CPU, lo que resulta útil cuando el modelo apenas supera la capacidad de VRAM.
 
+## Dispositivo de inferencia (CPU / GPU)
+Elija si ejecutar la inferencia LLM en CPU o GPU. El cambio de dispositivo surte efecto inmediatamente: el servidor se reinicia automáticamente si ya está en ejecución. En CPU, todas las capas del transformer se ejecutan en el procesador del host (se usa libomp para BLAS paralelo). En GPU, las capas se descargan a Metal (macOS) o Vulkan (Linux/Windows). Use el modo CPU cuando la VRAM de la GPU sea insuficiente o cuando la GPU esté reservada para la incrustación de EEG.
+
 ## Tamaño del contexto
 El tamaño de la caché KV en tokens. 'Auto' elige el contexto más grande que se ajuste a su GPU/RAM según el tamaño y la cuantificación del modelo. Los contextos más grandes permiten que el modelo recuerde más historial de conversaciones pero consume más memoria. Las opciones están limitadas al máximo entrenado del modelo. Si se encuentra con errores de falta de memoria, intente reducir el tamaño del contexto.
 

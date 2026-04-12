@@ -8,7 +8,7 @@ Ouverte via le menu, un raccourci global ou le bouton tag. Tapez un label pour a
 La fenêtre Recherche propose trois modes - Similarité EEG, Texte et Interactif - interrogeant vos données de différentes façons.
 
 ## Recherche par similarité EEG
-Choisissez une plage de dates/heures et lancez une recherche par plus proches voisins sur toutes les embeddings ZUNA enregistrées dans cette fenêtre. L'index HNSW renvoie les k époques EEG de 5 secondes les plus similaires de tout votre historique, classées par distance cosinus. Distance plus faible = état cérébral plus similaire. Les étiquettes qui chevauchent un horodatage de résultat sont affichées en ligne.
+Choisissez une plage de dates/heures de début et de fin et lancez une recherche approximative de plus proches voisins sur tous les embeddings EEG enregistrés dans cette fenêtre. L'index HNSW retourne les k époques EEG de 5 secondes les plus similaires de tout votre historique, classées par distance cosinus. Distance plus faible = état cérébral plus similaire. Les labels qui chevauchent un horodatage de résultat sont affichés en ligne. Utile pour retrouver des moments passés qui « ressemblaient » à une période de référence.
 
 ## Recherche par embedding textuel
 Saisissez n'importe quel concept, activité ou état mental en langage naturel (p. ex. « concentration profonde », « anxieux », « méditation yeux fermés »). La requête est vectorisée par le même modèle sentence-transformer que celui utilisé pour l'indexation des étiquettes, puis comparée à toutes vos annotations par similarité cosinus dans l'index HNSW. Les résultats sont vos propres étiquettes classées par proximité sémantique - pas par correspondance de mots-clés. Un graphe kNN 3D visualise la structure de voisinage.

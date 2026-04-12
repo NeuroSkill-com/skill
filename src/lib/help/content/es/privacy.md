@@ -4,7 +4,7 @@
 # Almacenamiento de datos
 
 ## Todos los datos permanecen en su dispositivo
-Cada dato de los registros {app} (muestras de EEG sin procesar (CSV), incrustaciones de ZUNA (índice SQLite + HNSW), etiquetas de texto, marcas de tiempo de calibración, registros y configuraciones) se almacena localmente en {dataDir}/. No se cargan datos a ningún servicio en la nube, servidor o tercero.
+Cada dato que {app} registra — muestras de EEG sin procesar (CSV), incrustaciones de EEG (SQLite + índice HNSW), etiquetas de texto, marcas de tiempo de calibración, registros y configuraciones — se almacena localmente en {dataDir}/. No se sube ningún dato a ningún servicio en la nube, servidor o tercero.
 
 ## Sin cuentas de usuario
 {app} no requiere registro, inicio de sesión ni ninguna forma de creación de cuenta. No se almacenan ni transmiten identificadores de usuario, tokens ni credenciales de autenticación.
@@ -40,7 +40,7 @@ El número de serie del dispositivo y la dirección MAC se reciben del auricular
 # Procesamiento en el dispositivo
 
 ## La inferencia de GPU permanece local
-El codificador integrado ZUNA se ejecuta completamente en su GPU local a través de wgpu. Los pesos del modelo se cargan desde la caché local de Hugging Face (~/.cache/huggingface/). No se envían datos de EEG a ninguna API de inferencia externa ni GPU en la nube.
+El codificador de incrustación de EEG se ejecuta completamente en su GPU local a través de wgpu. Los pesos del modelo se cargan desde la caché local de Hugging Face (~/.cache/huggingface/). No se envían datos de EEG a ninguna API de inferencia externa ni GPU en la nube. Las incrustaciones de texto para la búsqueda de etiquetas utilizan nomic-embed-text-v1.5, también almacenado en caché localmente.
 
 ## Filtrado y análisis
 Todo el procesamiento de señales (filtrado para guardar superposiciones, cálculo de potencia de banda FFT, generación de espectrogramas y monitoreo de la calidad de la señal) se ejecuta localmente en su CPU/GPU. Ningún dato EEG sin procesar o procesado sale de su máquina.
