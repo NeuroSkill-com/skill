@@ -8,7 +8,7 @@ Geöffnet über Menü, Tastenkürzel oder Tag-Button. Geben Sie ein Label ein, u
 Das Such-Fenster bietet drei Modi — EEG-Ähnlichkeit, Text und Interaktiv — die Ihre Aufzeichnungen auf unterschiedliche Weise abfragen.
 
 ## EEG-Ähnlichkeitssuche
-Wählen Sie einen Zeitraum und suchen Sie per Nächste-Nachbarn-Suche über alle ZUNA-Einbettungen in diesem Fenster. Der HNSW-Index liefert die k ähnlichsten 5-Sekunden-EEG-Epochen aus Ihrer gesamten Aufzeichnungshistorie, sortiert nach Kosinusabstand. Kleinerer Abstand = ähnlicherer Gehirnzustand. Labels, die einen Ergebnis-Zeitstempel überlappen, werden direkt angezeigt.
+Wählen Sie einen Start-/End-Zeitraum und führen Sie eine approximative Nächste-Nachbarn-Suche über alle in diesem Zeitfenster aufgezeichneten EEG-Embeddings durch. Der HNSW-Index liefert die k ähnlichsten 5-Sekunden-EEG-Epochen aus Ihrer gesamten Historie, nach Kosinusdistanz sortiert. Niedrigere Distanz = ähnlicherer Hirnzustand. Labels, die einen Ergebnis-Zeitstempel überlappen, werden inline angezeigt. Nützlich, um vergangene Momente zu finden, die sich ähnlich „angefühlt" haben wie ein Referenzzeitraum.
 
 ## Texteinbettungssuche
 Geben Sie ein beliebiges Konzept, eine Aktivität oder einen mentalen Zustand in natürlicher Sprache ein (z. B. "tiefe Konzentration", "ängstlich", "Meditation mit geschlossenen Augen"). Die Abfrage wird durch dasselbe Satz-Transformer-Modell eingebettet, das für die Label-Indizierung verwendet wird, und mit all Ihren Anmerkungen über Kosinusähnlichkeit im HNSW-Label-Index abgeglichen. Ergebnisse sind Ihre eigenen Labels, nach semantischer Nähe sortiert — keine Schlüsselwortsuche. Ein 3D-kNN-Graph visualisiert die Nachbarschaftsstruktur.
@@ -35,7 +35,7 @@ Ein Live-Dashboard mit allen aktuell verbundenen WebSocket-Clients und einem scr
 Für Sitzungen ab 30 Minuten zeigt die Verlaufsansicht ein automatisch generiertes Hypnogramm. Hinweis: Consumer-BCI-Headsets wie Muse haben 4 Trockenelektroden — die Schlafphaseneinteilung ist näherungsweise, kein klinisches PSG.
 
 ## ⚖  Vergleichen
-Pick any two time ranges on the timeline and compare their average band-power distributions, relaxation/engagement scores, and Frontal Alpha Asymmetry side by side. Includes sleep staging, advanced metrics, and Brain Nebula™ — a 3D UMAP projection showing how similar the two periods are in high-dimensional EEG space. Open from the tray menu or command palette (⌘K → Compare).
+Wählen Sie zwei beliebige Zeitbereiche auf der Zeitleiste und vergleichen Sie deren durchschnittliche Bandleistungsverteilungen, Entspannungs-/Engagement-Scores und frontale Alpha-Asymmetrie nebeneinander. Enthält Schlafphasen, erweiterte Metriken und Brain Nebula™ — eine 3D-UMAP-Projektion, die zeigt, wie ähnlich die beiden Zeiträume im hochdimensionalen EEG-Raum sind. Öffnen über das Tray-Menü oder die Befehlspalette (⌘K → Vergleichen).
 
 # Overlays & Befehlspalette
 Schnellzugriff-Overlays, die in jedem Fenster per Tastenkürzel verfügbar sind.

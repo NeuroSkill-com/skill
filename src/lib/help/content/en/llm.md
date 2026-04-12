@@ -34,6 +34,9 @@ Fine-tune how the server loads and runs models.
 ## GPU Layers
 Controls how many transformer layers are offloaded to GPU. Set to 'All' for maximum speed if the model fits in VRAM. Set to 0 for CPU-only inference. Intermediate values split the model across GPU and CPU — useful when the model barely exceeds VRAM capacity.
 
+## Inference Device (CPU / GPU)
+Choose whether to run LLM inference on CPU or GPU. Switching the device takes effect immediately — the server restarts automatically if it is already running. On CPU, all transformer layers run on the host processor (libomp is used for parallel BLAS). On GPU, layers are offloaded to Metal (macOS) or Vulkan (Linux/Windows). Use CPU mode when GPU VRAM is insufficient or when the GPU is reserved for EEG embedding.
+
 ## Context Size
 The KV-cache size in tokens. 'Auto' picks the largest context that fits your GPU/RAM based on the model's size and quantization. Larger contexts let the model remember more conversation history but consume more memory. Options are limited to the model's trained maximum. If you run into out-of-memory errors, try reducing context size.
 

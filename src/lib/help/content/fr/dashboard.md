@@ -29,7 +29,7 @@ Une jauge ancrée au centre montrant l'index FAA en temps réel : ln(AF8 α) - l
 Un graphique défilant du signal EEG filtré pour les quatre canaux. Sous chaque forme d'onde se trouve un spectrogramme.
 
 ## Utilisation GPU
-Un petit graphique en haut de la fenêtre principale montrant l'utilisation du GPU. Visible uniquement lorsque l'encodeur ZUNA est actif.
+Un petit graphique tout en haut de la fenêtre principale montrant l'utilisation de l'encodeur et du décodeur GPU. Visible uniquement lorsque l'encodeur d'embedding EEG est actif. Permet de vérifier que le pipeline wgpu fonctionne.
 
 # États de l'icône de la barre
 

@@ -2,7 +2,7 @@
 Tout est stocké localement dans {dataDir}/ - enregistrements CSV, index HNSW, bases SQLite, labels, journaux et paramètres.
 
 ## Que fait l'encodeur ZUNA ?
-ZUNA est un encodeur transformer accéléré par GPU qui convertit des époques EEG de 5 secondes en vecteurs d'embedding compacts.
+ZUNA est l'un des plusieurs backends d'embedding EEG disponibles dans {app}. C'est un encodeur transformer accéléré par GPU qui convertit des époques EEG de 5 secondes en vecteurs d'embedding compacts. Ces vecteurs capturent la signature neuronale de chaque moment et alimentent la fonction de recherche par similarité. Les autres backends incluent LUNA et NeuroRVQ.
 
 ## Pourquoi la calibration nécessite-t-elle un appareil connecté ?
 La calibration enregistre des données EEG labellisées. Sans données en streaming, il n'y aurait pas de signal neural à associer.
@@ -25,11 +25,14 @@ Le Bluetooth est désactivé. Ouvrez Préférences Système → Bluetooth et act
 ## L'application tourne en boucle sans se connecter - que faire ?
 1. Vérifiez que l'appareil est allumé (Muse : maintenez jusqu'à la vibration ; Ganglion/Cyton : voyant bleu). 2. Restez à moins de 5 m. 3. Si le problème persiste, éteignez et rallumez l'appareil.
 
+## Pourquoi mon appareil s'est-il déconnecté automatiquement ?
+Si aucune donnée n'arrive pendant 30 secondes après la réception d'au moins une trame EEG, {app} considère l'appareil comme silencieusement déconnecté (par ex. hors de portée BLE ou éteint sans déconnexion propre). L'icône de la barre repasse en gris et le scan reprend automatiquement.
+
 ## Comment accorder la permission Bluetooth ?
 macOS affiche une boîte de dialogue de permission. Si vous l'avez rejetée, allez dans Préférences Système → Confidentialité → Bluetooth.
 
 ## Quelles métriques sont stockées dans la base de données ?
-Toutes les 2,5 s : vecteur d'embedding ZUNA (32-D), puissances de bande relatives (delta, thêta, alpha, bêta, gamma, high-gamma) moyennées, puissances par canal en JSON, scores dérivés (focus, relaxation, engagement), FAA, ratios inter-bandes (TAR, BAR, DTR), forme spectrale (PSE, APF, BPS, SNR), cohérence, suppression Mu, indice d'humeur et moyennes PPG.
+Chaque époque de 2,5 s stocke : le vecteur d'embedding EEG, les puissances de bande relatives (delta, thêta, alpha, bêta, gamma, high-gamma) moyennées sur les canaux, les puissances de bande par canal en JSON, les scores dérivés (relaxation, engagement), la FAA, les ratios inter-bandes (TAR, BAR, DTR), la forme spectrale (PSE, APF, BPS, SNR), la cohérence, la suppression Mu, l'indice d'humeur et les moyennes PPG si disponibles.
 
 ## Qu'est-ce que la comparaison de sessions ?
 Comparer (⌘⇧M) compare deux plages horaires côte à côte : barres de puissance avec écarts, tous les scores et ratios, FAA, hypnogrammes et Brain NebulaTM - une projection UMAP 3D.
@@ -128,13 +131,16 @@ macOS : le dongle apparaît en /dev/cu.usbserial-*. Si absent, installez le pilo
 Galea d'OpenBCI est un casque biosignaux 24 voies (EEG + EMG + AUX) diffusant en UDP. 1. Allumez Galea et connectez-le à votre réseau local. 2. Sélectionnez « Galea - 24 voies · UDP » dans Paramètres. 3. Entrez l'adresse IP ou laissez vide. 4. Cliquez sur Connecter. Les voies 1-8 sont EEG ; 9-16 EMG ; 17-24 AUX. Les 24 voies sont enregistrées en CSV.
 
 ## Puis-je utiliser deux appareils BCI simultanément ?
-Oui - NeuroSkillTM peut streamer depuis les deux simultanément. Le premier appareil connecté pilote le tableau de bord en direct et le pipeline d'embedding ZUNA. Les données du second sont enregistrées en CSV pour l'analyse hors ligne. La prise en charge multi-appareils en temps réel est prévue dans une future version.
+Oui — NeuroSkill™ peut diffuser depuis les deux simultanément. L'appareil connecté en premier pilote le tableau de bord en direct, l'affichage des puissances de bande et le pipeline d'embedding EEG. Les données du second appareil sont enregistrées en CSV pour l'analyse hors ligne. L'analyse multi-appareils simultanée dans le pipeline temps réel est prévue pour une version future.
 
 ## Seulement 4 des 8 voies du Cyton sont utilisées en temps réel - pourquoi ?
-Le pipeline d'analyse temps réel est actuellement conçu pour 4 voies d'entrée afin de correspondre au format Muse. Pour le Cyton (8 voies) et Cyton+Daisy (16 voies), les voies 1-4 alimentent le pipeline en direct ; toutes les voies sont enregistrées en CSV. La prise en charge complète multi-canaux est prévue.
+Le pipeline d'analyse en temps réel (filtres, puissances de bande, embeddings EEG, points de qualité du signal) est actuellement conçu pour des entrées à 4 canaux, correspondant au format du casque Muse. Pour le Cyton (8 voies) et le Cyton+Daisy (16 voies), les canaux 1 à 4 alimentent le pipeline en direct ; tous les canaux sont écrits en CSV pour le travail hors ligne. La prise en charge complète du pipeline multi-canaux est prévue.
 
 ## Comment améliorer la qualité du signal sur un board OpenBCI ?
 1. Appliquez du gel conducteur sur chaque électrode et écartez les cheveux pour un contact direct avec le cuir chevelu. 2. Vérifiez l'impédance avec OpenBCI GUI (objectif : < 20 kΩ). 3. Connectez l'électrode SRB sur le mastoïde (derrière l'oreille). 4. Utilisez des câbles courts à l'écart des alimentations. 5. Activez le filtre coupe-bande dans Paramètres → Traitement du signal (50 Hz en Europe). 6. Pour le Ganglion BLE : éloignez le board des ports USB 3.0 qui émettent sur 2,4 GHz.
+
+## {app} prend-il en charge le bandeau AWEAR ?
+Oui. AWEAR est un appareil EEG BLE à canal unique échantillonnant à 256 Hz. La connexion fonctionne comme pour les autres appareils BLE — allumez le bandeau, accordez la permission Bluetooth si demandé, et {app} le découvrira et se connectera automatiquement. Le canal EEG unique alimente le pipeline d'analyse en temps réel.
 
 ## La connexion OpenBCI se coupe fréquemment - comment la stabiliser ?
 Ganglion BLE : maintenez le board à moins de 2 m ; branchez l'adaptateur BLE sur un port USB 2.0 (l'USB 3.0 perturbe le 2,4 GHz). Cyton USB : utilisez un câble USB court et de qualité, directement sur l'ordinateur. WiFi Shield : évitez que le canal 2,4 GHz du shield ne chevauche celui du routeur. En général : évitez les applications gourmandes en sans-fil (visioconférence, sync de fichiers) pendant l'enregistrement.

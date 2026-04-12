@@ -32,7 +32,7 @@ Choisissez un mode de couleur (Système / Clair / Sombre), activez le contraste 
 Définissez un objectif d'enregistrement quotidien en minutes. Une barre de progression apparaît sur le tableau de bord pendant la diffusion, et une notification est envoyée lorsque vous atteignez votre objectif. Le graphique des 30 derniers jours montre les jours atteints (vert), à moitié atteints (ambre), partiellement (atténué) ou manqués (vide).
 
 ## Embeddings textuels
-Sélectionnez le modèle sentence-transformer pour la recherche sémantique. Les modèles plus petits (≤384-dim) sont rapides; les plus grands produisent des représentations plus riches. Les poids sont téléchargés une fois depuis HuggingFace et mis en cache localement. Après avoir changé de modèle, exécutez Ré-encoder tous les labels.
+Les labels et les requêtes de recherche sont vectorisés avec nomic-embed-text-v1.5 (~130 Mo, modèle ONNX, 768 dimensions). Le modèle est téléchargé une seule fois depuis HuggingFace Hub et mis en cache localement. Il alimente à la fois la recherche par similarité textuelle et l'index sémantique de labels utilisé par les Proactive Hooks.
 
 ## Raccourcis
 Configurez les raccourcis clavier globaux pour ouvrir les fenêtres Label, Recherche, Paramètres et Calibration. Affiche aussi tous les raccourcis in-app (⌘K pour la palette, ? pour l'overlay, ⌘↵ pour soumettre). Format : ex. CmdOrCtrl+Shift+L.
@@ -61,10 +61,10 @@ Les deux bascules dans Paramètres → Suivi d'activité prennent effet immédia
 Paramètres UMAP pour la projection 3D dans la comparaison de sessions : nombre de voisins (structure locale vs. globale), distance minimale (densité des clusters) et métrique (cosinus ou euclidienne). Plus de voisins préservent la topologie globale; moins révèlent les clusters locaux fins. Les projections s'exécutent en arrière-plan.
 
 # Onglet Modèle EEG
-Surveillez l'encodeur ZUNA et l'état de l'index vectoriel HNSW.
+Surveillez l'état de l'encodeur d'embedding EEG et de l'index vectoriel HNSW.
 
 ## État de l'encodeur
-Indique si l'encodeur ZUNA wgpu est chargé, le résumé de l'architecture et le chemin du fichier de poids.
+Indique si l'encodeur d'embedding EEG est chargé, le résumé de l'architecture (dimension, couches, têtes) et le chemin vers le fichier de poids .safetensors. L'encodeur fonctionne entièrement sur l'appareil via votre GPU.
 
 ## Embeddings aujourd'hui
 Un compteur en direct du nombre d'époques EEG de 5 secondes intégrées dans l'index HNSW du jour.

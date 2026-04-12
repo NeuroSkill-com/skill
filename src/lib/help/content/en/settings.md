@@ -32,7 +32,7 @@ Choose a colour mode (System / Light / Dark), enable High Contrast for stronger 
 Set a daily recording target in minutes. A progress bar appears on the dashboard while streaming, and a notification fires when you hit your goal. The last-30-days chart shows which days you reached (green), reached halfway (amber), made some progress (dim), or missed (none).
 
 ## Text Embeddings
-Select the sentence-transformer model used to embed your label text for semantic search. Smaller models (≤384-dim, e.g. all-MiniLM-L6-v2) are fast and sufficient for personal search. Larger models produce richer representations at the cost of download size and inference time. Weights are downloaded once from HuggingFace and cached locally. After switching models, run Re-embed All Labels to reindex.
+Labels and search queries are embedded using nomic-embed-text-v1.5 (~130 MB ONNX model, 768-dim). The model is downloaded once from HuggingFace Hub and cached locally. It powers both text similarity search and the semantic label index used by Proactive Hooks.
 
 ## Shortcuts
 Configure global keyboard shortcuts (system-wide hotkeys) for opening the Label, Search, Settings, and Calibration windows. Also shows all in-app shortcuts (⌘K for command palette, ? for shortcuts overlay, ⌘↵ to submit a label). Shortcuts use the standard accelerator format — e.g. CmdOrCtrl+Shift+L.
@@ -61,10 +61,10 @@ Both toggles in Settings → Activity Tracking take effect immediately — no re
 Control parameters for the 3D UMAP projection used in Session Compare: number of neighbours (controls local vs. global structure), minimum distance (how tightly points cluster), and the metric (cosine or euclidean). Higher neighbour counts preserve more global topology; lower counts reveal fine-grained local clusters. Projections run in a background job and results are cached.
 
 # EEG Model Tab
-Monitor the ZUNA encoder and HNSW vector index status.
+Monitor the EEG embedding encoder and HNSW vector index status.
 
 ## Encoder Status
-Shows whether the ZUNA wgpu encoder is loaded, the architecture summary (dimension, layers, heads), and the path to the .safetensors weight file. The encoder runs entirely on-device using your GPU.
+Shows whether the EEG embedding encoder is loaded, the architecture summary (dimension, layers, heads), and the path to the .safetensors weight file. The encoder runs entirely on-device using your GPU.
 
 ## Embeddings Today
 A live counter of how many 5-second EEG epochs have been embedded into today's HNSW index. Each embedding is a compact vector that captures the neural signature of that moment.

@@ -29,7 +29,7 @@ A centre-anchored gauge showing the real-time Frontal Alpha Asymmetry index: ln(
 A scrolling time-domain chart of the filtered EEG signal for all channels. Below each waveform is a spectrogram tape showing the frequency content over time. The chart displays the most recent ~4 seconds of data.
 
 ## GPU Utilisation
-A small chart at the very top of the main window showing GPU encoder and decoder utilisation. Visible only while the ZUNA embedding encoder is active. Helps verify that the wgpu pipeline is running.
+A small chart at the very top of the main window showing GPU encoder and decoder utilisation. Visible only while the EEG embedding encoder is active. Helps verify that the wgpu pipeline is running.
 
 # Tray Icon States
 

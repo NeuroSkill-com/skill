@@ -32,7 +32,7 @@ Farbmodus wählen (System / Hell / Dunkel), Hochkontrast für stärkere Rahmen u
 Tägliches Aufnahmeziel in Minuten festlegen. Ein Fortschrittsbalken erscheint während der Aufnahme im Dashboard, und bei Zielerreichung erfolgt eine Benachrichtigung. Das 30-Tage-Diagramm zeigt Tage mit erfülltem (grün), halbem (gelb), teilweisem (gedimmt) oder fehlendem (leer) Fortschritt.
 
 ## Texteinbettungen
-Sentence-Transformer-Modell für die semantische Suche auswählen. Kleinere Modelle (≤384-dim) sind schnell; größere erzeugen reichhaltigere Repräsentationen. Gewichte werden einmalig von HuggingFace heruntergeladen und lokal gecacht. Nach Modellwechsel "Alle Labels neu einbetten" ausführen.
+Labels und Suchanfragen werden mit nomic-embed-text-v1.5 (~130 MB ONNX-Modell, 768-dim) eingebettet. Das Modell wird einmalig vom HuggingFace Hub heruntergeladen und lokal zwischengespeichert. Es treibt sowohl die Text-Ähnlichkeitssuche als auch den semantischen Label-Index für Proactive Hooks an.
 
 ## Tastenkürzel
 Globale Tastenkürzel für Label-, Such-, Einstellungs- und Kalibrierungsfenster konfigurieren. Zeigt auch alle In-App-Kürzel (⌘K für Befehlspalette, ? für Kürzel-Overlay, ⌘↵ zum Label absenden). Format: z. B. CmdOrCtrl+Shift+L.
@@ -61,10 +61,10 @@ Beide Umschalter in Einstellungen → Aktivitätsverfolgung wirken sofort — ke
 UMAP-Projektionsparameter für den 3D-Vergleich einstellen: Anzahl Nachbarn (lokale vs. globale Struktur), Mindestabstand (Cluster-Dichte) und Metrik (Kosinus oder Euklidisch). Höhere Nachbarzahlen bewahren globale Topologie; niedrige enthüllen feine lokale Cluster. Projektionen laufen im Hintergrund.
 
 # EEG-Modell-Tab
-ZUNA-Encoder und HNSW-Vektor-Index-Status überwachen.
+Überwachen Sie den Status des EEG-Embedding-Encoders und des HNSW-Vektor-Index.
 
 ## Encoder-Status
-Zeigt ob der ZUNA wgpu-Encoder geladen ist, die Architektur und den Pfad der Gewichtsdatei.
+Zeigt an, ob der EEG-Embedding-Encoder geladen ist, die Architekturübersicht (Dimension, Schichten, Köpfe) und den Pfad zur .safetensors-Gewichtsdatei. Der Encoder läuft vollständig auf dem Gerät mit Ihrer GPU.
 
 ## Embeddings heute
 Ein Live-Zähler der in den heutigen HNSW-Index eingebetteten 5-Sekunden-EEG-Epochen.

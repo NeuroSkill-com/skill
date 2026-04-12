@@ -2,7 +2,7 @@
 Everything is stored locally in {dataDir}/ — raw CSV recordings, HNSW vector indices, embedding SQLite databases, labels, logs, and settings. Nothing is sent to the cloud.
 
 ## What does the ZUNA encoder do?
-ZUNA is a GPU-accelerated transformer encoder that converts 5-second EEG epochs into compact embedding vectors. These vectors capture the neural signature of each moment and power the similarity search feature.
+ZUNA is one of several EEG embedding backends available in {app}. It is a GPU-accelerated transformer encoder that converts 5-second EEG epochs into compact embedding vectors. These vectors capture the neural signature of each moment and power the similarity search feature. Other backends include LUNA and NeuroRVQ.
 
 ## Why does calibration require a connected device?
 Calibration runs a timed task (e.g. eyes open / eyes closed) and records labelled EEG data. Without live streaming data, the calibration would have no neural signal to associate with each phase.
@@ -25,11 +25,14 @@ Bluetooth is turned off on your system. Open System Settings → Bluetooth and e
 ## The app keeps spinning but never connects — what should I do?
 1. Make sure the device is powered on (Muse: hold until you feel a vibration; Ganglion/Cyton: check the blue LED). 2. Keep it within 5 m. 3. If it still fails, power-cycle the device.
 
+## Why did my device disconnect automatically?
+If no data arrives for 30 seconds after at least one EEG frame has been received, {app} treats the device as silently disconnected (e.g. moved out of BLE range or powered off without a clean disconnect). The tray icon returns to grey and scanning resumes automatically.
+
 ## How do I grant Bluetooth permission?
 macOS will show a permission dialog the first time {app} tries to connect. If you dismissed it, go to System Settings → Privacy & Security → Bluetooth and enable {app}.
 
 ## What metrics are stored in the database?
-Every 2.5 s epoch stores: the ZUNA embedding vector (32-D), relative band powers (delta, theta, alpha, beta, gamma, high-gamma) averaged across channels, per-channel band powers as JSON, derived scores (relaxation, engagement), FAA, cross-band ratios (TAR, BAR, DTR), spectral shape (PSE, APF, BPS, SNR), coherence, Mu suppression, mood index, and PPG averages if available.
+Every 2.5 s epoch stores: the EEG embedding vector, relative band powers (delta, theta, alpha, beta, gamma, high-gamma) averaged across channels, per-channel band powers as JSON, derived scores (relaxation, engagement), FAA, cross-band ratios (TAR, BAR, DTR), spectral shape (PSE, APF, BPS, SNR), coherence, Mu suppression, mood index, and PPG averages if available.
 
 ## What is Session Compare?
 Compare (⌘⇧M) lets you pick two time ranges and compare them side-by-side: relative band-power bars with deltas, all derived scores and ratios, Frontal Alpha Asymmetry, sleep staging hypnograms, and Brain Nebula™ — a 3D UMAP embedding projection.
@@ -128,13 +131,16 @@ macOS: The dongle appears as /dev/cu.usbserial-*. If absent, install the CP210x 
 Galea by OpenBCI is a 24-channel research biosignals headset combining EEG, EMG, and AUX sensors, streaming over UDP. To connect: 1. Power on Galea and connect it to your local network. 2. In Settings → OpenBCI select "Galea — 24ch · UDP". 3. Enter the Galea IP address (or leave blank to accept from any sender). 4. Click Connect. Channels 1–8 are EEG (drive real-time analysis); 9–16 are EMG; 17–24 are AUX. All 24 are saved to CSV.
 
 ## Can I use two BCI devices at the same time?
-Yes — NeuroSkill™ can stream from both simultaneously. Whichever device connects first drives the live dashboard, band-power display, and ZUNA embedding pipeline. The second device's data is recorded to CSV for offline analysis. Simultaneous multi-device analysis in the real-time pipeline is planned for a future release.
+Yes — NeuroSkill™ can stream from both simultaneously. Whichever device connects first drives the live dashboard, band-power display, and EEG embedding pipeline. The second device's data is recorded to CSV for offline analysis. Simultaneous multi-device analysis in the real-time pipeline is planned for a future release.
 
 ## Only 4 of my Cyton's 8 channels are used for live analysis — why?
-The real-time analysis pipeline (filters, band powers, ZUNA embeddings, signal quality dots) is currently designed for 4-channel inputs to match the Muse headset format. For Cyton (8ch) and Cyton+Daisy (16ch), channels 1–4 feed the live pipeline; all channels are written to CSV for offline work. Full multi-channel pipeline support is on the roadmap.
+The real-time analysis pipeline (filters, band powers, EEG embeddings, signal quality dots) is currently designed for 4-channel inputs to match the Muse headset format. For Cyton (8ch) and Cyton+Daisy (16ch), channels 1–4 feed the live pipeline; all channels are written to CSV for offline work. Full multi-channel pipeline support is on the roadmap.
 
 ## How do I improve signal quality on an OpenBCI board?
 1. Apply conductive gel or paste at each electrode site and part hair to make direct scalp contact. 2. Verify impedance with the OpenBCI GUI Impedance Check before recording — aim for < 20 kΩ. 3. Connect the SRB bias electrode to the mastoid (behind the ear) for a solid reference. 4. Keep electrode cables short and away from power supplies. 5. Use the notch filter in Settings → Signal Processing (50 Hz for Europe, 60 Hz for Americas). 6. For Ganglion BLE: move the board away from USB 3.0 ports, which emit 2.4 GHz interference.
+
+## Does {app} support the AWEAR headband?
+Yes. AWEAR is a single-channel BLE EEG device sampling at 256 Hz. Connection works the same as other BLE devices — power on the headband, grant Bluetooth permission if prompted, and {app} will discover and connect automatically. The single EEG channel drives the real-time analysis pipeline.
 
 ## My OpenBCI connection drops repeatedly — how do I stabilise it?
 Ganglion BLE: Keep the board within 2 m; plug the host computer's BLE adapter into a USB 2.0 port (USB 3.0 emits 2.4 GHz noise that can jam BLE). Cyton USB: Use a short, high-quality USB cable and connect directly to the computer rather than through a hub. WiFi Shield: Ensure the shield's 2.4 GHz channel does not overlap with your router; move the board closer. All boards: avoid running other wireless-intensive apps (video calls, file sync) during recordings.
