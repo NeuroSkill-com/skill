@@ -199,6 +199,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "find_session_for_timestamp",
   "get_csv_metrics",
   "get_daily_goal",
+  "get_day_metrics_batch",
   "get_daily_recording_mins",
   "get_dnd_active",
   "get_dnd_config",
