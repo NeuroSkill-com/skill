@@ -103,8 +103,10 @@ const perm: Record<string, string> = {
   "perm.fullDiskAccessDesc":
     "Erforderlich für die direkte Fokusmodus-Erkennung über die Systemdatenbank. Ohne diese Berechtigung greift die App auf eine langsamere Legacy-Methode zurück. Empfohlen für eine zuverlässige «Nicht stören»-Integration.",
   "perm.fullDiskAccessStep1": "Öffne System Settings → Privacy & Security → Full Disk Access",
-  "perm.fullDiskAccessStep2": "Suche NeuroSkill™ (oder das Terminal, in dem der Daemon läuft) in der Liste und aktiviere es",
-  "perm.fullDiskAccessStep3": "Möglicherweise musst du die App beenden und neu starten, damit die Änderung wirksam wird",
+  "perm.fullDiskAccessStep2":
+    "Suche NeuroSkill™ (oder das Terminal, in dem der Daemon läuft) in der Liste und aktiviere es",
+  "perm.fullDiskAccessStep3":
+    "Möglicherweise musst du die App beenden und neu starten, damit die Änderung wirksam wird",
   "perm.openFullDiskAccessSettings": "Einstellungen für vollständigen Festplattenzugriff öffnen",
 };
 

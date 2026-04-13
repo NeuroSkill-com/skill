@@ -53,7 +53,7 @@ else
   BASE_REF="HEAD"
 fi
 
-CHANGED_FILES="$(git diff --name-only "$BASE_REF...HEAD" 2>/dev/null || true)"
+CHANGED_FILES="$(git diff --name-only --diff-filter=d "$BASE_REF...HEAD" 2>/dev/null || true)"
 
 if [ -z "$CHANGED_FILES" ]; then
   echo "✅ Pre-push checks passed (no changed files detected)."

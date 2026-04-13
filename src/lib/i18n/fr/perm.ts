@@ -104,7 +104,8 @@ const perm: Record<string, string> = {
     "Requis pour la détection directe du mode Concentration via la base de données système. Sans cette autorisation, l'app bascule sur une méthode héritée plus lente. Recommandé pour une intégration fiable du mode Ne pas déranger.",
   "perm.fullDiskAccessStep1": "Ouvrir System Settings → Privacy & Security → Full Disk Access",
   "perm.fullDiskAccessStep2": "Trouver NeuroSkill™ (ou le terminal exécutant le daemon) dans la liste et l'activer",
-  "perm.fullDiskAccessStep3": "Vous devrez peut-être quitter et relancer l'application pour que la modification prenne effet",
+  "perm.fullDiskAccessStep3":
+    "Vous devrez peut-être quitter et relancer l'application pour que la modification prenne effet",
   "perm.openFullDiskAccessSettings": "Ouvrir les réglages d'accès complet au disque",
 };
 

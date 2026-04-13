@@ -105,7 +105,8 @@ const perm: Record<string, string> = {
     "Necesario para la detección directa del modo Concentración a través de la base de datos del sistema. Sin él, la app recurre a un método heredado más lento. Recomendado para una integración fiable con No molestar.",
   "perm.fullDiskAccessStep1": "Abre System Settings → Privacy & Security → Full Disk Access",
   "perm.fullDiskAccessStep2": "Busca NeuroSkill™ (o el terminal donde se ejecuta el daemon) en la lista y actívalo",
-  "perm.fullDiskAccessStep3": "Es posible que tengas que cerrar y reiniciar la aplicación para que el cambio surta efecto",
+  "perm.fullDiskAccessStep3":
+    "Es posible que tengas que cerrar y reiniciar la aplicación para que el cambio surta efecto",
   "perm.openFullDiskAccessSettings": "Abrir ajustes de acceso completo al disco",
 };
 
