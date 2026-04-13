@@ -24,8 +24,12 @@ pub(super) async fn cmd_status(state: &AppState) -> Result<Value, String> {
     let device = json!({
         "state": status.state,
         "name": status.device_name,
+        "kind": status.device_kind,
+        "id": status.device_id,
         "battery": status.battery,
         "eeg_samples": status.sample_count,
+        "eeg_channels": status.eeg_channel_count,
+        "eeg_sample_rate": status.eeg_sample_rate_hz,
         "error": status.device_error,
     });
 

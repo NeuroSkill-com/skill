@@ -306,9 +306,10 @@ function fitBadgeLabel(level: string): string {
               {@const downloading = entry.state === "downloading"}
               {@const downloaded = entry.state === "downloaded"}
               {@const failed = entry.state === "failed" || entry.state === "cancelled"}
+              {@const notDownloaded = !downloading && !downloaded}
               {@const fit = hardwareFits.get(entry.filename)}
 
-              <div class="flex flex-col gap-1 px-4 py-2.5 {isActive ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}">
+              <div class="flex flex-col gap-1 px-4 py-2.5 {isActive ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''} {notDownloaded ? 'opacity-50' : ''}">
                 <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center min-w-0">
                   <span class="text-[0.74rem] font-bold font-mono text-foreground truncate">
                     {entry.quant}
@@ -345,6 +346,7 @@ function fitBadgeLabel(level: string): string {
                       <Button size="sm" class="h-6 text-[0.6rem] px-2.5 bg-violet-600 hover:bg-violet-700 text-white" onclick={() => onDownload(entry.filename)}>
                         {failed ? "Retry" : `Download ${fmtSize(entry.size_gb)}`}{entry.shard_files?.length > 1 ? ` (${entry.shard_files.length} parts)` : ""}
                       </Button>
+                      <Button size="sm" variant="outline" class="h-6 text-[0.6rem] px-2 text-muted-foreground border-border/50 hover:text-foreground" onclick={() => onSelectModel(entry.filename)}>Use</Button>
                     {/if}
                   </div>
                 </div>
