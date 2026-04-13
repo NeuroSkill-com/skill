@@ -9,9 +9,9 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { Separator } from "$lib/components/ui/separator";
 import { getLocale, t } from "$lib/i18n/index.svelte";
-import { getHelpContent } from "./help-loader";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
+import { getHelpContent } from "./help-loader";
 import TtsTestWidget from "./TtsTestWidget.svelte";
 
 const stackBadges: { label: string; url: string; cls: string }[] = [

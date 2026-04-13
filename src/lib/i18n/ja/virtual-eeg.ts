@@ -94,7 +94,7 @@ const virtualEeg: Record<string, string> = {
   "vdev.lslStopped": "仮想LSLソースが停止中",
   "vdev.lslDesc": "LSLストリームの検出と接続をテストするためのローカルLab Streaming Layerソースを起動します。",
   "vdev.lslHint":
-    'メイン設定→LSLタブで「ネットワークスキャン」をクリックし、ストリームリストにSkillVirtualEEGが表示されたら接続してください。',
+    "メイン設定→LSLタブで「ネットワークスキャン」をクリックし、ストリームリストにSkillVirtualEEGが表示されたら接続してください。",
   "vdev.lslStarted": "仮想LSLソースがローカルネットワークでストリーミングを開始しました。",
 
   "vdev.statusSource": "LSLソース",

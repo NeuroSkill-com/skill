@@ -184,7 +184,8 @@ const search: Record<string, string> = {
   "labels.search.semanticTitle":
     "セマンティック検索 — 埋め込みインデックスを使用して意味でセッションを検索します（設定→埋め込みで埋め込みモデルの初期化が必要）",
   "labels.search.semanticPlaceholder": "感情、活動、精神状態を記述…",
-  "labels.search.semanticHint": "概念を入力してEnterを押してください — 埋め込みインデックスが意味で結果をランク付けします",
+  "labels.search.semanticHint":
+    "概念を入力してEnterを押してください — 埋め込みインデックスが意味で結果をランク付けします",
   "labels.search.searching": "検索中…",
   "labels.search.noIndex":
     "埋め込みモデルが初期化されていません — 設定→埋め込みを開いて再埋め込みをクリックし、まずインデックスを構築してください",

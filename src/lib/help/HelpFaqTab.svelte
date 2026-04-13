@@ -8,8 +8,8 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { getLocale } from "$lib/i18n/index.svelte";
-import { getFaqContent } from "./help-loader";
 import HelpSection from "./HelpSection.svelte";
+import { getFaqContent } from "./help-loader";
 
 const entries = $derived(getFaqContent(getLocale()));
 </script>

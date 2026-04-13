@@ -21,8 +21,8 @@ import HelpReferences from "$lib/help/HelpReferences.svelte";
 import HelpSettings from "$lib/help/HelpSettings.svelte";
 import HelpTts from "$lib/help/HelpTts.svelte";
 import HelpWindows from "$lib/help/HelpWindows.svelte";
+import { getFaqContent, getHelpContent } from "$lib/help/help-loader";
 import { getLocale, t } from "$lib/i18n/index.svelte";
-import { getHelpContent, getFaqContent } from "$lib/help/help-loader";
 import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
@@ -99,9 +99,7 @@ const searchIndex = $derived.by(() => {
 const searchResults = $derived.by(() => {
   const q = searchQuery.trim().toLowerCase();
   if (!q) return [] as SearchEntry[];
-  return searchIndex.filter((item) =>
-    item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q),
-  );
+  return searchIndex.filter((item) => item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q));
 });
 
 function goToTab(id: Tab) {

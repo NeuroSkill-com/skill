@@ -19,7 +19,7 @@ const perm: Record<string, string> = {
   "perm.accessibilityOk": "権限が許可されました。キーボードとマウスの活動タイムスタンプが記録されています。",
   "perm.accessibilityPending": "権限ステータスを確認中…",
   "perm.howToGrant": "この権限を許可する方法：",
-  "perm.accessStep1": '下の「アクセシビリティ設定を開く」をクリックしてください。',
+  "perm.accessStep1": "下の「アクセシビリティ設定を開く」をクリックしてください。",
   "perm.accessStep2": "リストで{app}を見つけます（または+ボタンをクリックして追加）。",
   "perm.accessStep3": "オンに切り替えます。",
   "perm.accessStep4": "ここに戻ってください — ステータスは自動的に更新されます。",
@@ -97,8 +97,7 @@ const perm: Record<string, string> = {
   "perm.fullDiskAccessStep3": "変更を適用するにはアプリを終了して再起動する必要がある場合があります",
   "perm.openFullDiskAccessSettings": "フルディスクアクセス設定を開く",
   "perm.whyCalendar": "カレンダー",
-  "perm.whyCalendarDesc":
-    "AIが予定のイベントを参照できるようにLLMツールにスケジュールコンテキストを提供するため。",
+  "perm.whyCalendarDesc": "AIが予定のイベントを参照できるようにLLMツールにスケジュールコンテキストを提供するため。",
   "perm.matrixCalendar": "カレンダーイベント",
   "perm.matrixCalendarReq": "カレンダーアクセスが必要",
 };

@@ -9,9 +9,9 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { Separator } from "$lib/components/ui/separator";
 import { getLocale } from "$lib/i18n/index.svelte";
-import { getHelpContent } from "./help-loader";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
+import { getHelpContent } from "./help-loader";
 
 const sections = $derived(getHelpContent("llm", getLocale()));
 </script>

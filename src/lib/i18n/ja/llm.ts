@@ -22,7 +22,8 @@ const llm: Record<string, string> = {
   "model.takesEffectRestart": "次の日または再起動時に有効になります",
   "model.connectivity": "接続性",
   "model.currently": "現在 {n}",
-  "model.connectivityDesc": "各ノードは最大2×Mのエッジを保持します。高いほど再現率が向上しますが、RAM使用量が増えます。",
+  "model.connectivityDesc":
+    "各ノードは最大2×Mのエッジを保持します。高いほど再現率が向上しますが、RAM使用量が増えます。",
   "model.buildQuality": "ビルド品質",
   "model.buildQualityDesc": "グラフ構築時のビーム幅。高いほどグラフが良くなりますが、挿入が遅くなります。",
   "model.index": "インデックス",
@@ -111,7 +112,8 @@ const llm: Record<string, string> = {
   "llm.inference.parallel": "最大同時リクエスト",
   "llm.inference.parallelDesc": "HTTP接続を応答可能に保ちながらデコードループをシリアル化します。",
   "llm.inference.apiKey": "APIキー（オプション）",
-  "llm.inference.apiKeyDesc": "すべての/v1/*リクエストにこのBearerトークンを要求します。空にするとオープンアクセスになります。",
+  "llm.inference.apiKeyDesc":
+    "すべての/v1/*リクエストにこのBearerトークンを要求します。空にするとオープンアクセスになります。",
   "llm.inference.apiKeyPlaceholder": "sk-…",
   "llm.tools.section": "組み込みツール",
   "llm.tools.sectionDesc": "LLMチャットが呼び出し可能なローカルツールを選択します。",
@@ -134,7 +136,8 @@ const llm: Record<string, string> = {
   "llm.tools.bash": "Bash",
   "llm.tools.bashDesc": "このマシンでシェルコマンドの実行を許可します。出力は2,000行/50KBに切り詰められます。",
   "llm.tools.readFile": "ファイル読み取り",
-  "llm.tools.readFileDesc": "テキストファイルの読み取りを許可します。大きなファイルはオフセット/リミットでページネーションされます。",
+  "llm.tools.readFileDesc":
+    "テキストファイルの読み取りを許可します。大きなファイルはオフセット/リミットでページネーションされます。",
   "llm.tools.writeFile": "ファイル書き込み",
   "llm.tools.writeFileDesc": "ファイルの作成や上書きを許可します。親ディレクトリは自動的に作成されます。",
   "llm.tools.editFile": "ファイル編集",
@@ -191,7 +194,8 @@ const llm: Record<string, string> = {
   "llm.tools.retryBaseDelayDesc": "最初のリトライ前の初期遅延（ミリ秒）。試行ごとに倍増します。",
   "llm.tools.retryMs": "ms",
   "llm.tools.webCache": "Webキャッシュ",
-  "llm.tools.webCacheDesc": "冗長なネットワーク呼び出しを避けるためにWeb検索とフェッチの結果をディスクにキャッシュします。",
+  "llm.tools.webCacheDesc":
+    "冗長なネットワーク呼び出しを避けるためにWeb検索とフェッチの結果をディスクにキャッシュします。",
   "llm.tools.webCacheEntries": "{n}件のエントリ",
   "llm.tools.webCacheSize": "{size}",
   "llm.tools.webCacheEmpty": "キャッシュは空です",
@@ -222,7 +226,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsSection": "エージェントスキル",
   "llm.tools.skillsSectionDesc":
     "スキルはLLMがオンデマンドで読み込める専門的な指示を提供します。個別のスキルを切り替えてチャットで利用可能なものを制御します。",
-  "llm.tools.skillsNone": "スキルが見つかりません。コミュニティスキルを同期するか、~/.skill/skills/にSKILL.mdファイルを追加してください。",
+  "llm.tools.skillsNone":
+    "スキルが見つかりません。コミュニティスキルを同期するか、~/.skill/skills/にSKILL.mdファイルを追加してください。",
   "llm.tools.skillsLoading": "スキルを読み込み中…",
   "llm.tools.skillsEnableAll": "すべて有効化",
   "llm.tools.skillsDisableAll": "すべて無効化",
@@ -329,7 +334,8 @@ const llm: Record<string, string> = {
   "chat.param.topK": "Top-K",
   "chat.param.topP": "Top-P",
   "chat.empty.stopped": "LLMサーバーは実行されていません",
-  "chat.empty.stoppedHint": "チャットを始めるにはサーバーを起動してください。設定→LLMでモデルがダウンロードされていることを確認してください。",
+  "chat.empty.stoppedHint":
+    "チャットを始めるにはサーバーを起動してください。設定→LLMでモデルがダウンロードされていることを確認してください。",
   "chat.empty.loadingHint": "設定→LLMでサーバーログの進捗を確認してください。",
   "chat.empty.ready": "メッセージを入力してチャットを開始してください。",
   "chat.loading.model": "モデルの重みを読み込み中",

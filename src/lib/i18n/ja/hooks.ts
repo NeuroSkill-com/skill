@@ -13,8 +13,7 @@ const hooks: Record<string, string> = {
   "dnd.enabledDesc":
     "オンにすると、エンゲージメントが設定時間以上高い状態を維持した場合にmacOSのおやすみモードを有効にします。エンゲージメントが低下するとDNDは解除されます。",
   "dnd.threshold": "集中閾値",
-  "dnd.thresholdDesc":
-    "必要な最低エンゲージメントスコア（0〜100）。スコアはEEGのβ/(α+θ)比率から算出されます。",
+  "dnd.thresholdDesc": "必要な最低エンゲージメントスコア（0〜100）。スコアはEEGのβ/(α+θ)比率から算出されます。",
   "dnd.duration": "持続時間",
   "dnd.durationDesc": "DNDが有効になるまでに集中が閾値を超え続ける必要がある秒数。",
   "dnd.requiresMacOS": "macOS 12（Monterey）以降が必要です。",
@@ -133,7 +132,7 @@ const hooks: Record<string, string> = {
   "focusTimer.autoLabelDesc": "各集中フェーズの開始と終了時にEEGラベルを自動的に追加します。",
   "focusTimer.tts": "音声アナウンス",
   "focusTimer.ttsDesc":
-    '内蔵TTSエンジンでフェーズ名、時間、5秒カウントダウン、「時間です」を音声で案内します。TTSモデルのダウンロードが必要です（設定→音声）。',
+    "内蔵TTSエンジンでフェーズ名、時間、5秒カウントダウン、「時間です」を音声で案内します。TTSモデルのダウンロードが必要です（設定→音声）。",
   "focusTimer.complete": "集中セッション完了！",
   "focusTimer.breakComplete": "休憩終了 — 集中の準備はできましたか？",
   "focusTimer.preset.pomodoro": "ポモドーロ（25/5）",

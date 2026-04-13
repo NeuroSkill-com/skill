@@ -14,8 +14,8 @@
  */
 
 import { getAppName } from "$lib/stores/app-name.svelte";
-import { parseHelpMd, parseFaqMd } from "./parse-help-md";
-import type { HelpSectionData, FaqEntry } from "./parse-help-md";
+import type { FaqEntry, HelpSectionData } from "./parse-help-md";
+import { parseFaqMd, parseHelpMd } from "./parse-help-md";
 
 // Eager-load all markdown files as raw strings at build time.
 const modules = import.meta.glob("./content/**/*.md", {
