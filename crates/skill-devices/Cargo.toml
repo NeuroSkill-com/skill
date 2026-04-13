@@ -44,7 +44,7 @@ mendi = { version = "0.0.2", default-features = false }
 cognionics = { version = "0.0.1", default-features = false }
 
 # AWEAR EEG wearable (BLE, LUCA protocol)
-awear = { version = "0.1.0", default-features = false }
+awear = { version = "0.2.0", default-features = false }
 
 [features]
 default = []
