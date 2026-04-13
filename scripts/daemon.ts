@@ -12,10 +12,10 @@
 //   npm run daemon -- --clean       # fresh data dir (temp, wiped on exit)
 //   npm run daemon -- --help
 
-import { execSync, spawn, execFileSync } from "node:child_process";
-import { existsSync, readFileSync, mkdirSync, rmSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir, platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import { homedir, tmpdir, platform } from "node:os";
 
 // ── Colours ──────────────────────────────────────────────────────────────────
 
@@ -28,11 +28,21 @@ const Y = no ? "" : "\x1b[33m";
 const C = no ? "" : "\x1b[36m";
 const RED = no ? "" : "\x1b[31m";
 
-function log(msg: string) { console.log(`  ${msg}`); }
-function ok(msg: string)  { log(`${G}✓${R} ${msg}`); }
-function warn(msg: string){ log(`${Y}!${R} ${msg}`); }
-function err(msg: string) { log(`${RED}✗${R} ${msg}`); }
-function info(msg: string){ log(`${D}${msg}${R}`); }
+function log(msg: string) {
+  console.log(`  ${msg}`);
+}
+function ok(msg: string) {
+  log(`${G}✓${R} ${msg}`);
+}
+function warn(msg: string) {
+  log(`${Y}!${R} ${msg}`);
+}
+function err(msg: string) {
+  log(`${RED}✗${R} ${msg}`);
+}
+function info(msg: string) {
+  log(`${D}${msg}${R}`);
+}
 
 // ── Args ─────────────────────────────────────────────────────────────────────
 
@@ -67,24 +77,50 @@ function parseArgs(): Opts {
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--port": case "-p":
+      case "--port":
+      case "-p":
         opts.port = parseInt(args[++i], 10);
         if (!opts.port || opts.port < 1 || opts.port > 65535) {
           err(`invalid port: ${args[i]}`);
           process.exit(1);
         }
         break;
-      case "--host":         opts.host = args[++i]; break;
-      case "--no-build":     opts.build = false; break;
-      case "--debug":        opts.release = false; break;
-      case "--release":      opts.release = true; break;
-      case "--force":  case "-f": opts.force = true; break;
-      case "--clean":        opts.clean = true; break;
-      case "--no-sign":      opts.sign = false; break;
-      case "--embed":        opts.embed = true; break;
-      case "--virtual":      opts.virtual = true; opts.embed = true; break;
-      case "--cpu":          opts.cpu = true; break;
-      case "--help":   case "-h": opts.help = true; break;
+      case "--host":
+        opts.host = args[++i];
+        break;
+      case "--no-build":
+        opts.build = false;
+        break;
+      case "--debug":
+        opts.release = false;
+        break;
+      case "--release":
+        opts.release = true;
+        break;
+      case "--force":
+      case "-f":
+        opts.force = true;
+        break;
+      case "--clean":
+        opts.clean = true;
+        break;
+      case "--no-sign":
+        opts.sign = false;
+        break;
+      case "--embed":
+        opts.embed = true;
+        break;
+      case "--virtual":
+        opts.virtual = true;
+        opts.embed = true;
+        break;
+      case "--cpu":
+        opts.cpu = true;
+        break;
+      case "--help":
+      case "-h":
+        opts.help = true;
+        break;
       default:
         err(`unknown option: ${args[i]}`);
         process.exit(1);
@@ -105,20 +141,34 @@ function daemonBin(release: boolean): string {
 function findDaemonPids(): number[] {
   try {
     if (platform() === "win32") {
-      const out = execSync("tasklist /FI \"IMAGENAME eq skill-daemon.exe\" /FO CSV /NH", { encoding: "utf8" });
-      return [...out.matchAll(/"skill-daemon\.exe","(\d+)"/gi)].map(m => parseInt(m[1], 10));
+      const out = execSync('tasklist /FI "IMAGENAME eq skill-daemon.exe" /FO CSV /NH', { encoding: "utf8" });
+      return [...out.matchAll(/"skill-daemon\.exe","(\d+)"/gi)].map((m) => parseInt(m[1], 10));
     }
     const out = execSync("pgrep -f skill-daemon", { encoding: "utf8" }).trim();
-    return out ? out.split("\n").map(Number).filter(p => p > 0 && p !== process.pid) : [];
-  } catch { return []; }
+    return out
+      ? out
+          .split("\n")
+          .map(Number)
+          .filter((p) => p > 0 && p !== process.pid)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function findPortPids(port: number): number[] {
   try {
     if (platform() === "win32") return [];
     const out = execSync(`lsof -ti :${port}`, { encoding: "utf8" }).trim();
-    return out ? out.split("\n").map(Number).filter(p => p > 0) : [];
-  } catch { return []; }
+    return out
+      ? out
+          .split("\n")
+          .map(Number)
+          .filter((p) => p > 0)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function killPids(pids: number[], label: string): void {
@@ -126,26 +176,36 @@ function killPids(pids: number[], label: string): void {
     try {
       process.kill(pid, "SIGTERM");
       info(`killed ${label} (PID ${pid})`);
-    } catch { /* already dead */ }
+    } catch {
+      /* already dead */
+    }
   }
 }
 
 function tokenPath(): string {
-  if (platform() === "darwin") return join(homedir(), "Library", "Application Support", "skill", "daemon", "auth.token");
-  if (platform() === "win32")  return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "skill", "daemon", "auth.token");
+  if (platform() === "darwin")
+    return join(homedir(), "Library", "Application Support", "skill", "daemon", "auth.token");
+  if (platform() === "win32")
+    return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "skill", "daemon", "auth.token");
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "skill", "daemon", "auth.token");
 }
 
 function waitForHealthz(port: number, timeoutMs = 15000): Promise<boolean> {
   const start = Date.now();
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const check = () => {
       fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1000) })
-        .then(r => { if (r.ok) resolve(true); else retry(); })
+        .then((r) => {
+          if (r.ok) resolve(true);
+          else retry();
+        })
         .catch(retry);
     };
     const retry = () => {
-      if (Date.now() - start > timeoutMs) { resolve(false); return; }
+      if (Date.now() - start > timeoutMs) {
+        resolve(false);
+        return;
+      }
       setTimeout(check, 300);
     };
     check();
@@ -193,7 +253,7 @@ ${B}Examples:${R}
     const pids = findDaemonPids();
     if (pids.length) {
       killPids(pids, "daemon");
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
       ok(`killed ${pids.length} daemon instance(s)`);
     } else {
       info("no running daemon instances found");
@@ -236,7 +296,9 @@ ${B}Examples:${R}
           execSync(`codesign -s "NeuroSkill Dev" -f "${bin}"`, { stdio: "ignore" });
           ok("codesigned");
         }
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     }
   }
 
@@ -257,7 +319,7 @@ ${B}Examples:${R}
 
   // ── Env ──────────────────────────────────────────────────────────────────
 
-  const env: Record<string, string> = { ...process.env } as any;
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
   if (dataDir) env.SKILL_DATA_DIR = dataDir;
   if (opts.embed) env.SKILL_VIRTUAL_EMBED = "1";
   env.SKILL_DAEMON_ADDR = `${opts.host}:${opts.port}`;
@@ -282,7 +344,9 @@ ${B}Examples:${R}
     }
     // Clean up temp dir
     if (dataDir) {
-      try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
+      try {
+        rmSync(dataDir, { recursive: true, force: true });
+      } catch {}
       info(`cleaned up ${dataDir}`);
     }
   });
@@ -334,17 +398,17 @@ ${B}Examples:${R}
       // Wait for auto-connect to finish its BLE scan (~6s after boot),
       // then cancel and take over
       info("waiting for daemon init to settle...");
-      await new Promise(r => setTimeout(r, 6000));
+      await new Promise((r) => setTimeout(r, 6000));
       await api("/v1/control/cancel-session", "POST", "{}").catch(() => {});
       await api("/v1/control/disable-reconnect", "POST", "{}").catch(() => {});
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
 
       // Start virtual LSL source
       const vRes = await api("/v1/lsl/virtual-source/start", "POST", "{}");
       if (!vRes.ok) {
         warn(`virtual source start failed: HTTP ${vRes.status} ${await vRes.text()}`);
       } else {
-        const vJson = await vRes.json() as any;
+        const vJson = (await vRes.json()) as { running?: boolean };
         if (vJson.running) {
           ok("virtual EEG source started (LSL: SkillVirtualEEG, 32ch @ 256Hz)");
         } else {
@@ -353,23 +417,30 @@ ${B}Examples:${R}
       }
 
       // Wait for LSL stream to be discoverable
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1500));
 
       // Discover
       const dRes = await api("/v1/lsl/discover");
       if (!dRes.ok) {
         warn(`LSL discover failed: HTTP ${dRes.status}`);
       } else {
-        const streams = await dRes.json() as any[];
-        const vStream = (Array.isArray(streams) ? streams : []).find(
-          (s: any) => String(s.name || "").includes("Virtual")
+        const streams = (await dRes.json()) as { name?: string; source_id?: string }[];
+        const vStream = (Array.isArray(streams) ? streams : []).find((s: { name?: string }) =>
+          String(s.name || "").includes("Virtual"),
         );
         if (vStream) {
           // Pair
-          const pRes = await api("/v1/lsl/pair", "POST", JSON.stringify({
-            sourceId: vStream.source_id || "skill-virtual-eeg-001",
-            name: "SkillVirtualEEG", streamType: "EEG", channels: 32, sampleRate: 256,
-          }));
+          const pRes = await api(
+            "/v1/lsl/pair",
+            "POST",
+            JSON.stringify({
+              sourceId: vStream.source_id || "skill-virtual-eeg-001",
+              name: "SkillVirtualEEG",
+              streamType: "EEG",
+              channels: 32,
+              sampleRate: 256,
+            }),
+          );
           if (pRes.ok) {
             ok("virtual stream paired");
           } else {
@@ -377,8 +448,11 @@ ${B}Examples:${R}
           }
 
           // Start recording session
-          const sRes = await api("/v1/control/start-session", "POST",
-            JSON.stringify({ target: "lsl:SkillVirtualEEG" }));
+          const sRes = await api(
+            "/v1/control/start-session",
+            "POST",
+            JSON.stringify({ target: "lsl:SkillVirtualEEG" }),
+          );
           if (sRes.ok) {
             ok("recording session started (lsl:SkillVirtualEEG)");
           } else {
@@ -397,8 +471,7 @@ ${B}Examples:${R}
 
   if (opts.cpu) {
     try {
-      const devRes = await api("/v1/settings/inference-device", "POST",
-        JSON.stringify({ device: "cpu" }));
+      const devRes = await api("/v1/settings/inference-device", "POST", JSON.stringify({ device: "cpu" }));
       if (devRes.ok) {
         ok("inference device set to CPU");
       } else {
@@ -418,13 +491,18 @@ ${B}Examples:${R}
 
       const catRes = await api("/v1/llm/catalog");
       if (catRes.ok) {
-        const catalog = await catRes.json() as any;
-        const entries: any[] = catalog.entries || [];
-        const ready = entries.filter((e: any) => e.state === "ready");
+        interface CatalogEntry {
+          filename?: string;
+          params_b?: number;
+          state?: string;
+        }
+        const catalog = (await catRes.json()) as { entries?: CatalogEntry[] };
+        const entries: CatalogEntry[] = catalog.entries || [];
+        const ready = entries.filter((e: CatalogEntry) => e.state === "ready");
 
         if (ready.length > 0) {
           // Prefer Q4_K_M quant, then smallest param count
-          ready.sort((a: any, b: any) => {
+          ready.sort((a: CatalogEntry, b: CatalogEntry) => {
             const aQ4 = (a.filename || "").includes("Q4_K_M") ? 0 : 1;
             const bQ4 = (b.filename || "").includes("Q4_K_M") ? 0 : 1;
             if (aQ4 !== bQ4) return aQ4 - bQ4;
@@ -434,8 +512,11 @@ ${B}Examples:${R}
           const best = ready[0];
           info(`selecting model: ${best.filename} (${best.params_b ?? "?"}B params)`);
 
-          const selRes = await api("/v1/llm/selection/active-model", "POST",
-            JSON.stringify({ filename: best.filename }));
+          const selRes = await api(
+            "/v1/llm/selection/active-model",
+            "POST",
+            JSON.stringify({ filename: best.filename }),
+          );
           if (selRes.ok) {
             ok(`model selected: ${best.filename}`);
 
@@ -483,7 +564,9 @@ ${B}Examples:${R}
       child.kill("SIGTERM");
       // Give it 3s to stop gracefully
       setTimeout(() => {
-        if (!exited) { child.kill("SIGKILL"); }
+        if (!exited) {
+          child.kill("SIGKILL");
+        }
       }, 3000);
     }
   };
@@ -492,4 +575,7 @@ ${B}Examples:${R}
   process.on("SIGTERM", shutdown);
 }
 
-main().catch(e => { err(e.message); process.exit(1); });
+main().catch((e) => {
+  err(e.message);
+  process.exit(1);
+});

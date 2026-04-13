@@ -52,7 +52,8 @@ const common: Record<string, string> = {
   "common.openComparison": "比較を開く",
   "common.dismiss": "閉じる",
   "common.error": "エラーが発生しました",
-  "error.description": "予期しないエラーが発生しました。ページの再読み込みまたはダッシュボードに戻ることをお試しください。",
+  "error.description":
+    "予期しないエラーが発生しました。ページの再読み込みまたはダッシュボードに戻ることをお試しください。",
   "error.goHome": "ダッシュボードへ",
   "error.reload": "ページを再読み込み",
 };

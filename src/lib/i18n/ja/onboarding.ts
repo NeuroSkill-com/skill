@@ -39,8 +39,7 @@ const onboarding: Record<string, string> = {
   "onboarding.btInstructions": "接続方法",
   "onboarding.btStep1":
     "BCIデバイスの電源を入れます（ヘッドセットに応じて電源ボタンを長押し、スイッチを切り替え、またはボタンを押してください）。",
-  "onboarding.btStep2":
-    "ヘッドセットを装着します — センサーが耳の後ろと額に当たるようにしてください。",
+  "onboarding.btStep2": "ヘッドセットを装着します — センサーが耳の後ろと額に当たるようにしてください。",
   "onboarding.btStep3": "上のスキャンをクリックしてください。{app}が最も近いBCIデバイスを見つけて自動接続します。",
   "onboarding.btSuccess": "ヘッドセットが接続されました！次に進めます。",
   "onboarding.fitTitle": "ヘッドセットのフィットを確認",
@@ -53,12 +52,9 @@ const onboarding: Record<string, string> = {
   "onboarding.quality.no_signal": "信号なし",
   "onboarding.fitNeedsBt": "ライブセンサーデータを表示するには、まずヘッドセットを接続してください。",
   "onboarding.fitTips": "接触改善のヒント",
-  "onboarding.fitTip1":
-    "耳センサー（TP9/TP10）：耳の後ろ少し上に配置します。センサーを覆う髪をよけてください。",
-  "onboarding.fitTip2":
-    "額センサー（AF7/AF8）：清潔な肌に平らに当ててください — 必要に応じて乾いた布で拭きます。",
-  "onboarding.fitTip3":
-    "接触が不良な場合、センサーを湿った指で軽く湿らせてください。導電性が向上します。",
+  "onboarding.fitTip1": "耳センサー（TP9/TP10）：耳の後ろ少し上に配置します。センサーを覆う髪をよけてください。",
+  "onboarding.fitTip2": "額センサー（AF7/AF8）：清潔な肌に平らに当ててください — 必要に応じて乾いた布で拭きます。",
+  "onboarding.fitTip3": "接触が不良な場合、センサーを湿った指で軽く湿らせてください。導電性が向上します。",
   "onboarding.fitGood": "フィット良好！すべてのセンサーの接触が良好です。",
   "onboarding.calibrationTitle": "キャリブレーションの実行",
   "onboarding.calibrationBody":
@@ -74,8 +70,7 @@ const onboarding: Record<string, string> = {
   "onboarding.models.downloading": "ダウンロード中…",
   "onboarding.models.downloaded": "ダウンロード済み",
   "onboarding.models.qwenTitle": "Qwen3.5 4B (Q4_K_M)",
-  "onboarding.models.qwenDesc":
-    "推奨チャットモデル。ほとんどのノートPCで最適な品質/速度バランスのQ4_K_Mを使用します。",
+  "onboarding.models.qwenDesc": "推奨チャットモデル。ほとんどのノートPCで最適な品質/速度バランスのQ4_K_Mを使用します。",
   "onboarding.models.zunaTitle": "ZUNA EEGエンコーダー",
   "onboarding.models.zunaDesc": "EEG埋め込み、セマンティック履歴、脳状態分析に必要です。",
   "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
@@ -107,7 +102,8 @@ const onboarding: Record<string, string> = {
   "onboarding.downloadMoreSettings": "アプリ設定",
   "onboarding.doneTitle": "準備完了！",
   "onboarding.doneBody": "{app}はメニューバーで動作しています。いくつかの注意点：",
-  "onboarding.doneTip.tray": "{app}はメニューバートレイにあります。アイコンをクリックでダッシュボードを表示/非表示にできます。",
+  "onboarding.doneTip.tray":
+    "{app}はメニューバートレイにあります。アイコンをクリックでダッシュボードを表示/非表示にできます。",
   "onboarding.doneTip.shortcuts": "⌘Kでコマンドパレットを開くか、?ですべてのキーボードショートカットを確認できます。",
   "onboarding.doneTip.help": "トレイメニューからヘルプを開くと、すべての機能の完全なリファレンスが表示されます。",
   "onboarding.back": "戻る",

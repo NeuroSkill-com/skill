@@ -80,69 +80,100 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.nucleusHermes": "Nucleus-Hermès",
   "settings.supportedDevices.device.mendiHeadband": "Mendi ヘッドバンド",
   "settings.supportedDevices.instruction.muse1": "ヘッドセットの電源を入れてこのコンピューターの近くに置いてください。",
-  "settings.supportedDevices.instruction.muse2": "下のデバイスリストでスキャン＆ペアリングし、必要に応じてデフォルトに設定してください。",
+  "settings.supportedDevices.instruction.muse2":
+    "下のデバイスリストでスキャン＆ペアリングし、必要に応じてデフォルトに設定してください。",
   "settings.supportedDevices.instruction.neurable1": "MW75 Neuroの電源を入れてBluetooth検出に近づけてください。",
-  "settings.supportedDevices.instruction.neurable2": "下のデバイスリストからスキャン、ペアリング、デフォルトに選択してください。",
+  "settings.supportedDevices.instruction.neurable2":
+    "下のデバイスリストからスキャン、ペアリング、デフォルトに選択してください。",
   "settings.supportedDevices.instruction.openbci1": "OpenBCI設定を開いてボードモデルを選択してください。",
   "settings.supportedDevices.instruction.openbci2": "シリアル/WiFiパラメータを設定して保存し、接続してください。",
-  "settings.supportedDevices.instruction.emotiv1": "デバイスAPIを開いてEmotiv CortexクライアントID/シークレットを入力してください。",
-  "settings.supportedDevices.instruction.emotiv2": "認証情報を保存してからEmotivヘッドセットをペアリング/接続してください。",
+  "settings.supportedDevices.instruction.emotiv1":
+    "デバイスAPIを開いてEmotiv CortexクライアントID/シークレットを入力してください。",
+  "settings.supportedDevices.instruction.emotiv2":
+    "認証情報を保存してからEmotivヘッドセットをペアリング/接続してください。",
   "settings.supportedDevices.instruction.idun1": "デバイスAPIを開いて必要に応じてIDUN APIトークンを追加してください。",
-  "settings.supportedDevices.instruction.idun2": "トークンを保存してからデバイスリストからヘッドセットをペアリング/接続してください。",
+  "settings.supportedDevices.instruction.idun2":
+    "トークンを保存してからデバイスリストからヘッドセットをペアリング/接続してください。",
   "settings.supportedDevices.company.oura": "Ōura",
   "settings.supportedDevices.device.ouraRing": "Oura Ring（第3世代/第4世代）",
-  "settings.supportedDevices.instruction.oura1": "cloud.ouraring.com/personal-access-tokensで個人アクセストークンを取得してください。",
+  "settings.supportedDevices.instruction.oura1":
+    "cloud.ouraring.com/personal-access-tokensで個人アクセストークンを取得してください。",
   "settings.supportedDevices.instruction.oura2": "デバイスAPI→Oura Ringを開いてトークンを貼り付けて保存してください。",
-  "settings.supportedDevices.instruction.oura3": "「今すぐ同期」をクリックして睡眠、活動、レディネス、心拍数、SpO2データを取得してください。",
-  "settings.supportedDevices.instruction.reak1": "Nucleus-Hermèsの電源を入れてこのコンピューターの近くに置いてください。",
-  "settings.supportedDevices.instruction.reak2": "デバイスリストでスキャンしてペアリングし、優先デバイスフローから接続してください。",
-  "settings.supportedDevices.instruction.cognionics1": "CGX USBドングルを差し込んでヘッドセットの電源を入れてください。",
-  "settings.supportedDevices.instruction.cognionics2": "USBシリアルポートからデバイスが自動検出されます。デバイスリストから選択して接続してください。",
+  "settings.supportedDevices.instruction.oura3":
+    "「今すぐ同期」をクリックして睡眠、活動、レディネス、心拍数、SpO2データを取得してください。",
+  "settings.supportedDevices.instruction.reak1":
+    "Nucleus-Hermèsの電源を入れてこのコンピューターの近くに置いてください。",
+  "settings.supportedDevices.instruction.reak2":
+    "デバイスリストでスキャンしてペアリングし、優先デバイスフローから接続してください。",
+  "settings.supportedDevices.instruction.cognionics1":
+    "CGX USBドングルを差し込んでヘッドセットの電源を入れてください。",
+  "settings.supportedDevices.instruction.cognionics2":
+    "USBシリアルポートからデバイスが自動検出されます。デバイスリストから選択して接続してください。",
   "settings.supportedDevices.instruction.mendi1": "Mendiの電源を入れてこのコンピューターの近くに置いてください。",
   "settings.supportedDevices.instruction.mendi2": "デバイスリストからスキャンしてペアリングし、接続してください。",
   "settings.supportedDevices.company.attentivu": "AttentivU",
   "settings.supportedDevices.device.attentivuGlasses": "AttentivUメガネ",
-  "settings.supportedDevices.instruction.attentivu1": "iPhoneにNeuroSkill™ iOSアプリをインストールし、このデスクトップアプリとペアリングしてください。",
-  "settings.supportedDevices.instruction.attentivu2": "iOSアプリでBLEデバイスをスキャンしてAttentivUメガネに接続してください。",
-  "settings.supportedDevices.instruction.attentivu3": "EEGデータはメガネ→iPhone→暗号化irohトンネル経由でデスクトップにストリーミングされます。すべての処理はこのコンピューターで行われます。",
+  "settings.supportedDevices.instruction.attentivu1":
+    "iPhoneにNeuroSkill™ iOSアプリをインストールし、このデスクトップアプリとペアリングしてください。",
+  "settings.supportedDevices.instruction.attentivu2":
+    "iOSアプリでBLEデバイスをスキャンしてAttentivUメガネに接続してください。",
+  "settings.supportedDevices.instruction.attentivu3":
+    "EEGデータはメガネ→iPhone→暗号化irohトンネル経由でデスクトップにストリーミングされます。すべての処理はこのコンピューターで行われます。",
   "settings.supportedDevices.company.awear": "AWEAR",
   "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
-  "settings.supportedDevices.instruction.awear1": "AWEAR EEGデバイスの電源を入れて、コンピューターのBluetoothが有効であることを確認してください。",
-  "settings.supportedDevices.instruction.awear2": "BLEデバイスをスキャンしてAWEARに接続してください。認証はHMAC-SHA256経由で自動的に処理されます。",
+  "settings.supportedDevices.instruction.awear1":
+    "AWEAR EEGデバイスの電源を入れて、コンピューターのBluetoothが有効であることを確認してください。",
+  "settings.supportedDevices.instruction.awear2":
+    "BLEデバイスをスキャンしてAWEARに接続してください。認証はHMAC-SHA256経由で自動的に処理されます。",
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
   "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
-  "settings.supportedDevices.instruction.brainbit1": "BrainBitヘッドバンドの電源を入れてください。プラットフォーム用のNeuroSDK2ライブラリ（libneurosdk2）がインストールされていることを確認してください。",
-  "settings.supportedDevices.instruction.brainbit2": "スキャナーがBLE経由でBrainBitデバイスを自動検出します。デバイスをタップしてペアリングと接続を行ってください。",
+  "settings.supportedDevices.instruction.brainbit1":
+    "BrainBitヘッドバンドの電源を入れてください。プラットフォーム用のNeuroSDK2ライブラリ（libneurosdk2）がインストールされていることを確認してください。",
+  "settings.supportedDevices.instruction.brainbit2":
+    "スキャナーがBLE経由でBrainBitデバイスを自動検出します。デバイスをタップしてペアリングと接続を行ってください。",
   "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
   "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4（4ch）",
   "settings.supportedDevices.device.brainmasterDiscovery": "Discovery（24ch）",
   "settings.supportedDevices.device.brainmasterFreedom": "Freedom（24chワイヤレス）",
-  "settings.supportedDevices.instruction.brainmaster1": "USBシリアルドングルを差し込んでBrainMasterアンプの電源を入れてください（57600ボー、FTDI）。",
-  "settings.supportedDevices.instruction.brainmaster2": "OpenBCI設定でボードモデルを選択してください。ポートは自動検出されるか、手動で設定してください。",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "USBシリアルドングルを差し込んでBrainMasterアンプの電源を入れてください（57600ボー、FTDI）。",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "OpenBCI設定でボードモデルを選択してください。ポートは自動検出されるか、手動で設定してください。",
   "settings.supportedDevices.company.gtec": "g.tec medical engineering",
   "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
-  "settings.supportedDevices.instruction.gtec1": "Unicorn APIライブラリ（libunicorn.so / Unicorn.dll）がシステムにインストールされていることを確認してください。",
-  "settings.supportedDevices.instruction.gtec2": "Unicornヘッドセットの電源を入れてこのコンピューターの近くに置いてください。スキャナーがBLE経由で自動検出します。",
+  "settings.supportedDevices.instruction.gtec1":
+    "Unicorn APIライブラリ（libunicorn.so / Unicorn.dll）がシステムにインストールされていることを確認してください。",
+  "settings.supportedDevices.instruction.gtec2":
+    "Unicornヘッドセットの電源を入れてこのコンピューターの近くに置いてください。スキャナーがBLE経由で自動検出します。",
   "settings.supportedDevices.company.neurofield": "Neurofield Inc",
   "settings.supportedDevices.device.neurofieldQ21": "Q21（20ch）",
-  "settings.supportedDevices.instruction.neurofield1": "PEAK PCAN-USBアダプターをコンピューターに接続し、Q21アンプをCANバス経由で接続してください。",
-  "settings.supportedDevices.instruction.neurofield2": "プラットフォーム用のPCAN Basicドライバーをインストールしてください。スキャナーがQ21を自動検出します。",
+  "settings.supportedDevices.instruction.neurofield1":
+    "PEAK PCAN-USBアダプターをコンピューターに接続し、Q21アンプをCANバス経由で接続してください。",
+  "settings.supportedDevices.instruction.neurofield2":
+    "プラットフォーム用のPCAN Basicドライバーをインストールしてください。スキャナーがQ21を自動検出します。",
   "settings.supportedDevices.company.neurosky": "NeuroSky",
   "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
-  "settings.supportedDevices.instruction.neurosky1": "NeuroSky USB/Bluetoothシリアルアダプターを接続してヘッドセットの電源を入れてください。",
-  "settings.supportedDevices.instruction.neurosky2": "ターゲット'neurosky'（または'neurosky:<serial-port>'）を使用して接続してください。生のThinkGear EEGが512 Hzでストリーミングされます。",
+  "settings.supportedDevices.instruction.neurosky1":
+    "NeuroSky USB/Bluetoothシリアルアダプターを接続してヘッドセットの電源を入れてください。",
+  "settings.supportedDevices.instruction.neurosky2":
+    "ターゲット'neurosky'（または'neurosky:<serial-port>'）を使用して接続してください。生のThinkGear EEGが512 Hzでストリーミングされます。",
   "settings.supportedDevices.company.neurosity": "Neurosity",
   "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
-  "settings.supportedDevices.instruction.neurosity1": "環境変数SKILL_NEUROSITY_EMAIL、SKILL_NEUROSITY_PASSWORD、SKILL_NEUROSITY_DEVICE_IDを設定してください。",
-  "settings.supportedDevices.instruction.neurosity2": "ターゲット'neurosity:<device-id>'を使用してNeurosity Cloud API経由で接続してください。",
+  "settings.supportedDevices.instruction.neurosity1":
+    "環境変数SKILL_NEUROSITY_EMAIL、SKILL_NEUROSITY_PASSWORD、SKILL_NEUROSITY_DEVICE_IDを設定してください。",
+  "settings.supportedDevices.instruction.neurosity2":
+    "ターゲット'neurosity:<device-id>'を使用してNeurosity Cloud API経由で接続してください。",
   "settings.supportedDevices.company.brainvision": "Brain Products",
   "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
-  "settings.supportedDevices.instruction.brainvision1": "Recorder/Remote Data Accessを起動してRDA TCPストリーム（デフォルト127.0.0.1:51244）を公開してください。",
-  "settings.supportedDevices.instruction.brainvision2": "ターゲット'brainvision:<host>:<port>'（または'brainvision'）を使用して接続してスキャンをストリーミングしてください。",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Recorder/Remote Data Accessを起動してRDA TCPストリーム（デフォルト127.0.0.1:51244）を公開してください。",
+  "settings.supportedDevices.instruction.brainvision2":
+    "ターゲット'brainvision:<host>:<port>'（または'brainvision'）を使用して接続してスキャンをストリーミングしてください。",
   "settings.scanner.title": "スキャナーバックエンド",
-  "settings.scanner.desc": "バックグラウンドで実行するディスカバリートランスポートを切り替えます。変更は次回のアプリ再起動時に有効になります。",
+  "settings.scanner.desc":
+    "バックグラウンドで実行するディスカバリートランスポートを切り替えます。変更は次回のアプリ再起動時に有効になります。",
   "settings.scanner.ble": "Bluetooth LE",
   "settings.scanner.bleDesc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi",
   "settings.scanner.usbSerial": "USBシリアル",
@@ -166,7 +197,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.idunDesc": "IDUNクラウドデコーディング機能用のオプションのトークン。",
   "settings.deviceApi.idunDashboard": "IDUNダッシュボードからAPIトークンを取得",
   "settings.deviceApi.ouraTitle": "Oura Ring",
-  "settings.deviceApi.ouraDesc": "Oura Ring V2 Cloud APIから睡眠、活動、レディネス、心拍数、SpO2データを同期するための個人アクセストークン。",
+  "settings.deviceApi.ouraDesc":
+    "Oura Ring V2 Cloud APIから睡眠、活動、レディネス、心拍数、SpO2データを同期するための個人アクセストークン。",
   "settings.deviceApi.ouraDashboard": "Oura Developer Portalからトークンを取得",
   "settings.deviceApi.ouraAccessToken": "アクセストークン",
   "settings.deviceApi.ouraSyncBtn": "今すぐ同期",
@@ -208,7 +240,8 @@ const settings: Record<string, string> = {
   "settings.openbciConnect": "OpenBCIボードに接続",
   "settings.openbciConnecting": "接続中…",
   "settings.openbciConnectHint": "まず設定を保存してから接続を押してください。",
-  "settings.openbciChannelsBeyond4": "チャンネル5〜{n}はCSVにのみ記録されます。最初の4つがリアルタイム分析を駆動します。",
+  "settings.openbciChannelsBeyond4":
+    "チャンネル5〜{n}はCSVにのみ記録されます。最初の4つがリアルタイム分析を駆動します。",
   "settings.openbciSerialPort": "シリアルポート",
   "settings.openbciSerialPortPlaceholder": "/dev/ttyUSB0 または COM3",
   "settings.openbciSerialPortHint": "空白で最初に検出されたポートを使用します。",
@@ -257,7 +290,8 @@ const settings: Record<string, string> = {
   "settings.eegEmbedding": "EEG埋め込み",
   "settings.epochOverlap": "エポックオーバーラップ",
   "settings.everyNSecs": "{n}秒ごと",
-  "settings.overlapDescription": "各5秒ウィンドウが前のウィンドウとどの程度共有するか。オーバーラップが大きいほど1分あたりの埋め込み数が増えます。",
+  "settings.overlapDescription":
+    "各5秒ウィンドウが前のウィンドウとどの程度共有するか。オーバーラップが大きいほど1分あたりの埋め込み数が増えます。",
   "settings.overlapNone": "なし",
   "settings.globalShortcuts": "グローバルショートカット",
   "settings.hotkeys": "ホットキー",
@@ -327,7 +361,8 @@ const settings: Record<string, string> = {
   "settings.wsRestart": "変更はアプリ再起動後に有効になります。",
   "settings.apiToken": "API認証",
   "settings.apiTokenLabel": "Bearerトークン",
-  "settings.apiTokenDesc": "設定すると、すべてのHTTPおよびWebSocket APIリクエストにAuthorizationヘッダーにこのトークンが必要です。空にすると認証が無効になります。",
+  "settings.apiTokenDesc":
+    "設定すると、すべてのHTTPおよびWebSocket APIリクエストにAuthorizationヘッダーにこのトークンが必要です。空にすると認証が無効になります。",
   "settings.apiTokenPlaceholder": "シークレットトークンを入力…",
   "settings.apiTokenActive": "認証が有効です — リクエストにはBearerトークンが必要です。",
   "settings.apiTokenNone": "トークン未設定 — APIはオープンです（localhostのみに適しています）。",
@@ -362,7 +397,8 @@ const settings: Record<string, string> = {
 
   "shortcutsTab.commandPalette": "コマンドパレット",
   "shortcutsTab.cmdKTitle": "コマンドパレット",
-  "shortcutsTab.cmdKDesc": "⌘K（Ctrl+K）を押すとどこでもクイックアクセスコマンドリストが開きます。入力してフィルター、矢印キーで移動、Enterで実行。",
+  "shortcutsTab.cmdKDesc":
+    "⌘K（Ctrl+K）を押すとどこでもクイックアクセスコマンドリストが開きます。入力してフィルター、矢印キーで移動、Enterで実行。",
   "shortcutsTab.inAppShortcuts": "アプリ内ショートカット",
 
   "shortcuts.title": "キーボードショートカット",
@@ -379,7 +415,8 @@ const settings: Record<string, string> = {
   "settingsTabs.tts": "音声",
 
   "settings.inferenceDevice": "推論デバイス",
-  "settings.inferenceDeviceDesc": "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。",
+  "settings.inferenceDeviceDesc":
+    "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "GPU / Metal / CUDAを使用した高速推論（推奨）。",
@@ -394,11 +431,13 @@ const settings: Record<string, string> = {
 
   "settings.mainWindow": "メインウィンドウ",
   "settings.autoFitToggle": "ダッシュボードの高さを自動調整",
-  "settings.autoFitToggleDesc": "ダッシュボードの内容に合わせてメインウィンドウを拡大/縮小します。画面の高さでクランプされます。",
+  "settings.autoFitToggleDesc":
+    "ダッシュボードの内容に合わせてメインウィンドウを拡大/縮小します。画面の高さでクランプされます。",
 
   "settings.activityTracking": "活動トラッキング",
   "settings.activeWindowToggle": "アクティブウィンドウを追跡",
-  "settings.activeWindowToggleDesc": "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。",
+  "settings.activeWindowToggleDesc":
+    "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。",
   "settings.activeWindowCurrent": "現在のウィンドウ",
   "settings.activeWindowApp": "アプリ",
   "settings.activeWindowPath": "パス",
@@ -406,32 +445,39 @@ const settings: Record<string, string> = {
   "settings.activeWindowSince": "アクティブ開始",
   "settings.activeWindowNone": "アクティブウィンドウが検出されません",
   "settings.inputActivityToggle": "キーボード＆マウスの活動を追跡",
-  "settings.inputActivityToggleDesc": "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。",
+  "settings.inputActivityToggleDesc":
+    "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。",
   "settings.inputActivityKeyboard": "最後のキーボード",
   "settings.inputActivityMouse": "最後のマウス",
   "settings.inputActivityNever": "なし",
   "settings.inputActivityActive": "トラッキング有効",
   "settings.inputActivityNoData": "マウスを動かすかキーを押してトラッキングの動作を確認してください。",
-  "settings.inputActivityPermNote": "特別な権限は不要です — アクセシビリティアクセスなしで動作する組み込みOSアイドルタイムAPIを使用します。",
+  "settings.inputActivityPermNote":
+    "特別な権限は不要です — アクセシビリティアクセスなしで動作する組み込みOSアイドルタイムAPIを使用します。",
   "settings.activityDb": "activity.sqliteに保存",
 
   "umapSettings.repulsion": "反発",
   "umapSettings.repulsionStrength": "反発強度",
-  "umapSettings.repulsionDesc": "非近傍ポイントがどれだけ強く押し離されるかを制御します。高い値ほどセッションAとBの間のクラスター分離が大きくなります。",
+  "umapSettings.repulsionDesc":
+    "非近傍ポイントがどれだけ強く押し離されるかを制御します。高い値ほどセッションAとBの間のクラスター分離が大きくなります。",
   "umapSettings.negSampleRate": "ネガティブサンプルレート",
-  "umapSettings.negSampleRateDesc": "各エポックで正のエッジあたりに抽出されるランダムな非近傍ペアの数。高いほど分離が強く、学習が遅い。",
+  "umapSettings.negSampleRateDesc":
+    "各エポックで正のエッジあたりに抽出されるランダムな非近傍ペアの数。高いほど分離が強く、学習が遅い。",
   "umapSettings.graphOptimisation": "グラフ＆最適化",
   "umapSettings.nNeighbors": "k最近傍",
-  "umapSettings.nNeighborsDesc": "KNNグラフの構築に使用される最近傍の数。小さい値ほどローカル詳細を保持、大きい値ほどグローバル構造をキャプチャ。",
+  "umapSettings.nNeighborsDesc":
+    "KNNグラフの構築に使用される最近傍の数。小さい値ほどローカル詳細を保持、大きい値ほどグローバル構造をキャプチャ。",
   "umapSettings.nEpochs": "最適化エポック",
   "umapSettings.nEpochsDesc": "勾配降下の反復回数。エポックが多いほどレイアウトが細かくなるが計算が遅い。",
   "umapSettings.safetyPerformance": "安全性＆パフォーマンス",
   "umapSettings.maxPoints": "最大ポイント数",
-  "umapSettings.maxPointsDesc": "UMAPに入力される最大埋め込み数。大きいデータセットは均等にサブサンプリングされます。高い値ほどGPUメモリを使用（n×nペアワイズ行列）。",
+  "umapSettings.maxPointsDesc":
+    "UMAPに入力される最大埋め込み数。大きいデータセットは均等にサブサンプリングされます。高い値ほどGPUメモリを使用（n×nペアワイズ行列）。",
   "umapSettings.timeout": "学習タイムアウト",
   "umapSettings.timeoutDesc": "UMAPオプティマイザーの最大時間。この制限に達すると学習が早期停止します。",
   "umapSettings.cooldownMs": "GPUクールダウン",
-  "umapSettings.cooldownMsDesc": "学習エポック間の一時停止（ミリ秒）。0 = 最大GPUスループット。他のタスクのために余裕を持たせるには増加。",
+  "umapSettings.cooldownMsDesc":
+    "学習エポック間の一時停止（ミリ秒）。0 = 最大GPUスループット。他のタスクのために余裕を持たせるには増加。",
   "umapSettings.pipeline": "パイプライン",
   "umapSettings.resetDefaults": "デフォルトにリセット",
   "umapSettings.apply": "適用＆キャッシュクリア",
@@ -446,7 +492,8 @@ const settings: Record<string, string> = {
   "settingsTabs.exg": "EXG",
 
   "tokens.title": "APIトークン",
-  "tokens.desc": "デーモンアクセス用のAPIトークンを管理します。各トークンには名前、アクセスレベル、有効期限があります。",
+  "tokens.desc":
+    "デーモンアクセス用のAPIトークンを管理します。各トークンには名前、アクセスレベル、有効期限があります。",
   "tokens.create": "トークンを作成",
   "tokens.name": "トークン名",
   "tokens.namePlaceholder": "例：マイアプリ、CIパイプライン",
@@ -476,7 +523,8 @@ const settings: Record<string, string> = {
   "tokens.copied": "コピーしました！",
   "tokens.empty": "APIトークンがまだありません。外部アプリを認証するためにトークンを作成してください。",
   "tokens.defaultToken": "デフォルトトークン",
-  "tokens.defaultTokenDesc": "アプリが使用する組み込み管理者トークン。削除できません。新しいトークンを生成するには更新してください — アプリが自動的に取得します。",
+  "tokens.defaultTokenDesc":
+    "アプリが使用する組み込み管理者トークン。削除できません。新しいトークンを生成するには更新してください — アプリが自動的に取得します。",
   "tokens.refresh": "更新",
 
   "daemon.connection": "デーモン接続",
@@ -494,14 +542,17 @@ const settings: Record<string, string> = {
   "settingsTabs.lsl": "LSL",
 
   "lsl.localStreams": "ローカルLSLストリーム",
-  "lsl.localStreamsDesc": "ローカルネットワーク上のLab Streaming Layer経由でブロードキャストされるEEG/EXGストリームを検出します。LSL互換デバイス（OpenBCI、BrainFlow、BrainFlow経由Emotiv、MATLAB、Python pylslなど）をデータソースとして使用できます。",
+  "lsl.localStreamsDesc":
+    "ローカルネットワーク上のLab Streaming Layer経由でブロードキャストされるEEG/EXGストリームを検出します。LSL互換デバイス（OpenBCI、BrainFlow、BrainFlow経由Emotiv、MATLAB、Python pylslなど）をデータソースとして使用できます。",
   "lsl.autoConnect": "自動接続",
   "lsl.autoConnectToggle": "ペアリング済みLSLストリームに自動接続",
   "lsl.idleTimeout": "アイドルタイムアウト",
-  "lsl.idleTimeoutDesc": "この時間サンプルが届かない場合にセッションを自動停止します。LSLソースがクラッシュしたり切断せずに一時停止した場合に便利です。",
+  "lsl.idleTimeoutDesc":
+    "この時間サンプルが届かない場合にセッションを自動停止します。LSLソースがクラッシュしたり切断せずに一時停止した場合に便利です。",
   "lsl.idleTimeoutDisabled": "無効",
   "lsl.idleTimeoutEnabled": "有効",
-  "lsl.autoConnectDesc": "10秒ごとにLSLストリームを自動スキャンし、ペアリング済みソースが見つかると接続します。セッションは自動的に開始されます。",
+  "lsl.autoConnectDesc":
+    "10秒ごとにLSLストリームを自動スキャンし、ペアリング済みソースが見つかると接続します。セッションは自動的に開始されます。",
   "lsl.pairedStreams": "ペアリング済みストリーム",
   "lsl.pair": "ペアリング",
   "lsl.unpair": "ペアリング解除",
@@ -525,10 +576,12 @@ const settings: Record<string, string> = {
   "lsl.streaming": "ストリーミング中",
   "lsl.sessionActive": "LSLセッション有効",
   "lsl.noStreams": "LSLストリームが見つかりません",
-  "lsl.noStreamsHint": "LSLソースが同じネットワークで実行され、ブロードキャストされていることを確認してください。一般的なソース：OpenBCI GUI、BrainFlow、MATLAB、Python pylsl。",
+  "lsl.noStreamsHint":
+    "LSLソースが同じネットワークで実行され、ブロードキャストされていることを確認してください。一般的なソース：OpenBCI GUI、BrainFlow、MATLAB、Python pylsl。",
 
   "lsl.irohRemote": "iroh経由のリモートLSL",
-  "lsl.irohDesc": "iroh QUIC経由でトンネルされたリモートLSLストリームを受信します。シンクを開始し、リモートクライアントとエンドポイントIDを共有すると、ソースが接続した時点で記録が自動的に開始されます。",
+  "lsl.irohDesc":
+    "iroh QUIC経由でトンネルされたリモートLSLストリームを受信します。シンクを開始し、リモートクライアントとエンドポイントIDを共有すると、ソースが接続した時点で記録が自動的に開始されます。",
   "lsl.irohRunning": "シンク実行中 — リモートソースを待機中",
   "lsl.irohStopped": "シンクが実行されていません",
   "lsl.irohStart": "シンクを開始",
@@ -537,7 +590,8 @@ const settings: Record<string, string> = {
   "lsl.irohEndpointId": "エンドポイントID",
   "lsl.irohCopy": "コピー",
   "lsl.irohCopied": "コピーしました！",
-  "lsl.irohEndpointIdHint": "このIDをリモートrlsl-irohソースと共有してください。リモートが接続すると自動的にセッションが開始されます（タイムアウト：120秒）。",
+  "lsl.irohEndpointIdHint":
+    "このIDをリモートrlsl-irohソースと共有してください。リモートが接続すると自動的にセッションが開始されます（タイムアウト：120秒）。",
 
   "sleepSettings.title": "睡眠スケジュール",
   "sleepSettings.subtitle": "睡眠分析とセッション分類のための就寝時間を設定します。",
@@ -558,11 +612,13 @@ const settings: Record<string, string> = {
   "sleepSettings.presetLongSleeperDesc": "延長10時間ウィンドウ — 22:00〜08:00。",
   "sleepSettings.howItWorks": "仕組み",
   "sleepSettings.info1": "睡眠ウィンドウはEEGセッションを睡眠vs覚醒として自動分類するために使用されます。",
-  "sleepSettings.info2": "睡眠ステージング（N1/N2/N3/REM）はこのウィンドウ内でデルタ、シータ、アルファ、ベータのパワー比を使用します。",
+  "sleepSettings.info2":
+    "睡眠ステージング（N1/N2/N3/REM）はこのウィンドウ内でデルタ、シータ、アルファ、ベータのパワー比を使用します。",
   "sleepSettings.info3": "スケジュールを調整すると、意図的な仮眠と一晩の睡眠を区別するのに役立ちます。",
 
   "settings.geoProvider": "位置情報サービス",
-  "settings.geoProviderDesc": "セッションとLLMツールに地理的コンテキストを提供するために位置情報サービスを有効にします。macOSではCoreLocation（GPS/Wi-Fi）を使用して高精度、他のプラットフォームではIPジオロケーションを使用します。デフォルトは無効 — オンに切り替えて権限を要求してテストします。",
+  "settings.geoProviderDesc":
+    "セッションとLLMツールに地理的コンテキストを提供するために位置情報サービスを有効にします。macOSではCoreLocation（GPS/Wi-Fi）を使用して高精度、他のプラットフォームではIPジオロケーションを使用します。デフォルトは無効 — オンに切り替えて権限を要求してテストします。",
   "settings.geoProviderOff": "位置情報サービスが無効です。LLM位置情報ツールは利用できません。",
   "settings.geoProviderLocal": "位置情報サービスを有効化",
   "settings.geoProviderRemote": "リモート",
@@ -571,14 +627,16 @@ const settings: Record<string, string> = {
   "settings.geoProviderRemoteOk": "IPジオロケーションが動作しています（市レベルの精度）。",
 
   "settings.storageFormat": "記録フォーマット",
-  "settings.storageFormatDesc": "EEG、PPG、IMU、指標記録のファイル形式を選択します。CSVは人間が読みやすく、Parquetはコンパクトで高速です。「両方」は両方のフォーマットを同時に書き込みます。",
+  "settings.storageFormatDesc":
+    "EEG、PPG、IMU、指標記録のファイル形式を選択します。CSVは人間が読みやすく、Parquetはコンパクトで高速です。「両方」は両方のフォーマットを同時に書き込みます。",
   "settings.storageFormatBoth": "両方",
   "settings.storageFormatCsvDesc": "人間が読みやすく、汎用的",
   "settings.storageFormatParquetDesc": "カラムナー、圧縮済み",
   "settings.storageFormatBothDesc": "CSV + Parquetを同時に",
 
   "settings.hfEndpoint": "HuggingFaceエンドポイント",
-  "settings.hfEndpointDesc": "モデルダウンロード（LLM + EXG + TTS）用のオプションのミラー/ベースURL。デフォルトはHF_ENDPOINTまたはhttps://huggingface.coに従います。",
+  "settings.hfEndpointDesc":
+    "モデルダウンロード（LLM + EXG + TTS）用のオプションのミラー/ベースURL。デフォルトはHF_ENDPOINTまたはhttps://huggingface.coに従います。",
   "settings.hfEndpointCurrent": "現在",
 };
 

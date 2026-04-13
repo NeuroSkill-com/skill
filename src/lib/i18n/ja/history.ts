@@ -143,8 +143,7 @@ const history: Record<string, string> = {
   "compare.epochsA": "A：{n}エポック",
   "compare.epochsB": "B：{n}エポック",
   "compare.needTwoSessions": "比較するには2つ以上のセッションが必要です。",
-  "compare.needTwoSessionsHint":
-    "2つ以上のEEGセッションを記録してから、ここで帯域パワー分布を並べて比較できます。",
+  "compare.needTwoSessionsHint": "2つ以上のEEGセッションを記録してから、ここで帯域パワー分布を並べて比較できます。",
   "compare.refresh": "更新",
   "compare.sessions": "セッション",
   "compare.rangeA": "範囲A",

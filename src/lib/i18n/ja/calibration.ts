@@ -30,12 +30,10 @@ const calibration: Record<string, string> = {
   "calibration.eegCalibration": "EEGキャリブレーション",
   "calibration.description":
     'このタスクは<strong class="text-blue-600 dark:text-blue-400">{action1}</strong>と<strong class="text-violet-600 dark:text-violet-400">{action2}</strong>を休憩を挟んで交互に行い、<strong>{count}</strong>回繰り返します。',
-  "calibration.timingDesc":
-    "各アクションは{actionSecs}秒、休憩は{breakSecs}秒です。ラベルは自動的に保存されます。",
+  "calibration.timingDesc": "各アクションは{actionSecs}秒、休憩は{breakSecs}秒です。ラベルは自動的に保存されます。",
   "calibration.startCalibration": "キャリブレーション開始",
   "calibration.complete": "キャリブレーション完了",
-  "calibration.completeDesc":
-    "全{n}回の反復が正常に完了しました。各アクションフェーズのラベルが保存されました。",
+  "calibration.completeDesc": "全{n}回の反復が正常に完了しました。各アクションフェーズのラベルが保存されました。",
   "calibration.runAgain": "再実行",
   "calibration.iteration": "反復",
   "calibration.break": "休憩",
@@ -61,15 +59,15 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleep": "入眠前 / 眠気",
   "calibration.preset.sleepDesc": "覚醒状態vs眠気。睡眠研究やリラックストラッキングに。",
   "calibration.preset.gaming": "ゲーム / パフォーマンス",
-  "calibration.preset.gamingDesc": "高負荷タスクvs受動的休息。eスポーツやピークパフォーマンスのバイオフィードバックに。",
+  "calibration.preset.gamingDesc":
+    "高負荷タスクvs受動的休息。eスポーツやピークパフォーマンスのバイオフィードバックに。",
   "calibration.preset.children": "子供 / 短い注意力",
   "calibration.preset.childrenDesc": "集中力の持続が難しい子供やユーザー向けの短いフェーズ（10秒）。",
   "calibration.preset.clinical": "臨床 / 研究",
   "calibration.preset.clinicalDesc":
     "研究や臨床ベースライン用の、長いアクションフェーズを持つ5回反復の拡張プロトコル。",
   "calibration.preset.stress": "ストレス / 不安",
-  "calibration.preset.stressDesc":
-    "安静時のリラックスvs軽度の認知ストレッサー。不安やストレス反応のトラッキングに。",
+  "calibration.preset.stressDesc": "安静時のリラックスvs軽度の認知ストレッサー。不安やストレス反応のトラッキングに。",
 };
 
 export default calibration;

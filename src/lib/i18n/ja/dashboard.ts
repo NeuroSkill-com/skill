@@ -117,7 +117,8 @@ const dashboard: Record<string, string> = {
   "dashboard.trayScan": "トレイを右クリック→デバイスをスキャン",
   "dashboard.scanForNew": "新しいデバイスをスキャン",
   "dashboard.scanForMuse": "デバイスをスキャン",
-  "dashboard.noDevicesPaired": "ペアリング済みデバイスがありません。BLEヘッドセットをスキャンするかLSL経由で接続してください。",
+  "dashboard.noDevicesPaired":
+    "ペアリング済みデバイスがありません。BLEヘッドセットをスキャンするかLSL経由で接続してください。",
   "dashboard.streamingCsv": "CSVにストリーミング中",
   "dashboard.cancelViaTray": "トレイメニューの右クリックでキャンセル",
   "dashboard.scanningFooter": "デバイスをスキャン中…",
@@ -175,8 +176,7 @@ const dashboard: Record<string, string> = {
   "dashboard.quitAnyway": "終了する",
   "dashboard.keepRecording": "記録を続ける",
   "dashboard.quitWhileRecording": "記録中",
-  "dashboard.quitWhileRecordingDesc":
-    "EEG記録がアクティブです。終了すると記録が停止し、ファイルが正常に閉じられます。",
+  "dashboard.quitWhileRecordingDesc": "EEG記録がアクティブです。終了すると記録が停止し、ファイルが正常に閉じられます。",
 
   "exg.title": "EXG",
   "exg.subtitle": "OpenBCIボード設定、信号処理フィルター、EEG埋め込みパイプライン。",
