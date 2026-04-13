@@ -92,13 +92,13 @@ const perm: Record<string, string> = {
   "perm.whyCalendarDesc": "כדי לספק הקשר תזמון לכלי הבינה המלאכותית כך שהעוזר יוכל להתייחס לאירועים הקרובים שלך.",
   "perm.matrixCalendar": "אירועי לוח שנה",
   "perm.matrixCalendarReq": "נדרשת גישה ללוח שנה",
-  "perm.fullDiskAccess": "Full Disk Access",
+  "perm.fullDiskAccess": "גישה מלאה לדיסק",
   "perm.fullDiskAccessDesc":
-    "Required for direct Focus-mode detection via the system database. Without it, the app falls back to a slower legacy method. Recommended for reliable Do Not Disturb integration.",
-  "perm.fullDiskAccessStep1": "Open System Settings → Privacy & Security → Full Disk Access",
-  "perm.fullDiskAccessStep2": "Find NeuroSkill™ (or the terminal running the daemon) in the list and enable it",
-  "perm.fullDiskAccessStep3": "You may need to quit and relaunch the app for the change to take effect",
-  "perm.openFullDiskAccessSettings": "Open Full Disk Access Settings",
+    "נדרשת לזיהוי ישיר של מצב ריכוז דרך מסד הנתונים של המערכת. ללא הרשאה זו, היישום עובר לשיטת Legacy איטית יותר. מומלץ לשילוב אמין עם מצב 'אל תפריע'.",
+  "perm.fullDiskAccessStep1": "פתח System Settings → Privacy & Security → Full Disk Access",
+  "perm.fullDiskAccessStep2": "מצא את NeuroSkill™ (או הטרמינל שבו רץ ה-daemon) ברשימה והפעל",
+  "perm.fullDiskAccessStep3": "ייתכן שתצטרך לצאת ולהפעיל מחדש את היישום כדי שהשינוי ייכנס לתוקף",
+  "perm.openFullDiskAccessSettings": "פתח הגדרות גישה מלאה לדיסק",
 };
 
 export default perm;

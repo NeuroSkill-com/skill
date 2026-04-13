@@ -99,13 +99,13 @@ const perm: Record<string, string> = {
     "Um dem KI-Tool Planungskontext zu liefern, damit es auf Ihre bevorstehenden Termine verweisen kann.",
   "perm.matrixCalendar": "Kalendertermine",
   "perm.matrixCalendarReq": "Kalenderzugriff erforderlich",
-  "perm.fullDiskAccess": "Full Disk Access",
+  "perm.fullDiskAccess": "Vollständiger Festplattenzugriff",
   "perm.fullDiskAccessDesc":
-    "Required for direct Focus-mode detection via the system database. Without it, the app falls back to a slower legacy method. Recommended for reliable Do Not Disturb integration.",
-  "perm.fullDiskAccessStep1": "Open System Settings → Privacy & Security → Full Disk Access",
-  "perm.fullDiskAccessStep2": "Find NeuroSkill™ (or the terminal running the daemon) in the list and enable it",
-  "perm.fullDiskAccessStep3": "You may need to quit and relaunch the app for the change to take effect",
-  "perm.openFullDiskAccessSettings": "Open Full Disk Access Settings",
+    "Erforderlich für die direkte Fokusmodus-Erkennung über die Systemdatenbank. Ohne diese Berechtigung greift die App auf eine langsamere Legacy-Methode zurück. Empfohlen für eine zuverlässige «Nicht stören»-Integration.",
+  "perm.fullDiskAccessStep1": "Öffne System Settings → Privacy & Security → Full Disk Access",
+  "perm.fullDiskAccessStep2": "Suche NeuroSkill™ (oder das Terminal, in dem der Daemon läuft) in der Liste und aktiviere es",
+  "perm.fullDiskAccessStep3": "Möglicherweise musst du die App beenden und neu starten, damit die Änderung wirksam wird",
+  "perm.openFullDiskAccessSettings": "Einstellungen für vollständigen Festplattenzugriff öffnen",
 };
 
 export default perm;

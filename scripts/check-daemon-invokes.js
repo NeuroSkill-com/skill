@@ -183,6 +183,18 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "delete_auth_token",
   "refresh_default_token",
 
+  // iroh
+  "get_iroh_info",
+  "iroh_phone_invite",
+  "list_iroh_totp",
+  "create_iroh_totp",
+  "get_iroh_scope_groups",
+  "list_iroh_clients",
+  "register_iroh_client",
+
+  // dnd / full disk access
+  "open_full_disk_access",
+
   // bulk-migrated via daemonInvoke proxy
   "abort_llm_stream",
   "cancel_llm_download",
