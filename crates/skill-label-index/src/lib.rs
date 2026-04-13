@@ -64,6 +64,71 @@ fn load_or_fresh(path: &Path) -> LabeledIndex<Cosine, i64> {
     }
 }
 
+/// Find the most common dimension among a set of embedding lengths.
+/// Returns `None` if the iterator is empty.
+fn dominant_dim(dims: impl Iterator<Item = usize>) -> Option<usize> {
+    let mut counts = std::collections::HashMap::<usize, usize>::new();
+    for d in dims {
+        if d > 0 {
+            *counts.entry(d).or_default() += 1;
+        }
+    }
+    counts.into_iter().max_by_key(|&(_, c)| c).map(|(d, _)| d)
+}
+
+/// Insert into an HNSW index only if the dimension matches (or the index is
+/// empty).  Returns `true` if inserted, `false` if skipped due to mismatch.
+fn safe_insert(
+    idx: &mut LabeledIndex<Cosine, i64>,
+    emb: Vec<f32>,
+    label_id: i64,
+    expected_dim: &mut Option<usize>,
+) -> bool {
+    if emb.is_empty() {
+        return false;
+    }
+    let dim = emb.len();
+    match *expected_dim {
+        None => {
+            *expected_dim = Some(dim);
+            idx.insert(emb, label_id);
+            true
+        }
+        Some(d) if d == dim => {
+            idx.insert(emb, label_id);
+            true
+        }
+        Some(d) => {
+            eprintln!("[label_idx] skipping label {label_id}: dim {dim} != expected {d}");
+            false
+        }
+    }
+}
+
+/// Check if a query vector matches the index dimension before searching.
+/// Returns empty results on mismatch instead of panicking.
+fn safe_search<'a>(
+    idx: &'a LabeledIndex<Cosine, i64>,
+    query: &[f32],
+    k: usize,
+    ef: usize,
+) -> Vec<fast_hnsw::labeled::LabeledResult<'a, i64>> {
+    if idx.is_empty() || query.is_empty() {
+        return vec![];
+    }
+    // Check dimension before searching to avoid a panic inside fast_hnsw.
+    if let Some(dim) = idx.inner.dim() {
+        if query.len() != dim {
+            eprintln!(
+                "[label_idx] search skipped: query dim {} != index dim {dim}",
+                query.len()
+            );
+            return vec![];
+        }
+    }
+    idx.search(query, k, ef.max(k))
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 pub struct LabelIndexState {
@@ -395,29 +460,38 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
 
     let rows = read_label_rows(&labels_db);
 
+    // Determine the most common text embedding dimension so we index
+    // the majority and skip outliers from a previous model.
+    let dominant_text_dim = dominant_dim(rows.iter().filter_map(|r| r.text_embedding.as_ref().map(|e| e.len())));
+    let dominant_ctx_dim = dominant_dim(
+        rows.iter()
+            .filter_map(|r| r.context_embedding.as_ref().map(|e| e.len())),
+    );
+
     let mut text_idx = fresh_index();
     let mut context_idx = fresh_index();
     let mut eeg_idx = fresh_index();
     let mut eeg_skipped = 0usize;
+    let mut text_dim: Option<usize> = dominant_text_dim;
+    let mut ctx_dim: Option<usize> = dominant_ctx_dim;
+    let mut eeg_dim: Option<usize> = None;
 
     for row in rows {
         // ── text HNSW ─────────────────────────────────────────────────────────
         if let Some(emb) = row.text_embedding {
-            if !emb.is_empty() {
-                text_idx.insert(emb, row.id);
-            }
+            safe_insert(&mut text_idx, emb, row.id, &mut text_dim);
         }
 
         // ── context HNSW ──────────────────────────────────────────────────────
         if let Some(emb) = row.context_embedding {
-            if !emb.is_empty() {
-                context_idx.insert(emb, row.id);
-            }
+            safe_insert(&mut context_idx, emb, row.id, &mut ctx_dim);
         }
 
         // ── EEG HNSW ──────────────────────────────────────────────────────────
         if let Some(mean_emb) = mean_eeg_for_window(skill_dir, row.eeg_start, row.eeg_end) {
-            eeg_idx.insert(mean_emb, row.id);
+            if !safe_insert(&mut eeg_idx, mean_emb, row.id, &mut eeg_dim) {
+                eeg_skipped += 1;
+            }
         } else {
             eeg_skipped += 1;
         }
@@ -469,15 +543,32 @@ pub fn insert_label(
 ) {
     let skill_dir_buf = skill_dir.to_path_buf();
 
+    // Helper: insert into one index if dimension is compatible.
+    fn try_insert(idx: &mut LabeledIndex<Cosine, i64>, emb: &[f32], label_id: i64, save_path: &Path, tag: &str) {
+        if emb.is_empty() {
+            return;
+        }
+        // Check dimension compatibility before inserting.
+        if let Some(d) = idx.inner.dim() {
+            if emb.len() != d {
+                eprintln!(
+                    "[label_idx] {tag} insert skipped for label {label_id}: dim {} != index dim {d}",
+                    emb.len()
+                );
+                return;
+            }
+        }
+        idx.insert(emb.to_vec(), label_id);
+        if let Err(e) = idx.save(save_path) {
+            eprintln!("[label_idx] {tag} save: {e}");
+        }
+    }
+
     // ── Text HNSW ─────────────────────────────────────────────────────────────
     if !text_embedding.is_empty() {
         let mut guard = state.text.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            idx.insert(text_embedding.to_vec(), label_id);
-            let path = skill_dir.join(TEXT_INDEX_FILE);
-            if let Err(e) = idx.save(&path) {
-                eprintln!("[label_idx] text save: {e}");
-            }
+            try_insert(idx, text_embedding, label_id, &skill_dir.join(TEXT_INDEX_FILE), "text");
         }
     }
 
@@ -485,11 +576,13 @@ pub fn insert_label(
     if !context_embedding.is_empty() {
         let mut guard = state.context.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            idx.insert(context_embedding.to_vec(), label_id);
-            let path = skill_dir.join(CONTEXT_INDEX_FILE);
-            if let Err(e) = idx.save(&path) {
-                eprintln!("[label_idx] context save: {e}");
-            }
+            try_insert(
+                idx,
+                context_embedding,
+                label_id,
+                &skill_dir.join(CONTEXT_INDEX_FILE),
+                "context",
+            );
         }
     }
 
@@ -497,11 +590,7 @@ pub fn insert_label(
     if let Some(mean_emb) = mean_eeg_for_window(&skill_dir_buf, eeg_start, eeg_end) {
         let mut guard = state.eeg.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            idx.insert(mean_emb, label_id);
-            let path = skill_dir.join(EEG_INDEX_FILE);
-            if let Err(e) = idx.save(&path) {
-                eprintln!("[label_idx] eeg save: {e}");
-            }
+            try_insert(idx, &mean_emb, label_id, &skill_dir.join(EEG_INDEX_FILE), "eeg");
         }
     }
 }
@@ -518,11 +607,8 @@ pub fn search_by_text_vec(
     let labels_db = skill_dir.join(LABELS_FILE);
     let guard = state.text.lock_or_recover();
     let Some(ref idx) = *guard else { return vec![] };
-    if idx.is_empty() {
-        return vec![];
-    }
 
-    idx.search(query, k, ef.max(k))
+    safe_search(idx, query, k, ef)
         .into_iter()
         .filter_map(|hit| {
             let row = fetch_label_by_id(&labels_db, *hit.payload)?;
@@ -543,11 +629,8 @@ pub fn search_by_context_vec(
     let labels_db = skill_dir.join(LABELS_FILE);
     let guard = state.context.lock_or_recover();
     let Some(ref idx) = *guard else { return vec![] };
-    if idx.is_empty() {
-        return vec![];
-    }
 
-    idx.search(query, k, ef.max(k))
+    safe_search(idx, query, k, ef)
         .into_iter()
         .filter_map(|hit| {
             let row = fetch_label_by_id(&labels_db, *hit.payload)?;
@@ -568,11 +651,8 @@ pub fn search_by_eeg_vec(
     let labels_db = skill_dir.join(LABELS_FILE);
     let guard = state.eeg.lock_or_recover();
     let Some(ref idx) = *guard else { return vec![] };
-    if idx.is_empty() {
-        return vec![];
-    }
 
-    idx.search(query, k, ef.max(k))
+    safe_search(idx, query, k, ef)
         .into_iter()
         .filter_map(|hit| {
             let row = fetch_label_by_id(&labels_db, *hit.payload)?;
@@ -717,5 +797,281 @@ mod tests {
         assert!(results[0].distance < 0.01);
         // Label 2 should be next (cosine-close)
         assert_eq!(results[1].label_id, 2);
+    }
+
+    // ── Dimension mismatch edge cases ────────────────────────────────────────
+
+    #[test]
+    fn insert_dimension_mismatch_is_skipped() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        let conn = create_labels_db(dir.path());
+        conn.execute_batch(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at) VALUES
+             (1, 0, 0, 0, 0, 'a', '', 1),
+             (2, 0, 0, 0, 0, 'b', '', 2);",
+        )
+        .unwrap();
+
+        // Insert 4-dim label
+        insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
+        // Try to insert 8-dim label — should be silently skipped
+        insert_label(
+            dir.path(),
+            2,
+            &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            &[],
+            0,
+            0,
+            &state,
+        );
+
+        let guard = state.text.lock().unwrap();
+        let idx = guard.as_ref().unwrap();
+        // Only the first label should be in the index
+        assert_eq!(idx.len(), 1);
+    }
+
+    #[test]
+    fn search_dimension_mismatch_returns_empty() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        let conn = create_labels_db(dir.path());
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+             VALUES (1, 0, 0, 0, 0, 'test', '', 1)",
+            [],
+        )
+        .unwrap();
+
+        // Insert 4-dim embedding
+        insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
+
+        // Search with 8-dim query — should return empty, not panic
+        let results = search_by_text_vec(
+            &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            5,
+            HNSW_EF,
+            dir.path(),
+            &state,
+        );
+        assert!(results.is_empty());
+
+        // Search with correct dim should still work
+        let results = search_by_text_vec(&[1.0, 0.0, 0.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn search_empty_query_returns_empty() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
+
+        let results = search_by_text_vec(&[], 5, HNSW_EF, dir.path(), &state);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn rebuild_mixed_dimensions_uses_dominant() {
+        let dir = tempdir().unwrap();
+        let conn = create_labels_db(dir.path());
+
+        // Helper to create embedding blobs
+        let to_blob = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|f| f.to_le_bytes()).collect() };
+
+        // Insert 3 labels: 2 with 4-dim, 1 with 8-dim embeddings
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+             VALUES (1, 0, 0, 0, 0, 'a', '', 1, ?1, 'model-a')",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+             VALUES (2, 0, 0, 0, 0, 'b', '', 2, ?1, 'model-a')",
+            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+             VALUES (3, 0, 0, 0, 0, 'c', '', 3, ?1, 'model-b')",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+        ).unwrap();
+
+        let state = LabelIndexState::new();
+        let stats = rebuild(dir.path(), &state);
+
+        // Only the 2 labels with the dominant dimension (4) should be indexed
+        assert_eq!(stats.text_nodes, 2);
+
+        // Search with 4-dim should find both
+        let results = search_by_text_vec(&[1.0, 0.0, 0.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert_eq!(results.len(), 2);
+
+        // Search with 8-dim should return empty (dimension mismatch)
+        let results = search_by_text_vec(
+            &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            5,
+            HNSW_EF,
+            dir.path(),
+            &state,
+        );
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn rebuild_after_reembed_picks_up_new_dimension() {
+        let dir = tempdir().unwrap();
+        let conn = create_labels_db(dir.path());
+        let to_blob = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|f| f.to_le_bytes()).collect() };
+
+        // All labels start with 4-dim
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+             VALUES (1, 0, 0, 0, 0, 'x', '', 1, ?1, 'old')",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+             VALUES (2, 0, 0, 0, 0, 'y', '', 2, ?1, 'old')",
+            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
+        ).unwrap();
+
+        let state = LabelIndexState::new();
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 2);
+
+        // Simulate reembed: update all labels to 8-dim
+        conn.execute(
+            "UPDATE labels SET text_embedding = ?1, embedding_model = 'new' WHERE id = 1",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0])],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE labels SET text_embedding = ?1, embedding_model = 'new' WHERE id = 2",
+            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5])],
+        )
+        .unwrap();
+
+        // Rebuild should now use 8-dim
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 2);
+
+        // 4-dim search should now return empty
+        let results = search_by_text_vec(&[1.0, 0.0, 0.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert!(results.is_empty());
+
+        // 8-dim search should find both
+        let results = search_by_text_vec(
+            &[1.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0],
+            5,
+            HNSW_EF,
+            dir.path(),
+            &state,
+        );
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].label_id, 1); // exact match
+    }
+
+    #[test]
+    fn safe_insert_tracks_dimension() {
+        let mut idx = fresh_index();
+        let mut dim: Option<usize> = None;
+
+        // First insert sets dimension
+        assert!(safe_insert(&mut idx, vec![1.0, 2.0, 3.0], 1, &mut dim));
+        assert_eq!(dim, Some(3));
+
+        // Same dimension succeeds
+        assert!(safe_insert(&mut idx, vec![4.0, 5.0, 6.0], 2, &mut dim));
+        assert_eq!(idx.len(), 2);
+
+        // Different dimension is rejected
+        assert!(!safe_insert(&mut idx, vec![1.0, 2.0], 3, &mut dim));
+        assert_eq!(idx.len(), 2); // unchanged
+
+        // Empty is rejected
+        assert!(!safe_insert(&mut idx, vec![], 4, &mut dim));
+        assert_eq!(idx.len(), 2);
+    }
+
+    #[test]
+    fn dominant_dim_picks_majority() {
+        assert_eq!(dominant_dim([4, 4, 8].into_iter()), Some(4));
+        assert_eq!(dominant_dim([8, 8, 4].into_iter()), Some(8));
+        assert_eq!(dominant_dim([384, 768, 768, 768].into_iter()), Some(768));
+        assert_eq!(dominant_dim(std::iter::empty::<usize>()), None);
+        assert_eq!(dominant_dim([0, 0].into_iter()), None); // zeros filtered
+    }
+
+    #[test]
+    fn context_and_eeg_search_dimension_safety() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.context.lock().unwrap() = Some(fresh_index());
+        *state.eeg.lock().unwrap() = Some(fresh_index());
+
+        let conn = create_labels_db(dir.path());
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+             VALUES (1, 0, 0, 0, 0, 't', 'c', 1)",
+            [],
+        )
+        .unwrap();
+
+        // Insert 4-dim context embedding
+        insert_label(dir.path(), 1, &[], &[1.0, 0.0, 0.0, 0.0], 0, 0, &state);
+
+        // Search with wrong dim returns empty
+        let r = search_by_context_vec(&[1.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert!(r.is_empty());
+
+        // Search with correct dim works
+        let r = search_by_context_vec(&[1.0, 0.0, 0.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert_eq!(r.len(), 1);
+
+        // EEG search on empty index returns empty
+        let r = search_by_eeg_vec(&[1.0, 0.0], 5, HNSW_EF, dir.path(), &state);
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn insert_into_none_state_does_not_panic() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        // State indices are None (not loaded) — should not panic
+        insert_label(dir.path(), 1, &[1.0, 2.0], &[3.0, 4.0], 0, 0, &state);
+    }
+
+    #[test]
+    fn rebuild_no_db_returns_zeros() {
+        let dir = tempdir().unwrap();
+        // No labels.sqlite exists
+        let state = LabelIndexState::new();
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 0);
+        assert_eq!(stats.eeg_nodes, 0);
+        assert_eq!(stats.eeg_skipped, 0);
+    }
+
+    #[test]
+    fn rebuild_labels_without_embeddings() {
+        let dir = tempdir().unwrap();
+        let conn = create_labels_db(dir.path());
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+             VALUES (1, 0, 0, 0, 0, 'no embedding', '', 1)",
+            [],
+        )
+        .unwrap();
+
+        let state = LabelIndexState::new();
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 0); // no text_embedding column filled
     }
 }
