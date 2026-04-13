@@ -348,6 +348,7 @@ pub(crate) async fn get_dnd_status(State(state): State<AppState>) -> Json<serde_
         "exit_secs_remaining": 0.0,
         "focus_lookback_secs": cfg.focus_lookback_secs,
         "exit_held_by_lookback": false,
+        "focus_db_available": skill_data::dnd::has_focus_db_access(),
     }))
 }
 
@@ -357,6 +358,22 @@ pub(crate) async fn test_dnd(Json(req): Json<DndTestRequest>) -> Json<serde_json
     }
     let ok = skill_data::dnd::set_dnd(false, "");
     Json(serde_json::json!({"ok": ok, "value": ok}))
+}
+
+/// Open the macOS Full Disk Access settings pane.
+pub(crate) async fn open_full_disk_access() -> Json<serde_json::Value> {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+                .spawn();
+        }
+    }
+    Json(serde_json::json!({"ok": true}))
 }
 
 // --- UI appearance ---

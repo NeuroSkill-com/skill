@@ -354,6 +354,10 @@ pub(crate) fn target_requires_pairing(target: &str) -> bool {
     if lower.starts_with("peer:") {
         return false;
     }
+    // LSL streams are paired in the LSL config, not the BLE device list.
+    if lower.starts_with("lsl:") || lower == "lsl-iroh" {
+        return false;
+    }
     lower.contains(':') || lower == "neurosky" || lower.starts_with("muse")
 }
 

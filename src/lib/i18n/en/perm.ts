@@ -89,6 +89,13 @@ const perm: Record<string, string> = {
   "perm.matrixLocationReq": "Location Services (optional — falls back to IP)",
   "perm.openInputMonitoringSettings": "Open Input Monitoring Settings",
   "perm.openFocusSettings": "Open Focus Settings",
+  "perm.fullDiskAccess": "Full Disk Access",
+  "perm.fullDiskAccessDesc":
+    "Required for direct Focus-mode detection via the system database. Without it, the app falls back to a slower legacy method. Recommended for reliable Do Not Disturb integration.",
+  "perm.fullDiskAccessStep1": "Open System Settings → Privacy & Security → Full Disk Access",
+  "perm.fullDiskAccessStep2": "Find NeuroSkill™ (or the terminal running the daemon) in the list and enable it",
+  "perm.fullDiskAccessStep3": "You may need to quit and relaunch the app for the change to take effect",
+  "perm.openFullDiskAccessSettings": "Open Full Disk Access Settings",
   "perm.whyCalendar": "Calendar",
   "perm.whyCalendarDesc":
     "To provide scheduling context to the LLM tools so the AI can reference your upcoming events.",

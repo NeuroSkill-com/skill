@@ -137,7 +137,7 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
                     s.state = "disconnected".to_string();
                     s.device_error = Some("Reconnect failed after multiple attempts".to_string());
                 }
-                state.broadcast("status", &*state.status.lock().unwrap());
+                state.broadcast("status", &*state.status.lock().unwrap_or_else(|e| e.into_inner()));
                 state.broadcast("reconnect-state", ReconnectState::default());
                 continue;
             }
@@ -158,7 +158,7 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
             if action.should_emit {
                 let rc = reconnect.lock().unwrap_or_else(|e| e.into_inner()).clone();
                 state.broadcast("reconnect-state", &rc);
-                state.broadcast("status", &*state.status.lock().unwrap());
+                state.broadcast("status", &*state.status.lock().unwrap_or_else(|e| e.into_inner()));
             }
 
             if action.trigger_retry {

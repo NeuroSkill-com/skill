@@ -84,6 +84,7 @@ let dndThresholdLive = $state(60); // mirrors dndConfig.focus_threshold
 let dndSaving = $state(false);
 let dndTesting = $state(false);
 let dndError = $state<string | null>(null);
+let focusDbAvailable = $state(true);
 let focusModes = $state<FocusModeOption[]>([]);
 let focusModesLoaded = $state(false);
 
@@ -181,6 +182,7 @@ async function refreshDndState() {
         sample_count: number;
         window_size: number;
         threshold: number;
+        focus_db_available?: boolean;
       }>("get_dnd_status"),
     ]);
     dndActive = appActive;
@@ -190,6 +192,7 @@ async function refreshDndState() {
     dndSampleCount = status.sample_count ?? 0;
     dndWindowSize = status.window_size ?? 0;
     dndThresholdLive = status.threshold ?? dndConfig.focus_threshold;
+    focusDbAvailable = status.focus_db_available ?? true;
   } catch (e) {}
 }
 
@@ -588,6 +591,16 @@ const streak = $derived.by(() => {
         <span class="font-semibold">Focus mode didn’t change.</span>
         <span class="ml-1">{dndError}</span>
       </div>
+    {/if}
+
+    {#if dndConfig.enabled && !focusDbAvailable}
+      <button
+        onclick={() => daemonInvoke("open_full_disk_access")}
+        class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.6rem] text-amber-700 dark:text-amber-300 leading-relaxed text-left
+               hover:bg-amber-500/15 transition-colors cursor-pointer">
+        <span class="font-semibold">Full Disk Access not granted.</span>
+        <span class="ml-1">DND detection is using a slower fallback. Click to open System Settings and grant access.</span>
+      </button>
     {/if}
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">

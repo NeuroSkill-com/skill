@@ -175,6 +175,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_dnd_active: [G, "/v1/settings/dnd/active"],
   get_dnd_status: [G, "/v1/settings/dnd/status"],
   test_dnd: [P, "/v1/settings/dnd/test"],
+  open_full_disk_access: [P, "/v1/settings/dnd/open-full-disk-access"],
   list_focus_modes: [G, "/v1/settings/dnd/focus-modes"],
   get_daily_goal: [G, "/v1/ui/daily-goal"],
   set_daily_goal: [P, "/v1/ui/daily-goal"],

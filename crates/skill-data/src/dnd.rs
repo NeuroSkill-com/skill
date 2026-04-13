@@ -118,27 +118,34 @@ pub struct FocusModeOption {
 /// app or by the user manually, and also recover from a previous crash where
 /// `dnd_active` was left `false` even though the OS still had DND on.
 ///
+/// Returns `true` if the Focus DB can be read directly (Full Disk Access granted).
+pub fn has_focus_db_access() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use macos_focus::FocusManager;
+        FocusManager::new().and_then(|mgr| mgr.is_active()).is_ok()
+    }
+    #[cfg(not(target_os = "macos"))]
+    true
+}
+
 /// Returns `Some(true/false)` on supported platforms, `None` when the platform
 /// backend cannot determine OS state.
 pub fn query_os_active() -> Option<bool> {
     #[cfg(target_os = "macos")]
     {
         use macos_focus::FocusManager;
-        match FocusManager::new() {
-            Ok(mgr) => match mgr.is_active() {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    eprintln!("[dnd] query_os_active failed via Focus DB: {e}");
-                    let legacy = query_macos_legacy_dnd();
-                    if legacy.is_some() {
-                        eprintln!("[dnd] query_os_active recovered via legacy defaults read");
-                    }
-                    legacy
-                }
-            },
+        match FocusManager::new().and_then(|mgr| mgr.is_active()) {
+            Ok(v) => Some(v),
             Err(e) => {
-                eprintln!("[dnd] query_os_active init failed: {e}");
-                query_macos_legacy_dnd()
+                let legacy = query_macos_legacy_dnd();
+                if std::env::var("SKILL_DND_LOG").is_ok() {
+                    match &legacy {
+                        Some(v) => eprintln!("[dnd] Focus DB failed ({e}), recovered via legacy defaults (active={v})"),
+                        None => eprintln!("[dnd] Focus DB failed ({e}), legacy fallback also failed"),
+                    }
+                }
+                legacy
             }
         }
     }

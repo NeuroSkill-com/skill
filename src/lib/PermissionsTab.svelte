@@ -115,6 +115,9 @@ async function openInputMonitoringSettings() {
 async function openFocusSettings() {
   await invoke("open_focus_settings");
 }
+async function openFullDiskAccessSettings() {
+  await invoke("open_full_disk_access_settings");
+}
 
 // ── Status badge helper ─────────────────────────────────────────────────────
 type Status = "granted" | "denied" | "unknown" | "not_required";
@@ -313,6 +316,55 @@ const notifStatus: Status = "unknown";
                   class="text-[0.7rem] h-7"
                   onclick={openScreenRecordingSettings}>
             {t("perm.openScreenRecordingSettings")}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 class="w-3 h-3 ml-1 shrink-0">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </Button>
+        </div>
+
+      </CardContent>
+    </Card>
+  </section>
+  {/if}
+
+  <!-- ── Full Disk Access ──────────────────────────────────────────────────── -->
+  {#if isMac}
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("perm.fullDiskAccess")}
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🔒</span>
+            <span class="text-[0.8rem] font-semibold text-foreground">{t("perm.fullDiskAccess")}</span>
+          </div>
+        </div>
+
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("perm.fullDiskAccessDesc")}
+        </p>
+
+        <div class="rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 px-3 py-2.5
+                    text-[0.68rem] text-amber-800 dark:text-amber-300 leading-relaxed flex flex-col gap-1">
+          <strong>{t("perm.howToGrant")}</strong>
+          <ol class="flex flex-col gap-0.5 list-decimal list-inside">
+            <li>{t("perm.fullDiskAccessStep1")}</li>
+            <li>{t("perm.fullDiskAccessStep2")}</li>
+            <li>{t("perm.fullDiskAccessStep3")}</li>
+          </ol>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline"
+                  class="text-[0.7rem] h-7"
+                  onclick={openFullDiskAccessSettings}>
+            {t("perm.openFullDiskAccessSettings")}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                  class="w-3 h-3 ml-1 shrink-0">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>

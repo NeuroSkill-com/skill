@@ -448,7 +448,9 @@ pub(crate) async fn enable_reconnect(State(state): State<AppState>) -> Json<serd
     if let Ok(mut rc) = state.reconnect.lock() {
         rc.pending = true;
     }
-    state.broadcast("reconnect-state", &*state.reconnect.lock().unwrap());
+    if let Ok(rc) = state.reconnect.lock() {
+        state.broadcast("reconnect-state", &*rc);
+    }
     Json(serde_json::json!({"ok": true}))
 }
 
@@ -463,7 +465,9 @@ pub(crate) async fn disable_reconnect(State(state): State<AppState>) -> Json<ser
         s.retry_countdown_secs = 0;
     }
     state.broadcast("reconnect-state", crate::reconnect::ReconnectState::default());
-    state.broadcast("status", &*state.status.lock().unwrap());
+    if let Ok(s) = state.status.lock() {
+        state.broadcast("status", &*s);
+    }
     Json(serde_json::json!({"ok": true}))
 }
 

@@ -16,7 +16,8 @@ pub fn spawn_all(state: AppState) {
     spawn_dnd_poll(state.clone());
     spawn_auto_scanner(state.clone());
     spawn_auto_connect(state.clone());
-    spawn_calibration_auto_start(state);
+    spawn_calibration_auto_start(state.clone());
+    spawn_screenshot_worker(state);
 }
 
 fn spawn_calibration_auto_start(state: AppState) {
@@ -156,4 +157,28 @@ fn spawn_dnd_poll(state: AppState) {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
+}
+
+fn spawn_screenshot_worker(state: AppState) {
+    use std::sync::Arc;
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let settings = skill_settings::load_settings(&skill_dir);
+    let ctx = Arc::new(crate::routes::settings_screenshots::DaemonScreenshotContext {
+        config: settings.screenshot,
+        state: Some(state.clone()),
+        events_tx: state.events_tx.clone(),
+        text_embedder: state.text_embedder.clone(),
+    });
+    let metrics = Arc::new(skill_screenshots::capture::ScreenshotMetrics::default());
+    let dir = skill_dir.clone();
+    std::thread::Builder::new()
+        .name("screenshot-capture".into())
+        .spawn(move || {
+            skill_screenshots::capture::run_screenshot_worker(ctx, dir, None, metrics);
+        })
+        .unwrap_or_else(|e| {
+            eprintln!("[screenshot] failed to spawn worker: {e}");
+            panic!("screenshot worker spawn failed");
+        });
+    info!("[screenshot] worker spawned");
 }

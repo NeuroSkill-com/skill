@@ -150,6 +150,29 @@ pub fn check_accessibility_permission() -> bool {
     }
 }
 
+/// Open the OS panel where the user can grant Full Disk Access permission.
+///
+/// macOS 13+: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles`
+/// macOS 12−: `x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`
+#[tauri::command]
+pub fn open_full_disk_access_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+                .spawn();
+        }
+    }
+    #[cfg(target_os = "linux")]
+    { /* no-op */ }
+    #[cfg(target_os = "windows")]
+    { /* no-op */ }
+}
+
 /// Open the OS panel where the user can grant Accessibility permission.
 ///
 /// macOS 13+: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility`

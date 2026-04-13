@@ -123,9 +123,12 @@ impl Pipeline {
         // Skip for virtual/synthetic devices: their data is procedurally
         // generated and not worth embedding, and ZUNA takes 60+ seconds to
         // load — starving the LLM of GPU while the virtual stream is active.
+        // Override with SKILL_VIRTUAL_EMBED=1 (e.g. for e2e tests).
         let is_virtual = device_name.to_lowercase().contains("virtual");
-        let skip_embed =
-            is_virtual || cfg!(test) || std::env::var("SKILL_SKIP_EMBED").map(|v| v == "1").unwrap_or(false);
+        let force_virtual_embed = std::env::var("SKILL_VIRTUAL_EMBED").map(|v| v == "1").unwrap_or(false);
+        let skip_embed = (is_virtual && !force_virtual_embed)
+            || cfg!(test)
+            || std::env::var("SKILL_SKIP_EMBED").map(|v| v == "1").unwrap_or(false);
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
         let (embed_worker_opt, acc) = if skip_embed {
             (None, None)

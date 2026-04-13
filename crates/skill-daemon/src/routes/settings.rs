@@ -264,6 +264,10 @@ pub fn router() -> Router<AppState> {
         .route("/settings/dnd/status", get(settings_ui::get_dnd_status))
         .route("/settings/dnd/test", post(settings_ui::test_dnd))
         .route(
+            "/settings/dnd/open-full-disk-access",
+            post(settings_ui::open_full_disk_access),
+        )
+        .route(
             "/settings/screenshot/config",
             get(settings_screenshots::get_screenshot_config).post(settings_screenshots::set_screenshot_config),
         )

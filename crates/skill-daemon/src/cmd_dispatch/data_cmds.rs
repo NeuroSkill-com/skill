@@ -540,16 +540,17 @@ pub(super) async fn cmd_umap(state: &AppState, msg: &Value) -> Result<Value, Str
 
     // Return as a "completed" UMAP result with a synthetic job_id
     Ok(json!({
+        "ok": true,
         "job_id": 0,
-        "status": "done",
+        "status": "complete",
         "result": result,
     }))
 }
 
 pub(super) async fn cmd_umap_poll(_state: &AppState, msg: &Value) -> Result<Value, String> {
-    // Since we compute UMAP synchronously in cmd_umap, polling always returns done
+    // Since we compute UMAP synchronously in cmd_umap, polling always returns complete
     let _job_id = u64_field(msg, "job_id").unwrap_or(0);
-    Ok(json!({ "status": "done" }))
+    Ok(json!({ "status": "complete" }))
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -578,9 +579,14 @@ pub(super) async fn cmd_hooks_set(state: &AppState, msg: &Value) -> Result<Value
     let mut settings = skill_settings::load_settings(&skill_dir);
     settings.hooks = hooks;
     let path = skill_settings::settings_path(&skill_dir);
-    let _ = serde_json::to_string_pretty(&settings)
-        .ok()
-        .and_then(|json| std::fs::write(path, json).ok());
+    match serde_json::to_string_pretty(&settings) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&path, json) {
+                return Err(format!("failed to save hooks: {e}"));
+            }
+        }
+        Err(e) => return Err(format!("failed to serialize settings: {e}")),
+    }
     Ok(json!({ "hooks": settings.hooks }))
 }
 

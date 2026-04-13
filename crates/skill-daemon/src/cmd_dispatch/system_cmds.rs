@@ -58,9 +58,14 @@ pub(super) async fn cmd_sleep_schedule_set(state: &AppState, msg: &Value) -> Res
         }
     }
     let path = skill_settings::settings_path(&skill_dir);
-    let _ = serde_json::to_string_pretty(&settings)
-        .ok()
-        .and_then(|json| std::fs::write(path, json).ok());
+    match serde_json::to_string_pretty(&settings) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&path, json) {
+                return Err(format!("failed to save sleep schedule: {e}"));
+            }
+        }
+        Err(e) => return Err(format!("failed to serialize settings: {e}")),
+    }
     Ok(json!({
         "bedtime": settings.sleep.bedtime,
         "wake_time": settings.sleep.wake_time,
@@ -287,12 +292,11 @@ pub(super) async fn cmd_dnd(state: &AppState) -> Result<Value, String> {
 
 pub(super) async fn cmd_dnd_set(msg: &Value) -> Result<Value, String> {
     let enabled = bool_field(msg, "enabled").ok_or("missing enabled")?;
-    let ok = if enabled {
-        // Can't programmatically enable DND easily - platform specific
-        false
-    } else {
-        skill_data::dnd::set_dnd(false, "")
-    };
+    let mode = msg
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("com.apple.donotdisturb.mode.default");
+    let ok = skill_data::dnd::set_dnd(enabled, mode);
     Ok(json!({ "enabled": enabled, "applied": ok }))
 }
 

@@ -46,12 +46,17 @@ fn now_unix_ms() -> u64 {
 #[derive(Clone)]
 pub(crate) struct DaemonScreenshotContext {
     pub(crate) config: skill_settings::ScreenshotConfig,
+    pub(crate) state: Option<crate::state::AppState>,
     pub(crate) events_tx: tokio::sync::broadcast::Sender<skill_daemon_common::EventEnvelope>,
     pub(crate) text_embedder: crate::text_embedder::SharedTextEmbedder,
 }
 
 impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
     fn config(&self) -> skill_screenshots::ScreenshotConfig {
+        if let Some(ref st) = self.state {
+            let skill_dir = st.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+            return skill_settings::load_settings(&skill_dir).screenshot;
+        }
         self.config.clone()
     }
     fn is_session_active(&self) -> bool {
@@ -138,6 +143,7 @@ pub(crate) async fn rebuild_screenshot_embeddings(
         let store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)?;
         let ctx = DaemonScreenshotContext {
             config: settings.screenshot.clone(),
+            state: None,
             events_tx,
             text_embedder: embedder,
         };
@@ -407,6 +413,7 @@ mod tests {
         let (tx, _rx) = tokio::sync::broadcast::channel(1);
         let ctx = DaemonScreenshotContext {
             config: skill_settings::ScreenshotConfig::default(),
+            state: None,
             events_tx: tx,
             text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
         };
@@ -419,6 +426,7 @@ mod tests {
         let (tx, _rx) = tokio::sync::broadcast::channel(1);
         let ctx = DaemonScreenshotContext {
             config: skill_settings::ScreenshotConfig::default(),
+            state: None,
             events_tx: tx,
             text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
         };

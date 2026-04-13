@@ -4326,6 +4326,102 @@ async function testHealthProbes(port: number): Promise<void> {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 36. HISTORY & ANALYSIS — REST endpoints for metrics, timeseries, etc.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testHistoryAnalysis(port: number): Promise<void> {
+  heading("history & analysis (REST)");
+  info("Tests /v1/history/stats, daily-recording-mins, /v1/analysis/* endpoints.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // history stats
+  try {
+    const { data, res } = await hfetch("/v1/history/stats");
+    res.ok ? ok("GET /v1/history/stats returned 200") : fail(`status ${res.status}`);
+    typeof data?.total_sessions === "number"
+      ? ok(`total_sessions=${data.total_sessions}`)
+      : ok("history stats response received");
+  } catch (e: any) { fail(`history stats failed: ${e.message}`); }
+
+  // daily recording mins
+  try {
+    const { data, res } = await hfetch("/v1/history/daily-recording-mins", {
+      method: "POST",
+      body: JSON.stringify({ days: 7 }),
+    });
+    res.ok ? ok("POST daily-recording-mins returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data)
+      ? ok(`${data.length} day(s) returned`)
+      : ok("daily-recording-mins response received");
+  } catch (e: any) { fail(`daily-recording-mins failed: ${e.message}`); }
+
+  // embedding count (use arbitrary range)
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const { data, res } = await hfetch("/v1/analysis/embedding-count", {
+      method: "POST",
+      body: JSON.stringify({ startUtc: now - 86400, endUtc: now }),
+    });
+    res.ok ? ok("POST embedding-count returned 200") : fail(`status ${res.status}`);
+    typeof data?.count === "number"
+      ? ok(`embedding count=${data.count}`)
+      : ok("embedding-count response received");
+  } catch (e: any) { fail(`embedding-count failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 37. LABELS CRUD — REST endpoints for label management
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testLabelsCrud(port: number): Promise<void> {
+  heading("labels CRUD (REST)");
+  info("Tests GET /v1/labels, /v1/labels/index/stats.");
+
+  const base = `http://127.0.0.1:${port}`;
+  async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    const data = await res.json().catch(() => null);
+    return { data, res };
+  }
+
+  // list labels
+  try {
+    const { data, res } = await hfetch("/v1/labels");
+    res.ok ? ok("GET /v1/labels returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data) ? ok(`${data.length} label(s)`) : ok("labels response received");
+  } catch (e: any) { fail(`list labels failed: ${e.message}`); }
+
+  // label index stats
+  try {
+    const { data, res } = await hfetch("/v1/labels/index/stats");
+    res.ok ? ok("GET /v1/labels/index/stats returned 200") : fail(`status ${res.status}`);
+  } catch (e: any) { fail(`label index stats failed: ${e.message}`); }
+
+  // global search index stats
+  try {
+    const { data, res } = await hfetch("/v1/search/global-index/stats");
+    res.ok ? ok("GET /v1/search/global-index/stats returned 200") : fail(`status ${res.status}`);
+    typeof data?.ready === "boolean"
+      ? ok(`index ready=${data.ready}`)
+      : ok("global index stats response received");
+  } catch (e: any) { fail(`global index stats failed: ${e.message}`); }
+}
+
+
 async function testUnknownCommand(): Promise<void> {
   heading("unknown command");
   info("Request: { command: 'nonexistent_command_xyz' }");
@@ -4884,6 +4980,8 @@ async function main(): Promise<void> {
   await testLslDiscover(port);
   await testDaemonInfo(port);
   await testHealthProbes(port);
+  await testHistoryAnalysis(port);
+  await testLabelsCrud(port);
 
   // 4. Summary
   if (transport === "ws") { try { ws.close(); } catch {} }
