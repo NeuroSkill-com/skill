@@ -20,7 +20,7 @@ iroh        = "0.97"
 serde       = { workspace = true, features = ["derive"] }
 serde_json  = { workspace = true }
 anyhow      = { workspace = true }
-rand        = "0.9"
+rand        = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
