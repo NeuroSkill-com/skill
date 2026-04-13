@@ -120,7 +120,20 @@ pub(crate) struct FilenameRequest {
 #[derive(Debug, Deserialize)]
 pub(crate) struct ChatCompletionsRequest {
     pub(crate) messages: Vec<serde_json::Value>,
+    /// Custom params object (Skill UI sends this).
+    #[serde(default)]
     pub(crate) params: serde_json::Value,
+    /// OpenAI-compatible fields — forwarded as params when `params` is absent.
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+    #[serde(default)]
+    pub(crate) max_tokens: Option<u32>,
+    #[serde(default)]
+    pub(crate) temperature: Option<f64>,
+    #[serde(default)]
+    pub(crate) stream: Option<bool>,
+    #[serde(default)]
+    pub(crate) stop: Option<serde_json::Value>,
 }
 
 #[allow(dead_code)]
@@ -233,6 +246,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/exg-inference-device",
             get(get_exg_inference_device).post(set_exg_inference_device),
+        )
+        .route(
+            "/settings/iroh-logs",
+            get(settings_ui::get_iroh_logs).post(settings_ui::set_iroh_logs),
         )
         .route(
             "/settings/location-enabled",
@@ -418,6 +435,8 @@ fn llm_routes() -> Router<AppState> {
         .route("/llm/chat/new-session", post(chat_new_session))
         .route("/llm/chat/save-tool-calls", post(chat_save_tool_calls))
         .route("/llm/chat-completions", post(llm_chat_completions))
+        // OpenAI-compatible alias — SDKs send to /v1/chat/completions
+        .route("/chat/completions", post(llm_chat_completions))
         .route("/llm/embed-image", post(llm_embed_image))
         .route("/llm/ocr", post(llm_ocr))
         .route("/llm/abort-stream", post(llm_abort_stream))
@@ -696,7 +715,7 @@ async fn chat_save_tool_calls(state: State<AppState>, req: Json<ChatSaveToolCall
     settings_llm_chat::chat_save_tool_calls_impl(state, req).await
 }
 
-async fn llm_chat_completions(state: State<AppState>, req: Json<ChatCompletionsRequest>) -> Json<serde_json::Value> {
+async fn llm_chat_completions(state: State<AppState>, req: Json<ChatCompletionsRequest>) -> axum::response::Response {
     settings_llm_chat::llm_chat_completions_impl(state, req).await
 }
 

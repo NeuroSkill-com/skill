@@ -106,7 +106,20 @@ pub(crate) fn auth_decision(headers: &HeaderMap, request: &axum::extract::Reques
                 .map(|a| a.is_endpoint_allowed(&peer_id))
                 .unwrap_or(false);
             if is_registered {
-                return AuthDecision::Allowed;
+                // Enforce scope-based ACL for iroh peers.
+                let scope = state.iroh_auth.lock().ok().and_then(|a| a.scope_for_endpoint(&peer_id));
+                let acl = match scope.as_deref() {
+                    Some("admin") => crate::auth::TokenAcl::Admin,
+                    Some("data") => crate::auth::TokenAcl::Data,
+                    Some("stream") => crate::auth::TokenAcl::Stream,
+                    _ => crate::auth::TokenAcl::ReadOnly,
+                };
+                let method = request.method().as_str();
+                let path = request.uri().path();
+                if acl.allows(method, path) {
+                    return AuthDecision::Allowed;
+                }
+                return AuthDecision::Forbidden;
             }
             // Unregistered peer — only the registration endpoint is open.
             let path = request.uri().path();

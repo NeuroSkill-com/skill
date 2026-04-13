@@ -51,9 +51,21 @@ async fn main() -> anyhow::Result<()> {
         info!("received shutdown signal");
     };
 
+    // Parse CLI flags
+    let args: Vec<String> = std::env::args().collect();
+    let cli_iroh_logs = args.iter().any(|a| a == "--iroh-logs");
+
     let skill_dir = skill_data_dir();
     let state = AppState::new(load_or_create_token()?, skill_dir.clone());
-    init_tracing(state.app_log.clone());
+
+    // CLI flag overrides the persisted setting
+    if cli_iroh_logs {
+        state
+            .iroh_logs_enabled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    init_tracing(state.app_log.clone(), state.iroh_logs_enabled.clone());
 
     // Spawn the remote-access iroh tunnel.  It proxies authenticated iroh
     // peers to this daemon's HTTP port, enabling phone pairing and remote EEG.
@@ -230,12 +242,24 @@ async fn main() -> anyhow::Result<()> {
         .expose_headers(Any);
 
     let shutdown_state = state.clone();
-    let app = Router::new()
-        .route("/healthz", get(handlers::healthz))
-        .route("/readyz", get(handlers::readyz))
+    // Root-level routes that require authentication
+    let authed_root = Router::new()
         .route("/service/install", axum::routing::post(handlers::service_install))
         .route("/service/uninstall", axum::routing::post(handlers::service_uninstall))
         .route("/service/status", get(handlers::service_status))
+        // Aliases without /v1/ prefix — used by neuroloop's skill-llm.ts
+        .route("/llm/status", get(handlers::llm_status_alias))
+        .route("/v1/models", get(handlers::openai_models_alias))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware::auth_middleware,
+        ));
+
+    let app = Router::new()
+        // Public health check endpoints (no auth required)
+        .route("/healthz", get(handlers::healthz))
+        .route("/readyz", get(handlers::readyz))
+        .merge(authed_root)
         .nest("/v1", v1)
         .merge(root_cmd)
         .layer(cors)
@@ -268,17 +292,38 @@ async fn main() -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown)
         .await?;
 
-    // Cancel any in-flight EXG weights download.
-    shutdown_state
-        .exg_download_cancel
-        .store(true, std::sync::atomic::Ordering::Relaxed);
+    info!("shutting down...");
 
-    // Drop the active BLE session so btleplug stops firing delegate callbacks
-    // before the event channel is torn down (prevents spurious
-    // "Error sending notification event: send failed because receiver is gone").
+    // Broadcast shutdown event so connected clients can react gracefully.
+    let _ = shutdown_state.events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "DaemonShutdown".to_string(),
+        ts_unix_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        correlation_id: None,
+        payload: serde_json::json!({}),
+    });
+
+    // 1. Stop the LLM server first — ggml-metal holds GPU resources that
+    //    assert-fail if freed during process exit (atexit) instead of being
+    //    released explicitly.
+    #[cfg(feature = "llm")]
+    {
+        skill_llm::shutdown_cell(&shutdown_state.llm_state_cell);
+        info!("LLM server stopped");
+    }
+
+    // 2. Drop the active BLE session so btleplug stops firing delegate
+    //    callbacks *before* the broadcast channel is dropped.
     if let Ok(mut slot) = shutdown_state.session_handle.lock() {
         drop(slot.take());
     }
+
+    // 3. Cancel any in-flight EXG weights download.
+    shutdown_state
+        .exg_download_cancel
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
     // Clean up PID file
     let _ = std::fs::remove_file(&pid_path);
@@ -292,7 +337,10 @@ fn skill_data_dir() -> PathBuf {
         .unwrap_or_else(|_| skill_settings::default_skill_dir())
 }
 
-fn init_tracing(app_log: std::sync::Arc<std::sync::Mutex<(u64, std::collections::VecDeque<String>)>>) {
+fn init_tracing(
+    app_log: std::sync::Arc<std::sync::Mutex<(u64, std::collections::VecDeque<String>)>>,
+    iroh_logs_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     use std::io::Write;
     use tracing_subscriber::fmt::MakeWriter;
 
@@ -376,13 +424,53 @@ fn init_tracing(app_log: std::sync::Arc<std::sync::Mutex<(u64, std::collections:
         buf: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "skill_daemon=info,info".into()),
-        )
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::Layer;
+
+    // Targets that belong to the iroh networking stack.
+    const IROH_PREFIXES: &[&str] = &[
+        "iroh",
+        "quinn",
+        "endpoint",
+        "magicsock",
+        "derp",
+        "relay",
+        "netcheck",
+        "portmapper",
+        "discovery",
+    ];
+
+    let env_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "skill_daemon=info,info".into());
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer)
         .with_target(false)
-        .compact()
+        .compact();
+
+    let iroh_flag = iroh_logs_enabled;
+    let iroh_filter = tracing_subscriber::filter::filter_fn(move |metadata| {
+        // If iroh logs are enabled, allow everything through.
+        if iroh_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            return true;
+        }
+        // Suppress iroh-related targets at WARN and below (i.e. WARN, INFO, DEBUG, TRACE).
+        // ERROR level always passes through.
+        if metadata.level() > &tracing::Level::ERROR {
+            let target = metadata.target();
+            for prefix in IROH_PREFIXES {
+                if target.starts_with(prefix) {
+                    return false;
+                }
+            }
+        }
+        true
+    });
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer.with_filter(iroh_filter))
         .init();
 }
 

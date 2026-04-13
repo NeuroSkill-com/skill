@@ -749,6 +749,11 @@ pub struct UserSettings {
     /// Default: `false` — must be explicitly enabled by the user.
     #[serde(default)]
     pub location_enabled: bool,
+    /// Show verbose iroh networking logs (relay, QUIC, IPv6 warnings).
+    /// Default: `false` — these are very noisy and rarely useful.
+    #[serde(default)]
+    pub iroh_logs: bool,
+
     /// Auto-scan for LSL streams and connect paired ones automatically.
     #[serde(default)]
     pub lsl_auto_connect: bool,
@@ -963,6 +968,7 @@ impl Default for UserSettings {
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
             location_enabled: false,
+            iroh_logs: false,
             lsl_auto_connect: false,
             lsl_paired_streams: vec![],
             lsl_idle_timeout_secs: default_lsl_idle_timeout_secs(),

@@ -103,6 +103,8 @@ pub struct AppState {
     /// Shared text embedder (nomic-embed-text-v1.5) used for labels, hooks,
     /// screenshot OCR, and screenshot search.
     pub text_embedder: SharedTextEmbedder,
+    /// When `false` (default), iroh/Quinn/relay logs are suppressed.
+    pub iroh_logs_enabled: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -188,6 +190,7 @@ impl AppState {
             label_index: Arc::new(LabelIndexState::new()),
             reconnect: Arc::new(Mutex::new(crate::reconnect::ReconnectState::default())),
             text_embedder: SharedTextEmbedder::new(),
+            iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
         }
     }
 }

@@ -99,6 +99,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "Hook-Matcher, Trigger & Benachrichtigungen",
   "settings.logTools": "Tools",
   "settings.logToolsDesc": "Tool-Aufruf-Ausführung (Aufruf, Sicherheit, Timing)",
+  "settings.logIroh": "Iroh-Netzwerk",
+  "settings.logIrohDesc": "Relay, QUIC, IPv6-Warnungen (Daemon — sehr gesprächig)",
   "settings.wsConfig": "WebSocket-Server",
   "settings.wsHost": "Bind-Adresse",
   "settings.wsHostLoopback": "Nur Loopback (127.0.0.1)",

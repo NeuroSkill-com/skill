@@ -11,6 +11,9 @@ use crate::state::AppState;
 use skill_data;
 use skill_settings;
 
+/// Maximum number of commands allowed in a single batch request.
+const BATCH_MAX_COMMANDS: usize = 20;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/status", get(api_status))
@@ -19,6 +22,7 @@ pub fn router() -> Router<AppState> {
         // REST shortcuts used by test.ts and external integrations
         .route("/say", post(api_say))
         .route("/dnd", get(api_dnd_get).post(api_dnd_set))
+        .route("/batch", post(api_batch))
 }
 
 async fn api_status(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -136,6 +140,43 @@ async fn api_create_label(
         Ok(id) => Json(serde_json::json!({ "command": "label", "ok": true, "label_id": id })),
         Err(e) => Json(serde_json::json!({ "command": "label", "ok": false, "error": e.to_string() })),
     }
+}
+
+async fn api_batch(State(state): State<AppState>, Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let commands = match req.get("commands").and_then(|v| v.as_array()) {
+        Some(arr) => arr.clone(),
+        None => {
+            return Json(serde_json::json!({
+                "ok": false,
+                "error": "missing or invalid \"commands\" array"
+            }));
+        }
+    };
+
+    if commands.len() > BATCH_MAX_COMMANDS {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": format!("too many commands: {} (max {})", commands.len(), BATCH_MAX_COMMANDS)
+        }));
+    }
+
+    let futures: Vec<_> = commands
+        .into_iter()
+        .map(|cmd| {
+            let st = state.clone();
+            tokio::spawn(async move { crate::cmd_dispatch::dispatch(st, cmd).await })
+        })
+        .collect();
+
+    let mut results = Vec::with_capacity(futures.len());
+    for f in futures {
+        results.push(
+            f.await
+                .unwrap_or_else(|e| serde_json::json!({ "ok": false, "error": format!("task panic: {e}") })),
+        );
+    }
+
+    Json(serde_json::json!({ "ok": true, "results": results }))
 }
 
 #[cfg(test)]

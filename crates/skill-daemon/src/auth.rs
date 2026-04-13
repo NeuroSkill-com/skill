@@ -57,6 +57,7 @@ impl TokenAcl {
                     || path.starts_with("/search")
                     || path.starts_with("/analysis")
                     || path.starts_with("/llm/chat")
+                    || path.starts_with("/chat/completions")
                     || (is_read
                         && (path == "/version"
                             || path.starts_with("/status")

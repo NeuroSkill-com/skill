@@ -172,7 +172,7 @@ pub(super) fn run_actor(
     // ctx_size is always resolved by init.rs (auto-recommended or user-set).
     // The 4096 fallback here is only reached if the actor is called directly
     // without going through init (e.g. tests).
-    let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
+    let ctx_size = config.ctx_size.and_then(NonZeroU32::new);
     app.emit_event(
         "llm:status",
         json!({"status":"loading","detail":"creating_context","model":model_file_name}),
@@ -185,7 +185,7 @@ pub(super) fn run_actor(
         log_file,
         "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={}, \
          cache_k={:?}, cache_v={:?}, attn_rot_disabled={})",
-        ctx_size.map_or(0, std::num::NonZero::get),
+        ctx_size.map_or(0, NonZeroU32::get),
         config.n_gpu_layers,
         config.flash_attention,
         config.offload_kqv,

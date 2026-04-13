@@ -363,6 +363,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "Comparador de ganchos, activadores y notificaciones",
   "settings.logTools": "Herramientas",
   "settings.logToolsDesc": "Ejecución de llamadas a herramientas (invocación, seguridad, sincronización)",
+  "settings.logIroh": "Red Iroh",
+  "settings.logIrohDesc": "Retransmisión, QUIC, advertencias IPv6 (daemon — muy ruidoso)",
   "settings.wsConfig": "Servidor WebSocket",
   "settings.wsHost": "Host de enlace",
   "settings.wsHostLoopback": "Solo bucle invertido (127.0.0.1)",

@@ -46,11 +46,12 @@ fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 serialport = "4"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "registry"] }
 urlencoding = "2"
 hex = "0.4"
 async-trait = "0.1"

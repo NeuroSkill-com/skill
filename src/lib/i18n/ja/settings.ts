@@ -314,6 +314,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "フックマッチャー、トリガー＆通知",
   "settings.logTools": "ツール",
   "settings.logToolsDesc": "ツール呼び出し実行（呼び出し、安全性、タイミング）",
+  "settings.logIroh": "Irohネットワーク",
+  "settings.logIrohDesc": "リレー、QUIC、IPv6警告（デーモン — 非常に多い）",
   "settings.wsConfig": "WebSocketサーバー",
   "settings.wsHost": "バインドアドレス",
   "settings.wsHostLoopback": "ループバックのみ（127.0.0.1）",

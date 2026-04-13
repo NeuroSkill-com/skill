@@ -107,6 +107,15 @@ export function setLocationEnabled(enabled: boolean): Promise<Record<string, unk
   return daemonPost<Record<string, unknown>>("/v1/settings/location-enabled", { value: enabled });
 }
 
+export async function getIrohLogs(): Promise<boolean> {
+  const r = await daemonGet<{ value: boolean }>("/v1/settings/iroh-logs");
+  return r.value;
+}
+
+export async function setIrohLogs(enabled: boolean): Promise<void> {
+  await daemonPost("/v1/settings/iroh-logs", { value: enabled });
+}
+
 export async function getInferenceDevice(): Promise<"gpu" | "cpu"> {
   const r = await daemonGet<{ value: "gpu" | "cpu" }>("/v1/settings/inference-device");
   return r.value;

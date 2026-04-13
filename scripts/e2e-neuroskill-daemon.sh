@@ -22,34 +22,25 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PORT=18444
 BASE="http://127.0.0.1:$PORT"
-DAEMON_BIN="$ROOT_DIR/src-tauri/target/release/skill-daemon"
 if [[ "$(uname)" == "Darwin" ]]; then
   SKILL_APP_DIR="$HOME/Library/Application Support/skill/daemon"
 else
   SKILL_APP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/skill/daemon"
 fi
 TOKEN_PATH="$SKILL_APP_DIR/auth.token"
+DAEMON_SCRIPT="$ROOT_DIR/scripts/daemon.ts"
 
 DO_BUILD=1
 KEEP_DAEMON=0
-DAEMON_STARTED_BY_US=0
-# Default to a temp directory; use /tmp so it works on macOS, Linux, and Windows (Git Bash / MSYS)
-SKILL_DIR="${TMPDIR:-/tmp}/skill-e2e"
+DAEMON_PID=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-build)    DO_BUILD=0; shift ;;
     --keep-daemon) KEEP_DAEMON=1; shift ;;
-    --skill-dir)   SKILL_DIR="$2"; shift 2 ;;
-    *) echo "Unknown arg: $1" >&2; echo "Usage: $0 [--no-build] [--keep-daemon] [--skill-dir <path>]" >&2; exit 1 ;;
+    *) echo "Unknown arg: $1" >&2; echo "Usage: $0 [--no-build] [--keep-daemon]" >&2; exit 1 ;;
   esac
 done
-
-# Always start clean: wipe skill dir if it exists, then create it
-if [[ -d "$SKILL_DIR" ]]; then
-  rm -rf "$SKILL_DIR"
-fi
-mkdir -p "$SKILL_DIR"
 
 # ── Counters ──────────────────────────────────────────────────────────────────
 
@@ -100,25 +91,16 @@ nsk_out() {
 cleanup() {
   heading "Cleanup"
 
-  # Stop virtual source
   apost "/v1/lsl/virtual-source/stop" '{}' >/dev/null 2>&1 || true
   info "virtual source stopped"
 
-  # Cancel any session
   apost "/v1/control/cancel-session" '{}' >/dev/null 2>&1 || true
   info "session cancelled"
 
-  if [[ "$DAEMON_STARTED_BY_US" -eq 1 && "$KEEP_DAEMON" -eq 0 ]]; then
-    DAEMON_PID=$(cat "$SKILL_APP_DIR/daemon.pid" 2>/dev/null || echo 0)
+  if [[ "$DAEMON_PID" -gt 0 && "$KEEP_DAEMON" -eq 0 ]]; then
     kill "$DAEMON_PID" 2>/dev/null || true
-    # Suppress "Terminated" message from bash job control
     wait "$DAEMON_PID" 2>/dev/null || true
     info "daemon stopped"
-    # Clean up isolated skill dir
-    if [[ -n "$SKILL_DIR" && -d "$SKILL_DIR" ]]; then
-      rm -rf "$SKILL_DIR"
-      info "removed skill dir: $SKILL_DIR"
-    fi
   fi
 }
 
@@ -128,98 +110,73 @@ trap cleanup EXIT
 # 1. BUILD & START DAEMON
 # ══════════════════════════════════════════════════════════════════════════════
 
-heading "Daemon setup"
+heading "Daemon setup (npm run daemon)"
 
-if [[ "$DO_BUILD" -eq 1 ]]; then
-  info "building skill-daemon (release)…"
-  (cd "$ROOT_DIR" && cargo build --release -p skill-daemon 2>&1 | tail -2)
-  if security find-identity -v -p codesigning 2>/dev/null | grep -q "NeuroSkill Dev"; then
-    info "codesigning skill-daemon…"
-    codesign -s "NeuroSkill Dev" -f "$DAEMON_BIN" 2>/dev/null && info "signed OK" || info "codesign failed (non-fatal)"
-  fi
+DAEMON_ARGS=(--force --clean --virtual --port "$PORT")
+if [[ "$DO_BUILD" -eq 0 ]]; then
+  DAEMON_ARGS+=(--no-build)
 fi
 
-# Always use isolated skill data dir; enable embeddings for virtual EEG
-DAEMON_ENV=(env "SKILL_DATA_DIR=$SKILL_DIR" "SKILL_VIRTUAL_EMBED=1")
-info "using isolated skill dir: $SKILL_DIR"
+info "starting daemon: npx tsx scripts/daemon.ts ${DAEMON_ARGS[*]}"
+npx tsx "$DAEMON_SCRIPT" "${DAEMON_ARGS[@]}" &>/tmp/skill-daemon-e2e.log &
+DAEMON_PID=$!
 
-# Always start a fresh daemon — kill any existing one on our port first
-if curl -sf "$BASE/healthz" >/dev/null 2>&1; then
-  info "killing existing daemon on port $PORT"
-  # Find and kill the process listening on our port
-  lsof -ti :"$PORT" 2>/dev/null | xargs kill 2>/dev/null || true
-  sleep 1
-fi
-
-info "starting daemon…"
-"${DAEMON_ENV[@]}" "$DAEMON_BIN" &>/tmp/skill-daemon-e2e.log &
-DAEMON_STARTED_BY_US=1
-# Wait up to 10s for it to come up
-for i in $(seq 1 20); do
+# Wait up to 30s for daemon to be ready (build + virtual EEG setup takes time)
+for i in $(seq 1 60); do
   if curl -sf "$BASE/healthz" >/dev/null 2>&1; then break; fi
   sleep 0.5
 done
 if ! curl -sf "$BASE/healthz" >/dev/null 2>&1; then
   echo "FATAL: daemon did not start. Logs:" >&2
-  cat /tmp/skill-daemon-e2e.log >&2
+  tail -40 /tmp/skill-daemon-e2e.log >&2
   exit 1
 fi
-info "daemon started (PID $(cat "$SKILL_APP_DIR/daemon.pid" 2>/dev/null || echo '?'))"
+info "daemon ready (wrapper PID $DAEMON_PID)"
+
+# Wait for virtual source to be started by daemon.ts (it settles 6s after healthz)
+info "waiting for virtual EEG setup..."
+for i in $(seq 1 30); do
+  VCHECK=$(curl -sf -H "Authorization: Bearer $(cat "$TOKEN_PATH" 2>/dev/null | tr -d '[:space:]')" "$BASE/v1/lsl/virtual-source/running" 2>/dev/null || echo "")
+  if echo "$VCHECK" | grep -q '"running":true'; then break; fi
+  sleep 1
+done
 
 load_token
 
-# Enable screenshot capture so the screenshots-around test has data
-info "enabling screenshot capture (interval=3s, session_only=false)…"
-apost "/v1/settings/screenshot/config" \
-  '{"enabled":true,"interval_secs":3,"image_size":768,"quality":60,"session_only":false,"embed_backend":"fastembed","fastembed_model":"clip-vit-b-32","ocr_enabled":true,"ocr_engine":"apple-vision","use_gpu":true,"gif_enabled":false,"gif_frame_count":15,"gif_frame_delay_ms":100,"gif_motion_threshold":0.05,"gif_max_size_kb":2048}' >/dev/null 2>&1
-# Give the worker time to capture at least 2 screenshots
-info "waiting 10s for screenshot captures…"
-sleep 10
-SC_METRICS=$(aget "/v1/settings/screenshot/metrics")
-SC_COUNT=$(echo "$SC_METRICS" | grep -oE '"captures":\s*[0-9]+' | grep -oE '[0-9]+$' || echo "0")
-info "screenshots captured so far: $SC_COUNT"
-
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. VIRTUAL DEVICE SETUP
+# 2. VERIFY VIRTUAL DEVICE + RECORD TWO SESSIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
-heading "Virtual device"
+heading "Virtual device (started by npm run daemon --virtual)"
 
-# Stop any previous virtual source, then start fresh
-apost "/v1/lsl/virtual-source/stop" >/dev/null 2>&1 || true
-VIRT=$(curl -s -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${BASE}/v1/lsl/virtual-source/start" -d '{}')
-has "$VIRT" '"running":\s*true' && pass "virtual EEG source started" || fail "virtual source start: $VIRT"
+# The daemon script already started virtual source, paired, and began session A.
+# Verify it's running.
+VIRT=$(aget "/v1/lsl/virtual-source/running")
+has "$VIRT" '"running":\s*true' && pass "virtual EEG source running" || fail "virtual source not running: $VIRT"
 
-# Discover LSL streams
-sleep 1
 LSL=$(aget "/v1/lsl/discover")
 has "$LSL" "SkillVirtualEEG" && pass "virtual stream discovered" || fail "LSL discover: $LSL"
 
-# Pair the virtual stream
-SOURCE_ID=$(echo "$LSL" | grep -oE '"source_id"\s*:\s*"[^"]+"' | head -1 | grep -oE '"[^"]+"\s*$' | tr -d '"' | tr -d ' ')
-SOURCE_ID="${SOURCE_ID:-skill-virtual-eeg-001}"
-PAIR=$(apost "/v1/lsl/pair" "{\"sourceId\":\"$SOURCE_ID\",\"name\":\"SkillVirtualEEG\",\"streamType\":\"EEG\",\"channels\":32,\"sampleRate\":256}")
-has "$PAIR" '"ok":\s*true|"paired"' && pass "virtual stream paired" || info "pair response: $PAIR"
+# Enable screenshot capture for screenshots-around test
+info "enabling screenshot capture (interval=3s)..."
+apost "/v1/settings/screenshot/config" \
+  '{"enabled":true,"interval_secs":3,"image_size":768,"quality":60,"session_only":false,"embed_backend":"fastembed","fastembed_model":"clip-vit-b-32","ocr_enabled":true,"ocr_engine":"apple-vision","use_gpu":true,"gif_enabled":false,"gif_frame_count":15,"gif_frame_delay_ms":100,"gif_motion_threshold":0.05,"gif_max_size_kb":2048}' >/dev/null 2>&1
 
-# Start a session via LSL connect
-SESSION_START=$(curl -s -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${BASE}/v1/control/start-session" -d '{}')
-info "session start: $(echo "$SESSION_START" | head -c 120)"
-
-# Record session A for enough time to generate embeddings (5s epochs)
-info "recording session A for 15 seconds…"
+# Record session A (already started by daemon --virtual) for 15s
+info "recording session A for 15 seconds..."
 sleep 15
 
 # Stop session A, start session B for comparison
-info "stopping session A, starting session B…"
-curl -s -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${BASE}/v1/control/cancel-session" -d '{}' >/dev/null 2>&1
+info "stopping session A, starting session B..."
+apost "/v1/control/cancel-session" '{}' >/dev/null 2>&1
 sleep 2
 SESSION_B=$(curl -s -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${BASE}/v1/control/start-session" -d '{"target":"lsl:SkillVirtualEEG"}')
 info "session B: $(echo "$SESSION_B" | head -c 80)"
-info "recording session B for 15 seconds…"
+info "recording session B for 15 seconds..."
 sleep 15
 
 # Stop session B
-curl -s -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${BASE}/v1/control/cancel-session" -d '{}' >/dev/null 2>&1
+apost "/v1/control/cancel-session" '{}' >/dev/null 2>&1
 sleep 1
 pass "two sessions recorded"
 
@@ -1283,6 +1240,34 @@ heading "Control (REST)"
 
 OUT=$(aget "/v1/control/state")
 [[ -n "$OUT" ]] && pass "control state" || skip "control state (endpoint may not exist)"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 39. BATCH ENDPOINT
+# ══════════════════════════════════════════════════════════════════════════════
+
+heading "Batch endpoint"
+
+# Reload token in case daemon restart changed it
+load_token
+
+# Simple batch with 2 commands
+OUT=$(apost "/v1/batch" '{"commands":[{"command":"status"},{"command":"sessions"}]}')
+if has "$OUT" '"results"'; then
+  pass "batch (2 commands)"
+  # Verify both results are present
+  N_RESULTS=$(echo "$OUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('results',[])))" 2>/dev/null || echo "0")
+  [[ "$N_RESULTS" == "2" ]] && pass "batch returns 2 results" || fail "batch returned $N_RESULTS results (expected 2)"
+else
+  fail "batch: $(echo "$OUT" | head -c 200)"
+fi
+
+# Batch with empty commands
+OUT=$(apost "/v1/batch" '{"commands":[]}')
+has "$OUT" '"results"' && pass "batch (empty commands)" || fail "batch empty: $(echo "$OUT" | head -c 200)"
+
+# Batch via CLI
+OUT=$(nsk_out batch '[{"command":"status"},{"command":"sessions"}]')
+[[ -n "$OUT" ]] && pass "batch via CLI" || fail "batch via CLI: empty"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SUMMARY

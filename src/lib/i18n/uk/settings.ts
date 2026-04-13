@@ -99,6 +99,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "Матчер hooks, тригери та сповіщення",
   "settings.logTools": "Tools",
   "settings.logToolsDesc": "Виконання викликів інструментів (виклик, безпека, час)",
+  "settings.logIroh": "Мережа Iroh",
+  "settings.logIrohDesc": "Реле, QUIC, попередження IPv6 (демон — дуже шумно)",
   "settings.wsConfig": "WebSocket-сервер",
   "settings.wsHost": "Адреса прослуховування",
   "settings.wsHostLoopback": "Лише локальна петля (127.0.0.1)",

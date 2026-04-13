@@ -7,8 +7,8 @@
 //!
 //! ## Discovery locations (priority order)
 //!
-//! 1. **User-global**: `~/.skill/skills/`
-//! 2. **Project-local**: `<cwd>/.skill/skills/`
+//! 1. **Project-local**: `<cwd>/.skill/skills/`
+//! 2. **User-global**: `~/.skill/skills/`
 //! 3. **Bundled / dev**: `<app_root>/skills/` (git submodule)
 //! 4. **Explicit paths**: passed via `skill_paths`
 //!
@@ -111,7 +111,7 @@ impl Default for LoadSkillsOptions {
 /// Load skills from all configured locations.
 ///
 /// Returns skills and any validation diagnostics.  Skills are deduplicated by
-/// name; the first loaded wins (user > project > bundled > explicit paths).
+/// name; the first loaded wins (project > user > bundled > explicit paths).
 pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
     let mut skill_map: HashMap<String, Skill> = HashMap::new();
     let mut real_paths: HashSet<PathBuf> = HashSet::new();
@@ -144,18 +144,18 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
     };
 
     if options.include_defaults {
-        // 1. User-global: ~/.skill/skills/ AND ~/.skill/ root
+        // 1. Project-local (highest priority): <cwd>/.skill/skills/ AND <cwd>/.skill/ root
+        let project_base = options.cwd.join(skill_constants::SKILL_DIR);
+        let project_skills_dir = project_base.join(SKILLS_SUBDIR);
+        add(load_skills_from_dir(&project_skills_dir, "project", true));
+        add(load_skills_from_dir(&project_base, "project", true));
+
+        // 2. User-global: ~/.skill/skills/ AND ~/.skill/ root
         let user_skills_dir = options.skill_dir.join(SKILLS_SUBDIR);
         add(load_skills_from_dir(&user_skills_dir, "user", true));
         // Also scan skill_dir root itself so users can drop SKILL.md files
         // directly into ~/.skill/ (or a custom data dir) without the skills/ subdir.
         add(load_skills_from_dir(&options.skill_dir, "user", true));
-
-        // 2. Project-local: <cwd>/.skill/skills/ AND <cwd>/.skill/ root
-        let project_base = options.cwd.join(skill_constants::SKILL_DIR);
-        let project_skills_dir = project_base.join(SKILLS_SUBDIR);
-        add(load_skills_from_dir(&project_skills_dir, "project", true));
-        add(load_skills_from_dir(&project_base, "project", true));
 
         // 3. Bundled / dev: <app_root>/skills/
         if let Some(ref bundled) = options.bundled_dir {
@@ -209,7 +209,28 @@ pub fn load_skills(options: &LoadSkillsOptions) -> LoadSkillsResult {
         add(result);
     }
 
-    all_diags.extend(collision_diags);
+    // Collapse collision diagnostics into a single summary line when there are
+    // multiple collisions, to avoid flooding the log with one line per skill.
+    if collision_diags.len() > 1 {
+        let names: Vec<String> = collision_diags
+            .iter()
+            .map(|d| {
+                // Extract the skill name from the message: skill name "foo" collision: ...
+                d.message.split('"').nth(1).unwrap_or("?").to_string()
+            })
+            .collect();
+        all_diags.push(SkillDiagnostic {
+            level: "collision".into(),
+            message: format!(
+                "{} skill name collisions (winner keeps priority): {}",
+                names.len(),
+                names.join(", "),
+            ),
+            path: String::new(),
+        });
+    } else {
+        all_diags.extend(collision_diags);
+    }
     LoadSkillsResult {
         skills: skill_map.into_values().collect(),
         diagnostics: all_diags,

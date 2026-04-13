@@ -98,6 +98,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "התאמת hooks, טריגרים והתראות",
   "settings.logTools": "Tools",
   "settings.logToolsDesc": "ביצוע קריאות כלים (הפעלה, אבטחה, תזמון)",
+  "settings.logIroh": "רשת Iroh",
+  "settings.logIrohDesc": "ממסר, QUIC, אזהרות IPv6 (שרת — רועש מאוד)",
   "settings.wsConfig": "שרת WebSocket",
   "settings.wsHost": "כתובת האזנה",
   "settings.wsHostLoopback": "לולאה מקומית בלבד (127.0.0.1)",

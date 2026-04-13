@@ -2535,6 +2535,8 @@ export type TranslationKey =
   | "settings.logLlmDesc"
   | "settings.logTools"
   | "settings.logToolsDesc"
+  | "settings.logIroh"
+  | "settings.logIrohDesc"
   | "settings.logTts"
   | "settings.logTtsDesc"
   | "settings.logWebsocket"

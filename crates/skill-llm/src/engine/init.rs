@@ -124,17 +124,17 @@ pub fn init(
 
         if config.ctx_size.is_none() {
             let recommended = crate::catalog::recommend_ctx_size(entry);
+            config.ctx_size = Some(recommended);
             push_log(
                 &app,
                 &log_buf,
                 "info",
                 &format!(
-                    "auto context size: {recommended} tokens \
+                    "auto context size: {} tokens \
                           (params={:.1}B, max_ctx={}, quant={})",
-                    entry.params_b, entry.max_context_length, entry.quant
+                    recommended, entry.params_b, entry.max_context_length, entry.quant
                 ),
             );
-            config.ctx_size = Some(recommended);
         } else if entry.max_context_length > 0 {
             // Cap user-set context at the model's trained maximum.
             let user_ctx = config.ctx_size.unwrap_or(entry.max_context_length);

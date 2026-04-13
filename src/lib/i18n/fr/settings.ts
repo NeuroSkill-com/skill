@@ -100,6 +100,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "Matcher des hooks, déclenchements et notifications",
   "settings.logTools": "Tools",
   "settings.logToolsDesc": "Exécution des appels d'outils (invocation, sécurité, timing)",
+  "settings.logIroh": "Réseau Iroh",
+  "settings.logIrohDesc": "Relais, QUIC, avertissements IPv6 (démon — très verbeux)",
   "settings.wsConfig": "Serveur WebSocket",
   "settings.wsHost": "Adresse d'écoute",
   "settings.wsHostLoopback": "Loopback uniquement (127.0.0.1)",

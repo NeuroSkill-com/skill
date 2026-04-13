@@ -25,6 +25,7 @@ import {
   getLastInputActivity,
   getLocationEnabled,
   getMainWindowAutoFit,
+  getIrohLogs,
   getStorageFormat,
   getWsConfig,
   setActiveWindowTracking,
@@ -32,6 +33,7 @@ import {
   setHfEndpoint,
   setInferenceDevice,
   setInputActivityTracking,
+  setIrohLogs,
   setLocationEnabled,
   setMainWindowAutoFit,
   setStorageFormat,
@@ -96,6 +98,7 @@ let logConfig = $state<LogConfig>({
   hooks: true,
   tools: false,
 });
+let irohLogs = $state(false);
 let dataDirCurrent = $state("");
 let dataDirDefault = $state("");
 let dataDirInput = $state("");
@@ -170,6 +173,7 @@ onMount(async () => {
   gpuStats = await getGpuStats().catch(() => null);
   storageFormat = (await getStorageFormat().catch(() => "csv")) as "csv" | "parquet" | "both";
   logConfig = await invoke<LogConfig>("get_log_config");
+  irohLogs = await getIrohLogs().catch(() => false);
   {
     const [cur, def] = await invoke<[string, string]>("get_data_dir");
     dataDirCurrent = cur;
@@ -694,6 +698,7 @@ onDestroy(() => {
           ["hooks",     t("settings.logHooks"),        t("settings.logHooksDesc")],
           ["tools",     t("settings.logTools"),        t("settings.logToolsDesc")],
         ] as [keyof LogConfig, string, string][]) as [key, label, desc]}
+
           <button
             role="switch" aria-checked={logConfig[key]}
             onclick={() => toggleLog(key)}
@@ -712,6 +717,27 @@ onDestroy(() => {
           </button>
         {/each}
       </div>
+    </CardContent>
+  </Card>
+
+  <!-- Daemon-side log toggles -->
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden mt-2">
+    <CardContent class="py-0 px-0">
+      <button
+        role="switch" aria-checked={irohLogs}
+        onclick={async () => { irohLogs = !irohLogs; await setIrohLogs(irohLogs); }}
+        class="flex items-center gap-3 px-4 py-3 w-full text-left transition-colors
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {irohLogs ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}">
+          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                      {irohLogs ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">{t("settings.logIroh")}</span>
+          <span class="text-[0.58rem] text-muted-foreground leading-tight truncate">{t("settings.logIrohDesc")}</span>
+        </div>
+      </button>
     </CardContent>
   </Card>
 </section>

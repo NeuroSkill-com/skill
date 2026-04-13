@@ -35,6 +35,25 @@ pub(crate) async fn readyz() -> Json<HealthResponse> {
     Json(HealthResponse { ok: true })
 }
 
+/// Alias for `/v1/llm/server/status` — neuroloop's `skill-llm.ts` probes `/llm/status`.
+pub(crate) async fn llm_status_alias(state: axum::extract::State<crate::state::AppState>) -> Json<serde_json::Value> {
+    crate::routes::settings_llm_runtime::llm_server_status_impl(state).await
+}
+
+/// OpenAI-compatible `/v1/models` — returns the active model or empty list.
+pub(crate) async fn openai_models_alias(
+    state: axum::extract::State<crate::state::AppState>,
+) -> Json<serde_json::Value> {
+    let status = crate::routes::settings_llm_runtime::llm_server_status_impl(axum::extract::State(state.0.clone()))
+        .await
+        .0;
+    let mut data = vec![];
+    if let Some(model) = status.get("model_name").and_then(|v| v.as_str()) {
+        data.push(serde_json::json!({ "id": model, "object": "model", "owned_by": "skill" }));
+    }
+    Json(serde_json::json!({ "object": "list", "data": data }))
+}
+
 pub(crate) async fn service_install() -> Json<serde_json::Value> {
     let bin = std::env::current_exe().unwrap_or_default();
     let installer = crate::service_installer::ServiceInstaller::new(bin);

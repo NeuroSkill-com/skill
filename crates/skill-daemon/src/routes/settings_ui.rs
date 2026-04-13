@@ -37,6 +37,26 @@ pub(crate) struct DndTestRequest {
     pub(crate) enabled: bool,
 }
 
+// --- Iroh logs ---
+
+pub(crate) async fn get_iroh_logs(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let enabled = state.iroh_logs_enabled.load(std::sync::atomic::Ordering::Relaxed);
+    Json(serde_json::json!({"value": enabled}))
+}
+
+pub(crate) async fn set_iroh_logs(
+    State(state): State<AppState>,
+    Json(req): Json<BoolValueRequest>,
+) -> Json<serde_json::Value> {
+    state
+        .iroh_logs_enabled
+        .store(req.value, std::sync::atomic::Ordering::Relaxed);
+    let mut settings = load_user_settings(&state);
+    settings.iroh_logs = req.value;
+    save_user_settings(&state, &settings);
+    Json(serde_json::json!({"ok": true}))
+}
+
 // --- TTS / Sleep / WS ---
 
 pub(crate) async fn get_neutts_config(State(state): State<AppState>) -> Json<skill_settings::NeuttsConfig> {

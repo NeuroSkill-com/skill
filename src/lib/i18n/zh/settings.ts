@@ -333,6 +333,8 @@ const settings: Record<string, string> = {
   "settings.logHooksDesc": "钩子匹配器、触发器和通知",
   "settings.logTools": "工具",
   "settings.logToolsDesc": "工具调用执行（调用、安全、计时）",
+  "settings.logIroh": "Iroh 网络",
+  "settings.logIrohDesc": "中继、QUIC、IPv6 警告（守护进程 — 非常嘈杂）",
   "settings.wsConfig": "WebSocket 服务器",
   "settings.wsHost": "绑定地址",
   "settings.wsHostLoopback": "仅本地回环 (127.0.0.1)",

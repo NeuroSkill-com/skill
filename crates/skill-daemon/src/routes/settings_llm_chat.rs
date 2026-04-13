@@ -3,6 +3,7 @@
 
 use axum::{extract::State, Json};
 use base64::Engine as _;
+use tokio_stream::StreamExt as _;
 
 use crate::{
     routes::settings::{
@@ -216,28 +217,194 @@ pub(crate) async fn chat_save_tool_calls_impl(
 pub(crate) async fn llm_chat_completions_impl(
     State(state): State<AppState>,
     Json(req): Json<ChatCompletionsRequest>,
-) -> Json<serde_json::Value> {
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    let want_stream = req.stream.unwrap_or(false);
+
     #[cfg(feature = "llm")]
     {
         let srv_opt = state.llm_state_cell.lock().ok().and_then(|g| g.clone());
         let Some(srv) = srv_opt else {
-            return Json(serde_json::json!({"error":"LLM server not running"}));
+            return Json(serde_json::json!({"error":"LLM server not running"})).into_response();
         };
 
-        let params: skill_llm::GenParams = serde_json::from_value(req.params).unwrap_or_default();
+        // Build params: prefer explicit `params` object, fall back to OpenAI top-level fields.
+        let params_val = if req.params.is_null() || req.params.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            let mut p = serde_json::Map::new();
+            if let Some(t) = req.temperature {
+                p.insert("temperature".into(), t.into());
+            }
+            if let Some(m) = req.max_tokens {
+                p.insert("n_predict".into(), m.into());
+            }
+            if let Some(s) = req.stop {
+                p.insert("stop".into(), s);
+            }
+            serde_json::Value::Object(p)
+        } else {
+            req.params
+        };
+        let params: skill_llm::GenParams = serde_json::from_value(params_val).unwrap_or_default();
+
+        let chat_id = format!(
+            "chatcmpl-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
+
+        if want_stream {
+            // SSE streaming response
+            let (tx, rx) = tokio::sync::mpsc::channel::<String>(64);
+            let chat_id2 = chat_id.clone();
+
+            tokio::spawn(async move {
+                // Track <think>...</think> tags to route to reasoning_content vs content
+                let mut in_think = false;
+                let mut buf = String::new();
+
+                let result = skill_llm::run_chat_with_builtin_tools(
+                    &srv, req.messages, params, Vec::new(),
+                    |delta| {
+                        buf.push_str(delta);
+
+                        // Process buffered text for think tag boundaries
+                        loop {
+                            if in_think {
+                                if let Some(end) = buf.find("</think>") {
+                                    let thinking = &buf[..end];
+                                    if !thinking.is_empty() {
+                                        let chunk = serde_json::json!({
+                                            "id": &chat_id2,
+                                            "object": "chat.completion.chunk",
+                                            "choices": [{"index": 0, "delta": {"reasoning_content": thinking}, "finish_reason": serde_json::Value::Null}],
+                                        });
+                                        let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                                    }
+                                    buf = buf[end + "</think>".len()..].to_string();
+                                    in_think = false;
+                                    continue;
+                                }
+                                // Still inside think — might have partial </think> at end
+                                // Flush everything except last 8 chars (len of "</think>")
+                                let safe = buf.len().saturating_sub(8);
+                                if safe > 0 {
+                                    let chunk = serde_json::json!({
+                                        "id": &chat_id2,
+                                        "object": "chat.completion.chunk",
+                                        "choices": [{"index": 0, "delta": {"reasoning_content": &buf[..safe]}, "finish_reason": serde_json::Value::Null}],
+                                    });
+                                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                                    buf = buf[safe..].to_string();
+                                }
+                                break;
+                            } else {
+                                if let Some(start) = buf.find("<think>") {
+                                    let before = &buf[..start];
+                                    if !before.is_empty() {
+                                        let chunk = serde_json::json!({
+                                            "id": &chat_id2,
+                                            "object": "chat.completion.chunk",
+                                            "choices": [{"index": 0, "delta": {"content": before}, "finish_reason": serde_json::Value::Null}],
+                                        });
+                                        let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                                    }
+                                    buf = buf[start + "<think>".len()..].to_string();
+                                    in_think = true;
+                                    continue;
+                                }
+                                // No <think> tag — might have partial at end
+                                let safe = buf.len().saturating_sub(7);
+                                if safe > 0 {
+                                    let chunk = serde_json::json!({
+                                        "id": &chat_id2,
+                                        "object": "chat.completion.chunk",
+                                        "choices": [{"index": 0, "delta": {"content": &buf[..safe]}, "finish_reason": serde_json::Value::Null}],
+                                    });
+                                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                                    buf = buf[safe..].to_string();
+                                }
+                                break;
+                            }
+                        }
+                    },
+                    |_evt| {},
+                ).await;
+
+                // Flush remaining buffer
+                if !buf.is_empty() {
+                    let field = if in_think { "reasoning_content" } else { "content" };
+                    let chunk = serde_json::json!({
+                        "id": &chat_id2,
+                        "object": "chat.completion.chunk",
+                        "choices": [{"index": 0, "delta": {field: &buf}, "finish_reason": serde_json::Value::Null}],
+                    });
+                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                }
+
+                // Send final chunk with finish_reason and usage
+                match result {
+                    Ok((_text, finish_reason, prompt_tokens, completion_tokens, _n_ctx)) => {
+                        let final_chunk = serde_json::json!({
+                            "id": &chat_id2,
+                            "object": "chat.completion.chunk",
+                            "choices": [{
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": finish_reason,
+                            }],
+                            "usage": {
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
+                            },
+                        });
+                        let _ = tx.send(format!("data: {}\n\n", final_chunk)).await;
+                    }
+                    Err(e) => {
+                        let err_chunk = serde_json::json!({
+                            "error": { "message": e.to_string() },
+                        });
+                        let _ = tx.send(format!("data: {}\n\n", err_chunk)).await;
+                    }
+                }
+                let _ = tx.send("data: [DONE]\n\n".to_string()).await;
+            });
+
+            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            let body = axum::body::Body::from_stream(stream.map(|s| Ok::<_, std::convert::Infallible>(s)));
+            return axum::response::Response::builder()
+                .header("Content-Type", "text/event-stream")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "keep-alive")
+                .body(body)
+                .unwrap_or_else(|_| Json(serde_json::json!({"error":"stream setup failed"})).into_response());
+        }
+
+        // Non-streaming response
         let result =
             skill_llm::run_chat_with_builtin_tools(&srv, req.messages, params, Vec::new(), |_delta| {}, |_evt| {})
                 .await;
 
         return match result {
-            Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => Json(serde_json::json!({
-                "content": text,
-                "finish_reason": finish_reason,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "n_ctx": n_ctx
-            })),
-            Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+            Ok((text, finish_reason, prompt_tokens, completion_tokens, _n_ctx)) => Json(serde_json::json!({
+                "id": chat_id,
+                "object": "chat.completion",
+                "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": text },
+                    "finish_reason": finish_reason,
+                }],
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                }
+            }))
+            .into_response(),
+            Err(e) => Json(serde_json::json!({"error": e.to_string()})).into_response(),
         };
     }
 
@@ -245,6 +412,7 @@ pub(crate) async fn llm_chat_completions_impl(
     {
         let _ = req;
         let _ = state;
+        let _ = want_stream;
         Json(serde_json::json!({
             "content": "Daemon LLM unavailable (compiled without llm feature)",
             "finish_reason": "stop",
@@ -252,6 +420,7 @@ pub(crate) async fn llm_chat_completions_impl(
             "completion_tokens": 0,
             "n_ctx": 0
         }))
+        .into_response()
     }
 }
 
