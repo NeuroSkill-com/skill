@@ -184,6 +184,14 @@ const search: Record<string, string> = {
   "labels.search.noIndex": "嵌入模型未初始化——请打开设置 → 嵌入并点击重新嵌入以先构建索引",
   "labels.search.noResults": `"{q}"无语义匹配结果`,
   "labels.search.simTitle": "语义相似度",
+  "labels.reindex.title": "嵌入模型已更改",
+  "labels.reindex.desc":
+    "{total}个标签中有{stale}个使用了不同的模型嵌入。在重新嵌入之前，语义搜索可能会返回较差的结果。",
+  "labels.reindex.models": "使用的模型：",
+  "labels.reindex.btn": "重新嵌入所有标签",
+  "labels.reindex.running": "正在重新嵌入…",
+  "labels.reindex.done": "重新嵌入完成 — 已更新{updated}个标签。",
+  "labels.reindex.error": "重新嵌入失败：{error}",
 
   "search.modeImages": "图片",
   "search.imageQueryLabel": "搜索截图文本",

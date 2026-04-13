@@ -74,6 +74,8 @@ pub fn router() -> Router<AppState> {
         .route("/labels/search-by-eeg", post(search_labels_by_eeg))
         .route("/labels/index/rebuild", post(rebuild_label_index))
         .route("/labels/index/stats", get(label_index_stats))
+        .route("/labels/embedding-status", get(label_embedding_status))
+        .route("/labels/reembed", post(reembed_all_labels))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,6 +91,9 @@ fn now_unix() -> f64 {
 fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
     use anyhow::Context as _;
     let db_path = skill_dir.join(LABELS_FILE);
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent).context("create labels DB directory")?;
+    }
     let conn = rusqlite::Connection::open(&db_path).context("open labels DB")?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS labels (
@@ -106,6 +111,18 @@ fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<rusqlite::Conne
         );",
     )
     .context("create labels table")?;
+    // Migrate older databases that lack newer columns.
+    for col in &[
+        ("wall_start", "INTEGER NOT NULL DEFAULT 0"),
+        ("wall_end", "INTEGER NOT NULL DEFAULT 0"),
+        ("label_start", "INTEGER NOT NULL DEFAULT 0"),
+        ("label_end", "INTEGER NOT NULL DEFAULT 0"),
+        ("text_embedding", "BLOB"),
+        ("context_embedding", "BLOB"),
+        ("embedding_model", "TEXT"),
+    ] {
+        let _ = conn.execute_batch(&format!("ALTER TABLE labels ADD COLUMN {} {};", col.0, col.1));
+    }
     Ok(conn)
 }
 
@@ -274,8 +291,9 @@ async fn create_label(
 
         conn.execute(
             "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
+                                 label_start, label_end,
                                  created_at, text_embedding, context_embedding, embedding_model)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 req.text,
                 context,
@@ -292,18 +310,28 @@ async fn create_label(
         .map_err(|e| anyhow::anyhow!("{e}"))?;
         let id = conn.last_insert_rowid();
 
-        // Insert into daemon-owned HNSW indices
+        // Insert into daemon-owned HNSW indices.
+        // Catch panics from dimension mismatches (e.g. model change 384→768)
+        // so the label is still created in SQLite even if indexing fails.
         let text_emb_ref = text_emb.as_deref().unwrap_or(&[]);
         let ctx_emb_ref = ctx_emb.as_deref().unwrap_or(&[]);
-        skill_label_index::insert_label(
-            &skill_dir,
-            id,
-            text_emb_ref,
-            ctx_emb_ref,
-            eeg_start,
-            eeg_end,
-            &label_index,
-        );
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            skill_label_index::insert_label(
+                &skill_dir,
+                id,
+                text_emb_ref,
+                ctx_emb_ref,
+                eeg_start,
+                eeg_end,
+                &label_index,
+            );
+        })) {
+            eprintln!("[labels] HNSW insert failed (dimension mismatch?): {e:?}");
+            // Rebuild index to pick up the new dimension
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                skill_label_index::rebuild(&skill_dir, &label_index);
+            }));
+        }
 
         Ok::<_, anyhow::Error>(LabelEntry {
             id,
@@ -381,8 +409,10 @@ async fn update_label(
             )
         })?;
 
-        // Rebuild HNSW indices to pick up the change
-        skill_label_index::rebuild(&skill_dir, &label_index);
+        // Rebuild HNSW indices to pick up the change (catch dimension panics)
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            skill_label_index::rebuild(&skill_dir, &label_index);
+        }));
 
         Ok(Json(serde_json::json!({ "ok": true })))
     })
@@ -542,4 +572,116 @@ async fn label_index_stats(State(state): State<AppState>) -> Json<serde_json::Va
         "context_nodes": context_len,
         "eeg_nodes": eeg_len,
     }))
+}
+
+/// Report how many labels use a different embedding model than the current one.
+async fn label_embedding_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let Ok(conn) = open_labels_db(&skill_dir) else {
+            return serde_json::json!({
+                "current_model": EMBED_MODEL_NAME,
+                "total": 0,
+                "stale": 0,
+                "models": {},
+            });
+        };
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM labels", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        let stale: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM labels WHERE embedding_model IS NULL OR embedding_model != ?1",
+                rusqlite::params![EMBED_MODEL_NAME],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        // Collect distinct models and their counts.
+        let models: serde_json::Value = conn
+            .prepare("SELECT COALESCE(embedding_model, '(none)'), COUNT(*) FROM labels GROUP BY embedding_model")
+            .and_then(|mut stmt| {
+                let rows: Vec<(String, i64)> = stmt
+                    .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))
+                    .map(|rows| rows.filter_map(Result::ok).collect())
+                    .unwrap_or_default();
+                Ok(rows)
+            })
+            .map(|rows| {
+                let mut m = serde_json::Map::new();
+                for (model, count) in rows {
+                    m.insert(model, serde_json::json!(count));
+                }
+                serde_json::Value::Object(m)
+            })
+            .unwrap_or_default();
+
+        serde_json::json!({
+            "current_model": EMBED_MODEL_NAME,
+            "total": total,
+            "stale": stale,
+            "models": models,
+        })
+    })
+    .await
+    .unwrap_or_else(|_| serde_json::json!({ "current_model": EMBED_MODEL_NAME, "total": 0, "stale": 0 }));
+
+    Json(result)
+}
+
+/// Re-embed all labels with the current embedding model and rebuild indices.
+async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let label_index = state.label_index.clone();
+    let embedder = state.text_embedder.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let conn = open_labels_db(&skill_dir)?;
+
+        // Read all label ids + text + context.
+        let mut stmt = conn.prepare("SELECT id, text, COALESCE(context, '') FROM labels ORDER BY id")?;
+        let rows: Vec<(i64, String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+
+        let total = rows.len();
+        let mut updated = 0usize;
+
+        for (id, text, context) in &rows {
+            let text_emb = embedder.embed(text);
+            let ctx_emb = embedder.embed(context);
+            let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
+            let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
+
+            conn.execute(
+                "UPDATE labels SET text_embedding = ?1, context_embedding = ?2, embedding_model = ?3 WHERE id = ?4",
+                rusqlite::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
+            )?;
+            updated += 1;
+        }
+
+        // Rebuild HNSW indices with new embeddings.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            skill_label_index::rebuild(&skill_dir, &label_index);
+        }));
+
+        Ok::<_, anyhow::Error>(serde_json::json!({
+            "ok": true,
+            "total": total,
+            "updated": updated,
+            "model": EMBED_MODEL_NAME,
+        }))
+    })
+    .await
+    .map_err(|e| format!("{e}"))
+    .and_then(|r| r.map_err(|e| format!("{e}")));
+
+    match result {
+        Ok(v) => Json(v),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
 }

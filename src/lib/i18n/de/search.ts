@@ -164,6 +164,14 @@ const search: Record<string, string> = {
     "Embedding-Modell nicht initialisiert — Einstellungen → Embeddings öffnen und Re-embed ausführen",
   "labels.search.noResults": 'Keine semantischen Treffer für „{q}"',
   "labels.search.simTitle": "Semantische Ähnlichkeit",
+  "labels.reindex.title": "Embedding-Modell geändert",
+  "labels.reindex.desc":
+    "{stale} von {total} Labels wurden mit einem anderen Modell eingebettet. Die semantische Suche kann ungenaue Ergebnisse liefern, bis sie neu eingebettet werden.",
+  "labels.reindex.models": "Verwendete Modelle:",
+  "labels.reindex.btn": "Alle Labels neu einbetten",
+  "labels.reindex.running": "Einbettung läuft…",
+  "labels.reindex.done": "Neu-Einbettung abgeschlossen — {updated} Labels aktualisiert.",
+  "labels.reindex.error": "Neu-Einbettung fehlgeschlagen: {error}",
 
   "search.interactiveQueryLabel": "Suche",
   "search.interactiveQueryPlaceholder": "Konzept, Aktivität oder mentalen Zustand eingeben…",

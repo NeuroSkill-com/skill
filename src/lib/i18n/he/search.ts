@@ -156,6 +156,14 @@ const search: Record<string, string> = {
   "labels.search.noIndex": "מודל ההטמעה לא אותחל — פתח הגדרות → הטמעות ולחץ על Re-embed",
   "labels.search.noResults": 'לא נמצאו תוצאות סמנטיות עבור „{q}"',
   "labels.search.simTitle": "דמיון סמנטי",
+  "labels.reindex.title": "מודל ההטמעה השתנה",
+  "labels.reindex.desc":
+    "{stale} מתוך {total} תוויות הוטמעו עם מודל אחר. חיפוש סמנטי עלול להחזיר תוצאות גרועות עד שיוטמעו מחדש.",
+  "labels.reindex.models": "מודלים בשימוש:",
+  "labels.reindex.btn": "הטמע מחדש את כל התוויות",
+  "labels.reindex.running": "מטמיע מחדש…",
+  "labels.reindex.done": "ההטמעה מחדש הושלמה — {updated} תוויות עודכנו.",
+  "labels.reindex.error": "ההטמעה מחדש נכשלה: {error}",
 
   "search.interactiveQueryLabel": "חיפוש",
   "search.interactiveQueryPlaceholder": "הזן מושג, פעילות או מצב מנטלי…",

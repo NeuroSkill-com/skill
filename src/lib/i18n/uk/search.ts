@@ -159,6 +159,14 @@ const search: Record<string, string> = {
     "Модель ембедингів не ініціалізована — відкрийте Налаштування → Ембединги та натисніть Re-embed",
   "labels.search.noResults": "Семантичних результатів для «{q}» не знайдено",
   "labels.search.simTitle": "Семантична схожість",
+  "labels.reindex.title": "Модель ембедингів змінилася",
+  "labels.reindex.desc":
+    "{stale} з {total} міток були вбудовані іншою моделлю. Семантичний пошук може давати погані результати, поки вони не будуть повторно вбудовані.",
+  "labels.reindex.models": "Моделі у використанні:",
+  "labels.reindex.btn": "Перевбудувати всі мітки",
+  "labels.reindex.running": "Перевбудовування…",
+  "labels.reindex.done": "Перевбудовування завершено — {updated} міток оновлено.",
+  "labels.reindex.error": "Перевбудовування не вдалося: {error}",
 
   "search.interactiveQueryLabel": "Пошук",
   "search.interactiveQueryPlaceholder": "Введіть концепцію, активність або ментальний стан…",

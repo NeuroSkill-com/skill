@@ -50,6 +50,44 @@ let editContext = $state("");
 let savingId = $state<number | null>(null);
 let deletingId = $state<number | null>(null);
 let confirmDel = $state<number | null>(null);
+let errorMsg = $state("");
+
+// ── Embedding status ──────────────────────────────────────────────────────
+interface EmbeddingStatus {
+  current_model: string;
+  total: number;
+  stale: number;
+  models: Record<string, number>;
+}
+let embeddingStatus = $state<EmbeddingStatus | null>(null);
+let reembedding = $state(false);
+let reembedDone = $state("");
+let reembedDismissed = $state(false);
+
+async function loadEmbeddingStatus() {
+  try {
+    embeddingStatus = await daemonInvoke<EmbeddingStatus>("get_label_embedding_status");
+  } catch (_) {}
+}
+
+async function doReembed() {
+  reembedding = true;
+  reembedDone = "";
+  try {
+    const result = await daemonInvoke<{ ok: boolean; updated?: number; error?: string }>("reembed_labels");
+    if (result.ok) {
+      reembedDone = t("labels.reindex.done", { updated: String(result.updated ?? 0) });
+      await loadEmbeddingStatus();
+      await loadLabels();
+    } else {
+      reembedDone = t("labels.reindex.error", { error: result.error ?? "unknown" });
+    }
+  } catch (e) {
+    reembedDone = t("labels.reindex.error", { error: String(e) });
+  } finally {
+    reembedding = false;
+  }
+}
 
 // ── Search mode ────────────────────────────────────────────────────────────
 
@@ -193,6 +231,7 @@ async function saveEdit(labelId: number) {
     if (idx !== -1) labels[idx] = { ...labels[idx], text: editText.trim(), context: editContext.trim() };
     cancelEdit();
   } catch (e) {
+    errorMsg = String(e);
   } finally {
     savingId = null;
   }
@@ -213,6 +252,7 @@ async function doDelete(labelId: number) {
     await daemonInvoke("delete_label", { labelId });
     labels = labels.filter((l) => l.id !== labelId);
   } catch (e) {
+    errorMsg = String(e);
   } finally {
     deletingId = null;
     confirmDel = null;
@@ -229,6 +269,7 @@ async function viewSession(_label: LabelRow) {
 
 onMount(() => {
   loadLabels();
+  loadEmbeddingStatus();
 });
 
 useWindowTitle("window.title.labels");
@@ -347,6 +388,60 @@ useWindowTitle("window.title.labels");
       {/if}
     {/if}
   </div>
+
+  <!-- ── Reindex banner ─────────────────────────────────────────────────────── -->
+  {#if embeddingStatus && embeddingStatus.stale > 0 && !reembedDismissed}
+    <div class="mx-4 mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 px-4 py-3 flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0 text-amber-500">
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span class="text-[0.72rem] font-semibold text-amber-600 dark:text-amber-400">
+          {t("labels.reindex.title")}
+        </span>
+      </div>
+      <p class="text-[0.62rem] text-amber-600/80 dark:text-amber-400/80 leading-relaxed">
+        {t("labels.reindex.desc", {
+          stale: String(embeddingStatus.stale),
+          total: String(embeddingStatus.total),
+        })}
+      </p>
+      {#if Object.keys(embeddingStatus.models).length > 1}
+        <div class="flex flex-wrap gap-1.5 items-center">
+          <span class="text-[0.58rem] text-amber-600/60 dark:text-amber-400/60 font-medium">
+            {t("labels.reindex.models")}
+          </span>
+          {#each Object.entries(embeddingStatus.models) as [model, count]}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.55rem] font-semibold
+                         {model === embeddingStatus.current_model
+                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
+                           : 'bg-muted text-muted-foreground/70 border border-border dark:border-white/[0.08]'}">
+              {model} ({count})
+            </span>
+          {/each}
+        </div>
+      {/if}
+      <div class="flex gap-2 mt-1">
+        <Button size="sm" onclick={doReembed} disabled={reembedding} class="text-[0.62rem] h-7 px-3">
+          {reembedding ? t("labels.reindex.running") : t("labels.reindex.btn")}
+        </Button>
+        <Button size="sm" variant="ghost" onclick={() => { reembedDismissed = true; }} class="text-[0.62rem] h-7 px-3 text-muted-foreground">
+          {t("common.dismiss")}
+        </Button>
+      </div>
+    </div>
+  {/if}
+
+  {#if reembedDone}
+    <p class="text-[0.68rem] px-4 py-1.5 {reembedDone.includes('failed') ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">{reembedDone}</p>
+  {/if}
+
+  {#if errorMsg}
+    <p class="text-[0.7rem] text-destructive px-4 py-1">{errorMsg}</p>
+  {/if}
 
   <!-- ── Label list ─────────────────────────────────────────────────────────── -->
   <div class="flex-1 overflow-y-auto min-h-0">

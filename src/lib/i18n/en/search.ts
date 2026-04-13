@@ -190,6 +190,14 @@ const search: Record<string, string> = {
     "Embedding model not initialised — open Settings → Embeddings and click Re-embed to build the index first",
   "labels.search.noResults": 'No semantic matches for "{q}"',
   "labels.search.simTitle": "Semantic similarity",
+  "labels.reindex.title": "Embedding model changed",
+  "labels.reindex.desc":
+    "{stale} of {total} labels were embedded with a different model. Semantic search may return poor results until they are re-embedded.",
+  "labels.reindex.models": "Models in use:",
+  "labels.reindex.btn": "Re-embed all labels",
+  "labels.reindex.running": "Re-embedding…",
+  "labels.reindex.done": "Re-embedding complete — {updated} labels updated.",
+  "labels.reindex.error": "Re-embedding failed: {error}",
 
   "search.modeImages": "Images",
   "search.imageQueryLabel": "SEARCH SCREENSHOT TEXT",

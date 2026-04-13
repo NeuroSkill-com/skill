@@ -47,7 +47,15 @@ export async function daemonPost<T>(path: string, body?: unknown): Promise<T> {
   return daemonRequest<T>("POST", path, body);
 }
 
-async function daemonRequest<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+export async function daemonPut<T>(path: string, body?: unknown): Promise<T> {
+  return daemonRequest<T>("PUT", path, body);
+}
+
+export async function daemonDelete<T>(path: string, body?: unknown): Promise<T> {
+  return daemonRequest<T>("DELETE", path, body);
+}
+
+async function daemonRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   let port: number;
   let token: string;
   try {

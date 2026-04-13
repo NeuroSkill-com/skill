@@ -6,7 +6,7 @@
 // End-state: replace daemonInvoke("cmd", args) with typed client calls
 // at each call site, then delete this file.
 
-import { daemonGet, daemonPost } from "./http";
+import { daemonGet, daemonPost, daemonPut, daemonDelete } from "./http";
 
 // biome-ignore lint/suspicious/noExplicitAny: generic proxy
 type AnyArgs = Record<string, any>;
@@ -97,9 +97,9 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   // Labels
   submit_label: [P, "/v1/labels"],
   get_recent_labels: [G, "/v1/labels"],
-  query_annotations: [P, "/v1/labels"],
-  update_label: [P, "/v1/labels"],
-  delete_label: [P, "/v1/labels"],
+  query_annotations: [G, "/v1/labels"],
+  get_label_embedding_status: [G, "/v1/labels/embedding-status"],
+  reembed_labels: [P, "/v1/labels/reembed"],
 
   // Search
   search_labels_by_text: [P, "/v1/search/eeg"],
@@ -318,6 +318,16 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
   }
   if (cmd === "enqueue_umap_compare") return handleEnqueue(args ?? {}) as T;
   if (cmd === "poll_job") return handlePoll(args ?? {}) as T;
+
+  // Label commands that need path parameters
+  if (cmd === "update_label") {
+    const { labelId, ...body } = args ?? {};
+    return daemonPut<T>(`/v1/labels/${labelId}`, body);
+  }
+  if (cmd === "delete_label") {
+    const { labelId } = args ?? {};
+    return daemonDelete<T>(`/v1/labels/${labelId}`);
+  }
 
   const route = ROUTES[cmd];
   if (route) {

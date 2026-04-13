@@ -191,6 +191,14 @@ const search: Record<string, string> = {
     "埋め込みモデルが初期化されていません — 設定→埋め込みを開いて再埋め込みをクリックし、まずインデックスを構築してください",
   "labels.search.noResults": "「{q}」に一致するセマンティック結果がありません",
   "labels.search.simTitle": "セマンティック類似度",
+  "labels.reindex.title": "埋め込みモデルが変更されました",
+  "labels.reindex.desc":
+    "{total}件中{stale}件のラベルが異なるモデルで埋め込まれています。再埋め込みするまでセマンティック検索の精度が低下する可能性があります。",
+  "labels.reindex.models": "使用中のモデル：",
+  "labels.reindex.btn": "全ラベルを再埋め込み",
+  "labels.reindex.running": "再埋め込み中…",
+  "labels.reindex.done": "再埋め込み完了 — {updated}件のラベルを更新しました。",
+  "labels.reindex.error": "再埋め込みに失敗: {error}",
 
   "search.modeImages": "画像",
   "search.imageQueryLabel": "スクリーンショットテキストを検索",

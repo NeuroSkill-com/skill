@@ -193,6 +193,14 @@ const search: Record<string, string> = {
     "Modelo de incrustación no inicializado: abra Configuración → Incrustaciones y haga clic en Volver a incrustar para crear el índice primero",
   "labels.search.noResults": 'No hay coincidencias semánticas para "{q}"',
   "labels.search.simTitle": "Similitud semántica",
+  "labels.reindex.title": "Modelo de embeddings cambiado",
+  "labels.reindex.desc":
+    "{stale} de {total} etiquetas fueron incrustadas con un modelo diferente. La búsqueda semántica puede dar malos resultados hasta que se vuelvan a incrustar.",
+  "labels.reindex.models": "Modelos en uso:",
+  "labels.reindex.btn": "Re-incrustar todas",
+  "labels.reindex.running": "Re-incrustando…",
+  "labels.reindex.done": "Re-incrustación completa — {updated} etiquetas actualizadas.",
+  "labels.reindex.error": "Re-incrustación fallida: {error}",
 
   "search.modeImages": "Imágenes",
   "search.imageQueryLabel": "BUSCAR TEXTO DE CAPTURA DE PANTALLA",
