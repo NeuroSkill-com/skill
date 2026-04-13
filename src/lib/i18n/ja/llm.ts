@@ -329,7 +329,7 @@ const llm: Record<string, string> = {
   "chat.think.normalDesc": "最大2,048トークン — ほとんどのタスクに最適なバランス",
   "chat.think.extendedDesc": "最大8,192トークン — 複雑な推論に最適",
   "chat.think.unlimitedDesc": "制限なし — モデルに必要なだけ思考させます",
-  "chat.param.temperature": "Temperature",
+  "chat.param.temperature": "温度",
   "chat.param.maxTokens": "最大トークン",
   "chat.param.topK": "Top-K",
   "chat.param.topP": "Top-P",

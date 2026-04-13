@@ -90,13 +90,13 @@ const perm: Record<string, string> = {
   "perm.whyCalendarDesc": "用于向大语言模型工具提供日程上下文，以便 AI 可以引用您即将到来的事件。",
   "perm.matrixCalendar": "日历事件",
   "perm.matrixCalendarReq": "需要日历访问权限",
-  "perm.fullDiskAccess": "Full Disk Access",
+  "perm.fullDiskAccess": "完全磁盘访问权限",
   "perm.fullDiskAccessDesc":
-    "Required for direct Focus-mode detection via the system database. Without it, the app falls back to a slower legacy method. Recommended for reliable Do Not Disturb integration.",
-  "perm.fullDiskAccessStep1": "Open System Settings → Privacy & Security → Full Disk Access",
-  "perm.fullDiskAccessStep2": "Find NeuroSkill™ (or the terminal running the daemon) in the list and enable it",
-  "perm.fullDiskAccessStep3": "You may need to quit and relaunch the app for the change to take effect",
-  "perm.openFullDiskAccessSettings": "Open Full Disk Access Settings",
+    "通过系统数据库直接检测专注模式所需。如未授权，应用将回退到较慢的旧方法。建议授权以确保勿扰模式集成的可靠性。",
+  "perm.fullDiskAccessStep1": "打开系统设置 → 隐私与安全性 → 完全磁盘访问权限",
+  "perm.fullDiskAccessStep2": "在列表中找到 NeuroSkill™（或运行守护进程的终端）并启用",
+  "perm.fullDiskAccessStep3": "您可能需要退出并重新启动应用才能使更改生效",
+  "perm.openFullDiskAccessSettings": "打开完全磁盘访问权限设置",
 };
 
 export default perm;

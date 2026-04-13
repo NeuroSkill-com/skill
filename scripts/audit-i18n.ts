@@ -88,21 +88,26 @@ function main() {
     _totalExempt += exemptCount;
     totalUntranslated += untranslated.length;
 
-    const _status = untranslated.length === 0 ? "✅" : "⚠️ ";
+    const status = untranslated.length === 0 ? "✅" : "⚠️ ";
+    console.log(`\n${status} ${locale}: ${untranslated.length} untranslated key(s)`);
 
     if (untranslated.length > 0) {
       const show = verbose ? untranslated : untranslated.slice(0, 15);
-      for (const [_key, val] of show) {
-        const _preview = val.length > 72 ? `${val.slice(0, 72)}…` : val;
+      for (const [key, val] of show) {
+        const preview = val.length > 72 ? `${val.slice(0, 72)}…` : val;
+        console.log(`    ${key}  →  "${preview}"`);
       }
       if (!verbose && untranslated.length > 15) {
+        console.log(`    … and ${untranslated.length - 15} more`);
       }
     }
   }
 
   if (doCheck && totalUntranslated > 0) {
+    console.error(`\n[audit-i18n] ${totalUntranslated} untranslated key(s) found. Run without --check for details.`);
     process.exit(1);
   } else if (totalUntranslated === 0) {
+    console.log("\n✅ All keys are translated (or exempt).");
   }
 }
 
