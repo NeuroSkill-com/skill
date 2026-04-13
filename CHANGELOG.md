@@ -8,6 +8,32 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.117] — 2026-04-13
+
+### Features
+
+- neuroskill
+- fixed cargo clippy
+- fixed svelte errors
+- updated main app for neuroskill and neuroloop
+-  Neuroloop TUI:
+-  Daemon:
+-  Neuroloop provider registration:
+-  No Tauri changes needed — the desktop UI already handles <think> tags natively with collapsible thinking blocks.
+- fixed neuroskill + added japanese
+- fixed neuroskill
+- updated neuroloop
+- updated iroh
+- updated neuroskill
+- tests
+- updated cli
+- updated faq
+- refactored faq and help
+- updated disconnect
+- added submodules
+- fixed tests
+- biome fixes
+
 ## [0.0.116] — 2026-04-11
 
 ### Features

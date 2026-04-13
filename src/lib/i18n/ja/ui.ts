@@ -144,7 +144,7 @@ const ui: Record<string, string> = {
     "EXG信号（EEG、EMG、ECG、EOGなど）は、電極が身体のどこにどのように配置されるかに強く依存します。電極の位置、間隔、参照位置のわずかな変更でも、信号のサイズ、形状、計算された指標の値に影響を与えることがあります。皮膚接触、インピーダンス、装着品質の違いも信号品質に影響を与えます。このため、電極配置や記録設定が変わると、EXGデータと派生測定値は直接比較できない場合があります。",
   "disclaimer.footer":
     "⚠️ 研究ツールのみ — 医療システムではありません。指標の詳細はリファレンスを確認してください。電極のフィット、配置、コーヒー摂取量が信号品質に影響します。",
-  "disclaimer.copyright": "© {year} {app}. All rights reserved.",
+  "disclaimer.copyright": "© {year} {app}. 全著作権所有。",
 
   "cmdK.title": "コマンドパレット",
   "cmdK.placeholder": "コマンドを入力…",
