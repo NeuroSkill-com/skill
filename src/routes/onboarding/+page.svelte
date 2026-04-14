@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { fade, fly } from "svelte/transition";
 import { Button } from "$lib/components/ui/button";
@@ -73,6 +74,26 @@ interface Phase {
   kind: CalPhase;
   actionIndex: number;
   loop: number;
+}
+
+// ── Double-click titlebar maximize/restore ─────────────────────────────────
+let _obSavedBounds: { x: number; y: number; width: number; height: number } | null = null;
+let _obIsMax = false;
+async function toggleMaximizeWindow() {
+  const win = getCurrentWindow();
+  if (_obIsMax && _obSavedBounds) {
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    await win.setPosition(new LogicalPosition(_obSavedBounds.x, _obSavedBounds.y));
+    await win.setSize(new LogicalSize(_obSavedBounds.width, _obSavedBounds.height));
+    _obIsMax = false; _obSavedBounds = null;
+  } else {
+    const pos = await win.outerPosition();
+    const size = await win.outerSize();
+    const f = await win.scaleFactor();
+    _obSavedBounds = { x: pos.x / f, y: pos.y / f, width: size.width / f, height: size.height / f };
+    await win.maximize();
+    _obIsMax = true;
+  }
 }
 
 // ── Steps ──────────────────────────────────────────────────────────────────
@@ -655,7 +676,9 @@ useWindowTitle("window.title.onboarding");
       aria-label={t("onboarding.title")}>
 
   <!-- ── Top bar ───────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2 px-4 pt-3 pb-1.5 shrink-0" data-tauri-drag-region>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="flex items-center gap-2 px-4 pt-3 pb-1.5 shrink-0" data-tauri-drag-region
+       ondblclick={toggleMaximizeWindow}>
     <span class="text-[0.78rem] font-bold tracking-tight flex-1">{t("onboarding.title")}</span>
     <!-- TTS readiness indicator (shown on calibration step) -->
     {#if step === "calibration" && !ttsReady}
