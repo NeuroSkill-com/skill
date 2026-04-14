@@ -598,12 +598,12 @@ async fn label_embedding_status(State(state): State<AppState>) -> Json<serde_jso
         // Collect distinct models and their counts.
         let models: serde_json::Value = conn
             .prepare("SELECT COALESCE(embedding_model, '(none)'), COUNT(*) FROM labels GROUP BY embedding_model")
-            .and_then(|mut stmt| {
+            .map(|mut stmt| {
                 let rows: Vec<(String, i64)> = stmt
                     .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))
                     .map(|rows| rows.filter_map(Result::ok).collect())
                     .unwrap_or_default();
-                Ok(rows)
+                rows
             })
             .map(|rows| {
                 let mut m = serde_json::Map::new();
