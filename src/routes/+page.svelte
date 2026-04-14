@@ -1090,8 +1090,12 @@ onMount(async () => {
   mainWindowAutoFit = await daemonInvoke<boolean>("get_main_window_auto_fit").catch(() => true);
 
   // Pause/resume auto-fit when titlebar maximize/restore is in progress
-  const onPause = () => { autofitPaused = true; };
-  const onResume = () => { autofitPaused = false; };
+  const onPause = () => {
+    autofitPaused = true;
+  };
+  const onResume = () => {
+    autofitPaused = false;
+  };
   window.addEventListener("skill:autofit-pause", onPause);
   window.addEventListener("skill:autofit-resume", onResume);
   unlisteners.push((() => {

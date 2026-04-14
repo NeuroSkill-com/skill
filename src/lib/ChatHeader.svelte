@@ -23,8 +23,10 @@ async function toggleMaximizeWindow() {
     const size = await win.outerSize();
     const factor = await win.scaleFactor();
     savedBounds = {
-      x: pos.x / factor, y: pos.y / factor,
-      width: size.width / factor, height: size.height / factor,
+      x: pos.x / factor,
+      y: pos.y / factor,
+      width: size.width / factor,
+      height: size.height / factor,
     };
     await win.maximize();
     isManuallyMaximized = true;

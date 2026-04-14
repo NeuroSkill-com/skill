@@ -6,7 +6,7 @@
 // End-state: replace daemonInvoke("cmd", args) with typed client calls
 // at each call site, then delete this file.
 
-import { daemonGet, daemonPost, daemonPut, daemonDelete } from "./http";
+import { daemonDelete, daemonGet, daemonPost, daemonPut } from "./http";
 
 // biome-ignore lint/suspicious/noExplicitAny: generic proxy
 type AnyArgs = Record<string, any>;

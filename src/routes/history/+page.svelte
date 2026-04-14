@@ -693,7 +693,7 @@ async function removeLabel(id: number) {
     await daemonInvoke("delete_label", { labelId: id });
     allLabels = allLabels.filter((l) => l.id !== id);
   } catch (e) {
-    console.error("delete_label failed:", e);
+    // delete_label failed silently
   }
 }
 const filteredLabels = $derived.by(() => {

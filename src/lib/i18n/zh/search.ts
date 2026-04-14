@@ -18,8 +18,7 @@ const search: Record<string, string> = {
   "embeddings.dimLegend": "维度",
   "embeddings.dimHint": "越大 = 越丰富但越慢",
   "embeddings.autoReembed.title": "自动重新嵌入",
-  "embeddings.autoReembed.desc":
-    "模型更改时在后台自动重新嵌入数据。禁用以节省资源并手动重新嵌入。",
+  "embeddings.autoReembed.desc": "模型更改时在后台自动重新嵌入数据。禁用以节省资源并手动重新嵌入。",
   "embeddings.autoReembed.labels": "文本标签",
   "embeddings.autoReembed.eeg": "EEG会话",
   "embeddings.autoReembed.screenshots": "截图",
