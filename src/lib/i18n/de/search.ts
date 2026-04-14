@@ -27,6 +27,10 @@ const search: Record<string, string> = {
   "embeddings.autoReembed.screenshots": "Screenshots",
   "embeddings.autoReembed.batchSize": "Stapelgröße",
   "embeddings.autoReembed.batchDelay": "Pause zwischen Stapeln (ms)",
+  "embeddings.watchdog.title": "Daemon automatisch neu starten",
+  "embeddings.watchdog.desc": "Daemon im Hintergrund automatisch neu starten, wenn er nicht erreichbar ist.",
+  "embeddings.watchdog.enabled": "Automatischer Neustart",
+  "embeddings.watchdog.timeout": "Neustart nach (Sekunden)",
 
   "label.addLabel": "Label hinzufügen",
   "label.eegWindow": "EEG-Fenster: {elapsed}",

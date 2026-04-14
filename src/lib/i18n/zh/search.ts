@@ -25,6 +25,10 @@ const search: Record<string, string> = {
   "embeddings.autoReembed.screenshots": "截图",
   "embeddings.autoReembed.batchSize": "批量大小",
   "embeddings.autoReembed.batchDelay": "批次间延迟（毫秒）",
+  "embeddings.watchdog.title": "守护进程自动重启",
+  "embeddings.watchdog.desc": "当后台守护进程无法访问时自动重启。",
+  "embeddings.watchdog.enabled": "自动重启",
+  "embeddings.watchdog.timeout": "重启等待时间（秒）",
 
   "label.addLabel": "添加标签",
   "label.eegWindow": "EEG 窗口：{elapsed}",

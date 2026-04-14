@@ -210,6 +210,10 @@ pub fn router() -> Router<AppState> {
             get(get_reembed_config).post(set_reembed_config),
         )
         .route(
+            "/settings/daemon-watchdog",
+            get(get_daemon_watchdog).post(set_daemon_watchdog),
+        )
+        .route(
             "/settings/update-check-interval",
             get(settings_device::get_update_check_interval).post(settings_device::set_update_check_interval),
         )
@@ -492,6 +496,31 @@ async fn set_reembed_config(
 ) -> Json<serde_json::Value> {
     let mut settings = load_user_settings(&state);
     settings.reembed = config;
+    save_user_settings(&state, &settings);
+    Json(serde_json::json!({ "ok": true }))
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct DaemonWatchdogConfig {
+    enabled: bool,
+    timeout_secs: u64,
+}
+
+async fn get_daemon_watchdog(state: State<AppState>) -> Json<DaemonWatchdogConfig> {
+    let s = load_user_settings(&state);
+    Json(DaemonWatchdogConfig {
+        enabled: s.daemon_auto_restart,
+        timeout_secs: s.daemon_restart_timeout_secs,
+    })
+}
+
+async fn set_daemon_watchdog(
+    state: State<AppState>,
+    Json(config): Json<DaemonWatchdogConfig>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.daemon_auto_restart = config.enabled;
+    settings.daemon_restart_timeout_secs = config.timeout_secs;
     save_user_settings(&state, &settings);
     Json(serde_json::json!({ "ok": true }))
 }

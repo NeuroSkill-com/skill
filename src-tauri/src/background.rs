@@ -69,8 +69,11 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
         // This loop only syncs daemon status into local Tauri state for the UI.
         // Watchdog: if the daemon is unreachable for several consecutive ticks,
         // attempt to restart it so the app doesn't stay in a degraded state.
+        // The threshold and on/off switch are user-configurable in settings.
         let mut consecutive_failures: u32 = 0;
-        const WATCHDOG_THRESHOLD: u32 = 3;
+        let mut settings_poll_counter: u32 = 0;
+        let mut watchdog_enabled = true;
+        let mut watchdog_threshold: u32 = 3; // recalculated from timeout_secs / poll_delay
         loop {
             let poll_result = tokio::task::spawn_blocking(crate::daemon_cmds::fetch_daemon_status)
                 .await
@@ -106,14 +109,18 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
                 }
                 Err(_) => {
                     consecutive_failures += 1;
-                    if consecutive_failures == WATCHDOG_THRESHOLD {
+                    if watchdog_enabled
+                        && consecutive_failures >= watchdog_threshold
+                        && watchdog_threshold > 0
+                    {
                         eprintln!(
-                            "[watchdog] daemon unreachable for {WATCHDOG_THRESHOLD} consecutive polls — restarting"
+                            "[watchdog] daemon unreachable for {consecutive_failures} consecutive polls — restarting"
                         );
                         let _ = tokio::task::spawn_blocking(|| {
                             crate::daemon_cmds::ensure_daemon_running();
                         })
                         .await;
+                        consecutive_failures = 0; // reset after restart attempt
                     }
                 }
             }
@@ -122,6 +129,22 @@ fn spawn_daemon_status_poll(handle: &AppHandle) {
                 let s = r.lock_or_recover();
                 poll_delay_secs(&s.status.state)
             };
+
+            // Reload watchdog settings every ~10 polls (~30-50s)
+            settings_poll_counter += 1;
+            if settings_poll_counter >= 10 {
+                settings_poll_counter = 0;
+                let skill_dir = {
+                    let r = app.state::<Mutex<Box<AppState>>>();
+                    let s = r.lock_or_recover();
+                    s.skill_dir.clone()
+                };
+                let cfg = skill_settings::load_settings(&skill_dir);
+                watchdog_enabled = cfg.daemon_auto_restart;
+                // Convert timeout_secs → poll count threshold
+                watchdog_threshold = (cfg.daemon_restart_timeout_secs / delay).max(1) as u32;
+            }
+
             tokio::time::sleep(Duration::from_secs(delay)).await;
         }
     });
