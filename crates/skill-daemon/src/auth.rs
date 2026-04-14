@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
-use rand::RngCore;
+use rand::Rng;
 
 /// Access control level for a token.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -373,7 +373,7 @@ fn generate_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::{TokenAcl, TokenStore};
-    use rand::RngCore;
+    use rand::Rng;
 
     #[test]
     fn data_acl_does_not_allow_control_or_auth_routes() {

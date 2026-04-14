@@ -12431,7 +12431,7 @@ dependencies = [
  "image",
  "iroh",
  "qrcodegen",
- "rand 0.10.1",
+ "rand 0.9.4",
  "serde",
  "serde_json",
  "tempfile",

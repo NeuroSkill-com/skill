@@ -97,8 +97,7 @@ const perm: Record<string, string> = {
   "perm.fullDiskAccessStep3": "변경 사항을 적용하려면 앱을 종료하고 다시 실행해야 할 수 있습니다",
   "perm.openFullDiskAccessSettings": "전체 디스크 접근 설정 열기",
   "perm.whyCalendar": "캘린더",
-  "perm.whyCalendarDesc":
-    "AI가 예정된 일정을 참조할 수 있도록 LLM 도구에 일정 컨텍스트를 제공합니다.",
+  "perm.whyCalendarDesc": "AI가 예정된 일정을 참조할 수 있도록 LLM 도구에 일정 컨텍스트를 제공합니다.",
   "perm.matrixCalendar": "캘린더 이벤트",
   "perm.matrixCalendarReq": "캘린더 접근 필요",
 };

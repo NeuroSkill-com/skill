@@ -147,6 +147,9 @@ fn catalog_entry_to_llm_model(
         num_attention_heads: None,
         num_key_value_heads: None,
         license: None,
+        num_hidden_layers: None,
+        head_dim: None,
+        attention_layout: None,
     }
 }
 

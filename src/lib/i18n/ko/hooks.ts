@@ -13,8 +13,7 @@ const hooks: Record<string, string> = {
   "dnd.enabledDesc":
     "켜면 설정된 시간 동안 몰입도가 높게 유지될 때 macOS 방해 금지가 활성화됩니다. 몰입도가 떨어지면 즉시 해제됩니다.",
   "dnd.threshold": "집중 임계값",
-  "dnd.thresholdDesc":
-    "필요한 최소 몰입 점수(0–100). 점수는 EEG 베타/(알파+세타) 비율에서 산출됩니다.",
+  "dnd.thresholdDesc": "필요한 최소 몰입 점수(0–100). 점수는 EEG 베타/(알파+세타) 비율에서 산출됩니다.",
   "dnd.duration": "지속 시간",
   "dnd.durationDesc": "DND가 활성화되기 전에 집중이 임계값 이상으로 유지되어야 하는 시간(초).",
   "dnd.requiresMacOS": "macOS 12 (Monterey) 이상이 필요합니다.",
@@ -58,8 +57,7 @@ const hooks: Record<string, string> = {
   "dnd.buildingLabel": "몰입도 구축 중",
 
   "hooks.title": "사전 대응 훅",
-  "hooks.subtitle":
-    "최근 라벨 유사성과 현재 인지/감정/신체 상태를 기반으로 사전에 동작을 트리거합니다.",
+  "hooks.subtitle": "최근 라벨 유사성과 현재 인지/감정/신체 상태를 기반으로 사전에 동작을 트리거합니다.",
   "hooks.examplesTitle": "빠른 예시",
   "hooks.examplesApply": "예시 적용",
   "hooks.addHook": "훅 추가",

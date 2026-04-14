@@ -4,7 +4,7 @@
 // Usage: node scripts/audit-a11y.js [--check]
 //   --check  exit with code 1 if any errors found (for CI)
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const CHECK_MODE = process.argv.includes("--check");
@@ -45,13 +45,12 @@ function matchesWithLines(content, regex) {
     let line = lines[i];
     if (/<(?:img|button|a|input|textarea|select|svg|video|audio|html|h[1-6])\b/.test(line) && !/>/.test(line)) {
       for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
-        line += " " + lines[j];
+        line += ` ${lines[j]}`;
         if (/>/.test(lines[j])) break;
       }
     }
-    let m;
-    const re = new RegExp(regex.source, regex.flags.replace("g", "") + "g");
-    while ((m = re.exec(line)) !== null) {
+    const re = new RegExp(regex.source, `${regex.flags.replace("g", "")}g`);
+    for (let m = re.exec(line); m !== null; m = re.exec(line)) {
       results.push({ line: i + 1, match: m[0], groups: m, fullLine: line });
     }
   }
@@ -62,7 +61,7 @@ function matchesWithLines(content, regex) {
 function hasSvelteIgnore(content, lineNum) {
   const lines = content.split("\n");
   for (let i = Math.max(0, lineNum - 3); i < lineNum; i++) {
-    if (lines[i] && lines[i].includes("svelte-ignore")) return true;
+    if (lines[i]?.includes("svelte-ignore")) return true;
   }
   return false;
 }
@@ -104,7 +103,7 @@ addRule("img-alt", "error", "Images must have alt text", (content) => {
     // Gather the full tag across lines (Svelte expressions may contain > inside generics)
     let fullTag = "";
     for (let i = m.line - 1; i < Math.min(m.line + 10, lines.length); i++) {
-      fullTag += " " + lines[i];
+      fullTag += ` ${lines[i]}`;
       // Check for /> or > that ends the img tag (heuristic: line ends with > or />)
       if (/\/>\s*$/.test(lines[i]) || (i > m.line - 1 && />\s*$/.test(lines[i]))) break;
     }
@@ -133,7 +132,7 @@ addRule("button-label", "error", "Buttons must have accessible labels", (content
     // Check if the button has text content (look at same line + next few lines until </button>)
     let buttonContent = "";
     for (let i = m.line - 1; i < Math.min(m.line + 5, lines.length); i++) {
-      buttonContent += lines[i] + "\n";
+      buttonContent += `${lines[i]}\n`;
       if (lines[i].includes("</button>")) break;
     }
 
@@ -142,7 +141,10 @@ addRule("button-label", "error", "Buttons must have accessible labels", (content
     // Remove closing tag and everything after
     buttonContent = buttonContent.replace(/<\/button>[\s\S]*/, "");
     // Remove HTML tags to get text content
-    const textContent = buttonContent.replace(/<[^>]*>/g, "").replace(/[{}\s]/g, "").trim();
+    const textContent = buttonContent
+      .replace(/<[^>]*>/g, "")
+      .replace(/[{}\s]/g, "")
+      .trim();
 
     // If only special characters or empty, flag it
     if (!textContent || /^[↻←→↑↓×✕✖✗⨉☰…·•]+$/.test(textContent)) {
@@ -156,20 +158,25 @@ addRule("button-label", "error", "Buttons must have accessible labels", (content
   return findings;
 });
 
-addRule("click-on-noninteractive", "warning", "Click handlers on non-interactive elements need role and keyboard support", (content) => {
-  const findings = [];
-  // Match onclick on div, span, li, section, etc.
-  const nonInteractive = /(<(?:div|span|li|section|article|p|td|tr)\b[^>]*\bonclick\b[^>]*>)/;
-  for (const m of matchesWithLines(content, nonInteractive)) {
-    if (!isInTemplate(content, m.line)) continue;
-    if (hasSvelteIgnore(content, m.line)) continue;
-    const tag = m.match;
-    if (/\brole\s*=/.test(tag)) continue;
-    if (/\btabindex\s*=/.test(tag)) continue;
-    findings.push({ line: m.line, message: `Non-interactive element with onclick missing role and tabindex` });
-  }
-  return findings;
-});
+addRule(
+  "click-on-noninteractive",
+  "warning",
+  "Click handlers on non-interactive elements need role and keyboard support",
+  (content) => {
+    const findings = [];
+    // Match onclick on div, span, li, section, etc.
+    const nonInteractive = /(<(?:div|span|li|section|article|p|td|tr)\b[^>]*\bonclick\b[^>]*>)/;
+    for (const m of matchesWithLines(content, nonInteractive)) {
+      if (!isInTemplate(content, m.line)) continue;
+      if (hasSvelteIgnore(content, m.line)) continue;
+      const tag = m.match;
+      if (/\brole\s*=/.test(tag)) continue;
+      if (/\btabindex\s*=/.test(tag)) continue;
+      findings.push({ line: m.line, message: `Non-interactive element with onclick missing role and tabindex` });
+    }
+    return findings;
+  },
+);
 
 addRule("input-label", "error", "Form inputs must have associated labels", (content) => {
   const findings = [];
@@ -200,13 +207,19 @@ addRule("input-label", "error", "Form inputs must have associated labels", (cont
     for (let i = m.line - 2; i >= Math.max(0, m.line - 8); i--) {
       if (/<\/label/.test(lines[i])) labelDepth++;
       if (/<label\b/.test(lines[i])) {
-        if (labelDepth === 0) { wrappedInLabel = true; break; }
+        if (labelDepth === 0) {
+          wrappedInLabel = true;
+          break;
+        }
         labelDepth--;
       }
     }
     if (wrappedInLabel) continue;
 
-    findings.push({ line: m.line, message: "Input missing label association (add id+label, aria-label, or aria-labelledby)" });
+    findings.push({
+      line: m.line,
+      message: "Input missing label association (add id+label, aria-label, or aria-labelledby)",
+    });
   }
   return findings;
 });
@@ -225,11 +238,14 @@ addRule("link-text", "error", "Links must have descriptive text", (content) => {
     // Grab content until </a>
     let linkContent = "";
     for (let i = m.line - 1; i < Math.min(m.line + 3, lines.length); i++) {
-      linkContent += lines[i] + "\n";
+      linkContent += `${lines[i]}\n`;
       if (lines[i].includes("</a>")) break;
     }
     linkContent = linkContent.replace(/<a\b[^>]*>/, "").replace(/<\/a>[\s\S]*/, "");
-    const text = linkContent.replace(/<[^>]*>/g, "").replace(/[{}\s]/g, "").trim();
+    const text = linkContent
+      .replace(/<[^>]*>/g, "")
+      .replace(/[{}\s]/g, "")
+      .trim();
 
     if (!text) {
       // Check for sr-only or aria-label inside
@@ -240,12 +256,12 @@ addRule("link-text", "error", "Links must have descriptive text", (content) => {
   return findings;
 });
 
-addRule("heading-hierarchy", "warning", "Heading levels should not skip", (content, file) => {
+addRule("heading-hierarchy", "warning", "Heading levels should not skip", (content, _file) => {
   const findings = [];
   const headings = [];
   for (const m of matchesWithLines(content, /<h([1-6])\b/)) {
     if (!isInTemplate(content, m.line)) continue;
-    headings.push({ level: parseInt(m.groups[1]), line: m.line });
+    headings.push({ level: parseInt(m.groups[1], 10), line: m.line });
   }
   for (let i = 1; i < headings.length; i++) {
     const prev = headings[i - 1].level;
@@ -264,7 +280,7 @@ addRule("tabindex-positive", "warning", "Avoid positive tabindex values", (conte
   const findings = [];
   for (const m of matchesWithLines(content, /tabindex\s*=\s*["']?(\d+)/)) {
     if (!isInTemplate(content, m.line)) continue;
-    const val = parseInt(m.groups[1]);
+    const val = parseInt(m.groups[1], 10);
     if (val > 0) {
       findings.push({ line: m.line, message: `Positive tabindex="${val}" disrupts natural tab order` });
     }
@@ -275,9 +291,15 @@ addRule("tabindex-positive", "warning", "Avoid positive tabindex values", (conte
 addRule("aria-hidden-focusable", "error", "aria-hidden elements must not contain focusable children", (content) => {
   const findings = [];
   // Simplified: flag aria-hidden on interactive elements
-  for (const m of matchesWithLines(content, /<(?:button|a|input|select|textarea)\b[^>]*aria-hidden\s*=\s*["']true["'][^>]*>/)) {
+  for (const m of matchesWithLines(
+    content,
+    /<(?:button|a|input|select|textarea)\b[^>]*aria-hidden\s*=\s*["']true["'][^>]*>/,
+  )) {
     if (!isInTemplate(content, m.line)) continue;
-    findings.push({ line: m.line, message: "Interactive element has aria-hidden=\"true\" (makes it invisible to assistive tech but still focusable)" });
+    findings.push({
+      line: m.line,
+      message: 'Interactive element has aria-hidden="true" (makes it invisible to assistive tech but still focusable)',
+    });
   }
   return findings;
 });
@@ -324,15 +346,23 @@ addRule("svg-accessible", "warning", "SVG elements used as images need accessibl
   return findings;
 });
 
-addRule("color-contrast-class", "info", "Text using opacity or very light color classes may have contrast issues", (content) => {
-  const findings = [];
-  // Flag text with very low opacity
-  for (const m of matchesWithLines(content, /class="[^"]*text-[^"]*opacity-(?:10|20|25)[^"]*"/)) {
-    if (!isInTemplate(content, m.line)) continue;
-    findings.push({ line: m.line, message: "Very low text opacity may cause contrast issues (check WCAG 4.5:1 ratio)" });
-  }
-  return findings;
-});
+addRule(
+  "color-contrast-class",
+  "info",
+  "Text using opacity or very light color classes may have contrast issues",
+  (content) => {
+    const findings = [];
+    // Flag text with very low opacity
+    for (const m of matchesWithLines(content, /class="[^"]*text-[^"]*opacity-(?:10|20|25)[^"]*"/)) {
+      if (!isInTemplate(content, m.line)) continue;
+      findings.push({
+        line: m.line,
+        message: "Very low text opacity may cause contrast issues (check WCAG 4.5:1 ratio)",
+      });
+    }
+    return findings;
+  },
+);
 
 // ── Run audit ────────────────────────────────────────────────────────────────
 const files = walk(SRC_DIR);
@@ -376,7 +406,9 @@ for (const file of sortedFiles) {
   console.log(`${COLORS.bold}${file}${COLORS.reset}`);
   for (const f of findings) {
     const sev = COLORS[f.severity];
-    console.log(`  ${sev}${f.severity}${COLORS.reset} ${COLORS.dim}L${f.line}${COLORS.reset} [${f.ruleId}] ${f.message}`);
+    console.log(
+      `  ${sev}${f.severity}${COLORS.reset} ${COLORS.dim}L${f.line}${COLORS.reset} [${f.ruleId}] ${f.message}`,
+    );
   }
   console.log();
 }
@@ -385,9 +417,9 @@ for (const file of sortedFiles) {
 console.log("─".repeat(60));
 console.log(
   `${COLORS.bold}Summary:${COLORS.reset} ` +
-  `${COLORS.error ? "\x1b[31m" : ""}${totalErrors} errors${COLORS.reset}, ` +
-  `${COLORS.warning ? "\x1b[33m" : ""}${totalWarnings} warnings${COLORS.reset}, ` +
-  `${COLORS.info ? "\x1b[36m" : ""}${totalInfo} info${COLORS.reset}`
+    `${COLORS.error ? "\x1b[31m" : ""}${totalErrors} errors${COLORS.reset}, ` +
+    `${COLORS.warning ? "\x1b[33m" : ""}${totalWarnings} warnings${COLORS.reset}, ` +
+    `${COLORS.info ? "\x1b[36m" : ""}${totalInfo} info${COLORS.reset}`,
 );
 console.log(`Files scanned: ${files.length} | Files with issues: ${sortedFiles.length}\n`);
 

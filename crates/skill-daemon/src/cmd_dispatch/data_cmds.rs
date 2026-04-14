@@ -63,7 +63,9 @@ pub(super) async fn cmd_status(state: &AppState) -> Result<Value, String> {
                         rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                     {
                         count += conn
-                            .query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get::<_, u64>(0))
+                            .query_row("SELECT COUNT(*) FROM embeddings", [], |r| {
+                                r.get::<_, i64>(0).map(|v| v as u64)
+                            })
                             .unwrap_or(0);
                     }
                 }

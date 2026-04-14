@@ -168,14 +168,14 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
 
         let dir1 = utc_dir(req.start_utc);
         let dir2 = utc_dir(req.end_utc);
-        let mut total: u64 = 0;
+        let mut total: i64 = 0;
         for dir_name in std::collections::HashSet::from([dir1, dir2]) {
             let db = skill_dir.join(&dir_name).join("eeg.sqlite");
             if !db.exists() {
                 continue;
             }
             if let Ok(conn) = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
-                let n: u64 = conn
+                let n: i64 = conn
                     .query_row(
                         "SELECT COUNT(*) FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2",
                         rusqlite::params![start_ms, end_ms],

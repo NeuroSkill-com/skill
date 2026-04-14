@@ -27,7 +27,8 @@ const settings: Record<string, string> = {
   "appearance.accentColor": "강조 색상",
   "appearance.accentColorDesc": "기본 인터랙티브 색상을 설정합니다 — 버튼, 활성 상태, 포커스 링, 앱 전체의 하이라이트.",
   "appearance.chartColors": "차트 색상 구성표",
-  "appearance.chartColorsDesc": "EEG 파형, 대역 파워 차트, 지표 시각화를 위한 색상 팔레트를 선택하세요. 색맹 안전 옵션이 있습니다.",
+  "appearance.chartColorsDesc":
+    "EEG 파형, 대역 파워 차트, 지표 시각화를 위한 색상 팔레트를 선택하세요. 색맹 안전 옵션이 있습니다.",
 
   "chartScheme.default": "기본",
   "chartScheme.defaultDesc": "녹색 · 파란색 · 보라색 · 주황색 — 기본 {app} 팔레트.",
@@ -88,59 +89,81 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2": "토큰을 저장한 후 기기 목록에서 헤드셋을 페어링/연결하세요.",
   "settings.supportedDevices.company.oura": "Ōura",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
-  "settings.supportedDevices.instruction.oura1": "cloud.ouraring.com/personal-access-tokens에서 개인 액세스 토큰을 받으세요.",
+  "settings.supportedDevices.instruction.oura1":
+    "cloud.ouraring.com/personal-access-tokens에서 개인 액세스 토큰을 받으세요.",
   "settings.supportedDevices.instruction.oura2": "기기 API → Oura Ring을 열고 토큰을 붙여넣은 후 저장하세요.",
-  "settings.supportedDevices.instruction.oura3": "지금 동기화를 클릭하여 수면, 활동, 준비 상태, 심박수, SpO2 데이터를 가져오세요.",
+  "settings.supportedDevices.instruction.oura3":
+    "지금 동기화를 클릭하여 수면, 활동, 준비 상태, 심박수, SpO2 데이터를 가져오세요.",
   "settings.supportedDevices.instruction.reak1": "Nucleus-Hermès의 전원을 켜고 이 컴퓨터 근처에 놓으세요.",
   "settings.supportedDevices.instruction.reak2": "기기 목록에서 스캔 및 페어링한 후 기본 기기 흐름에서 연결하세요.",
   "settings.supportedDevices.instruction.cognionics1": "CGX USB 동글을 꽂고 헤드셋의 전원을 켜세요.",
-  "settings.supportedDevices.instruction.cognionics2": "USB 시리얼 포트에서 기기가 자동 감지됩니다. 기기 목록에서 선택하고 연결하세요.",
+  "settings.supportedDevices.instruction.cognionics2":
+    "USB 시리얼 포트에서 기기가 자동 감지됩니다. 기기 목록에서 선택하고 연결하세요.",
   "settings.supportedDevices.instruction.mendi1": "Mendi의 전원을 켜고 이 컴퓨터 근처에 놓으세요.",
   "settings.supportedDevices.instruction.mendi2": "기기 목록에서 스캔 및 페어링한 후 연결하세요.",
 
   "settings.supportedDevices.company.attentivu": "AttentivU",
   "settings.supportedDevices.device.attentivuGlasses": "AttentivU Glasses",
-  "settings.supportedDevices.instruction.attentivu1": "iPhone에 NeuroSkill™ iOS 앱을 설치하고 이 데스크톱 앱과 페어링하세요.",
+  "settings.supportedDevices.instruction.attentivu1":
+    "iPhone에 NeuroSkill™ iOS 앱을 설치하고 이 데스크톱 앱과 페어링하세요.",
   "settings.supportedDevices.instruction.attentivu2": "iOS 앱에서 BLE 기기를 스캔하고 AttentivU 안경에 연결하세요.",
-  "settings.supportedDevices.instruction.attentivu3": "EEG 데이터는 안경 → iPhone → 데스크톱으로 암호화된 iroh 터널을 통해 스트리밍됩니다. 모든 처리는 이 컴퓨터에서 수행됩니다.",
+  "settings.supportedDevices.instruction.attentivu3":
+    "EEG 데이터는 안경 → iPhone → 데스크톱으로 암호화된 iroh 터널을 통해 스트리밍됩니다. 모든 처리는 이 컴퓨터에서 수행됩니다.",
   "settings.supportedDevices.company.awear": "AWEAR",
   "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
-  "settings.supportedDevices.instruction.awear1": "AWEAR EEG 기기의 전원을 켜고 컴퓨터에서 Bluetooth가 활성화되어 있는지 확인하세요.",
-  "settings.supportedDevices.instruction.awear2": "BLE 기기를 스캔하고 AWEAR에 연결하세요. 인증은 HMAC-SHA256을 통해 자동으로 처리됩니다.",
+  "settings.supportedDevices.instruction.awear1":
+    "AWEAR EEG 기기의 전원을 켜고 컴퓨터에서 Bluetooth가 활성화되어 있는지 확인하세요.",
+  "settings.supportedDevices.instruction.awear2":
+    "BLE 기기를 스캔하고 AWEAR에 연결하세요. 인증은 HMAC-SHA256을 통해 자동으로 처리됩니다.",
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
   "settings.supportedDevices.device.brainbitFlex": "BrainBit Flex 4/8",
-  "settings.supportedDevices.instruction.brainbit1": "BrainBit 헤드밴드의 전원을 켜세요. 플랫폼에 맞는 NeuroSDK2 라이브러리(libneurosdk2)가 설치되어 있는지 확인하세요.",
-  "settings.supportedDevices.instruction.brainbit2": "스캐너가 BLE를 통해 BrainBit 기기를 자동 감지합니다. 기기를 탭하여 페어링하고 연결하세요.",
+  "settings.supportedDevices.instruction.brainbit1":
+    "BrainBit 헤드밴드의 전원을 켜세요. 플랫폼에 맞는 NeuroSDK2 라이브러리(libneurosdk2)가 설치되어 있는지 확인하세요.",
+  "settings.supportedDevices.instruction.brainbit2":
+    "스캐너가 BLE를 통해 BrainBit 기기를 자동 감지합니다. 기기를 탭하여 페어링하고 연결하세요.",
   "settings.supportedDevices.company.brainmaster": "BrainMaster Technologies",
   "settings.supportedDevices.device.brainmasterAtlantis4": "Atlantis 4×4 (4채널)",
   "settings.supportedDevices.device.brainmasterDiscovery": "Discovery (24채널)",
   "settings.supportedDevices.device.brainmasterFreedom": "Freedom (24채널 무선)",
-  "settings.supportedDevices.instruction.brainmaster1": "USB 시리얼 동글을 꽂고 BrainMaster 증폭기의 전원을 켜세요 (57600 보드, FTDI).",
-  "settings.supportedDevices.instruction.brainmaster2": "OpenBCI 설정에서 보드 모델을 선택하세요. 포트는 자동 감지되거나 수동으로 설정하세요.",
+  "settings.supportedDevices.instruction.brainmaster1":
+    "USB 시리얼 동글을 꽂고 BrainMaster 증폭기의 전원을 켜세요 (57600 보드, FTDI).",
+  "settings.supportedDevices.instruction.brainmaster2":
+    "OpenBCI 설정에서 보드 모델을 선택하세요. 포트는 자동 감지되거나 수동으로 설정하세요.",
   "settings.supportedDevices.company.gtec": "g.tec medical engineering",
   "settings.supportedDevices.device.unicornHybridBlack": "Unicorn Hybrid Black",
-  "settings.supportedDevices.instruction.gtec1": "시스템에 Unicorn API 라이브러리(libunicorn.so / Unicorn.dll)가 설치되어 있는지 확인하세요.",
-  "settings.supportedDevices.instruction.gtec2": "Unicorn 헤드셋의 전원을 켜고 이 컴퓨터 근처에 놓으세요. 스캐너가 BLE를 통해 자동 감지합니다.",
+  "settings.supportedDevices.instruction.gtec1":
+    "시스템에 Unicorn API 라이브러리(libunicorn.so / Unicorn.dll)가 설치되어 있는지 확인하세요.",
+  "settings.supportedDevices.instruction.gtec2":
+    "Unicorn 헤드셋의 전원을 켜고 이 컴퓨터 근처에 놓으세요. 스캐너가 BLE를 통해 자동 감지합니다.",
   "settings.supportedDevices.company.neurofield": "Neurofield Inc",
   "settings.supportedDevices.device.neurofieldQ21": "Q21 (20채널)",
-  "settings.supportedDevices.instruction.neurofield1": "PEAK PCAN-USB 어댑터를 컴퓨터에 연결하고 CAN 버스를 통해 Q21 증폭기를 꽂으세요.",
-  "settings.supportedDevices.instruction.neurofield2": "플랫폼에 맞는 PCAN Basic 드라이버를 설치하세요. 스캐너가 Q21을 자동 감지합니다.",
+  "settings.supportedDevices.instruction.neurofield1":
+    "PEAK PCAN-USB 어댑터를 컴퓨터에 연결하고 CAN 버스를 통해 Q21 증폭기를 꽂으세요.",
+  "settings.supportedDevices.instruction.neurofield2":
+    "플랫폼에 맞는 PCAN Basic 드라이버를 설치하세요. 스캐너가 Q21을 자동 감지합니다.",
   "settings.supportedDevices.company.neurosky": "NeuroSky",
   "settings.supportedDevices.device.neuroskyMindWave": "MindWave / MindWave Mobile",
-  "settings.supportedDevices.instruction.neurosky1": "NeuroSky USB/Bluetooth 시리얼 어댑터를 연결하고 헤드셋의 전원을 켜세요.",
-  "settings.supportedDevices.instruction.neurosky2": "타겟 'neurosky' (또는 'neurosky:<시리얼-포트>')를 사용하여 연결하세요. 원시 ThinkGear EEG가 512 Hz로 스트리밍됩니다.",
+  "settings.supportedDevices.instruction.neurosky1":
+    "NeuroSky USB/Bluetooth 시리얼 어댑터를 연결하고 헤드셋의 전원을 켜세요.",
+  "settings.supportedDevices.instruction.neurosky2":
+    "타겟 'neurosky' (또는 'neurosky:<시리얼-포트>')를 사용하여 연결하세요. 원시 ThinkGear EEG가 512 Hz로 스트리밍됩니다.",
   "settings.supportedDevices.company.neurosity": "Neurosity",
   "settings.supportedDevices.device.neurosityCrownNotion": "Crown / Notion",
-  "settings.supportedDevices.instruction.neurosity1": "환경 변수 SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD, SKILL_NEUROSITY_DEVICE_ID를 설정하세요.",
-  "settings.supportedDevices.instruction.neurosity2": "타겟 'neurosity:<기기-id>'를 사용하여 Neurosity Cloud API를 통해 연결하세요.",
+  "settings.supportedDevices.instruction.neurosity1":
+    "환경 변수 SKILL_NEUROSITY_EMAIL, SKILL_NEUROSITY_PASSWORD, SKILL_NEUROSITY_DEVICE_ID를 설정하세요.",
+  "settings.supportedDevices.instruction.neurosity2":
+    "타겟 'neurosity:<기기-id>'를 사용하여 Neurosity Cloud API를 통해 연결하세요.",
   "settings.supportedDevices.company.brainvision": "Brain Products",
   "settings.supportedDevices.device.brainvisionRda": "BrainVision RDA",
-  "settings.supportedDevices.instruction.brainvision1": "Recorder/Remote Data Access를 시작하고 RDA TCP 스트림을 노출하세요 (기본값 127.0.0.1:51244).",
-  "settings.supportedDevices.instruction.brainvision2": "타겟 'brainvision:<호스트>:<포트>' (또는 'brainvision')를 사용하여 연결하고 스캔을 스트리밍하세요.",
+  "settings.supportedDevices.instruction.brainvision1":
+    "Recorder/Remote Data Access를 시작하고 RDA TCP 스트림을 노출하세요 (기본값 127.0.0.1:51244).",
+  "settings.supportedDevices.instruction.brainvision2":
+    "타겟 'brainvision:<호스트>:<포트>' (또는 'brainvision')를 사용하여 연결하고 스캔을 스트리밍하세요.",
   "settings.scanner.title": "스캐너 백엔드",
-  "settings.scanner.desc": "백그라운드에서 실행할 검색 전송 수단을 토글합니다. 변경 사항은 다음 앱 재시작 시 적용됩니다.",
+  "settings.scanner.desc":
+    "백그라운드에서 실행할 검색 전송 수단을 토글합니다. 변경 사항은 다음 앱 재시작 시 적용됩니다.",
   "settings.scanner.ble": "Bluetooth LE",
   "settings.scanner.bleDesc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi",
   "settings.scanner.usbSerial": "USB 시리얼",
@@ -164,7 +187,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.idunDesc": "IDUN 클라우드 디코딩 기능을 위한 선택적 토큰.",
   "settings.deviceApi.idunDashboard": "IDUN 대시보드에서 API 토큰 받기",
   "settings.deviceApi.ouraTitle": "Oura Ring",
-  "settings.deviceApi.ouraDesc": "Oura Ring V2 Cloud API에서 수면, 활동, 준비 상태, 심박수, SpO2 데이터를 동기화하기 위한 개인 액세스 토큰.",
+  "settings.deviceApi.ouraDesc":
+    "Oura Ring V2 Cloud API에서 수면, 활동, 준비 상태, 심박수, SpO2 데이터를 동기화하기 위한 개인 액세스 토큰.",
   "settings.deviceApi.ouraDashboard": "Oura 개발자 포털에서 토큰 받기",
   "settings.deviceApi.ouraAccessToken": "액세스 토큰",
   "settings.deviceApi.ouraSyncBtn": "지금 동기화",
@@ -255,7 +279,8 @@ const settings: Record<string, string> = {
   "settings.eegEmbedding": "EEG 임베딩",
   "settings.epochOverlap": "에폭 오버랩",
   "settings.everyNSecs": "{n}초마다",
-  "settings.overlapDescription": "각 5초 창이 이전 창과 공유하는 정도. 오버랩이 높을수록 분당 더 많은 임베딩이 저장됩니다.",
+  "settings.overlapDescription":
+    "각 5초 창이 이전 창과 공유하는 정도. 오버랩이 높을수록 분당 더 많은 임베딩이 저장됩니다.",
   "settings.overlapNone": "없음",
   "settings.globalShortcuts": "전역 단축키",
   "settings.hotkeys": "단축키",
@@ -325,7 +350,8 @@ const settings: Record<string, string> = {
   "settings.wsRestart": "변경 사항은 앱 재시작 후 적용됩니다.",
   "settings.apiToken": "API 인증",
   "settings.apiTokenLabel": "Bearer 토큰",
-  "settings.apiTokenDesc": "설정하면 모든 HTTP 및 WebSocket API 요청에 이 토큰이 Authorization 헤더에 필요합니다. 인증을 비활성화하려면 비워 두세요.",
+  "settings.apiTokenDesc":
+    "설정하면 모든 HTTP 및 WebSocket API 요청에 이 토큰이 Authorization 헤더에 필요합니다. 인증을 비활성화하려면 비워 두세요.",
   "settings.apiTokenPlaceholder": "비밀 토큰을 입력하세요…",
   "settings.apiTokenActive": "인증이 활성 상태 — 요청에 Bearer 토큰이 필요합니다.",
   "settings.apiTokenNone": "토큰 미설정 — API가 개방 상태입니다 (localhost 전용에 적합).",
@@ -360,7 +386,8 @@ const settings: Record<string, string> = {
 
   "shortcutsTab.commandPalette": "명령 팔레트",
   "shortcutsTab.cmdKTitle": "명령 팔레트",
-  "shortcutsTab.cmdKDesc": "아무 곳에서나 ⌘K (Ctrl+K)를 눌러 빠른 접근 명령 목록을 엽니다. 입력하여 필터링, 화살표 키로 탐색, Enter로 실행.",
+  "shortcutsTab.cmdKDesc":
+    "아무 곳에서나 ⌘K (Ctrl+K)를 눌러 빠른 접근 명령 목록을 엽니다. 입력하여 필터링, 화살표 키로 탐색, Enter로 실행.",
   "shortcutsTab.inAppShortcuts": "앱 내 단축키",
 
   "shortcuts.title": "키보드 단축키",
@@ -377,7 +404,8 @@ const settings: Record<string, string> = {
   "settingsTabs.tts": "음성",
 
   "settings.inferenceDevice": "추론 기기",
-  "settings.inferenceDeviceDesc": "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요.",
+  "settings.inferenceDeviceDesc":
+    "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "빠른 추론을 위해 GPU / Metal / CUDA 사용 (권장).",
@@ -396,7 +424,8 @@ const settings: Record<string, string> = {
 
   "settings.activityTracking": "활동 추적",
   "settings.activeWindowToggle": "활성 창 추적",
-  "settings.activeWindowToggleDesc": "어떤 앱과 창이 포커스에 있는지 기록합니다. activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.",
+  "settings.activeWindowToggleDesc":
+    "어떤 앱과 창이 포커스에 있는지 기록합니다. activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.",
   "settings.activeWindowCurrent": "현재 창",
   "settings.activeWindowApp": "앱",
   "settings.activeWindowPath": "경로",
@@ -404,32 +433,39 @@ const settings: Record<string, string> = {
   "settings.activeWindowSince": "활성 시작",
   "settings.activeWindowNone": "활성 창이 감지되지 않음",
   "settings.inputActivityToggle": "키보드 & 마우스 활동 추적",
-  "settings.inputActivityToggleDesc": "키보드와 마우스가 사용된 시간을 초 단위로 기록합니다. 특별한 OS 권한이 필요하지 않습니다. activity.sqlite에 로컬로 저장됩니다.",
+  "settings.inputActivityToggleDesc":
+    "키보드와 마우스가 사용된 시간을 초 단위로 기록합니다. 특별한 OS 권한이 필요하지 않습니다. activity.sqlite에 로컬로 저장됩니다.",
   "settings.inputActivityKeyboard": "마지막 키보드",
   "settings.inputActivityMouse": "마지막 마우스",
   "settings.inputActivityNever": "없음",
   "settings.inputActivityActive": "추적 활성",
   "settings.inputActivityNoData": "추적이 작동하는지 확인하려면 마우스를 움직이거나 키를 누르세요.",
-  "settings.inputActivityPermNote": "특별한 권한이 필요 없음 — 손쉬운 사용 접근 없이 작동하는 내장 OS 유휴 시간 API를 사용합니다.",
+  "settings.inputActivityPermNote":
+    "특별한 권한이 필요 없음 — 손쉬운 사용 접근 없이 작동하는 내장 OS 유휴 시간 API를 사용합니다.",
   "settings.activityDb": "activity.sqlite에 저장됨",
 
   "umapSettings.repulsion": "반발",
   "umapSettings.repulsionStrength": "반발 강도",
-  "umapSettings.repulsionDesc": "비이웃 포인트가 서로 밀어내는 강도를 제어합니다. 높은 값은 세션 A와 B 간에 더 분리된 클러스터를 생성합니다.",
+  "umapSettings.repulsionDesc":
+    "비이웃 포인트가 서로 밀어내는 강도를 제어합니다. 높은 값은 세션 A와 B 간에 더 분리된 클러스터를 생성합니다.",
   "umapSettings.negSampleRate": "음성 샘플 비율",
-  "umapSettings.negSampleRateDesc": "에폭당 양성 엣지당 추출되는 무작위 비이웃 쌍 수. 높을수록 분리가 강하지만 학습이 느려집니다.",
+  "umapSettings.negSampleRateDesc":
+    "에폭당 양성 엣지당 추출되는 무작위 비이웃 쌍 수. 높을수록 분리가 강하지만 학습이 느려집니다.",
   "umapSettings.graphOptimisation": "그래프 & 최적화",
   "umapSettings.nNeighbors": "k-최근접 이웃",
-  "umapSettings.nNeighborsDesc": "KNN 그래프 구축에 사용되는 최근접 이웃 수. 작은 값은 로컬 디테일을, 큰 값은 전역 구조를 더 보존합니다.",
+  "umapSettings.nNeighborsDesc":
+    "KNN 그래프 구축에 사용되는 최근접 이웃 수. 작은 값은 로컬 디테일을, 큰 값은 전역 구조를 더 보존합니다.",
   "umapSettings.nEpochs": "최적화 에폭",
   "umapSettings.nEpochsDesc": "경사 하강 반복 횟수. 에폭이 많을수록 레이아웃이 정밀하지만 계산이 느려집니다.",
   "umapSettings.safetyPerformance": "안전 & 성능",
   "umapSettings.maxPoints": "최대 포인트",
-  "umapSettings.maxPointsDesc": "UMAP에 공급되는 최대 임베딩 수. 큰 데이터셋은 균등 서브샘플링됩니다. 높은 값은 더 많은 GPU 메모리를 사용합니다(n×n 페어와이즈 행렬).",
+  "umapSettings.maxPointsDesc":
+    "UMAP에 공급되는 최대 임베딩 수. 큰 데이터셋은 균등 서브샘플링됩니다. 높은 값은 더 많은 GPU 메모리를 사용합니다(n×n 페어와이즈 행렬).",
   "umapSettings.timeout": "학습 타임아웃",
   "umapSettings.timeoutDesc": "UMAP 옵티마이저의 최대 시간. 이 제한에 도달하면 조기 중지됩니다.",
   "umapSettings.cooldownMs": "GPU 쿨다운",
-  "umapSettings.cooldownMsDesc": "학습 에폭 사이 일시 정지 시간(밀리초). 0 = 최대 GPU 처리량. 증가시키면 GPU 사용률이 줄고 다른 작업을 위한 여유가 생깁니다.",
+  "umapSettings.cooldownMsDesc":
+    "학습 에폭 사이 일시 정지 시간(밀리초). 0 = 최대 GPU 처리량. 증가시키면 GPU 사용률이 줄고 다른 작업을 위한 여유가 생깁니다.",
   "umapSettings.pipeline": "파이프라인",
   "umapSettings.resetDefaults": "기본값으로 재설정",
   "umapSettings.apply": "적용 & 캐시 지우기",
@@ -474,7 +510,8 @@ const settings: Record<string, string> = {
   "tokens.copied": "복사됨!",
   "tokens.empty": "아직 API 토큰이 없습니다. 외부 앱을 인증하려면 하나를 생성하세요.",
   "tokens.defaultToken": "기본 토큰",
-  "tokens.defaultTokenDesc": "앱에서 사용하는 내장 관리자 토큰. 삭제할 수 없습니다. 새 것을 생성하려면 새로고침하세요 — 앱이 자동으로 인식합니다.",
+  "tokens.defaultTokenDesc":
+    "앱에서 사용하는 내장 관리자 토큰. 삭제할 수 없습니다. 새 것을 생성하려면 새로고침하세요 — 앱이 자동으로 인식합니다.",
   "tokens.refresh": "새로고침",
 
   "daemon.connection": "데몬 연결",
@@ -492,14 +529,17 @@ const settings: Record<string, string> = {
   "settingsTabs.lsl": "LSL",
 
   "lsl.localStreams": "로컬 LSL 스트림",
-  "lsl.localStreamsDesc": "로컬 네트워크에서 Lab Streaming Layer를 통해 브로드캐스트되는 EEG/EXG 스트림을 검색합니다. LSL 호환 기기(OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl 등)를 데이터 소스로 사용할 수 있습니다.",
+  "lsl.localStreamsDesc":
+    "로컬 네트워크에서 Lab Streaming Layer를 통해 브로드캐스트되는 EEG/EXG 스트림을 검색합니다. LSL 호환 기기(OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl 등)를 데이터 소스로 사용할 수 있습니다.",
   "lsl.autoConnect": "자동 연결",
   "lsl.autoConnectToggle": "페어링된 LSL 스트림 자동 연결",
   "lsl.idleTimeout": "유휴 타임아웃",
-  "lsl.idleTimeoutDesc": "이 기간 동안 샘플이 도착하지 않으면 세션을 자동 중지합니다. LSL 소스가 충돌하거나 연결 해제 없이 일시 정지된 경우에 유용합니다.",
+  "lsl.idleTimeoutDesc":
+    "이 기간 동안 샘플이 도착하지 않으면 세션을 자동 중지합니다. LSL 소스가 충돌하거나 연결 해제 없이 일시 정지된 경우에 유용합니다.",
   "lsl.idleTimeoutDisabled": "없음",
   "lsl.idleTimeoutEnabled": "활성화",
-  "lsl.autoConnectDesc": "10초마다 LSL 스트림을 자동 스캔하고 발견된 페어링 소스에 연결합니다. 세션이 즉시 시작됩니다 — 수동 작업이 필요하지 않습니다.",
+  "lsl.autoConnectDesc":
+    "10초마다 LSL 스트림을 자동 스캔하고 발견된 페어링 소스에 연결합니다. 세션이 즉시 시작됩니다 — 수동 작업이 필요하지 않습니다.",
   "lsl.pairedStreams": "페어링된 스트림",
   "lsl.pair": "페어링",
   "lsl.unpair": "페어링 해제",
@@ -523,10 +563,12 @@ const settings: Record<string, string> = {
   "lsl.streaming": "스트리밍 중",
   "lsl.sessionActive": "LSL 세션 활성",
   "lsl.noStreams": "LSL 스트림을 찾을 수 없음",
-  "lsl.noStreamsHint": "LSL 소스가 실행 중이고 같은 네트워크에서 브로드캐스트하는지 확인하세요. 일반적인 소스: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
+  "lsl.noStreamsHint":
+    "LSL 소스가 실행 중이고 같은 네트워크에서 브로드캐스트하는지 확인하세요. 일반적인 소스: OpenBCI GUI, BrainFlow, MATLAB, Python pylsl.",
 
   "lsl.irohRemote": "iroh를 통한 원격 LSL",
-  "lsl.irohDesc": "iroh QUIC를 통해 터널링된 원격 LSL 스트림을 수신합니다. 싱크를 시작하고, 원격 클라이언트와 엔드포인트 ID를 공유하면, 소스가 연결될 때 자동으로 녹화가 시작됩니다.",
+  "lsl.irohDesc":
+    "iroh QUIC를 통해 터널링된 원격 LSL 스트림을 수신합니다. 싱크를 시작하고, 원격 클라이언트와 엔드포인트 ID를 공유하면, 소스가 연결될 때 자동으로 녹화가 시작됩니다.",
   "lsl.irohRunning": "싱크 실행 중 — 원격 소스 대기 중",
   "lsl.irohStopped": "싱크 실행되지 않음",
   "lsl.irohStart": "싱크 시작",
@@ -535,7 +577,8 @@ const settings: Record<string, string> = {
   "lsl.irohEndpointId": "엔드포인트 ID",
   "lsl.irohCopy": "복사",
   "lsl.irohCopied": "복사됨!",
-  "lsl.irohEndpointIdHint": "이 ID를 원격 rlsl-iroh 소스와 공유하세요. 원격이 연결되면 세션이 자동으로 시작됩니다 (타임아웃: 120초).",
+  "lsl.irohEndpointIdHint":
+    "이 ID를 원격 rlsl-iroh 소스와 공유하세요. 원격이 연결되면 세션이 자동으로 시작됩니다 (타임아웃: 120초).",
 
   "sleepSettings.title": "수면 일정",
   "sleepSettings.subtitle": "수면 분석 및 세션 분류를 위해 수면 시간을 설정하세요.",
@@ -560,7 +603,8 @@ const settings: Record<string, string> = {
   "sleepSettings.info3": "일정을 조정하면 의도적 낮잠과 밤 수면을 구분하는 데 도움이 됩니다.",
 
   "settings.geoProvider": "위치 서비스",
-  "settings.geoProviderDesc": "세션 및 LLM 도구에 지리적 컨텍스트를 제공하기 위해 위치 서비스를 활성화합니다. macOS에서는 CoreLocation(GPS/Wi-Fi)을 사용하여 고정밀; 다른 플랫폼에서는 IP 지오로케이션을 사용합니다. 기본적으로 비활성화 — 토글하여 권한을 요청하고 테스트하세요.",
+  "settings.geoProviderDesc":
+    "세션 및 LLM 도구에 지리적 컨텍스트를 제공하기 위해 위치 서비스를 활성화합니다. macOS에서는 CoreLocation(GPS/Wi-Fi)을 사용하여 고정밀; 다른 플랫폼에서는 IP 지오로케이션을 사용합니다. 기본적으로 비활성화 — 토글하여 권한을 요청하고 테스트하세요.",
   "settings.geoProviderOff": "위치 서비스가 비활성화되었습니다. LLM 위치 도구를 사용할 수 없습니다.",
   "settings.geoProviderLocal": "위치 서비스 활성화",
   "settings.geoProviderRemote": "원격",
@@ -569,14 +613,16 @@ const settings: Record<string, string> = {
   "settings.geoProviderRemoteOk": "IP 지오로케이션이 작동합니다 (도시 수준 정밀도).",
 
   "settings.storageFormat": "녹화 형식",
-  "settings.storageFormatDesc": "EEG, PPG, IMU, 지표 녹화의 파일 형식을 선택하세요. CSV는 사람이 읽을 수 있고, Parquet는 컴팩트하고 빠릅니다. \"Both\"는 두 형식을 동시에 기록합니다.",
+  "settings.storageFormatDesc":
+    'EEG, PPG, IMU, 지표 녹화의 파일 형식을 선택하세요. CSV는 사람이 읽을 수 있고, Parquet는 컴팩트하고 빠릅니다. "Both"는 두 형식을 동시에 기록합니다.',
   "settings.storageFormatBoth": "둘 다",
   "settings.storageFormatCsvDesc": "사람이 읽을 수 있는 범용 형식",
   "settings.storageFormatParquetDesc": "열 기반, 압축",
   "settings.storageFormatBothDesc": "CSV + Parquet 동시",
 
   "settings.hfEndpoint": "HuggingFace 엔드포인트",
-  "settings.hfEndpointDesc": "모델 다운로드(LLM + EXG + TTS)를 위한 선택적 미러/기본 URL. 기본값은 HF_ENDPOINT 또는 https://huggingface.co를 따릅니다.",
+  "settings.hfEndpointDesc":
+    "모델 다운로드(LLM + EXG + TTS)를 위한 선택적 미러/기본 URL. 기본값은 HF_ENDPOINT 또는 https://huggingface.co를 따릅니다.",
   "settings.hfEndpointCurrent": "현재",
 };
 

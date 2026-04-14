@@ -853,7 +853,7 @@ pub(crate) async fn delete_token(State(state): State<AppState>, Json(req): Json<
 }
 
 pub(crate) async fn refresh_default_token(State(state): State<AppState>) -> impl IntoResponse {
-    use rand::RngCore;
+    use rand::Rng;
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     let new_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);

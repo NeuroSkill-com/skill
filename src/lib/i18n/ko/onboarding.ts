@@ -39,8 +39,7 @@ const onboarding: Record<string, string> = {
   "onboarding.btInstructions": "연결 방법",
   "onboarding.btStep1":
     "BCI 기기의 전원을 켜세요 (헤드셋에 따라 전원 버튼을 길게 누르거나, 스위치를 올리거나, 버튼을 누르세요).",
-  "onboarding.btStep2":
-    "헤드셋을 머리에 씌우세요 — 센서가 귀 뒤와 이마에 위치해야 합니다.",
+  "onboarding.btStep2": "헤드셋을 머리에 씌우세요 — 센서가 귀 뒤와 이마에 위치해야 합니다.",
   "onboarding.btStep3": "위의 스캔을 클릭하세요. {app}이(가) 가장 가까운 BCI 기기를 자동으로 찾아 연결합니다.",
   "onboarding.btSuccess": "헤드셋이 연결되었습니다! 계속 진행하세요.",
   "onboarding.fitTitle": "헤드셋 착용 확인",
@@ -53,12 +52,9 @@ const onboarding: Record<string, string> = {
   "onboarding.quality.no_signal": "신호 없음",
   "onboarding.fitNeedsBt": "실시간 센서 데이터를 보려면 먼저 헤드셋을 연결하세요.",
   "onboarding.fitTips": "더 나은 접촉을 위한 팁",
-  "onboarding.fitTip1":
-    "귀 센서 (TP9/TP10): 귀 뒤 약간 위에 밀착시키세요. 센서를 가리는 머리카락을 치워주세요.",
-  "onboarding.fitTip2":
-    "이마 센서 (AF7/AF8): 깨끗한 피부에 평평하게 밀착시키세요 — 필요시 마른 천으로 닦으세요.",
-  "onboarding.fitTip3":
-    "접촉이 좋지 않다면 센서를 젖은 손가락으로 살짝 적시세요. 전도성이 향상됩니다.",
+  "onboarding.fitTip1": "귀 센서 (TP9/TP10): 귀 뒤 약간 위에 밀착시키세요. 센서를 가리는 머리카락을 치워주세요.",
+  "onboarding.fitTip2": "이마 센서 (AF7/AF8): 깨끗한 피부에 평평하게 밀착시키세요 — 필요시 마른 천으로 닦으세요.",
+  "onboarding.fitTip3": "접촉이 좋지 않다면 센서를 젖은 손가락으로 살짝 적시세요. 전도성이 향상됩니다.",
   "onboarding.fitGood": "착용 상태가 좋습니다! 모든 센서의 접촉이 양호합니다.",
   "onboarding.calibrationTitle": "캘리브레이션 실행",
   "onboarding.calibrationBody":
@@ -74,15 +70,13 @@ const onboarding: Record<string, string> = {
   "onboarding.models.downloading": "다운로드 중…",
   "onboarding.models.downloaded": "다운로드됨",
   "onboarding.models.qwenTitle": "Qwen3.5 4B (Q4_K_M)",
-  "onboarding.models.qwenDesc":
-    "권장 채팅 모델. 대부분의 노트북에서 최적의 품질/속도 균형을 위해 Q4_K_M을 사용합니다.",
+  "onboarding.models.qwenDesc": "권장 채팅 모델. 대부분의 노트북에서 최적의 품질/속도 균형을 위해 Q4_K_M을 사용합니다.",
   "onboarding.models.zunaTitle": "ZUNA EEG 인코더",
   "onboarding.models.zunaDesc": "EEG 임베딩, 시맨틱 기록, 하위 뇌 상태 분석에 필요합니다.",
   "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
   "onboarding.models.neuttsDesc": "더 나은 품질과 음성 복제를 지원하는 권장 다국어 음성 엔진.",
   "onboarding.models.kittenTitle": "Kitten TTS",
-  "onboarding.models.kittenDesc":
-    "가벼운 고속 음성 백엔드, 빠른 대체 수단 및 저사양 시스템에 유용합니다.",
+  "onboarding.models.kittenDesc": "가벼운 고속 음성 백엔드, 빠른 대체 수단 및 저사양 시스템에 유용합니다.",
   "onboarding.models.ocrTitle": "OCR 모델",
   "onboarding.models.ocrDesc":
     "스크린샷에서 텍스트를 추출하기 위한 텍스트 감지 + 인식 모델. 캡처한 화면에서 텍스트 검색이 가능합니다 (각 ~10 MB).",
@@ -99,8 +93,7 @@ const onboarding: Record<string, string> = {
   "onboarding.tray.green": "녹색 — 연결 및 녹화 중",
   "onboarding.tray.red": "빨간색 — Bluetooth 꺼짐",
   "onboarding.tray.open": "트레이 아이콘을 클릭하여 언제든지 메인 대시보드를 표시하거나 숨기세요.",
-  "onboarding.tray.menu":
-    "아이콘을 우클릭(Windows/Linux에서는 좌클릭)하여 빠른 작업 — 연결, 라벨, 캘리브레이션 등.",
+  "onboarding.tray.menu": "아이콘을 우클릭(Windows/Linux에서는 좌클릭)하여 빠른 작업 — 연결, 라벨, 캘리브레이션 등.",
   "onboarding.downloadsComplete": "모든 다운로드 완료!",
   "onboarding.downloadsCompleteBody":
     "권장 모델이 다운로드되어 사용 준비가 되었습니다. 더 많은 모델을 다운로드하거나 다른 모델로 전환하려면",
