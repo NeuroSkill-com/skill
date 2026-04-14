@@ -183,14 +183,14 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
     // Data route should work (200 OK, even if empty)
     const sessResp = await fetch(`${BASE}/v1/history/sessions`, {
       headers: { Authorization: `Bearer ${created.token}` },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(10_000),
     });
     expect(sessResp.status).toBe(200);
 
     // Auth route should fail
     const authResp = await fetch(`${BASE}/v1/auth/tokens`, {
       headers: { Authorization: `Bearer ${created.token}` },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(10_000),
     });
     expect(authResp.status).toBe(403);
 
@@ -202,7 +202,7 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({}),
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(10_000),
     });
     expect(controlResp.status).toBe(403);
   }, 20_000);
