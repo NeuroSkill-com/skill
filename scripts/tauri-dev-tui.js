@@ -157,7 +157,7 @@ function requestRender() {
 function getLayout() {
   const cols = Math.max(40, process.stdout.columns || 120);
   const rows = Math.max(18, process.stdout.rows || 40);
-  const headerRows = 7;
+  const headerRows = 8;
   const footerRows = 1;
   const contentTop = headerRows + 1;
   const contentBottom = rows - footerRows;
@@ -225,19 +225,39 @@ function paneStatusLine(pane, isActive) {
 function render() {
   const { cols, rows, contentTop, contentBottom, paneBodyHeight, leftWidth, rightWidth, dividerCol } = getLayout();
 
-  const art = [
-    " _   _                        ____  _    _ _ _ ",
-    "| \\ | | ___ _   _ _ __ ___   / ___|| | _(_) | |",
-    "|  \\| |/ _ \\ | | | '__/ _ \\  \\___ \\| |/ / | | |",
-    "| |\\  |  __/ |_| | | | (_) |  ___) |   <| | | |",
-    "|_| \\_|\\___|\\__,_|_|  \\___/  |____/|_|\\_\\_|_|_|",
+  const artRaw = [
+    "███╗   ██╗███████╗██╗   ██╗██████╗  ██████╗ ███████╗██╗  ██╗██╗██╗     ██╗",
+    "████╗  ██║██╔════╝██║   ██║██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██║██║     ██║",
+    "██╔██╗ ██║█████╗  ██║   ██║██████╔╝██║   ██║███████╗█████╔╝ ██║██║     ██║",
+    "██║╚██╗██║██╔══╝  ██║   ██║██╔══██╗██║   ██║╚════██║██╔═██╗ ██║██║     ██║",
+    "██║ ╚████║███████╗╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██╗██║███████╗███████╗",
+    "╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝",
   ];
+  const artMaxW = Math.max(...artRaw.map(l => [...l].length));
+  const art = artRaw.map((l, i) => {
+    const padded = l + " ".repeat(Math.max(0, artMaxW - [...l].length));
+    return i === 0 ? padded.slice(0, -1) + "™" : padded;
+  });
 
   process.stdout.write("\x1b[?25l\x1b[2J\x1b[H");
 
   let row = 1;
-  for (const line of art) {
-    process.stdout.write(`\x1b[${row};1H\x1b[95m${fitText(center(line, cols), cols)}\x1b[0m`);
+  const HOTPINK = "\x1b[38;2;255;20;147m";
+  const DIMPINK = "\x1b[38;2;180;80;130m";
+  const RST = "\x1b[0m";
+  for (let i = 0; i < art.length; i++) {
+    const line = art[i];
+    if (i === 0) {
+      // ™ at the end in dim pink, rest in hot pink
+      const body = line.slice(0, -1);
+      const centered = center(body + "™", cols);
+      // Replace the ™ char with dim-pink colored version
+      const tmIdx = centered.lastIndexOf("™");
+      const colored = HOTPINK + centered.slice(0, tmIdx) + DIMPINK + "™" + RST;
+      process.stdout.write(`\x1b[${row};1H${fitText(colored, cols)}`);
+    } else {
+      process.stdout.write(`\x1b[${row};1H${HOTPINK}${fitText(center(line, cols), cols)}${RST}`);
+    }
     row += 1;
   }
 
