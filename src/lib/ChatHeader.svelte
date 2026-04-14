@@ -13,9 +13,9 @@ let isManuallyMaximized = false;
 async function toggleMaximizeWindow() {
   const win = getCurrentWindow();
   if (isManuallyMaximized && savedBounds) {
-    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
-    await win.setPosition(new LogicalPosition(savedBounds.x, savedBounds.y));
+    await win.unmaximize();
     await win.setSize(new LogicalSize(savedBounds.width, savedBounds.height));
+    await win.setPosition(new LogicalPosition(savedBounds.x, savedBounds.y));
     isManuallyMaximized = false;
     savedBounds = null;
   } else {

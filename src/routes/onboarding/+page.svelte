@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { fade, fly } from "svelte/transition";
@@ -82,9 +83,9 @@ let _obIsMax = false;
 async function toggleMaximizeWindow() {
   const win = getCurrentWindow();
   if (_obIsMax && _obSavedBounds) {
-    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
-    await win.setPosition(new LogicalPosition(_obSavedBounds.x, _obSavedBounds.y));
+    await win.unmaximize();
     await win.setSize(new LogicalSize(_obSavedBounds.width, _obSavedBounds.height));
+    await win.setPosition(new LogicalPosition(_obSavedBounds.x, _obSavedBounds.y));
     _obIsMax = false; _obSavedBounds = null;
   } else {
     const pos = await win.outerPosition();

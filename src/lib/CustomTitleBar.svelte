@@ -70,7 +70,13 @@ async function toggleMaximizeWindow() {
     await win.setPosition(new LogicalPosition(savedBounds.x, savedBounds.y));
     isManuallyMaximized = false;
     savedBounds = null;
+    // Resume auto-fit after geometry is applied
+    if (isMainWindow) {
+      setTimeout(() => window.dispatchEvent(new CustomEvent("skill:autofit-resume")), 500);
+    }
   } else {
+    // Pause auto-fit for the entire time the window is maximized
+    if (isMainWindow) window.dispatchEvent(new CustomEvent("skill:autofit-pause"));
     const pos = await win.outerPosition();
     const size = await win.outerSize();
     const factor = await win.scaleFactor();

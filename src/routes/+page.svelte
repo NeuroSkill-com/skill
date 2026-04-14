@@ -938,9 +938,10 @@ let autoHeightRo: ResizeObserver | null = null;
 let autoHeightTimer: ReturnType<typeof setTimeout> | null = null;
 let lastAutoHeight = -1;
 let mainWindowAutoFit = $state(true);
+let autofitPaused = false;
 
 function scheduleAutoHeightFit() {
-  if (!mainWindowAutoFit) return;
+  if (!mainWindowAutoFit || autofitPaused) return;
   if (autoHeightTimer) clearTimeout(autoHeightTimer);
   autoHeightTimer = setTimeout(() => {
     void fitMainWindowHeight();
@@ -948,7 +949,7 @@ function scheduleAutoHeightFit() {
 }
 
 async function fitMainWindowHeight() {
-  if (!mainWindowAutoFit) return;
+  if (!mainWindowAutoFit || autofitPaused) return;
   if (!dashboardContentEl) return;
   const host = document.getElementById("main-content");
   const hostCs = host ? getComputedStyle(host) : null;
@@ -1087,6 +1088,16 @@ onMount(async () => {
   dashboardDiscovered = await getDevices().catch(() => []);
   appVersion = await invoke<string>("get_app_version");
   mainWindowAutoFit = await daemonInvoke<boolean>("get_main_window_auto_fit").catch(() => true);
+
+  // Pause/resume auto-fit when titlebar maximize/restore is in progress
+  const onPause = () => { autofitPaused = true; };
+  const onResume = () => { autofitPaused = false; };
+  window.addEventListener("skill:autofit-pause", onPause);
+  window.addEventListener("skill:autofit-resume", onResume);
+  unlisteners.push((() => {
+    window.removeEventListener("skill:autofit-pause", onPause);
+    window.removeEventListener("skill:autofit-resume", onResume);
+  }) as unknown as UnlistenFn);
 
   // Auto-fit window height to dashboard content as cards expand/collapse.
   autoHeightRo = new ResizeObserver(() => scheduleAutoHeightFit());
