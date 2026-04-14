@@ -584,4 +584,89 @@ mod tests {
         assert_eq!(s.expired_entries, 0);
         c.clear();
     }
+
+    // ── extract_domain ───────────────────────────────────────────────────
+
+    #[test]
+    fn extract_domain_https() {
+        assert_eq!(extract_domain("https://example.com/path"), "example.com");
+    }
+
+    #[test]
+    fn extract_domain_http_with_port() {
+        assert_eq!(extract_domain("http://localhost:8080/api"), "localhost");
+    }
+
+    #[test]
+    fn extract_domain_no_scheme() {
+        assert_eq!(extract_domain("example.com/path"), "example.com");
+    }
+
+    #[test]
+    fn extract_domain_bare() {
+        assert_eq!(extract_domain("example.com"), "example.com");
+    }
+
+    #[test]
+    fn extract_domain_uppercased() {
+        assert_eq!(extract_domain("https://Example.COM/Page"), "example.com");
+    }
+
+    // ── hex_encode ───────────────────────────────────────────────────────
+
+    #[test]
+    fn hex_encode_empty() {
+        assert_eq!(hex_encode(&[]), "");
+    }
+
+    #[test]
+    fn hex_encode_known() {
+        assert_eq!(hex_encode(&[0xff, 0x00, 0xab]), "ff00ab");
+    }
+
+    // ── cache_key determinism ────────────────────────────────────────────
+
+    #[test]
+    fn cache_key_search_deterministic() {
+        let k1 = cache_key_search("test query", "default", false);
+        let k2 = cache_key_search("test query", "default", false);
+        assert_eq!(k1, k2);
+        assert_eq!(k1.len(), 64); // SHA-256 hex
+    }
+
+    #[test]
+    fn cache_key_search_varies_by_render() {
+        let k1 = cache_key_search("test", "default", false);
+        let k2 = cache_key_search("test", "default", true);
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_search_varies_by_backend() {
+        let k1 = cache_key_search("test", "google", false);
+        let k2 = cache_key_search("test", "duckduckgo", false);
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_search_case_insensitive_query() {
+        let k1 = cache_key_search("Hello", "default", false);
+        let k2 = cache_key_search("hello", "default", false);
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
+    fn cache_key_fetch_deterministic() {
+        let k1 = cache_key_fetch("https://example.com", false);
+        let k2 = cache_key_fetch("https://example.com", false);
+        assert_eq!(k1, k2);
+        assert_eq!(k1.len(), 64);
+    }
+
+    #[test]
+    fn cache_key_fetch_varies_by_url() {
+        let k1 = cache_key_fetch("https://a.com", false);
+        let k2 = cache_key_fetch("https://b.com", false);
+        assert_ne!(k1, k2);
+    }
 }

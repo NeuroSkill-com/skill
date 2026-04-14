@@ -6,6 +6,7 @@ use super::helpers::*;
 use super::safety::*;
 use super::safety::{clear_bash_edit_hook, request_bash_edit, set_bash_edit_hook};
 use super::status::format_status_as_text;
+use super::tools_system::exec_date;
 use super::tools_web::{exec_web_fetch, exec_web_search};
 use super::truncate::*;
 use crate::types::LlmToolConfig;
@@ -428,4 +429,87 @@ fn retry_zero_retries_runs_once() {
     });
     assert_eq!(result, Err("fail"));
     assert_eq!(attempts, 1);
+}
+
+// ── enforce_path_integrity ──────────────────────────────────────────────
+
+#[test]
+fn enforce_path_integrity_allows_home() {
+    let home = dirs::home_dir().unwrap();
+    let p = home.join("some/file.txt");
+    assert!(enforce_path_integrity(&p).is_ok());
+}
+
+#[test]
+fn enforce_path_integrity_allows_cwd() {
+    let cwd = std::env::current_dir().unwrap();
+    let p = cwd.join("test.txt");
+    assert!(enforce_path_integrity(&p).is_ok());
+}
+
+#[test]
+fn enforce_path_integrity_allows_tmp() {
+    let tmp = std::env::temp_dir();
+    let p = tmp.join("test.txt");
+    assert!(enforce_path_integrity(&p).is_ok());
+}
+
+#[test]
+fn enforce_path_integrity_rejects_outside_roots() {
+    // /etc is unlikely to be under home/cwd/tmp
+    let p = std::path::PathBuf::from("/etc/passwd");
+    std::env::remove_var("SKILL_DISABLE_STRICT_PATH_SAFETY");
+    let result = enforce_path_integrity(&p);
+    assert!(result.is_err(), "should reject /etc/passwd");
+}
+
+#[test]
+fn enforce_path_integrity_disabled_by_env() {
+    // This test must run alone (env var race). Use a path under /tmp which is
+    // always allowed, then verify the env-var bypass *additionally* allows /etc.
+    // We test the bypass indirectly: if the var is "1", any path should pass.
+    let prev = std::env::var("SKILL_DISABLE_STRICT_PATH_SAFETY").ok();
+    std::env::set_var("SKILL_DISABLE_STRICT_PATH_SAFETY", "1");
+    // /usr/bin is outside cwd/home/tmp on most systems
+    let p = std::path::PathBuf::from("/usr/bin/env");
+    let result = enforce_path_integrity(&p);
+    // Restore
+    match prev {
+        Some(v) => std::env::set_var("SKILL_DISABLE_STRICT_PATH_SAFETY", v),
+        None => std::env::remove_var("SKILL_DISABLE_STRICT_PATH_SAFETY"),
+    }
+    assert!(result.is_ok(), "env bypass should allow any path");
+}
+
+// ── exec_date ───────────────────────────────────────────────────────────
+
+#[test]
+fn exec_date_returns_structured_json() {
+    let result = exec_date();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["tool"], "date");
+    assert!(result["unix"].as_u64().unwrap() > 1700000000);
+    assert!(result["unix_ms"].as_u64().unwrap() > 1700000000000u64);
+    assert!(result["iso_utc"].as_str().unwrap().contains("T"));
+    assert!(result["iso_local"].as_str().is_some());
+    assert!(result["timezone"]["offset"].as_str().is_some());
+    assert!(result["timezone"]["offset_seconds"].is_number());
+}
+
+#[test]
+fn exec_date_iso_utc_ends_with_z() {
+    let result = exec_date();
+    let utc = result["iso_utc"].as_str().unwrap();
+    assert!(utc.ends_with('Z'), "expected UTC ISO to end with Z: {utc}");
+}
+
+#[test]
+fn exec_date_timezone_offset_format() {
+    let result = exec_date();
+    let offset = result["timezone"]["offset"].as_str().unwrap();
+    // Should match +HH:MM or -HH:MM
+    assert!(
+        offset.len() == 6 && (offset.starts_with('+') || offset.starts_with('-')),
+        "unexpected offset format: {offset}"
+    );
 }

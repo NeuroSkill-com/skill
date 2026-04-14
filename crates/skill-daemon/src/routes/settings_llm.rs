@@ -19,9 +19,11 @@ pub(crate) async fn set_llm_config(
     State(state): State<AppState>,
     Json(config): Json<skill_settings::LlmConfig>,
 ) -> Json<serde_json::Value> {
-    // Detect whether n_gpu_layers changed (requires server restart).
+    // Detect whether n_gpu_layers or ctx_size changed (requires server restart).
     #[cfg(feature = "llm")]
     let prev_gpu_layers = state.llm_config.lock().map(|g| g.n_gpu_layers).unwrap_or(0);
+    #[cfg(feature = "llm")]
+    let prev_ctx_size = state.llm_config.lock().map(|g| g.ctx_size).ok();
 
     let mut settings = load_user_settings(&state);
     settings.llm = config.clone();
@@ -51,8 +53,9 @@ pub(crate) async fn set_llm_config(
                 }
             }
 
-            // If n_gpu_layers changed, the model must be reloaded.
-            if config.n_gpu_layers != prev_gpu_layers {
+            // If n_gpu_layers or ctx_size changed, the model must be reloaded.
+            let ctx_changed = prev_ctx_size.map_or(false, |prev| prev != config.ctx_size);
+            if config.n_gpu_layers != prev_gpu_layers || ctx_changed {
                 skill_llm::shutdown_cell(&state.llm_state_cell);
                 if let Ok(mut st) = state.llm_status.lock() {
                     *st = "stopped".to_string();

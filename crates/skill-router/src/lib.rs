@@ -759,4 +759,81 @@ mod tests {
         assert!(COMMANDS.contains(&"search"));
         assert!(COMMANDS.contains(&"say"));
     }
+
+    // ── find_label_for_epoch ─────────────────────────────────────────────
+
+    #[test]
+    fn find_label_exact_match() {
+        let labels = vec![(100, 200, "meditation".to_string())];
+        assert_eq!(find_label_for_epoch(&labels, 150), Some("meditation".into()));
+    }
+
+    #[test]
+    fn find_label_at_boundaries() {
+        let labels = vec![(100, 200, "focus".to_string())];
+        assert_eq!(find_label_for_epoch(&labels, 100), Some("focus".into()));
+        assert_eq!(find_label_for_epoch(&labels, 200), Some("focus".into()));
+    }
+
+    #[test]
+    fn find_label_outside_range() {
+        let labels = vec![(100, 200, "focus".to_string())];
+        assert_eq!(find_label_for_epoch(&labels, 99), None);
+        assert_eq!(find_label_for_epoch(&labels, 201), None);
+    }
+
+    #[test]
+    fn find_label_empty_labels() {
+        let labels: Vec<(u64, u64, String)> = vec![];
+        assert_eq!(find_label_for_epoch(&labels, 150), None);
+    }
+
+    #[test]
+    fn find_label_first_matching() {
+        let labels = vec![(100, 200, "first".to_string()), (150, 250, "second".to_string())];
+        assert_eq!(find_label_for_epoch(&labels, 175), Some("first".into()));
+    }
+
+    // ── UMAP cache paths ─────────────────────────────────────────────────
+
+    #[test]
+    fn umap_cache_dir_appends_subdir() {
+        let dir = umap_cache_dir(Path::new("/home/user/.skill"));
+        assert_eq!(dir, PathBuf::from("/home/user/.skill/umap_cache"));
+    }
+
+    #[test]
+    fn umap_cache_path_deterministic() {
+        let p = umap_cache_path(Path::new("/data"), 100, 200, 300, 400);
+        assert_eq!(p, PathBuf::from("/data/umap_cache/umap_100_200_300_400.json"));
+    }
+
+    // ── analyze_umap_points ──────────────────────────────────────────────
+
+    #[test]
+    fn analyze_umap_empty_returns_null() {
+        let result = analyze_umap_points(&[], &[], &[], 0);
+        assert!(result.is_null());
+    }
+
+    #[test]
+    fn analyze_umap_single_session() {
+        let embedding = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let session_ids = vec![0, 0];
+        let timestamps = vec![1000, 2000];
+        let result = analyze_umap_points(&embedding, &session_ids, &timestamps, 2);
+        assert!(result.is_object());
+        assert!(result.get("inter_cluster_distance").is_some());
+    }
+
+    #[test]
+    fn analyze_umap_two_sessions() {
+        let embedding = vec![vec![0.0, 0.0, 0.0], vec![10.0, 10.0, 10.0]];
+        let session_ids = vec![0, 1];
+        let timestamps = vec![1000, 2000];
+        let result = analyze_umap_points(&embedding, &session_ids, &timestamps, 1);
+        assert!(result.is_object());
+        let dist = result["inter_cluster_distance"].as_f64().unwrap();
+        assert!(dist > 0.0, "centroids should be separated");
+    }
 }

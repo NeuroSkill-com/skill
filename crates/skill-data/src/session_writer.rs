@@ -141,3 +141,41 @@ impl SessionWriter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::StorageFormat;
+
+    #[test]
+    fn storage_format_parse_csv() {
+        assert_eq!(StorageFormat::parse("csv"), StorageFormat::Csv);
+        assert_eq!(StorageFormat::parse("CSV"), StorageFormat::Csv);
+        assert_eq!(StorageFormat::parse("unknown"), StorageFormat::Csv);
+        assert_eq!(StorageFormat::parse(""), StorageFormat::Csv);
+    }
+
+    #[test]
+    fn storage_format_parse_parquet() {
+        assert_eq!(StorageFormat::parse("parquet"), StorageFormat::Parquet);
+        assert_eq!(StorageFormat::parse("PARQUET"), StorageFormat::Parquet);
+        assert_eq!(StorageFormat::parse("Parquet"), StorageFormat::Parquet);
+    }
+
+    #[test]
+    fn storage_format_parse_both() {
+        assert_eq!(StorageFormat::parse("both"), StorageFormat::Both);
+        assert_eq!(StorageFormat::parse("BOTH"), StorageFormat::Both);
+    }
+
+    #[test]
+    fn storage_format_as_str_roundtrip() {
+        assert_eq!(StorageFormat::Csv.as_str(), "csv");
+        assert_eq!(StorageFormat::Parquet.as_str(), "parquet");
+        assert_eq!(StorageFormat::Both.as_str(), "both");
+
+        // Roundtrip
+        for fmt in [StorageFormat::Csv, StorageFormat::Parquet, StorageFormat::Both] {
+            assert_eq!(StorageFormat::parse(fmt.as_str()), fmt);
+        }
+    }
+}

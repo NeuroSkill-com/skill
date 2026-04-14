@@ -208,3 +208,119 @@ fn new_profile_id_is_unique_across_calls() {
     assert!(!a.is_empty());
     assert!(!b.is_empty());
 }
+
+// ── parse_hhmm ──────────────────────────────────────────────────────────
+
+#[test]
+fn parse_hhmm_valid() {
+    assert_eq!(parse_hhmm("08:30"), (8, 30));
+    assert_eq!(parse_hhmm("23:59"), (23, 59));
+    assert_eq!(parse_hhmm("00:00"), (0, 0));
+}
+
+#[test]
+fn parse_hhmm_clamps_overflow() {
+    assert_eq!(parse_hhmm("25:70"), (23, 59));
+    assert_eq!(parse_hhmm("99:99"), (23, 59));
+}
+
+#[test]
+fn parse_hhmm_bad_input() {
+    assert_eq!(parse_hhmm(""), (0, 0));
+    assert_eq!(parse_hhmm("garbage"), (0, 0));
+    assert_eq!(parse_hhmm(":"), (0, 0));
+}
+
+// ── SleepConfig::duration_minutes ───────────────────────────────────────
+
+#[test]
+fn sleep_duration_normal() {
+    let cfg = SleepConfig {
+        bedtime: "23:00".into(),
+        wake_time: "07:00".into(),
+        preset: SleepPreset::Default,
+    };
+    assert_eq!(cfg.duration_minutes(), 480); // 8 hours
+}
+
+#[test]
+fn sleep_duration_same_day() {
+    let cfg = SleepConfig {
+        bedtime: "01:00".into(),
+        wake_time: "09:00".into(),
+        preset: SleepPreset::Default,
+    };
+    assert_eq!(cfg.duration_minutes(), 480); // 8 hours
+}
+
+#[test]
+fn sleep_duration_overnight() {
+    let cfg = SleepConfig {
+        bedtime: "22:00".into(),
+        wake_time: "06:00".into(),
+        preset: SleepPreset::Default,
+    };
+    assert_eq!(cfg.duration_minutes(), 480); // 8 hours
+}
+
+#[test]
+fn sleep_duration_equal_times() {
+    let cfg = SleepConfig {
+        bedtime: "08:00".into(),
+        wake_time: "08:00".into(),
+        preset: SleepPreset::Default,
+    };
+    assert_eq!(cfg.duration_minutes(), 0);
+}
+
+// ── UserSettings serde ──────────────────────────────────────────────────
+
+#[test]
+fn user_settings_default_serde_roundtrip() {
+    let s = UserSettings::default();
+    let json = serde_json::to_string(&s).unwrap();
+    let back: UserSettings = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.ws_host, s.ws_host);
+    assert_eq!(back.ws_port, s.ws_port);
+    assert_eq!(back.theme, s.theme);
+}
+
+#[test]
+fn user_settings_from_empty_json() {
+    let s: UserSettings = serde_json::from_str("{}").unwrap();
+    assert_eq!(s.ws_port, default_ws_port());
+    assert_eq!(s.theme, default_theme());
+    assert_eq!(s.accent_color, default_accent_color());
+    assert_eq!(s.daily_goal_min, default_daily_goal_min());
+}
+
+#[test]
+fn umap_user_config_default_roundtrip() {
+    let cfg = UmapUserConfig::default();
+    let json = serde_json::to_string(&cfg).unwrap();
+    let back: UmapUserConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.n_epochs, 500);
+    assert_eq!(back.n_neighbors, 15);
+    assert_eq!(back.timeout_secs, 120);
+}
+
+#[test]
+fn settings_path_builds_correctly() {
+    let p = settings_path(std::path::Path::new("/home/user/.skill"));
+    assert!(p.to_str().unwrap().contains("settings"));
+}
+
+// ── default_* functions ─────────────────────────────────────────────────
+
+#[test]
+fn default_values_are_sensible() {
+    assert!(!default_ws_host().is_empty());
+    assert!(default_ws_port() > 0);
+    assert!(!default_theme().is_empty());
+    assert!(!default_accent_color().is_empty());
+    assert!(default_daily_goal_min() > 0);
+    assert!(!default_embedding_model().is_empty());
+    assert!(default_overlap_secs() >= 0.0);
+    assert!(default_update_check_interval() > 0);
+    assert!(!default_hf_endpoint().is_empty());
+}

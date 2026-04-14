@@ -49,7 +49,7 @@ pub fn estimate_memory_gb(params_b: f64, quant: &str, ctx: u32) -> f64 {
 pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
     // Need model metadata to make an intelligent recommendation.
     if entry.params_b <= 0.0 || entry.max_context_length == 0 {
-        return 4096; // legacy fallback
+        return 8192; // legacy fallback (4096 is too small for tool-augmented prompts)
     }
 
     let gpu = skill_data::gpu_stats::read();
@@ -81,7 +81,7 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
         }
     }
 
-    4096 // absolute minimum
+    8192 // absolute minimum (tool-augmented prompts need >4K)
 }
 
 #[cfg(test)]

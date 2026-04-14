@@ -1323,4 +1323,66 @@ mod tests {
         ];
         assert_eq!(pca_3d(&data).len(), 4);
     }
+
+    #[test]
+    fn pca_3d_empty() {
+        assert!(pca_3d(&[]).is_empty());
+    }
+
+    #[test]
+    fn pca_3d_single_point() {
+        let result = pca_3d(&[vec![1.0, 2.0, 3.0]]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], (0.0, 0.0, 0.0));
+    }
+
+    // ── date_from_ts ─────────────────────────────────────────────────────
+
+    #[test]
+    fn date_from_ts_extracts_date_prefix() {
+        // ts format is YYYYMMDDHHmmss — dividing by 1_000_000 gives YYYYMMDD
+        assert_eq!(date_from_ts(20260414143000), "20260414");
+    }
+
+    #[test]
+    fn date_from_ts_epoch() {
+        assert_eq!(date_from_ts(19700101000000), "19700101");
+    }
+
+    // ── ts_ms_to_unix ────────────────────────────────────────────────────
+
+    #[test]
+    fn ts_ms_to_unix_unix_milliseconds() {
+        // 1773576000000 ms = 1773576000 unix seconds (2026-03-15 12:00 UTC)
+        assert_eq!(ts_ms_to_unix(1773576000000), 1773576000);
+    }
+
+    #[test]
+    fn ts_ms_to_unix_yyyymmddhhmmss_format() {
+        // 20260315120000000 → YYYYMMDDHHmmss × 1000 → should convert to unix seconds
+        let result = ts_ms_to_unix(20260315120000000);
+        assert!(result > 1700000000, "expected valid unix ts, got {result}");
+    }
+
+    // ── pca_2d additional ────────────────────────────────────────────────
+
+    #[test]
+    fn pca_2d_two_points() {
+        let data = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
+        let pts = pca_2d(&data);
+        assert_eq!(pts.len(), 2);
+        // Two points should be symmetric around origin
+        assert!((pts[0].0 + pts[1].0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn pca_2d_identical_points() {
+        let data = vec![vec![1.0, 2.0, 3.0]; 5];
+        let pts = pca_2d(&data);
+        assert_eq!(pts.len(), 5);
+        // All identical → all projected to same point (may not be exactly 0 due to float)
+        for p in &pts {
+            assert!((p.0 - pts[0].0).abs() < 1e-5 && (p.1 - pts[0].1).abs() < 1e-5);
+        }
+    }
 }

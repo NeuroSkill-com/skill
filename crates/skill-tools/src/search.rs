@@ -1074,4 +1074,198 @@ mod web_search_tests {
             "weather ({w_score}) should be much higher than garbage ({g_score})"
         );
     }
+
+    // ── strip_json_ld_blocks ─────────────────────────────────────────────
+
+    #[test]
+    fn strip_json_ld_removes_context_block() {
+        let input = r#"Hello {"@context":"https://schema.org","@type":"Article","name":"Test"} world"#;
+        let result = strip_json_ld_blocks(input);
+        assert!(!result.contains("@context"));
+        assert!(result.contains("Hello"));
+        assert!(result.contains("world"));
+    }
+
+    #[test]
+    fn strip_json_ld_removes_type_block() {
+        let input = r#"Before {"@type":"WebPage","url":"https://example.com"} after"#;
+        let result = strip_json_ld_blocks(input);
+        assert!(!result.contains("@type"));
+        assert!(result.contains("Before"));
+        assert!(result.contains("after"));
+    }
+
+    #[test]
+    fn strip_json_ld_preserves_normal_json() {
+        let input = r#"Data: {"name":"Alice","age":30}"#;
+        let result = strip_json_ld_blocks(input);
+        assert!(result.contains("Alice"));
+        assert!(result.contains("age"));
+    }
+
+    #[test]
+    fn strip_json_ld_handles_nested_braces() {
+        let input = r#"{"@context":"schema.org","nested":{"key":"val"}} text"#;
+        let result = strip_json_ld_blocks(input);
+        assert!(!result.contains("@context"));
+        assert!(result.contains("text"));
+    }
+
+    #[test]
+    fn strip_json_ld_no_braces() {
+        let input = "Just plain text with no JSON";
+        assert_eq!(strip_json_ld_blocks(input), input);
+    }
+
+    #[test]
+    fn strip_json_ld_schema_org_keyword() {
+        let input = r#"x {"schema.org":"yes","data":1} y"#;
+        let result = strip_json_ld_blocks(input);
+        assert!(!result.contains("schema.org"));
+    }
+
+    // ── strip_html_tags ──────────────────────────────────────────────────
+
+    #[test]
+    fn strip_html_removes_script_tags() {
+        let html = "Hello <script>alert('xss')</script> world";
+        let result = strip_html_tags(html);
+        assert!(result.contains("Hello"));
+        assert!(result.contains("world"));
+        assert!(!result.contains("alert"));
+    }
+
+    #[test]
+    fn strip_html_removes_style_tags() {
+        let html = "<style>body{color:red}</style><p>Content</p>";
+        let result = strip_html_tags(html);
+        assert!(result.contains("Content"));
+        assert!(!result.contains("color:red"));
+    }
+
+    #[test]
+    fn strip_html_removes_head() {
+        let html = "<html><head><title>Page</title><meta charset='utf-8'></head><body>Text</body></html>";
+        let result = strip_html_tags(html);
+        assert!(result.contains("Text"));
+        assert!(!result.contains("<title>"));
+    }
+
+    #[test]
+    fn strip_html_decodes_entities() {
+        let html = "A &amp; B &lt; C &gt; D &quot;E&quot;";
+        let result = strip_html_tags(html);
+        assert!(result.contains("A & B"));
+        assert!(result.contains("< C >"));
+        assert!(result.contains("\"E\""));
+    }
+
+    #[test]
+    fn strip_html_removes_comments() {
+        let html = "before <!-- comment --> after";
+        let result = strip_html_tags(html);
+        assert!(result.contains("before"));
+        assert!(result.contains("after"));
+        assert!(!result.contains("comment"));
+    }
+
+    #[test]
+    fn strip_html_strips_tags() {
+        let html = "<div><p>Hello <b>world</b></p></div>";
+        let result = strip_html_tags(html);
+        assert!(result.contains("Hello"));
+        assert!(result.contains("world"));
+        assert!(!result.contains("<p>"));
+    }
+
+    #[test]
+    fn strip_html_removes_nav_footer() {
+        let html = "<nav>Menu</nav><main>Content</main><footer>Copyright</footer>";
+        let result = strip_html_tags(html);
+        assert!(result.contains("Content"));
+        assert!(!result.contains("Menu"));
+        assert!(!result.contains("Copyright"));
+    }
+
+    #[test]
+    fn strip_html_plain_text_unchanged() {
+        let text = "Just plain text with no HTML";
+        let result = strip_html_tags(text);
+        assert_eq!(result.trim(), text);
+    }
+
+    // ── extract_attr_value / extract_tag_content ─────────────────────────
+
+    #[test]
+    fn extract_attr_value_finds_href() {
+        let html = r#"<a class="result__a" href="https://example.com">Title</a>"#;
+        let result = extract_attr_value(html, r#"class="result__a""#, r#"href=""#);
+        assert_eq!(result, Some("https://example.com".into()));
+    }
+
+    #[test]
+    fn extract_attr_value_returns_none_when_missing() {
+        let html = "<p>No matching marker</p>";
+        assert!(extract_attr_value(html, r#"class="missing""#, r#"href=""#).is_none());
+    }
+
+    #[test]
+    fn extract_tag_content_finds_text() {
+        let html = r#"<a class="result__a" href="url">Hello World</a>"#;
+        let result = extract_tag_content(html, r#"class="result__a""#);
+        assert_eq!(result, Some("Hello World".into()));
+    }
+
+    #[test]
+    fn extract_tag_content_returns_none_when_missing() {
+        assert!(extract_tag_content("<p>text</p>", r#"class="missing""#).is_none());
+    }
+
+    // ── parse_ddg_html ──────────────────────────────────────────────────
+
+    #[test]
+    fn parse_ddg_html_empty_body() {
+        assert!(parse_ddg_html("").is_empty());
+    }
+
+    #[test]
+    fn parse_ddg_html_no_results() {
+        assert!(parse_ddg_html("<html><body>No results found</body></html>").is_empty());
+    }
+
+    #[test]
+    fn parse_ddg_html_single_result() {
+        let html = r##"
+        <div class="result results_links results_links_deep web-result ">
+            <a class="result__a" href="https://example.com">Example Title</a>
+            <a class="result__snippet" href="#">This is the snippet text.</a>
+        </div>
+        "##;
+        let results = parse_ddg_html(html);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["url"], "https://example.com");
+        assert!(results[0]["title"].as_str().unwrap().contains("Example Title"));
+        assert!(results[0]["snippet"].as_str().unwrap().contains("snippet text"));
+    }
+
+    // ── score_rendered_text ──────────────────────────────────────────────
+
+    #[test]
+    fn score_rendered_text_high_for_prose() {
+        let prose = "The quick brown fox jumps over the lazy dog. This is a well-formed sentence with proper grammar and multiple words. It contains useful information for the reader.";
+        let score = score_rendered_text(prose);
+        assert!(score > 10, "prose should score high: {score}");
+    }
+
+    #[test]
+    fn score_rendered_text_low_for_garbage() {
+        let garbage = "asdkfjaskdf jklasdf jklasdf jkldsaf k";
+        let score = score_rendered_text(garbage);
+        assert!(score < 50, "garbage should score low: {score}");
+    }
+
+    #[test]
+    fn score_rendered_text_zero_for_empty() {
+        assert_eq!(score_rendered_text(""), 0);
+    }
 }

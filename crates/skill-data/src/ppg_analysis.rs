@@ -740,4 +740,111 @@ mod tests {
         a.push(1, &[1000.0; 20]);
         assert!(a.compute_epoch(20).is_none());
     }
+
+    // ── lf_hf_from_ibis ─────────────────────────────────────────────────
+
+    #[test]
+    fn lf_hf_too_few_ibis_returns_zero() {
+        assert_eq!(lf_hf_from_ibis(&[]), 0.0);
+        assert_eq!(lf_hf_from_ibis(&[0.8, 0.9]), 0.0);
+        assert_eq!(lf_hf_from_ibis(&[0.8, 0.9, 1.0]), 0.0);
+    }
+
+    #[test]
+    fn lf_hf_regular_ibis_returns_non_negative() {
+        // Steady 75 bpm → 0.8s IBIs
+        let ibis = vec![0.8; 30];
+        let ratio = lf_hf_from_ibis(&ibis);
+        assert!(ratio >= 0.0, "ratio should be non-negative: {ratio}");
+    }
+
+    // ── band_power_goertzel ──────────────────────────────────────────────
+
+    #[test]
+    fn band_power_returns_non_negative() {
+        let signal: Vec<f64> = (0..256)
+            .map(|i| (2.0 * std::f64::consts::PI * 0.2 * i as f64 / 4.0).sin())
+            .collect();
+        let power = band_power_goertzel(&signal, 4.0, 0.1, 0.3);
+        assert!(power >= 0.0, "power should be non-negative: {power}");
+        assert!(power > 0.0, "sinusoid in-band should have positive power");
+    }
+
+    // ── respiratory_rate_from_ppg ─────────────────────────────────────────
+
+    #[test]
+    fn respiratory_rate_short_signal_returns_zero() {
+        // Less than 4 seconds at 64 Hz → 0
+        let signal = vec![1.0; 100];
+        assert_eq!(respiratory_rate_from_ppg(&signal, 64.0), 0.0);
+    }
+
+    #[test]
+    fn respiratory_rate_plausible_range() {
+        // Generate a 10s signal with 0.25 Hz breathing modulation (15 bpm)
+        let sr = 64.0;
+        let n = (sr * 10.0) as usize;
+        let signal: Vec<f64> = (0..n)
+            .map(|i| {
+                let t = i as f64 / sr;
+                1000.0 + 10.0 * (2.0 * std::f64::consts::PI * 0.25 * t).sin()
+            })
+            .collect();
+        let rr = respiratory_rate_from_ppg(&signal, sr);
+        // Should be in plausible range (0-40 bpm) or 0 if not detected
+        assert!(rr >= 0.0 && rr <= 40.0, "rr={rr}");
+    }
+
+    // ── detect_peaks_and_ibis ────────────────────────────────────────────
+
+    #[test]
+    fn detect_peaks_empty_signal() {
+        let ibis = detect_peaks_and_ibis(&[], 64.0);
+        assert!(ibis.is_empty());
+    }
+
+    #[test]
+    fn detect_peaks_constant_signal_no_peaks() {
+        let signal = vec![1000.0; 256];
+        let ibis = detect_peaks_and_ibis(&signal, 64.0);
+        assert!(ibis.is_empty());
+    }
+
+    #[test]
+    fn detect_peaks_synthetic_heartbeat() {
+        // Generate a 5s signal with peaks at ~1Hz (60 bpm)
+        let sr = 64.0;
+        let n = (sr * 5.0) as usize;
+        let signal: Vec<f64> = (0..n)
+            .map(|i| {
+                let t = i as f64 / sr;
+                let phase = t.fract();
+                // Sharp pulse every 1 second
+                if phase < 0.05 {
+                    1200.0
+                } else {
+                    1000.0
+                }
+            })
+            .collect();
+        let ibis = detect_peaks_and_ibis(&signal, sr);
+        // May or may not detect peaks depending on adaptive threshold
+        for &ibi in &ibis {
+            assert!(ibi >= PPG_IBI_MIN_S && ibi <= PPG_IBI_MAX_S, "IBI out of range: {ibi}");
+        }
+    }
+
+    // ── spo2_from_red_ir ─────────────────────────────────────────────────
+
+    #[test]
+    fn spo2_matching_signals_returns_high() {
+        // When red and IR have identical modulation, R-ratio ≈ 1, SpO2 should be ~95-98%
+        let n = 256;
+        let ir: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + 10.0 * (2.0 * std::f64::consts::PI * i as f64 / 64.0).sin())
+            .collect();
+        let red = ir.clone();
+        let spo2 = spo2_from_red_ir(&red, &ir);
+        assert!(spo2 >= 80.0 && spo2 <= 100.0, "spo2={spo2}");
+    }
 }

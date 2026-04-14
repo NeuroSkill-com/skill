@@ -239,3 +239,49 @@ pub fn get_model_hardware_fit(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_param_count_7b() {
+        let (label, raw) = parse_param_count("Llama-3.3-70B");
+        assert_eq!(label, "70B");
+        assert_eq!(raw, Some(70_000_000_000));
+    }
+
+    #[test]
+    fn parse_param_count_millions() {
+        let (label, raw) = parse_param_count("SmolLM-360M");
+        assert_eq!(label, "360M");
+        assert_eq!(raw, Some(360_000_000));
+    }
+
+    #[test]
+    fn parse_param_count_default_fallback() {
+        let (label, raw) = parse_param_count("NoNumbers");
+        assert_eq!(label, "7B");
+        assert_eq!(raw, None);
+    }
+
+    #[test]
+    fn parse_param_count_picks_first_match() {
+        let (label, _raw) = parse_param_count("Qwen3-235B-A22B");
+        assert_eq!(label, "235B");
+    }
+
+    #[test]
+    fn parse_param_count_lowercase() {
+        let (label, raw) = parse_param_count("model-4b");
+        assert_eq!(label, "4B");
+        assert_eq!(raw, Some(4_000_000_000));
+    }
+
+    #[test]
+    fn parse_param_count_with_decimal() {
+        let (label, raw) = parse_param_count("Phi-3.5-mini-3.8B");
+        assert_eq!(label, "3.8B");
+        assert_eq!(raw, Some(3_800_000_000));
+    }
+}

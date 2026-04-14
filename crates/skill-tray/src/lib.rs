@@ -331,4 +331,80 @@ mod tests {
         let out = overlay_progress_bar(&rgba, 4, 4, 0.5);
         assert_eq!(out.len(), rgba.len()); // no panic, returns unchanged
     }
+
+    #[test]
+    fn overlay_normal_image_modifies_pixels() {
+        let size = 32u32;
+        let rgba = vec![128u8; (size * size * 4) as usize];
+        let out = overlay_progress_bar(&rgba, size, size, 0.5);
+        assert_eq!(out.len(), rgba.len());
+        // At 50% progress some pixels should be modified (ring drawn)
+        assert_ne!(out, rgba, "overlay should modify some pixels");
+    }
+
+    #[test]
+    fn overlay_zero_progress_still_draws_track() {
+        let size = 32u32;
+        let rgba = vec![200u8; (size * size * 4) as usize];
+        let out = overlay_progress_bar(&rgba, size, size, 0.0);
+        assert_ne!(out, rgba, "even 0% should draw the dark track ring");
+    }
+
+    #[test]
+    fn overlay_full_progress() {
+        let size = 32u32;
+        let rgba = vec![0u8; (size * size * 4) as usize];
+        let out = overlay_progress_bar(&rgba, size, size, 1.0);
+        assert_eq!(out.len(), rgba.len());
+        // Should not panic, should draw full ring
+        assert_ne!(out, rgba);
+    }
+
+    #[test]
+    fn overlay_clamped_above_one() {
+        let size = 16u32;
+        let rgba = vec![0u8; (size * size * 4) as usize];
+        // progress > 1.0 clamped to 1.0
+        let out = overlay_progress_bar(&rgba, size, size, 5.0);
+        assert_eq!(out.len(), rgba.len());
+    }
+
+    #[test]
+    fn progress_bucket_negative_clamped() {
+        assert_eq!(progress_bucket(-1.0), 0);
+    }
+
+    #[test]
+    fn progress_percent_negative_clamped() {
+        assert_eq!(progress_percent(-0.5), 0);
+    }
+
+    #[test]
+    fn progress_percent_above_one_clamped() {
+        assert_eq!(progress_percent(2.0), 100);
+    }
+
+    #[test]
+    fn ellipsize_exact_length() {
+        assert_eq!(ellipsize_middle("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn ellipsize_one_over() {
+        assert_eq!(ellipsize_middle("abcdef", 5), "a...f");
+    }
+
+    #[test]
+    fn shortcut_suffix_plus_key() {
+        let s = shortcut_suffix("CmdOrCtrl+Plus");
+        assert!(s.contains("+"), "Plus should render as +: {s}");
+    }
+
+    #[test]
+    fn shortcut_suffix_arrow_key() {
+        let s = shortcut_suffix("CmdOrCtrl+ArrowUp");
+        // "Arrow" prefix stripped
+        assert!(s.contains("Up"));
+        assert!(!s.contains("Arrow"));
+    }
 }

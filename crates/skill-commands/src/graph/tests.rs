@@ -195,3 +195,204 @@ fn pca_3d_empty() {
     let result = pca_3d(&[]);
     assert!(result.is_empty());
 }
+
+// ── svg helpers additional ──────────────────────────────────────────────
+
+#[test]
+fn svg_esc_no_special_chars() {
+    assert_eq!(svg_esc("hello world"), "hello world");
+}
+
+#[test]
+fn svg_esc_all_special() {
+    assert_eq!(svg_esc("&<>"), "&amp;&lt;&gt;");
+}
+
+#[test]
+fn trunc_unicode() {
+    assert_eq!(trunc("café☕long", 5), "café☕…");
+}
+
+#[test]
+fn turbo_hex_mid_is_greenish() {
+    let hex = turbo_hex(0.5);
+    assert!(hex.starts_with('#'));
+    assert_eq!(hex.len(), 7);
+}
+
+#[test]
+fn turbo_hex_varies_across_range() {
+    let h0 = turbo_hex(0.0);
+    let h5 = turbo_hex(0.5);
+    let h1 = turbo_hex(1.0);
+    assert_ne!(h0, h5);
+    assert_ne!(h5, h1);
+    assert_ne!(h0, h1);
+}
+
+// ── dot helpers additional ──────────────────────────────────────────────
+
+#[test]
+fn dot_esc_empty() {
+    assert_eq!(dot_esc(""), "");
+}
+
+#[test]
+fn generate_dot_with_edge() {
+    let nodes = vec![
+        InteractiveGraphNode {
+            id: "a".into(),
+            kind: "query".into(),
+            text: Some("q".into()),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "b".into(),
+            kind: "eeg_point".into(),
+            timestamp_unix: Some(1700000000),
+            ..InteractiveGraphNode::default()
+        },
+    ];
+    let edges = vec![InteractiveGraphEdge {
+        from_id: "a".into(),
+        to_id: "b".into(),
+        distance: 0.5,
+        kind: "eeg_neighbor".into(),
+    }];
+    let dot = generate_dot(&nodes, &edges);
+    assert!(dot.contains("->"));
+}
+
+// ── generate_svg smoke ──────────────────────────────────────────────────
+
+fn test_labels() -> SvgLabels {
+    SvgLabels {
+        layer_query: "QUERY".into(),
+        layer_text_matches: "TEXT MATCHES".into(),
+        layer_eeg_neighbors: "EEG NEIGHBORS".into(),
+        layer_found_labels: "FOUND LABELS".into(),
+        layer_screenshots: "SCREENSHOTS".into(),
+        legend_query: "Query".into(),
+        legend_text: "Text Match".into(),
+        legend_eeg: "EEG Neighbor".into(),
+        legend_found: "Found Label".into(),
+        legend_screenshot: "Screenshot".into(),
+        generated_by: "Test Suite".into(),
+    }
+}
+
+#[test]
+fn generate_svg_empty_produces_valid_svg() {
+    let svg = generate_svg(&[], &[], &test_labels(), false);
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("</svg>"));
+}
+
+#[test]
+fn generate_svg_single_query_node() {
+    let nodes = vec![InteractiveGraphNode {
+        id: "q1".into(),
+        kind: "query".into(),
+        text: Some("meditation".into()),
+        ..InteractiveGraphNode::default()
+    }];
+    let svg = generate_svg(&nodes, &[], &test_labels(), false);
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("meditation"));
+}
+
+#[test]
+fn generate_svg_mixed_nodes_with_edges() {
+    let nodes = vec![
+        InteractiveGraphNode {
+            id: "q1".into(),
+            kind: "query".into(),
+            text: Some("focus".into()),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "t1".into(),
+            kind: "text_label".into(),
+            text: Some("deep focus session".into()),
+            timestamp_unix: Some(1700000000),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "e1".into(),
+            kind: "eeg_point".into(),
+            timestamp_unix: Some(1700000100),
+            proj_x: Some(0.5),
+            proj_y: Some(-0.3),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "fl1".into(),
+            kind: "found_label".into(),
+            text: Some("meditation".into()),
+            timestamp_unix: Some(1700000200),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "ss1".into(),
+            kind: "screenshot".into(),
+            window_title: Some("VS Code".into()),
+            timestamp_unix: Some(1700000050),
+            parent_id: Some("e1".into()),
+            filename: Some("20231114/img.webp".into()),
+            ..InteractiveGraphNode::default()
+        },
+    ];
+    let edges = vec![
+        InteractiveGraphEdge {
+            from_id: "q1".into(),
+            to_id: "e1".into(),
+            distance: 0.15,
+            kind: "eeg_neighbor".into(),
+        },
+        InteractiveGraphEdge {
+            from_id: "q1".into(),
+            to_id: "t1".into(),
+            distance: 0.0,
+            kind: "text_match".into(),
+        },
+        InteractiveGraphEdge {
+            from_id: "e1".into(),
+            to_id: "ss1".into(),
+            distance: 0.05,
+            kind: "screenshot_prox".into(),
+        },
+    ];
+    let svg = generate_svg(&nodes, &edges, &test_labels(), false);
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("</svg>"));
+    assert!(svg.contains("focus"));
+    assert!(svg.contains("QUERY"));
+    // Should contain all layer headers
+    assert!(svg.contains("TEXT MATCHES") || svg.contains("text"));
+    assert!(svg.contains("EEG") || svg.contains("eeg"));
+}
+
+#[test]
+fn generate_svg_with_pca() {
+    let nodes = vec![
+        InteractiveGraphNode {
+            id: "q1".into(),
+            kind: "query".into(),
+            text: Some("test".into()),
+            proj_x: Some(0.0),
+            proj_y: Some(0.0),
+            ..InteractiveGraphNode::default()
+        },
+        InteractiveGraphNode {
+            id: "e1".into(),
+            kind: "eeg_point".into(),
+            timestamp_unix: Some(1700000000),
+            proj_x: Some(0.5),
+            proj_y: Some(0.5),
+            ..InteractiveGraphNode::default()
+        },
+    ];
+    let svg = generate_svg(&nodes, &[], &test_labels(), true);
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("</svg>"));
+}

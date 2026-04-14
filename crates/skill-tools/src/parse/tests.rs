@@ -865,3 +865,355 @@ fn coerce_tool_call_arguments_fn() {
     let re_parsed: Value = serde_json::from_str(&call.function.arguments).expect("valid json");
     assert_eq!(re_parsed["render"], Value::Bool(true));
 }
+
+// ── inject.rs tests ──────────────────────────────────────────────────────────
+
+fn make_tool(name: &str, desc: &str, params: Option<Value>) -> types::Tool {
+    types::Tool {
+        tool_type: "function".into(),
+        function: types::ToolFunction {
+            name: name.into(),
+            description: Some(desc.into()),
+            parameters: params,
+        },
+    }
+}
+
+#[test]
+fn inject_noop_when_no_tools() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hello"})];
+    inject_tools_into_system_prompt(&mut msgs, &[], 4096);
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["role"], "user");
+}
+
+#[test]
+fn inject_creates_system_message_when_none_exists() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hello"})];
+    let tools = vec![make_tool("date", "Get current date", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    assert_eq!(msgs.len(), 2);
+    assert_eq!(msgs[0]["role"], "system");
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("date"), "should mention tool name");
+}
+
+#[test]
+fn inject_prepends_to_existing_system_message() {
+    let mut msgs = vec![
+        serde_json::json!({"role":"system","content":"You are helpful."}),
+        serde_json::json!({"role":"user","content":"hello"}),
+    ];
+    let tools = vec![make_tool("bash", "Run shell", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    assert_eq!(msgs.len(), 2, "should not add extra message");
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("bash"), "should mention tool name");
+    assert!(content.contains("You are helpful."), "should preserve original");
+}
+
+#[test]
+fn inject_compact_mode_for_small_context() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("date", "Get date", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 1024);
+    let content = msgs[0]["content"].as_str().unwrap();
+    // Compact mode uses "Tools:" prefix
+    assert!(content.contains("Tools:"), "compact mode should use 'Tools:' prefix");
+}
+
+#[test]
+fn inject_full_mode_for_large_context() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("date", "Get date", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    let content = msgs[0]["content"].as_str().unwrap();
+    // Full mode uses "# Tools" heading
+    assert!(content.contains("# Tools"), "full mode should use '# Tools' heading");
+}
+
+#[test]
+fn inject_includes_parameter_docs_in_full_mode() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool(
+        "web_search",
+        "Search the web",
+        Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "render": {"type": "boolean", "description": "Render HTML"}
+            },
+            "required": ["query"]
+        })),
+    )];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("query"), "should list param name");
+    assert!(content.contains("(required)"), "should mark required params");
+    assert!(content.contains("(optional)"), "should mark optional params");
+}
+
+#[test]
+fn inject_compact_shows_params_inline() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool(
+        "bash",
+        "Run shell",
+        Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string"}
+            }
+        })),
+    )];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 1024);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("bash(command)"), "compact should show params inline");
+}
+
+#[test]
+fn inject_with_query_mode() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("date", "Get date", None)];
+    let opts = inject::ToolPromptOptions {
+        prefer_native_tool_calling: false,
+        chat_mode: Some("query".into()),
+        query_refusal_response: Some("Cannot answer.".into()),
+    };
+    inject::inject_tools_into_system_prompt_with_options(&mut msgs, &tools, 4096, &opts);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("Cannot answer."), "should include refusal text");
+    assert!(content.contains("Query mode") || content.contains("query") || content.contains("grounding"));
+}
+
+#[test]
+fn inject_with_chat_mode() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("date", "Get date", None)];
+    let opts = inject::ToolPromptOptions {
+        prefer_native_tool_calling: true,
+        chat_mode: Some("chat".into()),
+        query_refusal_response: None,
+    };
+    inject::inject_tools_into_system_prompt_with_options(&mut msgs, &tools, 4096, &opts);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("Chat mode") || content.contains("chat") || content.contains("conversationally"));
+}
+
+#[test]
+fn inject_os_context_for_shell_tools() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("bash", "Run shell", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(content.contains("System:"), "should include OS context for shell tools");
+}
+
+#[test]
+fn inject_no_os_context_without_shell_tools() {
+    let mut msgs = vec![serde_json::json!({"role":"user","content":"hi"})];
+    let tools = vec![make_tool("date", "Get date", None)];
+    inject_tools_into_system_prompt(&mut msgs, &tools, 4096);
+    let content = msgs[0]["content"].as_str().unwrap();
+    assert!(
+        !content.contains("System:"),
+        "should not include OS context without shell tools"
+    );
+}
+
+// ── Additional coerce.rs tests ───────────────────────────────────────────────
+
+#[test]
+fn coerce_null_string_to_null() {
+    let schema = serde_json::json!({"type": "null"});
+    assert_eq!(coerce_value(&Value::String("null".into()), &schema), Value::Null);
+    assert_eq!(coerce_value(&Value::String("".into()), &schema), Value::Null);
+}
+
+#[test]
+fn coerce_string_encoded_array() {
+    let schema = serde_json::json!({"type": "array", "items": {"type": "integer"}});
+    let result = coerce_value(&Value::String("[1, 2, 3]".into()), &schema);
+    assert_eq!(result, serde_json::json!([1, 2, 3]));
+}
+
+#[test]
+fn coerce_array_items_recursively() {
+    let schema = serde_json::json!({"type": "array", "items": {"type": "boolean"}});
+    let result = coerce_value(&serde_json::json!(["true", "false", "1"]), &schema);
+    assert_eq!(result, serde_json::json!([true, false, true]));
+}
+
+#[test]
+fn coerce_float_to_integer() {
+    let schema = serde_json::json!({"type": "integer"});
+    let result = coerce_value(&serde_json::json!(3.0), &schema);
+    assert_eq!(result, serde_json::json!(3));
+}
+
+#[test]
+fn coerce_string_float_to_integer() {
+    let schema = serde_json::json!({"type": "integer"});
+    let result = coerce_value(&Value::String("42.0".into()), &schema);
+    assert_eq!(result, serde_json::json!(42));
+}
+
+#[test]
+fn coerce_bool_to_number() {
+    let schema = serde_json::json!({"type": "number"});
+    assert_eq!(coerce_value(&Value::Bool(true), &schema), serde_json::json!(1));
+    assert_eq!(coerce_value(&Value::Bool(false), &schema), serde_json::json!(0));
+}
+
+#[test]
+fn coerce_number_to_string_schema() {
+    let schema = serde_json::json!({"type": "string"});
+    assert_eq!(
+        coerce_value(&serde_json::json!(42), &schema),
+        Value::String("42".into())
+    );
+}
+
+#[test]
+fn coerce_bool_to_string_schema() {
+    let schema = serde_json::json!({"type": "string"});
+    assert_eq!(coerce_value(&Value::Bool(true), &schema), Value::String("true".into()));
+}
+
+#[test]
+fn coerce_null_to_string_schema() {
+    let schema = serde_json::json!({"type": "string"});
+    assert_eq!(coerce_value(&Value::Null, &schema), Value::String("".into()));
+}
+
+#[test]
+fn coerce_number_bool_on_off() {
+    let schema = serde_json::json!({"type": "boolean"});
+    assert_eq!(coerce_value(&Value::String("on".into()), &schema), Value::Bool(true));
+    assert_eq!(coerce_value(&Value::String("off".into()), &schema), Value::Bool(false));
+}
+
+#[test]
+fn coerce_number_to_bool() {
+    let schema = serde_json::json!({"type": "boolean"});
+    assert_eq!(coerce_value(&serde_json::json!(1), &schema), Value::Bool(true));
+    assert_eq!(coerce_value(&serde_json::json!(0), &schema), Value::Bool(false));
+    assert_eq!(coerce_value(&serde_json::json!(42), &schema), Value::Bool(true));
+}
+
+#[test]
+fn coerce_nullable_type_array() {
+    let schema = serde_json::json!({"type": ["string", "null"]});
+    // string stays string
+    assert_eq!(
+        coerce_value(&serde_json::json!(42), &schema),
+        Value::String("42".into())
+    );
+    // "null" string → null
+    assert_eq!(coerce_value(&Value::String("null".into()), &schema), Value::Null);
+}
+
+#[test]
+fn coerce_passthrough_when_schema_is_bool() {
+    let result = coerce_value(&serde_json::json!(42), &Value::Bool(true));
+    assert_eq!(result, serde_json::json!(42));
+}
+
+#[test]
+fn coerce_tool_call_no_matching_tool() {
+    let tools = vec![make_tool("date", "Get date", None)];
+    let mut call = ToolCall {
+        id: "call_0".into(),
+        call_type: "function".into(),
+        function: types::ToolCallFunction {
+            name: "nonexistent".into(),
+            arguments: r#"{"x":1}"#.into(),
+        },
+    };
+    let result = coerce_tool_call_arguments(&mut call, &tools);
+    assert_eq!(result, serde_json::json!({"x": 1}));
+}
+
+#[test]
+fn coerce_tool_call_invalid_json_arguments() {
+    let tools = vec![make_tool("date", "Get date", None)];
+    let mut call = ToolCall {
+        id: "call_0".into(),
+        call_type: "function".into(),
+        function: types::ToolCallFunction {
+            name: "date".into(),
+            arguments: "not json".into(),
+        },
+    };
+    let result = coerce_tool_call_arguments(&mut call, &tools);
+    assert_eq!(result, serde_json::json!({}));
+}
+
+// ── MessageContent::as_text tests ────────────────────────────────────────────
+
+#[test]
+fn message_content_text_as_text() {
+    let mc = types::MessageContent::Text("hello world".into());
+    assert_eq!(mc.as_text(), "hello world");
+}
+
+#[test]
+fn message_content_parts_as_text() {
+    let mc = types::MessageContent::Parts(vec![
+        types::ContentPart::Text { text: "hello".into() },
+        types::ContentPart::Image {
+            image_url: types::ImageUrl {
+                url: "data:image/png;base64,...".into(),
+                detail: None,
+            },
+        },
+        types::ContentPart::Text { text: "world".into() },
+    ]);
+    assert_eq!(mc.as_text(), "hello\nworld");
+}
+
+#[test]
+fn message_content_empty_parts() {
+    let mc = types::MessageContent::Parts(vec![]);
+    assert_eq!(mc.as_text(), "");
+}
+
+// ── ChatMessage serde roundtrip ──────────────────────────────────────────────
+
+#[test]
+fn chat_message_system_roundtrip() {
+    let json = r#"{"role":"system","content":"Be helpful"}"#;
+    let msg: types::ChatMessage = serde_json::from_str(json).unwrap();
+    match msg {
+        types::ChatMessage::System { content } => assert_eq!(content.as_text(), "Be helpful"),
+        _ => panic!("expected System"),
+    }
+}
+
+#[test]
+fn chat_message_assistant_with_tool_calls() {
+    let json = r#"{"role":"assistant","content":"Let me check","tool_calls":[{"id":"call_1","type":"function","function":{"name":"date","arguments":"{}"}}]}"#;
+    let msg: types::ChatMessage = serde_json::from_str(json).unwrap();
+    match msg {
+        types::ChatMessage::Assistant { content, tool_calls } => {
+            assert_eq!(content.unwrap().as_text(), "Let me check");
+            assert_eq!(tool_calls.len(), 1);
+            assert_eq!(tool_calls[0].function.name, "date");
+        }
+        _ => panic!("expected Assistant"),
+    }
+}
+
+#[test]
+fn chat_message_tool_result() {
+    let json = r#"{"role":"tool","tool_call_id":"call_1","content":"2026-04-14"}"#;
+    let msg: types::ChatMessage = serde_json::from_str(json).unwrap();
+    match msg {
+        types::ChatMessage::Tool { tool_call_id, content } => {
+            assert_eq!(tool_call_id, "call_1");
+            assert_eq!(content.as_text(), "2026-04-14");
+        }
+        _ => panic!("expected Tool"),
+    }
+}

@@ -1054,4 +1054,178 @@ mod tests {
         assert_eq!(levenshtein("", "abc"), 3);
         assert_eq!(levenshtein("abc", ""), 3);
     }
+
+    // ── normalize_text ───────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_text_lowercases() {
+        assert_eq!(normalize_text("Hello World"), "hello world");
+    }
+
+    #[test]
+    fn normalize_text_strips_special_chars() {
+        assert_eq!(normalize_text("focus! @#$%"), "focus ");
+    }
+
+    #[test]
+    fn normalize_text_preserves_digits() {
+        assert_eq!(normalize_text("session 42"), "session 42");
+    }
+
+    #[test]
+    fn normalize_text_empty() {
+        assert_eq!(normalize_text(""), "");
+    }
+
+    // ── panic_msg ────────────────────────────────────────────────────────
+
+    #[test]
+    fn panic_msg_string_payload() {
+        let payload: Box<dyn std::any::Any + Send> = Box::new("test panic".to_string());
+        assert_eq!(panic_msg(&payload), "test panic");
+    }
+
+    #[test]
+    fn panic_msg_str_payload() {
+        let payload: Box<dyn std::any::Any + Send> = Box::new("static str");
+        assert_eq!(panic_msg(&payload), "static str");
+    }
+
+    #[test]
+    fn panic_msg_non_string() {
+        let payload: Box<dyn std::any::Any + Send> = Box::new(42i32);
+        assert_eq!(panic_msg(&payload), "(non-string panic payload)");
+    }
+
+    // ── EpochMetrics ─────────────────────────────────────────────────────
+
+    #[test]
+    fn epoch_metrics_default_zeroed() {
+        let m = EpochMetrics::default();
+        assert_eq!(m.rel_delta, 0.0);
+        assert_eq!(m.rel_alpha, 0.0);
+        assert_eq!(m.hr, 0.0);
+        assert_eq!(m.blink_count, 0);
+        assert_eq!(m.mood, 50.0); // mood defaults to 50
+    }
+
+    #[test]
+    fn epoch_metrics_sigmoid100_midpoint() {
+        let v = EpochMetrics::sigmoid100(1.0, 2.5, 1.0);
+        assert!((v - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn epoch_metrics_sigmoid100_large() {
+        let v = EpochMetrics::sigmoid100(100.0, 1.0, 1.0);
+        assert!(v > 99.0);
+    }
+
+    #[test]
+    fn epoch_metrics_sigmoid100_zero() {
+        let v = EpochMetrics::sigmoid100(0.0, 2.5, 5.0);
+        assert!(v < 1.0);
+    }
+
+    #[test]
+    fn epoch_metrics_serde_roundtrip() {
+        let m = EpochMetrics::default();
+        let json = serde_json::to_string(&m).unwrap();
+        let back: EpochMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.mood, m.mood);
+        assert_eq!(back.rel_delta, m.rel_delta);
+    }
+
+    // ── validate_safetensors ─────────────────────────────────────────────
+
+    #[test]
+    fn validate_safetensors_nonexistent_returns_false() {
+        assert!(!validate_safetensors(Path::new("/nonexistent/file.safetensors")));
+    }
+
+    #[test]
+    fn validate_safetensors_too_small() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("tiny.safetensors");
+        std::fs::write(&path, b"short").unwrap();
+        assert!(!validate_safetensors(&path));
+    }
+
+    #[test]
+    fn validate_safetensors_invalid_header_len() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bad.safetensors");
+        // Header len says 999999 but file is only 16 bytes
+        let mut data = vec![0u8; 16];
+        data[..8].copy_from_slice(&999999u64.to_le_bytes());
+        std::fs::write(&path, &data).unwrap();
+        assert!(!validate_safetensors(&path));
+    }
+
+    #[test]
+    fn validate_safetensors_valid_minimal() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("valid.safetensors");
+        // Minimal valid safetensors: header = {"__metadata__":{}}
+        let header = br#"{"__metadata__":{}}"#;
+        let header_len = header.len() as u64;
+        let mut data = Vec::new();
+        data.extend_from_slice(&header_len.to_le_bytes());
+        data.extend_from_slice(header);
+        std::fs::write(&path, &data).unwrap();
+        assert!(validate_safetensors(&path));
+    }
+
+    #[test]
+    fn validate_safetensors_with_tensor() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("tensor.safetensors");
+        // Header with one tensor: 16 bytes of data (4 float32s)
+        let header = br#"{"weight":{"dtype":"F32","shape":[4],"data_offsets":[0,16]}}"#;
+        let header_len = header.len() as u64;
+        let mut data = Vec::new();
+        data.extend_from_slice(&header_len.to_le_bytes());
+        data.extend_from_slice(header);
+        data.extend_from_slice(&[0u8; 16]); // tensor data
+        std::fs::write(&path, &data).unwrap();
+        assert!(validate_safetensors(&path));
+    }
+
+    #[test]
+    fn validate_safetensors_truncated_data() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("truncated.safetensors");
+        // Header says 16 bytes of data, but file is short
+        let header = br#"{"weight":{"dtype":"F32","shape":[4],"data_offsets":[0,16]}}"#;
+        let header_len = header.len() as u64;
+        let mut data = Vec::new();
+        data.extend_from_slice(&header_len.to_le_bytes());
+        data.extend_from_slice(header);
+        data.extend_from_slice(&[0u8; 8]); // only 8 bytes, needs 16
+        std::fs::write(&path, &data).unwrap();
+        assert!(!validate_safetensors(&path));
+    }
+
+    // ── validate_or_remove ───────────────────────────────────────────────
+
+    #[test]
+    fn validate_or_remove_nonexistent_returns_false() {
+        assert!(!validate_or_remove(Path::new("/nonexistent/file.safetensors")));
+    }
+
+    #[test]
+    fn validate_or_remove_removes_corrupt() {
+        let dir = std::env::temp_dir().join(format!("skill_exg_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("corrupt.safetensors");
+        std::fs::write(&path, b"corrupt data that is not valid safetensors format at all").unwrap();
+        assert!(!validate_or_remove(&path));
+        // File should have been removed
+        assert!(!path.exists(), "corrupt file should be deleted");
+    }
 }

@@ -625,6 +625,49 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
 mod tests {
     use crate::{parse_first_ts_from_bytes, parse_last_ts_from_bytes, SessionJsonMeta};
 
+    use super::sigmoid100;
+
+    #[test]
+    fn sigmoid100_at_midpoint_is_50() {
+        let result = sigmoid100(5.0, 1.0, 5.0);
+        assert!(
+            (result - 50.0).abs() < 0.01,
+            "sigmoid at midpoint should be ~50, got {result}"
+        );
+    }
+
+    #[test]
+    fn sigmoid100_at_zero_is_near_zero_with_positive_mid() {
+        let result = sigmoid100(0.0, 1.0, 10.0);
+        assert!(result < 1.0, "sigmoid at 0 with mid=10 should be near 0, got {result}");
+    }
+
+    #[test]
+    fn sigmoid100_at_large_input_approaches_100() {
+        let result = sigmoid100(100.0, 1.0, 5.0);
+        assert!(
+            result > 99.0,
+            "sigmoid at large input should approach 100, got {result}"
+        );
+    }
+
+    #[test]
+    fn sigmoid100_steepness_affects_slope() {
+        let gentle = sigmoid100(6.0, 0.5, 5.0);
+        let steep = sigmoid100(6.0, 5.0, 5.0);
+        // Both above 50 since x > mid, but steep should be closer to 100
+        assert!(steep > gentle, "steeper k should give higher value at same offset");
+    }
+
+    #[test]
+    fn sigmoid100_monotonically_increasing() {
+        let a = sigmoid100(1.0, 1.0, 5.0);
+        let b = sigmoid100(5.0, 1.0, 5.0);
+        let c = sigmoid100(10.0, 1.0, 5.0);
+        assert!(a < b, "should be monotonically increasing: {a} < {b}");
+        assert!(b < c, "should be monotonically increasing: {b} < {c}");
+    }
+
     #[test]
     fn parse_ts_from_csv_bytes() {
         let csv = b"timestamp,col1,col2\n1700000000.123,1.0,2.0\n1700000005.456,3.0,4.0\n1700000010.789,5.0,6.0\n";
@@ -727,5 +770,62 @@ mod tests {
         }"#;
         let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
         assert_eq!(meta.avg_snr_db, None);
+    }
+
+    // ── load_metrics_csv ─────────────────────────────────────────────────
+
+    #[test]
+    fn load_metrics_csv_returns_none_for_missing_file() {
+        let result = super::load_metrics_csv(std::path::Path::new("/nonexistent/exg_1700000000.csv"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn load_metrics_csv_with_fixture() {
+        use skill_data::session_csv::METRICS_CSV_HEADER;
+
+        let dir = tempfile::tempdir().unwrap();
+        // Create the expected _metrics.csv alongside a dummy EEG csv
+        let eeg_path = dir.path().join("exg_1700000000.csv");
+        std::fs::write(&eeg_path, "timestamp_s\n").unwrap();
+
+        let metrics_path = dir.path().join("exg_1700000000_metrics.csv");
+        let header = METRICS_CSV_HEADER.join(",");
+        // Generate 5 rows of dummy data (all zeros except timestamp)
+        let mut csv_data = header.clone();
+        for i in 0..5 {
+            csv_data.push('\n');
+            let ts = 1700000000.0 + i as f64 * 5.0;
+            csv_data.push_str(&ts.to_string());
+            // Fill remaining 94 columns with 0.1
+            for _ in 1..METRICS_CSV_HEADER.len() {
+                csv_data.push_str(",0.1");
+            }
+        }
+        std::fs::write(&metrics_path, &csv_data).unwrap();
+
+        let result = super::load_metrics_csv(&eeg_path);
+        assert!(result.is_some(), "should parse fixture CSV");
+        let result = result.unwrap();
+        assert!(!result.timeseries.is_empty(), "should have timeseries rows");
+        assert!(result.summary.n_epochs > 0, "should have epochs");
+    }
+
+    #[test]
+    fn load_metrics_csv_with_empty_metrics_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let eeg_path = dir.path().join("exg_1700000000.csv");
+        std::fs::write(&eeg_path, "timestamp_s\n").unwrap();
+
+        let metrics_path = dir.path().join("exg_1700000000_metrics.csv");
+        // Only header, no data rows
+        use skill_data::session_csv::METRICS_CSV_HEADER;
+        std::fs::write(&metrics_path, METRICS_CSV_HEADER.join(",")).unwrap();
+
+        let result = super::load_metrics_csv(&eeg_path);
+        // Should return None or empty timeseries (no data rows)
+        if let Some(r) = result {
+            assert!(r.timeseries.is_empty());
+        }
     }
 }

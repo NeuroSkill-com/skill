@@ -721,4 +721,131 @@ mod round_trip_tests {
     fn csv_handles_empty_and_corrupt() {
         // TODO: Write empty/corrupt CSV and verify error handling
     }
+
+    // ── Path derivation helpers ──────────────────────────────────────────────
+
+    #[test]
+    fn ppg_csv_path_derives_correctly() {
+        let p = ppg_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_ppg.csv"));
+    }
+
+    #[test]
+    fn metrics_csv_path_derives_correctly() {
+        let p = metrics_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_metrics.csv"));
+    }
+
+    #[test]
+    fn imu_csv_path_derives_correctly() {
+        let p = imu_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_imu.csv"));
+    }
+
+    #[test]
+    fn fnirs_csv_path_derives_correctly() {
+        let p = fnirs_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_fnirs.csv"));
+    }
+
+    #[test]
+    fn csv_path_helpers_handle_legacy_prefix() {
+        let p = ppg_csv_path(Path::new("/data/muse_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/muse_1700000000_ppg.csv"));
+    }
+
+    // ── build_metrics_header ─────────────────────────────────────────────────
+
+    #[test]
+    fn build_metrics_header_starts_with_timestamp() {
+        let header = build_metrics_header(&["TP9", "AF7", "AF8", "TP10"]);
+        assert_eq!(header[0], "timestamp_s");
+    }
+
+    #[test]
+    fn build_metrics_header_has_correct_length() {
+        let channels = ["TP9", "AF7", "AF8", "TP10"];
+        let header = build_metrics_header(&channels);
+        // 1 timestamp + 4 channels × 12 bands + 46 cross-channel
+        assert_eq!(header.len(), 1 + 4 * 12 + 46);
+    }
+
+    #[test]
+    fn build_metrics_header_contains_channel_bands() {
+        let header = build_metrics_header(&["TP9"]);
+        assert!(header.contains(&"TP9_delta".to_string()));
+        assert!(header.contains(&"TP9_rel_alpha".to_string()));
+    }
+
+    #[test]
+    fn build_metrics_header_ends_with_cross_channel() {
+        let header = build_metrics_header(&["TP9"]);
+        assert!(header.contains(&"faa".to_string()));
+        assert!(header.contains(&"snr".to_string()));
+    }
+
+    #[test]
+    fn build_metrics_header_empty_channels() {
+        let header = build_metrics_header(&[]);
+        assert_eq!(header.len(), 1 + 46); // just timestamp + cross-channel
+        assert_eq!(header[0], "timestamp_s");
+    }
+
+    // ── push_ppg ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn push_ppg_creates_ppg_csv() {
+        let dir = tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut csv = CsvState::open(&csv_path).unwrap();
+
+        // Push 3 PPG channels (ambient, infrared, red)
+        let samples = [500.0, 501.0, 502.0, 503.0];
+        csv.push_ppg(&csv_path, 0, &samples, 1000.0, None);
+        csv.push_ppg(&csv_path, 1, &samples, 1000.0, None);
+        csv.push_ppg(&csv_path, 2, &samples, 1000.0, None);
+        csv.flush();
+
+        let ppg_path = ppg_csv_path(&csv_path);
+        assert!(ppg_path.exists(), "PPG CSV should be created");
+        let content = std::fs::read_to_string(&ppg_path).unwrap();
+        assert!(content.contains("timestamp_s"), "should have header");
+    }
+
+    // ── push_eeg multi-channel alignment ─────────────────────────────────
+
+    #[test]
+    fn push_eeg_aligns_channels() {
+        let dir = tempdir().unwrap();
+        let csv_path = dir.path().join("exg_align.csv");
+        let mut csv = CsvState::open(&csv_path).unwrap();
+
+        // Push samples one channel at a time; rows should only appear
+        // when all 4 channels have data
+        csv.push_eeg(0, &[1.0, 2.0], 1000.0, 256.0);
+        csv.push_eeg(1, &[3.0, 4.0], 1000.0, 256.0);
+        csv.push_eeg(2, &[5.0, 6.0], 1000.0, 256.0);
+        // No complete rows yet (missing channel 3)
+        csv.push_eeg(3, &[7.0, 8.0], 1000.0, 256.0);
+        csv.flush();
+
+        let content = std::fs::read_to_string(&csv_path).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 3, "header + 2 data rows"); // 2 samples per channel
+    }
+
+    // ── push_eeg ignores out-of-range electrode ──────────────────────────
+
+    #[test]
+    fn push_eeg_ignores_out_of_range() {
+        let dir = tempdir().unwrap();
+        let csv_path = dir.path().join("exg_oor.csv");
+        let mut csv = CsvState::open(&csv_path).unwrap();
+        // Electrode 99 is out of range for 4-channel
+        csv.push_eeg(99, &[1.0], 1000.0, 256.0);
+        csv.flush();
+        let content = std::fs::read_to_string(&csv_path).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 1, "only header, no data from invalid electrode");
+    }
 }

@@ -666,3 +666,97 @@ impl ParquetState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn eeg_parquet_path_replaces_extension() {
+        let p = eeg_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000.parquet"));
+    }
+
+    #[test]
+    fn ppg_parquet_path_derives_correctly() {
+        let p = ppg_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_ppg.parquet"));
+    }
+
+    #[test]
+    fn metrics_parquet_path_derives_correctly() {
+        let p = metrics_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_metrics.parquet"));
+    }
+
+    #[test]
+    fn imu_parquet_path_derives_correctly() {
+        let p = imu_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_imu.parquet"));
+    }
+
+    #[test]
+    fn fnirs_parquet_path_derives_correctly() {
+        let p = fnirs_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_fnirs.parquet"));
+    }
+
+    #[test]
+    fn parquet_open_write_flush() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let labels = ["TP9", "AF7", "AF8", "TP10"];
+
+        let mut pq = ParquetState::open_with_labels(&csv_path, &labels).unwrap();
+
+        // Push 4 channels of EEG data
+        let samples = [1.0, 2.0, 3.0, 4.0];
+        pq.push_eeg(0, &samples, 1000.0, 256.0);
+        pq.push_eeg(1, &samples, 1000.0, 256.0);
+        pq.push_eeg(2, &samples, 1000.0, 256.0);
+        pq.push_eeg(3, &samples, 1000.0, 256.0);
+        pq.flush();
+
+        let pq_path = eeg_parquet_path(&csv_path);
+        assert!(pq_path.exists(), "Parquet EEG file should exist");
+    }
+
+    #[test]
+    fn parquet_ppg_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let labels = ["TP9", "AF7", "AF8", "TP10"];
+
+        let mut pq = ParquetState::open_with_labels(&csv_path, &labels).unwrap();
+
+        let samples = [500.0, 501.0];
+        pq.push_ppg(&csv_path, 0, &samples, 1000.0, None);
+        pq.push_ppg(&csv_path, 1, &samples, 1000.0, None);
+        pq.push_ppg(&csv_path, 2, &samples, 1000.0, None);
+        pq.flush();
+
+        let ppg_path = ppg_parquet_path(&csv_path);
+        assert!(ppg_path.exists(), "Parquet PPG file should exist");
+    }
+
+    #[test]
+    fn parquet_imu_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let labels = ["TP9"];
+
+        let mut pq = ParquetState::open_with_labels(&csv_path, &labels).unwrap();
+        pq.push_imu(
+            &csv_path,
+            1000.0,
+            [0.1, 0.2, 0.3],
+            Some([0.4, 0.5, 0.6]),
+            Some([0.7, 0.8, 0.9]),
+        );
+        pq.flush();
+
+        let imu_path = imu_parquet_path(&csv_path);
+        assert!(imu_path.exists(), "Parquet IMU file should exist");
+    }
+}

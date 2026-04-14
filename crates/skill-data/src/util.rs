@@ -356,4 +356,68 @@ mod tests {
         assert!(is_leap(2024));
         assert!(!is_leap(2023));
     }
+
+    #[test]
+    fn ts_to_unix_known_date() {
+        // 20260315120000 → 2026-03-15 12:00:00 UTC = 1773576000
+        assert_eq!(ts_to_unix(20260315120000), 1773576000);
+    }
+
+    #[test]
+    fn ts_to_unix_epoch() {
+        assert_eq!(ts_to_unix(19700101000000), 0);
+    }
+
+    #[test]
+    fn unix_to_ts_known_date() {
+        assert_eq!(unix_to_ts(1773576000), 20260315120000);
+    }
+
+    #[test]
+    fn civil_from_unix_leap_day() {
+        // 2024-02-29 00:00:00 UTC = 1709164800
+        let (y, mo, d, _, _, _) = civil_from_unix(1709164800);
+        assert_eq!((y, mo, d), (2024, 2, 29));
+    }
+
+    #[test]
+    fn civil_from_unix_end_of_year() {
+        // 2025-12-31 23:59:59 UTC = 1767225599
+        let (y, mo, d, h, m, s) = civil_from_unix(1767225599);
+        assert_eq!((y, mo, d, h, m, s), (2025, 12, 31, 23, 59, 59));
+    }
+
+    #[test]
+    fn f32_to_blob_length() {
+        let v = vec![1.0f32, 2.0, 3.0];
+        let blob = f32_to_blob(&v);
+        assert_eq!(blob.len(), 12); // 3 floats × 4 bytes
+    }
+
+    #[test]
+    fn blob_to_f32_truncates_partial() {
+        // 5 bytes → only 1 float (4 bytes), last byte ignored
+        let blob = vec![0u8; 5];
+        let v = blob_to_f32(&blob);
+        assert_eq!(v.len(), 1);
+    }
+
+    #[test]
+    fn fmt_unix_utc_epoch() {
+        assert_eq!(fmt_unix_utc(0), "1970-01-01 00:00");
+    }
+
+    #[test]
+    fn yyyymmdd_utc_returns_8_chars() {
+        let s = yyyymmdd_utc();
+        assert_eq!(s.len(), 8);
+        assert!(s.starts_with("20"), "expected current century: {s}");
+    }
+
+    #[test]
+    fn yyyymmddhhmmss_utc_returns_14_digits() {
+        let ts = yyyymmddhhmmss_utc();
+        assert!(ts > 20200101000000, "expected recent timestamp: {ts}");
+        assert!(ts < 21000101000000, "expected before 2100: {ts}");
+    }
 }

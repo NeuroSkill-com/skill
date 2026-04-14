@@ -277,15 +277,20 @@ pub(crate) fn ensure_daemon_running() {
     let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
 
     eprintln!("[daemon] not reachable at {base_url}, spawning: {bin}");
-    match std::process::Command::new(&bin)
-        .env(
-            "SKILL_DAEMON_ADDR",
-            std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string()),
-        )
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::inherit())
-        .spawn()
+    let mut cmd = std::process::Command::new(&bin);
+    cmd.env(
+        "SKILL_DAEMON_ADDR",
+        std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string()),
+    )
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::inherit());
+    #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    match cmd.spawn() {
         Ok(_) => {
             eprintln!("[daemon] spawned, waiting for readiness...");
             // Wait up to 5 seconds for the daemon to become ready.
@@ -323,11 +328,15 @@ pub fn start_daemon_dev() -> Result<(), String> {
     });
     let addr = std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string());
 
-    std::process::Command::new(bin)
-        .env("SKILL_DAEMON_ADDR", addr)
-        .spawn()
-        .map(|_| ())
-        .map_err(|err| err.to_string())
+    let mut cmd = std::process::Command::new(bin);
+    cmd.env("SKILL_DAEMON_ADDR", addr);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.spawn().map(|_| ()).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -2721,6 +2730,1344 @@ mod tests {
         ensure_daemon_background_service();
 
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
+    }
+
+    #[test]
+    fn daemon_base_url_default_and_env_override() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9999");
+        assert_eq!(daemon_base_url(), "http://127.0.0.1:9999");
+
+        std::env::remove_var("SKILL_DAEMON_ADDR");
+        assert_eq!(daemon_base_url(), "http://127.0.0.1:18444");
+
+        // restore
+        std::env::remove_var("SKILL_DAEMON_ADDR");
+    }
+
+    #[test]
+    fn load_daemon_token_rejects_empty() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        // Write whitespace-only token
+        std::fs::write(&tp, "  \n").unwrap();
+        let err = load_daemon_token().unwrap_err();
+        assert!(err.contains("empty"), "expected empty token error: {err}");
+    }
+
+    #[test]
+    fn load_daemon_token_trims_whitespace() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "  my-token \n").unwrap();
+        assert_eq!(load_daemon_token().unwrap(), "my-token");
+    }
+
+    #[test]
+    fn get_daemon_token_path_returns_string() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let p = get_daemon_token_path();
+        assert!(p.contains("auth.token"), "expected auth.token in path: {p}");
+    }
+
+    #[test]
+    fn get_daemon_status_returns_error_when_no_token() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        // No token file exists
+        let status = get_daemon_status();
+        assert!(!status.reachable);
+        assert!(!status.authenticated);
+        assert!(!status.compatible_protocol);
+        assert!(status.error.is_some());
+        assert!(
+            status.error.as_ref().unwrap().contains("token")
+                || status.error.as_ref().unwrap().contains("No such file")
+                || status.error.as_ref().unwrap().contains("os error"),
+            "unexpected error: {:?}",
+            status.error
+        );
+    }
+
+    #[test]
+    fn get_daemon_status_returns_version_on_success() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let version_json = format!(
+            "{{\"daemon\":\"skill-daemon\",\"protocol_version\":{},\"daemon_version\":\"1.0.0\"}}",
+            PROTOCOL_VERSION
+        );
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", &version_json);
+        });
+
+        let status = get_daemon_status();
+        assert!(status.reachable);
+        assert!(status.authenticated);
+        assert!(status.compatible_protocol);
+        assert!(status.error.is_none());
+        assert_eq!(status.version.as_ref().unwrap().daemon_version, "1.0.0");
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn get_daemon_status_detects_protocol_mismatch() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let version_json = format!(
+            "{{\"daemon\":\"skill-daemon\",\"protocol_version\":{},\"daemon_version\":\"0.0.1\"}}",
+            PROTOCOL_VERSION + 999
+        );
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", &version_json);
+        });
+
+        let status = get_daemon_status();
+        assert!(status.reachable);
+        assert!(status.authenticated);
+        assert!(!status.compatible_protocol);
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn get_daemon_bootstrap_returns_port_and_token() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "bootstrap-token\n").unwrap();
+
+        let version_json = format!(
+            "{{\"daemon\":\"skill-daemon\",\"protocol_version\":{},\"daemon_version\":\"2.0.0\"}}",
+            PROTOCOL_VERSION
+        );
+
+        let server = std::thread::spawn(move || {
+            // ws-port request
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, path, _head, _body) = read_http_request(&mut stream);
+            if path == "/v1/ws-port" {
+                write_json_response(&mut stream, "200 OK", "{\"port\":19000}");
+            }
+            // version request
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", &version_json);
+        });
+
+        let bs = get_daemon_bootstrap().unwrap();
+        assert_eq!(bs.token, "bootstrap-token");
+        assert_eq!(bs.port, 19000);
+        assert!(bs.compatible_protocol);
+        assert_eq!(bs.daemon_version.as_deref(), Some("2.0.0"));
+        assert_eq!(bs.protocol_version, Some(PROTOCOL_VERSION));
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn rollback_snapshot_overwrites_when_source_changes() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let fake_bin = td.path().join(if cfg!(target_os = "windows") {
+            "skill-daemon.exe"
+        } else {
+            "skill-daemon"
+        });
+        std::fs::write(&fake_bin, b"daemon-v1").unwrap();
+        std::env::set_var("SKILL_DAEMON_BIN", &fake_bin);
+
+        // First copy
+        update_daemon_rollback_snapshot_best_effort();
+        let rollback = daemon_rollback_bin_path().unwrap();
+        assert_eq!(std::fs::read(&rollback).unwrap(), b"daemon-v1");
+
+        // Update source binary (different size triggers re-copy)
+        std::fs::write(&fake_bin, b"daemon-v2-longer").unwrap();
+        update_daemon_rollback_snapshot_best_effort();
+        assert_eq!(std::fs::read(&rollback).unwrap(), b"daemon-v2-longer");
+
+        std::env::remove_var("SKILL_DAEMON_BIN");
+    }
+
+    #[test]
+    fn rollback_snapshot_skips_when_src_equals_dst() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        // Point SKILL_DAEMON_BIN to the rollback path itself
+        let rollback = daemon_rollback_bin_path().unwrap();
+        if let Some(parent) = rollback.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&rollback, b"self-binary").unwrap();
+        std::env::set_var("SKILL_DAEMON_BIN", &rollback);
+
+        // Should be a no-op (src == dst)
+        update_daemon_rollback_snapshot_best_effort();
+        assert_eq!(std::fs::read(&rollback).unwrap(), b"self-binary");
+
+        std::env::remove_var("SKILL_DAEMON_BIN");
+    }
+
+    #[test]
+    fn http_contract_reconnect_and_catalog_routes() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let expected = vec![
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/enable-reconnect",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "POST",
+                path: "/v1/control/disable-reconnect",
+                response_json: "{}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/llm/catalog",
+                response_json: "{\"entries\":[]}".into(),
+            },
+            ExpectedReq {
+                method: "GET",
+                path: "/v1/models/estimate-reembed",
+                response_json: "{\"count\":42}".into(),
+            },
+        ];
+
+        let server = std::thread::spawn(move || {
+            let mut i = 0usize;
+            while i < expected.len() {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (method, path, head, _body) = read_http_request(&mut stream);
+                if method.is_empty() {
+                    continue;
+                }
+                let e = &expected[i];
+                assert_eq!(method, e.method);
+                assert_eq!(path, e.path);
+                assert!(
+                    head.to_ascii_lowercase()
+                        .contains("authorization: bearer test-token"),
+                    "missing bearer header: {head}"
+                );
+                write_json_response(&mut stream, "200 OK", &e.response_json);
+                i += 1;
+            }
+        });
+
+        enable_reconnect().unwrap();
+        disable_reconnect().unwrap();
+        let _ = llm_get_catalog().unwrap();
+        let _ = fetch_daemon_estimate_reembed().unwrap();
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn fetch_daemon_log_recent_handles_empty_lines() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{\"next_seq\":0,\"lines\":[]}");
+        });
+
+        let (next_seq, lines) = fetch_daemon_log_recent(0).unwrap();
+        assert_eq!(next_seq, 0);
+        assert!(lines.is_empty());
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn fetch_accent_color_defaults_to_blue_when_missing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            // Return empty object — no "value" field
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let color = fetch_accent_color().unwrap();
+        assert_eq!(
+            color, "blue",
+            "should default to blue when value is missing"
+        );
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn daemon_required_env_parsing_yes_and_on() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "yes");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "on");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "YES");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "ON");
+        assert!(daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "0");
+        assert!(!daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "no");
+        assert!(!daemon_required_env());
+
+        std::env::set_var("SKILL_DAEMON_REQUIRED", "random");
+        assert!(!daemon_required_env());
+
+        std::env::remove_var("SKILL_DAEMON_REQUIRED");
+    }
+
+    // ── push_event_to_daemon tests ──────────────────────────────────────────
+
+    #[test]
+    fn push_event_to_daemon_sends_envelope_to_events_endpoint() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "push-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, head, body) = read_http_request(&mut stream);
+            assert_eq!(method, "POST");
+            assert_eq!(path, "/v1/events/push");
+            assert!(
+                head.to_ascii_lowercase()
+                    .contains("authorization: bearer push-token"),
+                "missing auth: {head}"
+            );
+            // Verify envelope structure
+            let envelope: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(envelope["type"], "TestEvent");
+            assert!(envelope["ts_unix_ms"].as_u64().unwrap() > 0);
+            assert!(envelope["correlation_id"].is_null());
+            assert_eq!(envelope["payload"]["key"], "value");
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        push_event_to_daemon("TestEvent", &serde_json::json!({"key": "value"}));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn push_event_to_daemon_gracefully_handles_no_token() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        // No token file — should silently return without panicking
+        push_event_to_daemon("Noop", &serde_json::json!({}));
+    }
+
+    // ── HTTP error path tests ────────────────────────────────────────────────
+
+    #[test]
+    fn fetch_json_returns_error_on_server_500() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(
+                &mut stream,
+                "500 Internal Server Error",
+                "{\"error\":\"boom\"}",
+            );
+        });
+
+        let err = fetch_daemon_status().unwrap_err();
+        assert!(!err.is_empty(), "should have error message");
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn fetch_json_returns_error_on_connection_refused() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        // Use discard port — nothing listening
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let err = fetch_daemon_status().unwrap_err();
+        assert!(
+            err.contains("refused") || err.contains("Connection") || err.contains("connect"),
+            "expected connection error: {err}"
+        );
+    }
+
+    #[test]
+    fn post_json_returns_error_on_server_error() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "403 Forbidden", "{\"error\":\"denied\"}");
+        });
+
+        let err = enable_reconnect().unwrap_err();
+        assert!(!err.is_empty());
+
+        server.join().unwrap();
+    }
+
+    // ── get_daemon_bootstrap edge cases ──────────────────────────────────────
+
+    #[test]
+    fn get_daemon_bootstrap_fails_without_token() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        let err = get_daemon_bootstrap().unwrap_err();
+        assert!(
+            err.contains("token") || err.contains("No such file") || err.contains("os error"),
+            "expected token-related error: {err}"
+        );
+    }
+
+    #[test]
+    fn get_daemon_bootstrap_defaults_port_when_unreachable() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        // Use discard port — nothing listening
+        std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let bs = get_daemon_bootstrap().unwrap();
+        // ws-port fetch fails → falls back to 18444
+        assert_eq!(bs.port, 18444);
+        assert_eq!(bs.token, "test-token");
+        // version fetch fails → compatible_protocol defaults to true
+        assert!(bs.compatible_protocol);
+        assert!(bs.daemon_version.is_none());
+        assert!(bs.protocol_version.is_none());
+    }
+
+    // ── daemon_rollback_bin_path ─────────────────────────────────────────────
+
+    #[test]
+    fn daemon_rollback_bin_path_contains_rollback_in_name() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let p = daemon_rollback_bin_path().unwrap();
+        let name = p.file_name().unwrap().to_str().unwrap();
+        assert!(
+            name.contains("rollback"),
+            "expected rollback in filename: {name}"
+        );
+        if cfg!(target_os = "windows") {
+            assert!(name.ends_with(".exe"), "expected .exe on Windows: {name}");
+        }
+    }
+
+    // ── resolve_daemon_bin_path fallback ─────────────────────────────────────
+
+    #[test]
+    fn resolve_daemon_bin_path_returns_fallback_when_no_candidates() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        // Remove the env override so it falls through all candidates
+        let prev = std::env::var("SKILL_DAEMON_BIN").ok();
+        std::env::remove_var("SKILL_DAEMON_BIN");
+
+        let bin = resolve_daemon_bin_path();
+        if cfg!(target_os = "windows") {
+            assert_eq!(bin, "skill-daemon.exe");
+        } else {
+            // Could be a real path or the bare fallback
+            assert!(
+                bin.contains("skill-daemon"),
+                "expected skill-daemon in path: {bin}"
+            );
+        }
+
+        if let Some(v) = prev {
+            std::env::set_var("SKILL_DAEMON_BIN", v);
+        }
+    }
+
+    // ── fetch_daemon_log_recent edge cases ───────────────────────────────────
+
+    #[test]
+    fn fetch_daemon_log_recent_defaults_on_missing_fields() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        // Return object with no next_seq and no lines
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let (next_seq, lines) = fetch_daemon_log_recent(0).unwrap();
+        assert_eq!(next_seq, 0, "next_seq should default to 0");
+        assert!(lines.is_empty(), "lines should default to empty");
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn fetch_daemon_log_recent_filters_non_string_lines() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        // lines array with mixed types — non-strings should be filtered
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(
+                &mut stream,
+                "200 OK",
+                "{\"next_seq\":5,\"lines\":[\"hello\",42,null,\"world\"]}",
+            );
+        });
+
+        let (next_seq, lines) = fetch_daemon_log_recent(0).unwrap();
+        assert_eq!(next_seq, 5);
+        assert_eq!(lines, vec!["hello", "world"]);
+
+        server.join().unwrap();
+    }
+
+    // ── fetch_update_check_interval default ──────────────────────────────────
+
+    #[test]
+    fn fetch_update_check_interval_defaults_to_3600() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            // No "value" field
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let interval = fetch_update_check_interval().unwrap();
+        assert_eq!(interval, 3600);
+
+        server.join().unwrap();
+    }
+
+    // ── find_history_session edge cases ──────────────────────────────────────
+
+    #[test]
+    fn find_history_session_returns_none_when_null() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{\"csv_path\":null}");
+        });
+
+        let result = find_history_session(999).unwrap();
+        assert!(result.is_none());
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn find_history_session_returns_none_when_field_missing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let result = find_history_session(999).unwrap();
+        assert!(result.is_none());
+
+        server.join().unwrap();
+    }
+
+    // ── service install/uninstall/status HTTP contract ────────────────────────
+
+    #[test]
+    fn service_install_sends_post_without_auth() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "POST");
+            assert_eq!(path, "/service/install");
+            write_json_response(&mut stream, "200 OK", "{\"ok\":true}");
+        });
+
+        let v = install_daemon_service().unwrap();
+        assert_eq!(v["ok"], true);
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_uninstall_sends_post() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "POST");
+            assert_eq!(path, "/service/uninstall");
+            write_json_response(&mut stream, "200 OK", "{\"ok\":true}");
+        });
+
+        let v = uninstall_daemon_service().unwrap();
+        assert_eq!(v["ok"], true);
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_status_sends_get() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, _body) = read_http_request(&mut stream);
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/service/status");
+            write_json_response(&mut stream, "200 OK", "{\"status\":\"running\"}");
+        });
+
+        let v = daemon_service_status().unwrap();
+        assert_eq!(v["status"], "running");
+
+        server.join().unwrap();
+    }
+
+    // ── set_update_check_interval returns server value ───────────────────────
+
+    #[test]
+    fn set_update_check_interval_returns_server_value() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, body) = read_http_request(&mut stream);
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(req["value"], 7200);
+            // Server returns a different value (clamped)
+            write_json_response(&mut stream, "200 OK", "{\"value\":3600}");
+        });
+
+        let result = set_update_check_interval(7200).unwrap();
+        assert_eq!(result, 3600, "should return server's clamped value");
+
+        server.join().unwrap();
+    }
+
+    // ── set_update_check_interval defaults to input on missing value ─────────
+
+    #[test]
+    fn set_update_check_interval_defaults_to_input_on_missing_value() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let result = set_update_check_interval(5000).unwrap();
+        assert_eq!(result, 5000, "should fall back to input value");
+
+        server.join().unwrap();
+    }
+
+    // ── llm_server_start/switch return values ────────────────────────────────
+
+    #[test]
+    fn llm_server_start_defaults_to_starting() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            // No "result" field
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let result = llm_server_start().unwrap();
+        assert_eq!(result, "starting", "should default to 'starting'");
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn llm_server_switch_model_defaults_to_switching() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let result = llm_server_switch_model("model.gguf".into()).unwrap();
+        assert_eq!(result, "switching");
+
+        server.join().unwrap();
+    }
+
+    // ── llm_add_model defaults ───────────────────────────────────────────────
+
+    #[test]
+    fn llm_add_model_defaults_to_empty_string_when_no_filename() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, body) = read_http_request(&mut stream);
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(req["repo"], "owner/repo");
+            assert_eq!(req["filename"], "file.gguf");
+            assert!(req["size_gb"].is_null());
+            assert!(req["mmproj"].is_null());
+            assert!(req["download"].is_null());
+            // No filename in response
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let result =
+            llm_add_model("owner/repo".into(), "file.gguf".into(), None, None, None).unwrap();
+        assert_eq!(result, "");
+
+        server.join().unwrap();
+    }
+
+    // ── get_lsl_idle_timeout returns None ────────────────────────────────────
+
+    #[test]
+    fn get_lsl_idle_timeout_returns_none_when_missing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let timeout = get_lsl_idle_timeout().unwrap();
+        assert!(timeout.is_none());
+
+        server.join().unwrap();
+    }
+
+    // ── get_disabled_skills defaults ─────────────────────────────────────────
+
+    #[test]
+    fn get_disabled_skills_returns_empty_on_missing_value() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        let skills = get_disabled_skills().unwrap();
+        assert!(skills.is_empty());
+
+        server.join().unwrap();
+    }
+
+    // ── fetch_skills_sync_on_launch defaults ─────────────────────────────────
+
+    #[test]
+    fn fetch_skills_sync_on_launch_defaults_to_false() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        assert!(!fetch_skills_sync_on_launch().unwrap());
+
+        server.join().unwrap();
+    }
+
+    // ── fetch_skills_refresh_interval defaults ───────────────────────────────
+
+    #[test]
+    fn fetch_skills_refresh_interval_defaults_to_zero() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, _body) = read_http_request(&mut stream);
+            write_json_response(&mut stream, "200 OK", "{}");
+        });
+
+        assert_eq!(fetch_skills_refresh_interval().unwrap(), 0);
+
+        server.join().unwrap();
+    }
+
+    // ── POST body verification tests ─────────────────────────────────────────
+
+    #[test]
+    fn start_session_sync_sends_target_in_body() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let status_json = serde_json::to_string(&StatusResponse::default()).unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (method, path, _head, body) = read_http_request(&mut stream);
+            assert_eq!(method, "POST");
+            assert_eq!(path, "/v1/control/start-session");
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(req["target"], "muse-s");
+            write_json_response(&mut stream, "200 OK", &status_json);
+        });
+
+        let _ = start_session_sync(Some("muse-s".into())).unwrap();
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn start_session_sync_sends_null_target() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let status_json = serde_json::to_string(&StatusResponse::default()).unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, _path, _head, body) = read_http_request(&mut stream);
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert!(req["target"].is_null());
+            write_json_response(&mut stream, "200 OK", &status_json);
+        });
+
+        let _ = start_session_sync(None).unwrap();
+
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn set_preferred_device_sends_id_in_body() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        std::env::set_var("SKILL_DAEMON_ADDR", addr.to_string());
+
+        let tp = token_path().expect("token path");
+        if let Some(parent) = tp.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&tp, "test-token\n").unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let (_method, path, _head, body) = read_http_request(&mut stream);
+            assert_eq!(path, "/v1/devices/set-preferred");
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(req["id"], "device-abc");
+            write_json_response(&mut stream, "200 OK", "[]");
+        });
+
+        let _ = set_preferred_device("device-abc".into()).unwrap();
+
+        server.join().unwrap();
     }
 
     #[test]

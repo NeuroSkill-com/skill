@@ -1179,4 +1179,70 @@ mod tests {
         condense_prior_tool_results(&mut msgs, 2);
         assert_eq!(msgs[0]["content"].as_str().unwrap().len(), 500);
     }
+
+    // ── message_text_content ─────────────────────────────────────────────
+
+    #[test]
+    fn message_text_content_plain_string() {
+        let msg = json!({"role": "user", "content": "hello"});
+        assert_eq!(message_text_content(&msg), "hello");
+    }
+
+    #[test]
+    fn message_text_content_multipart() {
+        let msg = json!({"role": "user", "content": [
+            {"type": "text", "text": "first"},
+            {"type": "image_url", "image_url": {"url": "data:..."}},
+            {"type": "text", "text": "second"},
+        ]});
+        assert_eq!(message_text_content(&msg), "first\nsecond");
+    }
+
+    #[test]
+    fn message_text_content_no_content() {
+        let msg = json!({"role": "assistant"});
+        assert_eq!(message_text_content(&msg), "");
+    }
+
+    #[test]
+    fn message_text_content_null_content() {
+        let msg = json!({"role": "assistant", "content": null});
+        assert_eq!(message_text_content(&msg), "");
+    }
+
+    // ── latest_user_prompt ───────────────────────────────────────────────
+
+    #[test]
+    fn latest_user_prompt_finds_last_user() {
+        let msgs = vec![
+            json!({"role": "user", "content": "first"}),
+            json!({"role": "assistant", "content": "reply"}),
+            json!({"role": "user", "content": "second"}),
+        ];
+        assert_eq!(latest_user_prompt(&msgs), Some("second".into()));
+    }
+
+    #[test]
+    fn latest_user_prompt_none_when_no_users() {
+        let msgs = vec![
+            json!({"role": "system", "content": "setup"}),
+            json!({"role": "assistant", "content": "hi"}),
+        ];
+        assert_eq!(latest_user_prompt(&msgs), None);
+    }
+
+    #[test]
+    fn latest_user_prompt_skips_whitespace_only() {
+        let msgs = vec![
+            json!({"role": "user", "content": "real question"}),
+            json!({"role": "user", "content": "   "}),
+        ];
+        assert_eq!(latest_user_prompt(&msgs), Some("real question".into()));
+    }
+
+    #[test]
+    fn latest_user_prompt_empty_messages() {
+        let msgs: Vec<Value> = vec![];
+        assert_eq!(latest_user_prompt(&msgs), None);
+    }
 }

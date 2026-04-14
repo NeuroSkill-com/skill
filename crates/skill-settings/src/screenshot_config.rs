@@ -182,3 +182,119 @@ impl ScreenshotConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_values() {
+        let cfg = ScreenshotConfig::default();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.interval_secs, 5);
+        assert_eq!(cfg.image_size, 768);
+        assert_eq!(cfg.quality, 60);
+        assert!(cfg.session_only);
+        assert_eq!(cfg.embed_backend, "fastembed");
+        assert!(cfg.ocr_enabled);
+        assert!(cfg.use_gpu);
+        assert!(!cfg.gif_enabled);
+    }
+
+    #[test]
+    fn effective_interval_at_default() {
+        let cfg = ScreenshotConfig::default();
+        assert_eq!(cfg.effective_interval_secs(), 5);
+    }
+
+    #[test]
+    fn interval_multiplier_rounds_to_nearest_epoch() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.interval_secs = 7; // Between 5 and 10, rounds to 1× (7/5 = 1.4, rounds to 1)
+        let mult = cfg.interval_multiplier();
+        assert!(mult >= 1 && mult <= 12, "multiplier should be 1-12, got {mult}");
+    }
+
+    #[test]
+    fn interval_multiplier_clamps_high() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.interval_secs = 999;
+        assert_eq!(cfg.interval_multiplier(), SCREENSHOT_INTERVAL_MAX_MULT);
+    }
+
+    #[test]
+    fn interval_multiplier_clamps_low() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.interval_secs = 0;
+        assert_eq!(cfg.interval_multiplier(), SCREENSHOT_INTERVAL_MIN_MULT);
+    }
+
+    #[test]
+    fn model_id_fastembed_nomic() {
+        let cfg = ScreenshotConfig::default();
+        assert_eq!(cfg.model_id(), "nomic-ai/nomic-embed-text-v1.5");
+    }
+
+    #[test]
+    fn model_id_fastembed_clip() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.fastembed_model = "clip-vit-b-32".into();
+        assert_eq!(cfg.model_id(), "Qdrant/clip-ViT-B-32-vision");
+    }
+
+    #[test]
+    fn model_id_mmproj() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.embed_backend = "mmproj".into();
+        assert_eq!(cfg.model_id(), "mmproj");
+    }
+
+    #[test]
+    fn model_id_llm_vlm() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.embed_backend = "llm-vlm".into();
+        assert_eq!(cfg.model_id(), "llm-vlm");
+    }
+
+    #[test]
+    fn model_id_custom_passthrough() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.embed_backend = "custom-backend".into();
+        assert_eq!(cfg.model_id(), "custom-backend");
+    }
+
+    #[test]
+    fn model_id_custom_fastembed_model_passthrough() {
+        let mut cfg = ScreenshotConfig::default();
+        cfg.fastembed_model = "custom-model".into();
+        assert_eq!(cfg.model_id(), "custom-model");
+    }
+
+    #[test]
+    fn recommended_image_size_always_768() {
+        let cfg = ScreenshotConfig::default();
+        assert_eq!(cfg.recommended_image_size(), 768);
+
+        let mut cfg2 = ScreenshotConfig::default();
+        cfg2.embed_backend = "mmproj".into();
+        assert_eq!(cfg2.recommended_image_size(), 768);
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let cfg = ScreenshotConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: ScreenshotConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.interval_secs, cfg.interval_secs);
+        assert_eq!(cfg2.quality, cfg.quality);
+        assert_eq!(cfg2.embed_backend, cfg.embed_backend);
+    }
+
+    #[test]
+    fn serde_defaults_on_empty_json() {
+        let cfg: ScreenshotConfig = serde_json::from_str("{}").unwrap();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.interval_secs, 5);
+        assert_eq!(cfg.quality, 60);
+    }
+}

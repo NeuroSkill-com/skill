@@ -1310,4 +1310,416 @@ mod tests {
         let result = analyze_sleep_stages(&stages);
         assert!(result.is_object() || result.is_string());
     }
+
+    // ── r2f ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn r2f_rounds_to_2_decimals() {
+        assert_eq!(r2f(3.14159), 3.14);
+        assert_eq!(r2f(1.006), 1.01);
+        assert_eq!(r2f(0.0), 0.0);
+        assert_eq!(r2f(-2.567), -2.57);
+    }
+
+    // ── linear_slope ─────────────────────────────────────────────────────
+
+    #[test]
+    fn linear_slope_constant_is_zero() {
+        assert_eq!(linear_slope(&[5.0, 5.0, 5.0, 5.0]), 0.0);
+    }
+
+    #[test]
+    fn linear_slope_increasing() {
+        let slope = linear_slope(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert!((slope - 1.0).abs() < 1e-10, "expected slope ~1.0, got {slope}");
+    }
+
+    #[test]
+    fn linear_slope_decreasing() {
+        let slope = linear_slope(&[5.0, 4.0, 3.0, 2.0, 1.0]);
+        assert!((slope - (-1.0)).abs() < 1e-10, "expected slope ~-1.0, got {slope}");
+    }
+
+    #[test]
+    fn linear_slope_single_value() {
+        assert_eq!(linear_slope(&[42.0]), 0.0);
+    }
+
+    #[test]
+    fn linear_slope_empty() {
+        assert_eq!(linear_slope(&[]), 0.0);
+    }
+
+    #[test]
+    fn linear_slope_two_values() {
+        let slope = linear_slope(&[0.0, 10.0]);
+        assert!((slope - 10.0).abs() < 1e-10);
+    }
+
+    // ── classify_sleep ───────────────────────────────────────────────────
+
+    #[test]
+    fn classify_sleep_wake_high_alpha() {
+        assert_eq!(classify_sleep(0.1, 0.1, 0.35, 0.1), 0); // high alpha → wake
+    }
+
+    #[test]
+    fn classify_sleep_wake_high_beta() {
+        assert_eq!(classify_sleep(0.1, 0.1, 0.1, 0.35), 0); // high beta → wake
+    }
+
+    #[test]
+    fn classify_sleep_rem() {
+        assert_eq!(classify_sleep(0.2, 0.35, 0.10, 0.10), 5); // high theta, low alpha/delta → REM
+    }
+
+    #[test]
+    fn classify_sleep_deep() {
+        assert_eq!(classify_sleep(0.55, 0.1, 0.1, 0.1), 3); // high delta → deep
+    }
+
+    #[test]
+    fn classify_sleep_light() {
+        assert_eq!(classify_sleep(0.3, 0.30, 0.1, 0.1), 1); // moderate theta → light
+    }
+
+    #[test]
+    fn classify_sleep_default() {
+        assert_eq!(classify_sleep(0.2, 0.2, 0.2, 0.2), 2); // no dominant band → stage 2
+    }
+
+    // ── metric_stats_vec ─────────────────────────────────────────────────
+
+    #[test]
+    fn metric_stats_vec_empty_returns_null() {
+        assert!(metric_stats_vec(&[]).is_null());
+    }
+
+    #[test]
+    fn metric_stats_vec_single_value() {
+        let result = metric_stats_vec(&[42.0]);
+        assert_eq!(result["min"], 42.0);
+        assert_eq!(result["max"], 42.0);
+        assert_eq!(result["mean"], 42.0);
+    }
+
+    #[test]
+    fn metric_stats_vec_basic_stats() {
+        let result = metric_stats_vec(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        assert_eq!(result["min"], 1.0);
+        assert_eq!(result["max"], 8.0);
+        assert_eq!(result["mean"], 4.5);
+        assert!(result["stddev"].as_f64().unwrap() > 0.0);
+        assert!(result["trend"].is_number());
+    }
+
+    // ── analyze_sleep_stages ─────────────────────────────────────────────
+
+    fn make_sleep_epoch(utc: u64, stage: u8) -> crate::SleepEpoch {
+        crate::SleepEpoch {
+            utc,
+            stage,
+            rel_delta: 0.0,
+            rel_theta: 0.0,
+            rel_alpha: 0.0,
+            rel_beta: 0.0,
+        }
+    }
+
+    #[test]
+    fn analyze_sleep_stages_empty_returns_null() {
+        let stages = crate::SleepStages {
+            epochs: vec![],
+            summary: crate::SleepSummary::default(),
+        };
+        assert!(analyze_sleep_stages(&stages).is_null());
+    }
+
+    #[test]
+    fn analyze_sleep_stages_all_wake() {
+        let epochs: Vec<crate::SleepEpoch> = (0..60).map(|i| make_sleep_epoch(1000 + i * 5, 0)).collect();
+        let stages = crate::SleepStages {
+            epochs,
+            summary: crate::SleepSummary {
+                total_epochs: 60,
+                wake_epochs: 60,
+                n1_epochs: 0,
+                n2_epochs: 0,
+                n3_epochs: 0,
+                rem_epochs: 0,
+                epoch_secs: 5.0,
+            },
+        };
+        let result = analyze_sleep_stages(&stages);
+        assert_eq!(result["efficiency_pct"], 0.0);
+        assert_eq!(result["transitions"], 0);
+        assert_eq!(result["awakenings"], 0);
+    }
+
+    #[test]
+    fn analyze_sleep_stages_mixed() {
+        let epochs = vec![
+            make_sleep_epoch(1000, 0), // wake
+            make_sleep_epoch(1005, 0), // wake
+            make_sleep_epoch(1010, 1), // N1 (sleep onset)
+            make_sleep_epoch(1015, 2), // N2
+            make_sleep_epoch(1020, 3), // N3 (deep)
+            make_sleep_epoch(1025, 3), // N3
+            make_sleep_epoch(1030, 5), // REM
+            make_sleep_epoch(1035, 0), // wake (awakening)
+        ];
+        let stages = crate::SleepStages {
+            epochs,
+            summary: crate::SleepSummary {
+                total_epochs: 8,
+                wake_epochs: 3,
+                n1_epochs: 1,
+                n2_epochs: 1,
+                n3_epochs: 2,
+                rem_epochs: 1,
+                epoch_secs: 5.0,
+            },
+        };
+        let result = analyze_sleep_stages(&stages);
+        assert!(result["efficiency_pct"].as_f64().unwrap() > 0.0);
+        assert!(result["onset_latency_min"].as_f64().unwrap() > 0.0);
+        assert!(result["transitions"].as_u64().unwrap() > 0);
+        assert_eq!(result["awakenings"], 1);
+        assert!(result["bouts"].is_object());
+        assert!(result["rem_latency_min"].is_number());
+    }
+
+    // ── analyze_search_results ──────────────────────────────────────────
+
+    #[test]
+    fn analyze_search_results_empty() {
+        let result = skill_commands::SearchResult {
+            start_utc: 0,
+            end_utc: 0,
+            k: 5,
+            ef: 50,
+            query_count: 0,
+            searched_days: vec![],
+            results: vec![],
+        };
+        let insights = analyze_search_results(&result);
+        assert_eq!(insights["total_neighbors"], 0);
+        assert!(insights["distance_stats"].is_null());
+    }
+
+    /// Create a test skill_dir with a YYYYMMDD/eeg.sqlite containing fixture embeddings.
+    fn create_fixture_db(skill_dir: &std::path::Path, date: &str, rows: &[(i64, &str)]) {
+        let day_dir = skill_dir.join(date);
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let db_path = day_dir.join("eeg.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                device_id TEXT,
+                device_name TEXT,
+                hnsw_id INTEGER DEFAULT 0,
+                eeg_embedding BLOB,
+                label TEXT,
+                metrics_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
+        )
+        .unwrap();
+        let mut stmt = conn
+            .prepare("INSERT INTO embeddings (timestamp, metrics_json) VALUES (?1, ?2)")
+            .unwrap();
+        for (ts, json) in rows {
+            stmt.execute(rusqlite::params![ts, json]).unwrap();
+        }
+    }
+
+    fn sample_metrics_json(rd: f64, rt: f64, ra: f64, rb: f64) -> String {
+        serde_json::json!({
+            "rel_delta": rd, "rel_theta": rt, "rel_alpha": ra, "rel_beta": rb,
+            "rel_gamma": 0.05, "relaxation_score": 50.0, "engagement_score": 50.0,
+            "faa": 0.1, "tar": 0.5, "bar": 0.3, "dtr": 0.8, "pse": 10.0,
+            "apf": 10.0, "bps": 5.0, "snr": 15.0, "coherence": 0.5,
+            "mu_suppression": 0.9, "mood": 60.0, "tbr": 1.5,
+            "hr": 72.0, "rmssd": 35.0, "sdnn": 45.0, "meditation": 55.0,
+        })
+        .to_string()
+    }
+
+    // ── get_session_timeseries ───────────────────────────────────────────
+
+    #[test]
+    fn get_session_timeseries_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let rows = get_session_timeseries(dir.path(), 1700000000, 1700003600);
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn get_session_timeseries_with_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000; // milliseconds
+        let rows_data: Vec<(i64, &str)> = (0..10).map(|i| (base_ts + i * 5000, "{}")).collect();
+        let rows_ref: Vec<(i64, &str)> = rows_data.iter().map(|(ts, json)| (*ts, *json)).collect();
+        create_fixture_db(dir.path(), "20231114", &rows_ref);
+
+        let result = get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert_eq!(result.len(), 10, "should return all 10 epochs");
+        assert!(result[0].t > 0.0);
+    }
+
+    #[test]
+    fn get_session_timeseries_with_metrics_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        let json = sample_metrics_json(0.3, 0.2, 0.25, 0.15);
+        let rows_data: Vec<(i64, String)> = (0..5).map(|i| (base_ts + i * 5000, json.clone())).collect();
+        let rows_ref: Vec<(i64, &str)> = rows_data.iter().map(|(ts, j)| (*ts, j.as_str())).collect();
+        create_fixture_db(dir.path(), "20231114", &rows_ref);
+
+        let result = get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert_eq!(result.len(), 5);
+        assert!((result[0].rd - 0.3).abs() < 0.01, "rel_delta should be 0.3");
+        assert!((result[0].hr - 72.0).abs() < 0.01, "hr should be 72");
+    }
+
+    // ── get_session_metrics ─────────────────────────────────────────────
+
+    #[test]
+    fn get_session_metrics_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let metrics = get_session_metrics(dir.path(), 1700000000, 1700003600);
+        assert_eq!(metrics.n_epochs, 0);
+    }
+
+    #[test]
+    fn get_session_metrics_with_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        let json = sample_metrics_json(0.3, 0.2, 0.25, 0.15);
+        let rows_data: Vec<(i64, String)> = (0..20).map(|i| (base_ts + i * 5000, json.clone())).collect();
+        let rows_ref: Vec<(i64, &str)> = rows_data.iter().map(|(ts, j)| (*ts, j.as_str())).collect();
+        create_fixture_db(dir.path(), "20231114", &rows_ref);
+
+        let metrics = get_session_metrics(dir.path(), 1700000000, 1700000100);
+        assert_eq!(metrics.n_epochs, 20);
+        assert!((metrics.rel_delta - 0.3).abs() < 0.01);
+        assert!((metrics.hr - 72.0).abs() < 0.01);
+    }
+
+    // ── get_sleep_stages ─────────────────────────────────────────────────
+
+    #[test]
+    fn get_sleep_stages_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let stages = get_sleep_stages(dir.path(), 1700000000, 1700003600);
+        assert!(stages.epochs.is_empty());
+    }
+
+    #[test]
+    fn get_sleep_stages_with_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        // Mix of band ratios → different sleep stages
+        let jsons = vec![
+            sample_metrics_json(0.1, 0.1, 0.35, 0.35),  // wake (high alpha+beta)
+            sample_metrics_json(0.1, 0.35, 0.10, 0.10), // REM (high theta)
+            sample_metrics_json(0.55, 0.1, 0.10, 0.10), // deep (high delta)
+            sample_metrics_json(0.2, 0.3, 0.10, 0.10),  // light (moderate theta)
+            sample_metrics_json(0.2, 0.2, 0.20, 0.20),  // stage 2 (default)
+        ];
+        let rows_data: Vec<(i64, &str)> = jsons
+            .iter()
+            .enumerate()
+            .map(|(i, j)| (base_ts + i as i64 * 5000, j.as_str()))
+            .collect();
+        create_fixture_db(dir.path(), "20231114", &rows_data);
+
+        let stages = get_sleep_stages(dir.path(), 1700000000, 1700000030);
+        assert_eq!(stages.epochs.len(), 5);
+        assert_eq!(stages.summary.total_epochs, 5);
+        // Verify different stages were classified
+        let stage_set: std::collections::HashSet<u8> = stages.epochs.iter().map(|e| e.stage).collect();
+        assert!(
+            stage_set.len() > 1,
+            "should have multiple sleep stages: {:?}",
+            stage_set
+        );
+    }
+
+    // ── compute_compare_insights ─────────────────────────────────────────
+
+    #[test]
+    fn compute_compare_insights_with_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_a = 1700000000i64 * 1000;
+        let base_b = 1700010000i64 * 1000;
+        let json_a = sample_metrics_json(0.3, 0.2, 0.25, 0.15);
+        let json_b = sample_metrics_json(0.15, 0.25, 0.35, 0.20);
+
+        let rows_a: Vec<(i64, String)> = (0..10).map(|i| (base_a + i * 5000, json_a.clone())).collect();
+        let rows_b: Vec<(i64, String)> = (0..10).map(|i| (base_b + i * 5000, json_b.clone())).collect();
+        let mut all: Vec<(i64, &str)> = rows_a.iter().map(|(t, j)| (*t, j.as_str())).collect();
+        all.extend(rows_b.iter().map(|(t, j)| (*t, j.as_str())));
+        create_fixture_db(dir.path(), "20231114", &all);
+
+        let metrics_a = get_session_metrics(dir.path(), 1700000000, 1700000050);
+        let metrics_b = get_session_metrics(dir.path(), 1700010000, 1700010050);
+        let insights = compute_compare_insights(
+            dir.path(),
+            1700000000,
+            1700000050,
+            1700010000,
+            1700010050,
+            &metrics_a,
+            &metrics_b,
+        );
+        assert!(insights.is_object());
+        assert!(insights.get("deltas").is_some());
+    }
+
+    #[test]
+    fn analyze_search_results_with_data() {
+        let result = skill_commands::SearchResult {
+            start_utc: 1700000000,
+            end_utc: 1700003600,
+            k: 3,
+            ef: 50,
+            query_count: 1,
+            searched_days: vec!["20231114".into()],
+            results: vec![skill_commands::QueryEntry {
+                timestamp: 20231114120000,
+                timestamp_unix: 1700000000,
+                neighbors: vec![
+                    skill_commands::NeighborEntry {
+                        hnsw_id: 0,
+                        timestamp: 20231114120100,
+                        timestamp_unix: 1700000060,
+                        distance: 0.1,
+                        date: "20231114".into(),
+                        device_id: None,
+                        device_name: None,
+                        labels: vec![],
+                        metrics: None,
+                    },
+                    skill_commands::NeighborEntry {
+                        hnsw_id: 1,
+                        timestamp: 20231114130000,
+                        timestamp_unix: 1700003600,
+                        distance: 0.5,
+                        date: "20231114".into(),
+                        device_id: None,
+                        device_name: None,
+                        labels: vec![],
+                        metrics: None,
+                    },
+                ],
+            }],
+        };
+        let insights = analyze_search_results(&result);
+        assert_eq!(insights["total_neighbors"], 2);
+        assert!(insights["distance_stats"].is_object());
+        assert!(insights["time_span_hours"].as_f64().unwrap() > 0.0);
+    }
 }

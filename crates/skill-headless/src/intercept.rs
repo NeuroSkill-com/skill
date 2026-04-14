@@ -238,3 +238,112 @@ pub fn interception_init_script() -> String {
     "#
     .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intercept_store_push_and_snapshot() {
+        let store = InterceptStore::new();
+        store.push_request(InterceptedRequest {
+            seq: 1,
+            method: "GET".into(),
+            url: "https://example.com".into(),
+            headers: "{}".into(),
+            body: String::new(),
+            timestamp_ms: 1000.0,
+        });
+        store.push_response(InterceptedResponse {
+            seq: 1,
+            status: 200,
+            status_text: "OK".into(),
+            headers: "{}".into(),
+            body: "OK".into(),
+            body_base64: false,
+            url: "https://example.com".into(),
+            timestamp_ms: 1001.0,
+        });
+        store.push_navigation(NavigationEvent {
+            url: "https://example.com".into(),
+            allowed: true,
+            timestamp_ms: 999.0,
+        });
+
+        let log = store.snapshot(false);
+        assert_eq!(log.requests.len(), 1);
+        assert_eq!(log.responses.len(), 1);
+        assert_eq!(log.navigations.len(), 1);
+        assert_eq!(log.requests[0].method, "GET");
+        assert_eq!(log.responses[0].status, 200);
+    }
+
+    #[test]
+    fn intercept_store_snapshot_clear() {
+        let store = InterceptStore::new();
+        store.push_request(InterceptedRequest {
+            seq: 1,
+            method: "POST".into(),
+            url: "https://api.test".into(),
+            headers: "{}".into(),
+            body: "data".into(),
+            timestamp_ms: 2000.0,
+        });
+
+        let log = store.snapshot(true);
+        assert_eq!(log.requests.len(), 1);
+
+        // After clear, should be empty
+        let log2 = store.snapshot(false);
+        assert!(log2.requests.is_empty());
+    }
+
+    #[test]
+    fn intercept_store_clear() {
+        let store = InterceptStore::new();
+        store.push_navigation(NavigationEvent {
+            url: "https://example.com".into(),
+            allowed: false,
+            timestamp_ms: 500.0,
+        });
+        store.clear();
+        let log = store.snapshot(false);
+        assert!(log.navigations.is_empty());
+    }
+
+    #[test]
+    fn intercept_store_default_is_empty() {
+        let store = InterceptStore::new();
+        let log = store.snapshot(false);
+        assert!(log.requests.is_empty());
+        assert!(log.responses.is_empty());
+        assert!(log.navigations.is_empty());
+    }
+
+    #[test]
+    fn interception_init_script_is_nonempty() {
+        let script = interception_init_script();
+        assert!(script.contains("__skillNetInterceptInstalled"));
+        assert!(script.contains("fetch"));
+    }
+
+    #[test]
+    fn network_log_serde_roundtrip() {
+        let log = NetworkLog {
+            requests: vec![InterceptedRequest {
+                seq: 1,
+                method: "GET".into(),
+                url: "https://test.com".into(),
+                headers: "{}".into(),
+                body: String::new(),
+                timestamp_ms: 100.0,
+            }],
+            responses: vec![],
+            navigations: vec![],
+        };
+        let json = serde_json::to_string(&log).unwrap();
+        let back: NetworkLog = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.requests.len(), 1);
+        assert_eq!(back.requests[0].url, "https://test.com");
+    }
+}

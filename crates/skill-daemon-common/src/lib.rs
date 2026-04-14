@@ -281,3 +281,102 @@ pub struct ApiError {
     pub code: &'static str,
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_transport_from_wire_ble_default() {
+        assert_eq!(DeviceTransport::from_wire("ble"), DeviceTransport::Ble);
+        assert_eq!(DeviceTransport::from_wire("unknown"), DeviceTransport::Ble);
+        assert_eq!(DeviceTransport::from_wire(""), DeviceTransport::Ble);
+    }
+
+    #[test]
+    fn device_transport_from_wire_variants() {
+        assert_eq!(DeviceTransport::from_wire("usb_serial"), DeviceTransport::UsbSerial);
+        assert_eq!(DeviceTransport::from_wire("wifi"), DeviceTransport::Wifi);
+        assert_eq!(DeviceTransport::from_wire("cortex"), DeviceTransport::Cortex);
+    }
+
+    #[test]
+    fn device_transport_serde_roundtrip() {
+        for t in [
+            DeviceTransport::Ble,
+            DeviceTransport::UsbSerial,
+            DeviceTransport::Wifi,
+            DeviceTransport::Cortex,
+        ] {
+            let json = serde_json::to_string(&t).unwrap();
+            let back: DeviceTransport = serde_json::from_str(&json).unwrap();
+            assert_eq!(t, back);
+        }
+    }
+
+    #[test]
+    fn status_response_clear_device_resets_fields() {
+        let mut s = StatusResponse::default();
+        s.device_name = Some("Muse".into());
+        s.device_kind = "muse".into();
+        s.battery = 85.0;
+        s.sample_count = 1000;
+        s.has_ppg = true;
+        s.channel_names = vec!["TP9".into()];
+
+        s.clear_device();
+
+        assert_eq!(s.state, "disconnected");
+        assert!(s.device_name.is_none());
+        assert!(s.device_kind.is_empty());
+        assert_eq!(s.battery, 0.0);
+        assert_eq!(s.sample_count, 0);
+        assert!(!s.has_ppg);
+        assert!(s.channel_names.is_empty());
+    }
+
+    #[test]
+    fn status_response_serde_default_roundtrip() {
+        let s = StatusResponse::default();
+        let json = serde_json::to_string(&s).unwrap();
+        let back: StatusResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.state, s.state);
+        assert_eq!(back.battery, 0.0);
+    }
+
+    #[test]
+    fn event_envelope_serde_roundtrip() {
+        let e = EventEnvelope {
+            r#type: "TestEvent".into(),
+            ts_unix_ms: 1700000000000,
+            correlation_id: Some("abc".into()),
+            payload: serde_json::json!({"key": "value"}),
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        let back: EventEnvelope = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.r#type, "TestEvent");
+        assert_eq!(back.ts_unix_ms, 1700000000000);
+        assert_eq!(back.correlation_id, Some("abc".into()));
+        assert_eq!(back.payload["key"], "value");
+    }
+
+    #[test]
+    fn version_response_serde() {
+        let v = VersionResponse {
+            daemon: DAEMON_NAME.into(),
+            protocol_version: PROTOCOL_VERSION,
+            daemon_version: "1.0.0".into(),
+        };
+        let json = serde_json::to_string(&v).unwrap();
+        let back: VersionResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.daemon, DAEMON_NAME);
+        assert_eq!(back.protocol_version, PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn scanner_wifi_config_default() {
+        let c = ScannerWifiConfigRequest::default();
+        assert!(c.wifi_shield_ip.is_empty());
+        assert!(c.galea_ip.is_empty());
+    }
+}

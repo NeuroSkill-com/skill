@@ -1117,4 +1117,167 @@ mod tests {
             assert!(!c.instruction_keys.is_empty());
         }
     }
+
+    // ── DeviceKind::as_str roundtrip ─────────────────────────────────────
+
+    #[test]
+    fn as_str_roundtrip_all_variants() {
+        let kinds = [
+            DeviceKind::Muse,
+            DeviceKind::Ganglion,
+            DeviceKind::OpenBci,
+            DeviceKind::BrainBit,
+            DeviceKind::Emotiv,
+            DeviceKind::Hermes,
+            DeviceKind::Idun,
+            DeviceKind::Mendi,
+            DeviceKind::Mw75,
+            DeviceKind::Cognionics,
+            DeviceKind::AttentivU,
+            DeviceKind::Unknown,
+        ];
+        for kind in kinds {
+            let s = kind.as_str();
+            let back = DeviceKind::from_kind_str(s);
+            assert_eq!(kind, back, "roundtrip failed for {s}");
+        }
+    }
+
+    #[test]
+    fn is_muse_true_for_muse() {
+        assert!(DeviceKind::Muse.is_muse());
+    }
+
+    #[test]
+    fn is_muse_false_for_others() {
+        assert!(!DeviceKind::Emotiv.is_muse());
+        assert!(!DeviceKind::Ganglion.is_muse());
+        assert!(!DeviceKind::Unknown.is_muse());
+    }
+
+    #[test]
+    fn capabilities_muse_has_ppg() {
+        let caps = DeviceKind::Muse.capabilities();
+        assert!(caps.has_ppg);
+        assert!(caps.has_imu);
+        assert_eq!(caps.channel_count, 4);
+    }
+
+    #[test]
+    fn capabilities_ganglion_no_ppg() {
+        let caps = DeviceKind::Ganglion.capabilities();
+        assert!(!caps.has_ppg);
+        assert_eq!(caps.channel_count, 4);
+    }
+
+    #[test]
+    fn capabilities_openbci_8_channels() {
+        let caps = DeviceKind::OpenBci.capabilities();
+        assert_eq!(caps.channel_count, 8);
+    }
+
+    #[test]
+    fn capabilities_emotiv_has_imu() {
+        let caps = DeviceKind::Emotiv.capabilities();
+        assert!(caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_hermes_8_channels() {
+        let caps = DeviceKind::Hermes.capabilities();
+        assert_eq!(caps.channel_count, 8);
+        assert!(caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_mw75_12_channels() {
+        let caps = DeviceKind::Mw75.capabilities();
+        assert_eq!(caps.channel_count, 12);
+    }
+
+    #[test]
+    fn capabilities_idun_1_channel() {
+        let caps = DeviceKind::Idun.capabilities();
+        assert_eq!(caps.channel_count, 1);
+        assert!(caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_cognionics() {
+        let caps = DeviceKind::Cognionics.capabilities();
+        assert!(caps.channel_count >= 8);
+    }
+
+    #[test]
+    fn capabilities_brainbit() {
+        let caps = DeviceKind::BrainBit.capabilities();
+        assert_eq!(caps.channel_count, 4);
+    }
+
+    #[test]
+    fn capabilities_attentivu() {
+        let caps = DeviceKind::AttentivU.capabilities();
+        assert_eq!(caps.channel_count, 4);
+        assert!(caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_mendi_fnirs() {
+        let caps = DeviceKind::Mendi.capabilities();
+        assert!(caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_unknown_zero() {
+        let caps = DeviceKind::Unknown.capabilities();
+        assert_eq!(caps.channel_count, 0);
+        assert!(!caps.has_ppg);
+        assert!(!caps.has_imu);
+    }
+
+    #[test]
+    fn capabilities_all_have_kind() {
+        let kinds = [
+            DeviceKind::Muse,
+            DeviceKind::Ganglion,
+            DeviceKind::OpenBci,
+            DeviceKind::Mw75,
+            DeviceKind::Hermes,
+            DeviceKind::Emotiv,
+            DeviceKind::Idun,
+            DeviceKind::Awear,
+            DeviceKind::Mendi,
+            DeviceKind::Cognionics,
+            DeviceKind::AttentivU,
+            DeviceKind::BrainBit,
+            DeviceKind::Unknown,
+        ];
+        for kind in kinds {
+            let caps = kind.capabilities();
+            assert_eq!(caps.kind, kind);
+        }
+    }
+
+    #[test]
+    fn device_kind_serde_roundtrip() {
+        for kind in [DeviceKind::Muse, DeviceKind::Emotiv, DeviceKind::Unknown] {
+            let json = serde_json::to_string(&kind).unwrap();
+            let back: DeviceKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(kind, back);
+        }
+    }
+
+    #[test]
+    fn paired_device_serde_roundtrip() {
+        let pd = PairedDevice {
+            id: "AA:BB:CC".into(),
+            name: "Muse-1234".into(),
+            last_seen: 1700000000,
+        };
+        let json = serde_json::to_string(&pd).unwrap();
+        let back: PairedDevice = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, pd.id);
+        assert_eq!(back.name, pd.name);
+        assert_eq!(back.last_seen, 1700000000);
+    }
 }

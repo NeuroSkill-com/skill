@@ -1157,6 +1157,60 @@ mod tests {
         let data = b"t,ch0\n1700000000.0,0.1\n1700000999.0,0.2\n\n\n";
         assert_eq!(parse_last_ts_from_bytes(data), Some(1700000999));
     }
+
+    // ── relaxed deserializers via SessionJsonMeta ─────────────────────────
+
+    #[test]
+    fn relaxed_u64_from_float() {
+        let json = r#"{"session_start_utc": 1700000000.0}"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.session_start_utc, Some(1700000000));
+    }
+
+    #[test]
+    fn relaxed_u64_from_string() {
+        let json = r#"{"total_samples": "76800"}"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.total_samples, Some(76800));
+    }
+
+    #[test]
+    fn relaxed_u64_null_returns_none() {
+        let json = r#"{"session_start_utc": null}"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.session_start_utc, None);
+    }
+
+    #[test]
+    fn relaxed_f64_from_int() {
+        let json = r#"{"battery_pct": 85}"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.battery_pct, Some(85.0));
+    }
+
+    #[test]
+    fn relaxed_f64_from_string() {
+        let json = r#"{"battery_pct_end": "92.5"}"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.battery_pct_end, Some(92.5));
+    }
+
+    #[test]
+    fn session_json_meta_default_all_none() {
+        let meta = SessionJsonMeta::default();
+        assert!(meta.csv_file.is_none());
+        assert!(meta.session_start_utc.is_none());
+        assert!(meta.total_samples.is_none());
+    }
+
+    // ── is_session_csv alias ─────────────────────────────────────────────
+
+    #[test]
+    fn is_session_csv_matches_data() {
+        assert!(is_session_csv("exg_1700000000.csv"));
+        assert!(is_session_csv("exg_1700000000.parquet"));
+        assert!(!is_session_csv("exg_1700000000_metrics.csv"));
+    }
 }
 
 fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
@@ -1189,17 +1243,178 @@ mod session_listing_tests {
     }
 
     #[test]
-    fn filter_sessions_by_date() {
-        // TODO: Create mock session files with different dates and test filtering
+    fn list_sessions_with_json_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20231114";
+        let day_dir = dir.path().join(day);
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        // Create a session JSON sidecar
+        let json = r#"{
+            "csv_file": "exg_1700000000.csv",
+            "session_start_utc": 1700000000,
+            "session_end_utc": 1700000300,
+            "session_duration_s": 300,
+            "device": {"name": "Muse 2", "id": "AA:BB:CC"},
+            "total_samples": 76800,
+            "sample_rate_hz": 256
+        }"#;
+        std::fs::write(day_dir.join("exg_1700000000.json"), json).unwrap();
+        // Create a matching CSV file (even empty, just needs to exist for file_size)
+        std::fs::write(day_dir.join("exg_1700000000.csv"), "timestamp_s\n").unwrap();
+
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].csv_file, "exg_1700000000.csv");
+        assert_eq!(sessions[0].session_start_utc, Some(1700000000));
+        assert_eq!(sessions[0].device_name.as_deref(), Some("Muse 2"));
+        assert_eq!(sessions[0].total_samples, Some(76800));
     }
 
     #[test]
-    fn cache_hit_and_miss() {
-        // TODO: Simulate cache and verify hit/miss logic
+    fn list_sessions_orphaned_csv() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20231114";
+        let day_dir = dir.path().join(day);
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        // Create a CSV without a JSON sidecar
+        std::fs::write(day_dir.join("exg_1700000000.csv"), "timestamp_s\n1700000000.0,1.0\n").unwrap();
+
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].csv_file, "exg_1700000000.csv");
+        assert_eq!(sessions[0].session_start_utc, Some(1700000000));
+        // No device info for orphaned CSVs
+        assert!(sessions[0].device_name.is_none());
+    }
+
+    #[test]
+    fn list_sessions_multiple() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20231114";
+        let day_dir = dir.path().join(day);
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        for ts in [1700000000u64, 1700010000, 1700020000] {
+            let json = format!(r#"{{"csv_file":"exg_{ts}.csv","session_start_utc":{ts}}}"#);
+            std::fs::write(day_dir.join(format!("exg_{ts}.json")), json).unwrap();
+            std::fs::write(day_dir.join(format!("exg_{ts}.csv")), "ts\n").unwrap();
+        }
+
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        assert_eq!(sessions.len(), 3);
+        // Should be sorted by start time descending
+        assert!(sessions[0].session_start_utc >= sessions[1].session_start_utc);
     }
 
     #[test]
     fn handle_corrupt_session_file() {
-        // TODO: Add a corrupt file and verify it is skipped or handled
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20231114";
+        let day_dir = dir.path().join(day);
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        // Corrupt JSON
+        std::fs::write(day_dir.join("exg_1700000000.json"), "not valid json{{{").unwrap();
+        std::fs::write(day_dir.join("exg_1700000000.csv"), "ts\n").unwrap();
+
+        // Valid JSON
+        let json = r#"{"csv_file":"exg_1700010000.csv","session_start_utc":1700010000}"#;
+        std::fs::write(day_dir.join("exg_1700010000.json"), json).unwrap();
+        std::fs::write(day_dir.join("exg_1700010000.csv"), "ts\n").unwrap();
+
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        // Should skip corrupt JSON, still return valid one
+        assert!(sessions.len() >= 1);
+        // The orphaned CSV (corrupt JSON means no sidecar match) may or may not appear
+    }
+
+    #[test]
+    fn list_sessions_ignores_metrics_ppg_imu() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = "20231114";
+        let day_dir = dir.path().join(day);
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        // These should NOT be listed as sessions
+        std::fs::write(day_dir.join("exg_1700000000_metrics.csv"), "ts\n").unwrap();
+        std::fs::write(day_dir.join("exg_1700000000_ppg.csv"), "ts\n").unwrap();
+        std::fs::write(day_dir.join("exg_1700000000_imu.csv"), "ts\n").unwrap();
+        std::fs::write(day_dir.join("notes.json"), "{}").unwrap();
+
+        let sessions = super::list_sessions_for_day(day, dir.path(), None);
+        assert!(sessions.is_empty(), "metrics/ppg/imu should not be listed");
+    }
+
+    // ── list_session_days ────────────────────────────────────────────────
+
+    #[test]
+    fn list_session_days_returns_yyyymmdd_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        // Days need session files inside to be listed
+        let d1 = dir.path().join("20231114");
+        let d2 = dir.path().join("20231115");
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::create_dir_all(dir.path().join("not_a_date")).unwrap();
+        std::fs::write(dir.path().join("file.txt"), "").unwrap();
+        // Add session files
+        std::fs::write(d1.join("exg_1700000000.json"), "{}").unwrap();
+        std::fs::write(d2.join("exg_1700010000.csv"), "ts\n").unwrap();
+
+        let days = super::list_session_days(dir.path());
+        assert!(days.contains(&"20231114".to_string()));
+        assert!(days.contains(&"20231115".to_string()));
+        assert!(!days.iter().any(|d| d == "not_a_date"));
+    }
+
+    // ── find_session_csv_for_timestamp ────────────────────────────────────
+
+    #[test]
+    fn find_session_csv_for_timestamp_finds_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        let json = r#"{"csv_file":"exg_1700000000.csv","session_start_utc":1700000000,"session_end_utc":1700000300}"#;
+        std::fs::write(day_dir.join("exg_1700000000.json"), json).unwrap();
+        std::fs::write(day_dir.join("exg_1700000000.csv"), "ts\n").unwrap();
+
+        let result = super::find_session_csv_for_timestamp(dir.path(), 1700000150);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn find_session_csv_for_timestamp_no_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        let result = super::find_session_csv_for_timestamp(dir.path(), 9999999999);
+        assert!(result.is_none());
+    }
+
+    // ── delete_session ───────────────────────────────────────────────────
+
+    #[test]
+    fn delete_session_removes_all_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+
+        let csv = day_dir.join("exg_1700000000.csv");
+        let json = day_dir.join("exg_1700000000.json");
+        let metrics = day_dir.join("exg_1700000000_metrics.csv");
+        let ppg = day_dir.join("exg_1700000000_ppg.csv");
+        for f in [&csv, &json, &metrics, &ppg] {
+            std::fs::write(f, "data").unwrap();
+        }
+
+        super::delete_session(csv.to_str().unwrap()).unwrap();
+        assert!(!csv.exists());
+        assert!(!json.exists());
+        assert!(!metrics.exists());
+        assert!(!ppg.exists());
     }
 }

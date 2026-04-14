@@ -169,10 +169,11 @@ pub(super) fn run_actor(
     };
 
     // ── create generation context ──
-    // ctx_size is always resolved by init.rs (auto-recommended or user-set).
-    // The 4096 fallback here is only reached if the actor is called directly
-    // without going through init (e.g. tests).
-    let ctx_size = config.ctx_size.and_then(NonZeroU32::new);
+    // ctx_size is normally resolved by init.rs (auto-recommended or user-set).
+    // Fallback to 16384 when still None (model not in catalog / tests) —
+    // the system prompt with tool definitions + EEG context injection can
+    // easily exceed 8K tokens.
+    let ctx_size = config.ctx_size.or(Some(16384)).and_then(NonZeroU32::new);
     app.emit_event(
         "llm:status",
         json!({"status":"loading","detail":"creating_context","model":model_file_name}),
