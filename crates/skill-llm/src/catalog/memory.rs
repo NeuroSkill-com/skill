@@ -142,7 +142,7 @@ mod tests {
             progress: 0.0,
             initiated_at_unix: None,
         };
-        assert_eq!(recommend_ctx_size(&entry), 4096);
+        assert_eq!(recommend_ctx_size(&entry), 8192);
     }
 
     #[test]

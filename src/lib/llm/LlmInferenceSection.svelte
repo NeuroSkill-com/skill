@@ -121,7 +121,7 @@ const curlSnippet = $derived(
           <div class="flex items-baseline justify-between">
             <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>
             <span class="text-[0.68rem] text-muted-foreground tabular-nums">
-              {config.n_gpu_layers === 0 ? "CPU only" : config.n_gpu_layers >= 4294967295 ? "All layers" : config.n_gpu_layers}
+              {config.n_gpu_layers === 0 ? "CPU only" : config.n_gpu_layers >= 999 ? "All layers" : config.n_gpu_layers}
             </span>
           </div>
           <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.gpuLayersDesc")}</p>
@@ -129,7 +129,7 @@ const curlSnippet = $derived(
             {#each [[0, "CPU"], [8, "8"], [16, "16"], [32, "32"], [4294967295, "All"]] as [val, label]}
               <button onclick={() => onSetGpuLayers(val as number)}
                 class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
-                     {config.n_gpu_layers === val
+                     {((val as number) >= 999 ? config.n_gpu_layers >= 999 : config.n_gpu_layers === val)
                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                        : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
                 {label}
@@ -141,14 +141,14 @@ const curlSnippet = $derived(
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">
             <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.ctxSize")}</span>
-            <span class="text-[0.68rem] text-muted-foreground tabular-nums">{config.ctx_size !== null ? config.ctx_size + " tokens" : "auto"}</span>
+            <span class="text-[0.68rem] text-muted-foreground tabular-nums">{config.ctx_size != null ? config.ctx_size + " tokens" : "auto"}</span>
           </div>
           <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.ctxSizeDesc")}</p>
           <div class="flex items-center gap-1.5 flex-wrap">
             {#each ctxOptions as [val, label]}
               <button onclick={() => onSetCtxSize(val as number | null)}
                 class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
-                     {config.ctx_size === val
+                     {(config.ctx_size ?? null) === val
                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                        : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
                 {label}
