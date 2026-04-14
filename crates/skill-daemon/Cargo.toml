@@ -93,7 +93,7 @@ sleeplm             = { version = "0.0.1", default-features = false, features = 
 steegformer         = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
 tribev2             = { version = "0.0.4", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
-burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
+burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std", "simd", "multi-threads"], optional = true }
 ndarray             = { version = "0.17", optional = true }
 skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
@@ -112,6 +112,14 @@ mendi                = { version = "0.0.2", features = ["simulate"] }
 mw75                 = { version = "0.0.6" }
 rlsl                 = { version = "0.0.4" }
 tokio-tungstenite    = "0.24"
+
+# macOS: use Apple Accelerate for BLAS (AMX coprocessor on M-series)
+[target.'cfg(target_os = "macos")'.dependencies]
+burn-ndarray        = { version = "0.20.1", default-features = false, features = ["blas-accelerate"], optional = true }
+
+# Linux: use system OpenBLAS when available
+[target.'cfg(target_os = "linux")'.dependencies]
+burn-ndarray        = { version = "0.20.1", default-features = false, features = ["blas-openblas-system"], optional = true }
 
 [lints]
 workspace = true
