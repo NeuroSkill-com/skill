@@ -54,7 +54,7 @@ pub(crate) async fn set_llm_config(
             }
 
             // If n_gpu_layers or ctx_size changed, the model must be reloaded.
-            let ctx_changed = prev_ctx_size.map_or(false, |prev| prev != config.ctx_size);
+            let ctx_changed = prev_ctx_size.is_some_and(|prev| prev != config.ctx_size);
             if config.n_gpu_layers != prev_gpu_layers || ctx_changed {
                 skill_llm::shutdown_cell(&state.llm_state_cell);
                 if let Ok(mut st) = state.llm_status.lock() {

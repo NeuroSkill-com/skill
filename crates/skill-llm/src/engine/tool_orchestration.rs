@@ -122,9 +122,9 @@ fn latest_user_prompt(messages: &[Value]) -> Option<String> {
     messages
         .iter()
         .rev()
-        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .filter(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
         .map(message_text_content)
-        .filter(|s| !s.trim().is_empty())
+        .find(|s| !s.trim().is_empty())
 }
 
 fn apply_runtime_prompt_variables(
