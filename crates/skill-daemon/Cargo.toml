@@ -39,7 +39,7 @@ base64 = { workspace = true }
 btleplug = "0.11"
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
-rand = "0.9"
+rand = "0.10"
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
@@ -102,7 +102,7 @@ skill-calendar       = { path = "../skill-calendar" }
 skill-iroh           = { path = "../skill-iroh" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
-sysinfo              = "0.33"
+sysinfo              = "0.38"
 
 [build-dependencies]
 
@@ -111,7 +111,7 @@ tempfile             = "3"
 mendi                = { version = "0.0.2", features = ["simulate"] }
 mw75                 = { version = "0.0.6" }
 rlsl                 = { version = "0.0.4" }
-tokio-tungstenite    = "0.24"
+tokio-tungstenite    = "0.28"
 
 # macOS: use Apple Accelerate for BLAS (AMX coprocessor on M-series)
 [target.'cfg(target_os = "macos")'.dependencies]

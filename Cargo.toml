@@ -78,7 +78,7 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 anyhow = "1"
 thiserror = "2"
 base64 = "0.22"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # ── TLS crypto provider ──────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # Deflate-compressed entries. Without this, zip 4.6.1 is compiled without
 # flate2 and produces "unsupported compression method" when the updater tries
 # to unpack a .nsis.zip built with standard Deflate (method 8).
-zip = { version = "4", features = ["deflate"] }
+zip = { version = "7", features = ["deflate"] }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #

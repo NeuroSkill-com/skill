@@ -67,7 +67,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 
 # Cross-platform GPU detection (VRAM, unified memory, backend).
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
-llmfit-core = "0.8.4"
+llmfit-core = "0.9.7"
 # sysinfo gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
 sysinfo = "0.38"
