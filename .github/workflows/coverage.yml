@@ -28,7 +28,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 1
+
+      - name: Fetch skills submodule
+        run: git submodule update --init --depth=1 skills
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

@@ -93,7 +93,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          submodules: true
+
+      - name: Fetch skills submodule
+        run: git submodule update --init --depth=1 skills
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
