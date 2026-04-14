@@ -461,7 +461,7 @@ $effect(() => {
   if (goalReached && !goalNotified && status.state === "connected") {
     goalNotified = true;
     const today = new Date().toISOString().slice(0, 10);
-    daemonInvoke("set_goal_notified_date", { date: today }).catch((_e) => {});
+    daemonInvoke("set_goal_notified_date", { value: today }).catch((_e) => {});
     try {
       sendNotification({
         title: "🎯 Daily Goal Reached!",

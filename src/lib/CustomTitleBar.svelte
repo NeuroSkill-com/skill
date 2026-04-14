@@ -5,6 +5,7 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
@@ -54,9 +55,36 @@ function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" | "imag
 async function minimizeWindow() {
   await getCurrentWindow().minimize();
 }
+
+// Manual maximize/restore: toggleMaximize() on macOS with decorations:false
+// doesn't reliably restore the previous window geometry (especially width).
+// We track the pre-maximise bounds ourselves.
+let savedBounds: { x: number; y: number; width: number; height: number } | null = null;
+let isManuallyMaximized = false;
+
 async function toggleMaximizeWindow() {
-  await getCurrentWindow().toggleMaximize();
+  const win = getCurrentWindow();
+  if (isManuallyMaximized && savedBounds) {
+    await win.unmaximize();
+    await win.setSize(new LogicalSize(savedBounds.width, savedBounds.height));
+    await win.setPosition(new LogicalPosition(savedBounds.x, savedBounds.y));
+    isManuallyMaximized = false;
+    savedBounds = null;
+  } else {
+    const pos = await win.outerPosition();
+    const size = await win.outerSize();
+    const factor = await win.scaleFactor();
+    savedBounds = {
+      x: pos.x / factor,
+      y: pos.y / factor,
+      width: size.width / factor,
+      height: size.height / factor,
+    };
+    await win.maximize();
+    isManuallyMaximized = true;
+  }
 }
+
 async function closeWindow() {
   await getCurrentWindow().close();
 }
@@ -247,7 +275,8 @@ onDestroy(() => {
       </div>
     </div>
   {:else if isDownloadsWindow}
-    <div class="downloads-window-head" data-tauri-drag-region>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="downloads-window-head" data-tauri-drag-region ondblclick={toggleMaximizeWindow}>
       <span class="downloads-window-title">{t("downloads.windowTitle")}</span>
       <span class="downloads-window-sub">{t("downloads.subtitle")}</span>
     </div>
@@ -256,7 +285,8 @@ onDestroy(() => {
       {@render historyHead()}
     </div>
   {:else if isHelpWindow}
-    <div class="help-window-head" data-tauri-drag-region>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="help-window-head" data-tauri-drag-region ondblclick={toggleMaximizeWindow}>
       <div class="help-search-wrap">
         <svg class="help-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -295,7 +325,8 @@ onDestroy(() => {
           </svg>
         </button>
       {:else}
-        <span class="chat-model-label" data-tauri-drag-region>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span class="chat-model-label" data-tauri-drag-region ondblclick={toggleMaximizeWindow}>
           {#if chatTitlebarState.status === 'loading'}
             {t("chat.status.loading")}
           {:else if chatTitlebarState.status === 'running'}
@@ -307,7 +338,8 @@ onDestroy(() => {
       {/if}
     </div>
   {:else}
-    <div class="titlebar-title" data-tauri-drag-region>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="titlebar-title" data-tauri-drag-region ondblclick={toggleMaximizeWindow}>
       {#if !isMainWindow}<span>{windowTitle}</span>{/if}
     </div>
   {/if}
@@ -392,14 +424,16 @@ onDestroy(() => {
   {#if isMac}
     {@render windowControls("mac")}
     {@render centerContent()}
-    <div class="titlebar-drag-region" data-tauri-drag-region></div>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="titlebar-drag-region" data-tauri-drag-region ondblclick={toggleMaximizeWindow}></div>
     {@render actionButtons()}
   {:else}
     {#if isMainWindow}
       {@render actionButtons()}
     {/if}
     {@render centerContent()}
-    <div class="titlebar-drag-region" data-tauri-drag-region></div>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="titlebar-drag-region" data-tauri-drag-region ondblclick={toggleMaximizeWindow}></div>
     {#if !isMainWindow}
       {@render actionButtons()}
     {/if}
@@ -407,7 +441,8 @@ onDestroy(() => {
   {/if}
 
   {#if isLabelWindow && labelTitlebarState.active}
-    <div class="label-window-countdown-center" data-tauri-drag-region>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="label-window-countdown-center" data-tauri-drag-region ondblclick={toggleMaximizeWindow}>
       <span class="label-window-countdown-pill">{t("label.eegWindow", { elapsed: labelTitlebarState.elapsed })}</span>
     </div>
   {/if}

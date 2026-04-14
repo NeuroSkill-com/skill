@@ -2,8 +2,34 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat top bar — sidebar toggle, tools badge, EEG badge, server controls, settings. -->
 <script lang="ts">
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { BandSnapshot, ServerStatus } from "$lib/chat-types";
 import { t } from "$lib/i18n/index.svelte";
+
+let savedBounds: { x: number; y: number; width: number; height: number } | null = null;
+let isManuallyMaximized = false;
+
+async function toggleMaximizeWindow() {
+  const win = getCurrentWindow();
+  if (isManuallyMaximized && savedBounds) {
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    await win.setPosition(new LogicalPosition(savedBounds.x, savedBounds.y));
+    await win.setSize(new LogicalSize(savedBounds.width, savedBounds.height));
+    isManuallyMaximized = false;
+    savedBounds = null;
+  } else {
+    const pos = await win.outerPosition();
+    const size = await win.outerSize();
+    const factor = await win.scaleFactor();
+    savedBounds = {
+      x: pos.x / factor, y: pos.y / factor,
+      width: size.width / factor, height: size.height / factor,
+    };
+    await win.maximize();
+    isManuallyMaximized = true;
+  }
+}
 
 interface Props {
   sidebarOpen: boolean;
@@ -60,7 +86,8 @@ let {
 
 <header class="relative flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#0f0f18] shrink-0 overflow-hidden min-h-0"
-        data-tauri-drag-region>
+        data-tauri-drag-region
+        ondblclick={toggleMaximizeWindow}>
 
   <!-- Sidebar toggle -->
   <button
@@ -78,7 +105,8 @@ let {
     </svg>
   </button>
 
-  <div class="flex-1 min-w-0" data-tauri-drag-region></div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="flex-1 min-w-0" data-tauri-drag-region ondblclick={toggleMaximizeWindow}></div>
 
   <!-- Tools badge -->
   {#if supportsTools}
