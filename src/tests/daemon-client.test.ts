@@ -38,8 +38,8 @@ describe("daemon client layer file inventory", () => {
   it("has no unexpectedly large files", () => {
     for (const f of files) {
       const lines = fs.readFileSync(path.join(daemonDir, f), "utf-8").split("\n").length;
-      // invoke-proxy is the biggest (~355 lines); nothing should exceed 400
-      expect(lines).toBeLessThan(400);
+      // invoke-proxy is the biggest (~470 lines after SSE streaming); nothing should exceed 500
+      expect(lines).toBeLessThan(500);
     }
   });
 
