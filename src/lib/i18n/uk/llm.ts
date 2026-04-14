@@ -69,6 +69,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "Дані embedding не знайдено.",
   "model.reembedLoadingEncoder": "Завантаження кодера…",
   "model.reembedError": "Помилка — перевірте ваги.",
+  "model.gpuPrecision": "Точність GPU",
+  "model.gpuPrecisionDesc": "Половинна точність (f16) швидша, повна точність (f32) точніша",
+  "model.gpuPrecisionF16": "швидше",
+  "model.gpuPrecisionF32": "точно",
+  "model.idleReembed": "Фонове вбудовування",
+  "model.idleReembedDesc": "Автоматично вбудовувати необроблені епохи, коли пристрій неактивний",
+  "model.idleDelay": "Почати після простою",
 
   "llm.section.server": "Локальний LLM сервер",
   "llm.section.models": "Мовні моделі",

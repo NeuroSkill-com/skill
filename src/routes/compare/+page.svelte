@@ -47,6 +47,7 @@ import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import { TimeSeriesChart } from "$lib/dashboard";
 import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import type { Series } from "$lib/dashboard/TimeSeriesChart.svelte";
@@ -99,6 +100,42 @@ let showCharts = $state(false);
 let advExpanded = $state(false);
 let sleepExpanded = $state(false);
 
+// Embedding status per side (for UMAP availability indicator)
+let embCountA = $state<{ count: number; embedded: number } | null>(null);
+let embCountB = $state<{ count: number; embedded: number } | null>(null);
+const embPctA = $derived(
+  embCountA && embCountA.count > 0 ? Math.round((embCountA.embedded / embCountA.count) * 100) : 0,
+);
+const embPctB = $derived(
+  embCountB && embCountB.count > 0 ? Math.round((embCountB.embedded / embCountB.count) * 100) : 0,
+);
+const umapTotalEmb = $derived((embCountA?.embedded ?? 0) + (embCountB?.embedded ?? 0));
+const umapTotalEpochs = $derived((embCountA?.count ?? 0) + (embCountB?.count ?? 0));
+
+// Background reembed progress (from daemon WebSocket events)
+let reembedStatus = $state<{ status: string; total?: number; done?: number; failed?: number; day?: string } | null>(
+  null,
+);
+let reembedStartedAt = $state(0); // Date.now() when first "running" event arrived
+let reembedStartedDone = $state(0); // done count at reembedStartedAt
+const reembedRunning = $derived(reembedStatus?.status === "running" || reembedStatus?.status === "started");
+const reembedPct = $derived(
+  reembedStatus?.total && reembedStatus.total > 0
+    ? Math.round(((reembedStatus.done ?? 0) / reembedStatus.total) * 100)
+    : 0,
+);
+const reembedEta = $derived(() => {
+  if (!reembedStatus?.total || !reembedRunning) return null;
+  const done = reembedStatus.done ?? 0;
+  const elapsed = (Date.now() - reembedStartedAt) / 1000;
+  const processed = done - reembedStartedDone;
+  if (elapsed < 5 || processed < 10) return null; // need enough samples
+  const rate = processed / elapsed; // epochs per second
+  const remaining = reembedStatus.total - done;
+  const etaSecs = Math.round(remaining / rate);
+  return { rate: Math.round(rate * 10) / 10, etaSecs };
+});
+
 // UMAP state
 let umapResult = $state<UmapResult | null>(null);
 let umapLoading = $state(false);
@@ -109,6 +146,7 @@ let umapElapsed = $state(0); // seconds elapsed since start
 let umapCountdown = $state<number | null>(null); // live seconds remaining
 let umapComputeMs = $state<number | null>(null); // actual compute time from backend
 let umapProgress = $state<UmapProgress | null>(null); // live epoch progress
+let umapError = $state<string | null>(null); // user-facing error when UMAP can't compute
 let umapTimerHandle: ReturnType<typeof setInterval> | null = null;
 let umapStartMs = 0; // performance.now() at fire
 
@@ -543,7 +581,44 @@ onMount(() => {
   // the canvas.clientWidth reads the OLD value — causing the stretched look.
   const ro = new ResizeObserver(() => redrawAllCanvases());
   if (scrollContainer) ro.observe(scrollContainer);
-  return () => ro.disconnect();
+
+  // Listen for background reembed progress events.
+  const unlistenReembed = onDaemonEvent("reembed-progress", (ev) => {
+    const p = ev.payload as { status: string; total?: number; done?: number; failed?: number; day?: string };
+    // Track start time for rate calculation.
+    if ((p.status === "running" || p.status === "started") && reembedStartedAt === 0) {
+      reembedStartedAt = Date.now();
+      reembedStartedDone = p.done ?? 0;
+    }
+    if (p.status === "done" || p.status === "idle_done" || p.status === "error") {
+      reembedStartedAt = 0;
+    }
+    reembedStatus = p;
+    // When reembed completes, refresh embedding counts.
+    if (p.status === "done" || p.status === "idle_done") {
+      if (metricsA && metricsB) {
+        const sA = aStartUtc,
+          eA = aEndUtc,
+          sB = bStartUtc,
+          eB = bEndUtc;
+        daemonInvoke<{ count: number; embedded: number }>("get_session_embedding_count", { startUtc: sA, endUtc: eA })
+          .then((r) => {
+            embCountA = r;
+          })
+          .catch(() => {});
+        daemonInvoke<{ count: number; embedded: number }>("get_session_embedding_count", { startUtc: sB, endUtc: eB })
+          .then((r) => {
+            embCountB = r;
+          })
+          .catch(() => {});
+      }
+    }
+  });
+
+  return () => {
+    ro.disconnect();
+    unlistenReembed();
+  };
 });
 
 // ── Compare ────────────────────────────────────────────────────────────────
@@ -560,34 +635,12 @@ async function compare() {
   console.warn(`[compare] sA=${sA} eA=${eA} sB=${sB} eB=${eB}`);
 
   comparing = true;
-  metricsA = null;
-  metricsB = null;
-  sleepA = null;
-  sleepB = null;
-
-  try {
-    const [ma, mb, sa, sb] = await Promise.all([
-      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
-      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
-      daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
-      daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
-    ]);
-
-    // biome-ignore lint/suspicious/noConsole: temporary diagnostic
-    console.warn("[compare] metricsA:", ma?.n_epochs, "metricsB:", mb?.n_epochs);
-    metricsA = ma;
-    metricsB = mb;
-    sleepA = sa.epochs?.length > 0 ? sa : null;
-    sleepB = sb.epochs?.length > 0 ? sb : null;
-  } catch (e) {
-    // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
-    console.error("compare() failed:", e);
-  }
-  comparing = false;
+  // Keep previous results visible (dimmed) while loading — don't null them out.
 
   // Reset any previously computed UMAP — the user must request it again.
   umapResult = null;
   umapPlaceholder = null;
+  umapError = null;
   umapRequested = false;
   umapLoading = false;
   umapEta = null;
@@ -596,7 +649,52 @@ async function compare() {
   umapProgress = null;
   stopUmapTimer();
 
-  // Load time-series for charts (non-blocking).
+  // ── Phase 1: Metrics (fast — SQL AVG returns 1 row) ─────────────────
+  // Show band-power results as fast as possible, then load heavier data.
+  try {
+    const [ma, mb] = await Promise.all([
+      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sA, endUtc: eA }),
+      daemonInvoke<SessionMetrics>("get_session_metrics", { startUtc: sB, endUtc: eB }),
+    ]);
+    // biome-ignore lint/suspicious/noConsole: temporary diagnostic
+    console.warn("[compare] metricsA:", ma?.n_epochs, "metricsB:", mb?.n_epochs);
+    metricsA = ma;
+    metricsB = mb;
+  } catch (e) {
+    // biome-ignore lint/suspicious/noConsole: intentional error logging for debug
+    console.error("compare() metrics failed:", e);
+  }
+  // Metrics are in — clear the comparing overlay so the user can see results
+  // while sleep + timeseries continue loading in the background.
+  comparing = false;
+
+  // ── Phase 2: Sleep + timeseries (heavier, non-blocking) ─────────────
+  Promise.all([
+    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sA, endUtc: eA }),
+    daemonInvoke<SleepStages>("get_sleep_stages", { startUtc: sB, endUtc: eB }),
+  ])
+    .then(([sa, sb]) => {
+      sleepA = sa.epochs?.length > 0 ? sa : null;
+      sleepB = sb.epochs?.length > 0 ? sb : null;
+    })
+    .catch((_e) => {});
+
+  // Fetch embedding counts (for UMAP availability indicator).
+  daemonInvoke<{ count: number; embedded: number }>("get_session_embedding_count", { startUtc: sA, endUtc: eA })
+    .then((r) => {
+      embCountA = r;
+    })
+    .catch(() => {
+      embCountA = null;
+    });
+  daemonInvoke<{ count: number; embedded: number }>("get_session_embedding_count", { startUtc: sB, endUtc: eB })
+    .then((r) => {
+      embCountB = r;
+    })
+    .catch(() => {
+      embCountB = null;
+    });
+
   Promise.all([
     daemonInvoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
     daemonInvoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
@@ -616,6 +714,7 @@ async function calculateUmap() {
   console.warn("[umap] calculateUmap called, setting umapRequested+umapLoading=true");
   umapRequested = true;
   umapResult = null;
+  umapError = null;
   umapLoading = true;
   umapEta = null;
   umapReadyUtc = null;
@@ -673,10 +772,18 @@ async function calculateUmap() {
       umapQueuePosition = 0;
       umapWaitSecs = 0;
       startUmapTimer(10); // rough estimate for direct call
-      daemonInvoke<UmapResult>("compute_umap_compare", umapArgs)
+      daemonInvoke<UmapResult & { reason?: string; total_a?: number; total_b?: number }>(
+        "compute_umap_compare",
+        umapArgs,
+      )
         .then((r) => {
           umapResult = r?.points && r.points.length > 0 ? r : null;
           umapComputeMs = r?.elapsed_ms ?? null;
+          if (!umapResult && r?.reason) {
+            umapError = r.reason.startsWith("no_embeddings")
+              ? `${(r.total_a ?? 0) + (r.total_b ?? 0)} epochs found but none have embedding vectors. Make sure the EEG model weights are downloaded.`
+              : `Could not compute UMAP: ${r.reason}`;
+          }
           finishUmap();
         })
         .catch(() => {
@@ -701,24 +808,35 @@ async function pollUmapJob(jobId: number) {
     try {
       const r = await daemonInvoke<JobPollResult>("poll_job", { jobId });
       if (r.status === "complete") {
-        const res = r.result as UmapResult | undefined;
+        const res = r.result as (UmapResult & { reason?: string; total_a?: number; total_b?: number }) | undefined;
         umapResult = res?.points && res.points.length > 0 ? res : null;
         umapComputeMs = res?.elapsed_ms ?? r.elapsed_ms ?? null;
+        // If UMAP returned empty with a reason, show it to the user
+        if (!umapResult && res?.reason) {
+          const reason = res.reason;
+          if (reason.startsWith("no_embeddings")) {
+            umapError = `Brain Nebula requires EEG embedding vectors, but ${(res.total_a ?? 0) + (res.total_b ?? 0)} epochs in this range only have metrics (no embeddings). Make sure the EEG model weights are downloaded and the encoder is active.`;
+          } else if (reason.startsWith("too_few")) {
+            umapError = `Not enough embeddings to compute 3D projection (need at least 5). Only ${(res.n_a ?? 0) + (res.n_b ?? 0)} epochs have embedding vectors.`;
+          } else if (reason.startsWith("no_epochs")) {
+            umapError = "No recorded epochs found in the selected time ranges.";
+          } else {
+            umapError = `Could not compute UMAP: ${reason}`;
+          }
+          // biome-ignore lint/suspicious/noConsole: diagnostic
+          console.warn("[umap] empty result, reason:", reason);
+        }
         finishUmap();
       } else if (r.status === "error") {
+        umapError = `UMAP computation failed: ${(r as unknown as Record<string, unknown>).error ?? "unknown error"}`;
         finishUmap();
-      } else if (r.status === "pending") {
+      } else if (r.status === "pending" || r.status === "running") {
         // Update queue-aware state on every poll so the UI stays current.
-        // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
-        umapQueuePosition = r.queue_position!;
-        // estimated_secs from poll = (jobs ahead + this job) estimate.
-        // Subtract this job's own estimate to get remaining wait time.
+        umapQueuePosition = r.queue_position ?? 0;
         umapWaitSecs = Math.max(0, (r.estimated_secs ?? 0) - umapOwnEstimateSecs);
 
-        // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
-        if (r.queue_position! > 0) {
-          // biome-ignore lint/style/noNonNullAssertion: value guarded by surrounding null-check or status check
-          umapEta = `queued #${r.queue_position! + 1}`;
+        if ((r.queue_position ?? 0) > 0) {
+          umapEta = `queued #${(r.queue_position ?? 0) + 1}`;
         } else if (r.progress) {
           const p = r.progress as unknown as UmapProgress;
           umapProgress = p;
@@ -732,7 +850,9 @@ async function pollUmapJob(jobId: number) {
       } else {
         finishUmap();
       }
-    } catch {
+    } catch (pollErr) {
+      // biome-ignore lint/suspicious/noConsole: intentional error logging
+      console.error("[umap] poll error:", pollErr);
       finishUmap();
     }
   };
@@ -936,10 +1056,31 @@ useWindowTitle("window.title.compare");
             {#if durSecs > 86400}
               <span class="text-[0.5rem] text-red-500">{t("compare.rangeExceedsLimit")}</span>
             {:else if valid}
+              {@const emb = side === "A" ? embCountA : embCountB}
+              {@const pct = side === "A" ? embPctA : embPctB}
               <span class="text-[0.5rem] text-muted-foreground/50 tabular-nums">
                 {sessCount} {sessCount === 1 ? "session" : "sessions"} · {fmtDuration(durSecs)}
                 <span class="text-emerald-500 ml-0.5">✓</span>
               </span>
+              <!-- Embedding status badge -->
+              {#if emb}
+                {#if pct >= 90}
+                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-emerald-500/70" title={t("compare.embeddingsReady")}>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/60"></span>
+                  </span>
+                {:else if pct > 0}
+                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-amber-500/70"
+                        title="{emb.embedded}/{emb.count} {t('compare.embeddingsReady')}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500/60"></span>
+                    <span class="tabular-nums">{pct}%</span>
+                  </span>
+                {:else}
+                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-red-400/70"
+                        title={t("compare.embeddingsNone")}>
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-400/50"></span>
+                  </span>
+                {/if}
+              {/if}
             {:else if anchorUtc !== null && sessCount === 0}
               <span class="text-[0.5rem] text-amber-500">{t("compare.noSessionsInRange")}</span>
             {/if}
@@ -1190,6 +1331,16 @@ useWindowTitle("window.title.compare");
       </div>
 
       <!-- ── Results ──────────────────────────────────────────────────────── -->
+      {#if comparing && !metricsA && !metricsB}
+        <!-- First compare — no previous results to show -->
+        <Separator class="bg-border dark:bg-white/[0.06]" />
+        <div class="flex flex-col items-center justify-center gap-3 py-12">
+          <svg class="w-6 h-6 text-muted-foreground spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+          </svg>
+          <p class="text-[0.73rem] text-muted-foreground">{t("compare.comparing")}</p>
+        </div>
+      {/if}
       {#if metricsA && metricsB}
         <Separator class="bg-border dark:bg-white/[0.06]" />
 
@@ -1785,9 +1936,50 @@ useWindowTitle("window.title.compare");
               </p>
               <Button size="sm"
                       class="text-[0.7rem] h-8 px-4"
+                      disabled={umapTotalEpochs > 0 && umapTotalEmb < 5}
                       onclick={calculateUmap}>
                 {t("compare.calculateUmap")}
               </Button>
+              {#if umapTotalEpochs > 0 && umapTotalEmb < 5}
+                <p class="text-[0.55rem] text-amber-500/80 text-center max-w-[280px] leading-relaxed">
+                  {t("compare.embeddingsNone")}
+                </p>
+                {#if reembedRunning}
+                  {@const eta = reembedEta()}
+                  <div class="flex flex-col items-center gap-1.5 w-full max-w-[280px]">
+                    <div class="w-full h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
+                      <div class="h-full rounded-full bg-blue-500/70 transition-all duration-1000 ease-linear"
+                           style="width:{reembedPct}%"></div>
+                    </div>
+                    <p class="text-[0.5rem] text-blue-400/70 tabular-nums leading-relaxed text-center">
+                      {t("compare.embeddingsProcessing")}
+                      {reembedStatus?.done ?? 0}/{reembedStatus?.total ?? 0} ({reembedPct}%)
+                      {#if reembedStatus?.day} · {reembedStatus.day}{/if}
+                      {#if eta}
+                        <br/>{eta.rate} embeddings/sec · ~{fmtDuration(eta.etaSecs)} remaining
+                      {/if}
+                    </p>
+                  </div>
+                {/if}
+              {:else if umapTotalEpochs > 0 && umapTotalEmb < umapTotalEpochs * 0.5}
+                <p class="text-[0.55rem] text-amber-500/60 text-center max-w-[280px] leading-relaxed tabular-nums">
+                  {umapTotalEmb}/{umapTotalEpochs} {t("compare.embeddingsReady")} ({Math.round(umapTotalEmb / umapTotalEpochs * 100)}%)
+                </p>
+                {#if reembedRunning}
+                  {@const eta = reembedEta()}
+                  <div class="flex flex-col items-center gap-1 w-full max-w-[260px]">
+                    <div class="w-full h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
+                      <div class="h-full rounded-full bg-blue-500/70 transition-all duration-1000 ease-linear"
+                           style="width:{reembedPct}%"></div>
+                    </div>
+                    {#if eta}
+                      <span class="text-[0.45rem] text-blue-400/60 tabular-nums">
+                        {eta.rate}/sec · ~{fmtDuration(eta.etaSecs)} left
+                      </span>
+                    {/if}
+                  </div>
+                {/if}
+              {/if}
             </div>
           </div>
         {:else}
@@ -1841,13 +2033,10 @@ useWindowTitle("window.title.compare");
                 {:else}
                   <Spinner size="w-3 h-3" class="text-blue-400 shrink-0" />
                   <span class="text-[0.45rem] text-muted-foreground italic tabular-nums">
-                    computing 3D projection
-                    {#if umapCountdown != null && umapCountdown > 0 && !umapProgress}
-                      · ~{fmtSecs(umapCountdown)} remaining
-                    {/if}
-                    · {fmtSecs(umapElapsed)} elapsed
+                    computing 3D projection · {fmtSecs(umapElapsed)} elapsed
                   </span>
                   {#if umapProgress && umapProgress.total_epochs > 0}
+                    <!-- Detailed epoch-level progress (from daemon with progress callback) -->
                     {@const pct = Math.round(umapProgress.epoch / umapProgress.total_epochs * 100)}
                     {@const remEpochs = umapProgress.total_epochs - umapProgress.epoch}
                     {@const remSecs = umapProgress.epoch_ms > 0
@@ -1869,6 +2058,21 @@ useWindowTitle("window.title.compare");
                           · ~{fmtSecs(remSecs)} left
                         </span>
                       {/if}
+                    </div>
+                  {:else}
+                    <!-- Estimated progress bar (elapsed / estimated time) -->
+                    {@const estSecs = umapOwnEstimateSecs > 0 ? umapOwnEstimateSecs : 15}
+                    {@const estPct = Math.min(95, Math.round(umapElapsed / estSecs * 100))}
+                    <div class="flex-1 max-w-[200px] flex flex-col gap-0.5">
+                      <div class="flex items-center gap-1.5">
+                        <div class="flex-1 h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
+                          <div class="h-full rounded-full bg-blue-500/70 dark:bg-blue-400/70 transition-all duration-1000 ease-linear"
+                               style="width:{estPct}%"></div>
+                        </div>
+                        <span class="text-[0.42rem] text-muted-foreground/60 tabular-nums shrink-0">
+                          ~{fmtSecs(Math.max(0, estSecs - umapElapsed))}
+                        </span>
+                      </div>
                     </div>
                   {/if}
                 {/if}
@@ -1892,9 +2096,40 @@ useWindowTitle("window.title.compare");
             </div>
 
             <!-- 3D viewer — fills remaining vertical space -->
-            <div class="flex-1" style="width:100%; min-height:400px">
-              <UmapViewer3D data={umapResult ?? umapPlaceholder ?? { points: [], n_a: 0, n_b: 0, dim: 0 }} computing={umapLoading} progress={umapProgress} />
-            </div>
+            {#if umapError && !umapLoading}
+              <div class="flex-1 flex flex-col items-center justify-center gap-3 px-6 py-12 text-center" style="min-height:400px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                     class="w-10 h-10 text-amber-500/60">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <p class="text-[0.7rem] text-muted-foreground max-w-[360px] leading-relaxed">{umapError}</p>
+                {#if reembedRunning}
+                  {@const eta = reembedEta()}
+                  <div class="flex flex-col items-center gap-2 w-full max-w-[300px] mt-2">
+                    <div class="w-full h-2 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
+                      <div class="h-full rounded-full bg-blue-500/70 transition-all duration-1000 ease-linear"
+                           style="width:{reembedPct}%"></div>
+                    </div>
+                    <p class="text-[0.6rem] text-blue-400/80 tabular-nums text-center leading-relaxed">
+                      {t("compare.embeddingsProcessing")}
+                      {reembedStatus?.done ?? 0}/{reembedStatus?.total ?? 0} ({reembedPct}%)
+                      {#if eta}
+                        <br/>{eta.rate} embeddings/sec · ~{fmtDuration(eta.etaSecs)} remaining
+                      {/if}
+                    </p>
+                  </div>
+                {:else}
+                  <Button size="sm" variant="outline" class="text-[0.65rem] h-7 px-3 mt-1" onclick={calculateUmap}>
+                    Retry
+                  </Button>
+                {/if}
+              </div>
+            {:else}
+              <div class="flex-1" style="width:100%; min-height:400px">
+                <UmapViewer3D data={umapResult ?? umapPlaceholder ?? { points: [], n_a: 0, n_b: 0, dim: 0 }} computing={umapLoading} progress={umapProgress} />
+              </div>
+            {/if}
 
             <!-- Footer legend -->
             <div class="flex items-center gap-4 text-[0.42rem] text-muted-foreground/60 px-4 py-3 shrink-0">

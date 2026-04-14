@@ -106,7 +106,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   set_daemon_watchdog: [P, "/v1/settings/daemon-watchdog"],
 
   // Search
-  search_labels_by_text: [P, "/v1/search/eeg"],
+  search_labels_by_text: [P, "/v1/labels/search"],
   interactive_search: [P, "/v1/search/eeg"],
   regenerate_interactive_svg: [P, "/v1/search/eeg"],
   regenerate_interactive_dot: [P, "/v1/search/eeg"],
@@ -227,7 +227,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
 
 const CHANNEL_ROUTES: Record<string, string> = {
   chat_completions_ipc: "/v1/llm/chat-completions",
-  stream_search_embeddings: "/v1/search/eeg",
+  stream_search_embeddings: "/v1/search/eeg/stream",
 };
 
 // Commands that must never fall back to Tauri invoke() when daemon HTTP fails.
@@ -245,16 +245,29 @@ const DAEMON_ONLY_COMMANDS = new Set<string>([
   "cancel_tool_call",
 ]);
 
-function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
+// Active search abort controller — allows cancel from UI.
+let _searchAbort: AbortController | null = null;
+
+/** Cancel any running EEG search stream. */
+export function cancelSearch(): void {
+  if (_searchAbort) {
+    _searchAbort.abort();
+    _searchAbort = null;
+  }
+}
+
+async function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
   const path = CHANNEL_ROUTES[cmd];
   const { channel, onProgress, ...rest } = args;
   const ch = channel ?? onProgress;
   const emit = (msg: AnyArgs) => {
     if (ch && typeof ch.onmessage === "function") ch.onmessage(msg);
   };
-  return daemonPost<AnyArgs>(path, rest)
-    .then((result) => {
-      if (cmd === "chat_completions_ipc") {
+
+  if (cmd === "chat_completions_ipc") {
+    // Chat: single POST, long timeout.
+    return daemonPost<AnyArgs>(path, rest, 300_000)
+      .then((result) => {
         if (result?.error) {
           emit({ type: "error", message: String(result.error) });
           return;
@@ -268,21 +281,123 @@ function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
           completion_tokens: result?.completion_tokens ?? 0,
           n_ctx: result?.n_ctx ?? 0,
         });
-      } else {
-        emit({ kind: "started", query_count: 0, searched_days: [] });
+      })
+      .catch((e: unknown) => {
+        emit({ type: "error", message: String(e) });
+      });
+  }
+
+  // EEG search: SSE stream — results arrive progressively.
+  // Cancel any previous search.
+  cancelSearch();
+  const abort = new AbortController();
+  _searchAbort = abort;
+
+  try {
+    const b = await (await import("./http")).getDaemonBaseUrl();
+    const url = `http://127.0.0.1:${b.port}${path.startsWith("/") ? path : `/${path}`}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${b.token}`,
+      },
+      body: JSON.stringify(rest),
+      signal: abort.signal,
+    });
+
+    if (!resp.ok) {
+      emit({ kind: "error", error: `${resp.status} ${resp.statusText}` });
+      return;
+    }
+
+    // Read SSE events from the response body.
+    // Try streaming via ReadableStream; fall back to full-body read if unavailable.
+    const reader = resp.body?.getReader();
+    if (reader) {
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events: "data: {...}\n\n"
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("data:")) {
+              const json = trimmed.slice(5).trim();
+              if (!json || json === "[DONE]") continue;
+              try {
+                emit(JSON.parse(json));
+              } catch {
+                /* skip */
+              }
+            }
+          }
+        }
+      } finally {
+        // Process remaining buffer after stream ends.
+        for (const line of buffer.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data:")) {
+            const json = trimmed.slice(5).trim();
+            if (json) {
+              try {
+                emit(JSON.parse(json));
+              } catch {
+                /* skip */
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Fallback: read full body, parse SSE events, emit all at once.
+      const text = await resp.text();
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data:")) {
+          const json = trimmed.slice(5).trim();
+          if (!json || json === "[DONE]") continue;
+          try {
+            emit(JSON.parse(json));
+          } catch {
+            /* skip */
+          }
+        }
+      }
+    }
+  } catch (e: unknown) {
+    if ((e as Error)?.name === "AbortError") {
+      emit({ kind: "done", total: 0 }); // cancelled by user
+    } else {
+      // SSE stream failed (e.g., WKWebView blocks direct fetch).
+      // Fall back to non-streaming POST via the normal daemon HTTP client.
+      try {
+        const fallbackPath = path.replace("/stream", "");
+        const result = await daemonPost<AnyArgs>(fallbackPath, rest, 120_000);
+        emit({
+          kind: "started",
+          query_count: result?.query_count ?? result?.results?.length ?? 0,
+          searched_days: result?.searched_days ?? [],
+        });
         if (Array.isArray(result?.results)) {
-          for (const entry of result.results) {
-            emit({ kind: "result", entry, done_count: 0 });
+          for (let i = 0; i < result.results.length; i++) {
+            emit({ kind: "result", entry: result.results[i], done_count: i + 1 });
           }
         }
         emit({ kind: "done", total: result?.results?.length ?? 0 });
+      } catch (fallbackErr) {
+        emit({ kind: "error", error: String(fallbackErr) });
       }
-    })
-    .catch((e: unknown) => {
-      emit(
-        cmd === "chat_completions_ipc" ? { type: "error", message: String(e) } : { kind: "error", error: String(e) },
-      );
-    });
+    }
+  } finally {
+    if (_searchAbort === abort) _searchAbort = null;
+  }
 }
 
 // ── Job queue ──────────────────────────────────────────────────────────────
@@ -295,7 +410,9 @@ const _jobResults = new Map<number, AnyArgs>();
 function handleEnqueue(args: AnyArgs): AnyArgs {
   const jobId = ++_nextJobId;
   const t0 = Date.now();
-  daemonPost("/v1/analysis/umap", args).then(
+  // UMAP computation is CPU-heavy and can take minutes — use a 5-minute timeout
+  // instead of the default 10s to avoid aborting the request mid-computation.
+  daemonPost("/v1/analysis/umap", args, 300_000).then(
     (result) => _jobResults.set(jobId, { status: "complete", job_id: jobId, result, elapsed_ms: Date.now() - t0 }),
     (err) =>
       _jobResults.set(jobId, { status: "error", job_id: jobId, error: String(err), elapsed_ms: Date.now() - t0 }),

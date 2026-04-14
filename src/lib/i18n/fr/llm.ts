@@ -71,6 +71,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "Aucune donnée d'embedding trouvée.",
   "model.reembedLoadingEncoder": "Chargement de l'encodeur…",
   "model.reembedError": "Erreur — vérifiez les poids.",
+  "model.gpuPrecision": "Précision GPU",
+  "model.gpuPrecisionDesc": "Demi-précision (f16) est plus rapide, pleine précision (f32) est plus précise",
+  "model.gpuPrecisionF16": "rapide",
+  "model.gpuPrecisionF32": "précis",
+  "model.idleReembed": "Embedding en arrière-plan",
+  "model.idleReembedDesc": "Intégrer automatiquement les époques non traitées en veille",
+  "model.idleDelay": "Démarrer après inactivité",
 
   "llm.section.server": "Serveur LLM local",
   "llm.section.models": "Modèles de langage",

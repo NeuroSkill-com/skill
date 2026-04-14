@@ -69,6 +69,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "未找到嵌入数据。",
   "model.reembedLoadingEncoder": "正在加载编码器…",
   "model.reembedError": "错误 — 请检查权重。",
+  "model.gpuPrecision": "GPU精度",
+  "model.gpuPrecisionDesc": "半精度(f16)更快，全精度(f32)更准确",
+  "model.gpuPrecisionF16": "更快",
+  "model.gpuPrecisionF32": "精确",
+  "model.idleReembed": "后台嵌入",
+  "model.idleReembedDesc": "设备空闲时自动嵌入未处理的epoch",
+  "model.idleDelay": "空闲后开始",
 
   "llm.section.server": "本地 LLM 服务器",
   "llm.section.models": "语言模型",

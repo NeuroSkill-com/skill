@@ -79,7 +79,7 @@ describe("daemonInvoke runtime contract", () => {
     const channel = { onmessage: (m: unknown) => messages.push(m) };
     await daemonInvoke<void>("chat_completions_ipc", { channel, messages: [], params: {} });
 
-    expect(daemonPost).toHaveBeenCalledWith("/v1/llm/chat-completions", { messages: [], params: {} });
+    expect(daemonPost).toHaveBeenCalledWith("/v1/llm/chat-completions", { messages: [], params: {} }, 300_000);
     expect(messages).toEqual([
       { type: "delta", content: "hello" },
       { type: "done", finish_reason: "stop", prompt_tokens: 1, completion_tokens: 2, n_ctx: 3 },

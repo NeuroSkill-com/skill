@@ -515,6 +515,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "守护进程未连接。校准数据将不会被记录。",
   "daemon.auth": "认证 ✓",
   "daemon.protocol": "协议",
+  "daemon.launchingIn": "离线 · {secs}秒后启动",
+  "daemon.starting": "启动中…",
+  "daemon.launchNow": "点击立即启动",
   "settingsTabs.lsl": "LSL",
 
   // ── LSL 标签页 ──────────────────────────────────────────────────────────────

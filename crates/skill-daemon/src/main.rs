@@ -9,6 +9,7 @@ pub(crate) mod background;
 pub(crate) mod cmd_dispatch;
 pub(crate) mod embed;
 mod handlers;
+mod idle_reembed;
 pub(crate) mod monitor;
 pub(crate) mod reconnect;
 mod routes;
@@ -108,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
     reconnect::spawn_reconnect_loop(state.clone(), state.reconnect.clone());
     monitor::spawn_status_monitor(state.clone());
     background::spawn_all(state.clone());
+    idle_reembed::spawn_idle_reembed_loop(state.clone());
 
     // Probe HF cache for the currently configured model weights so the UI
     // shows the correct state immediately on first load.
@@ -250,6 +252,12 @@ async fn main() -> anyhow::Result<()> {
         // Aliases without /v1/ prefix — used by neuroloop's skill-llm.ts
         .route("/llm/status", get(handlers::llm_status_alias))
         .route("/v1/models", get(handlers::openai_models_alias))
+        // Screenshot images (auth required — supports ?token= for <img> tags).
+        .route("/screenshots/{filename}", get(handlers::serve_screenshot))
+        .route(
+            "/screenshots/{date}/{filename}",
+            get(handlers::serve_screenshot_with_date),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware::auth_middleware,

@@ -97,6 +97,9 @@ pub(crate) async fn run_adapter_session(
                             s.firmware_version = info.firmware_version.clone();
                             s.hardware_version = info.hardware_version.clone();
                         }
+                        // Cancel any background idle reembed — real-time takes priority.
+                        state.idle_reembed_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+
                         broadcast_event(&state.events_tx, "DeviceConnected", &serde_json::json!({
                             "name": info.name,
                             "kind": device_kind,

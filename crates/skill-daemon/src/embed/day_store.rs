@@ -110,7 +110,8 @@ impl DayStore {
                 ppg_infrared    REAL,
                 ppg_red         REAL,
                 metrics_json    TEXT
-            );",
+            );
+            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
         )
         .ok()?;
 

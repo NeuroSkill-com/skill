@@ -202,6 +202,9 @@ fn icon_bt_off() -> Image<'static> {
 fn overlay_progress_bar(base: Image<'static>, progress: f32) -> Image<'static> {
     let width = base.width();
     let height = base.height();
+    if width == 0 || height == 0 {
+        return base; // Avoid muda ZeroWidth panic
+    }
     let rgba = skill_tray::overlay_progress_bar(base.rgba(), width, height, progress);
     Image::new_owned(rgba, width, height)
 }
@@ -633,7 +636,12 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
                 ),
                 None => base_tip.to_string(),
             };
-            let _ = tray.set_icon(Some(icon));
+            // Guard against muda ZeroWidth panic (upstream bug in muda 0.17.x
+            // where to_png() unwraps on a zero-width image inside an extern "C"
+            // callback that cannot unwind).  Validate dimensions before calling.
+            if icon.width() > 0 && icon.height() > 0 {
+                let _ = tray.set_icon(Some(icon));
+            }
             let _ = tray.set_tooltip(Some(&tip));
             *last = icon_key;
         }

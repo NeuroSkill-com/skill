@@ -840,6 +840,20 @@ pub struct ReembedConfig {
     pub batch_size: usize,
     /// Milliseconds to sleep between batches (backpressure control).
     pub batch_delay_ms: u64,
+    /// Enable background EEG reembedding when the device is idle.
+    /// When true, the daemon will start processing un-embedded epochs after
+    /// the device has been disconnected for `idle_reembed_delay_secs`.
+    /// Embedding pauses immediately when a device reconnects.
+    pub idle_reembed_enabled: bool,
+    /// Seconds of device inactivity before background reembed starts.
+    pub idle_reembed_delay_secs: u64,
+    /// Prefer GPU (wgpu/Metal) for background reembedding when available.
+    pub idle_reembed_gpu: bool,
+    /// GPU float precision: "f16" (default, faster) or "f32" (higher precision).
+    pub gpu_precision: String,
+    /// Milliseconds to sleep between epochs during background reembed.
+    /// Higher values reduce CPU/GPU contention with other daemon tasks.
+    pub idle_reembed_throttle_ms: u64,
 }
 
 fn default_daemon_auto_restart() -> bool {
@@ -857,6 +871,11 @@ impl Default for ReembedConfig {
             auto_screenshots: false,
             batch_size: 10,
             batch_delay_ms: 50,
+            idle_reembed_enabled: true,
+            idle_reembed_delay_secs: 1800, // 30 minutes
+            idle_reembed_gpu: true,
+            gpu_precision: "f16".into(),
+            idle_reembed_throttle_ms: 10,
         }
     }
 }

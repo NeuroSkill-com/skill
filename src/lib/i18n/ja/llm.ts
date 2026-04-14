@@ -71,6 +71,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "埋め込みデータが見つかりません。",
   "model.reembedLoadingEncoder": "エンコーダーを読み込み中…",
   "model.reembedError": "エラー — 重みを確認してください。",
+  "model.gpuPrecision": "GPU精度",
+  "model.gpuPrecisionDesc": "半精度(f16)は高速、全精度(f32)は高精度",
+  "model.gpuPrecisionF16": "高速",
+  "model.gpuPrecisionF32": "高精度",
+  "model.idleReembed": "バックグラウンド埋め込み",
+  "model.idleReembedDesc": "デバイスがアイドル時に未処理のエポックを自動的に埋め込む",
+  "model.idleDelay": "アイドル後に開始",
 
   "llm.section.server": "ローカルLLMサーバー",
   "llm.section.models": "言語モデル",

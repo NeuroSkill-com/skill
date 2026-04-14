@@ -13,9 +13,13 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
 cpu-only = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
+# GPU-accelerated ZUNA encoder (Metal on macOS, Vulkan on Linux)
+embed-zuna-gpu = ["embed-zuna", "zuna-rs/wgpu", "burn/wgpu"]
+# GPU f16 half-precision — faster than f32 on Apple Silicon and modern GPUs
+embed-zuna-gpu-f16 = ["embed-zuna", "zuna-rs/wgpu-f16", "burn/wgpu", "dep:half"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-osf  = ["dep:osf-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
@@ -49,7 +53,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 serialport = "4"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "registry"] }
 urlencoding = "2"
@@ -84,7 +88,7 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-zuna-rs             = { version = "0.0.4", default-features = false, features = ["ndarray"], optional = true }
+zuna-rs             = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
 reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
@@ -93,6 +97,7 @@ sleeplm             = { version = "0.0.1", default-features = false, features = 
 steegformer         = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
 tribev2             = { version = "0.0.4", default-features = false, features = ["ndarray"], optional = true }
 burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
+half                = { version = "2", optional = true }
 burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std", "simd", "multi-threads"], optional = true }
 ndarray             = { version = "0.17", optional = true }
 skill-location      = { path = "../skill-location" }

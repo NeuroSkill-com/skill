@@ -123,12 +123,15 @@ onMount(() => {
   switchMode(initialMode);
   emitSearchMode(initialMode);
 
-  // Load screenshot server port for image URLs
-  daemonInvoke<[string, number]>("get_screenshots_dir")
-    .then(([, port]) => {
-      imgPort = port;
-    })
-    .catch((_e) => {});
+  // Load screenshot server port + auth token for image URLs
+  import("$lib/daemon/http")
+    .then(({ getDaemonBaseUrl }) =>
+      getDaemonBaseUrl().then(({ port, token }) => {
+        imgPort = port;
+        imgToken = token;
+      }),
+    )
+    .catch(() => {});
 
   return () => {
     window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
@@ -177,16 +180,18 @@ function applyPreset(mins: number) {
 }
 
 const filtered = $derived.by(() => {
-  if (!result) return [];
+  if (!result?.results) return [];
+  // During streaming, skip filtering to avoid O(n²) on every incoming result.
+  if (searching) return result.results;
   let entries = result.results;
   const lf = labelFilter.trim().toLowerCase();
   if (lf || labelsOnly) {
     entries = entries
       .map((q) => {
-        const matched = q.neighbors.filter((nb) => {
-          if (nb.labels.length === 0 && labelsOnly) return false;
+        const matched = (q.neighbors ?? []).filter((nb) => {
+          if ((nb.labels?.length ?? 0) === 0 && labelsOnly) return false;
           if (!lf) return true;
-          return nb.labels.some((l) => l.text.toLowerCase().includes(lf));
+          return (nb.labels ?? []).some((l) => (l.text ?? "").toLowerCase().includes(lf));
         });
         return matched.length > 0 ? { ...q, neighbors: matched } : null;
       })
@@ -197,8 +202,9 @@ const filtered = $derived.by(() => {
 const totalPages = $derived(Math.ceil(filtered.length / SEARCH_PAGE_SIZE) || 0);
 const pageSlice = $derived(filtered.slice(page * SEARCH_PAGE_SIZE, (page + 1) * SEARCH_PAGE_SIZE));
 
-const searchAnalysis = $derived.by(() => (result ? computeSearchAnalysis(result) : null));
-const temporalHeatmap = $derived.by(() => (result ? computeTemporalHeatmap(result) : null));
+// Only recompute analysis when not actively streaming (avoids 1750 re-computations).
+const searchAnalysis = $derived.by(() => (result && !searching ? computeSearchAnalysis(result) : null));
+const temporalHeatmap = $derived.by(() => (result && !searching ? computeTemporalHeatmap(result) : null));
 const heatmapMax = $derived(temporalHeatmap ? Math.max(...temporalHeatmap.flat(), 1) : 1);
 
 // UMAP
@@ -248,9 +254,9 @@ function fireUmap() {
 function buildNeighborLabelMap(): Map<number, string> {
   const map = new Map<number, string>();
   if (!result) return map;
-  for (const q of result.results) {
-    for (const nb of q.neighbors) {
-      if (nb.labels.length > 0 && !map.has(nb.timestamp_unix)) {
+  for (const q of result.results ?? []) {
+    for (const nb of q.neighbors ?? []) {
+      if ((nb.labels?.length ?? 0) > 0 && !map.has(nb.timestamp_unix)) {
         map.set(nb.timestamp_unix, nb.labels[0].text);
       }
     }
@@ -360,7 +366,23 @@ async function searchEeg() {
         searchStatus = t("search.searchingIndices");
       } else if (msg.kind === "result" && msg.entry) {
         streamDone = msg.done_count ?? streamDone + 1;
-        acc.results = [...acc.results, msg.entry];
+        // Ensure all neighbor fields are non-null for safe template rendering.
+        const neighbors = (msg.entry.neighbors ?? []).map(
+          (nb: NeighborEntry) =>
+            ({
+              ...nb,
+              distance: nb.distance ?? 0,
+              timestamp: nb.timestamp ?? 0,
+              timestamp_unix: nb.timestamp_unix ?? 0,
+              labels: nb.labels ?? [],
+              date: nb.date ?? "",
+              hnsw_id: nb.hnsw_id ?? 0,
+              device_id: nb.device_id ?? null,
+              device_name: nb.device_name ?? null,
+            }) satisfies NeighborEntry,
+        );
+        const entry: QueryEntry = { ...msg.entry, neighbors };
+        acc.results = [...acc.results, entry];
         result = { ...acc };
       } else if (msg.kind === "done") {
         streamDone = msg.total ?? streamDone;
@@ -526,8 +548,8 @@ async function searchInteractive() {
         generatedBy: t("svg.generatedBy", { app: getAppName() }),
       },
     });
-    ixNodes = res.nodes;
-    ixEdges = res.edges;
+    ixNodes = res.nodes ?? [];
+    ixEdges = res.edges ?? [];
     ixDot = res.dot;
     ixSvg = res.svg;
     ixSvgCol = res.svg_col;
@@ -814,7 +836,11 @@ async function searchText() {
   page = 0;
   textFilter = "";
   try {
-    textResults = await daemonInvoke<LabelNeighbor[]>("search_labels_by_text", { query: textQuery.trim(), k: kVal });
+    const res = await daemonInvoke<{ results: LabelNeighbor[] } | LabelNeighbor[]>("search_labels_by_text", {
+      query: textQuery.trim(),
+      k: kVal,
+    });
+    textResults = Array.isArray(res) ? res : (res?.results ?? []);
     textSearched = true;
   } catch (e) {
     error = String(e);
@@ -833,7 +859,8 @@ function onTextKeydown(e: KeyboardEvent) {
 const textFiltered = $derived.by(() => {
   let r = textResults;
   const tf = textFilter.trim().toLowerCase();
-  if (tf) r = r.filter((x) => x.text.toLowerCase().includes(tf) || x.context.toLowerCase().includes(tf));
+  if (tf)
+    r = r.filter((x) => (x.text ?? "").toLowerCase().includes(tf) || (x.context ?? "").toLowerCase().includes(tf));
   if (textSort === "date") return [...r].sort((a, b) => b.eeg_start - a.eeg_start);
   return r; // similarity order is already from backend
 });
@@ -861,9 +888,12 @@ let imgSearching = $state(false);
 let imgSearched = $state(false);
 let imgSearchMode = $state<"substring" | "semantic">("substring");
 let imgPort = $state(8375);
+let imgToken = $state("");
 
 function imgSrc(filename: string): string {
-  return filename ? `http://127.0.0.1:${imgPort}/screenshots/${filename}` : "";
+  if (!filename) return "";
+  const tokenParam = imgToken ? `?token=${encodeURIComponent(imgToken)}` : "";
+  return `http://127.0.0.1:${imgPort}/screenshots/${filename}${tokenParam}`;
 }
 
 async function searchImages() {
@@ -981,7 +1011,10 @@ useWindowTitle("window.title.search");
           <span class="flex-1"></span>
         {/if}
         {#if searching}
-          <Button onclick={() => { searchCancelled = true; searching = false; searchStatus = ""; }}
+          <Button onclick={() => {
+            searchCancelled = true; searching = false; searchStatus = "";
+            import("$lib/daemon/invoke-proxy").then(m => m.cancelSearch());
+          }}
                   variant="outline" size="sm"
                   class="gap-1 px-3 h-7 text-[0.68rem] text-destructive border-destructive/30 hover:bg-destructive/10">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-3 h-3">
@@ -1575,7 +1608,7 @@ useWindowTitle("window.title.search");
                             {isSelf ? "100%" : simPct(nb.distance, maxDist)}
                           </span>
                           <span class="shrink-0 font-mono text-[0.56rem] text-muted-foreground/35 tabular-nums">
-                            {isSelf ? t("search.analysisSelf") : nb.distance.toFixed(4)}
+                            {isSelf ? t("search.analysisSelf") : (nb.distance ?? 0).toFixed(4)}
                           </span>
                         </div>
 
@@ -1606,7 +1639,7 @@ useWindowTitle("window.title.search");
                         {/if}
 
                         <!-- Labels -->
-                        {#if nb.labels.length > 0}
+                        {#if nb.labels?.length > 0}
                           <div class="flex flex-wrap gap-1 mt-1.5">
                             {#each nb.labels as lbl}
                               <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded

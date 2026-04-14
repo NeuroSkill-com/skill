@@ -169,6 +169,7 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
         let dir1 = utc_dir(req.start_utc);
         let dir2 = utc_dir(req.end_utc);
         let mut total: i64 = 0;
+        let mut total_embedded: i64 = 0;
         for dir_name in std::collections::HashSet::from([dir1, dir2]) {
             let db = skill_dir.join(&dir_name).join("eeg.sqlite");
             if !db.exists() {
@@ -183,9 +184,17 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
                     )
                     .unwrap_or(0);
                 total += n;
+                let emb: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2 AND length(eeg_embedding) >= 4",
+                        rusqlite::params![start_ms, end_ms],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                total_embedded += emb;
             }
         }
-        serde_json::json!({"count": total})
+        serde_json::json!({"count": total, "embedded": total_embedded})
     })
     .await
     .unwrap_or_else(|e| serde_json::json!({"error": e.to_string(), "count": 0u64}));

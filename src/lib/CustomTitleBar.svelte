@@ -688,13 +688,20 @@ onDestroy(() => {
     width: auto; min-width: 0; flex: 1 1 0;
     height: 22px; padding: 0 10px; border: 0;
     background: transparent;
-    color: color-mix(in oklab, var(--color-text) 72%, transparent);
-    font-size: 0.62rem; font-weight: 600; line-height: 1; white-space: nowrap;
+    color: color-mix(in oklab, var(--color-text) 45%, transparent);
+    font-size: 0.62rem; font-weight: 500; line-height: 1; white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .search-mode-button:hover:not(.active) {
+    background: color-mix(in oklab, var(--color-text) 8%, transparent);
+    color: color-mix(in oklab, var(--color-text) 70%, transparent);
   }
   .search-mode-button + .search-mode-button { border-left: 1px solid var(--color-border); }
   .search-mode-button.active {
-    background: color-mix(in oklab, var(--color-text) 15%, transparent);
+    background: color-mix(in oklab, var(--color-accent-foreground) 12%, transparent);
     color: var(--color-text);
+    font-weight: 700;
+    box-shadow: inset 0 -2px 0 var(--color-accent-foreground);
   }
 
   /* ── Downloads window ────────────────────────────────────────────────── */

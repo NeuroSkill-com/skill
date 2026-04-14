@@ -15,7 +15,7 @@ use skill_eeg::eeg_model_config::{ExgModelBackend, ExgModelConfig};
 use skill_exg::neurorvq::{Modality as NeuroModality, NeuroRVQFM};
 use skill_settings::HookRule;
 use tokio::sync::broadcast;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use super::accumulator::EpochMsg;
 use super::day_store::DayStore;
@@ -400,10 +400,9 @@ fn embed_worker_main(
 
     let mut epoch_count = 0u64;
     let mut save_counter = 0u32;
+    let mut metrics_only_streak = 0u64;
 
     for msg in rx.iter() {
-        epoch_count += 1;
-
         // Roll over to new day if needed.
         let today = yyyymmdd_utc();
         if today != current_date {
@@ -441,7 +440,35 @@ fn embed_worker_main(
         let ts_ms = msg.timestamp * 1000;
 
         // Encode the epoch.
+        let t0 = std::time::Instant::now();
         let embedding = encoder.as_ref().and_then(|enc| encode_epoch(enc, &msg));
+        let embed_ms = t0.elapsed().as_millis();
+
+        if embedding.is_none() && encoder.is_some() {
+            metrics_only_streak += 1;
+            // Log every 100 consecutive failures, plus the first one.
+            if metrics_only_streak == 1 || metrics_only_streak % 100 == 0 {
+                tracing::warn!(
+                    ts = ts_ms,
+                    streak = metrics_only_streak,
+                    "[embed] encoder returned None — storing metrics-only (streak: {metrics_only_streak})"
+                );
+            }
+        } else if embedding.is_some() {
+            if metrics_only_streak > 0 {
+                tracing::info!(
+                    streak = metrics_only_streak,
+                    "[embed] encoder recovered after {metrics_only_streak} metrics-only epochs"
+                );
+                metrics_only_streak = 0;
+            }
+            if embed_ms > 2000 {
+                tracing::warn!(ms = embed_ms, "[embed] slow encode: {embed_ms}ms");
+            }
+        } else if encoder.is_none() && epoch_count == 0 {
+            tracing::warn!("[embed] no encoder loaded — all epochs will be metrics-only");
+        }
+        epoch_count += 1;
 
         // Store in day store.
         if let Some(ref mut s) = store {
@@ -489,7 +516,7 @@ fn embed_worker_main(
 // ── Encoder loading ──────────────────────────────────────────────────────────
 
 #[allow(dead_code)]
-enum Encoder {
+pub(crate) enum Encoder {
     #[cfg(feature = "embed-zuna")]
     Zuna(Box<ZunaState>),
     #[cfg(feature = "embed-luna")]
@@ -512,18 +539,30 @@ enum Encoder {
 }
 
 #[cfg(feature = "embed-tribev2")]
-struct Tribev2State {
+pub(crate) struct Tribev2State {
     _placeholder: (),
 }
 
 #[cfg(feature = "embed-zuna")]
-struct ZunaState {
+pub(crate) struct ZunaState {
     encoder: zuna_rs::ZunaEncoder<burn::backend::NdArray>,
     data_config: zuna_rs::config::DataConfig,
 }
 
+#[cfg(feature = "embed-zuna-gpu")]
+pub(crate) struct ZunaGpuState {
+    encoder: zuna_rs::ZunaEncoder<burn::backend::wgpu::Wgpu>,
+    data_config: zuna_rs::config::DataConfig,
+}
+
+#[cfg(feature = "embed-zuna-gpu-f16")]
+pub(crate) struct ZunaGpuF16State {
+    encoder: zuna_rs::ZunaEncoder<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>,
+    data_config: zuna_rs::config::DataConfig,
+}
+
 #[cfg(feature = "embed-neurorvq")]
-struct NeuroRVQState {
+pub(crate) struct NeuroRVQState {
     model: NeuroRVQFM,
 }
 
@@ -624,9 +663,13 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         }
     };
     if result.is_some() {
-        info!(backend = backend.as_str(), "encoder loaded");
+        info!(backend = backend.as_str(), "encoder loaded successfully");
     } else {
-        warn!(backend = backend.as_str(), "encoder unavailable — metrics-only");
+        error!(
+            backend = backend.as_str(),
+            "encoder FAILED to load — ALL epochs will be metrics-only (no embeddings). \
+             Check model weights are downloaded and the backend feature is compiled."
+        );
     }
     result
 }
@@ -889,4 +932,216 @@ fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
     }
     let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
     state.model.encode_pooled(&signal, &ch_names).ok()
+}
+
+// ── GPU ZUNA encoder ────────────────────────────────────────────────────────
+
+#[cfg(feature = "embed-zuna-gpu")]
+fn load_zuna_gpu(config: &ExgModelConfig) -> Option<ZunaGpuState> {
+    match skill_exg::resolve_hf_weights(&config.hf_repo) {
+        Some((weights_path, config_path)) => {
+            info!(weights = %weights_path.display(), "loading ZUNA encoder on GPU (wgpu/Metal)");
+            let device = burn::backend::wgpu::WgpuDevice::default();
+            match zuna_rs::ZunaEncoder::<burn::backend::wgpu::Wgpu>::load(&config_path, &weights_path, device) {
+                Ok((encoder, ms)) => {
+                    info!(ms, "ZUNA GPU encoder loaded");
+                    let data_config = encoder.data_cfg.clone();
+                    Some(ZunaGpuState { encoder, data_config })
+                }
+                Err(e) => {
+                    warn!(%e, "ZUNA GPU encoder load failed — will fall back to CPU");
+                    None
+                }
+            }
+        }
+        None => {
+            warn!("ZUNA weights not found for GPU encoder");
+            None
+        }
+    }
+}
+
+#[cfg(feature = "embed-zuna-gpu")]
+fn encode_zuna_gpu(state: &ZunaGpuState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    use std::collections::HashMap as HM;
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
+    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
+        for (s, &v) in samples.iter().enumerate() {
+            data[[ch, s]] = v;
+        }
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let device = burn::backend::wgpu::WgpuDevice::default();
+    let empty_pos: HM<String, [f32; 3]> = HM::new();
+    let batches = zuna_rs::load_from_named_tensor::<burn::backend::wgpu::Wgpu>(
+        data,
+        &ch_names,
+        msg.sample_rate,
+        10.0,
+        &empty_pos,
+        &state.data_config,
+        &device,
+    )
+    .ok()?;
+    let epochs = state.encoder.encode_batches(batches).ok()?;
+    epochs.first().map(|ep| {
+        let dim = ep.output_dim();
+        let n_tok = ep.n_tokens();
+        if dim == 0 || n_tok == 0 {
+            return Vec::new();
+        }
+        let mut pooled = vec![0.0f32; dim];
+        for t in 0..n_tok {
+            for (d, p) in pooled.iter_mut().enumerate() {
+                *p += ep.embeddings[t * dim + d];
+            }
+        }
+        let inv = 1.0 / n_tok as f32;
+        for p in &mut pooled {
+            *p *= inv;
+        }
+        pooled
+    })
+}
+
+// ── GPU f16 ZUNA encoder ────────────────────────────────────────────────────
+
+#[cfg(feature = "embed-zuna-gpu-f16")]
+fn load_zuna_gpu_f16(config: &ExgModelConfig) -> Option<ZunaGpuF16State> {
+    match skill_exg::resolve_hf_weights(&config.hf_repo) {
+        Some((weights_path, config_path)) => {
+            info!(weights = %weights_path.display(), "loading ZUNA encoder on GPU f16 (wgpu/Metal half-precision)");
+            let device = burn::backend::wgpu::WgpuDevice::default();
+            match zuna_rs::ZunaEncoder::<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>::load(
+                &config_path,
+                &weights_path,
+                device,
+            ) {
+                Ok((encoder, ms)) => {
+                    info!(ms, "ZUNA GPU f16 encoder loaded");
+                    let data_config = encoder.data_cfg.clone();
+                    Some(ZunaGpuF16State { encoder, data_config })
+                }
+                Err(e) => {
+                    warn!(%e, "ZUNA GPU f16 encoder load failed — will try f32 or CPU");
+                    None
+                }
+            }
+        }
+        None => {
+            warn!("ZUNA weights not found for GPU f16 encoder");
+            None
+        }
+    }
+}
+
+#[cfg(feature = "embed-zuna-gpu-f16")]
+fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f32>> {
+    use std::collections::HashMap as HM;
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
+    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
+        for (s, &v) in samples.iter().enumerate() {
+            data[[ch, s]] = v;
+        }
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let device = burn::backend::wgpu::WgpuDevice::default();
+    let empty_pos: HM<String, [f32; 3]> = HM::new();
+    let batches = zuna_rs::load_from_named_tensor::<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>(
+        data,
+        &ch_names,
+        msg.sample_rate,
+        10.0,
+        &empty_pos,
+        &state.data_config,
+        &device,
+    )
+    .ok()?;
+    let epochs = state.encoder.encode_batches(batches).ok()?;
+    epochs.first().map(|ep| {
+        let dim = ep.output_dim();
+        let n_tok = ep.n_tokens();
+        if dim == 0 || n_tok == 0 {
+            return Vec::new();
+        }
+        let mut pooled = vec![0.0f32; dim];
+        for t in 0..n_tok {
+            for (d, p) in pooled.iter_mut().enumerate() {
+                *p += ep.embeddings[t * dim + d];
+            }
+        }
+        let inv = 1.0 / n_tok as f32;
+        for p in &mut pooled {
+            *p *= inv;
+        }
+        pooled
+    })
+}
+
+// ── Public API for batch reembedding ─────────────────────────────────────────
+
+/// Opaque encoder for batch reembed — prefers GPU f16, then f32, then CPU.
+pub enum PublicEncoder {
+    Cpu(Encoder),
+    #[cfg(feature = "embed-zuna-gpu")]
+    Gpu(ZunaGpuState),
+    #[cfg(feature = "embed-zuna-gpu-f16")]
+    GpuF16(Box<ZunaGpuF16State>),
+}
+
+/// Load an encoder for batch reembed: tries GPU f16 → GPU f32 → CPU.
+pub fn load_encoder_public(config: &ExgModelConfig, skill_dir: &Path) -> Option<PublicEncoder> {
+    if matches!(config.model_backend, ExgModelBackend::Zuna) {
+        // Try GPU f16 first (fastest on Apple Silicon / modern GPUs).
+        #[cfg(feature = "embed-zuna-gpu-f16")]
+        {
+            if let Some(gpu) = load_zuna_gpu_f16(config) {
+                return Some(PublicEncoder::GpuF16(Box::new(gpu)));
+            }
+            warn!("GPU f16 unavailable, trying GPU f32");
+        }
+        // Fall back to GPU f32.
+        #[cfg(feature = "embed-zuna-gpu")]
+        {
+            if let Some(gpu) = load_zuna_gpu(config) {
+                return Some(PublicEncoder::Gpu(gpu));
+            }
+            warn!("GPU f32 unavailable, falling back to CPU");
+        }
+    }
+    load_encoder(config, skill_dir).map(PublicEncoder::Cpu)
+}
+
+/// Encode raw EEG samples into an embedding vector.
+pub fn encode_raw_public(
+    encoder: &PublicEncoder,
+    samples: &[Vec<f32>],
+    channel_names: &[String],
+    sample_rate: f64,
+) -> Option<Vec<f32>> {
+    let msg = EpochMsg {
+        timestamp: 0,
+        samples: samples.to_vec(),
+        channel_names: channel_names.to_vec(),
+        sample_rate: sample_rate as f32,
+        band_snapshot: None,
+        device_name: None,
+    };
+    match encoder {
+        PublicEncoder::Cpu(enc) => encode_epoch(enc, &msg),
+        #[cfg(feature = "embed-zuna-gpu")]
+        PublicEncoder::Gpu(gpu) => encode_zuna_gpu(gpu, &msg),
+        #[cfg(feature = "embed-zuna-gpu-f16")]
+        PublicEncoder::GpuF16(gpu) => encode_zuna_gpu_f16(gpu, &msg),
+    }
 }

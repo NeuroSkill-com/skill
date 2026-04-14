@@ -3,9 +3,11 @@
 
 use axum::{
     extract::State,
+    response::sse::{Event, Sse},
     routing::{get, post},
     Json, Router,
 };
+use futures::stream::{Stream, StreamExt};
 use serde::Deserialize;
 
 use crate::state::AppState;
@@ -48,6 +50,7 @@ pub struct CompareSearchRequest {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/search/eeg", post(search_eeg))
+        .route("/search/eeg/stream", post(search_eeg_stream))
         .route("/search/compare", post(compare_search))
         .route("/search/global-index/stats", get(global_index_stats))
         .route("/search/global-index/rebuild", post(global_index_rebuild))
@@ -70,11 +73,175 @@ async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest
         .await
         .unwrap_or_default();
         Json(result)
+    } else if let Some(query) = req.query.filter(|q| !q.trim().is_empty()) {
+        // Interactive cross-modal search:
+        // 1. Embed query → search text labels
+        // 2. For each label → find nearby EEG epochs
+        // 3. For each EEG epoch → find temporal neighbors
+        let k_text = req.k_text.unwrap_or(3) as usize;
+        let k_eeg = req.k_eeg.unwrap_or(5) as usize;
+        let embedder = state.text_embedder.clone();
+        let label_index = state.label_index.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            interactive_search_impl(&skill_dir, &query, k_text, k_eeg, &embedder, &label_index)
+        })
+        .await
+        .unwrap_or_else(|_| {
+            serde_json::json!({
+                "nodes": [], "edges": [], "dot": "", "svg": "", "svg_col": ""
+            })
+        });
+        Json(result)
     } else {
-        // Text-based search or other commands that share this endpoint —
-        // return empty results (text search is handled by /labels/search).
-        Json(serde_json::json!({ "results": [] }))
+        // No recognized parameters — return empty.
+        Json(serde_json::json!({
+            "nodes": [], "edges": [], "dot": "", "svg": "", "svg_col": "",
+            "results": []
+        }))
     }
+}
+
+/// SSE streaming EEG search — sends results as they're found.
+/// The client can cancel by closing the connection.
+async fn search_eeg_stream(
+    State(state): State<AppState>,
+    Json(req): Json<SearchRequest>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let start_utc = req.start_utc.unwrap_or(0);
+    let end_utc = req.end_utc.unwrap_or(0);
+    let k = req.k.unwrap_or(5) as usize;
+    let ef = req.ef.unwrap_or(50) as usize;
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(64);
+
+    tokio::task::spawn_blocking(move || {
+        let emit = |progress: skill_commands::SearchProgress| {
+            let json = serde_json::to_string(&progress).unwrap_or_default();
+            let event = Event::default().data(json);
+            // If send fails, the client disconnected — stop searching.
+            tx.blocking_send(event).is_ok()
+        };
+
+        // Emit "started" first, then results one by one.
+        skill_commands::stream_search_inner(&skill_dir, start_utc, end_utc, k, ef, None, &|progress| {
+            emit(progress);
+        });
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(15)))
+}
+
+/// Build an interactive cross-modal search graph.
+fn interactive_search_impl(
+    skill_dir: &std::path::Path,
+    query: &str,
+    k_text: usize,
+    k_eeg: usize,
+    embedder: &crate::text_embedder::SharedTextEmbedder,
+    label_index: &std::sync::Arc<skill_label_index::LabelIndexState>,
+) -> serde_json::Value {
+    use skill_commands::{InteractiveGraphEdge, InteractiveGraphNode};
+    use skill_constants::LABELS_FILE;
+
+    let mut nodes: Vec<InteractiveGraphNode> = Vec::new();
+    let mut edges: Vec<InteractiveGraphEdge> = Vec::new();
+
+    // Query node
+    let query_id = "q0".to_string();
+    nodes.push(InteractiveGraphNode {
+        id: query_id.clone(),
+        kind: "query".into(),
+        text: Some(query.to_string()),
+        distance: 0.0,
+        ..Default::default()
+    });
+
+    // Step 1: Embed query text → search labels by text similarity.
+    let Some(query_vec) = embedder.embed(query) else {
+        return serde_json::json!({
+            "nodes": nodes, "edges": edges, "dot": "", "svg": "", "svg_col": "",
+            "error": "failed to embed query text"
+        });
+    };
+
+    let text_neighbors = skill_label_index::search_by_text_vec(&query_vec, k_text, 64, skill_dir, label_index);
+
+    // Add text_label nodes.
+    for (i, nb) in text_neighbors.iter().enumerate() {
+        let node_id = format!("tl{i}");
+        let ts = if nb.eeg_start > 0 { Some(nb.eeg_start) } else { None };
+        nodes.push(InteractiveGraphNode {
+            id: node_id.clone(),
+            kind: "text_label".into(),
+            text: Some(nb.text.clone()),
+            timestamp_unix: ts,
+            distance: nb.distance,
+            parent_id: Some(query_id.clone()),
+            ..Default::default()
+        });
+        edges.push(InteractiveGraphEdge {
+            from_id: query_id.clone(),
+            to_id: node_id.clone(),
+            distance: nb.distance,
+            kind: "text_sim".into(),
+        });
+
+        // Step 2: For each text label with a timestamp, find nearby EEG epochs.
+        if let Some(ts) = ts {
+            // Get EEG epochs from the session range around this label.
+            let eeg_ts = skill_history::get_session_timeseries(skill_dir, ts.saturating_sub(60), ts + 60);
+            for (j, ep) in eeg_ts.iter().take(k_eeg).enumerate() {
+                let eeg_id = format!("ep{i}_{j}");
+                nodes.push(InteractiveGraphNode {
+                    id: eeg_id.clone(),
+                    kind: "eeg_point".into(),
+                    timestamp_unix: Some(ep.t as u64),
+                    distance: 0.0,
+                    parent_id: Some(node_id.clone()),
+                    ..Default::default()
+                });
+                edges.push(InteractiveGraphEdge {
+                    from_id: node_id.clone(),
+                    to_id: eeg_id.clone(),
+                    distance: 0.0,
+                    kind: "eeg_bridge".into(),
+                });
+
+                // Step 3: Find labels near each EEG epoch.
+                let labels_db = skill_dir.join(LABELS_FILE);
+                let nearby_labels = skill_commands::get_labels_near(&labels_db, ep.t as u64, 60);
+                for (l, lbl) in nearby_labels.iter().enumerate().take(2) {
+                    let fl_id = format!("fl{i}_{j}_{l}");
+                    nodes.push(InteractiveGraphNode {
+                        id: fl_id.clone(),
+                        kind: "found_label".into(),
+                        text: Some(lbl.text.clone()),
+                        timestamp_unix: Some(lbl.eeg_start),
+                        distance: 0.0,
+                        parent_id: Some(eeg_id.clone()),
+                        ..Default::default()
+                    });
+                    edges.push(InteractiveGraphEdge {
+                        from_id: eeg_id.clone(),
+                        to_id: fl_id.clone(),
+                        distance: 0.0,
+                        kind: "label_prox".into(),
+                    });
+                }
+            }
+        }
+    }
+
+    serde_json::json!({
+        "nodes": nodes,
+        "edges": edges,
+        "dot": "",
+        "svg": "",
+        "svg_col": "",
+    })
 }
 
 async fn compare_search(

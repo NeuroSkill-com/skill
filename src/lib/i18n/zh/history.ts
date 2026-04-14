@@ -225,6 +225,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "频段功率差异 (B − A)",
   "compare.heatmapRowNorm": "按频段逐行归一化 · 越亮 = 越高",
   "compare.heatmapDiffLegend": "蓝色 = A > B · 红色 = B > A",
+  "compare.embeddingsReady": "嵌入就绪",
+  "compare.embeddingsPartial": "{n}/{total} 嵌入 ({pct}%)",
+  "compare.embeddingsNone": "无嵌入 — Brain Nebula 不可用",
+  "compare.embeddingsProcessing": "嵌入正在后台处理中…",
 
   "history.metrics": "会话指标",
   "history.noMetrics": "此会话无时段数据。",

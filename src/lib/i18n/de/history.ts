@@ -98,6 +98,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "Bandleistungsdiff (B − A)",
   "compare.heatmapRowNorm": "Reihen pro Band normiert · heller = höher",
   "compare.heatmapDiffLegend": "blau = A > B · rot = B > A",
+  "compare.embeddingsReady": "Embeddings bereit",
+  "compare.embeddingsPartial": "{n}/{total} Embeddings ({pct}%)",
+  "compare.embeddingsNone": "keine Embeddings — Brain Nebula nicht verfügbar",
+  "compare.embeddingsProcessing": "Embeddings werden im Hintergrund verarbeitet…",
 
   "history.metrics": "Sitzungsmetriken",
   "history.noMetrics": "Keine Epochendaten für diese Sitzung.",

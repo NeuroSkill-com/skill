@@ -226,6 +226,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "대역 파워 차이 (B − A)",
   "compare.heatmapRowNorm": "행은 대역별로 정규화 · 밝을수록 높은 값",
   "compare.heatmapDiffLegend": "파란색 = A > B · 빨간색 = B > A",
+  "compare.embeddingsReady": "임베딩 준비 완료",
+  "compare.embeddingsPartial": "{n}/{total} 임베딩 ({pct}%)",
+  "compare.embeddingsNone": "임베딩 없음 — Brain Nebula 사용 불가",
+  "compare.embeddingsProcessing": "백그라운드에서 임베딩 처리 중…",
 
   "history.metrics": "세션 지표",
   "history.noMetrics": "이 세션의 에폭 데이터가 없습니다.",

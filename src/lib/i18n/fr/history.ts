@@ -98,6 +98,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "Diff puissance de bande (B - A)",
   "compare.heatmapRowNorm": "lignes normalisées par bande · plus clair = plus élevé",
   "compare.heatmapDiffLegend": "bleu = A > B · rouge = B > A",
+  "compare.embeddingsReady": "embeddings prêts",
+  "compare.embeddingsPartial": "{n}/{total} embeddings ({pct}%)",
+  "compare.embeddingsNone": "pas d'embeddings — Brain Nebula indisponible",
+  "compare.embeddingsProcessing": "embeddings en cours de traitement…",
 
   "history.metrics": "Métriques de session",
   "history.noMetrics": "Aucune donnée d'époque pour cette session.",

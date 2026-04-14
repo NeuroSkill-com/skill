@@ -525,8 +525,8 @@ async fn set_daemon_watchdog(
     Json(serde_json::json!({ "ok": true }))
 }
 
-async fn trigger_reembed() -> Json<serde_json::Value> {
-    settings_exg::trigger_reembed_impl().await
+async fn trigger_reembed(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_exg::trigger_reembed_impl(state).await
 }
 
 async fn trigger_weights_download(state: State<AppState>) -> Json<serde_json::Value> {
@@ -1392,14 +1392,15 @@ mod tests {
         let Json(catalog) = get_exg_catalog(State(st.clone())).await;
         assert!(catalog.get("families").is_some());
 
-        let Json(r1) = trigger_reembed().await;
+        let Json(r1) = trigger_reembed(State(st.clone())).await;
         assert_eq!(r1["ok"], true);
 
         let Json(r2) = rebuild_index().await;
         assert_eq!(r2["ok"], true);
 
         let Json(est) = estimate_reembed(State(st)).await;
-        assert!(est.get("sessions_total").is_some());
+        assert!(est.get("total_epochs").is_some());
+        assert!(est.get("embeddings_needed").is_some());
     }
 
     #[tokio::test]
