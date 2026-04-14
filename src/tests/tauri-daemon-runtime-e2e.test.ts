@@ -161,5 +161,5 @@ describe.skipIf(!canRun)("tauri runtime e2e via real daemon", () => {
 
     const port = await daemonInvoke<{ port: number }>("get_ws_port");
     expect(typeof port.port).toBe("number");
-  });
+  }, 15_000);
 });

@@ -75,6 +75,7 @@ async function daemonRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path:
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
   });
 
   const text = await resp.text();
