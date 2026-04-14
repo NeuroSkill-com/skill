@@ -109,7 +109,10 @@ function main() {
   if (fs.existsSync(HELP_CONTENT_DIR)) {
     const enMdDir = path.join(HELP_CONTENT_DIR, "en");
     const enMdFiles = fs.existsSync(enMdDir)
-      ? fs.readdirSync(enMdDir).filter((f) => f.endsWith(".md")).sort()
+      ? fs
+          .readdirSync(enMdDir)
+          .filter((f) => f.endsWith(".md"))
+          .sort()
       : [];
 
     if (enMdFiles.length > 0) {
@@ -133,7 +136,10 @@ function main() {
 
       for (const locale of mdLocales) {
         const locMdDir = path.join(HELP_CONTENT_DIR, locale);
-        const locMdFiles = fs.readdirSync(locMdDir).filter((f) => f.endsWith(".md")).sort();
+        const locMdFiles = fs
+          .readdirSync(locMdDir)
+          .filter((f) => f.endsWith(".md"))
+          .sort();
         const missing = enMdFiles.filter((f) => !locMdFiles.includes(f));
         const extra = locMdFiles.filter((f) => !enMdFiles.includes(f));
 
@@ -171,7 +177,9 @@ function main() {
 
   const totalIssues = totalUntranslated + mdIssues;
   if (doCheck && totalIssues > 0) {
-    console.error(`\n[audit-i18n] ${totalUntranslated} untranslated key(s), ${mdIssues} markdown issue(s) found. Run without --check for details.`);
+    console.error(
+      `\n[audit-i18n] ${totalUntranslated} untranslated key(s), ${mdIssues} markdown issue(s) found. Run without --check for details.`,
+    );
     process.exit(1);
   } else if (totalIssues === 0) {
     console.log("\n✅ All keys are translated (or exempt). All markdown content present.");

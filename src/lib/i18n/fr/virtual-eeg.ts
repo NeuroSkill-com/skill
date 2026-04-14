@@ -21,11 +21,13 @@ const virtualEeg: Record<string, string> = {
   "veeg.template": "Modèle de signal",
   "veeg.templateDesc": "Choisissez le type de signal synthétique à générer.",
   "veeg.templateSine": "Ondes sinusoïdales",
-  "veeg.templateSineDesc": "Ondes sinusoïdales propres aux bandes de fréquences standard (delta, thêta, alpha, bêta, gamma).",
+  "veeg.templateSineDesc":
+    "Ondes sinusoïdales propres aux bandes de fréquences standard (delta, thêta, alpha, bêta, gamma).",
   "veeg.templateGoodQuality": "EEG de bonne qualité",
   "veeg.templateGoodQualityDesc": "EEG réaliste au repos avec rythme alpha dominant et bruit rose en arrière-plan.",
   "veeg.templateBadQuality": "EEG de mauvaise qualité",
-  "veeg.templateBadQualityDesc": "Signal bruité avec artefacts musculaires, bruit de ligne 50/60 Hz et sauts d'électrode.",
+  "veeg.templateBadQualityDesc":
+    "Signal bruité avec artefacts musculaires, bruit de ligne 50/60 Hz et sauts d'électrode.",
   "veeg.templateInterruptions": "Connexion intermittente",
   "veeg.templateInterruptionsDesc":
     "Bon signal avec des interruptions périodiques simulant des électrodes mal fixées ou des interférences sans fil.",
@@ -93,9 +95,10 @@ const virtualEeg: Record<string, string> = {
   "vdev.lslSourceTitle": "Source LSL virtuelle",
   "vdev.lslRunning": "Diffusion d'EEG synthétique via LSL",
   "vdev.lslStopped": "Source LSL virtuelle arrêtée",
-  "vdev.lslDesc": "Démarre une source locale Lab Streaming Layer pour tester la découverte et la connexion de flux LSL.",
+  "vdev.lslDesc":
+    "Démarre une source locale Lab Streaming Layer pour tester la découverte et la connexion de flux LSL.",
   "vdev.lslHint":
-    'Ouvrez Paramètres → onglet LSL et cliquez sur « Scanner le réseau » pour voir SkillVirtualEEG dans la liste des flux, puis connectez-vous.',
+    "Ouvrez Paramètres → onglet LSL et cliquez sur « Scanner le réseau » pour voir SkillVirtualEEG dans la liste des flux, puis connectez-vous.",
   "vdev.lslStarted": "La source LSL virtuelle diffuse maintenant sur le réseau local.",
 
   // Panneau d'état
@@ -133,7 +136,8 @@ const virtualEeg: Record<string, string> = {
   "vdev.cfgTemplateBad": "EEG de mauvaise qualité",
   "vdev.cfgTemplateBadDesc": "Signal bruité avec artefacts musculaires, bruit de ligne et sauts d'électrode.",
   "vdev.cfgTemplateInterruptions": "Connexion intermittente",
-  "vdev.cfgTemplateInterruptionsDesc": "Bon signal avec des interruptions périodiques simulant des électrodes mal fixées.",
+  "vdev.cfgTemplateInterruptionsDesc":
+    "Bon signal avec des interruptions périodiques simulant des électrodes mal fixées.",
 
   // Modèle personnalisé — avancé
   "vdev.cfgAdvanced": "Avancé",

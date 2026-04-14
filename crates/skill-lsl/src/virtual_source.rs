@@ -23,7 +23,7 @@ use std::sync::{
 use std::time::Duration;
 
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 // ── Public constants ──────────────────────────────────────────────────────────
 

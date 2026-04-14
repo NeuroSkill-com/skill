@@ -27,8 +27,7 @@ const virtualEeg: Record<string, string> = {
   "veeg.templateBadQuality": "불량한 품질 EEG",
   "veeg.templateBadQualityDesc": "근육 아티팩트, 50/60 Hz 라인 노이즈, 전극 팝이 있는 노이즈 신호.",
   "veeg.templateInterruptions": "간헐적 연결",
-  "veeg.templateInterruptionsDesc":
-    "느슨한 전극이나 무선 간섭을 시뮬레이션하는 주기적 드롭아웃이 있는 양호한 신호.",
+  "veeg.templateInterruptionsDesc": "느슨한 전극이나 무선 간섭을 시뮬레이션하는 주기적 드롭아웃이 있는 양호한 신호.",
   "veeg.templateFile": "파일에서",
   "veeg.templateFileDesc": "CSV 또는 EDF 파일에서 샘플을 재생합니다.",
 

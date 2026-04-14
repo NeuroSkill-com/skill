@@ -61,8 +61,7 @@ const llm: Record<string, string> = {
   "model.embedSpeedLast": "최근: {ms}ms",
   "model.embedSpeedAvg": "평균: {ms}ms",
   "model.reembed": "재임베딩",
-  "model.reembedDesc":
-    "선택한 모델 백엔드로 모든 원시 EXG 세션 녹화를 다시 인코딩하고 HNSW 인덱스를 재구축합니다.",
+  "model.reembedDesc": "선택한 모델 백엔드로 모든 원시 EXG 세션 녹화를 다시 인코딩하고 HNSW 인덱스를 재구축합니다.",
   "model.reembedBtn": "모든 세션 재임베딩",
   "model.reembedEstimate": "{days}일, {rows}개 세션",
   "model.reembedRunning": "{date} 처리 중… ({done}/{total})",
@@ -175,16 +174,14 @@ const llm: Record<string, string> = {
   "llm.tools.compressionNormal": "보통",
   "llm.tools.compressionAggressive": "적극적",
   "chat.tools.thinkingBudget": "도구 사고 예산",
-  "chat.tools.thinkingBudgetDesc":
-    "도구 호출 라운드 중 모델이 사고할 수 있는 양. 낮을수록 도구 결과 후 더 빠른 응답.",
+  "chat.tools.thinkingBudgetDesc": "도구 호출 라운드 중 모델이 사고할 수 있는 양. 낮을수록 도구 결과 후 더 빠른 응답.",
   "chat.tools.thinkChat": "채팅",
   "chat.tools.thinkNone": "없음",
   "chat.tools.thinkMinimal": "256",
   "chat.tools.thinkNormal": "1 K",
   "chat.tools.thinkExtended": "4 K",
   "llm.tools.retrySection": "네트워크 재시도",
-  "llm.tools.retrySectionDesc":
-    "일시적 오류 시 웹 도구(검색, 가져오기, 위치)를 지수 백오프로 재시도합니다.",
+  "llm.tools.retrySectionDesc": "일시적 오류 시 웹 도구(검색, 가져오기, 위치)를 지수 백오프로 재시도합니다.",
   "llm.tools.retryMaxRetries": "최대 재시도",
   "llm.tools.retryMaxRetriesDesc": "초기 실패 후 재시도 횟수. 0 = 재시도 없음.",
   "llm.tools.retryBaseDelay": "기본 지연",
@@ -208,7 +205,8 @@ const llm: Record<string, string> = {
   "llm.tools.maxResultChars": "최대 결과 문자 수",
   "llm.tools.zeroAutoLabel": "0 = 자동 (레벨 기반)",
   "llm.tools.skillsRefresh": "스킬 자동 새로고침",
-  "llm.tools.skillsRefreshDesc": "GitHub에서 최신 커뮤니티 스킬을 주기적으로 다운로드합니다. 0으로 설정하면 비활성화됩니다.",
+  "llm.tools.skillsRefreshDesc":
+    "GitHub에서 최신 커뮤니티 스킬을 주기적으로 다운로드합니다. 0으로 설정하면 비활성화됩니다.",
   "llm.tools.skillsRefreshOff": "끄기",
   "llm.tools.skillsRefresh12h": "12시간",
   "llm.tools.skillsRefresh24h": "24시간",
@@ -222,7 +220,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsSection": "에이전트 스킬",
   "llm.tools.skillsSectionDesc":
     "스킬은 LLM이 필요에 따라 로드할 수 있는 전문 지침을 제공합니다. 개별 스킬을 토글하여 채팅에서 사용 가능 여부를 제어하세요.",
-  "llm.tools.skillsNone": "스킬을 찾을 수 없습니다. 커뮤니티 스킬을 동기화하거나 ~/.skill/skills/에 SKILL.md 파일을 추가하세요.",
+  "llm.tools.skillsNone":
+    "스킬을 찾을 수 없습니다. 커뮤니티 스킬을 동기화하거나 ~/.skill/skills/에 SKILL.md 파일을 추가하세요.",
   "llm.tools.skillsLoading": "스킬 불러오는 중...",
   "llm.tools.skillsEnableAll": "모두 활성화",
   "llm.tools.skillsDisableAll": "모두 비활성화",
@@ -330,7 +329,8 @@ const llm: Record<string, string> = {
   "chat.param.topK": "Top-K",
   "chat.param.topP": "Top-P",
   "chat.empty.stopped": "LLM 서버가 실행 중이 아닙니다",
-  "chat.empty.stoppedHint": "채팅을 시작하려면 서버를 시작하세요. 설정 → LLM에서 모델이 다운로드되어 있는지 확인하세요.",
+  "chat.empty.stoppedHint":
+    "채팅을 시작하려면 서버를 시작하세요. 설정 → LLM에서 모델이 다운로드되어 있는지 확인하세요.",
   "chat.empty.loadingHint": "설정 → LLM에서 서버 로그를 확인하세요.",
   "chat.empty.ready": "메시지를 입력하여 채팅을 시작하세요.",
   "chat.loading.model": "모델 가중치 로딩",

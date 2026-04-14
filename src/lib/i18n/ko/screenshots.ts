@@ -8,18 +8,15 @@
 const screenshots: Record<string, string> = {
   "screenshots.title": "스크린샷 캡처",
   "screenshots.enableToggle": "스크린샷 캡처 활성화",
-  "screenshots.enableDesc":
-    "활성 창을 주기적으로 캡처하고 비전 모델로 임베딩하여 시각적 유사성 검색을 수행합니다.",
+  "screenshots.enableDesc": "활성 창을 주기적으로 캡처하고 비전 모델로 임베딩하여 시각적 유사성 검색을 수행합니다.",
   "screenshots.sessionOnlyToggle": "세션 전용",
   "screenshots.sessionOnlyDesc": "활성 EEG 녹화 세션 중에만 캡처합니다.",
   "screenshots.interval": "캡처 간격",
-  "screenshots.intervalDesc":
-    "EEG 임베딩 에폭(각 5초)에 맞춰 정렬됩니다. 1× = 매 에폭, 2× = 격 에폭, 최대 12× (60초).",
+  "screenshots.intervalDesc": "EEG 임베딩 에폭(각 5초)에 맞춰 정렬됩니다. 1× = 매 에폭, 2× = 격 에폭, 최대 12× (60초).",
   "screenshots.intervalUnit": "초",
   "screenshots.intervalEpoch": "에폭",
   "screenshots.imageSize": "이미지 크기",
-  "screenshots.imageSizeDesc":
-    "중간 해상도(px). 캡처된 창이 저장 및 임베딩 전에 이 정사각형에 맞게 크기 조정됩니다.",
+  "screenshots.imageSizeDesc": "중간 해상도(px). 캡처된 창이 저장 및 임베딩 전에 이 정사각형에 맞게 크기 조정됩니다.",
   "screenshots.imageSizeUnit": "px",
   "screenshots.imageSizeRecommended": "현재 모델 권장:",
   "screenshots.quality": "WebP 품질",
@@ -40,10 +37,8 @@ const screenshots: Record<string, string> = {
   "screenshots.unembedded": "미임베딩",
   "screenshots.estimate": "예상 시간:",
   "screenshots.modelChanged": "임베딩 모델 변경됨",
-  "screenshots.modelChangedDesc":
-    "스크린샷이 다른 모델로 임베딩되었습니다. 일관된 검색 결과를 위해 재임베딩하세요.",
-  "screenshots.privacyNote":
-    "모든 스크린샷은 로컬에만 저장되며 전송되지 않습니다. 기본적으로 옵트인, 세션 제한입니다.",
+  "screenshots.modelChangedDesc": "스크린샷이 다른 모델로 임베딩되었습니다. 일관된 검색 결과를 위해 재임베딩하세요.",
+  "screenshots.privacyNote": "모든 스크린샷은 로컬에만 저장되며 전송되지 않습니다. 기본적으로 옵트인, 세션 제한입니다.",
   "screenshots.storagePath": "저장 경로: ~/.skill/screenshots/",
   "screenshots.permissionRequired": "화면 녹화 권한 필요",
   "screenshots.permissionDesc":

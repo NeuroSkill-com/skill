@@ -21,11 +21,13 @@ const virtualEeg: Record<string, string> = {
   "veeg.template": "Plantilla de señal",
   "veeg.templateDesc": "Elija el tipo de señal sintética a generar.",
   "veeg.templateSine": "Ondas sinusoidales",
-  "veeg.templateSineDesc": "Ondas sinusoidales limpias en bandas de frecuencia estándar (delta, theta, alfa, beta, gamma).",
+  "veeg.templateSineDesc":
+    "Ondas sinusoidales limpias en bandas de frecuencia estándar (delta, theta, alfa, beta, gamma).",
   "veeg.templateGoodQuality": "EEG de buena calidad",
   "veeg.templateGoodQualityDesc": "EEG realista en reposo con ritmo alfa dominante y ruido rosa de fondo.",
   "veeg.templateBadQuality": "EEG de mala calidad",
-  "veeg.templateBadQualityDesc": "Señal ruidosa con artefactos musculares, ruido de línea de 50/60 Hz y saltos de electrodo.",
+  "veeg.templateBadQualityDesc":
+    "Señal ruidosa con artefactos musculares, ruido de línea de 50/60 Hz y saltos de electrodo.",
   "veeg.templateInterruptions": "Conexión intermitente",
   "veeg.templateInterruptionsDesc":
     "Buena señal con interrupciones periódicas que simulan electrodos sueltos o interferencia inalámbrica.",

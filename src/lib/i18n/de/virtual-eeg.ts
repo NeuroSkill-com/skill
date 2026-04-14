@@ -23,9 +23,11 @@ const virtualEeg: Record<string, string> = {
   "veeg.templateSine": "Sinuswellen",
   "veeg.templateSineDesc": "Saubere Sinuswellen in Standard-Frequenzbändern (Delta, Theta, Alpha, Beta, Gamma).",
   "veeg.templateGoodQuality": "Gute EEG-Qualität",
-  "veeg.templateGoodQualityDesc": "Realistisches Ruhe-EEG mit dominantem Alpha-Rhythmus und rosa Rauschen im Hintergrund.",
+  "veeg.templateGoodQualityDesc":
+    "Realistisches Ruhe-EEG mit dominantem Alpha-Rhythmus und rosa Rauschen im Hintergrund.",
   "veeg.templateBadQuality": "Schlechte EEG-Qualität",
-  "veeg.templateBadQualityDesc": "Verrauschtes Signal mit Muskelartefakten, 50/60-Hz-Netzbrummen und Elektrodenknacken.",
+  "veeg.templateBadQualityDesc":
+    "Verrauschtes Signal mit Muskelartefakten, 50/60-Hz-Netzbrummen und Elektrodenknacken.",
   "veeg.templateInterruptions": "Unterbrochene Verbindung",
   "veeg.templateInterruptionsDesc":
     "Gutes Signal mit periodischen Aussetzern zur Simulation lockerer Elektroden oder Funkstörungen.",
@@ -93,7 +95,8 @@ const virtualEeg: Record<string, string> = {
   "vdev.lslSourceTitle": "Virtuelle LSL-Quelle",
   "vdev.lslRunning": "Synthetisches EEG wird über LSL gestreamt",
   "vdev.lslStopped": "Virtuelle LSL-Quelle gestoppt",
-  "vdev.lslDesc": "Startet eine lokale Lab-Streaming-Layer-Quelle, um die LSL-Stream-Erkennung und -Verbindung zu testen.",
+  "vdev.lslDesc":
+    "Startet eine lokale Lab-Streaming-Layer-Quelle, um die LSL-Stream-Erkennung und -Verbindung zu testen.",
   "vdev.lslHint":
     'Öffnen Sie Einstellungen → LSL-Tab und klicken Sie auf „Netzwerk scannen", um SkillVirtualEEG in der Stream-Liste zu sehen, und verbinden Sie sich dann damit.',
   "vdev.lslStarted": "Die virtuelle LSL-Quelle streamt jetzt im lokalen Netzwerk.",

@@ -57,9 +57,12 @@ const ui: Record<string, string> = {
   "tip.shakes": "감지된 수평 머리 흔들림(롤 진동).",
   "tip.headache": "두통 상관 — 피질 과흥분성: 상승된 베타 + 억제된 알파 + 높은 BAR. 연구 지표입니다.",
   "tip.migraine": "편두통 상관 — 피질 확산 억제 프록시: 상승된 델타 + 알파 억제 + 반구 편측화. 연구 지표입니다.",
-  "tip.consciousness.lzc": "Lempel-Ziv 복잡도 프록시 — 순열 엔트로피(순서 복잡도)와 Higuchi 프랙탈 차원(프랙탈 복잡도)으로 근사된 신호 정보 풍부성. 높을수록 더 복잡하고 정보가 풍부한 EEG.",
-  "tip.consciousness.wakefulness": "각성 수준 — BAR와 TAR로 조절된 역 졸림. 높은 값은 각성된 활발한 뇌 상태를 나타냅니다.",
-  "tip.consciousness.integration": "정보 통합 프록시(글로벌 워크스페이스 이론) — 채널 간 코히어런스 × 세타-감마 PAC × 스펙트럼 엔트로피의 합성. 높을수록 더 통합된 전뇌 활동.",
+  "tip.consciousness.lzc":
+    "Lempel-Ziv 복잡도 프록시 — 순열 엔트로피(순서 복잡도)와 Higuchi 프랙탈 차원(프랙탈 복잡도)으로 근사된 신호 정보 풍부성. 높을수록 더 복잡하고 정보가 풍부한 EEG.",
+  "tip.consciousness.wakefulness":
+    "각성 수준 — BAR와 TAR로 조절된 역 졸림. 높은 값은 각성된 활발한 뇌 상태를 나타냅니다.",
+  "tip.consciousness.integration":
+    "정보 통합 프록시(글로벌 워크스페이스 이론) — 채널 간 코히어런스 × 세타-감마 PAC × 스펙트럼 엔트로피의 합성. 높을수록 더 통합된 전뇌 활동.",
 
   "goals.title": "일일 녹화 목표",
   "goals.subtitle": "매일 얼마나 오래 녹화할지 목표를 설정하세요.",
@@ -129,11 +132,14 @@ const ui: Record<string, string> = {
   "svg.generatedBy": "{app}에서 생성",
 
   "disclaimer.title": "연구 용도 전용",
-  "disclaimer.body": "{app}은(는) 탐색적 EEG 분석을 위한 오픈소스 연구 도구입니다. 의료 기기가 아니며 FDA, CE 또는 기타 규제 기관의 승인을 받지 않았습니다. 임상 진단, 치료 결정 또는 의료 목적으로 사용해서는 안 됩니다. 모든 지표는 실험적 연구 출력이며 검증된 임상 측정이 아닙니다. 건강 관련 결정을 위해 이 소프트웨어의 출력에 의존하지 마세요. 의료 문제가 있으면 자격 있는 의료 전문가에게 상담하세요. 의료 시스템이 아닙니다. 지표가 어떻게 계산되고 사용되는지 항상 참고문헌을 확인하세요. 전극의 위치, 착용감, 품질, 심지어 커피 섭취량까지 신호 품질에 영향을 미칩니다.",
+  "disclaimer.body":
+    "{app}은(는) 탐색적 EEG 분석을 위한 오픈소스 연구 도구입니다. 의료 기기가 아니며 FDA, CE 또는 기타 규제 기관의 승인을 받지 않았습니다. 임상 진단, 치료 결정 또는 의료 목적으로 사용해서는 안 됩니다. 모든 지표는 실험적 연구 출력이며 검증된 임상 측정이 아닙니다. 건강 관련 결정을 위해 이 소프트웨어의 출력에 의존하지 마세요. 의료 문제가 있으면 자격 있는 의료 전문가에게 상담하세요. 의료 시스템이 아닙니다. 지표가 어떻게 계산되고 사용되는지 항상 참고문헌을 확인하세요. 전극의 위치, 착용감, 품질, 심지어 커피 섭취량까지 신호 품질에 영향을 미칩니다.",
   "disclaimer.short": "연구 목적으로만 사용됩니다. 의료 기기가 아닙니다. 임상용이 아닙니다.",
   "disclaimer.nonCommercial": "이 소프트웨어는 비상업적 연구 및 교육 용도로만 제공됩니다.",
-  "disclaimer.exgPlacement": "EXG 신호(EEG, EMG, ECG, EOG 등)는 전극이 신체에 어떻게 배치되는지에 크게 의존합니다. 전극 위치, 간격 또는 기준 위치의 작은 변화도 신호의 크기, 형태, 계산된 지표 값에 영향을 줄 수 있습니다. 피부 접촉, 임피던스, 부착 품질의 차이도 신호 품질에 영향을 줄 수 있습니다. 따라서 전극 배치나 녹화 설정이 변경되면 EXG 데이터와 파생 측정값을 직접 비교하지 못할 수 있습니다.",
-  "disclaimer.footer": "⚠️ 연구 도구 전용 — 의료 시스템이 아닙니다. 지표 세부사항은 참고문헌을 확인하세요. 전극 착용감, 배치 & 커피 섭취가 신호 품질에 영향을 줍니다.",
+  "disclaimer.exgPlacement":
+    "EXG 신호(EEG, EMG, ECG, EOG 등)는 전극이 신체에 어떻게 배치되는지에 크게 의존합니다. 전극 위치, 간격 또는 기준 위치의 작은 변화도 신호의 크기, 형태, 계산된 지표 값에 영향을 줄 수 있습니다. 피부 접촉, 임피던스, 부착 품질의 차이도 신호 품질에 영향을 줄 수 있습니다. 따라서 전극 배치나 녹화 설정이 변경되면 EXG 데이터와 파생 측정값을 직접 비교하지 못할 수 있습니다.",
+  "disclaimer.footer":
+    "⚠️ 연구 도구 전용 — 의료 시스템이 아닙니다. 지표 세부사항은 참고문헌을 확인하세요. 전극 착용감, 배치 & 커피 섭취가 신호 품질에 영향을 줍니다.",
   "disclaimer.copyright": "© {year} {app}. 모든 권리 보유.",
 
   "cmdK.title": "명령 팔레트",
@@ -163,14 +169,17 @@ const ui: Record<string, string> = {
   "cmdK.openCompare": "비교",
   "cmdK.openOnboarding": "설정 마법사",
   "cmdK.openElectrodes": "전극 배치 가이드",
-  "cmdK.kw.settings": "환경설정 설정 기기 필터 노치 신호처리 언어 글꼴 외관 테마 단축키 핫키 로깅 업데이트 데이터 디렉토리 페어링된 기기",
+  "cmdK.kw.settings":
+    "환경설정 설정 기기 필터 노치 신호처리 언어 글꼴 외관 테마 단축키 핫키 로깅 업데이트 데이터 디렉토리 페어링된 기기",
   "cmdK.kw.help": "문서 FAQ 참고 가이드 문제해결 전극 API 개인정보",
   "cmdK.kw.history": "세션 녹화 과거 데이터 검토 재생 수면 수면도 삭제 내보내기",
   "cmdK.kw.compare": "세션 나란히 비교 차이 대역 파워 점수 UMAP 수면 단계 지표",
   "cmdK.kw.search": "임베딩 유사도 최근접 이웃 쿼리 시간 범위 HNSW UMAP 검색",
   "cmdK.kw.label": "태그 주석 마크 타임스탬프 이벤트 메모",
-  "cmdK.kw.retryConnect": "재연결 muse openbci neurable mw75 emotiv idun guardian ganglion cyton 헤드셋 스캔 페어링 BLE",
-  "cmdK.kw.btSettings": "블루투스 페어링 muse openbci neurable mw75 emotiv idun guardian ganglion cyton 헤드셋 무선 BLE 어댑터",
+  "cmdK.kw.retryConnect":
+    "재연결 muse openbci neurable mw75 emotiv idun guardian ganglion cyton 헤드셋 스캔 페어링 BLE",
+  "cmdK.kw.btSettings":
+    "블루투스 페어링 muse openbci neurable mw75 emotiv idun guardian ganglion cyton 헤드셋 무선 BLE 어댑터",
   "cmdK.kw.calibration": "눈 뜨기 감기 기준선 훈련 가이드 작업 동작 라벨 타이머",
   "cmdK.kw.api": "웹소켓 서버 클라이언트 포트 mdns bonjour 스트리밍 JSON 명령",
   "cmdK.kw.onboarding": "설정 마법사 첫 실행 환영 블루투스 착용감 캘리브레이션 시작하기",
@@ -247,11 +256,13 @@ const ui: Record<string, string> = {
   "about.license": "라이선스",
   "about.acknowledgements": "감사의 글",
   "about.discord": "Discord",
-  "about.tagline": "Muse, OpenBCI, Emotiv, IDUN 및 기타 BCI 기기를 위한 실시간 EXG 정신 상태 시스템 및 뇌 상태 모니터링.",
+  "about.tagline":
+    "Muse, OpenBCI, Emotiv, IDUN 및 기타 BCI 기기를 위한 실시간 EXG 정신 상태 시스템 및 뇌 상태 모니터링.",
   "about.copyright": "© 2025–2026 NeuroSkill.com",
   "about.role.eugene": "수석 개발자 & EEG 신호 처리",
   "about.role.nataliya": "신경과학 및 뇌-컴퓨터 인터페이스",
-  "about.ack": "Tauri, SvelteKit, Zyphra의 ZUNA EEG 기반 모델로 구축되었습니다. EEG 대역 파워 연구는 Klimesch(1999), Pope 등(1995), Kosmyna & Maes(2019)의 연구를 기반으로 합니다.",
+  "about.ack":
+    "Tauri, SvelteKit, Zyphra의 ZUNA EEG 기반 모델로 구축되었습니다. EEG 대역 파워 연구는 Klimesch(1999), Pope 등(1995), Kosmyna & Maes(2019)의 연구를 기반으로 합니다.",
 
   "downloads.windowTitle": "다운로드",
   "downloads.subtitle": "활성 및 완료된 모델 다운로드를 관리합니다.",
@@ -278,7 +289,8 @@ const ui: Record<string, string> = {
   "devices.noPaired": "페어링된 기기 없음",
   "devices.noPairedHint": "BCI 헤드셋의 전원을 켜면 검색 시 여기에 표시됩니다. 페어링하면 자동 연결이 활성화됩니다.",
   "devices.noDiscovered": "근처 기기 없음",
-  "devices.noDiscoveredHint": "BCI 헤드셋의 전원을 켜고 Bluetooth 범위 내에 놓으세요. 검색된 기기가 자동으로 표시됩니다.",
+  "devices.noDiscoveredHint":
+    "BCI 헤드셋의 전원을 켜고 Bluetooth 범위 내에 놓으세요. 검색된 기기가 자동으로 표시됩니다.",
   "devices.virtualDevices": "가상",
   "devices.virtualDevicesHint": "하드웨어 없이 테스트하기 위한 시뮬레이션 기기. 가상 기기 창에서 하나를 시작하세요.",
   "devices.virtualBadge": "가상",

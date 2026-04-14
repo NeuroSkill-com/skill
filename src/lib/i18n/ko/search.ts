@@ -9,12 +9,10 @@ const search: Record<string, string> = {
   "embeddings.model": "임베딩 모델",
   "embeddings.info":
     "각 라벨의 텍스트와 컨텍스트에 대해 임베딩이 생성됩니다. 첫 사용 시 모델 가중치가 한 번 다운로드되어 로컬에 캐시됩니다. 소형 모델(≤384d)은 빠르고, 대형 모델은 더 풍부한 표현을 생성합니다.",
-  "embeddings.sharedNote":
-    "이 모델은 앱 전체에서 공유됩니다 — EEG 훅 매칭과 스크린샷 OCR 텍스트 검색에도 사용됩니다.",
+  "embeddings.sharedNote": "이 모델은 앱 전체에서 공유됩니다 — EEG 훅 매칭과 스크린샷 OCR 텍스트 검색에도 사용됩니다.",
   "embeddings.stale": "오래됨",
   "embeddings.reembed": "모든 라벨 재임베딩",
-  "embeddings.reembedDesc":
-    "현재 모델을 사용하여 모든 기존 라벨의 임베딩을 다시 계산합니다. 모델 전환 후 실행하세요.",
+  "embeddings.reembedDesc": "현재 모델을 사용하여 모든 기존 라벨의 임베딩을 다시 계산합니다. 모델 전환 후 실행하세요.",
   "embeddings.reembedBtn": "재임베딩",
   "embeddings.reembedding": "임베딩 중…",
   "embeddings.dimLegend": "차원",

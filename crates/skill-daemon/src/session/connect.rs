@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn select_connect_route_is_deterministic_for_random_targets() {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(0x5EED_BAAD_F00D);
         for _ in 0..512 {

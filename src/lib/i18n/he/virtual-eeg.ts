@@ -4,8 +4,7 @@ const virtualEeg: Record<string, string> = {
   "settingsTabs.virtualEeg": "EEG וירטואלי",
 
   "veeg.title": "מכשיר EEG וירטואלי",
-  "veeg.desc":
-    "סמלו אוזניות EEG לבדיקות, הדגמות ופיתוח. מייצר נתונים סינתטיים שעוברים דרך כל צינור עיבוד האות.",
+  "veeg.desc": "סמלו אוזניות EEG לבדיקות, הדגמות ופיתוח. מייצר נתונים סינתטיים שעוברים דרך כל צינור עיבוד האות.",
 
   "veeg.status": "מצב",
   "veeg.running": "פועל",
@@ -27,8 +26,7 @@ const virtualEeg: Record<string, string> = {
   "veeg.templateBadQuality": "EEG באיכות גרועה",
   "veeg.templateBadQualityDesc": "אות רועש עם ארטיפקטים של שרירים, רעש קו 50/60 Hz וקפיצות אלקטרודה.",
   "veeg.templateInterruptions": "חיבור לסירוגין",
-  "veeg.templateInterruptionsDesc":
-    "אות טוב עם נפילות תקופתיות המדמות אלקטרודות רופפות או הפרעות אלחוטיות.",
+  "veeg.templateInterruptionsDesc": "אות טוב עם נפילות תקופתיות המדמות אלקטרודות רופפות או הפרעות אלחוטיות.",
   "veeg.templateFile": "מקובץ",
   "veeg.templateFileDesc": "השמעה חוזרת של דגימות מקובץ CSV או EDF.",
 
