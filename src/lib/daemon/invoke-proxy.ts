@@ -272,13 +272,16 @@ async function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
           emit({ type: "error", message: String(result.error) });
           return;
         }
-        const content = result?.content ?? "";
+        // Handle both flat format (legacy) and OpenAI format (daemon HTTP).
+        const choice = result?.choices?.[0];
+        const content = choice?.message?.content ?? result?.content ?? "";
         if (content) emit({ type: "delta", content });
+        const usage = result?.usage;
         emit({
           type: "done",
-          finish_reason: result?.finish_reason ?? "stop",
-          prompt_tokens: result?.prompt_tokens ?? 0,
-          completion_tokens: result?.completion_tokens ?? 0,
+          finish_reason: choice?.finish_reason ?? result?.finish_reason ?? "stop",
+          prompt_tokens: usage?.prompt_tokens ?? result?.prompt_tokens ?? 0,
+          completion_tokens: usage?.completion_tokens ?? result?.completion_tokens ?? 0,
           n_ctx: result?.n_ctx ?? 0,
         });
       })
