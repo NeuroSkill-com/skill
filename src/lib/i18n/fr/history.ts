@@ -99,7 +99,7 @@ const history: Record<string, string> = {
   "compare.heatmapRowNorm": "lignes normalisées par bande · plus clair = plus élevé",
   "compare.heatmapDiffLegend": "bleu = A > B · rouge = B > A",
   "compare.embeddingsReady": "embeddings prêts",
-  "compare.embeddingsPartial": "{n}/{total} embeddings ({pct}%)",
+  "compare.embeddingsPartial": "{n}/{total} incorporations ({pct}%)",
   "compare.embeddingsNone": "pas d'embeddings — Brain Nebula indisponible",
   "compare.embeddingsProcessing": "embeddings en cours de traitement…",
 
