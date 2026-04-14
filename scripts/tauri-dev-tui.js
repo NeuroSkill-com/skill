@@ -233,10 +233,10 @@ function render() {
     "██║ ╚████║███████╗╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██╗██║███████╗███████╗",
     "╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝",
   ];
-  const artMaxW = Math.max(...artRaw.map(l => [...l].length));
+  const artMaxW = Math.max(...artRaw.map((l) => [...l].length));
   const art = artRaw.map((l, i) => {
     const padded = l + " ".repeat(Math.max(0, artMaxW - [...l].length));
-    return i === 0 ? padded.slice(0, -1) + "™" : padded;
+    return i === 0 ? `${padded.slice(0, -1)}™` : padded;
   });
 
   process.stdout.write("\x1b[?25l\x1b[2J\x1b[H");
@@ -250,10 +250,10 @@ function render() {
     if (i === 0) {
       // ™ at the end in dim pink, rest in hot pink
       const body = line.slice(0, -1);
-      const centered = center(body + "™", cols);
+      const centered = center(`${body}™`, cols);
       // Replace the ™ char with dim-pink colored version
       const tmIdx = centered.lastIndexOf("™");
-      const colored = HOTPINK + centered.slice(0, tmIdx) + DIMPINK + "™" + RST;
+      const colored = `${HOTPINK}${centered.slice(0, tmIdx)}${DIMPINK}™${RST}`;
       process.stdout.write(`\x1b[${row};1H${fitText(colored, cols)}`);
     } else {
       process.stdout.write(`\x1b[${row};1H${HOTPINK}${fitText(center(line, cols), cols)}${RST}`);
