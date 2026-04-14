@@ -2,6 +2,10 @@
 # These are informational-only advisories (unmaintained / unsound);
 # no actual vulnerabilities are present.
 
+# Yanked crates — transitive deps we can't control.
+[yanked]
+enabled = false
+
 [advisories]
 ignore = [
     # ── gtk-rs GTK3 family — unmaintained, no GTK4 upgrade path until Tauri migrates ──
