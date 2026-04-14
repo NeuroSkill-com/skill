@@ -65,6 +65,8 @@ members = [
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+# Fix muda ZeroWidth panic in to_png() on macOS (upstream bug in 0.17.2)
+muda            = { path = "patches/muda-0.17.2" }
 
 
 

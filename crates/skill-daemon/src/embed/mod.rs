@@ -12,3 +12,4 @@ mod worker;
 
 pub(crate) use accumulator::EpochAccumulator;
 pub(crate) use worker::EmbedWorkerHandle;
+pub(crate) use worker::{encode_raw_public, load_encoder_public, PublicEncoder};

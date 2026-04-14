@@ -73,8 +73,465 @@ pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, Stri
     None
 }
 
-pub(crate) async fn trigger_reembed_impl() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "ok": true, "message": "reembed queued in daemon" }))
+pub(crate) async fn trigger_reembed_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let events_tx = state.events_tx.clone();
+    let model_status = state.exg_model_status.clone();
+
+    // Check if reembed is already running (use model_status as a simple guard).
+    {
+        let st = model_status.lock().unwrap_or_else(|e| e.into_inner());
+        if st.downloading_weights {
+            return Json(
+                serde_json::json!({ "ok": false, "message": "weights download in progress — wait for it to finish" }),
+            );
+        }
+    }
+
+    let cancel = state.idle_reembed_cancel.clone();
+    // Reset cancel so a previous idle-reembed cancel doesn't block the manual trigger.
+    cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = run_batch_reembed_with_cancel(
+            &skill_dir, &events_tx, &cancel, true, // use_gpu
+            10,   // throttle_ms
+            50,   // batch_size
+        ) {
+            tracing::error!("batch reembed failed: {e}");
+            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "reembed-progress".into(),
+                ts_unix_ms: now_unix_ms(),
+                correlation_id: None,
+                payload: serde_json::json!({ "status": "error", "message": e.to_string() }),
+            });
+        }
+    });
+
+    Json(serde_json::json!({ "ok": true, "message": "reembed started" }))
+}
+
+/// Scan all day directories, find epochs with empty eeg_embedding,
+/// re-read raw EEG samples from CSV, encode, and update the BLOB.
+/// Public so the idle-reembed loop can call it.
+pub(crate) fn run_batch_reembed_with_cancel(
+    skill_dir: &std::path::Path,
+    events_tx: &tokio::sync::broadcast::Sender<skill_daemon_common::EventEnvelope>,
+    cancel: &std::sync::atomic::AtomicBool,
+    _use_gpu: bool,
+    throttle_ms: u64,
+    batch_size: usize,
+) -> anyhow::Result<()> {
+    tracing::info!("[reembed] starting batch reembed");
+
+    // 1. Load the encoder (tries GPU first, falls back to CPU).
+    let config = load_model_config(skill_dir);
+    let encoder = crate::embed::load_encoder_public(&config, skill_dir);
+    if encoder.is_none() {
+        anyhow::bail!(
+            "encoder failed to load for backend '{}' — check model weights",
+            config.model_backend.as_str()
+        );
+    }
+    let encoder = encoder.unwrap();
+
+    // 2. Scan all day directories for sessions with missing embeddings.
+    let mut total_needed = 0u64;
+    let mut total_done = 0u64;
+    let mut total_failed = 0u64;
+
+    let mut day_dirs: Vec<_> = std::fs::read_dir(skill_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|n| n.len() == 8 && n.starts_with("20"))
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .collect();
+    day_dirs.sort();
+
+    // First pass: count total needed.
+    for day_dir in &day_dirs {
+        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
+        if !db_path.exists() {
+            continue;
+        }
+        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        else {
+            continue;
+        };
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        total_needed += count.max(0) as u64;
+    }
+
+    tracing::info!(
+        "[reembed] {total_needed} epochs need embeddings across {} days",
+        day_dirs.len()
+    );
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({ "status": "started", "total": total_needed, "done": 0 }),
+    });
+
+    if total_needed == 0 {
+        let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+            r#type: "reembed-progress".into(),
+            ts_unix_ms: now_unix_ms(),
+            correlation_id: None,
+            payload: serde_json::json!({ "status": "done", "total": 0, "done": 0 }),
+        });
+        return Ok(());
+    }
+
+    // 3. Process each day directory.
+    for day_dir in &day_dirs {
+        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
+        if !db_path.exists() {
+            continue;
+        }
+
+        // Find CSV files in this day directory (raw EEG data).
+        let csv_files = find_eeg_csvs(day_dir);
+        if csv_files.is_empty() {
+            continue;
+        }
+
+        // Read session metadata from JSON sidecar.
+        let (channel_names, sample_rate) = read_session_meta(day_dir, &csv_files);
+        if channel_names.is_empty() || sample_rate == 0.0 {
+            tracing::warn!("[reembed] skipping {} — no channel metadata", day_dir.display());
+            continue;
+        }
+
+        // Open DB for writing.
+        let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+            continue;
+        };
+        let _ = conn.execute_batch("PRAGMA busy_timeout=5000;");
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp)",
+            [],
+        );
+
+        // Get timestamps of epochs that need embeddings.
+        let mut stmt = conn.prepare(
+            "SELECT id, timestamp FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4 ORDER BY timestamp",
+        )?;
+        let epochs_needed: Vec<(i64, i64)> = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt);
+
+        if epochs_needed.is_empty() {
+            continue;
+        }
+
+        let day_name = day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string();
+        tracing::info!(
+            "[reembed] {day_name}: {} epochs to embed, loading CSV data...",
+            epochs_needed.len()
+        );
+
+        // Load all raw CSV data for this day into a time-indexed buffer.
+        let raw_data = load_day_csv_data(day_dir, &csv_files, &channel_names, sample_rate);
+
+        let epoch_samples = (sample_rate * 5.0) as usize; // 5-second epoch
+        let commit_size = batch_size.max(10); // commit every N epochs for write efficiency
+
+        // Process in transaction batches for write performance.
+        for chunk in epochs_needed.chunks(commit_size) {
+            // Check cancel flag between batches (backpressure: device reconnected).
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                tracing::info!("[reembed] cancelled — device reconnected or user stopped");
+                let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                    r#type: "reembed-progress".into(),
+                    ts_unix_ms: now_unix_ms(),
+                    correlation_id: None,
+                    payload: serde_json::json!({
+                        "status": "paused",
+                        "total": total_needed,
+                        "done": total_done,
+                        "reason": "device_connected",
+                    }),
+                });
+                return Ok(());
+            }
+
+            let _ = conn.execute_batch("BEGIN");
+
+            for (row_id, ts_ms) in chunk {
+                let ts_secs = (*ts_ms as f64) / 1000.0;
+
+                let samples = extract_epoch_samples(&raw_data, ts_secs, epoch_samples, channel_names.len());
+                if samples.is_empty() {
+                    total_failed += 1;
+                    total_done += 1;
+                    continue;
+                }
+
+                let t0 = std::time::Instant::now();
+                let embedding = encode_raw_samples(&encoder, &samples, &channel_names, sample_rate);
+                let ms = t0.elapsed().as_millis();
+
+                if let Some(emb) = embedding {
+                    let blob: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+                    let _ = conn.execute(
+                        "UPDATE embeddings SET eeg_embedding = ?1 WHERE id = ?2",
+                        rusqlite::params![blob, row_id],
+                    );
+                    if ms > 2000 {
+                        tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
+                    }
+                } else {
+                    total_failed += 1;
+                }
+
+                total_done += 1;
+            }
+
+            let _ = conn.execute_batch("COMMIT");
+
+            // Emit progress every batch.
+            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "reembed-progress".into(),
+                ts_unix_ms: now_unix_ms(),
+                correlation_id: None,
+                payload: serde_json::json!({
+                    "status": "running",
+                    "total": total_needed,
+                    "done": total_done,
+                    "failed": total_failed,
+                    "day": day_name,
+                }),
+            });
+
+            // Throttle between batches to reduce contention with other daemon tasks.
+            if throttle_ms > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(throttle_ms));
+            }
+        }
+
+        tracing::info!(
+            "[reembed] {} done: {}/{} epochs embedded",
+            day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+            total_done - total_failed,
+            epochs_needed.len()
+        );
+    }
+
+    tracing::info!("[reembed] complete: {total_done} processed, {total_failed} failed out of {total_needed}");
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({
+            "status": "done",
+            "total": total_needed,
+            "done": total_done,
+            "failed": total_failed,
+        }),
+    });
+
+    Ok(())
+}
+
+/// Find exg_*.csv files (raw EEG, not metrics/ppg/imu).
+fn find_eeg_csvs(day_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut csvs: Vec<_> = std::fs::read_dir(day_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            let name = p.file_name()?.to_str()?;
+            if name.starts_with("exg_")
+                && name.ends_with(".csv")
+                && !name.contains("metrics")
+                && !name.contains("ppg")
+                && !name.contains("imu")
+            {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .collect();
+    csvs.sort();
+    csvs
+}
+
+/// Read channel names and sample rate from JSON sidecar or CSV header.
+fn read_session_meta(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf]) -> (Vec<String>, f64) {
+    // Try JSON sidecar first.
+    for csv in csv_files {
+        let json_path = csv.with_extension("json");
+        if !json_path.exists() {
+            continue;
+        }
+        if let Ok(data) = std::fs::read_to_string(&json_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
+                let sr = v
+                    .get("sample_rate_hz")
+                    .or_else(|| v.get("sample_rate"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let ch: Vec<String> = v
+                    .get("channel_names")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                if sr > 0.0 && !ch.is_empty() {
+                    return (ch, sr);
+                }
+                // Have JSON but no sample_rate? Try to infer from CSV header.
+                if !ch.is_empty() {
+                    // Default to 256 Hz (Muse standard).
+                    return (ch, 256.0);
+                }
+            }
+        }
+    }
+    // Fallback: read CSV header to get channel names.
+    for csv in csv_files {
+        if let Ok(file) = std::fs::File::open(csv) {
+            use std::io::BufRead;
+            let mut reader = std::io::BufReader::new(file);
+            let mut header = String::new();
+            if reader.read_line(&mut header).is_ok() {
+                let cols: Vec<&str> = header.trim().split(',').collect();
+                if cols.len() > 1 && cols[0].contains("timestamp") {
+                    let ch: Vec<String> = cols[1..].iter().map(|s| s.trim().to_string()).collect();
+                    if !ch.is_empty() {
+                        return (ch, 256.0); // Assume 256 Hz default.
+                    }
+                }
+            }
+        }
+    }
+    (vec![], 0.0)
+}
+
+/// Timestamp-indexed raw EEG data: Vec<(timestamp_secs, Vec<Vec<f32>> channels×samples)>.
+struct RawDayData {
+    /// Sorted list of (start_time_secs, samples_per_channel[ch][sample]).
+    segments: Vec<(f64, Vec<Vec<f32>>)>,
+    sample_rate: f64,
+}
+
+/// Load all raw CSV data for a day directory.
+fn load_day_csv_data(
+    _day_dir: &std::path::Path,
+    csv_files: &[std::path::PathBuf],
+    channel_names: &[String],
+    sample_rate: f64,
+) -> RawDayData {
+    let n_ch = channel_names.len();
+    let mut segments = Vec::new();
+
+    for csv_path in csv_files {
+        let Ok(file) = std::fs::File::open(csv_path) else {
+            continue;
+        };
+        let reader = std::io::BufReader::new(file);
+        use std::io::BufRead;
+        let mut lines = reader.lines();
+
+        // Skip header.
+        let _header = lines.next();
+
+        let mut channels: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
+        let mut first_ts: Option<f64> = None;
+
+        for line in lines.map_while(Result::ok) {
+            let fields: Vec<&str> = line.split(',').collect();
+            if fields.len() < n_ch + 1 {
+                continue;
+            }
+
+            if first_ts.is_none() {
+                first_ts = fields[0].parse::<f64>().ok();
+            }
+
+            for (ch, field) in fields[1..].iter().enumerate().take(n_ch) {
+                if let Ok(v) = field.parse::<f32>() {
+                    channels[ch].push(v);
+                }
+            }
+        }
+
+        if let Some(mut ts) = first_ts {
+            // Detect relative timestamps (small values < year 2001).
+            // These are device-internal cumulative clocks, NOT offsets from zero.
+            // Use the session start time from the filename as the segment start.
+            if ts < 1_000_000_000.0 {
+                if let Some(start) = csv_path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.strip_prefix("exg_"))
+                    .and_then(|s| s.parse::<f64>().ok())
+                {
+                    ts = start;
+                }
+            }
+            if channels.iter().all(|c| !c.is_empty()) {
+                segments.push((ts, channels));
+            }
+        }
+    }
+
+    segments.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    RawDayData { segments, sample_rate }
+}
+
+/// Extract a 5-second window of samples at the given epoch timestamp.
+fn extract_epoch_samples(
+    data: &RawDayData,
+    epoch_ts_secs: f64,
+    epoch_samples: usize,
+    n_channels: usize,
+) -> Vec<Vec<f32>> {
+    for (seg_start, channels) in &data.segments {
+        let seg_len = channels[0].len();
+        let seg_end = *seg_start + (seg_len as f64 / data.sample_rate);
+
+        // Check if this epoch falls within this segment.
+        if epoch_ts_secs >= *seg_start && epoch_ts_secs < seg_end {
+            let offset = ((epoch_ts_secs - seg_start) * data.sample_rate) as usize;
+            let end = (offset + epoch_samples).min(seg_len);
+            if end - offset < epoch_samples / 2 {
+                continue;
+            } // too few samples
+
+            let mut result = Vec::with_capacity(n_channels);
+            for ch in channels.iter().take(n_channels) {
+                result.push(ch[offset..end].to_vec());
+            }
+            return result;
+        }
+    }
+    vec![]
+}
+
+/// Encode raw samples using the loaded encoder.
+fn encode_raw_samples(
+    encoder: &crate::embed::PublicEncoder,
+    samples: &[Vec<f32>],
+    channel_names: &[String],
+    sample_rate: f64,
+) -> Option<Vec<f32>> {
+    crate::embed::encode_raw_public(encoder, samples, channel_names, sample_rate)
 }
 
 pub(crate) async fn trigger_weights_download_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -272,12 +729,45 @@ pub(crate) async fn cancel_weights_download_impl(State(state): State<AppState>) 
 
 pub(crate) async fn estimate_reembed_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let sessions = tokio::task::spawn_blocking(move || skill_history::list_all_sessions(&skill_dir, None))
-        .await
-        .unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut total_epochs = 0i64;
+        let mut missing_embeddings = 0i64;
+        let Ok(entries) = std::fs::read_dir(&skill_dir) else {
+            return (0, 0);
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let db_path = path.join(skill_constants::SQLITE_FILE);
+            if !db_path.exists() {
+                continue;
+            }
+            let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            else {
+                continue;
+            };
+            let t: i64 = conn
+                .query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get(0))
+                .unwrap_or(0);
+            let m: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            total_epochs += t;
+            missing_embeddings += m;
+        }
+        (total_epochs, missing_embeddings)
+    })
+    .await
+    .unwrap_or((0, 0));
     Json(serde_json::json!({
-        "sessions_total": sessions.len(),
-        "embeddings_needed": 0,
+        "total_epochs": result.0,
+        "embeddings_needed": result.1,
     }))
 }
 

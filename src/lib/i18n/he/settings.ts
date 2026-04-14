@@ -629,6 +629,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "השד לא מחובר. נתוני כיול לא יוקלטו.",
   "daemon.auth": "auth ✓",
   "daemon.protocol": "protocol",
+  "daemon.launchingIn": "לא מקוון · הפעלה בעוד {secs} שניות",
+  "daemon.starting": "מופעל…",
+  "daemon.launchNow": "לחץ להפעלה מיידית",
 };
 
 export default settings;

@@ -111,6 +111,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "לא נמצאו נתוני embedding.",
   "model.reembedLoadingEncoder": "טוען מקודד…",
   "model.reembedError": "שגיאה — בדוק משקולות.",
+  "model.gpuPrecision": "דיוק GPU",
+  "model.gpuPrecisionDesc": "חצי דיוק (f16) מהיר יותר, דיוק מלא (f32) מדויק יותר",
+  "model.gpuPrecisionF16": "מהיר",
+  "model.gpuPrecisionF32": "מדויק",
+  "model.idleReembed": "הטמעה ברקע",
+  "model.idleReembedDesc": "להטמיע אוטומטית אפוקות שלא עובדו כשהמכשיר לא פעיל",
+  "model.idleDelay": "התחל לאחר חוסר פעילות",
 
   "llm.section.server": "שרת LLM מקומי",
   "llm.section.models": "מודלי שפה",

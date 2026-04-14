@@ -96,6 +96,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "הפרש עוצמות תדר (B − A)",
   "compare.heatmapRowNorm": "שורות מנורמלות לפי תדר · בהיר יותר = גבוה יותר",
   "compare.heatmapDiffLegend": "כחול = A > B · אדום = B > A",
+  "compare.embeddingsReady": "הטמעות מוכנות",
+  "compare.embeddingsPartial": "{n}/{total} הטמעות ({pct}%)",
+  "compare.embeddingsNone": "אין הטמעות — Brain Nebula לא זמין",
+  "compare.embeddingsProcessing": "הטמעות מעובדות ברקע…",
 
   "history.metrics": "מדדי סשן",
   "history.noMetrics": "אין נתוני אפוק לסשן זה.",

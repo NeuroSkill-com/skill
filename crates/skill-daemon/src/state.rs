@@ -96,6 +96,9 @@ pub struct AppState {
     pub exg_model_status: Arc<Mutex<skill_eeg::eeg_model_config::EegModelStatus>>,
     /// Cancel flag for the EXG weights download thread.
     pub exg_download_cancel: Arc<AtomicBool>,
+    /// Cancel flag for the background idle reembed task.
+    /// Set to `true` when a device connects to immediately pause reembedding.
+    pub idle_reembed_cancel: Arc<AtomicBool>,
     /// Daemon-owned HNSW indices for label search (text, context, EEG).
     pub label_index: Arc<LabelIndexState>,
     /// Reconnect state machine (daemon-authoritative).
@@ -187,6 +190,7 @@ impl AppState {
             session_handle: Arc::new(Mutex::new(None)),
             exg_model_status: Arc::new(Mutex::new(skill_eeg::eeg_model_config::EegModelStatus::default())),
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
+            idle_reembed_cancel: Arc::new(AtomicBool::new(false)),
             label_index: Arc::new(LabelIndexState::new()),
             reconnect: Arc::new(Mutex::new(crate::reconnect::ReconnectState::default())),
             text_embedder: SharedTextEmbedder::new(),

@@ -35,6 +35,55 @@ pub(crate) async fn readyz() -> Json<HealthResponse> {
     Json(HealthResponse { ok: true })
 }
 
+/// Serve a screenshot image by bare filename (e.g., `20260413081553.webp`).
+/// Infers the date subdirectory from the first 8 characters of the filename.
+pub(crate) async fn serve_screenshot(
+    state: axum::extract::State<crate::state::AppState>,
+    axum::extract::Path(filename): axum::extract::Path<String>,
+) -> axum::response::Response {
+    let date_prefix = if filename.len() >= 8 { &filename[..8] } else { "" };
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let path = skill_dir.join("screenshots").join(date_prefix).join(&filename);
+    serve_file(path).await
+}
+
+/// Serve a screenshot image with explicit date path (e.g., `20260413/20260413081553.webp`).
+pub(crate) async fn serve_screenshot_with_date(
+    state: axum::extract::State<crate::state::AppState>,
+    axum::extract::Path((date, filename)): axum::extract::Path<(String, String)>,
+) -> axum::response::Response {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let path = skill_dir.join("screenshots").join(&date).join(&filename);
+    serve_file(path).await
+}
+
+async fn serve_file(path: std::path::PathBuf) -> axum::response::Response {
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
+
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let mime = if path.extension().and_then(|e| e.to_str()) == Some("webp") {
+                "image/webp"
+            } else if path.extension().and_then(|e| e.to_str()) == Some("png") {
+                "image/png"
+            } else {
+                "application/octet-stream"
+            };
+            (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, mime),
+                    (header::CACHE_CONTROL, "public, max-age=86400"),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "not found").into_response(),
+    }
+}
+
 /// Alias for `/v1/llm/server/status` — neuroloop's `skill-llm.ts` probes `/llm/status`.
 pub(crate) async fn llm_status_alias(state: axum::extract::State<crate::state::AppState>) -> Json<serde_json::Value> {
     crate::routes::settings_llm_runtime::llm_server_status_impl(state).await

@@ -663,6 +663,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "Daemon ist nicht verbunden. Kalibrierungsdaten werden nicht aufgezeichnet.",
   "daemon.auth": "auth ✓",
   "daemon.protocol": "protocol",
+  "daemon.launchingIn": "offline · Start in {secs}s",
+  "daemon.starting": "wird gestartet…",
+  "daemon.launchNow": "Klicken zum sofortigen Starten",
 };
 
 export default settings;

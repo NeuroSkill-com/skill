@@ -39,12 +39,17 @@ export async function getDaemonPort(): Promise<number> {
   return b.port;
 }
 
+export async function getDaemonBaseUrl(): Promise<{ port: number; token: string }> {
+  const b = await getBootstrap();
+  return { port: b.port, token: b.token };
+}
+
 export async function daemonGet<T>(path: string): Promise<T> {
   return daemonRequest<T>("GET", path);
 }
 
-export async function daemonPost<T>(path: string, body?: unknown): Promise<T> {
-  return daemonRequest<T>("POST", path, body);
+export async function daemonPost<T>(path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  return daemonRequest<T>("POST", path, body, timeoutMs);
 }
 
 export async function daemonPut<T>(path: string, body?: unknown): Promise<T> {
@@ -55,7 +60,12 @@ export async function daemonDelete<T>(path: string, body?: unknown): Promise<T> 
   return daemonRequest<T>("DELETE", path, body);
 }
 
-async function daemonRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+async function daemonRequest<T>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+  timeoutMs = 10_000,
+): Promise<T> {
   let port: number;
   let token: string;
   try {
@@ -75,7 +85,7 @@ async function daemonRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path:
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   const text = await resp.text();

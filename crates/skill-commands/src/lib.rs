@@ -258,6 +258,7 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
         "SELECT hnsw_id, timestamp, eeg_embedding
          FROM embeddings
          WHERE timestamp BETWEEN ?1 AND ?2
+           AND length(eeg_embedding) >= 4
          ORDER BY timestamp",
     ) {
         Ok(s) => s,
@@ -278,13 +279,30 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
             embedding,
         })
     })
-    .map(|rows| rows.flatten().collect())
+    .map(|rows| rows.flatten().filter(|e| !e.embedding.is_empty()).collect())
     .unwrap_or_default()
 }
 
 /// Derive the `YYYYMMDD` date string from a `YYYYMMDDHHmmss` timestamp integer.
 fn date_from_ts(ts: i64) -> String {
     format!("{}", ts / 1_000_000)
+}
+
+/// Convert a database timestamp (ms) to Unix seconds.
+///
+/// The embeddings table stores timestamps in two formats:
+/// - Unix milliseconds (e.g., `1775784303872` → year 2026)
+/// - YYYYMMDDHHmmss × 1000 (e.g., `20260414014211000` → Apr 14, 2026 01:42:11)
+///
+/// Detects the format and delegates to `skill_data::util::ts_to_unix` for
+/// the YYYYMMDDHHmmss conversion.
+fn ts_ms_to_unix(ts: i64) -> u64 {
+    const UNIX_MS_2100: i64 = 4_102_444_800_000;
+    if ts < UNIX_MS_2100 {
+        (ts / 1000) as u64
+    } else {
+        ts_to_unix(ts / 1000)
+    }
 }
 
 /// Look up a row in `db_path` by its `YYYYMMDDHHmmss` timestamp.
@@ -514,7 +532,7 @@ pub fn search_embeddings_in_range_for(
         // ── Hydrate each candidate ────────────────────────────────────────
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
-            let neighbor_unix = (neighbor_ts / 1000) as u64;
+            let neighbor_unix = ts_ms_to_unix(neighbor_ts);
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
@@ -682,7 +700,7 @@ pub fn stream_search_inner_for(
 
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
-            let neighbor_unix = (neighbor_ts / 1000) as u64;
+            let neighbor_unix = ts_ms_to_unix(neighbor_ts);
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {

@@ -226,6 +226,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "帯域パワー差分 (B − A)",
   "compare.heatmapRowNorm": "行は帯域ごとに正規化 · 明るいほど高値",
   "compare.heatmapDiffLegend": "青 = A > B · 赤 = B > A",
+  "compare.embeddingsReady": "埋め込み準備完了",
+  "compare.embeddingsPartial": "{n}/{total} 埋め込み ({pct}%)",
+  "compare.embeddingsNone": "埋め込みなし — Brain Nebula 利用不可",
+  "compare.embeddingsProcessing": "バックグラウンドで埋め込み処理中…",
 
   "history.metrics": "セッション指標",
   "history.noMetrics": "このセッションにはエポックデータがありません。",

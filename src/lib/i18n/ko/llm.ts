@@ -69,6 +69,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "임베딩 데이터를 찾을 수 없습니다.",
   "model.reembedLoadingEncoder": "인코더 로딩 중…",
   "model.reembedError": "오류 — 가중치를 확인하세요.",
+  "model.gpuPrecision": "GPU 정밀도",
+  "model.gpuPrecisionDesc": "반정밀도(f16)가 더 빠르고, 전체 정밀도(f32)가 더 정확",
+  "model.gpuPrecisionF16": "빠름",
+  "model.gpuPrecisionF32": "정밀",
+  "model.idleReembed": "백그라운드 임베딩",
+  "model.idleReembedDesc": "기기 유휴 시 미처리 에포크 자동 임베딩",
+  "model.idleDelay": "유휴 후 시작",
 
   "llm.section.server": "로컬 LLM 서버",
   "llm.section.models": "언어 모델",

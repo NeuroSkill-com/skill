@@ -526,6 +526,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "데몬이 연결되지 않았습니다. 캘리브레이션 데이터가 기록되지 않습니다.",
   "daemon.auth": "인증 ✓",
   "daemon.protocol": "프로토콜",
+  "daemon.launchingIn": "오프라인 · {secs}초 후 실행",
+  "daemon.starting": "시작 중…",
+  "daemon.launchNow": "클릭하여 바로 실행",
   "settingsTabs.lsl": "LSL",
 
   "lsl.localStreams": "로컬 LSL 스트림",

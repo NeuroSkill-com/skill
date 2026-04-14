@@ -34,7 +34,7 @@ fn days_to_ymd(days: i64) -> (i32, u32, u32) {
 }
 
 /// Convert (year, month, day) to days-since-Unix-epoch.
-fn ymd_to_days(y: i32, m: u32, d: u32) -> i64 {
+pub(crate) fn ymd_to_days(y: i32, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y as i64 - 1 } else { y as i64 };
     let era = (if y >= 0 { y } else { y - 399 }) / 400;
     let yoe = (y - era * 400) as u32;

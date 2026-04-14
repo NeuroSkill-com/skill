@@ -92,6 +92,29 @@ let modelConfigSaving = $state(false);
 let reembedEstimate = $state<ReembedEstimate | null>(null);
 let reembedProgress = $state<ReembedProgress | null>(null);
 let reembedRunning = $state(false);
+let reembedConfig = $state<{
+  idle_reembed_enabled: boolean;
+  idle_reembed_delay_secs: number;
+  idle_reembed_gpu: boolean;
+  gpu_precision: string;
+  idle_reembed_throttle_ms: number;
+  batch_size: number;
+  batch_delay_ms: number;
+  auto_labels: boolean;
+  auto_eeg: boolean;
+  auto_screenshots: boolean;
+}>({
+  idle_reembed_enabled: true,
+  idle_reembed_delay_secs: 1800,
+  idle_reembed_gpu: true,
+  gpu_precision: "f16",
+  idle_reembed_throttle_ms: 10,
+  batch_size: 10,
+  batch_delay_ms: 50,
+  auto_labels: false,
+  auto_eeg: false,
+  auto_screenshots: false,
+});
 
 // One-shot startup recovery signal from embed worker.
 let hnswRebuilt = $state(false);
@@ -153,6 +176,10 @@ async function startReembed() {
   await daemonInvoke("trigger_reembed");
 }
 
+async function saveReembedConfig() {
+  await daemonInvoke("set_reembed_config", reembedConfig);
+}
+
 // Derived state helpers
 const isDownloading = $derived(modelStatus.downloading_weights);
 const isAutoRetrying = $derived(
@@ -202,6 +229,11 @@ onMount(async () => {
   modelStatus = await daemonInvoke<EegModelStatus>("get_eeg_model_status");
   statusTimer = setInterval(refreshStatus, 2000);
   loadReembedEstimate();
+  daemonInvoke<typeof reembedConfig>("get_reembed_config")
+    .then((c) => {
+      reembedConfig = c;
+    })
+    .catch(() => {});
 
   unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
     reembedProgress = ev.payload;
@@ -783,6 +815,53 @@ onDestroy(() => {
                     onclick={startReembed}>
               {t("model.reembedBtn")}
             </Button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- GPU precision + idle reembed settings -->
+      <div class="flex flex-col gap-3 px-4 py-3.5">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-medium text-foreground">{t("model.gpuPrecision")}</span>
+            <span class="text-[0.55rem] text-muted-foreground/70">{t("model.gpuPrecisionDesc")}</span>
+          </div>
+          <select
+            value={reembedConfig.gpu_precision}
+            onchange={(e) => { reembedConfig.gpu_precision = (e.target as HTMLSelectElement).value; saveReembedConfig(); }}
+            class="text-[0.65rem] rounded border border-border dark:border-white/[0.08]
+                   bg-background dark:bg-[#14141e] px-2 py-1
+                   text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+            <option value="f16">f16 ({t("model.gpuPrecisionF16")})</option>
+            <option value="f32">f32 ({t("model.gpuPrecisionF32")})</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-medium text-foreground">{t("model.idleReembed")}</span>
+            <span class="text-[0.55rem] text-muted-foreground/70">{t("model.idleReembedDesc")}</span>
+          </div>
+          <input type="checkbox"
+            checked={reembedConfig.idle_reembed_enabled}
+            onchange={(e) => { reembedConfig.idle_reembed_enabled = (e.target as HTMLInputElement).checked; saveReembedConfig(); }}
+            class="w-4 h-4 rounded border-border accent-blue-500" />
+        </div>
+
+        {#if reembedConfig.idle_reembed_enabled}
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-[0.65rem] text-muted-foreground">{t("model.idleDelay")}</span>
+            <select
+              value={String(reembedConfig.idle_reembed_delay_secs)}
+              onchange={(e) => { reembedConfig.idle_reembed_delay_secs = Number((e.target as HTMLSelectElement).value); saveReembedConfig(); }}
+              class="text-[0.6rem] rounded border border-border dark:border-white/[0.08]
+                     bg-background dark:bg-[#14141e] px-2 py-0.5
+                     text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+              <option value="300">5 min</option>
+              <option value="900">15 min</option>
+              <option value="1800">30 min</option>
+              <option value="3600">1 hour</option>
+            </select>
           </div>
         {/if}
       </div>

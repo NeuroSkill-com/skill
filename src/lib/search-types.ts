@@ -182,10 +182,10 @@ export function metricChips(met: NeighborMetrics): { l: string; v: string; c: st
 
 /** Compute search analysis from results. */
 export function computeSearchAnalysis(result: SearchResult): SearchAnalysis | null {
-  if (result.results.length === 0) return null;
-  const allNb = result.results.flatMap((q) => q.neighbors);
+  if (!result.results?.length) return null;
+  const allNb = result.results.flatMap((q) => q.neighbors ?? []);
   if (allNb.length === 0) return null;
-  const dists = allNb.map((n) => n.distance);
+  const dists = allNb.map((n) => n.distance ?? 0);
   const distMin = Math.min(...dists),
     distMax = Math.max(...dists);
   const distMean = dists.reduce((a, b) => a + b, 0) / dists.length;
@@ -207,10 +207,10 @@ export function computeSearchAnalysis(result: SearchResult): SearchAnalysis | nu
 
 /** Compute temporal heatmap (7 days × 24 hours) from search results. */
 export function computeTemporalHeatmap(result: SearchResult): number[][] | null {
-  if (result.results.length === 0) return null;
+  if (!result.results?.length) return null;
   const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
   for (const q of result.results)
-    for (const n of q.neighbors)
+    for (const n of q.neighbors ?? [])
       grid[new Date(n.timestamp_unix * 1000).getDay()][new Date(n.timestamp_unix * 1000).getHours()]++;
   return grid.flat().some((v) => v > 0) ? grid : null;
 }

@@ -539,6 +539,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "デーモンが接続されていません。キャリブレーションデータは記録されません。",
   "daemon.auth": "認証 ✓",
   "daemon.protocol": "プロトコル",
+  "daemon.launchingIn": "オフライン · {secs}秒後に起動",
+  "daemon.starting": "起動中…",
+  "daemon.launchNow": "クリックして今すぐ起動",
   "settingsTabs.lsl": "LSL",
 
   "lsl.localStreams": "ローカルLSLストリーム",

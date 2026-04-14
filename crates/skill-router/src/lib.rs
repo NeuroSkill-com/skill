@@ -382,27 +382,54 @@ pub fn umap_compute_inner(
         return Ok(cached);
     }
 
-    let embs_a = load_embeddings_range(skill_dir, a_start, a_end);
-    let embs_b = load_embeddings_range(skill_dir, b_start, b_end);
+    let mut embs_a = load_embeddings_range(skill_dir, a_start, a_end);
+    let mut embs_b = load_embeddings_range(skill_dir, b_start, b_end);
     let all_labels = load_labels_range(skill_dir, a_start.min(b_start), a_end.max(b_end));
 
+    // Count total epochs (including those with empty embedding BLOBs)
+    let total_a = embs_a.len();
+    let total_b = embs_b.len();
+    // Filter to only epochs that have actual embedding vectors
+    embs_a.retain(|e| !e.1.is_empty());
+    embs_b.retain(|e| !e.1.is_empty());
     let n_a = embs_a.len();
     let n_b = embs_b.len();
     let n = n_a + n_b;
 
     let umap_start = std::time::Instant::now();
     eprintln!(
-        "[umap] computing 3D projection for {} embeddings (A={}, B={})",
-        n, n_a, n_b
+        "[umap] A: {}/{} epochs have embeddings, B: {}/{} epochs have embeddings",
+        n_a, total_a, n_b, total_b
     );
 
     if n < 5 {
-        return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
+        let reason = if total_a + total_b == 0 {
+            "no_epochs".to_string()
+        } else if n == 0 {
+            format!(
+                "no_embeddings: {} epochs found but none have computed embedding vectors \
+                 (model weights may not be downloaded or encoder is in metrics-only mode)",
+                total_a + total_b
+            )
+        } else {
+            format!("too_few_embeddings: only {} embeddings available (need at least 5)", n)
+        };
+        eprintln!("[umap] skipping: {reason}");
+        return Ok(serde_json::json!({
+            "points": [], "n_a": n_a, "n_b": n_b, "dim": 0,
+            "total_a": total_a, "total_b": total_b,
+            "reason": reason,
+        }));
     }
 
     let dim = embs_a.first().or(embs_b.first()).map(|e| e.1.len()).unwrap_or(0);
     if dim == 0 {
-        return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
+        eprintln!("[umap] skipping: embedding vectors have dimension 0");
+        return Ok(serde_json::json!({
+            "points": [], "n_a": n_a, "n_b": n_b, "dim": 0,
+            "total_a": total_a, "total_b": total_b,
+            "reason": "zero_dim: embedding vectors are empty",
+        }));
     }
 
     // ── Load user-configurable UMAP parameters ─────────────────────────────

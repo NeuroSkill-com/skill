@@ -541,6 +541,9 @@ const settings: Record<string, string> = {
   "daemon.notConnectedWarning": "Daemon is not connected. Calibration data will not be recorded.",
   "daemon.auth": "auth ✓",
   "daemon.protocol": "protocol",
+  "daemon.launchingIn": "offline · launching in {secs}s",
+  "daemon.starting": "starting…",
+  "daemon.launchNow": "Click to launch now",
   "settingsTabs.lsl": "LSL",
 
   // ── LSL tab ──────────────────────────────────────────────────────────────

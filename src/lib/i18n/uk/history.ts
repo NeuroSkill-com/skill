@@ -98,6 +98,10 @@ const history: Record<string, string> = {
   "compare.heatmapDiff": "Різниця потужностей (B − A)",
   "compare.heatmapRowNorm": "рядки нормалізовано по діапазону · яскравіше = вище",
   "compare.heatmapDiffLegend": "синій = A > B · червоний = B > A",
+  "compare.embeddingsReady": "вбудовування готові",
+  "compare.embeddingsPartial": "{n}/{total} вбудовувань ({pct}%)",
+  "compare.embeddingsNone": "немає вбудовувань — Brain Nebula недоступна",
+  "compare.embeddingsProcessing": "вбудовування обробляються у фоновому режимі…",
 
   "history.metrics": "Метрики сеансу",
   "history.noMetrics": "Немає даних епох для цього сеансу.",

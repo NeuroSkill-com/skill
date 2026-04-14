@@ -69,6 +69,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "Keine Embedding-Daten gefunden.",
   "model.reembedLoadingEncoder": "Lade Encoder…",
   "model.reembedError": "Fehler — Gewichte überprüfen.",
+  "model.gpuPrecision": "GPU-Präzision",
+  "model.gpuPrecisionDesc": "Halbpräzision (f16) ist schneller, volle Präzision (f32) ist genauer",
+  "model.gpuPrecisionF16": "schneller",
+  "model.gpuPrecisionF32": "präzise",
+  "model.idleReembed": "Hintergrund-Einbettung",
+  "model.idleReembedDesc": "Nicht verarbeitete Epochen automatisch einbetten, wenn das Gerät inaktiv ist",
+  "model.idleDelay": "Starten nach Leerlauf",
 
   "llm.section.server": "Lokaler LLM-Server",
   "llm.section.models": "Sprachmodelle",

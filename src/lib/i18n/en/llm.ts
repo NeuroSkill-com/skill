@@ -70,6 +70,13 @@ const llm: Record<string, string> = {
   "model.reembedNoData": "No embedding data found.",
   "model.reembedLoadingEncoder": "Loading encoder…",
   "model.reembedError": "Error — check weights.",
+  "model.gpuPrecision": "GPU Precision",
+  "model.gpuPrecisionDesc": "Half-precision (f16) is faster, full-precision (f32) is more accurate",
+  "model.gpuPrecisionF16": "faster",
+  "model.gpuPrecisionF32": "precise",
+  "model.idleReembed": "Background Embedding",
+  "model.idleReembedDesc": "Automatically embed unprocessed epochs when device is idle",
+  "model.idleDelay": "Start after idle",
 
   "llm.section.server": "Local LLM Server",
   "llm.section.models": "Language Models",

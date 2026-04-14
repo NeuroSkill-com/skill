@@ -35,6 +35,7 @@ import {
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { getDevices, pairDevice as pairDeviceCmd } from "$lib/daemon/devices";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { daemonStatus } from "$lib/daemon/status.svelte";
 import {
   ArtifactEvents,
   BrainStateScores,
@@ -92,6 +93,60 @@ async function refreshModelDl() {
 }
 
 const modelDlVisible = $derived(modelDl.downloading_weights || modelDl.download_retry_in_secs > 0);
+
+// ── Daemon auto-launch countdown ──────────────────────────────────────────
+let daemonCountdown = $state(-1); // -1 = inactive
+let daemonCountdownTimer: ReturnType<typeof setInterval> | null = null;
+let daemonLaunching = $state(false);
+
+function clearDaemonCountdown() {
+  if (daemonCountdownTimer) {
+    clearInterval(daemonCountdownTimer);
+    daemonCountdownTimer = null;
+  }
+  daemonCountdown = -1;
+}
+
+function startDaemonCountdown() {
+  if (daemonCountdownTimer || daemonLaunching) return;
+  daemonCountdown = 10;
+  daemonCountdownTimer = setInterval(() => {
+    if (daemonStatus.state === "connected") {
+      clearDaemonCountdown();
+      daemonLaunching = false;
+      return;
+    }
+    daemonCountdown--;
+    if (daemonCountdown <= 0) {
+      clearDaemonCountdown();
+      launchDaemon();
+    }
+  }, 1000);
+}
+
+async function launchDaemon() {
+  daemonLaunching = true;
+  try {
+    await invoke("start_daemon_dev");
+  } catch (e) {
+    addToast("error", "Daemon", `Failed to start daemon: ${e}`, 6000);
+  } finally {
+    // Give it a moment, then reset if still not connected
+    setTimeout(() => {
+      daemonLaunching = false;
+    }, 5000);
+  }
+}
+
+$effect(() => {
+  const s = daemonStatus.state;
+  if (s === "connected") {
+    clearDaemonCountdown();
+    daemonLaunching = false;
+  } else if (s === "disconnected" || s === "error") {
+    startDaemonCountdown();
+  }
+});
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface EegPacket {
@@ -1355,6 +1410,7 @@ onDestroy(() => {
     clearInterval(modelDlTimer);
     modelDlTimer = null;
   }
+  clearDaemonCountdown();
   autoHeightRo?.disconnect();
   autoHeightRo = null;
   if (autoHeightTimer) {
@@ -2527,12 +2583,24 @@ useWindowTitle("window.title.main");
         {/if}
       </p>
       <div class="flex items-center gap-2 shrink-0">
-        {#await import('$lib/daemon/status.svelte') then { daemonStatus }}
           <span class="flex items-center gap-1" title="{t('daemon.titlePrefix')}: {daemonStatus.state}">
             <span class="inline-block h-1.5 w-1.5 rounded-full {daemonStatus.state === 'connected' ? 'bg-green-500' : daemonStatus.state === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'}"></span>
-            <span class="text-[0.48rem] text-muted-foreground/30">{daemonStatus.state === 'connected' ? t('daemon.stateConnected') : daemonStatus.state === 'connecting' ? t('daemon.stateConnecting') : daemonStatus.state === 'error' ? t('daemon.stateError') : t('daemon.stateDisconnected')}</span>
+            {#if daemonStatus.state !== "connected" && (daemonCountdown > 0 || daemonLaunching)}
+              <button
+                class="text-[0.48rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer tabular-nums"
+                title={t("daemon.launchNow")}
+                onclick={() => { clearDaemonCountdown(); launchDaemon(); }}
+              >
+                {#if daemonLaunching}
+                  {t("daemon.starting")}
+                {:else}
+                  {t("daemon.launchingIn", { secs: daemonCountdown })}
+                {/if}
+              </button>
+            {:else}
+              <span class="text-[0.48rem] text-muted-foreground/30">{daemonStatus.state === 'connected' ? t('daemon.stateConnected') : daemonStatus.state === 'connecting' ? t('daemon.stateConnecting') : daemonStatus.state === 'error' ? t('daemon.stateError') : t('daemon.stateDisconnected')}</span>
+            {/if}
           </span>
-        {/await}
         <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>
       </div>
     </CardFooter>
