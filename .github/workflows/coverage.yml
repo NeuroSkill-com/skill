@@ -54,8 +54,8 @@ jobs:
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
-            protobuf-compiler
-          version: tauri-rust-check-v4
+            protobuf-compiler libopenblas-dev
+          version: tauri-rust-check-v5
 
       - name: Setup Vulkan SDK
         uses: ./.github/actions/setup-vulkan-linux

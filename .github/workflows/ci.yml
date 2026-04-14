@@ -126,8 +126,8 @@ jobs:
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
-            protobuf-compiler
-          version: tauri-rust-check-v4
+            protobuf-compiler libopenblas-dev
+          version: tauri-rust-check-v5
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
       # Cached via reusable action to avoid repeated ~200 MB downloads.
@@ -916,8 +916,8 @@ jobs:
             libssl-dev pkg-config cmake binutils
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev mold clang
-            protobuf-compiler
-          version: llm-e2e-v3
+            protobuf-compiler libopenblas-dev
+          version: llm-e2e-v4
 
       # Reuse the same Vulkan SDK cache as rust-check via reusable setup action.
       - name: Setup Vulkan SDK
@@ -1021,8 +1021,8 @@ jobs:
             libssl-dev pkg-config cmake binutils
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev mold clang
-            protobuf-compiler
-          version: lsl-e2e-v1
+            protobuf-compiler libopenblas-dev
+          version: lsl-e2e-v2
 
       - name: Run LSL E2E test
         env:

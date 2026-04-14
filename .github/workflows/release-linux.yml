@@ -87,7 +87,8 @@ jobs:
             mold
             clang
             protobuf-compiler
-          version: tauri-release-linux-v5
+            libopenblas-dev
+          version: tauri-release-linux-v6
 
       # ── Rust toolchain + build cache bootstrap ───────────────────────────────
       - name: Setup Rust bootstrap (Linux)
