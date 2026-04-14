@@ -20,7 +20,7 @@ csv         = "1"
 parquet     = { version = "58", default-features = false, features = ["arrow", "snap", "zstd"] }
 arrow-array = "58"
 arrow-schema = "58"
-llmfit-core = "0.8.4"
+llmfit-core = "0.9.7"
 sysinfo     = "0.38"
 libc        = "0.2"
 
