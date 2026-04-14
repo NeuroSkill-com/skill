@@ -795,6 +795,14 @@ pub struct UserSettings {
     /// Embedding reindex behaviour when a model changes.
     #[serde(default)]
     pub reembed: ReembedConfig,
+
+    /// Automatically restart the daemon if it becomes unreachable.
+    #[serde(default = "default_daemon_auto_restart")]
+    pub daemon_auto_restart: bool,
+
+    /// Seconds to wait before restarting an unreachable daemon.
+    #[serde(default = "default_daemon_restart_timeout")]
+    pub daemon_restart_timeout_secs: u64,
 }
 
 /// A remembered LSL stream for auto-connect.
@@ -832,6 +840,13 @@ pub struct ReembedConfig {
     pub batch_size: usize,
     /// Milliseconds to sleep between batches (backpressure control).
     pub batch_delay_ms: u64,
+}
+
+fn default_daemon_auto_restart() -> bool {
+    true
+}
+fn default_daemon_restart_timeout() -> u64 {
+    10
 }
 
 impl Default for ReembedConfig {
@@ -1010,6 +1025,8 @@ impl Default for UserSettings {
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
             exg_inference_device: default_exg_inference_device(),
             reembed: ReembedConfig::default(),
+            daemon_auto_restart: default_daemon_auto_restart(),
+            daemon_restart_timeout_secs: default_daemon_restart_timeout(),
         }
     }
 }

@@ -26,6 +26,10 @@ const search: Record<string, string> = {
   "embeddings.autoReembed.screenshots": "צילומי מסך",
   "embeddings.autoReembed.batchSize": "גודל אצווה",
   "embeddings.autoReembed.batchDelay": "השהיה בין אצוות (מ״ש)",
+  "embeddings.watchdog.title": "הפעלה מחדש אוטומטית של הדמון",
+  "embeddings.watchdog.desc": "הפעל מחדש את הדמון ברקע אוטומטית אם אינו נגיש.",
+  "embeddings.watchdog.enabled": "הפעלה מחדש אוטומטית",
+  "embeddings.watchdog.timeout": "הפעלה מחדש לאחר (שניות)",
 
   "label.addLabel": "הוסף תווית",
   "label.eegWindow": "חלון EEG: {elapsed}",

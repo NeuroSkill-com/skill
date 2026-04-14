@@ -27,6 +27,10 @@ const search: Record<string, string> = {
   "embeddings.autoReembed.screenshots": "スクリーンショット",
   "embeddings.autoReembed.batchSize": "バッチサイズ",
   "embeddings.autoReembed.batchDelay": "バッチ間の遅延（ms）",
+  "embeddings.watchdog.title": "デーモン自動再起動",
+  "embeddings.watchdog.desc": "バックグラウンドデーモンが応答しない場合、自動的に再起動します。",
+  "embeddings.watchdog.enabled": "自動再起動",
+  "embeddings.watchdog.timeout": "再起動までの時間（秒）",
 
   "label.addLabel": "ラベルを追加",
   "label.eegWindow": "EEGウィンドウ：{elapsed}",

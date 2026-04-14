@@ -102,6 +102,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   reembed_labels: [P, "/v1/labels/reembed"],
   get_reembed_config: [G, "/v1/settings/reembed-config"],
   set_reembed_config: [P, "/v1/settings/reembed-config"],
+  get_daemon_watchdog: [G, "/v1/settings/daemon-watchdog"],
+  set_daemon_watchdog: [P, "/v1/settings/daemon-watchdog"],
 
   // Search
   search_labels_by_text: [P, "/v1/search/eeg"],

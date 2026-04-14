@@ -27,6 +27,10 @@ const search: Record<string, string> = {
   "embeddings.autoReembed.screenshots": "Знімки екрана",
   "embeddings.autoReembed.batchSize": "Розмір пакета",
   "embeddings.autoReembed.batchDelay": "Затримка між пакетами (мс)",
+  "embeddings.watchdog.title": "Автоматичний перезапуск демона",
+  "embeddings.watchdog.desc": "Автоматично перезапускати фоновий демон, якщо він стає недоступним.",
+  "embeddings.watchdog.enabled": "Автоматичний перезапуск",
+  "embeddings.watchdog.timeout": "Перезапуск через (секунди)",
 
   "label.addLabel": "Додати мітку",
   "label.eegWindow": "Вікно ЕЕГ: {elapsed}",

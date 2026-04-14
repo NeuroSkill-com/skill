@@ -305,6 +305,20 @@ pub struct BandSnapshot {
     /// GPU tiler/geometry engine utilisation 0.0–1.0 (Apple Silicon).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_tiler: Option<f64>,
+
+    // ── Averaged relative band powers (δ–γ, excluding high_gamma) ───────────
+    // Mean across all channels, renormalised so δ+θ+α+β+γ = 1.0.
+    // Consumers can read these directly without per-channel averaging.
+    #[serde(default)]
+    pub rel_delta: f32,
+    #[serde(default)]
+    pub rel_theta: f32,
+    #[serde(default)]
+    pub rel_alpha: f32,
+    #[serde(default)]
+    pub rel_beta: f32,
+    #[serde(default)]
+    pub rel_gamma: f32,
 }
 
 // ── BandAnalyzer ─────────────────────────────────────────────────────────────
@@ -914,6 +928,29 @@ impl BandAnalyzer {
         let consciousness_integration =
             (0.40 * c01(coherence * 2.5) + 0.40 * c01(pac_theta_gamma * 3.0) + 0.20 * c01(pse)) * 100.0;
 
+        // Average absolute powers across channels, then normalise across all 6
+        // bands (including high_gamma) so the top-level rel_* values match the
+        // per-channel rel_* values that Tauri's BandChart uses.
+        let n_ch = ch_powers.len().max(1) as f32;
+        let avg_delta: f32 = ch_powers.iter().map(|c| c.delta).sum::<f32>() / n_ch;
+        let avg_theta: f32 = ch_powers.iter().map(|c| c.theta).sum::<f32>() / n_ch;
+        let avg_alpha: f32 = ch_powers.iter().map(|c| c.alpha).sum::<f32>() / n_ch;
+        let avg_beta: f32 = ch_powers.iter().map(|c| c.beta).sum::<f32>() / n_ch;
+        let avg_gamma: f32 = ch_powers.iter().map(|c| c.gamma).sum::<f32>() / n_ch;
+        let avg_high_gamma: f32 = ch_powers.iter().map(|c| c.high_gamma).sum::<f32>() / n_ch;
+        let band_total = avg_delta + avg_theta + avg_alpha + avg_beta + avg_gamma + avg_high_gamma;
+        let (r_delta, r_theta, r_alpha, r_beta, r_gamma) = if band_total > 0.0 {
+            (
+                avg_delta / band_total,
+                avg_theta / band_total,
+                avg_alpha / band_total,
+                avg_beta / band_total,
+                avg_gamma / band_total,
+            )
+        } else {
+            (0.0, 0.0, 0.0, 0.0, 0.0)
+        };
+
         self.latest = Some(BandSnapshot {
             timestamp: now,
             channels: ch_powers,
@@ -968,6 +1005,11 @@ impl BandAnalyzer {
             gpu_overall: None,
             gpu_render: None,
             gpu_tiler: None,
+            rel_delta: r_delta,
+            rel_theta: r_theta,
+            rel_alpha: r_alpha,
+            rel_beta: r_beta,
+            rel_gamma: r_gamma,
         });
     }
 }

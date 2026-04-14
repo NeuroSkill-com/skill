@@ -51,6 +51,25 @@ async function loadReembedConfig() {
   } catch (_) {}
 }
 
+// ── Daemon watchdog config ─────────────────────────────────────────────────
+interface WatchdogConfig {
+  enabled: boolean;
+  timeout_secs: number;
+}
+let watchdogCfg = $state<WatchdogConfig>({ enabled: true, timeout_secs: 10 });
+
+async function loadWatchdogConfig() {
+  try {
+    watchdogCfg = await daemonInvoke<WatchdogConfig>("get_daemon_watchdog");
+  } catch (_) {}
+}
+
+async function saveWatchdogConfig() {
+  try {
+    await daemonInvoke("set_daemon_watchdog", watchdogCfg);
+  } catch (_) {}
+}
+
 async function saveReembedConfig() {
   savingCfg = true;
   try {
@@ -113,7 +132,7 @@ async function reembed() {
 }
 
 onMount(async () => {
-  await Promise.all([load(), loadReembedConfig()]);
+  await Promise.all([load(), loadReembedConfig(), loadWatchdogConfig()]);
   unlisten = await listen<{ done: number; total: number }>("embed-progress", (e) => {
     progress = e.payload;
   });
@@ -318,6 +337,40 @@ function dimColor(_dim: number) {
                       focus:outline-none focus:ring-1 focus:ring-ring/50" />
       </div>
     </div>
+  </div>
+
+  <Separator />
+
+  <!-- ── Daemon watchdog ─────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-3">
+    <span class="text-[0.72rem] font-semibold text-foreground">
+      {t("embeddings.watchdog.title")}
+    </span>
+    <p class="text-[0.6rem] text-muted-foreground/60 leading-relaxed -mt-1">
+      {t("embeddings.watchdog.desc")}
+    </p>
+    <label class="flex items-center justify-between gap-2 cursor-pointer">
+      <span class="text-[0.68rem] text-foreground">{t("embeddings.watchdog.enabled")}</span>
+      <input type="checkbox" bind:checked={watchdogCfg.enabled} onchange={saveWatchdogConfig}
+             class="w-8 h-4 rounded-full appearance-none bg-muted dark:bg-white/[0.08]
+                    checked:bg-primary relative cursor-pointer transition-colors
+                    after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                    after:w-3 after:h-3 after:rounded-full after:bg-white after:transition-transform
+                    checked:after:translate-x-4" />
+    </label>
+    {#if watchdogCfg.enabled}
+      <div class="flex flex-col gap-1">
+        <label for="watchdog-timeout" class="text-[0.6rem] text-muted-foreground/60">
+          {t("embeddings.watchdog.timeout")}
+        </label>
+        <input id="watchdog-timeout" type="number" min="5" max="120" step="5"
+               bind:value={watchdogCfg.timeout_secs} onchange={saveWatchdogConfig}
+               class="w-32 rounded-md border border-border dark:border-white/[0.08]
+                      bg-white dark:bg-[#14141e] px-2.5 py-1.5
+                      text-[0.7rem] text-foreground tabular-nums
+                      focus:outline-none focus:ring-1 focus:ring-ring/50" />
+      </div>
+    {/if}
   </div>
 
 </section>
