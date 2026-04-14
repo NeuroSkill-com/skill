@@ -656,6 +656,7 @@ onDestroy(() => {
     <CardContent class="py-0 px-0">
       <button
         role="switch" aria-checked={autoConnect}
+        aria-label="Toggle auto-connect"
         onclick={toggleAutoConnect}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]"
@@ -1138,6 +1139,7 @@ onDestroy(() => {
                 {t("lsl.irohEndpointId")}
               </span>
               <button
+                aria-label="Copy endpoint ID"
                 class="ml-auto text-[0.52rem] font-semibold px-2 py-0.5 rounded
                        border border-cyan-500/30 text-cyan-600 dark:text-cyan-400
                        hover:bg-cyan-500/10 transition-colors cursor-pointer"

@@ -499,6 +499,7 @@ function logDistance(row: HookLogRow): string {
             <div class="grid grid-cols-12 gap-2 items-center">
               <input
                 class="col-span-7 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                aria-label={t("hooks.name")}
                 placeholder={t("hooks.name")}
                 value={hook.name}
                 oninput={(e) => updateHook(i, { name: (e.currentTarget as HTMLInputElement).value })}
@@ -546,6 +547,7 @@ function logDistance(row: HookLogRow): string {
             <div class="grid grid-cols-12 gap-2 items-center">
               <input
                 class="col-span-9 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                aria-label={t("hooks.addKeywordPlaceholder")}
                 placeholder={t("hooks.addKeywordPlaceholder")}
                 value={keywordDrafts[i] ?? ""}
                 oninput={(e) => onKeywordDraftInput(i, (e.currentTarget as HTMLInputElement).value)}
@@ -586,6 +588,7 @@ function logDistance(row: HookLogRow): string {
               <div class="col-span-8 relative">
                 <select
                   class="w-full appearance-none rounded-md border border-border bg-background px-2 py-1.5 pr-7 text-xs text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2"
+                  aria-label={t("hooks.scenarioLabel")}
                   value={hook.scenario ?? "any"}
                   onchange={(e) => updateHook(i, { scenario: (e.currentTarget as HTMLSelectElement).value })}
                 >
@@ -618,12 +621,14 @@ function logDistance(row: HookLogRow): string {
             <div class="grid grid-cols-12 gap-2">
               <input
                 class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                aria-label={t("hooks.command")}
                 placeholder={t("hooks.command")}
                 value={hook.command}
                 oninput={(e) => updateHook(i, { command: (e.currentTarget as HTMLInputElement).value })}
               />
               <input
                 class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                aria-label={t("hooks.text")}
                 placeholder={t("hooks.text")}
                 value={hook.text}
                 oninput={(e) => updateHook(i, { text: (e.currentTarget as HTMLInputElement).value })}

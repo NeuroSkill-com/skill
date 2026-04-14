@@ -188,7 +188,7 @@ onMount(refresh);
     <CardContent class="flex flex-col gap-3 py-3">
       <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("tokens.create")}</span>
 
-      <input type="text" bind:value={newName} placeholder={t("tokens.namePlaceholder")}
+      <input type="text" bind:value={newName} aria-label={t("tokens.namePlaceholder")} placeholder={t("tokens.namePlaceholder")}
         class="h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
                text-foreground placeholder:text-muted-foreground/40
                focus:outline-none focus:ring-1 focus:ring-ring" />

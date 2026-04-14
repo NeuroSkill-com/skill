@@ -505,6 +505,7 @@ onDestroy(() => {
     <CardContent class="py-0 px-0">
       <button
         role="switch" aria-checked={autostartEnabled}
+        aria-label="Toggle launch at login"
         onclick={toggleAutostart}
         disabled={autostartSaving}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full

@@ -89,6 +89,8 @@ let {
 <header class="relative flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#0f0f18] shrink-0 overflow-hidden min-h-0"
         data-tauri-drag-region
+        role="toolbar"
+        tabindex="-1"
         ondblclick={toggleMaximizeWindow}>
 
   <!-- Sidebar toggle -->
@@ -205,6 +207,7 @@ let {
   {#if canStart}
     <button
       onclick={onStartServer}
+      aria-label="Start server"
       class="flex items-center gap-1 text-[0.65rem] font-semibold px-2.5 py-1
              rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors cursor-pointer">
       <svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3">
@@ -215,6 +218,7 @@ let {
   {:else if canStop}
     <button
       onclick={onStopServer}
+      aria-label="Stop server"
       class="flex items-center gap-1 text-[0.65rem] font-semibold px-2.5 py-1
              rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10
              transition-colors cursor-pointer">

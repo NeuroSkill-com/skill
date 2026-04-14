@@ -59,6 +59,7 @@ export const NS_FILES = [
   "help",
   "help-ref",
   "ui",
+  "virtual-eeg",
 ];
 
 /**
@@ -295,6 +296,11 @@ export const EXEMPT_KEYS = new Set([
   "dashboard.rec", // "● REC" — universal recording indicator
   "ttsTab.apiExampleWs", // API code example — language-neutral
   "ttsTab.apiExampleHttp", // API code example — language-neutral
+  "vdev.presetMuse", // product name "Muse S"
+  "vdev.presetCyton", // product name "OpenBCI Cyton"
+  "vdev.cfgAmplitude", // "Amplitude (µV)" — identical in DE/FR
+  "veeg.amplitudeUv", // "Amplitude (µV)" — identical in DE/FR
+  "vdev.statusSession", // "Session" — identical in FR
 ]);
 
 /** Patterns for values that are inherently language-neutral. */

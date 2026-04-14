@@ -577,6 +577,7 @@ onDestroy(() => stopPolling());
               <div class="flex flex-col items-center gap-1.5 w-full max-w-64">
                 <button
                   onclick={copyInviteLink}
+                  aria-label="Copy invite link"
                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border dark:border-white/[0.1]
                          text-[0.58rem] text-muted-foreground hover:text-foreground hover:bg-muted
                          transition-colors cursor-pointer w-full justify-center"

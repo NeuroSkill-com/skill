@@ -326,6 +326,7 @@ $effect(() => {
   bind:this={fileInputEl}
   type="file"
   accept="image/*"
+  aria-label="Upload images"
   multiple
   class="hidden"
   onchange={onFilesSelected}

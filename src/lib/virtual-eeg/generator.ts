@@ -159,7 +159,7 @@ export function generateSamples(config: VirtualEegConfig, sampleIndex: number): 
       }
 
       case "file": {
-        if (config.fileData && config.fileData[ch]) {
+        if (config.fileData?.[ch]) {
           const data = config.fileData[ch];
           value = data[sampleIndex % data.length] ?? 0;
         }

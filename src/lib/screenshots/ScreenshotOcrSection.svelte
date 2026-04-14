@@ -50,6 +50,7 @@ let { enabled, isMac, ocrEngine, useGpu, sharedTextModel, saving, onSetOcrEngine
       <div class="flex flex-col gap-1.5">
         <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.ocrEngineSelect")}</span>
         <select
+          aria-label="OCR engine"
           value={ocrEngine}
           onchange={(e) => onSetOcrEngine((e.target as HTMLSelectElement).value)}
           class="w-full rounded-lg border border-border dark:border-white/[0.08]

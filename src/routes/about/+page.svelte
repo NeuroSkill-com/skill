@@ -74,19 +74,19 @@ onMount(async () => {
         </p>
         <div class="flex gap-4">
           <a href={info.website}
-             target="_blank" rel="noreferrer"
+             target="_blank" rel="noreferrer" aria-label="Website"
              class="flex items-center gap-1.5 text-[0.8rem] text-blue-500 dark:text-blue-400
                     hover:underline underline-offset-2 transition-colors">
             <span class="text-[0.7rem] opacity-60">🌐</span>{info.websiteLabel}
           </a>
           <a href={info.repoUrl}
-             target="_blank" rel="noreferrer"
+             target="_blank" rel="noreferrer" aria-label="Source code repository"
              class="flex items-center gap-1.5 text-[0.8rem] text-blue-500 dark:text-blue-400
                     hover:underline underline-offset-2 transition-colors">
             <span class="text-[0.7rem] opacity-60">📦</span>{t("about.sourceCode")}
           </a>
           <a href={info.discordUrl}
-             target="_blank" rel="noreferrer"
+             target="_blank" rel="noreferrer" aria-label="Discord community"
              class="flex items-center gap-1.5 text-[0.8rem] text-blue-500 dark:text-blue-400
                     hover:underline underline-offset-2 transition-colors">
             <span class="text-[0.7rem] opacity-60">💬</span>{t("about.discord")}

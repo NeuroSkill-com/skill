@@ -886,6 +886,7 @@ onDestroy(() => {
       <input
         type="text"
         bind:value={supportedDevicesSearchQuery}
+        aria-label={t("settings.supportedDevices.search")}
         placeholder={t("settings.supportedDevices.search")}
         class="text-[0.73rem] px-2.5 py-1.5 rounded-md border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-muted-foreground/50" />
     </div>
@@ -1043,13 +1044,13 @@ onDestroy(() => {
               <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciSerialPort")}</p>
               <div class="flex gap-2 items-center">
                 {#if serialPorts.length > 0}
-                  <select bind:value={openbci.serial_port} onchange={() => { openbciChanged = true; }}
+                  <select bind:value={openbci.serial_port} aria-label={t("settings.openbciSerialPort")} onchange={() => { openbciChanged = true; }}
                     class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground">
                     <option value="">{t("settings.openbciSerialPortPlaceholder")}</option>
                     {#each serialPorts as p}<option value={p}>{p}</option>{/each}
                   </select>
                 {:else}
-                  <input type="text" bind:value={openbci.serial_port} oninput={() => { openbciChanged = true; }}
+                  <input type="text" bind:value={openbci.serial_port} aria-label={t("settings.openbciSerialPort")} oninput={() => { openbciChanged = true; }}
                     placeholder={t("settings.openbciSerialPortPlaceholder")}
                     class="flex-1 min-w-0 text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
                 {/if}
@@ -1074,7 +1075,7 @@ onDestroy(() => {
                             border border-border dark:border-white/[0.06]" />
                 <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciWifiShieldIp")}</p>
               </div>
-              <input type="text" bind:value={openbci.wifi_shield_ip} oninput={() => { openbciChanged = true; }}
+              <input type="text" bind:value={openbci.wifi_shield_ip} aria-label={t("settings.openbciWifiShieldIp")} oninput={() => { openbciChanged = true; }}
                 placeholder={t("settings.openbciWifiShieldIpPlaceholder")}
                 class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
               <div class="flex items-center gap-3 mt-1">
@@ -1096,7 +1097,7 @@ onDestroy(() => {
           {#if isGalea}
             <div class="flex flex-col gap-1.5">
               <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciGaleaIp")}</p>
-              <input type="text" bind:value={openbci.galea_ip} oninput={() => { openbciChanged = true; }}
+              <input type="text" bind:value={openbci.galea_ip} aria-label={t("settings.openbciGaleaIp")} oninput={() => { openbciChanged = true; }}
                 placeholder={t("settings.openbciGaleaIpPlaceholder")}
                 class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
             </div>
@@ -1118,6 +1119,7 @@ onDestroy(() => {
 
             <div class="flex items-center gap-2">
               <select
+                aria-label="Channel preset"
                 value={activePreset === "__custom__" ? "__custom__" : activePreset}
                 onchange={(e) => applyPreset((e.currentTarget as HTMLSelectElement).value)}
                 class="flex-1 min-w-0 text-[0.68rem] h-7 px-2 rounded border border-border
@@ -1142,6 +1144,7 @@ onDestroy(() => {
                 <div class="flex flex-col gap-0.5 min-w-0">
                   <span class="text-[0.58rem] text-muted-foreground tabular-nums text-center">{i + 1}</span>
                   <input type="text"
+                    aria-label={`Channel ${i + 1} label`}
                     value={openbciChannelLabel(i)}
                     oninput={(e) => setChannelLabel(i, (e.currentTarget as HTMLInputElement).value)}
                     placeholder={defaultChannelNames[i] ?? `Ch${i+1}`}

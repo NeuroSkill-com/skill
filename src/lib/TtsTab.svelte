@@ -607,6 +607,7 @@ async function toggleTtsLog() {
             </div>
 
             <select
+              aria-label={t("ttsTab.neuttsModelDesc")}
               bind:value={neuttsConfig.backbone_repo}
               onchange={() => { neuttsDirty = true; }}
               class="w-full rounded-lg border border-border dark:border-white/[0.08]
@@ -717,6 +718,7 @@ async function toggleTtsLog() {
                   </span>
                   <textarea
                     bind:value={neuttsConfig.ref_text}
+                    aria-label={t("ttsTab.neuttsRefTextLabel")}
                     oninput={() => { neuttsDirty = true; }}
                     rows={2}
                     placeholder={t("ttsTab.neuttsRefTextPlaceholder")}

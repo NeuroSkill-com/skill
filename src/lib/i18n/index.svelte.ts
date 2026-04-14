@@ -38,6 +38,7 @@ export const SUPPORTED_LOCALES: LocaleMeta[] = [
   { code: "fr", name: "Français", flag: "🇫🇷", dir: "ltr" },
   { code: "he", name: "עברית", flag: "🇮🇱", dir: "rtl" },
   { code: "ja", name: "日本語", flag: "🇯🇵", dir: "ltr" },
+  { code: "ko", name: "한국어", flag: "🇰🇷", dir: "ltr" },
   { code: "uk", name: "Українська", flag: "🇺🇦", dir: "ltr" },
   { code: "zh", name: "中文", flag: "🇨🇳", dir: "ltr" },
 ];
@@ -83,6 +84,7 @@ const loaders: Record<string, () => Promise<{ default: Record<string, string> }>
   es: () => import("./es/index"),
   he: () => import("./he/index"),
   ja: () => import("./ja/index"),
+  ko: () => import("./ko/index"),
   uk: () => import("./uk/index"),
   zh: () => import("./zh/index"),
 };

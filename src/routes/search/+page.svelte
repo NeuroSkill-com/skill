@@ -944,11 +944,13 @@ useWindowTitle("window.title.search");
         {/each}
         <div class="flex items-center gap-1 ml-auto">
           <input type="datetime-local" step="1" bind:value={startInput}
+                 aria-label="Search start time"
                  class="rounded border border-border dark:border-white/[0.1]
                         bg-background px-2 py-1 text-[0.7rem]
                         focus:outline-none focus:ring-1 focus:ring-ring" />
           <span class="text-muted-foreground/40 text-[0.65rem] select-none">→</span>
           <input type="datetime-local" step="1" bind:value={endInput}
+                 aria-label="Search end time"
                  class="rounded border border-border dark:border-white/[0.1]
                         bg-background px-2 py-1 text-[0.7rem]
                         focus:outline-none focus:ring-1 focus:ring-ring" />
@@ -960,6 +962,7 @@ useWindowTitle("window.title.search");
         <div class="flex items-center gap-1.5">
           <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">k</span>
           <input type="number" min="1" max="100" bind:value={kVal}
+                 aria-label="k nearest neighbors"
                  class="w-14 rounded border border-border dark:border-white/[0.1]
                         bg-background px-1.5 py-1 text-[0.72rem] text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
@@ -967,6 +970,7 @@ useWindowTitle("window.title.search");
         <div class="flex items-center gap-1.5">
           <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">ef</span>
           <input type="number" min="10" max="500" bind:value={efVal}
+                 aria-label="ef search parameter"
                  class="w-16 rounded border border-border dark:border-white/[0.1]
                         bg-background px-1.5 py-1 text-[0.72rem] text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
@@ -1034,6 +1038,7 @@ useWindowTitle("window.title.search");
           <!-- Query textarea -->
           <div class="px-3 pt-2 pb-0 border-t border-border dark:border-white/[0.06]">
             <textarea bind:value={ixQuery}
+                      aria-label="Interactive search query"
                       onkeydown={onIxKeydown}
                       placeholder={t("search.interactiveQueryPlaceholder")}
                       rows="2"
@@ -1075,6 +1080,7 @@ useWindowTitle("window.title.search");
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">−</button>
                 <input type="number" min={step.min} max={step.max} value={step.val}
+                       aria-label="{step.title} value"
                        oninput={(e) => step.set(Number((e.target as HTMLInputElement).value))}
                        class="w-9 rounded border border-border dark:border-white/[0.1]
                               bg-background px-0.5 py-0.5 text-[0.68rem] text-center font-mono
@@ -1140,6 +1146,7 @@ useWindowTitle("window.title.search");
         <div class="flex items-center gap-1.5">
           <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">k</span>
           <input type="number" min="1" max="100" bind:value={kVal}
+                 aria-label="k nearest neighbors"
                  class="w-14 rounded border border-border dark:border-white/[0.1]
                         bg-background px-1.5 py-1 text-[0.72rem] text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
@@ -1218,6 +1225,7 @@ useWindowTitle("window.title.search");
         <line x1="7" y1="7" x2="7.01" y2="7"/>
       </svg>
       <input type="text" placeholder={t("search.filterByLabel")} bind:value={labelFilter}
+             aria-label="Filter by label"
              oninput={() => { page = 0; }}
              class="flex-1 bg-transparent text-[0.7rem] focus:outline-none
                     placeholder:text-muted-foreground/30" />
@@ -1239,6 +1247,7 @@ useWindowTitle("window.title.search");
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
       <input type="text" placeholder={t("search.textFilterLabel")} bind:value={textFilter}
+             aria-label="Filter text results"
              oninput={() => { page = 0; }}
              class="flex-1 bg-transparent text-[0.7rem] focus:outline-none
                     placeholder:text-muted-foreground/30" />

@@ -29,6 +29,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const I18N_DIR = path.resolve(__dirname, "../src/lib/i18n");
+const HELP_CONTENT_DIR = path.resolve(__dirname, "../src/lib/help/content");
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -103,11 +104,77 @@ function main() {
     }
   }
 
-  if (doCheck && totalUntranslated > 0) {
-    console.error(`\n[audit-i18n] ${totalUntranslated} untranslated key(s) found. Run without --check for details.`);
+  // ── Help markdown content audit ───────────────────────────────────────────
+  let mdIssues = 0;
+  if (fs.existsSync(HELP_CONTENT_DIR)) {
+    const enMdDir = path.join(HELP_CONTENT_DIR, "en");
+    const enMdFiles = fs.existsSync(enMdDir)
+      ? fs.readdirSync(enMdDir).filter((f) => f.endsWith(".md")).sort()
+      : [];
+
+    if (enMdFiles.length > 0) {
+      console.log("\n── Help markdown content ─────────────────────────────");
+
+      // Discover locale dirs under help/content (excluding en)
+      const mdLocales = fs
+        .readdirSync(HELP_CONTENT_DIR, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name !== "en")
+        .map((d) => d.name)
+        .filter((l) => !filterLocale || l === filterLocale)
+        .sort();
+
+      // Check which i18n locales are missing a help/content dir entirely
+      for (const locale of locales) {
+        if (!fs.existsSync(path.join(HELP_CONTENT_DIR, locale))) {
+          console.log(`\n⚠️  ${locale}: help/content/${locale}/ directory missing`);
+          mdIssues++;
+        }
+      }
+
+      for (const locale of mdLocales) {
+        const locMdDir = path.join(HELP_CONTENT_DIR, locale);
+        const locMdFiles = fs.readdirSync(locMdDir).filter((f) => f.endsWith(".md")).sort();
+        const missing = enMdFiles.filter((f) => !locMdFiles.includes(f));
+        const extra = locMdFiles.filter((f) => !enMdFiles.includes(f));
+
+        // Count headings per file to verify structure matches
+        const structureMismatches: string[] = [];
+        for (const file of enMdFiles) {
+          const locFile = path.join(locMdDir, file);
+          if (!fs.existsSync(locFile)) continue;
+          const enHeadings = fs
+            .readFileSync(path.join(enMdDir, file), "utf8")
+            .split("\n")
+            .filter((l) => /^#{1,3} /.test(l)).length;
+          const locHeadings = fs
+            .readFileSync(locFile, "utf8")
+            .split("\n")
+            .filter((l) => /^#{1,3} /.test(l)).length;
+          if (enHeadings !== locHeadings) {
+            structureMismatches.push(`${file}: ${locHeadings} headings (en has ${enHeadings})`);
+          }
+        }
+
+        const issues = missing.length + extra.length + structureMismatches.length;
+        if (issues === 0) {
+          console.log(`\n✅ ${locale}: all ${enMdFiles.length} markdown files present, structure OK`);
+        } else {
+          mdIssues += issues;
+          console.log(`\n⚠️  ${locale}: ${issues} markdown issue(s)`);
+          for (const f of missing) console.log(`    missing: ${f}`);
+          for (const f of extra) console.log(`    extra:   ${f}`);
+          for (const m of structureMismatches) console.log(`    structure: ${m}`);
+        }
+      }
+    }
+  }
+
+  const totalIssues = totalUntranslated + mdIssues;
+  if (doCheck && totalIssues > 0) {
+    console.error(`\n[audit-i18n] ${totalUntranslated} untranslated key(s), ${mdIssues} markdown issue(s) found. Run without --check for details.`);
     process.exit(1);
-  } else if (totalUntranslated === 0) {
-    console.log("\n✅ All keys are translated (or exempt).");
+  } else if (totalIssues === 0) {
+    console.log("\n✅ All keys are translated (or exempt). All markdown content present.");
   }
 }
 

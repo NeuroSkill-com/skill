@@ -330,6 +330,7 @@ $effect(() => {
     <!-- ── Family selector dropdown ───────────────────────────────────── -->
     <div class="relative">
       <select
+        aria-label="EXG model family"
         bind:value={selectedFamilyId}
         class="w-full appearance-none rounded-xl border border-border dark:border-white/[0.06]
                bg-white dark:bg-[#14141e] text-foreground text-[0.78rem] font-semibold

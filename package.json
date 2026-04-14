@@ -77,7 +77,9 @@
     "lint": "npx biome check src/ scripts/",
     "lint:fix": "npx biome check --write src/ scripts/",
     "format": "npx biome format --write src/ scripts/",
-    "format:check": "npx biome format src/ scripts/"
+    "format:check": "npx biome format src/ scripts/",
+    "audit:a11y": "node scripts/audit-a11y.js",
+    "audit:a11y:check": "node scripts/audit-a11y.js --check"
   },
   "license": "GPL-3.0-only",
   "dependencies": {

@@ -150,6 +150,7 @@ async function dismiss() {
         <!-- Version picker dropdown -->
         <div class="relative flex-1 min-w-0 max-w-[13rem]">
           <select
+            aria-label="Select version"
             bind:value={currentIdx}
             class="w-full appearance-none text-center text-[0.7rem] font-medium
                    text-foreground bg-background dark:bg-[#14141e]

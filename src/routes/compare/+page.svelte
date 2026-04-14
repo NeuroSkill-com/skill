@@ -963,6 +963,7 @@ useWindowTitle("window.title.compare");
               </button>
 
               <select
+                aria-label="Select day"
                 value={dayStr ?? ""}
                 onchange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) selectDay(side, v); }}
                 class="text-[0.62rem] font-medium text-foreground/80 bg-transparent
@@ -1096,6 +1097,7 @@ useWindowTitle("window.title.compare");
             <div class="flex items-center gap-1.5">
               <span class="text-[0.5rem] text-muted-foreground/50 shrink-0">{t("compare.timeFrom")}</span>
               <input type="datetime-local"
+                aria-label="Range start time"
                 value={rangeStart !== null ? utcToDateTimeLocal(rangeStart) : utcToDateTimeLocal(anchor)}
                 min={utcToDateTimeLocal(anchor)}
                 max={utcToDateTimeLocal(anchor + 172800)}
@@ -1106,6 +1108,7 @@ useWindowTitle("window.title.compare");
                 style="--tw-ring-color:{accent}50"/>
               <span class="text-[0.5rem] text-muted-foreground/50 shrink-0">–</span>
               <input type="datetime-local"
+                aria-label="Range end time"
                 value={rangeEnd !== null ? utcToDateTimeLocal(rangeEnd) : utcToDateTimeLocal(anchor + 86400)}
                 min={utcToDateTimeLocal(anchor)}
                 max={utcToDateTimeLocal(anchor + 172800)}

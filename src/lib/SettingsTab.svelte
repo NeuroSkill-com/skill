@@ -763,6 +763,7 @@ onDestroy(() => {
       <div class="flex items-center gap-2">
         <input type="text"
                bind:value={dataDirInput}
+               aria-label="Data directory"
                oninput={() => { dataDirChanged = dataDirInput !== dataDirCurrent; }}
                placeholder={dataDirDefault}
                class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
@@ -851,6 +852,7 @@ onDestroy(() => {
         <p class="text-[0.58rem] text-muted-foreground leading-relaxed">{t("settings.wsPortDesc")}</p>
         <div class="flex items-center gap-2">
           <input type="number" min="1024" max="65535"
+                 aria-label={t("settings.wsPort")}
                  bind:value={wsPortInput}
                  oninput={() => {
                    const n = parseInt(wsPortInput, 10);
@@ -918,6 +920,7 @@ onDestroy(() => {
       <div class="flex items-center gap-2">
         <input type="text"
                bind:value={hfEndpointInput}
+               aria-label="Hugging Face endpoint URL"
                placeholder="https://huggingface.co"
                class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
                       font-mono text-foreground placeholder:text-muted-foreground/40
@@ -953,6 +956,7 @@ onDestroy(() => {
         <div class="flex items-center gap-2 mt-1">
           <input type="password"
                  bind:value={apiTokenInput}
+                 aria-label={t("settings.apiTokenLabel")}
                  placeholder={t("settings.apiTokenPlaceholder")}
                  class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
                         font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring" />

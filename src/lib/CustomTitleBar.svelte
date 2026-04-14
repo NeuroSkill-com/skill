@@ -298,6 +298,7 @@ onDestroy(() => {
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
         <input type="search" class="help-search-input" bind:value={helpTitlebarState.query}
+               aria-label={t("help.searchPlaceholder")}
                placeholder={t("help.searchPlaceholder")} autocomplete="off" spellcheck="false" />
         {#if helpTitlebarState.query}
           <button class="help-search-clear" onclick={() => helpTitlebarState.query = ""}

@@ -302,6 +302,7 @@ useWindowTitle("window.title.labels");
 
         <input
           type="text"
+          aria-label="Search labels"
           bind:value={search}
           onkeydown={(e) => {
             if (e.key === "Enter" && searchMode === "semantic") {
@@ -483,6 +484,7 @@ useWindowTitle("window.title.labels");
               <div class="flex flex-col gap-2">
                 <input
                   type="text"
+                  aria-label="Edit label text"
                   bind:value={editText}
                   onkeydown={(e) => {
                     if (e.key === "Escape") cancelEdit();
@@ -495,6 +497,7 @@ useWindowTitle("window.title.labels");
                   use:focusOnMount
                 />
                 <textarea
+                  aria-label="Edit label context"
                   bind:value={editContext}
                   placeholder={t("label.contextPlaceholder")}
                   onkeydown={(e) => {

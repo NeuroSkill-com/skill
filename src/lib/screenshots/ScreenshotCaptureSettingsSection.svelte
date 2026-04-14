@@ -91,6 +91,7 @@ let { config, saving, recommendedSize, onUpdate, onSave }: Props = $props();
 
         <div class="flex flex-col gap-1">
           <select
+            aria-label="Embedding backend"
             value={config.embed_backend}
             onchange={(e) => onUpdate({ embed_backend: (e.target as HTMLSelectElement).value }, true)}
             class="w-full rounded-lg border border-border dark:border-white/[0.08] bg-white dark:bg-[#14141e] px-3 py-2 text-[0.72rem] text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/50">
@@ -101,6 +102,7 @@ let { config, saving, recommendedSize, onUpdate, onSave }: Props = $props();
 
           {#if config.embed_backend === "fastembed"}
             <select
+              aria-label="Fastembed model"
               value={config.fastembed_model}
               onchange={(e) => onUpdate({ fastembed_model: (e.target as HTMLSelectElement).value }, true)}
               class="w-full rounded-lg border border-border dark:border-white/[0.08] bg-white dark:bg-[#14141e] px-3 py-2 text-[0.72rem] text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/50">

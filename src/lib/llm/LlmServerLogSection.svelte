@@ -83,6 +83,7 @@ function toggleAutoScroll() {
 
     <input
       type="text"
+      aria-label="Filter server logs"
       bind:value={logSearch}
       placeholder={t("chat.logFilter.search")}
       class="ml-auto h-5 w-28 text-[0.52rem] px-2 rounded-md border border-border/50

@@ -87,6 +87,7 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
       {t("screenshots.perfTitle")}
     </span>
     <button onclick={onRefresh}
+            aria-label="Refresh performance stats"
             class="text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
       ↻
     </button>

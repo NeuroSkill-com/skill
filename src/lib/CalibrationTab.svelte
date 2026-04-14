@@ -435,6 +435,7 @@ onDestroy(() => clearInterval(nowTimer));
           <div class="flex items-center justify-between">
             <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.actionLabels")}</span>
             <button onclick={addAction}
+                  aria-label="Add action"
                   class="flex items-center gap-1 text-[0.6rem] font-semibold text-primary
                     hover:text-primary/80 transition-colors">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -468,6 +469,7 @@ onDestroy(() => clearInterval(nowTimer));
               </div>
               <!-- Label -->
               <input type="text" bind:value={action.label}
+                     aria-label={t("calibration.actionLabel")}
                      placeholder={t("calibration.actionLabel")}
                      class="flex-1 rounded-lg border border-border dark:border-white/[0.08]
                             bg-muted dark:bg-[#1a1a28] px-2.5 py-1.5

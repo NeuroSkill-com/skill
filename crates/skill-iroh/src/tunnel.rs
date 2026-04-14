@@ -397,10 +397,7 @@ pub fn rotate_secret_key(skill_dir: &Path) -> anyhow::Result<(String, String)> {
     std::fs::write(&history_path, hist_json).context("write history")?;
 
     // Generate new key
-    let new_key = {
-        let mut rng = rand::rng();
-        SecretKey::generate(&mut rng)
-    };
+    let new_key = SecretKey::generate(&mut rand::rng());
     std::fs::write(&key_path, new_key.to_bytes()).context("write new key")?;
 
     #[cfg(unix)]
@@ -440,10 +437,7 @@ fn load_or_create_secret_key(skill_dir: &Path) -> anyhow::Result<SecretKey> {
         ));
     }
 
-    let secret = {
-        let mut rng = rand::rng();
-        SecretKey::generate(&mut rng)
-    };
+    let secret = SecretKey::generate(&mut rand::rng());
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

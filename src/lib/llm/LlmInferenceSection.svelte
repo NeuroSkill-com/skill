@@ -180,6 +180,7 @@ const curlSnippet = $derived(
           <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.apiKeyDesc")}</p>
           <div class="flex items-center gap-2">
             <input type={apiKeyVisible ? "text" : "password"}
+              aria-label="API key"
               placeholder={t("llm.inference.apiKeyPlaceholder")}
               value={config.api_key ?? ""}
               oninput={(e: Event) => onSetApiKey((e.target as HTMLInputElement).value || null)}

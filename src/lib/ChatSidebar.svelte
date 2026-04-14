@@ -235,6 +235,7 @@ onMount(refresh);
                   <input
                     bind:this={editEl}
                     bind:value={editTitle}
+                    aria-label="Edit conversation title"
                     onblur={commitEdit}
                     onkeydown={(e) => {
                       if (e.key === "Enter") { e.preventDefault(); commitEdit(); }

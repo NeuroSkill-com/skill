@@ -277,7 +277,7 @@ function fmtAge(unixSecs: number): string {
                     {/if}
                   </span>
                   <div class="flex items-center gap-1">
-                    <button onclick={onRefreshCache} class="rounded-md border border-border px-1.5 py-0.5 text-[0.54rem] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-background">↻</button>
+                    <button onclick={onRefreshCache} aria-label="Refresh cache" class="rounded-md border border-border px-1.5 py-0.5 text-[0.54rem] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-background">↻</button>
                     {#if cacheStats.total_entries > 0}
                       <button onclick={onClearCache} class="rounded-md border border-red-500/30 bg-red-500/5 px-2 py-0.5 text-[0.54rem] font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer">{t("llm.tools.webCacheClearAll")}</button>
                     {/if}

@@ -142,6 +142,7 @@ function roleColor(role: string): string {
                  text-muted-foreground hover:text-foreground hover:bg-muted/50
                  transition-colors"
           onclick={copyAll}
+          aria-label="Copy context"
         >
           {#if copied}
             <!-- Checkmark -->

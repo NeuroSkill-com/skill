@@ -5,7 +5,7 @@ import { t } from "$lib/i18n/index.svelte";
 </script>
 
 <section>
-  <a href="https://discord.gg/Rcvb8Cx4cZ" target="_blank" rel="noopener noreferrer"
+  <a href="https://discord.gg/Rcvb8Cx4cZ" target="_blank" rel="noopener noreferrer" aria-label="Suggest a skill on Discord"
      class="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10
             hover:bg-primary/15 transition-colors px-4 py-3 group cursor-pointer no-underline">
     <svg class="w-5 h-5 text-primary-foreground/90 bg-primary rounded-md p-0.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">

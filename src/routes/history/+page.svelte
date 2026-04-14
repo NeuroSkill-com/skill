@@ -1540,6 +1540,7 @@ useWindowTitle("window.title.history");
       <div class="flex items-center gap-2">
         <span class="text-[0.62rem] font-semibold text-foreground/80">{t("history.labels")} ({allLabels.length})</span>
         <input
+          aria-label="Search labels"
           bind:value={labelSearchQuery}
           placeholder={t("common.search")}
           class="flex-1 h-6 text-[0.62rem] rounded border border-border dark:border-white/[0.08]

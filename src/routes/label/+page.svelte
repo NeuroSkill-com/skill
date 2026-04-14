@@ -231,6 +231,7 @@ useWindowTitle("window.title.label");
       {#if useCustomTime}
         <input
           type="datetime-local"
+          aria-label="Custom label time"
           bind:value={customDatetime}
           class="h-6 rounded-md border border-border bg-background px-2 text-[0.62rem]
                  font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"

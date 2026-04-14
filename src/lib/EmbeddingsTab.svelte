@@ -160,6 +160,7 @@ function dimColor(_dim: number) {
     </div>
 
     <select
+      aria-label="Embedding code"
       bind:value={currentCode}
       class="w-full rounded-lg border border-border dark:border-white/[0.08]
              bg-white dark:bg-[#14141e] px-3 py-2

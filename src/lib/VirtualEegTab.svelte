@@ -546,6 +546,7 @@ onDestroy(() => {
               <span class="text-[0.5rem] text-muted-foreground">{t("veeg.amplitudeDesc")}</span>
             </div>
             <input type="number" min="1" max="500" step="5"
+              aria-label="Amplitude in microvolts"
               bind:value={config.amplitudeUv}
               disabled={running}
               class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem] text-right
@@ -561,6 +562,7 @@ onDestroy(() => {
               <span class="text-[0.5rem] text-muted-foreground">{t("veeg.noiseDesc")}</span>
             </div>
             <input type="number" min="0" max="100" step="1"
+              aria-label="Noise in microvolts"
               bind:value={config.noiseUv}
               disabled={running}
               class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem] text-right
@@ -600,6 +602,7 @@ onDestroy(() => {
               <span class="text-[0.5rem] text-muted-foreground">{t("veeg.dropoutDesc")}</span>
             </div>
             <input type="number" min="0" max="1" step="0.05"
+              aria-label="Dropout probability"
               bind:value={config.dropoutProb}
               disabled={running}
               class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem] text-right
