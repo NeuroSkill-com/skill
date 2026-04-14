@@ -538,6 +538,11 @@ mod tests {
             gpu_tiler: None,
             faa: 0.05,
             timestamp: 0.0,
+            rel_delta: 0.3,
+            rel_theta: 0.2,
+            rel_alpha: 0.25,
+            rel_beta: 0.15,
+            rel_gamma: 0.1,
         }
     }
 

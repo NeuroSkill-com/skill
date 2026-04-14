@@ -184,6 +184,7 @@ export const EXEMPT_KEY_PREFIXES = [
   "settings.shortcutCalibration",
   "settings.calibration", // "Calibration" cognate
   "calibration.title", // "Calibration" cognate
+  "embeddings.autoReembed.", // "Screenshots" cognate / technical label
   "embeddings.dimLegend", // "Dimensions" cognate
   "settings.action1",
   "settings.action2", // "Action" cognate
