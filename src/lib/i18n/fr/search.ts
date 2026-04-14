@@ -19,6 +19,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "Intégration en cours...",
   "embeddings.dimLegend": "Dimensions",
   "embeddings.dimHint": "plus grand = plus riche mais plus lent",
+  "embeddings.autoReembed.title": "Ré-encodage automatique",
+  "embeddings.autoReembed.desc":
+    "Ré-encoder automatiquement les données en arrière-plan lorsque le modèle change. Désactivez pour économiser les ressources.",
+  "embeddings.autoReembed.labels": "Labels textuels",
+  "embeddings.autoReembed.eeg": "Sessions EEG",
+  "embeddings.autoReembed.screenshots": "Captures d'écran",
+  "embeddings.autoReembed.batchSize": "Taille du lot",
+  "embeddings.autoReembed.batchDelay": "Délai entre les lots (ms)",
 
   "label.addLabel": "Ajouter un label",
   "label.eegWindow": "Fenêtre EEG : {elapsed}",

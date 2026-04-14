@@ -18,6 +18,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "מטמיע…",
   "embeddings.dimLegend": "ממדים",
   "embeddings.dimHint": "גדול יותר = עשיר יותר אך איטי יותר",
+  "embeddings.autoReembed.title": "הטמעה מחדש אוטומטית",
+  "embeddings.autoReembed.desc":
+    "הטמע מחדש נתונים ברקע באופן אוטומטי כאשר המודל משתנה. השבת כדי לחסוך במשאבים.",
+  "embeddings.autoReembed.labels": "תוויות טקסט",
+  "embeddings.autoReembed.eeg": "הקלטות EEG",
+  "embeddings.autoReembed.screenshots": "צילומי מסך",
+  "embeddings.autoReembed.batchSize": "גודל אצווה",
+  "embeddings.autoReembed.batchDelay": "השהיה בין אצוות (מ״ש)",
 
   "label.addLabel": "הוסף תווית",
   "label.eegWindow": "חלון EEG: {elapsed}",

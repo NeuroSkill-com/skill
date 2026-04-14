@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { Separator } from "$lib/components/ui/separator";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -26,6 +27,38 @@ let saving = $state(false);
 let reembedding = $state(false);
 let progress = $state<{ done: number; total: number } | null>(null);
 let unlisten: UnlistenFn | null = null;
+
+// ── Reembed config ────────────────────────────────────────────────────────
+interface ReembedConfig {
+  auto_labels: boolean;
+  auto_eeg: boolean;
+  auto_screenshots: boolean;
+  batch_size: number;
+  batch_delay_ms: number;
+}
+let reembedCfg = $state<ReembedConfig>({
+  auto_labels: false,
+  auto_eeg: false,
+  auto_screenshots: false,
+  batch_size: 10,
+  batch_delay_ms: 50,
+});
+let savingCfg = $state(false);
+
+async function loadReembedConfig() {
+  try {
+    reembedCfg = await daemonInvoke<ReembedConfig>("get_reembed_config");
+  } catch (_) {}
+}
+
+async function saveReembedConfig() {
+  savingCfg = true;
+  try {
+    await daemonInvoke("set_reembed_config", reembedCfg);
+  } finally {
+    savingCfg = false;
+  }
+}
 
 const activeModel = $derived(models.find((m) => m.code === currentCode) ?? null);
 
@@ -80,7 +113,7 @@ async function reembed() {
 }
 
 onMount(async () => {
-  await load();
+  await Promise.all([load(), loadReembedConfig()]);
   unlisten = await listen<{ done: number; total: number }>("embed-progress", (e) => {
     progress = e.payload;
   });
@@ -216,6 +249,75 @@ function dimColor(_dim: number) {
       </span>
     {/each}
     <span class="text-[0.56rem] text-muted-foreground/40">{t("embeddings.dimHint")}</span>
+  </div>
+
+  <Separator />
+
+  <!-- ── Auto re-embed settings ──────────────────────────────────────────── -->
+  <div class="flex flex-col gap-3">
+    <span class="text-[0.72rem] font-semibold text-foreground">
+      {t("embeddings.autoReembed.title")}
+    </span>
+    <p class="text-[0.6rem] text-muted-foreground/60 leading-relaxed -mt-1">
+      {t("embeddings.autoReembed.desc")}
+    </p>
+
+    <!-- Toggle switches -->
+    <div class="flex flex-col gap-2">
+      <label class="flex items-center justify-between gap-2 cursor-pointer">
+        <span class="text-[0.68rem] text-foreground">{t("embeddings.autoReembed.labels")}</span>
+        <input type="checkbox" bind:checked={reembedCfg.auto_labels} onchange={saveReembedConfig}
+               class="w-8 h-4 rounded-full appearance-none bg-muted dark:bg-white/[0.08]
+                      checked:bg-primary relative cursor-pointer transition-colors
+                      after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                      after:w-3 after:h-3 after:rounded-full after:bg-white after:transition-transform
+                      checked:after:translate-x-4" />
+      </label>
+      <label class="flex items-center justify-between gap-2 cursor-pointer">
+        <span class="text-[0.68rem] text-foreground">{t("embeddings.autoReembed.eeg")}</span>
+        <input type="checkbox" bind:checked={reembedCfg.auto_eeg} onchange={saveReembedConfig}
+               class="w-8 h-4 rounded-full appearance-none bg-muted dark:bg-white/[0.08]
+                      checked:bg-primary relative cursor-pointer transition-colors
+                      after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                      after:w-3 after:h-3 after:rounded-full after:bg-white after:transition-transform
+                      checked:after:translate-x-4" />
+      </label>
+      <label class="flex items-center justify-between gap-2 cursor-pointer">
+        <span class="text-[0.68rem] text-foreground">{t("embeddings.autoReembed.screenshots")}</span>
+        <input type="checkbox" bind:checked={reembedCfg.auto_screenshots} onchange={saveReembedConfig}
+               class="w-8 h-4 rounded-full appearance-none bg-muted dark:bg-white/[0.08]
+                      checked:bg-primary relative cursor-pointer transition-colors
+                      after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                      after:w-3 after:h-3 after:rounded-full after:bg-white after:transition-transform
+                      checked:after:translate-x-4" />
+      </label>
+    </div>
+
+    <!-- Backpressure controls -->
+    <div class="grid grid-cols-2 gap-3 mt-1">
+      <div class="flex flex-col gap-1">
+        <label for="batch-size" class="text-[0.6rem] text-muted-foreground/60">
+          {t("embeddings.autoReembed.batchSize")}
+        </label>
+        <input id="batch-size" type="number" min="1" max="100"
+               bind:value={reembedCfg.batch_size} onchange={saveReembedConfig}
+               class="w-full rounded-md border border-border dark:border-white/[0.08]
+                      bg-white dark:bg-[#14141e] px-2.5 py-1.5
+                      text-[0.7rem] text-foreground tabular-nums
+                      focus:outline-none focus:ring-1 focus:ring-ring/50" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="batch-delay" class="text-[0.6rem] text-muted-foreground/60">
+          {t("embeddings.autoReembed.batchDelay")}
+        </label>
+        <input id="batch-delay" type="number" min="0" max="5000" step="10"
+               bind:value={reembedCfg.batch_delay_ms} onchange={saveReembedConfig}
+               class="w-full rounded-md border border-border dark:border-white/[0.08]
+                      bg-white dark:bg-[#14141e] px-2.5 py-1.5
+                      text-[0.7rem] text-foreground tabular-nums
+                      focus:outline-none focus:ring-1 focus:ring-ring/50" />
+      </div>
+    </div>
   </div>
 
 </section>

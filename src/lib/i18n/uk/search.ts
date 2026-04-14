@@ -19,6 +19,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "Вбудовування…",
   "embeddings.dimLegend": "Виміри",
   "embeddings.dimHint": "більше = насиченіше, але повільніше",
+  "embeddings.autoReembed.title": "Автоматичне перевбудовування",
+  "embeddings.autoReembed.desc":
+    "Автоматично перевбудовувати дані у фоновому режимі при зміні моделі. Вимкніть для економії ресурсів.",
+  "embeddings.autoReembed.labels": "Текстові мітки",
+  "embeddings.autoReembed.eeg": "Сесії ЕЕГ",
+  "embeddings.autoReembed.screenshots": "Знімки екрана",
+  "embeddings.autoReembed.batchSize": "Розмір пакета",
+  "embeddings.autoReembed.batchDelay": "Затримка між пакетами (мс)",
 
   "label.addLabel": "Додати мітку",
   "label.eegWindow": "Вікно ЕЕГ: {elapsed}",

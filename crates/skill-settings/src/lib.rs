@@ -791,6 +791,10 @@ pub struct UserSettings {
     /// is used instead (no GPU required, slower).
     #[serde(default = "default_exg_inference_device")]
     pub exg_inference_device: String,
+
+    /// Embedding reindex behaviour when a model changes.
+    #[serde(default)]
+    pub reembed: ReembedConfig,
 }
 
 /// A remembered LSL stream for auto-connect.
@@ -810,6 +814,36 @@ pub struct LslPairedStream {
     /// Sample rate in Hz.
     #[serde(default)]
     pub sample_rate: f64,
+}
+
+// ── Reembed config ──────────────────────────────────────────────────────────
+
+/// Controls automatic re-embedding behaviour when the embedding model changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReembedConfig {
+    /// Automatically re-embed text labels when the text embedding model changes.
+    pub auto_labels: bool,
+    /// Automatically re-embed EEG data when the EEG model changes.
+    pub auto_eeg: bool,
+    /// Automatically re-embed screenshots when the vision model changes.
+    pub auto_screenshots: bool,
+    /// Number of items to process per batch before yielding.
+    pub batch_size: usize,
+    /// Milliseconds to sleep between batches (backpressure control).
+    pub batch_delay_ms: u64,
+}
+
+impl Default for ReembedConfig {
+    fn default() -> Self {
+        Self {
+            auto_labels: false,
+            auto_eeg: false,
+            auto_screenshots: false,
+            batch_size: 10,
+            batch_delay_ms: 50,
+        }
+    }
 }
 
 /// In release builds, secrets are always stripped from the JSON (stored in
@@ -975,6 +1009,7 @@ impl Default for UserSettings {
             inference_device: default_inference_device(),
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
             exg_inference_device: default_exg_inference_device(),
+            reembed: ReembedConfig::default(),
         }
     }
 }

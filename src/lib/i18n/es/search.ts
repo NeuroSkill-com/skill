@@ -19,6 +19,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "Incrustando…",
   "embeddings.dimLegend": "Dimensiones",
   "embeddings.dimHint": "más grande = más rico pero más lento",
+  "embeddings.autoReembed.title": "Re-incrustación automática",
+  "embeddings.autoReembed.desc":
+    "Re-incrustar datos automáticamente en segundo plano cuando cambia el modelo. Desactive para ahorrar recursos.",
+  "embeddings.autoReembed.labels": "Etiquetas de texto",
+  "embeddings.autoReembed.eeg": "Sesiones EEG",
+  "embeddings.autoReembed.screenshots": "Capturas de pantalla",
+  "embeddings.autoReembed.batchSize": "Tamaño del lote",
+  "embeddings.autoReembed.batchDelay": "Pausa entre lotes (ms)",
 
   "label.addLabel": "Agregar etiqueta",
   "label.eegWindow": "Ventana EEG: {elapsed}",

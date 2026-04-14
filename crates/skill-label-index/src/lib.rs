@@ -530,8 +530,19 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
     }
 }
 
+/// Result of inserting a label into the indices.
+#[derive(Debug, Default)]
+pub struct InsertResult {
+    /// `true` if any index was rebuilt due to a dimension change.
+    pub rebuilt: bool,
+}
+
 /// Insert a single label into all indices after it has been embedded.
-/// Call this from the `embed_and_store_label` background task.
+///
+/// If the new embedding's dimension differs from the current index, the index
+/// is automatically rebuilt from SQLite so the new label is immediately
+/// searchable.  The caller can check `InsertResult::rebuilt` to notify the
+/// user that old labels with a different model are no longer indexed.
 pub fn insert_label(
     skill_dir: &Path,
     label_id: i64,
@@ -540,35 +551,44 @@ pub fn insert_label(
     eeg_start: u64,
     eeg_end: u64,
     state: &LabelIndexState,
-) {
+) -> InsertResult {
     let skill_dir_buf = skill_dir.to_path_buf();
+    let mut needs_rebuild = false;
 
-    // Helper: insert into one index if dimension is compatible.
-    fn try_insert(idx: &mut LabeledIndex<Cosine, i64>, emb: &[f32], label_id: i64, save_path: &Path, tag: &str) {
+    /// Try to insert; returns `false` on dimension mismatch.
+    fn try_insert(
+        idx: &mut LabeledIndex<Cosine, i64>,
+        emb: &[f32],
+        label_id: i64,
+        save_path: &Path,
+        tag: &str,
+    ) -> bool {
         if emb.is_empty() {
-            return;
+            return true; // nothing to do
         }
-        // Check dimension compatibility before inserting.
         if let Some(d) = idx.inner.dim() {
             if emb.len() != d {
                 eprintln!(
-                    "[label_idx] {tag} insert skipped for label {label_id}: dim {} != index dim {d}",
+                    "[label_idx] {tag} dim mismatch for label {label_id}: {} != index {d}",
                     emb.len()
                 );
-                return;
+                return false;
             }
         }
         idx.insert(emb.to_vec(), label_id);
         if let Err(e) = idx.save(save_path) {
             eprintln!("[label_idx] {tag} save: {e}");
         }
+        true
     }
 
     // ── Text HNSW ─────────────────────────────────────────────────────────────
     if !text_embedding.is_empty() {
         let mut guard = state.text.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            try_insert(idx, text_embedding, label_id, &skill_dir.join(TEXT_INDEX_FILE), "text");
+            if !try_insert(idx, text_embedding, label_id, &skill_dir.join(TEXT_INDEX_FILE), "text") {
+                needs_rebuild = true;
+            }
         }
     }
 
@@ -576,13 +596,15 @@ pub fn insert_label(
     if !context_embedding.is_empty() {
         let mut guard = state.context.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            try_insert(
+            if !try_insert(
                 idx,
                 context_embedding,
                 label_id,
                 &skill_dir.join(CONTEXT_INDEX_FILE),
                 "context",
-            );
+            ) {
+                needs_rebuild = true;
+            }
         }
     }
 
@@ -590,9 +612,21 @@ pub fn insert_label(
     if let Some(mean_emb) = mean_eeg_for_window(&skill_dir_buf, eeg_start, eeg_end) {
         let mut guard = state.eeg.lock_or_recover();
         if let Some(ref mut idx) = *guard {
-            try_insert(idx, &mean_emb, label_id, &skill_dir.join(EEG_INDEX_FILE), "eeg");
+            if !try_insert(idx, &mean_emb, label_id, &skill_dir.join(EEG_INDEX_FILE), "eeg") {
+                needs_rebuild = true;
+            }
         }
     }
+
+    // On dimension mismatch, rebuild all indices from SQLite.
+    // This picks the dominant dimension (which now includes the new label),
+    // so the new label is immediately searchable.
+    if needs_rebuild {
+        eprintln!("[label_idx] dimension changed — rebuilding all indices from SQLite");
+        rebuild(skill_dir, state);
+    }
+
+    InsertResult { rebuilt: needs_rebuild }
 }
 
 /// Search the **text** HNSW with a pre-computed text embedding vector.
@@ -815,10 +849,24 @@ mod tests {
         )
         .unwrap();
 
-        // Insert 4-dim label
-        insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
-        // Try to insert 8-dim label — should be silently skipped
-        insert_label(
+        let to_blob = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|f| f.to_le_bytes()).collect() };
+
+        // Store 4-dim embedding in DB and insert into index
+        conn.execute(
+            "UPDATE labels SET text_embedding = ?1, embedding_model = 'a' WHERE id = 1",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+        )
+        .unwrap();
+        let r1 = insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
+        assert!(!r1.rebuilt);
+
+        // Store 8-dim embedding in DB and try to insert — triggers rebuild
+        conn.execute(
+            "UPDATE labels SET text_embedding = ?1, embedding_model = 'b' WHERE id = 2",
+            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+        )
+        .unwrap();
+        let r2 = insert_label(
             dir.path(),
             2,
             &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -827,10 +875,12 @@ mod tests {
             0,
             &state,
         );
+        assert!(r2.rebuilt);
 
+        // After rebuild with mixed dims, each dim has 1 label so either could be dominant.
+        // The important thing: no panic, and the index has exactly 1 node (dominant dim).
         let guard = state.text.lock().unwrap();
         let idx = guard.as_ref().unwrap();
-        // Only the first label should be in the index
         assert_eq!(idx.len(), 1);
     }
 

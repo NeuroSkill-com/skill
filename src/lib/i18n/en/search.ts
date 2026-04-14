@@ -19,6 +19,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "Embedding…",
   "embeddings.dimLegend": "Dimensions",
   "embeddings.dimHint": "larger = richer but slower",
+  "embeddings.autoReembed.title": "Auto Re-embed",
+  "embeddings.autoReembed.desc":
+    "Automatically re-embed data in the background when the model changes. Disable to save resources and re-embed manually.",
+  "embeddings.autoReembed.labels": "Text labels",
+  "embeddings.autoReembed.eeg": "EEG sessions",
+  "embeddings.autoReembed.screenshots": "Screenshots",
+  "embeddings.autoReembed.batchSize": "Batch size",
+  "embeddings.autoReembed.batchDelay": "Delay between batches (ms)",
 
   "label.addLabel": "Add Label",
   "label.eegWindow": "EEG window: {elapsed}",

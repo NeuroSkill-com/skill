@@ -19,6 +19,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "埋め込み中…",
   "embeddings.dimLegend": "次元数",
   "embeddings.dimHint": "大きいほど豊かだが遅い",
+  "embeddings.autoReembed.title": "自動再埋め込み",
+  "embeddings.autoReembed.desc":
+    "モデル変更時にバックグラウンドで自動的にデータを再埋め込みします。リソースを節約するには無効にしてください。",
+  "embeddings.autoReembed.labels": "テキストラベル",
+  "embeddings.autoReembed.eeg": "EEGセッション",
+  "embeddings.autoReembed.screenshots": "スクリーンショット",
+  "embeddings.autoReembed.batchSize": "バッチサイズ",
+  "embeddings.autoReembed.batchDelay": "バッチ間の遅延（ms）",
 
   "label.addLabel": "ラベルを追加",
   "label.eegWindow": "EEGウィンドウ：{elapsed}",

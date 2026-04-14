@@ -206,6 +206,10 @@ pub fn router() -> Router<AppState> {
             get(settings_device::get_embedding_overlap).post(settings_device::set_embedding_overlap),
         )
         .route(
+            "/settings/reembed-config",
+            get(get_reembed_config).post(set_reembed_config),
+        )
+        .route(
             "/settings/update-check-interval",
             get(settings_device::get_update_check_interval).post(settings_device::set_update_check_interval),
         )
@@ -476,6 +480,20 @@ async fn get_model_status(state: State<AppState>) -> Json<EegModelStatus> {
 /// Public so `main.rs` can call it during daemon startup.
 pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, String)> {
     settings_exg::probe_weights_for_config(config)
+}
+
+async fn get_reembed_config(state: State<AppState>) -> Json<skill_settings::ReembedConfig> {
+    Json(load_user_settings(&state).reembed)
+}
+
+async fn set_reembed_config(
+    state: State<AppState>,
+    Json(config): Json<skill_settings::ReembedConfig>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.reembed = config;
+    save_user_settings(&state, &settings);
+    Json(serde_json::json!({ "ok": true }))
 }
 
 async fn trigger_reembed() -> Json<serde_json::Value> {

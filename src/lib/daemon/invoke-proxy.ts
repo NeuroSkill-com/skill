@@ -100,6 +100,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   query_annotations: [G, "/v1/labels"],
   get_label_embedding_status: [G, "/v1/labels/embedding-status"],
   reembed_labels: [P, "/v1/labels/reembed"],
+  get_reembed_config: [G, "/v1/settings/reembed-config"],
+  set_reembed_config: [P, "/v1/settings/reembed-config"],
 
   // Search
   search_labels_by_text: [P, "/v1/search/eeg"],

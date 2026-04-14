@@ -311,26 +311,21 @@ async fn create_label(
         let id = conn.last_insert_rowid();
 
         // Insert into daemon-owned HNSW indices.
-        // Catch panics from dimension mismatches (e.g. model change 384→768)
-        // so the label is still created in SQLite even if indexing fails.
+        // On dimension mismatch, insert_label auto-rebuilds the index so the
+        // new label is immediately searchable.
         let text_emb_ref = text_emb.as_deref().unwrap_or(&[]);
         let ctx_emb_ref = ctx_emb.as_deref().unwrap_or(&[]);
-        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            skill_label_index::insert_label(
-                &skill_dir,
-                id,
-                text_emb_ref,
-                ctx_emb_ref,
-                eeg_start,
-                eeg_end,
-                &label_index,
-            );
-        })) {
-            eprintln!("[labels] HNSW insert failed (dimension mismatch?): {e:?}");
-            // Rebuild index to pick up the new dimension
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                skill_label_index::rebuild(&skill_dir, &label_index);
-            }));
+        let insert_result = skill_label_index::insert_label(
+            &skill_dir,
+            id,
+            text_emb_ref,
+            ctx_emb_ref,
+            eeg_start,
+            eeg_end,
+            &label_index,
+        );
+        if insert_result.rebuilt {
+            eprintln!("[labels] HNSW indices rebuilt due to embedding model change");
         }
 
         Ok::<_, anyhow::Error>(LabelEntry {
@@ -635,6 +630,7 @@ async fn label_embedding_status(State(state): State<AppState>) -> Json<serde_jso
 /// Re-embed all labels with the current embedding model and rebuild indices.
 async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let reembed_cfg = crate::routes::settings_io::load_user_settings(&state).reembed;
     let label_index = state.label_index.clone();
     let embedder = state.text_embedder.clone();
 
@@ -651,7 +647,9 @@ async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::V
         let total = rows.len();
         let mut updated = 0usize;
 
-        for (id, text, context) in &rows {
+        let batch_size = reembed_cfg.batch_size.max(1);
+        let batch_delay = std::time::Duration::from_millis(reembed_cfg.batch_delay_ms);
+        for (i, (id, text, context)) in rows.iter().enumerate() {
             let text_emb = embedder.embed(text);
             let ctx_emb = embedder.embed(context);
             let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
@@ -662,6 +660,11 @@ async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::V
                 rusqlite::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
             )?;
             updated += 1;
+
+            // Yield between batches to avoid saturating the CPU.
+            if (i + 1) % batch_size == 0 && batch_delay.as_millis() > 0 {
+                std::thread::sleep(batch_delay);
+            }
         }
 
         // Rebuild HNSW indices with new embeddings.

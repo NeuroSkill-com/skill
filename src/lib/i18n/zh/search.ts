@@ -17,6 +17,14 @@ const search: Record<string, string> = {
   "embeddings.reembedding": "嵌入中…",
   "embeddings.dimLegend": "维度",
   "embeddings.dimHint": "越大 = 越丰富但越慢",
+  "embeddings.autoReembed.title": "自动重新嵌入",
+  "embeddings.autoReembed.desc":
+    "模型更改时在后台自动重新嵌入数据。禁用以节省资源并手动重新嵌入。",
+  "embeddings.autoReembed.labels": "文本标签",
+  "embeddings.autoReembed.eeg": "EEG会话",
+  "embeddings.autoReembed.screenshots": "截图",
+  "embeddings.autoReembed.batchSize": "批量大小",
+  "embeddings.autoReembed.batchDelay": "批次间延迟（毫秒）",
 
   "label.addLabel": "添加标签",
   "label.eegWindow": "EEG 窗口：{elapsed}",
