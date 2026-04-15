@@ -128,7 +128,16 @@ fn resolve_daemon_bin_path() -> String {
                     return candidate.display().to_string();
                 }
             }
-            // macOS .app bundle: inside Contents/MacOS/
+            // macOS: daemon wrapped in its own .app bundle (for Activity Monitor icon)
+            let app_candidate = dir.join("skill-daemon.app/Contents/MacOS/skill-daemon");
+            if app_candidate.exists() {
+                return app_candidate
+                    .canonicalize()
+                    .unwrap_or(app_candidate)
+                    .display()
+                    .to_string();
+            }
+            // macOS .app bundle: inside Contents/MacOS/ (legacy fallback)
             let mac_candidate = dir.join("../MacOS/skill-daemon");
             if mac_candidate.exists() {
                 return mac_candidate

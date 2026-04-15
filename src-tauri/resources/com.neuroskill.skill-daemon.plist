@@ -6,7 +6,7 @@
   <string>com.neuroskill.skill-daemon</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Applications/NeuroSkill.app/Contents/MacOS/skill-daemon</string>
+    <string>/Applications/NeuroSkill.app/Contents/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon</string>
   </array>
   <key>RunAtLoad</key>
   <true/>

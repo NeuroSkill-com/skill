@@ -56,9 +56,53 @@ echo "  ✓ binary"
 # spawn it in production bundles.
 DAEMON_SRC="$TAURI_DIR/target/$TARGET/release/skill-daemon"
 if [[ -f "$DAEMON_SRC" ]]; then
-  cp "$DAEMON_SRC" "$MACOS_DIR/skill-daemon"
-  chmod +x "$MACOS_DIR/skill-daemon"
-  echo "  ✓ skill-daemon"
+  # Wrap the daemon in a minimal .app bundle so it gets its own icon
+  # in Activity Monitor, Force Quit, etc.
+  DAEMON_APP="$MACOS_DIR/skill-daemon.app"
+  DAEMON_CONTENTS="$DAEMON_APP/Contents"
+  DAEMON_MACOS="$DAEMON_CONTENTS/MacOS"
+  DAEMON_RES="$DAEMON_CONTENTS/Resources"
+  mkdir -p "$DAEMON_MACOS" "$DAEMON_RES"
+
+  cp "$DAEMON_SRC" "$DAEMON_MACOS/skill-daemon"
+  chmod +x "$DAEMON_MACOS/skill-daemon"
+
+  # Copy icon
+  if [[ -f "$TAURI_DIR/icons/icon.icns" ]]; then
+    cp "$TAURI_DIR/icons/icon.icns" "$DAEMON_RES/icon.icns"
+  fi
+
+  # Write Info.plist for daemon .app bundle
+  cat > "$DAEMON_CONTENTS/Info.plist" << DPLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>skill-daemon</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.neuroskill.skill-daemon</string>
+  <key>CFBundleName</key>
+  <string>Skill Daemon</string>
+  <key>CFBundleDisplayName</key>
+  <string>Skill Daemon</string>
+  <key>CFBundleVersion</key>
+  <string>$VERSION</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleIconFile</key>
+  <string>icon</string>
+  <key>LSBackgroundOnly</key>
+  <true/>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+DPLIST
+
+  echo "  ✓ skill-daemon.app"
 else
   echo "  ⚠ missing daemon sidecar: $DAEMON_SRC" >&2
 fi
