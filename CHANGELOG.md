@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.121] — 2026-04-15
+
+### Features
+
+- update failing apple notary tool
+
 ## [0.0.120] — 2026-04-15
 
 ### Features
