@@ -94,16 +94,14 @@ async fn search_commands(
     let candidates = req.candidates;
 
     let result = tokio::task::spawn_blocking(move || {
-        let query_vec = match embedder.embed(&query) {
-            Some(v) => v,
-            None => return serde_json::json!({ "results": [] }),
+        let Some(query_vec) = embedder.embed(&query) else {
+            return serde_json::json!({ "results": [] });
         };
 
         // Batch-embed all candidates
         let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
-        let cand_vecs = match embedder.embed_batch(texts) {
-            Some(v) => v,
-            None => return serde_json::json!({ "results": [] }),
+        let Some(cand_vecs) = embedder.embed_batch(texts) else {
+            return serde_json::json!({ "results": [] });
         };
 
         // Score and rank

@@ -181,7 +181,10 @@ $effect(() => {
     pingDaemon();
     if (!latencyTimer) latencyTimer = setInterval(pingDaemon, 5000);
   } else {
-    if (latencyTimer) { clearInterval(latencyTimer); latencyTimer = null; }
+    if (latencyTimer) {
+      clearInterval(latencyTimer);
+      latencyTimer = null;
+    }
   }
 });
 
@@ -210,11 +213,16 @@ const engineState = $derived.by(() => {
 
 const engineDotClass = $derived.by(() => {
   switch (engineState) {
-    case "streaming": return "bg-green-500";
-    case "idle": return "bg-green-500/60";
-    case "connecting": return "bg-amber-400 animate-pulse";
-    case "error": return "bg-red-500";
-    default: return "bg-red-500";
+    case "streaming":
+      return "bg-green-500";
+    case "idle":
+      return "bg-green-500/60";
+    case "connecting":
+      return "bg-amber-400 animate-pulse";
+    case "error":
+      return "bg-red-500";
+    default:
+      return "bg-red-500";
   }
 });
 
@@ -225,7 +233,9 @@ async function restartDaemon() {
   } catch (e) {
     addToast("error", t("daemon.connection"), `${e}`, 6000);
   } finally {
-    setTimeout(() => { daemonLaunching = false; }, 5000);
+    setTimeout(() => {
+      daemonLaunching = false;
+    }, 5000);
   }
 }
 
@@ -1492,7 +1502,10 @@ onDestroy(() => {
     modelDlTimer = null;
   }
   clearDaemonCountdown();
-  if (latencyTimer) { clearInterval(latencyTimer); latencyTimer = null; }
+  if (latencyTimer) {
+    clearInterval(latencyTimer);
+    latencyTimer = null;
+  }
   autoHeightRo?.disconnect();
   autoHeightRo = null;
   if (autoHeightTimer) {

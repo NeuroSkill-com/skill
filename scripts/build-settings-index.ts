@@ -77,28 +77,87 @@ const KEY_PREFIX_TO_TAB: Record<string, string> = {
 // ── Filtering: only keep keys that represent configurable settings ───────────
 
 const SKIP_PREFIXES = [
-  "settingsTabs.", "cmdK.", "common.", "toast.", "dashboard.", "search.",
-  "history.", "help.", "helpRef.", "onboarding.", "focusTimer.", "labels.",
-  "downloads.", "shortcuts.", "nav.",
+  "settingsTabs.",
+  "cmdK.",
+  "common.",
+  "toast.",
+  "dashboard.",
+  "search.",
+  "history.",
+  "help.",
+  "helpRef.",
+  "onboarding.",
+  "focusTimer.",
+  "labels.",
+  "downloads.",
+  "shortcuts.",
+  "nav.",
 ];
 
 const SKIP_SUFFIXES = [
-  "Placeholder", "Error", "Toast", "Confirm", "Success", "Warning",
-  "StatusMsg", "Loading", "Btn", "Button", "Title", "Subtitle",
-  "Header", "Footer", "Hint", "Info", "Note", "Help", "Empty",
-  "None", "NoData", "Unavailable", "Unsupported", "Required",
-  "Active", "Inactive", "Status", "Count", "Badge", "Label",
+  "Placeholder",
+  "Error",
+  "Toast",
+  "Confirm",
+  "Success",
+  "Warning",
+  "StatusMsg",
+  "Loading",
+  "Btn",
+  "Button",
+  "Title",
+  "Subtitle",
+  "Header",
+  "Footer",
+  "Hint",
+  "Info",
+  "Note",
+  "Help",
+  "Empty",
+  "None",
+  "NoData",
+  "Unavailable",
+  "Unsupported",
+  "Required",
+  "Active",
+  "Inactive",
+  "Status",
+  "Count",
+  "Badge",
+  "Label",
 ];
 
 const isDescKey = (key: string) => key.endsWith("Desc");
 
 const DISPLAY_ONLY = [
-  /\.status[A-Z]/, /\.legend/, /\.chart/, /\.how/, /\.info\d/,
-  /\.preset\d/, /Preset\d/, /\.value/, /Value/, /\.current/,
-  /\.last[A-Z]/, /\.no[A-Z]/, /\.error/, /\.toast/, /\.confirm/,
-  /\.until/, /\.building/, /\.activating/, /\.exiting/, /\.force/,
-  /\.requiresMac/, /\.section$/, /Desc$/, /\.action\d+$/,
-  /\.window[A-Z]/, /\.path$/, /\.since$/, /\.today$/,
+  /\.status[A-Z]/,
+  /\.legend/,
+  /\.chart/,
+  /\.how/,
+  /\.info\d/,
+  /\.preset\d/,
+  /Preset\d/,
+  /\.value/,
+  /Value/,
+  /\.current/,
+  /\.last[A-Z]/,
+  /\.no[A-Z]/,
+  /\.error/,
+  /\.toast/,
+  /\.confirm/,
+  /\.until/,
+  /\.building/,
+  /\.activating/,
+  /\.exiting/,
+  /\.force/,
+  /\.requiresMac/,
+  /\.section$/,
+  /Desc$/,
+  /\.action\d+$/,
+  /\.window[A-Z]/,
+  /\.path$/,
+  /\.since$/,
+  /\.today$/,
 ];
 
 function isSettingKey(key: string, value: string, allKeys: Set<string>): boolean {
@@ -112,7 +171,8 @@ function isSettingKey(key: string, value: string, allKeys: Set<string>): boolean
 
   if (allKeys.has(`${key}Desc`)) return true;
 
-  const settingWords = /\b(enabled?|toggle|mode|provider|model|interval|timeout|threshold|format|size|speed|rate|layers?|batch|cutoff|overlap|host|port|directory|dir|endpoint|section|autostart|auto[A-Z])\b/i;
+  const settingWords =
+    /\b(enabled?|toggle|mode|provider|model|interval|timeout|threshold|format|size|speed|rate|layers?|batch|cutoff|overlap|host|port|directory|dir|endpoint|section|autostart|auto[A-Z])\b/i;
   if (settingWords.test(lastPart)) return true;
 
   return false;
@@ -130,11 +190,12 @@ function loadTranslations(locale: string): Record<string, string> {
   for (const file of files) {
     const content = fs.readFileSync(path.join(dir, file), "utf-8");
     const re = /"([^"]+)":\s*(?:"([^"]*(?:\\.[^"]*)*)"|`([^`]*)`|"([^"]*)")/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(content))) {
+    let m: RegExpExecArray | null = re.exec(content);
+    while (m) {
       const key = m[1];
       const value = m[2] ?? m[3] ?? m[4] ?? "";
       all[key] = value.replace(/\\"/g, '"').replace(/\\n/g, " ").trim();
+      m = re.exec(content);
     }
   }
 
@@ -142,9 +203,10 @@ function loadTranslations(locale: string): Record<string, string> {
   for (const file of files) {
     const content = fs.readFileSync(path.join(dir, file), "utf-8");
     const multiLine = /"([^"]+)":\s*\n\s*"([^"]*)"/g;
-    let m: RegExpExecArray | null;
-    while ((m = multiLine.exec(content))) {
+    let m: RegExpExecArray | null = multiLine.exec(content);
+    while (m) {
       if (!all[m[1]]) all[m[1]] = m[2].trim();
+      m = multiLine.exec(content);
     }
   }
 
@@ -164,12 +226,15 @@ function scanTabKeys(): Map<string, Set<string>> {
 
     const content = fs.readFileSync(path.join(LIB_DIR, file), "utf-8");
     const re = /t\("([^"]+)"\)/g;
-    let m: RegExpExecArray | null;
+    let m: RegExpExecArray | null = re.exec(content);
     const keys = new Set<string>();
-    while ((m = re.exec(content))) keys.add(m[1]);
+    while (m) {
+      keys.add(m[1]);
+      m = re.exec(content);
+    }
 
     if (!tabKeys.has(tabId)) tabKeys.set(tabId, new Set());
-    const existing = tabKeys.get(tabId)!;
+    const existing = tabKeys.get(tabId) as Set<string>;
     for (const k of keys) existing.add(k);
   }
 
@@ -235,7 +300,7 @@ function resolveLocale(
   return skeleton.map(({ tab, key, descKey }) => {
     // Use locale translation, fall back to EN
     const label = translations[key] || enTranslations[key] || key;
-    const desc = descKey ? (translations[descKey] || enTranslations[descKey]) : undefined;
+    const desc = descKey ? translations[descKey] || enTranslations[descKey] : undefined;
     return { tab, key, label, ...(desc && { desc }) };
   });
 }
@@ -283,7 +348,9 @@ export function generate() {
   const manifest = { locales, entriesPerLocale: skeleton.length };
   writeIfChanged(path.join(OUT_DIR, "settings-search-manifest.json"), JSON.stringify(manifest, null, 2));
 
-  console.log(`[settings-index] ${locales.length} locales, ${skeleton.length} entries each, ${totalWritten} files written`);
+  console.log(
+    `[settings-index] ${locales.length} locales, ${skeleton.length} entries each, ${totalWritten} files written`,
+  );
 }
 
 // Run directly

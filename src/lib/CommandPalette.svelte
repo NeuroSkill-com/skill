@@ -15,19 +15,18 @@ import { fade } from "svelte/transition";
 import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
 import { getDeviceStatus } from "$lib/daemon/devices";
 import { daemonPost } from "$lib/daemon/http";
-import { t, getLocale } from "$lib/i18n/index.svelte";
-import * as nav from "$lib/navigation";
-import { getHighContrast, toggleHighContrast, toggleTheme, getResolved, setTheme } from "$lib/stores/theme.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import { recordUsage, usageBoost, getRecentIds } from "$lib/stores/cmdk-history.svelte";
 import { typoMatch } from "$lib/fuzzy-utils";
+import { getLocale, t } from "$lib/i18n/index.svelte";
+import * as nav from "$lib/navigation";
 import { SYNONYMS } from "$lib/settings-search-index";
+import { getRecentIds, recordUsage, usageBoost } from "$lib/stores/cmdk-history.svelte";
+import { getHighContrast, getResolved, setTheme, toggleHighContrast, toggleTheme } from "$lib/stores/theme.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 
 // Load all locale indexes at build time via Vite glob import
-const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>(
-  "$lib/generated/settings-search-index.*.json",
-  { eager: true },
-);
+const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>("$lib/generated/settings-search-index.*.json", {
+  eager: true,
+});
 
 interface SearchIndexEntry {
   tab: string;
@@ -72,10 +71,26 @@ const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("
 const mod = isMac ? "⌘" : "Ctrl";
 
 const SETTINGS_TAB_ICONS: Record<string, string> = {
-  goals: "🎯", devices: "📡", exg: "📊", lsl: "📶", sleep: "🌙", calibration: "⚙",
-  tts: "🗣", llm: "💬", tools: "🔧", clients: "🔗", embeddings: "🔍", screenshots: "📷",
-  hooks: "🪝", appearance: "🎨", settings: "⚙", shortcuts: "⌨", umap: "🗺",
-  updates: "⬆", permissions: "🔒", tokens: "🔑",
+  goals: "🎯",
+  devices: "📡",
+  exg: "📊",
+  lsl: "📶",
+  sleep: "🌙",
+  calibration: "⚙",
+  tts: "🗣",
+  llm: "💬",
+  tools: "🔧",
+  clients: "🔗",
+  embeddings: "🔍",
+  screenshots: "📷",
+  hooks: "🪝",
+  appearance: "🎨",
+  settings: "⚙",
+  shortcuts: "⌨",
+  umap: "🗺",
+  updates: "⬆",
+  permissions: "🔒",
+  tokens: "🔑",
 };
 
 function settingsTabCommands(): Command[] {
@@ -322,7 +337,12 @@ function commands(): Command[] {
       section: t("cmdK.sectionUtilities"),
       label: getHighContrast() ? t("cmdK.highContrastOff") : t("cmdK.highContrastOn"),
       keywords: t("cmdK.kw.highContrast"),
-      toggle: { get: getHighContrast, set: (v) => { import("$lib/stores/theme.svelte").then(m => m.setHighContrast(v)); } },
+      toggle: {
+        get: getHighContrast,
+        set: (v) => {
+          import("$lib/stores/theme.svelte").then((m) => m.setHighContrast(v));
+        },
+      },
       action: () => {
         toggleHighContrast();
         close();
@@ -714,8 +734,12 @@ function openPalette() {
   requestAnimationFrame(() => inputEl?.focus());
   // Refresh device status for contextual boosting
   getDeviceStatus<{ state: string }>()
-    .then((s) => { deviceConnected = s.state === "connected"; })
-    .catch(() => { deviceConnected = false; });
+    .then((s) => {
+      deviceConnected = s.state === "connected";
+    })
+    .catch(() => {
+      deviceConnected = false;
+    });
 }
 
 function close() {

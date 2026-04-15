@@ -99,8 +99,19 @@ let sections = $derived(() => {
 
 async function fetchShortcuts() {
   try {
-    [labelShortcut, searchShortcut, settingsShortcut, calibrationShortcut, focusTimerShortcut,
-     chatShortcut, compareShortcut, helpShortcut, historyShortcut, apiShortcut, themeShortcut] = await Promise.all([
+    [
+      labelShortcut,
+      searchShortcut,
+      settingsShortcut,
+      calibrationShortcut,
+      focusTimerShortcut,
+      chatShortcut,
+      compareShortcut,
+      helpShortcut,
+      historyShortcut,
+      apiShortcut,
+      themeShortcut,
+    ] = await Promise.all([
       invoke<string>("get_label_shortcut"),
       invoke<string>("get_search_shortcut"),
       invoke<string>("get_settings_shortcut"),
