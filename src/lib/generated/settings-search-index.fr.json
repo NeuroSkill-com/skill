@@ -1,0 +1,920 @@
+[
+  {
+    "tab": "appearance",
+    "key": "appearance.accentColor",
+    "label": "Couleur d'accentuation",
+    "desc": "Définit la couleur interactive principale - boutons, états actifs, anneaux de focus et surbrillances."
+  },
+  {
+    "tab": "appearance",
+    "key": "appearance.highContrast",
+    "label": "Haute visibilité",
+    "desc": "Augmentez le contraste des bordures et du texte pour une meilleure lisibilité."
+  },
+  {
+    "tab": "appearance",
+    "key": "settings.fontSize",
+    "label": "Taille de police",
+    "desc": "Ajustez la taille du texte de l'interface utilisateur. Affecte tout le texte de l'application."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.complete",
+    "label": "Calibration terminée",
+    "desc": "Les {n} itérations ont été complétées avec succès. Les labels ont été enregistrés pour chaque phase."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.baseline",
+    "label": "Yeux ouverts / fermés",
+    "desc": "Référence classique : repos yeux ouverts vs fermés. Recommandé pour débutants."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.children",
+    "label": "Enfants / Courte attention",
+    "desc": "Phases plus courtes (10 s) pour enfants ou utilisateurs à durée d'attention limitée."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.clinical",
+    "label": "Clinique / Recherche",
+    "desc": "Protocole étendu à 5 itérations avec longues phases d'action pour la recherche ou la baseline clinique."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.focus",
+    "label": "Concentration / Détente",
+    "desc": "Neurofeedback : calcul mental vs respiration calme. Usage général."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.gaming",
+    "label": "Jeu / Performance",
+    "desc": "Tâche très exigeante vs repos passif. Pour l'e-sport et le biofeedback haute performance."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.meditation",
+    "label": "Méditation",
+    "desc": "Pensée active vs méditation de pleine conscience. Pour méditants."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.sleep",
+    "label": "Pré-sommeil / Somnolence",
+    "desc": "Éveil alerte vs somnolence. Pour la recherche sur le sommeil."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.stress",
+    "label": "Stress / Anxiété",
+    "desc": "Calme au repos vs facteur de stress cognitif léger. Pour le suivi du stress et de l'anxiété."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.presets",
+    "label": "Préréglages rapides",
+    "desc": "Sélectionnez une configuration de calibration selon votre objectif, âge et cas d'usage."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.actionLabels",
+    "label": "Labels d'action",
+    "desc": "Noms affichés pendant chaque phase et enregistrés comme labels EEG."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.iterations",
+    "label": "Itérations",
+    "desc": "Nombre de cycles complets Action 1 → Pause → Action 2 → Pause."
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 via le Launcher local"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB Série",
+    "desc": "Dongle OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.model",
+    "label": "Modèle d'embedding"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.reembed",
+    "label": "Ré-intégrer toutes les étiquettes",
+    "desc": "Recalculer les embeddings pour toutes les étiquettes existantes avec le modèle actuel. À effectuer après un changement de modèle."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.enabled",
+    "label": "Redémarrage automatique"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.timeout",
+    "label": "Redémarrer après (secondes)"
+  },
+  {
+    "tab": "exg",
+    "key": "model.buildQuality",
+    "label": "Qualité de construction",
+    "desc": "Largeur du faisceau pendant la construction. Plus haut = meilleur graphe, insertions plus lentes."
+  },
+  {
+    "tab": "exg",
+    "key": "model.connectivity",
+    "label": "Connectivité",
+    "desc": "Chaque nœud conserve jusqu'à 2 × M arêtes. Plus haut = meilleur rappel, plus de RAM."
+  },
+  {
+    "tab": "exg",
+    "key": "model.gpuPrecision",
+    "label": "Précision GPU",
+    "desc": "Demi-précision (f16) est plus rapide, pleine précision (f32) est plus précise"
+  },
+  {
+    "tab": "exg",
+    "key": "model.idleReembed",
+    "label": "Embedding en arrière-plan",
+    "desc": "Intégrer automatiquement les époques non traitées en veille"
+  },
+  {
+    "tab": "exg",
+    "key": "model.reembed",
+    "label": "Ré-embedder",
+    "desc": "Ré-encoder toutes les sessions EXG brutes avec le modèle sélectionné et reconstruire les indices HNSW."
+  },
+  {
+    "tab": "exg",
+    "key": "settings.inferenceDevice",
+    "label": "Périphérique d’inférence",
+    "desc": "Où l’inférence IA s’exécute. Le GPU est plus rapide ; le CPU fonctionne sur n’importe quelle machine sans pression sur la VRAM. Redémarrez le serveur LLM après modification."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.channels",
+    "label": "Canaux",
+    "desc": "Nombre d'électrodes EEG à simuler."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.lineNoise",
+    "label": "Bruit de ligne",
+    "desc": "Ajouter une interférence secteur de 50 Hz ou 60 Hz."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.preview",
+    "label": "Aperçu du signal",
+    "desc": "Aperçu en temps réel des 4 premiers canaux."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.quality",
+    "label": "Qualité du signal",
+    "desc": "Ajustez le rapport signal/bruit. Plus élevé = signal plus propre."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.sampleRate",
+    "label": "Fréquence d'échantillonnage (Hz)",
+    "desc": "Échantillons par seconde par canal."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.template",
+    "label": "Modèle de signal",
+    "desc": "Choisissez le type de signal synthétique à générer."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateBadQuality",
+    "label": "EEG de mauvaise qualité",
+    "desc": "Signal bruité avec artefacts musculaires, bruit de ligne 50/60 Hz et sauts d'électrode."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateFile",
+    "label": "Depuis un fichier",
+    "desc": "Relire des échantillons à partir d'un fichier CSV ou EDF."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateGoodQuality",
+    "label": "EEG de bonne qualité",
+    "desc": "EEG réaliste au repos avec rythme alpha dominant et bruit rose en arrière-plan."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateInterruptions",
+    "label": "Connexion intermittente",
+    "desc": "Bon signal avec des interruptions périodiques simulant des électrodes mal fixées ou des interférences sans fil."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateSine",
+    "label": "Ondes sinusoïdales",
+    "desc": "Ondes sinusoïdales propres aux bandes de fréquences standard (delta, thêta, alpha, bêta, gamma)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.duration",
+    "label": "Durée soutenue",
+    "desc": "Secondes pendant lesquelles l'engagement doit rester au-dessus du seuil avant l'activation du NDD."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.enabled",
+    "label": "Activer l'auto-NDD",
+    "desc": "Quand activé, l'app déclenche Ne pas déranger sur macOS dès que l'engagement reste élevé pendant la durée configurée. Le NDD est désactivé dès que l'engagement baisse."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitDuration",
+    "label": "Délai de sortie DND",
+    "desc": "Durée pendant laquelle le score doit rester sous le seuil avant de désactiver le mode Focus. Évite les basculements intempestifs."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitNotification",
+    "label": "Notification de sortie",
+    "desc": "Envoyer une notification quand le mode Focus est désactivé automatiquement (score insuffisant, signal faible ou fonctionnalité désactivée)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusLookback",
+    "label": "Mémoire de focus",
+    "desc": "Si une période de focus a été détectée dans cette fenêtre avant la chute du score, le compte à rebours de sortie se réinitialise."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusMode",
+    "label": "Mode Focus",
+    "desc": "Le mode Focus macOS à activer lorsque votre engagement est soutenu. Choisissez parmi les modes configurés dans Réglages Système → Focus."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.snrExitThreshold",
+    "label": "Seuil SNR de désactivation",
+    "desc": "Si le rapport signal/bruit reste en dessous de ce seuil pendant 1 minute, le mode Focus est désactivé de force. Des valeurs plus basses tolèrent des signaux plus bruités."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.threshold",
+    "label": "Seuil d'engagement",
+    "desc": "Score d'engagement minimum requis (0-100). Dérivé du rapport bêta/(alpha+thêta) de l'EEG."
+  },
+  {
+    "tab": "hooks",
+    "key": "hooks.enabled",
+    "label": "Activé"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.autostart",
+    "label": "Démarrage automatique",
+    "desc": "Charger automatiquement le modèle actif au lancement de l'application."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.enabled",
+    "label": "Activer le serveur LLM",
+    "desc": "Exécutez un serveur d'inférence compatible OpenAI sur le même port que l'API WebSocket. Nécessite la fonctionnalité llm Cargo et un modèle téléchargé."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.endpoint",
+    "label": "Point de terminaison de l'API"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.apiKey",
+    "label": "Clé API (facultatif)",
+    "desc": "Exigez ce jeton Bearer à chaque requête /v1/*."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.attnRot",
+    "label": "Rotation d’attention TurboQuant",
+    "desc": "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. sauf en cas de problèmes de compatibilité avec le modèle."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.ctxSize",
+    "label": "Taille du contexte",
+    "desc": "Taille du cache KV en jetons. Auto choisit le plus grand contexte qui tient dans votre GPU/RAM."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.flashAttn",
+    "label": "Flash attention",
+    "desc": "Utiliser flash attention pour une self-attention plus rapide et économe en mémoire. Supporté sur Metal, CUDA et Vulkan."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuLayers",
+    "label": "Couches GPU",
+    "desc": "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite llm-metal / llm-cuda."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuMemThreshold",
+    "label": "Protection mémoire GPU",
+    "desc": "Mémoire GPU/unifiée minimale requise avant l'inférence. Empêche les plantages Metal/CUDA en cas de mémoire insuffisante. Désactiver n'est pas recommandé."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.kvCacheType",
+    "label": "Quantification du cache KV (TurboQuant)",
+    "desc": "Précision de stockage des tenseurs du cache KV. Les types quantifiés (Q8_0/Q5_0/Q4_0) réduisent considérablement l’utilisation de la VRAM. La rotation d’attention TurboQuant (ci-dessous) maintient la qualité même avec quantification."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.offloadKqv",
+    "label": "Décharger KQV sur GPU",
+    "desc": "Décharger les opérations tensorielles K/Q/V sur le GPU même si toutes les couches ne sont pas sur GPU."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.parallel",
+    "label": "Nombre maximal de requêtes simultanées",
+    "desc": "Sérialise les boucles de décodage tout en gardant les connexions HTTP réactives."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.prefill",
+    "label": "Taille du lot de préremplissage",
+    "desc": "Contrôle le nombre de tokens traités par appel de décodage pendant le traitement du prompt."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.autoload",
+    "label": "Charger automatiquement l'encodeur de vision",
+    "desc": "Chargez automatiquement le meilleur projecteur de vision disponible (mmproj) au démarrage du serveur."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.nThreads",
+    "label": "Fils d'encodeur",
+    "desc": "Threads CPU pour l'encodeur vision/audio."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.size",
+    "label": "{gb} Go"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.braveApiKey",
+    "label": "Clé API Brave Search",
+    "desc": "Gratuit : 2 000 requêtes/mois. Obtenez une clé sur brave.com/search/api"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.contextCompression",
+    "label": "Compression du contexte",
+    "desc": "Compresse les résultats des outils pour économiser l'espace du contexte. Recommandé pour les petits modèles (< 8 K contexte). Aide le modèle à compléter les chaînes d'outils (ex. recherche puis récupération)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxCallsPerRound",
+    "label": "Appels max par round",
+    "desc": "Nombre d'outils que le modèle peut invoquer en un seul round."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxRounds",
+    "label": "Rounds max",
+    "desc": "Nombre de cycles penser→outil→penser autorisés par message."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryBaseDelay",
+    "label": "Delai de base",
+    "desc": "Delai initial en millisecondes avant la premiere nouvelle tentative. Double a chaque tentative."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryMaxRetries",
+    "label": "Tentatives max.",
+    "desc": "Nombre de tentatives apres le premier echec. 0 = pas de nouvelle tentative."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retrySection",
+    "label": "Nouvelle tentative reseau",
+    "desc": "Reessayer les outils web (recherche, recuperation, localisation) en cas d'erreurs transitoires avec backoff exponentiel."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searchProvider",
+    "label": "Fournisseur de recherche",
+    "desc": "Choisissez un moteur de recherche web. Brave Search nécessite une clé API gratuite. SearXNG nécessite l'URL d'une instance auto-hébergée."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searxngUrl",
+    "label": "URL de l'instance SearXNG",
+    "desc": "URL de base de votre instance SearXNG auto-hébergée."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillApi",
+    "label": "Skill API",
+    "desc": "Permettre au LLM d'interroger l'API NeuroSkill — état de l'appareil, sessions EEG, labels, recherche, hooks, calibrations, TTS, etc."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsRefresh",
+    "label": "Mise à jour auto des skills",
+    "desc": "Télécharger périodiquement les derniers skills communautaires depuis GitHub. 0 pour désactiver."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsSyncOnLaunch",
+    "label": "Synchroniser au lancement",
+    "desc": "Toujours recuperer les derniers skills au demarrage de l'application"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.suggestSkill",
+    "label": "Apprenez quelque chose de nouveau à NeuroSkill",
+    "desc": "Proposez un skill sur Discord — protocoles, automatisations, tout est possible."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webCache",
+    "label": "Cache web",
+    "desc": "Mettre en cache les resultats de recherche et de recuperation web sur le disque."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.verbose",
+    "label": "Journalisation LLM détaillée",
+    "desc": "Afficher la sortie brute de lama.cpp / clip_model_loader dans le journal. Désactivé par défaut."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.autoConnect",
+    "label": "Auto-Connect",
+    "desc": "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.idleTimeout",
+    "label": "Délai d'inactivité",
+    "desc": "Arrêter la session automatiquement si aucun échantillon n'arrive pendant ce délai. Utile si la source LSL plante ou est mise en pause sans se déconnecter."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.localStreams",
+    "label": "Local LSL Streams",
+    "desc": "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.accessibility",
+    "label": "Accessibilité",
+    "desc": "Le suivi de l'activité clavier et souris utilise un CGEventTap (macOS) pour enregistrer les horodatages du dernier appui de touche et du dernier mouvement de souris. Aucune frappe ni position du curseur n'est stockée - uniquement des horodatages Unix. Cela nécessite l'autorisation Accessibilité sur macOS."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.bluetooth",
+    "label": "Bluetooth",
+    "desc": "Le Bluetooth est utilisé pour se connecter à votre casque BCI (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian, etc.). Sur macOS, le système affiche une invite de permission unique lors du premier scan. Sous Linux et Windows, aucune permission spécifique n'est requise."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.calendar",
+    "label": "Calendrier",
+    "desc": "Les outils de calendrier peuvent lire les événements pour fournir du contexte de planification. L'autorisation est demandée par macOS au besoin."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.fullDiskAccess",
+    "label": "Accès complet au disque",
+    "desc": "Requis pour la détection directe du mode Concentration via la base de données système. Sans cette autorisation, l'app bascule sur une méthode héritée plus lente. Recommandé pour une intégration fiable du mode Ne pas déranger."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.location",
+    "label": "Services de localisation",
+    "desc": "Sur macOS, les services de localisation utilisent CoreLocation (GPS/Wi-Fi/cellulaire) pour un positionnement précis. Sur Linux et Windows, l’app utilise la géolocalisation IP sans autorisation nécessaire. Si la localisation est refusée, l’app bascule automatiquement sur la géolocalisation IP."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.notifications",
+    "label": "Notifications",
+    "desc": "Les notifications sont envoyées lorsque vous atteignez votre objectif d'enregistrement quotidien et lorsqu'une mise à jour logicielle est disponible. Sur macOS et Windows, le système demande la permission lors de l'envoi de la première notification."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.screenRecording",
+    "label": "Enregistrement d'écran",
+    "desc": "Requis pour capturer les fenêtres d'autres applications pour le système d'embedding de captures. macOS masque le contenu des fenêtres sans cette autorisation."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyAccessibility",
+    "label": "Accessibilité",
+    "desc": "Pour horodater les événements clavier et souris et fournir un contexte d'activité. Seul le moment de l'événement est enregistré - jamais ce qui a été tapé ni où se trouvait le curseur."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyBluetooth",
+    "label": "Bluetooth",
+    "desc": "Pour détecter votre casque BCI et diffuser ses données via BLE."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyCalendar",
+    "label": "Calendrier",
+    "desc": "Pour fournir du contexte de planification aux outils IA afin que l'assistant puisse référencer vos événements à venir."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyLocation",
+    "label": "Localisation",
+    "desc": "Pour fournir un contexte de localisation précis au LLM et stocker les données GPS aux côtés des données de santé. Bascule sur la géolocalisation IP en cas de refus."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyNotifications",
+    "label": "Notifications",
+    "desc": "Pour vous avertir lorsque vous atteignez votre objectif quotidien et lorsque des mises à jour sont disponibles."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyScreenRecording",
+    "label": "Enregistrement d'écran",
+    "desc": "Pour capturer la fenêtre active pour la recherche de similarité visuelle et la corrélation EEG cross-modale. Seules les captures manuelles sont stockées — jamais d'enregistrement continu."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.embeddingModel",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.gpuToggle",
+    "label": "Accélération GPU",
+    "desc": "Utiliser le GPU pour les embeddings d'images et l'OCR. Désactiver pour forcer l'inférence CPU (libère le GPU pour le LLM/EEG)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.imageSize",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.interval",
+    "label": "Intervalle de capture",
+    "desc": "Aligné sur les époques d'embedding EEG (5 s chacune). 1× = chaque époque, 2× = une sur deux, jusqu'à 12× (60 s)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.modelChanged",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.ocrToggle",
+    "label": "Extraction de texte OCR",
+    "desc": "Extraire le texte des captures d'écran pour la recherche textuelle. S'exécute sur l'image pleine résolution avant le redimensionnement."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.quality",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.reembed",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.activeWindowToggle",
+    "label": "Suivre la fenêtre active",
+    "desc": "Enregistrer quelle application et quelle fenêtre est au premier plan. Stocké localement dans activity.sqlite, jamais transmis."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.apiToken",
+    "label": "Authentification API",
+    "desc": "Lorsqu'il est défini, toutes les requêtes API HTTP et WebSocket doivent inclure ce jeton dans l'en-tête Authorization. Laissez vide pour désactiver l'authentification."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.autoFitToggle",
+    "label": "Ajuster automatiquement la hauteur du tableau de bord",
+    "desc": "Agrandit ou réduit la fenêtre principale pour correspondre au contenu du tableau de bord, limité à la hauteur de l'écran."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dailyGoal",
+    "label": "Objectif quotidien",
+    "desc": "Définissez votre objectif d'enregistrement quotidien. Le progrès est affiché sur le tableau de bord."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dataDir",
+    "label": "Répertoire de données",
+    "desc": "Où toutes les données EEG, embeddings, labels et logs sont stockés."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.geoProvider",
+    "label": "Fournisseur de géolocalisation",
+    "desc": "Choisissez comment l'application détermine votre position pour les métadonnées de session. « Désactivé » désactive la géolocalisation, « Local » utilise le GPS de l'appareil et « Distant » interroge un service externe."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.hfEndpoint",
+    "label": "Point de terminaison HuggingFace",
+    "desc": "URL miroir/base optionnelle pour les téléchargements de modèles (LLM + EXG + TTS). Par défaut, suit HF_ENDPOINT ou https://huggingface.co."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.inputActivityToggle",
+    "label": "Suivre l'activité clavier et souris",
+    "desc": "Enregistrer l'activité clavier et souris à la seconde près. Aucune permission spéciale requise. Stocké dans activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.language",
+    "label": "Langue",
+    "desc": "Choisissez la langue d'affichage. Par défaut : la langue de votre système."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBands",
+    "label": "Bandes",
+    "desc": "Instantanés de puissance"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBluetooth",
+    "label": "Appareils",
+    "desc": "Scanner d'appareils & cycle de session"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logChatStore",
+    "label": "Stockage de chat",
+    "desc": "Opérations SQLite de chat (sauvegarde, migration, ouverture)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logEmbedder",
+    "label": "Encodeur",
+    "desc": "Encodeur ZUNA & insertions HNSW"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logFilter",
+    "label": "Filtre",
+    "desc": "Pas du filtre GPU"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHistory",
+    "label": "Historique",
+    "desc": "Chargement sessions & scan CSV"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHooks",
+    "label": "Hooks",
+    "desc": "Matcher des hooks, déclenchements et notifications"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logIroh",
+    "label": "Réseau Iroh",
+    "desc": "Relais, QUIC, avertissements IPv6 (démon — très verbeux)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logScanner",
+    "label": "Scanner",
+    "desc": "Découverte multi-transport d'appareils (BLE, USB, Cortex)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logTools",
+    "label": "Tools",
+    "desc": "Exécution des appels d'outils (invocation, sécurité, timing)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logWebsocket",
+    "label": "WebSocket",
+    "desc": "Connexions & messages WS"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.openbci",
+    "label": "OpenBCI",
+    "desc": "Configurez une carte OpenBCI pour vous connecter à côté ou à la place d'un autre appareil BCI."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.wsHost",
+    "label": "Adresse d'écoute",
+    "desc": "Le mode LAN expose l'API à tous les appareils du réseau. Redémarrage requis."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetDefault",
+    "label": "Par défaut",
+    "desc": "Cycle standard de 8 heures - 23h00 à 07h00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetEarlyBird",
+    "label": "Lève-tôt",
+    "desc": "Coucher tôt - 21h30 à 05h30 (8 h)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetLongSleeper",
+    "label": "Gros dormeur",
+    "desc": "Fenêtre étendue de 10 heures - 22h00 à 08h00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetNightOwl",
+    "label": "Couche-tard",
+    "desc": "Coucher tardif - 01h00 à 09h00 (8 h)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetShortSleeper",
+    "label": "Petit dormeur",
+    "desc": "Fenêtre compacte de 6 heures - 00h00 à 06h00."
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclAdmin",
+    "label": "Admin",
+    "desc": "Full access"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclReadOnly",
+    "label": "Read Only",
+    "desc": "GET endpoints only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclStream",
+    "label": "Stream",
+    "desc": "EEG events, status, bands only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.defaultToken",
+    "label": "Default Token",
+    "desc": "Built-in admin token used by the app. Cannot be deleted."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.editFile",
+    "label": "Modifier un fichier",
+    "desc": "Effectuer des modifications chirurgicales rechercher-remplacer dans des fichiers existants."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.location",
+    "label": "Localisation",
+    "desc": "Permet une recherche approximative du pays, de la région, de la ville et du fuseau horaire par IP."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.readFile",
+    "label": "Lire un fichier",
+    "desc": "Lire le contenu de fichiers texte. Les gros fichiers sont paginés avec offset/limit."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.skillsSection",
+    "label": "Compétences de l'agent",
+    "desc": "Les skills fournissent des instructions spécialisées que le LLM peut charger à la demande. Activez ou désactivez les skills individuellement."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webFetch",
+    "label": "Récupération web",
+    "desc": "Permet de récupérer le corps texte brut d'une page HTTP(S) publique."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webSearch",
+    "label": "Recherche sur le Web",
+    "desc": "Recherche web avec le fournisseur de recherche configuré."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.writeFile",
+    "label": "Écrire un fichier",
+    "desc": "Créer ou écraser des fichiers. Les répertoires parents sont créés automatiquement."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendKitten",
+    "label": "KittenTTS",
+    "desc": "Modèle ONNX compact, rapide sur tout CPU, anglais uniquement."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendNeutts",
+    "label": "NeuTTS",
+    "desc": "Backbone LLM GGUF avec décodeur NeuCodec. Clone n'importe quelle voix ; prend en charge l'anglais, l'allemand, le français, l'espagnol."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.preloadOnStartup",
+    "label": "Précharger le moteur au démarrage",
+    "desc": "Réchauffe le moteur actif en arrière-plan au lancement de l'application"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.requirements",
+    "label": "Nécessite espeak-ng dans le PATH",
+    "desc": "macOS : brew install espeak-ng · Ubuntu : apt install espeak-ng"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.cooldownMs",
+    "label": "Refroidissement GPU",
+    "desc": "Pause en millisecondes entre les époques d'entraînement. 0 = débit GPU maximal. Augmenter pour réduire l'utilisation du GPU."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.negSampleRate",
+    "label": "Taux d'échantillonnage négatif",
+    "desc": "Paires non-voisines aléatoires par arête positive par époque. Plus élevé = séparation plus forte, entraînement plus lent."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nEpochs",
+    "label": "Époques d'optimisation",
+    "desc": "Nombre d'itérations de descente de gradient. Plus d'époques = mise en page plus fine, calcul plus lent."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nNeighbors",
+    "label": "k plus proches voisins",
+    "desc": "Nombre de voisins pour le graphe KNN. Valeurs faibles = détails locaux ; valeurs élevées = structure globale."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.repulsion",
+    "label": "Répulsion",
+    "desc": "Contrôle la force de séparation des points non-voisins. Des valeurs plus élevées produisent des clusters plus distincts entre les sessions A et B."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.timeout",
+    "label": "Délai d'entraînement",
+    "desc": "Temps maximum pour l'optimiseur UMAP. L'entraînement s'arrête si cette limite est atteinte."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoCheck",
+    "label": "Vérifier automatiquement",
+    "desc": "Vérifier les mises à jour une fois par jour au démarrage de l'application."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autostart",
+    "label": "Lancer à la connexion",
+    "desc": "Démarre automatiquement quand vous ouvrez une session."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.checkInterval",
+    "label": "Fréquence de vérification",
+    "desc": "À quelle fréquence l'application vérifie automatiquement les mises à jour en arrière-plan."
+  }
+]

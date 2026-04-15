@@ -309,6 +309,10 @@ const ui: Record<string, string> = {
   "invite.copyLink": "העתק קישור הזמנה",
   "invite.copied": "הועתק!",
   "invite.linkHint": "פתח את הקישור הזה בטלפון אם אינך יכול לסרוק את קוד ה-QR",
+
+  // ── Auto-synced from en/ (2026-04-15) ──
+  // TODO: translate the following 1 key(s) into he
+  "cmdK.sectionSettings": "Settings",
 };
 
 export default ui;

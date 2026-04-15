@@ -312,6 +312,10 @@ const ui: Record<string, string> = {
   "invite.copyLink": "초대 링크 복사",
   "invite.copied": "복사됨!",
   "invite.linkHint": "QR 코드를 스캔할 수 없으면 이 링크를 휴대폰에서 열어보세요",
+
+  // ── Auto-synced from en/ (2026-04-15) ──
+  // TODO: translate the following 1 key(s) into ko
+  "cmdK.sectionSettings": "Settings",
 };
 
 export default ui;

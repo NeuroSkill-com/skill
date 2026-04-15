@@ -762,6 +762,10 @@ async function main() {
       execSync("npm run clean:rust", { stdio: "inherit" });
     }
 
+    // ── regenerate derived indexes ─────────────────────────────────────────────
+
+    execSync("npm run build:settings-index", { stdio: "inherit" });
+
     // ── create bump commit ────────────────────────────────────────────────────
 
     execSync("git add -A", { stdio: "inherit" });

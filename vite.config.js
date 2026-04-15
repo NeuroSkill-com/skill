@@ -8,6 +8,7 @@ import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -75,6 +76,28 @@ function patchTailwindForSvelte() {
   return pluginArray;
 }
 
+// ── Settings search index — auto-regenerate during dev ──────────────────────
+//
+// Watches i18n EN files and *Tab.svelte for changes, then reruns the
+// build-settings-index script to keep the Cmd-K search index up to date.
+
+/** @type {() => import('vite').Plugin} */
+function settingsSearchIndexPlugin() {
+  const watched = ["src/lib/i18n/en/", "Tab.svelte"];
+  return {
+    name: "settings-search-index",
+    configureServer(server) {
+      server.watcher.on("change", (file) => {
+        if (watched.some((p) => file.includes(p))) {
+          try {
+            execSync("npx tsx scripts/build-settings-index.ts", { cwd: path.resolve("."), stdio: "inherit" });
+          } catch { /* logged by the script */ }
+        }
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // Pre-bundle map libraries so Vite's import-analysis pass never fails on
@@ -91,6 +114,7 @@ export default defineConfig(({ mode }) => ({
   },
 
   plugins: [
+    settingsSearchIndexPlugin(),
     sveltekit(),
     ...patchTailwindForSvelte(),
     suppressUnusedImportWarnings,

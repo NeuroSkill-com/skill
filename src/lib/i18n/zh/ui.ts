@@ -310,6 +310,10 @@ const ui: Record<string, string> = {
   "invite.copyLink": "复制邀请链接",
   "invite.copied": "已复制！",
   "invite.linkHint": "如果无法扫描二维码，请在手机上打开此链接",
+
+  // ── Auto-synced from en/ (2026-04-15) ──
+  // TODO: translate the following 1 key(s) into zh
+  "cmdK.sectionSettings": "Settings",
 };
 
 export default ui;

@@ -195,6 +195,9 @@ const ui: Record<string, string> = {
   "cmdK.kw.highContrast": "accessibility visibility contrast borders text",
   "cmdK.kw.updates": "version upgrade download install patch",
 
+  // ── Settings-tab deep links ─────────────────────────────────────────
+  "cmdK.sectionSettings": "Settings",
+
   // ── LSL commands ─────────────────────────────────────────────────────
   "cmdK.sectionLsl": "LSL",
   "cmdK.lslScan": "Scan for LSL Streams",

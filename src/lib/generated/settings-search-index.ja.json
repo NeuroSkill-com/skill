@@ -1,0 +1,920 @@
+[
+  {
+    "tab": "appearance",
+    "key": "appearance.accentColor",
+    "label": "アクセントカラー",
+    "desc": "主要なインタラクティブカラーを設定します — ボタン、アクティブ状態、フォーカスリング、アプリ全体のハイライト。"
+  },
+  {
+    "tab": "appearance",
+    "key": "appearance.highContrast",
+    "label": "ハイコントラスト",
+    "desc": "視認性向上のために境界線とテキストのコントラストを高めます。"
+  },
+  {
+    "tab": "appearance",
+    "key": "settings.fontSize",
+    "label": "フォントサイズ",
+    "desc": "UIテキストサイズを調整します。アプリ内のすべてのテキストに影響します。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.complete",
+    "label": "キャリブレーション完了",
+    "desc": "全{n}回の反復が正常に完了しました。各アクションフェーズのラベルが保存されました。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.baseline",
+    "label": "開眼 / 閉眼",
+    "desc": "クラシックなベースライン：安静時の開眼vs閉眼。初心者や初回キャリブレーションに最適です。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.children",
+    "label": "子供 / 短い注意力",
+    "desc": "集中力の持続が難しい子供やユーザー向けの短いフェーズ（10秒）。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.clinical",
+    "label": "臨床 / 研究",
+    "desc": "研究や臨床ベースライン用の、長いアクションフェーズを持つ5回反復の拡張プロトコル。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.focus",
+    "label": "集中 / リラックス",
+    "desc": "ニューロフィードバック：暗算vs穏やかな呼吸。一般的な用途に。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.gaming",
+    "label": "ゲーム / パフォーマンス",
+    "desc": "高負荷タスクvs受動的休息。eスポーツやピークパフォーマンスのバイオフィードバックに。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.meditation",
+    "label": "瞑想",
+    "desc": "能動的思考vsマインドフルネス瞑想。瞑想実践者向け。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.sleep",
+    "label": "入眠前 / 眠気",
+    "desc": "覚醒状態vs眠気。睡眠研究やリラックストラッキングに。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.stress",
+    "label": "ストレス / 不安",
+    "desc": "安静時のリラックスvs軽度の認知ストレッサー。不安やストレス反応のトラッキングに。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.presets",
+    "label": "クイックプリセット",
+    "desc": "目的、年齢、用途に基づいたキャリブレーション設定を選択してください。下記で設定を調整できます。"
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.actionLabels",
+    "label": "アクションラベル",
+    "desc": "各フェーズで表示され、EEGラベルとして保存される名前。"
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.iterations",
+    "label": "反復回数",
+    "desc": "アクション1→休憩→アクション2→休憩の完全サイクル数。"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "ローカルランチャー経由のEPOC、Insight、Flex、MN8"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.usbSerial",
+    "label": "USBシリアル",
+    "desc": "OpenBCI Cyton / CytonDaisyドングル"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.model",
+    "label": "埋め込みモデル"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.reembed",
+    "label": "すべてのラベルを再埋め込み",
+    "desc": "現在のモデルを使用してすべての既存ラベルの埋め込みを再計算します。モデル切り替え後に実行してください。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.enabled",
+    "label": "自動再起動"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.timeout",
+    "label": "再起動までの時間（秒）"
+  },
+  {
+    "tab": "exg",
+    "key": "model.buildQuality",
+    "label": "ビルド品質",
+    "desc": "グラフ構築時のビーム幅。高いほどグラフが良くなりますが、挿入が遅くなります。"
+  },
+  {
+    "tab": "exg",
+    "key": "model.connectivity",
+    "label": "接続性",
+    "desc": "各ノードは最大2×Mのエッジを保持します。高いほど再現率が向上しますが、RAM使用量が増えます。"
+  },
+  {
+    "tab": "exg",
+    "key": "model.gpuPrecision",
+    "label": "GPU精度",
+    "desc": "半精度(f16)は高速、全精度(f32)は高精度"
+  },
+  {
+    "tab": "exg",
+    "key": "model.idleReembed",
+    "label": "バックグラウンド埋め込み",
+    "desc": "デバイスがアイドル時に未処理のエポックを自動的に埋め込む"
+  },
+  {
+    "tab": "exg",
+    "key": "model.reembed",
+    "label": "再埋め込み",
+    "desc": "選択したモデルバックエンドですべての生EXGセッション記録を再エンコードし、HNSWインデックスを再構築します。"
+  },
+  {
+    "tab": "exg",
+    "key": "settings.inferenceDevice",
+    "label": "推論デバイス",
+    "desc": "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.channels",
+    "label": "チャンネル",
+    "desc": "シミュレートするEEG電極の数。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.lineNoise",
+    "label": "ラインノイズ",
+    "desc": "50 Hzまたは60 Hzの商用電源干渉を追加します。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.preview",
+    "label": "信号プレビュー",
+    "desc": "最初の4チャンネルのライブプレビュー。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.quality",
+    "label": "信号品質",
+    "desc": "信号対雑音比を調整します。高いほどクリーンな信号です。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.sampleRate",
+    "label": "サンプルレート（Hz）",
+    "desc": "チャンネルあたりの1秒間のサンプル数。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.template",
+    "label": "信号テンプレート",
+    "desc": "生成する合成信号の種類を選択します。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateBadQuality",
+    "label": "不良なEEG",
+    "desc": "筋アーティファクト、50/60 Hzラインノイズ、電極ポップを含むノイジーな信号。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateFile",
+    "label": "ファイルから",
+    "desc": "CSVまたはEDFファイルからサンプルを再生します。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateGoodQuality",
+    "label": "良好なEEG",
+    "desc": "アルファリズム優位でピンクノイズ背景のリアルな安静時EEG。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateInterruptions",
+    "label": "間欠的接続",
+    "desc": "電極のゆるみやワイヤレス干渉をシミュレートする周期的なドロップアウトを含む良好な信号。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateSine",
+    "label": "正弦波",
+    "desc": "標準周波数帯（デルタ、シータ、アルファ、ベータ、ガンマ）のクリーンな正弦波。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.duration",
+    "label": "持続時間",
+    "desc": "DNDが有効になるまでに集中が閾値を超え続ける必要がある秒数。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.enabled",
+    "label": "自動DND有効化",
+    "desc": "オンにすると、エンゲージメントが設定時間以上高い状態を維持した場合にmacOSのおやすみモードを有効にします。エンゲージメントが低下するとDNDは解除されます。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitDuration",
+    "label": "DND解除遅延",
+    "desc": "集中スコアが閾値を下回ってからDNDが解除されるまでの時間。短い低下によるDNDの切り替えを防ぎます。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitNotification",
+    "label": "解除通知",
+    "desc": "集中モードが自動的に解除された時（スコア低下、信号品質低下、機能オフ）に通知を送信します。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusLookback",
+    "label": "集中ルックバック",
+    "desc": "スコアが低下する前にこの期間内に集中が持続していた場合、解除カウントダウンがリセットされます — 最近の集中がDND解除を遅延させます。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusMode",
+    "label": "集中モード",
+    "desc": "エンゲージメントが持続した時に有効にするmacOSの集中モード。システム設定→集中モードで設定されたモードから選択します。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.snrExitThreshold",
+    "label": "SNR解除閾値",
+    "desc": "信号対雑音比がこのレベルを1分間下回ると、集中モードが強制解除されます。低い値ほどノイズの多い信号を許容します。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.threshold",
+    "label": "集中閾値",
+    "desc": "必要な最低エンゲージメントスコア（0〜100）。スコアはEEGのβ/(α+θ)比率から算出されます。"
+  },
+  {
+    "tab": "hooks",
+    "key": "hooks.enabled",
+    "label": "有効"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.autostart",
+    "label": "起動時に自動開始",
+    "desc": "アプリ起動時にアクティブモデルを自動読み込みします。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.enabled",
+    "label": "LLMサーバーを有効化",
+    "desc": "WebSocket APIと同じポートでOpenAI互換推論サーバーを実行します。llm Cargoフィーチャーとダウンロード済みモデルが必要です。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.endpoint",
+    "label": "APIエンドポイント"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.apiKey",
+    "label": "APIキー（オプション）",
+    "desc": "すべての/v1/*リクエストにこのBearerトークンを要求します。空にするとオープンアクセスになります。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.attnRot",
+    "label": "TurboQuant注意回転",
+    "desc": "KVキャッシュ書き込み前にQ/K/Vテンソルに適用されるアダマール回転（llama.cpp PR #21038）。量子化KVキャッシュの品質をほぼゼロコストで大幅に向上させます。モデル互換性に問題がない限り有効のままにしてください。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.ctxSize",
+    "label": "コンテキストサイズ",
+    "desc": "KVキャッシュサイズ（トークン数）。自動はGPU/RAMに収まる最大コンテキストを選択します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.flashAttn",
+    "label": "Flash Attention",
+    "desc": "より高速でメモリ効率の良いセルフアテンションにFlash Attentionを使用します。Metal、CUDA、Vulkanバックエンドでサポート。互換性の問題がある場合のみ無効にしてください。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuLayers",
+    "label": "GPUレイヤー",
+    "desc": "GPUにオフロードするレイヤー数（0 = CPUのみ、高い値 = GPU）。llm-metal / llm-cudaフィーチャーが必要です。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuMemThreshold",
+    "label": "GPUメモリ安全性",
+    "desc": "推論実行前に必要な最小空きGPU/統合メモリ。メモリが少ない場合のMetal/CUDAクラッシュを防ぎます。オフで無効化（非推奨）。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.kvCacheType",
+    "label": "KVキャッシュ量子化（TurboQuant）",
+    "desc": "KVキャッシュテンソルの保存精度。量子化型（Q8_0/Q5_0/Q4_0）はVRAM使用量を大幅に削減します。TurboQuant注意回転（下記）により量子化時も品質が維持されます。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.offloadKqv",
+    "label": "KQVをGPUにオフロード",
+    "desc": "すべてのトランスフォーマーレイヤーがGPUオフロードされていなくても、K/Q/Vテンソル操作をGPUにオフロードします。ハイブリッドCPU+GPUセットアップに推奨。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.parallel",
+    "label": "最大同時リクエスト",
+    "desc": "HTTP接続を応答可能に保ちながらデコードループをシリアル化します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.prefill",
+    "label": "プリフィルバッチサイズ",
+    "desc": "プロンプト取り込み中にデコード呼び出しごとに処理されるトークン数を制御します。大きい値ほどプリフィルが速くなりますが、ピークメモリが増加します。自動はmin(n_ctx, 2048)を使用します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.autoload",
+    "label": "ビジョンエンコーダー自動読み込み",
+    "desc": "サーバー起動時に利用可能な最適ビジョンプロジェクター（mmproj）を自動読み込みします。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.nThreads",
+    "label": "エンコーダースレッド",
+    "desc": "ビジョン/オーディオエンコーダー用のCPUスレッド数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.size",
+    "label": "{gb} GB"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.braveApiKey",
+    "label": "Brave Search APIキー",
+    "desc": "無料プラン：月2,000クエリ。brave.com/search/apiでキーを取得してください"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.contextCompression",
+    "label": "コンテキスト圧縮",
+    "desc": "ツール結果を圧縮してコンテキストウィンドウのスペースを節約します。小さいモデル（8Kコンテキスト未満）に推奨。マルチステップツールチェーン（検索→フェッチなど）の完了を助けます。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxCallsPerRound",
+    "label": "ラウンドあたりの最大呼び出し数",
+    "desc": "1ラウンドでモデルが呼び出せるツールの数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxRounds",
+    "label": "最大ラウンド数",
+    "desc": "1メッセージあたりにモデルが実行できる思考→ツール→思考のホップ数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryBaseDelay",
+    "label": "基本遅延",
+    "desc": "最初のリトライ前の初期遅延（ミリ秒）。試行ごとに倍増します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryMaxRetries",
+    "label": "最大リトライ回数",
+    "desc": "初回失敗後のリトライ回数。0 = リトライなし。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retrySection",
+    "label": "ネットワークリトライ",
+    "desc": "一時的エラー時にWebツール（検索、フェッチ、位置情報）を指数バックオフでリトライします。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searchProvider",
+    "label": "検索プロバイダー",
+    "desc": "Web検索バックエンドを選択します。Brave Searchには無料APIキーが必要です。SearXNGにはセルフホストインスタンスURLが必要です。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searxngUrl",
+    "label": "SearXNGインスタンスURL",
+    "desc": "セルフホストSearXNGインスタンスのベースURL。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillApi",
+    "label": "Skill API",
+    "desc": "LLMがNeuroSkill APIをクエリすることを許可します — デバイス状態、EEGセッション、ラベル、検索、フック、キャリブレーション、TTSなど。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsRefresh",
+    "label": "スキル自動更新",
+    "desc": "最新のコミュニティスキルをGitHubから定期的にダウンロードします。0で無効化。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsSyncOnLaunch",
+    "label": "起動時に同期",
+    "desc": "アプリ起動時に常に最新のスキルを取得します"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.suggestSkill",
+    "label": "NeuroSkillに新しいことを教える",
+    "desc": "Discordでスキルを提案 — プロトコルから自動化まで、何でもOKです。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webCache",
+    "label": "Webキャッシュ",
+    "desc": "冗長なネットワーク呼び出しを避けるためにWeb検索とフェッチの結果をディスクにキャッシュします。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.verbose",
+    "label": "LLM詳細ログ",
+    "desc": "llama.cpp / clip_model_loaderの生の出力をログに表示します。デフォルトはオフ — モデル読み込みのデバッグ時のみ有効にしてください。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.autoConnect",
+    "label": "自動接続",
+    "desc": "10秒ごとにLSLストリームを自動スキャンし、ペアリング済みソースが見つかると接続します。セッションは自動的に開始されます。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.idleTimeout",
+    "label": "アイドルタイムアウト",
+    "desc": "この時間サンプルが届かない場合にセッションを自動停止します。LSLソースがクラッシュしたり切断せずに一時停止した場合に便利です。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.localStreams",
+    "label": "ローカルLSLストリーム",
+    "desc": "ローカルネットワーク上のLab Streaming Layer経由でブロードキャストされるEEG/EXGストリームを検出します。LSL互換デバイス（OpenBCI、BrainFlow、BrainFlow経由Emotiv、MATLAB、Python pylslなど）をデータソースとして使用できます。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.accessibility",
+    "label": "アクセシビリティ",
+    "desc": "キーボードとマウスの活動トラッキングは、macOSのCGEventTapを使用して最後のキー押下とマウスイベントのタイムスタンプを記録します。キーストロークやカーソル位置は保存されません — Unixの秒単位のタイムスタンプのみです。macOSではアクセシビリティ権限が必要です。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.bluetooth",
+    "label": "Bluetooth",
+    "desc": "BluetoothはBCIヘッドセット（Muse、MW75 Neuro、OpenBCI Ganglion、IDUN Guardianなど）に接続するために使用されます。macOSでは、アプリが初めてスキャンする際にシステムがBluetooth アクセスを求めます。LinuxとWindowsでは個別の権限は不要です。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.calendar",
+    "label": "カレンダー",
+    "desc": "カレンダーツールはスケジュールコンテキストのためにイベントを読み取ることができます。必要に応じてmacOSが権限を要求します。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.fullDiskAccess",
+    "label": "フルディスクアクセス",
+    "desc": "システムデータベース経由で直接集中モードを検出するのに必要です。これがないと、アプリはより遅いレガシー方式にフォールバックします。信頼性の高いおやすみモード統合に推奨されます。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.location",
+    "label": "位置情報サービス",
+    "desc": "macOSでは位置情報サービスがCoreLocation（GPS / Wi-Fi / セル）を使用して高精度な位置情報を提供します。LinuxとWindowsではIPベースのジオロケーションを使用し、権限は不要です。位置情報サービスが拒否されたり利用できない場合、アプリは自動的にIPジオロケーションにフォールバックします。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.notifications",
+    "label": "通知",
+    "desc": "通知はデイリー記録目標の達成時やソフトウェアアップデートが利用可能な時にお知らせするために使用されます。macOSとWindowsでは、最初の通知送信時にOSが権限を求めます。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.screenRecording",
+    "label": "画面収録",
+    "desc": "スクリーンショット埋め込みシステムのために他のアプリケーションウィンドウをキャプチャするのに必要です。macOSではこの権限がないとウィンドウ内容が墨消しされます。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyAccessibility",
+    "label": "アクセシビリティ",
+    "desc": "活動コンテキスト用にキーボードとマウスイベントにタイムスタンプを付けるため。イベントの時刻のみが保存されます — 入力内容やカーソル位置は保存されません。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyBluetooth",
+    "label": "Bluetooth",
+    "desc": "BLE経由でBCIヘッドセットを検出しデータをストリーミングするため。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyCalendar",
+    "label": "カレンダー",
+    "desc": "AIが予定のイベントを参照できるようにLLMツールにスケジュールコンテキストを提供するため。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyLocation",
+    "label": "位置情報",
+    "desc": "LLMに正確な位置情報コンテキストを提供し、健康データとともにGPS位置情報を保存するため。拒否された場合はIPジオロケーションにフォールバックします。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyNotifications",
+    "label": "通知",
+    "desc": "デイリー記録目標の達成時とアップデートの準備完了時に通知するため。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyScreenRecording",
+    "label": "画面収録",
+    "desc": "視覚類似検索とクロスモーダルEEG相関のためにアクティブウィンドウをキャプチャします。オプトインのスクリーンショットのみが保存されます — 連続録画ではありません。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.embeddingModel",
+    "label": "埋め込みモデル",
+    "desc": "類似検索用の画像埋め込みを生成するビジョンモデル。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.gpuToggle",
+    "label": "GPUアクセラレーション",
+    "desc": "画像埋め込みとOCRにGPUを使用します。CPU推論を強制するには無効にしてください（LLM/EEG用にGPUを解放）。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.imageSize",
+    "label": "画像サイズ",
+    "desc": "中間解像度（px）。キャプチャしたウィンドウは保存と埋め込みの前にこの正方形に収まるようにリサイズされます。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.interval",
+    "label": "キャプチャ間隔",
+    "desc": "EEG埋め込みエポック（各5秒）に揃えられます。1× = 毎エポック、2× = 2エポックごと、最大12×（60秒）。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.modelChanged",
+    "label": "埋め込みモデルが変更されました",
+    "desc": "スクリーンショットは別のモデルで埋め込まれています。一貫した検索結果のために再埋め込みしてください。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.ocrToggle",
+    "label": "OCRテキスト抽出",
+    "desc": "テキストベースの検索のためにスクリーンショットからテキストを抽出します。ダウンサイズ前のフル解像度画像で実行されます。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.quality",
+    "label": "WebP品質",
+    "desc": "WebP圧縮品質（0〜100）。低いほどファイルサイズが小さくなります。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.reembed",
+    "label": "スクリーンショットの再埋め込み",
+    "desc": "現在のモデルを使用してすべての既存スクリーンショットの埋め込みを再計算します。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.activeWindowToggle",
+    "label": "アクティブウィンドウを追跡",
+    "desc": "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.apiToken",
+    "label": "API認証",
+    "desc": "設定すると、すべてのHTTPおよびWebSocket APIリクエストにAuthorizationヘッダーにこのトークンが必要です。空にすると認証が無効になります。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.autoFitToggle",
+    "label": "ダッシュボードの高さを自動調整",
+    "desc": "ダッシュボードの内容に合わせてメインウィンドウを拡大/縮小します。画面の高さでクランプされます。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dailyGoal",
+    "label": "デイリー目標",
+    "desc": "デイリー記録目標を設定します。進捗はダッシュボードに表示されます。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dataDir",
+    "label": "データディレクトリ",
+    "desc": "すべてのEEGデータ、埋め込み、ラベル、ログが保存される場所。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.geoProvider",
+    "label": "位置情報サービス",
+    "desc": "セッションとLLMツールに地理的コンテキストを提供するために位置情報サービスを有効にします。macOSではCoreLocation（GPS/Wi-Fi）を使用して高精度、他のプラットフォームではIPジオロケーションを使用します。デフォルトは無効 — オンに切り替えて権限を要求してテストします。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.hfEndpoint",
+    "label": "HuggingFaceエンドポイント",
+    "desc": "モデルダウンロード（LLM + EXG + TTS）用のオプションのミラー/ベースURL。デフォルトはHF_ENDPOINTまたはhttps://huggingface.coに従います。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.inputActivityToggle",
+    "label": "キーボード＆マウスの活動を追跡",
+    "desc": "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.language",
+    "label": "言語",
+    "desc": "表示言語を選択します。デフォルトはシステムロケールです。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBands",
+    "label": "帯域",
+    "desc": "帯域パワースナップショット"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBluetooth",
+    "label": "デバイス",
+    "desc": "デバイススキャナー＆セッションライフサイクル"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logChatStore",
+    "label": "チャットストア",
+    "desc": "Chat SQLite操作（保存、マイグレーション、オープン）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logEmbedder",
+    "label": "エンベッダー",
+    "desc": "ZUNAエンコーダー＆HNSW挿入"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logFilter",
+    "label": "フィルター",
+    "desc": "GPUフィルターホップ"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHistory",
+    "label": "履歴",
+    "desc": "セッションリスト読み込み＆CSVスキャン"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHooks",
+    "label": "フック",
+    "desc": "フックマッチャー、トリガー＆通知"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logIroh",
+    "label": "Irohネットワーク",
+    "desc": "リレー、QUIC、IPv6警告（デーモン — 非常に多い）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logScanner",
+    "label": "スキャナー",
+    "desc": "マルチトランスポートデバイスディスカバリー（BLE、USB、Cortex）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logTools",
+    "label": "ツール",
+    "desc": "ツール呼び出し実行（呼び出し、安全性、タイミング）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logWebsocket",
+    "label": "WebSocket",
+    "desc": "WS接続＆メッセージ"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.openbci",
+    "label": "OpenBCI",
+    "desc": "別のBCIデバイスと一緒に、または代わりにOpenBCIボードを設定します。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.wsHost",
+    "label": "バインドアドレス",
+    "desc": "LANモードはネットワーク上のすべてのデバイスにAPIを公開します。再起動が必要です。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetDefault",
+    "label": "デフォルト",
+    "desc": "標準的な8時間サイクル — 23:00〜07:00。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetEarlyBird",
+    "label": "早起き",
+    "desc": "日の出とともに起きるスケジュール — 21:30〜05:30（8時間）。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetLongSleeper",
+    "label": "ロングスリーパー",
+    "desc": "延長10時間ウィンドウ — 22:00〜08:00。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetNightOwl",
+    "label": "夜型",
+    "desc": "遅寝スケジュール — 01:00〜09:00（8時間）。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetShortSleeper",
+    "label": "ショートスリーパー",
+    "desc": "コンパクトな6時間ウィンドウ — 00:00〜06:00。"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclAdmin",
+    "label": "管理者",
+    "desc": "フルアクセス — すべてのエンドポイント"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclReadOnly",
+    "label": "読み取り専用",
+    "desc": "GETエンドポイントのみ"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclStream",
+    "label": "ストリーム",
+    "desc": "EEGイベント、ステータス、帯域のみ"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.defaultToken",
+    "label": "デフォルトトークン",
+    "desc": "アプリが使用する組み込み管理者トークン。削除できません。新しいトークンを生成するには更新してください — アプリが自動的に取得します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.editFile",
+    "label": "ファイル編集",
+    "desc": "既存ファイルへの検索・置換編集を許可します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.location",
+    "label": "位置情報",
+    "desc": "IPベースの概算の国、地域、市区町村、タイムゾーン検索を許可します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.readFile",
+    "label": "ファイル読み取り",
+    "desc": "テキストファイルの読み取りを許可します。大きなファイルはオフセット/リミットでページネーションされます。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.skillsSection",
+    "label": "エージェントスキル",
+    "desc": "スキルはLLMがオンデマンドで読み込める専門的な指示を提供します。個別のスキルを切り替えてチャットで利用可能なものを制御します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webFetch",
+    "label": "Webフェッチ",
+    "desc": "公開HTTP(S)ページのテキストボディの取得を許可します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webSearch",
+    "label": "Web検索",
+    "desc": "設定された検索プロバイダーを使用してWebを検索します。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.writeFile",
+    "label": "ファイル書き込み",
+    "desc": "ファイルの作成や上書きを許可します。親ディレクトリは自動的に作成されます。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendKitten",
+    "label": "KittenTTS",
+    "desc": "コンパクトなONNXモデル。あらゆるCPUで高速。英語のみ。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendNeutts",
+    "label": "NeuTTS",
+    "desc": "GGUFのLLMバックボーンとNeuCodecデコーダー。任意の声をクローン可能。英語、ドイツ語、フランス語、スペイン語対応。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.preloadOnStartup",
+    "label": "起動時にエンジンをプリロード",
+    "desc": "アプリ起動時にアクティブなエンジンをバックグラウンドでウォームアップします"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.requirements",
+    "label": "PATHにespeak-ngが必要です",
+    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.cooldownMs",
+    "label": "GPUクールダウン",
+    "desc": "学習エポック間の一時停止（ミリ秒）。0 = 最大GPUスループット。他のタスクのために余裕を持たせるには増加。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.negSampleRate",
+    "label": "ネガティブサンプルレート",
+    "desc": "各エポックで正のエッジあたりに抽出されるランダムな非近傍ペアの数。高いほど分離が強く、学習が遅い。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nEpochs",
+    "label": "最適化エポック",
+    "desc": "勾配降下の反復回数。エポックが多いほどレイアウトが細かくなるが計算が遅い。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nNeighbors",
+    "label": "k最近傍",
+    "desc": "KNNグラフの構築に使用される最近傍の数。小さい値ほどローカル詳細を保持、大きい値ほどグローバル構造をキャプチャ。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.repulsion",
+    "label": "反発",
+    "desc": "非近傍ポイントがどれだけ強く押し離されるかを制御します。高い値ほどセッションAとBの間のクラスター分離が大きくなります。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.timeout",
+    "label": "学習タイムアウト",
+    "desc": "UMAPオプティマイザーの最大時間。この制限に達すると学習が早期停止します。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoCheck",
+    "label": "自動確認",
+    "desc": "アプリ起動時に1日1回アップデートを確認します。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autostart",
+    "label": "ログイン時に起動",
+    "desc": "コンピューターにログインしたときに自動的に起動します。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.checkInterval",
+    "label": "確認頻度",
+    "desc": "バックグラウンドで自動アップデートを確認する頻度。"
+  }
+]

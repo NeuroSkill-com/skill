@@ -386,6 +386,15 @@ onDestroy(() => {
       {@render tbBtn(t("apiStatus.refresh"), t("apiStatus.refresh"), emitApiRefresh,
         '<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>')}
     {/if}
+    <button type="button" title={"Command Palette (" + (isMac ? "⌘" : "Ctrl+") + "K)"} aria-label="Command Palette"
+      onclick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: isMac, ctrlKey: !isMac, bubbles: true }))}
+      class="flex items-center justify-center w-6 h-6 rounded-md transition-colors
+             text-muted-foreground hover:text-foreground hover:bg-accent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+        <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/>
+      </svg>
+    </button>
     <ThemeToggle />
     <LanguagePicker />
   </div>

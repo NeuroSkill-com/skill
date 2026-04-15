@@ -53,11 +53,11 @@ export async function openBtSettings(): Promise<void> {
   await invoke("open_bt_settings");
 }
 
-/** Open the settings window and navigate to a specific tab. */
-export async function openSettingsTab(tab: string): Promise<void> {
+/** Open the settings window and navigate to a specific tab, optionally scrolling to a setting. */
+export async function openSettingsTab(tab: string, settingKey?: string): Promise<void> {
   await invoke("open_settings_window");
   // Small delay to ensure the window is ready to receive events
   await new Promise((r) => setTimeout(r, 150));
   const { emit } = await import("@tauri-apps/api/event");
-  await emit("switch-tab", tab);
+  await emit("switch-tab", { tab, settingKey: settingKey ?? null });
 }

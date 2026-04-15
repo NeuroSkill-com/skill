@@ -1,0 +1,920 @@
+[
+  {
+    "tab": "appearance",
+    "key": "appearance.accentColor",
+    "label": "强调色",
+    "desc": "设置主要交互颜色 — 按钮、活动状态、焦点指示环以及整个应用中的高亮显示。"
+  },
+  {
+    "tab": "appearance",
+    "key": "appearance.highContrast",
+    "label": "高对比度",
+    "desc": "增强边框和文字对比度，提高可见性。"
+  },
+  {
+    "tab": "appearance",
+    "key": "settings.fontSize",
+    "label": "字体大小",
+    "desc": "调整界面文字大小。影响应用中的所有文本。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.complete",
+    "label": "校准完成",
+    "desc": "全部 {n} 次迭代已成功完成。每个动作阶段的标签均已保存。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.baseline",
+    "label": "睁眼 / 闭眼",
+    "desc": "经典基线：静息睁眼与闭眼对比。最适合初学者和首次校准。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.children",
+    "label": "儿童 / 短注意力",
+    "desc": "较短阶段（10 秒），适合儿童或注意力持续时间有限的用户。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.clinical",
+    "label": "临床 / 研究",
+    "desc": "扩展的 5 次迭代方案，具有较长的动作阶段，适用于研究或临床基线。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.focus",
+    "label": "专注 / 放松",
+    "desc": "神经反馈：心算与平静呼吸对比。通用场景。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.gaming",
+    "label": "游戏 / 高性能",
+    "desc": "高强度任务与被动休息对比。适用于电子竞技和巅峰表现生物反馈。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.meditation",
+    "label": "冥想",
+    "desc": "主动思考与正念冥想对比。适合冥想者和练习者。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.sleep",
+    "label": "入睡前 / 困倦",
+    "desc": "清醒警觉与困倦对比。适用于睡眠研究和入睡跟踪。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.stress",
+    "label": "压力 / 焦虑",
+    "desc": "静息平静与轻度认知压力源对比。适用于焦虑和压力反应跟踪。"
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.presets",
+    "label": "快速预设",
+    "desc": "根据您的目标、年龄和使用场景选择校准配置。设置仍可在下方调整。"
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.actionLabels",
+    "label": "操作标签",
+    "desc": "每个阶段显示的名称，并作为 EEG 标签存储。"
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.iterations",
+    "label": "迭代次数",
+    "desc": "完整的操作 1 → 休息 → 操作 2 → 休息循环次数。"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.ble",
+    "label": "低功耗蓝牙",
+    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC、Insight、Flex、MN8（通过本地 Launcher）"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB 串口",
+    "desc": "OpenBCI Cyton / CytonDaisy 适配器"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.model",
+    "label": "嵌入模型"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.reembed",
+    "label": "重新嵌入所有标签",
+    "desc": "使用当前模型重新计算所有现有标签的嵌入向量。切换模型后请运行此操作。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.enabled",
+    "label": "自动重启"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.timeout",
+    "label": "重启等待时间（秒）"
+  },
+  {
+    "tab": "exg",
+    "key": "model.buildQuality",
+    "label": "构建质量",
+    "desc": "图构建时的波束宽度。值越高，图质量越好，但插入速度越慢。"
+  },
+  {
+    "tab": "exg",
+    "key": "model.connectivity",
+    "label": "连通性",
+    "desc": "每个节点最多保留 2 × M 条边。值越高，召回率越好，但占用更多内存。"
+  },
+  {
+    "tab": "exg",
+    "key": "model.gpuPrecision",
+    "label": "GPU精度",
+    "desc": "半精度(f16)更快，全精度(f32)更准确"
+  },
+  {
+    "tab": "exg",
+    "key": "model.idleReembed",
+    "label": "后台嵌入",
+    "desc": "设备空闲时自动嵌入未处理的epoch"
+  },
+  {
+    "tab": "exg",
+    "key": "model.reembed",
+    "label": "重新嵌入",
+    "desc": "使用所选模型后端重新编码所有原始 EXG 会话记录并重建 HNSW 索引。"
+  },
+  {
+    "tab": "exg",
+    "key": "settings.inferenceDevice",
+    "label": "推理设备",
+    "desc": "AI 推理运行的位置。GPU 更快；CPU 适用于任何机器且避免 VRAM 压力。更改后重启 LLM 服务器。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.channels",
+    "label": "通道数",
+    "desc": "要模拟的 EEG 电极数量。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.lineNoise",
+    "label": "工频干扰",
+    "desc": "添加 50 Hz 或 60 Hz 电网干扰。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.preview",
+    "label": "信号预览",
+    "desc": "前 4 个通道的实时预览。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.quality",
+    "label": "信号质量",
+    "desc": "调整信噪比。数值越高，信号越干净。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.sampleRate",
+    "label": "采样率 (Hz)",
+    "desc": "每通道每秒采样数。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.template",
+    "label": "信号模板",
+    "desc": "选择要生成的合成信号类型。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateBadQuality",
+    "label": "低质量 EEG",
+    "desc": "带有肌肉伪迹、50/60 Hz 工频干扰和电极跳变的噪声信号。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateFile",
+    "label": "从文件加载",
+    "desc": "从 CSV 或 EDF 文件回放采样数据。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateGoodQuality",
+    "label": "高质量 EEG",
+    "desc": "逼真的静息态 EEG，具有主导 alpha 节律和粉红噪声背景。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateInterruptions",
+    "label": "间歇性连接",
+    "desc": "良好信号伴有周期性断连，模拟电极松动或无线干扰。"
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateSine",
+    "label": "正弦波",
+    "desc": "标准频段（delta、theta、alpha、beta、gamma）的纯净正弦波。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.duration",
+    "label": "持续时长",
+    "desc": "专注度必须在阈值以上保持的秒数，达到后才会激活 DND。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.enabled",
+    "label": "启用自动勿扰模式",
+    "desc": "开启后，当专注度持续保持高水平达到设定时间，应用将自动激活 macOS 勿扰模式。专注度下降后立即解除 DND。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitDuration",
+    "label": "DND 退出延迟",
+    "desc": "专注分数必须低于阈值多长时间后才解除 DND。防止短暂下降导致 DND 关闭。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitNotification",
+    "label": "退出通知",
+    "desc": "当专注模式被自动停用时发送通知（分数下降、信号质量低或功能被关闭）。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusLookback",
+    "label": "专注回溯",
+    "desc": "如果在此时间窗口内曾保持专注，即使分数下降，退出倒计时也会重置——近期的专注会延迟 DND 停用。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusMode",
+    "label": "专注模式",
+    "desc": "当您的专注度持续保持时要激活的 macOS 专注模式。从\"系统设置 → 专注\"中配置的模式中选择。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.snrExitThreshold",
+    "label": "SNR 退出阈值",
+    "desc": "如果信噪比 (SNR) 持续低于此水平 1 分钟，专注模式将被强制停用。较低的值容许更多噪声。"
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.threshold",
+    "label": "专注阈值",
+    "desc": "所需的最低专注分数（0–100）。该分数由 EEG beta/(alpha+theta) 比率计算得出。"
+  },
+  {
+    "tab": "hooks",
+    "key": "hooks.enabled",
+    "label": "已启用"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.autostart",
+    "label": "启动时自动加载",
+    "desc": "应用启动时自动加载活动模型。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.enabled",
+    "label": "启用 LLM 服务器",
+    "desc": "在与 WebSocket API 相同的端口上运行 OpenAI 兼容的推理服务器。需要 llm Cargo 功能和已下载的模型。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.endpoint",
+    "label": "API 端点"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.apiKey",
+    "label": "API 密钥（可选）",
+    "desc": "在每个 /v1/* 请求上要求此 Bearer 令牌。留空表示开放访问。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.attnRot",
+    "label": "TurboQuant 注意力旋转",
+    "desc": "在 KV-cache 写入前对 Q/K/V 张量应用 Hadamard 旋转（llama.cpp PR #21038）。以几乎零成本显著提高量化 KV 缓存的质量。除非遇到模型兼容性问题，否则请保持启用。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.ctxSize",
+    "label": "上下文大小",
+    "desc": "KV-cache 大小（以 token 为单位）。自动选择适合您 GPU/RAM 的最大上下文。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.flashAttn",
+    "label": "Flash attention",
+    "desc": "使用 flash attention 实现更快、更节省内存的自注意力。支持 Metal、CUDA 和 Vulkan 后端。仅在遇到兼容性问题时禁用。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuLayers",
+    "label": "GPU 层数",
+    "desc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要 llm-metal / llm-cuda 功能。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuMemThreshold",
+    "label": "GPU 内存安全",
+    "desc": "运行推理前所需的最低可用 GPU/统一内存。防止内存不足时 Metal/CUDA 崩溃。设为关闭以禁用（不推荐）。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.kvCacheType",
+    "label": "KV-cache 量化（TurboQuant）",
+    "desc": "KV-cache 张量的存储精度。量化类型（Q8_0/Q5_0/Q4_0）显著减少 VRAM 使用。TurboQuant 注意力旋转（见下方）在量化时保持高质量。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.offloadKqv",
+    "label": "将 KQV 卸载到 GPU",
+    "desc": "即使并非所有 transformer 层都在 GPU 上，也将 K/Q/V 张量运算卸载到 GPU。推荐用于混合 CPU+GPU 设置。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.parallel",
+    "label": "最大并发请求数",
+    "desc": "序列化解码循环，同时保持 HTTP 连接响应。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.prefill",
+    "label": "预填充批大小",
+    "desc": "控制提示词摄入期间每次解码调用处理的 token 数量。较大的值加速预填充但增加峰值内存。自动使用 min(n_ctx, 2048)。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.autoload",
+    "label": "自动加载视觉编码器",
+    "desc": "服务器启动时自动加载最佳可用视觉投影器（mmproj）。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.nThreads",
+    "label": "编码器线程数",
+    "desc": "视觉/音频编码器的 CPU 线程数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.size",
+    "label": "{gb} GB"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.braveApiKey",
+    "label": "Brave Search API 密钥",
+    "desc": "免费层：每月 2,000 次查询。在 brave.com/search/api 获取密钥"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.contextCompression",
+    "label": "上下文压缩",
+    "desc": "压缩工具结果以节省上下文窗口空间。推荐用于小模型（< 8 K 上下文）。帮助模型完成多步工具链（例如搜索后获取）。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxCallsPerRound",
+    "label": "每轮最大调用数",
+    "desc": "模型在单轮中可调用的工具数量。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxRounds",
+    "label": "最大轮数",
+    "desc": "模型在每条消息中可执行的思考→工具→思考跳转次数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryBaseDelay",
+    "label": "基础延迟",
+    "desc": "首次重试前的初始延迟（毫秒）。每次尝试后翻倍。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryMaxRetries",
+    "label": "最大重试次数",
+    "desc": "初始失败后的重试次数。0 = 不重试。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retrySection",
+    "label": "网络重试",
+    "desc": "在暂时性错误时使用指数退避重试网络工具（搜索、获取、位置）。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searchProvider",
+    "label": "搜索提供商",
+    "desc": "选择网页搜索后端。Brave Search 需要免费 API 密钥。SearXNG 需要自托管实例 URL。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searxngUrl",
+    "label": "SearXNG 实例 URL",
+    "desc": "您的自托管 SearXNG 实例的基础 URL。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillApi",
+    "label": "Skill API",
+    "desc": "允许 LLM 查询 NeuroSkill API — 设备状态、EEG 会话、标签、搜索、钩子、校准、TTS 等。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsRefresh",
+    "label": "技能自动刷新",
+    "desc": "定期从 GitHub 下载最新的社区技能。设为 0 以禁用。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsSyncOnLaunch",
+    "label": "启动时同步",
+    "desc": "应用启动时始终获取最新技能"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.suggestSkill",
+    "label": "教 NeuroSkill 新技能",
+    "desc": "在 Discord 上建议技能 — 从协议到自动化，无所不包。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webCache",
+    "label": "网页缓存",
+    "desc": "将网页搜索和获取结果缓存到磁盘，以避免冗余的网络调用。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.verbose",
+    "label": "详细 LLM 日志",
+    "desc": "在日志中显示原始 llama.cpp / clip_model_loader 输出。默认关闭 — 仅在调试模型加载时启用。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.autoConnect",
+    "label": "自动连接",
+    "desc": "每 10 秒自动扫描 LSL 流，并在发现已配对源时连接。会话立即开始 — 无需手动操作。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.idleTimeout",
+    "label": "空闲超时",
+    "desc": "当没有样本到达超过此时间时自动停止会话。适用于 LSL 源崩溃或暂停但未断开的情况。"
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.localStreams",
+    "label": "本地 LSL 流",
+    "desc": "发现在本地网络上通过 Lab Streaming Layer 广播的 EEG/EXG 流。任何兼容 LSL 的设备（OpenBCI、BrainFlow、Emotiv via BrainFlow、MATLAB、Python pylsl 等）都可以作为数据源。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.accessibility",
+    "label": "辅助功能",
+    "desc": "键盘和鼠标活动跟踪使用 CGEventTap（macOS）来记录最近一次按键和鼠标事件的时间戳。不会存储任何击键内容或光标位置——仅记录 Unix 秒级时间戳。此功能在 macOS 上需要辅助功能权限。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.bluetooth",
+    "label": "Bluetooth",
+    "desc": "Bluetooth 用于连接您的脑机接口头戴设备（Muse、MW75 Neuro、OpenBCI Ganglion、IDUN Guardian 等）。在 macOS 上，应用首次扫描时系统会提示授予 Bluetooth 访问权限。在 Linux 和 Windows 上无需单独授权。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.calendar",
+    "label": "日历",
+    "desc": "日历工具可以读取事件以提供日程上下文。macOS 会在需要时请求权限。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.fullDiskAccess",
+    "label": "完全磁盘访问权限",
+    "desc": "通过系统数据库直接检测专注模式所需。如未授权，应用将回退到较慢的旧方法。建议授权以确保勿扰模式集成的可靠性。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.location",
+    "label": "定位服务",
+    "desc": "在 macOS 上，定位服务使用 CoreLocation（GPS / Wi-Fi / 蜂窝网络）进行高精度定位。在 Linux 和 Windows 上，应用使用基于 IP 的地理定位，无需权限。如果定位服务被拒绝或不可用，应用将自动回退到基于 IP 的地理定位。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.notifications",
+    "label": "通知",
+    "desc": "通知用于在您达到每日录制目标时以及有软件更新可用时提醒您。在 macOS 和 Windows 上，首次发送通知时操作系统会请求权限。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.screenRecording",
+    "label": "屏幕录制",
+    "desc": "需要此权限才能捕获其他应用程序窗口以用于截图嵌入系统。未授予此权限时，macOS 会遮蔽窗口内容。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyAccessibility",
+    "label": "辅助功能",
+    "desc": "用于记录键盘和鼠标事件的时间戳以提供活动上下文。仅存储事件发生的时间——不会记录输入内容或光标位置。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyBluetooth",
+    "label": "Bluetooth",
+    "desc": "用于通过 BLE 发现和传输脑机接口头戴设备的数据。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyCalendar",
+    "label": "日历",
+    "desc": "用于向大语言模型工具提供日程上下文，以便 AI 可以引用您即将到来的事件。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyLocation",
+    "label": "定位",
+    "desc": "用于向大语言模型提供精确的位置上下文，并将 GPS 定位数据与健康数据一起存储。被拒绝时将回退到基于 IP 的地理定位。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyNotifications",
+    "label": "通知",
+    "desc": "用于在您达到每日录制目标和有更新可用时通知您。"
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyScreenRecording",
+    "label": "屏幕录制",
+    "desc": "用于捕获活动窗口以进行视觉相似性搜索和跨模态脑电图关联。仅存储主动选择的截图——不会持续录制。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.embeddingModel",
+    "label": "嵌入模型",
+    "desc": "用于生成图像嵌入向量以进行相似性搜索的视觉模型。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.gpuToggle",
+    "label": "GPU 加速",
+    "desc": "使用 GPU 进行图像嵌入和 OCR。禁用后强制使用 CPU 推理（为 LLM/EEG 释放 GPU 资源）。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.imageSize",
+    "label": "图像尺寸",
+    "desc": "中间分辨率（像素）。捕获的窗口在保存和嵌入之前会缩放至此正方形尺寸。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.interval",
+    "label": "捕获间隔",
+    "desc": "与 EEG 嵌入时段对齐（每段 5 秒）。1× = 每个时段，2× = 每隔一个时段，最高 12×（60 秒）。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.modelChanged",
+    "label": "嵌入模型已更改",
+    "desc": "截图使用了不同的模型进行嵌入。请重新嵌入以获得一致的搜索结果。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.ocrToggle",
+    "label": "OCR 文字提取",
+    "desc": "从截图中提取文字以进行文本搜索。在缩小图像之前对全分辨率图像运行。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.quality",
+    "label": "WebP 质量",
+    "desc": "WebP 压缩质量（0–100）。值越低，文件越小。"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.reembed",
+    "label": "重新嵌入截图",
+    "desc": "使用当前模型重新计算所有现有截图的嵌入向量。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.activeWindowToggle",
+    "label": "跟踪活动窗口",
+    "desc": "记录当前焦点所在的应用和窗口。本地存储在 activity.sqlite 中，从不上传。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.apiToken",
+    "label": "API 认证",
+    "desc": "设置后，所有 HTTP 和 WebSocket API 请求必须在 Authorization 头中包含此令牌。留空以禁用认证。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.autoFitToggle",
+    "label": "自动适应仪表板高度",
+    "desc": "根据仪表板内容扩展或收缩主窗口，受屏幕高度限制。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dailyGoal",
+    "label": "每日目标",
+    "desc": "设置您的每日录制目标。进度显示在仪表板上。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dataDir",
+    "label": "数据目录",
+    "desc": "所有 EEG 数据、嵌入、标签和日志的存储位置。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.geoProvider",
+    "label": "位置服务",
+    "desc": "启用位置服务以为会话和 LLM 工具提供地理上下文。macOS 上使用 CoreLocation (GPS/Wi-Fi) 实现高精度；其他平台使用 IP 地理定位。默认禁用 — 开启以请求权限并测试。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.hfEndpoint",
+    "label": "HuggingFace 端点",
+    "desc": "用于模型下载（LLM + EXG + TTS）的可选镜像/基础 URL。默认跟随 HF_ENDPOINT 或 https://huggingface.co。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.inputActivityToggle",
+    "label": "跟踪键盘和鼠标活动",
+    "desc": "按秒记录键盘和鼠标的使用情况。无需特殊操作系统权限。本地存储在 activity.sqlite 中。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.language",
+    "label": "语言",
+    "desc": "选择显示语言。默认跟随系统区域设置。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBands",
+    "label": "频段",
+    "desc": "频段功率快照"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBluetooth",
+    "label": "设备",
+    "desc": "设备扫描器和会话生命周期"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logChatStore",
+    "label": "聊天存储",
+    "desc": "聊天 SQLite 操作（保存、迁移、打开）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logEmbedder",
+    "label": "嵌入器",
+    "desc": "ZUNA 编码器和 HNSW 插入"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logFilter",
+    "label": "滤波器",
+    "desc": "GPU 滤波跳转"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHistory",
+    "label": "历史",
+    "desc": "会话列表加载和 CSV 扫描"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHooks",
+    "label": "钩子",
+    "desc": "钩子匹配器、触发器和通知"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logIroh",
+    "label": "Iroh 网络",
+    "desc": "中继、QUIC、IPv6 警告（守护进程 — 非常嘈杂）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logScanner",
+    "label": "扫描器",
+    "desc": "多传输设备发现（BLE、USB、Cortex）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logTools",
+    "label": "工具",
+    "desc": "工具调用执行（调用、安全、计时）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logWebsocket",
+    "label": "WebSocket",
+    "desc": "WS 连接和消息"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.openbci",
+    "label": "OpenBCI",
+    "desc": "配置 OpenBCI 板以替代或补充另一个 BCI 设备进行连接。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.wsHost",
+    "label": "绑定地址",
+    "desc": "局域网模式会将 API 暴露给网络上的所有设备。需要重启。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetDefault",
+    "label": "默认",
+    "desc": "标准 8 小时周期 — 23:00 至 07:00。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetEarlyBird",
+    "label": "早起型",
+    "desc": "日出即起 — 21:30 至 05:30（8 小时）。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetLongSleeper",
+    "label": "长睡型",
+    "desc": "延长 10 小时窗口 — 22:00 至 08:00。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetNightOwl",
+    "label": "夜猫型",
+    "desc": "晚睡 — 01:00 至 09:00（8 小时）。"
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetShortSleeper",
+    "label": "短睡型",
+    "desc": "紧凑 6 小时窗口 — 00:00 至 06:00。"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclAdmin",
+    "label": "管理员",
+    "desc": "完全访问 — 所有端点"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclReadOnly",
+    "label": "只读",
+    "desc": "仅 GET 端点"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclStream",
+    "label": "流",
+    "desc": "仅 EEG 事件、状态、频段"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.defaultToken",
+    "label": "默认令牌",
+    "desc": "应用使用的内置管理员令牌。不可删除。刷新以生成新令牌 — 应用会自动使用新令牌。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.editFile",
+    "label": "编辑文件",
+    "desc": "允许对现有文件进行精确的查找替换编辑。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.location",
+    "label": "位置",
+    "desc": "允许基于 IP 的大致国家、地区、城市和时区查询。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.readFile",
+    "label": "读取文件",
+    "desc": "允许读取文本文件。大文件通过偏移量/限制进行分页。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.skillsSection",
+    "label": "智能体技能",
+    "desc": "技能提供 LLM 可按需加载的专业指令。切换各项技能以控制聊天中可用的技能。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webFetch",
+    "label": "网页获取",
+    "desc": "允许获取公共 HTTP(S) 页面的原始文本内容。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webSearch",
+    "label": "网页搜索",
+    "desc": "使用配置的搜索提供商搜索网页。"
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.writeFile",
+    "label": "写入文件",
+    "desc": "允许创建或覆盖文件。父目录会自动创建。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendKitten",
+    "label": "KittenTTS",
+    "desc": "紧凑的 ONNX 模型，适用于任何 CPU，速度快，仅支持英语。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendNeutts",
+    "label": "NeuTTS",
+    "desc": "基于 GGUF LLM 骨干网络和 NeuCodec 解码器。可克隆任意语音；支持英语、德语、法语、西班牙语。"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.preloadOnStartup",
+    "label": "启动时预加载引擎",
+    "desc": "应用启动时在后台预热活动引擎"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.requirements",
+    "label": "需要 PATH 中存在 espeak-ng",
+    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.cooldownMs",
+    "label": "GPU 冷却",
+    "desc": "训练轮次之间的暂停毫秒数。0 = 最大 GPU 吞吐量。增加以降低 GPU 利用率并为其他任务留出空间。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.negSampleRate",
+    "label": "负采样率",
+    "desc": "每个正边每轮抽取的随机非相邻对数量。较高 = 更强分离，训练更慢。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nEpochs",
+    "label": "优化轮数",
+    "desc": "梯度下降迭代次数。更多轮数 = 更精细的布局但计算更慢。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nNeighbors",
+    "label": "k-最近邻",
+    "desc": "构建 KNN 图使用的最近邻数量。较小的值保留更多局部细节；较大的值捕获更多全局结构。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.repulsion",
+    "label": "排斥",
+    "desc": "控制非相邻点之间的排斥力度。较高的值会使会话 A 和 B 之间的聚类分离更明显。"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.timeout",
+    "label": "训练超时",
+    "desc": "UMAP 优化器的最大时间。达到此限制时训练提前停止。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoCheck",
+    "label": "自动检查",
+    "desc": "应用启动时每天自动检查更新。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autostart",
+    "label": "登录时启动",
+    "desc": "登录计算机时自动启动。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.checkInterval",
+    "label": "检查频率",
+    "desc": "应用在后台自动检查更新的频率。"
+  }
+]

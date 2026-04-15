@@ -1,0 +1,920 @@
+[
+  {
+    "tab": "appearance",
+    "key": "appearance.accentColor",
+    "label": "Accent Colour",
+    "desc": "Sets the primary interactive colour — buttons, active states, focus rings, and highlights throughout the app."
+  },
+  {
+    "tab": "appearance",
+    "key": "appearance.highContrast",
+    "label": "High Contrast",
+    "desc": "Increase border and text contrast for better visibility."
+  },
+  {
+    "tab": "appearance",
+    "key": "settings.fontSize",
+    "label": "Font Size",
+    "desc": "Adjust the UI text size. Affects all text in the app."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.complete",
+    "label": "Calibration Complete",
+    "desc": "All {n} iterations completed successfully. Labels have been saved for each action phase."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.baseline",
+    "label": "Eyes Open / Closed",
+    "desc": "Classic baseline: resting eyes-open vs eyes-closed. Best for beginners & first calibration."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.children",
+    "label": "Children / Short Attention",
+    "desc": "Shorter phases (10 s) for children or users with limited focus endurance."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.clinical",
+    "label": "Clinical / Research",
+    "desc": "Extended 5-iteration protocol with long action phases for research or clinical baseline."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.focus",
+    "label": "Focus / Relax",
+    "desc": "Neurofeedback: mental arithmetic vs. calm breathing. General use."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.gaming",
+    "label": "Gaming / Performance",
+    "desc": "High-demand task vs. passive rest. For esports and peak-performance biofeedback."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.meditation",
+    "label": "Meditation",
+    "desc": "Active thinking vs. mindfulness meditation. For meditators & practitioners."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.sleep",
+    "label": "Pre-sleep / Drowsiness",
+    "desc": "Alert wakefulness vs. drowsiness. For sleep research & wind-down tracking."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.stress",
+    "label": "Stress / Anxiety",
+    "desc": "Resting calm vs. mild cognitive stressor. For anxiety and stress-response tracking."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.presets",
+    "label": "Quick Presets",
+    "desc": "Select a calibration configuration based on your goal, age, and use case. Settings can still be adjusted below."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.actionLabels",
+    "label": "Action Labels",
+    "desc": "Names shown during each phase and stored as EEG labels."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.iterations",
+    "label": "Iterations",
+    "desc": "Number of full Action 1 → Break → Action 2 → Break cycles."
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 via local Launcher"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB Serial",
+    "desc": "OpenBCI Cyton / CytonDaisy dongle"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.model",
+    "label": "Embedding Model"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.reembed",
+    "label": "Re-embed All Labels",
+    "desc": "Recompute embeddings for all existing labels using the current model. Run this after switching models."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.enabled",
+    "label": "Auto-restart daemon"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.timeout",
+    "label": "Restart after (seconds)"
+  },
+  {
+    "tab": "exg",
+    "key": "model.buildQuality",
+    "label": "Build quality",
+    "desc": "Beam width during graph construction. Higher = better graph, slower inserts."
+  },
+  {
+    "tab": "exg",
+    "key": "model.connectivity",
+    "label": "Connectivity",
+    "desc": "Each node keeps up to 2 × M edges. Higher = better recall, more RAM."
+  },
+  {
+    "tab": "exg",
+    "key": "model.gpuPrecision",
+    "label": "GPU Precision",
+    "desc": "Half-precision (f16) is faster, full-precision (f32) is more accurate"
+  },
+  {
+    "tab": "exg",
+    "key": "model.idleReembed",
+    "label": "Background Embedding",
+    "desc": "Automatically embed unprocessed epochs when device is idle"
+  },
+  {
+    "tab": "exg",
+    "key": "model.reembed",
+    "label": "Re-embed",
+    "desc": "Re-encode all raw EXG session recordings with the selected model backend and rebuild HNSW indices."
+  },
+  {
+    "tab": "exg",
+    "key": "settings.inferenceDevice",
+    "label": "Inference Device",
+    "desc": "Where AI inference runs. GPU is faster; CPU works on any machine and avoids VRAM pressure. Restart the LLM server after changing."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.channels",
+    "label": "Channels",
+    "desc": "Number of EEG electrodes to simulate."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.lineNoise",
+    "label": "Line noise",
+    "desc": "Add 50 Hz or 60 Hz mains interference."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.preview",
+    "label": "Signal Preview",
+    "desc": "Live preview of the first 4 channels."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.quality",
+    "label": "Signal Quality",
+    "desc": "Adjust signal-to-noise ratio. Higher = cleaner signal."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.sampleRate",
+    "label": "Sample Rate (Hz)",
+    "desc": "Samples per second per channel."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.template",
+    "label": "Signal Template",
+    "desc": "Choose the type of synthetic signal to generate."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateBadQuality",
+    "label": "Bad quality EEG",
+    "desc": "Noisy signal with muscle artefacts, 50/60 Hz line noise, and electrode pops."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateFile",
+    "label": "From file",
+    "desc": "Replay samples from a CSV or EDF file."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateGoodQuality",
+    "label": "Good quality EEG",
+    "desc": "Realistic resting-state EEG with dominant alpha rhythm and pink noise background."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateInterruptions",
+    "label": "Intermittent connection",
+    "desc": "Good signal with periodic dropouts simulating loose electrodes or wireless interference."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateSine",
+    "label": "Sine waves",
+    "desc": "Clean sine waves at standard frequency bands (delta, theta, alpha, beta, gamma)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.duration",
+    "label": "Sustained duration",
+    "desc": "Seconds focus must remain above the threshold before DND activates."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.enabled",
+    "label": "Enable auto-DND",
+    "desc": "When on, the app activates macOS Do Not Disturb once engagement stays high for the configured time. DND is cleared as soon as engagement drops."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitDuration",
+    "label": "DND Exit Delay",
+    "desc": "How long your focus score must stay below the threshold before DND is cleared. Prevents brief dips from toggling DND off."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitNotification",
+    "label": "Exit notification",
+    "desc": "Send a notification when focus mode is automatically deactivated (score dropped, low signal quality, or feature turned off)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusLookback",
+    "label": "Focus Lookback",
+    "desc": "If focus was sustained within this window before the score dropped, the exit countdown resets — recent focus delays DND deactivation."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusMode",
+    "label": "Focus mode",
+    "desc": "The macOS Focus mode to activate when your engagement is sustained. Pick from modes configured in System Settings → Focus."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.snrExitThreshold",
+    "label": "SNR exit threshold",
+    "desc": "If signal-to-noise ratio stays below this level for 1 minute, focus mode is forcibly deactivated. Lower values tolerate noisier signals."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.threshold",
+    "label": "Focus threshold",
+    "desc": "Minimum engagement score (0–100) required. The score is derived from your EEG beta/(alpha+theta) ratio."
+  },
+  {
+    "tab": "hooks",
+    "key": "hooks.enabled",
+    "label": "Enabled"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.autostart",
+    "label": "Auto-start on launch",
+    "desc": "Automatically load the active model when the app starts."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.enabled",
+    "label": "Enable LLM server",
+    "desc": "Run an OpenAI-compatible inference server on the same port as the WebSocket API. Requires the llm Cargo feature and a downloaded model."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.endpoint",
+    "label": "API endpoint"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.apiKey",
+    "label": "API key (optional)",
+    "desc": "Require this Bearer token on every /v1/* request. Leave empty for open access."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.attnRot",
+    "label": "TurboQuant attention rotation",
+    "desc": "Hadamard rotation applied to Q/K/V tensors before KV-cache write (llama.cpp PR #21038). Significantly improves quality of quantized KV caches at near-zero cost. Keep enabled unless you hit model compatibility issues."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.ctxSize",
+    "label": "Context size",
+    "desc": "KV-cache size in tokens. Auto picks the largest context that fits your GPU/RAM."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.flashAttn",
+    "label": "Flash attention",
+    "desc": "Use flash attention for faster, more memory-efficient self-attention. Supported on Metal, CUDA, and Vulkan backends. Disable only if you experience compatibility issues."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuLayers",
+    "label": "GPU layers",
+    "desc": "Layers to offload to GPU (0 = CPU only, high = GPU). Requires llm-metal / llm-cuda feature."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuMemThreshold",
+    "label": "GPU memory safety",
+    "desc": "Minimum free GPU/unified memory required before running inference. Prevents Metal/CUDA crashes when memory is low. Set to Off to disable (not recommended)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.kvCacheType",
+    "label": "KV-cache quantization (TurboQuant)",
+    "desc": "Storage precision for the KV-cache tensors. Quantized types (Q8_0/Q5_0/Q4_0) cut VRAM use significantly. TurboQuant attention rotation (below) keeps quality high when quantized."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.offloadKqv",
+    "label": "Offload KQV to GPU",
+    "desc": "Offload K/Q/V tensor operations to the GPU even when not all transformer layers are GPU-offloaded. Recommended for hybrid CPU+GPU setups."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.parallel",
+    "label": "Max concurrent requests",
+    "desc": "Serialises decode loops while keeping HTTP connections responsive."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.prefill",
+    "label": "Prefill batch size",
+    "desc": "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 2048)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.autoload",
+    "label": "Auto-load vision encoder",
+    "desc": "Automatically load the best available vision projector (mmproj) when the server starts."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.nThreads",
+    "label": "Encoder threads",
+    "desc": "CPU threads for the vision/audio encoder."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.size",
+    "label": "{gb} GB"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.braveApiKey",
+    "label": "Brave Search API key",
+    "desc": "Free tier: 2,000 queries/month. Get a key at brave.com/search/api"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.contextCompression",
+    "label": "Context compression",
+    "desc": "Compress tool results to save context window space. Recommended for small models (< 8 K context). Helps the model complete multi-step tool chains (e.g. search then fetch)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxCallsPerRound",
+    "label": "Max calls per round",
+    "desc": "How many tools the model may invoke in a single round."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxRounds",
+    "label": "Max rounds",
+    "desc": "How many think→tool→think hops the model may perform per message."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryBaseDelay",
+    "label": "Base delay",
+    "desc": "Initial delay in milliseconds before the first retry. Doubles with each attempt."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryMaxRetries",
+    "label": "Max retries",
+    "desc": "Number of retry attempts after the initial failure. 0 = no retries."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retrySection",
+    "label": "Network retry",
+    "desc": "Retry web tools (search, fetch, location) on transient errors with exponential backoff."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searchProvider",
+    "label": "Search provider",
+    "desc": "Choose a web search backend. Brave Search requires a free API key. SearXNG requires a self-hosted instance URL."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searxngUrl",
+    "label": "SearXNG instance URL",
+    "desc": "Base URL of your self-hosted SearXNG instance."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillApi",
+    "label": "Skill API",
+    "desc": "Allow the LLM to query the NeuroSkill API — device status, EEG sessions, labels, search, hooks, calibrations, TTS, and more."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsRefresh",
+    "label": "Skills auto-refresh",
+    "desc": "Periodically download the latest community skills from GitHub. Set to 0 to disable."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsSyncOnLaunch",
+    "label": "Sync on launch",
+    "desc": "Always fetch the latest skills when the app starts"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.suggestSkill",
+    "label": "Teach NeuroSkill something new",
+    "desc": "Suggest a skill on Discord — from protocols to automations, anything goes."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webCache",
+    "label": "Web cache",
+    "desc": "Cache web search and fetch results on disk to avoid redundant network calls."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.verbose",
+    "label": "Verbose LLM logging",
+    "desc": "Show raw llama.cpp / clip_model_loader output in the log. Off by default — only enable when debugging model loading."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.autoConnect",
+    "label": "Auto-Connect",
+    "desc": "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.idleTimeout",
+    "label": "Idle Timeout",
+    "desc": "Stop the session automatically when no samples arrive for this long. Useful when the LSL source crashes or is paused without disconnecting."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.localStreams",
+    "label": "Local LSL Streams",
+    "desc": "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.accessibility",
+    "label": "Accessibility",
+    "desc": "Keyboard and mouse activity tracking uses a CGEventTap (macOS) to record timestamps of the last key press and mouse event. No keystrokes or cursor positions are stored — only Unix-second timestamps. This requires Accessibility permission on macOS."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.bluetooth",
+    "label": "Bluetooth",
+    "desc": "Bluetooth is used to connect to your BCI headset (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian, etc.). On macOS, the system will prompt for Bluetooth access the first time the app scans. On Linux and Windows no separate permission is needed."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.calendar",
+    "label": "Calendar",
+    "desc": "Calendar tools can read events for scheduling context. Permission is requested by macOS when needed."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.fullDiskAccess",
+    "label": "Full Disk Access",
+    "desc": "Required for direct Focus-mode detection via the system database. Without it, the app falls back to a slower legacy method. Recommended for reliable Do Not Disturb integration."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.location",
+    "label": "Location Services",
+    "desc": "On macOS, Location Services uses CoreLocation (GPS / Wi-Fi / cell) for high-accuracy positioning. On Linux and Windows the app uses IP-based geolocation which needs no permission. If Location Services is denied or unavailable, the app falls back to IP geolocation automatically."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.notifications",
+    "label": "Notifications",
+    "desc": "Notifications are used to alert you when you reach your daily recording goal, and when a software update is available. On macOS and Windows, the OS will prompt for permission the first time a notification is sent."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.screenRecording",
+    "label": "Screen Recording",
+    "desc": "Required to capture other application windows for the screenshot embedding system. macOS redacts window content without this permission."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyAccessibility",
+    "label": "Accessibility",
+    "desc": "To timestamp keyboard and mouse events for activity context. Only the time of the event is stored — never what was typed or where the cursor was."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyBluetooth",
+    "label": "Bluetooth",
+    "desc": "To discover and stream data from your BCI headset over BLE."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyCalendar",
+    "label": "Calendar",
+    "desc": "To provide scheduling context to the LLM tools so the AI can reference your upcoming events."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyLocation",
+    "label": "Location",
+    "desc": "To provide precise location context to the LLM and store GPS fixes alongside health data. Falls back to IP geolocation if denied."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyNotifications",
+    "label": "Notifications",
+    "desc": "To notify you when you hit your daily recording goal and when updates are ready."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyScreenRecording",
+    "label": "Screen Recording",
+    "desc": "To capture the active window for visual-similarity search and cross-modal EEG correlation. Only opt-in screenshots are stored — never continuous recording."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.embeddingModel",
+    "label": "Embedding Model",
+    "desc": "Vision model used to generate image embeddings for similarity search."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.gpuToggle",
+    "label": "GPU Acceleration",
+    "desc": "Use GPU for image embeddings and OCR. Disable to force CPU inference (frees GPU for LLM/EEG)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.imageSize",
+    "label": "Image Size",
+    "desc": "Intermediate resolution (px). Captured window is resized to fit this square before saving and embedding."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.interval",
+    "label": "Capture Interval",
+    "desc": "Aligned with EEG embedding epochs (5 s each). 1× = every epoch, 2× = every other epoch, up to 12× (60 s)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.modelChanged",
+    "label": "Embedding model changed",
+    "desc": "screenshots were embedded with a different model. Re-embed for consistent search results."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.ocrToggle",
+    "label": "OCR Text Extraction",
+    "desc": "Extract text from screenshots for text-based search. Runs on full-resolution image before downsizing."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.quality",
+    "label": "WebP Quality",
+    "desc": "WebP compression quality (0–100). Lower = smaller files."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.reembed",
+    "label": "Re-embed Screenshots",
+    "desc": "Recompute embeddings for all existing screenshots using the current model."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.activeWindowToggle",
+    "label": "Track Active Window",
+    "desc": "Record which app and window is in focus. Stored locally in activity.sqlite, never uploaded."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.apiToken",
+    "label": "API Authentication",
+    "desc": "When set, all HTTP and WebSocket API requests must include this token in the Authorization header. Leave empty to disable authentication."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.autoFitToggle",
+    "label": "Auto-fit dashboard height",
+    "desc": "Expands or contracts the main window to match dashboard content, clamped to screen height."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dailyGoal",
+    "label": "Daily Goal",
+    "desc": "Set your daily recording goal. Progress is shown on the dashboard."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dataDir",
+    "label": "Data Directory",
+    "desc": "Where all EEG data, embeddings, labels, and logs are stored."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.geoProvider",
+    "label": "Location Services",
+    "desc": "Enable location services to provide geographic context for sessions and LLM tools. On macOS this uses CoreLocation (GPS/Wi-Fi) for high accuracy; on other platforms it uses IP geolocation. Disabled by default — toggle on to request permission and test."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.hfEndpoint",
+    "label": "HuggingFace Endpoint",
+    "desc": "Optional mirror/base URL for model downloads (LLM + EXG + TTS). Default follows HF_ENDPOINT or https://huggingface.co."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.inputActivityToggle",
+    "label": "Track Keyboard & Mouse Activity",
+    "desc": "Record when keyboard and mouse are used, by second. No special OS permissions required. Stored locally in activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.language",
+    "label": "Language",
+    "desc": "Choose the display language. Defaults to your system locale."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBands",
+    "label": "Bands",
+    "desc": "Band-power snapshots"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBluetooth",
+    "label": "Devices",
+    "desc": "Device scanner & session lifecycle"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logChatStore",
+    "label": "Chat Store",
+    "desc": "Chat SQLite operations (save, migrate, open)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logEmbedder",
+    "label": "Embedder",
+    "desc": "ZUNA encoder & HNSW inserts"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logFilter",
+    "label": "Filter",
+    "desc": "GPU filter hops"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHistory",
+    "label": "History",
+    "desc": "Session list loading & CSV scan"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHooks",
+    "label": "Hooks",
+    "desc": "Hook matcher, triggers & notifications"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logIroh",
+    "label": "Iroh Networking",
+    "desc": "Relay, QUIC, IPv6 warnings (daemon — very noisy)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logScanner",
+    "label": "Scanner",
+    "desc": "Multi-transport device discovery (BLE, USB, Cortex)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logTools",
+    "label": "Tools",
+    "desc": "Tool-call execution (invocation, safety, timing)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logWebsocket",
+    "label": "WebSocket",
+    "desc": "WS connections & messages"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.openbci",
+    "label": "OpenBCI",
+    "desc": "Configure an OpenBCI board to connect alongside or instead of another BCI device."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.wsHost",
+    "label": "Bind address",
+    "desc": "LAN mode exposes the API to all devices on your network. Restart required."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetDefault",
+    "label": "Default",
+    "desc": "Standard 8-hour cycle — 23:00 to 07:00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetEarlyBird",
+    "label": "Early Bird",
+    "desc": "Rise-with-the-sun schedule — 21:30 to 05:30 (8 h)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetLongSleeper",
+    "label": "Long Sleeper",
+    "desc": "Extended 10-hour window — 22:00 to 08:00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetNightOwl",
+    "label": "Night Owl",
+    "desc": "Late-to-bed schedule — 01:00 to 09:00 (8 h)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetShortSleeper",
+    "label": "Short Sleeper",
+    "desc": "Compact 6-hour window — 00:00 to 06:00."
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclAdmin",
+    "label": "Admin",
+    "desc": "Full access — all endpoints"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclReadOnly",
+    "label": "Read Only",
+    "desc": "GET endpoints only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclStream",
+    "label": "Stream",
+    "desc": "EEG events, status, bands only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.defaultToken",
+    "label": "Default Token",
+    "desc": "Built-in admin token used by the app. Cannot be deleted. Refresh to generate a new one — the app will pick it up automatically."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.editFile",
+    "label": "Edit file",
+    "desc": "Allow surgical find-and-replace edits to existing files."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.location",
+    "label": "Location",
+    "desc": "Allow approximate IP-based country, region, city, and timezone lookup."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.readFile",
+    "label": "Read file",
+    "desc": "Allow reading text files. Large files are paginated with offset/limit."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.skillsSection",
+    "label": "Agent Skills",
+    "desc": "Skills provide specialised instructions the LLM can load on demand. Toggle individual skills to control which are available in chat."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webFetch",
+    "label": "Web fetch",
+    "desc": "Allow fetching the raw text body of a public HTTP(S) page."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webSearch",
+    "label": "Web search",
+    "desc": "Search the web using the configured search provider."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.writeFile",
+    "label": "Write file",
+    "desc": "Allow creating or overwriting files. Parent directories are created automatically."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendKitten",
+    "label": "KittenTTS",
+    "desc": "Compact ONNX model, fast on any CPU, English only."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendNeutts",
+    "label": "NeuTTS",
+    "desc": "GGUF LLM backbone with NeuCodec decoder. Clone any voice; supports English, German, French, Spanish."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.preloadOnStartup",
+    "label": "Preload engine on startup",
+    "desc": "Warms up the active engine in the background when the app launches"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.requirements",
+    "label": "Requires espeak-ng on PATH",
+    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.cooldownMs",
+    "label": "GPU Cooldown",
+    "desc": "Milliseconds to pause between training epochs. 0 = maximum GPU throughput. Increase to reduce GPU utilisation and leave headroom for other tasks."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.negSampleRate",
+    "label": "Negative Sample Rate",
+    "desc": "Number of random non-neighbor pairs drawn per positive edge each epoch. Higher = stronger separation, slower training."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nEpochs",
+    "label": "Optimisation Epochs",
+    "desc": "Number of gradient descent iterations. More epochs = finer layout but slower compute."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nNeighbors",
+    "label": "k-Nearest Neighbours",
+    "desc": "Number of nearest neighbours used to build the KNN graph. Smaller values preserve more local detail; larger values capture more global structure."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.repulsion",
+    "label": "Repulsion",
+    "desc": "Controls how strongly non-neighbor points are pushed apart. Higher values produce more separated clusters between sessions A and B."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.timeout",
+    "label": "Training Timeout",
+    "desc": "Maximum time for the UMAP optimiser. Training stops early if this limit is reached."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoCheck",
+    "label": "Check automatically",
+    "desc": "Check for updates once a day when the app starts."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autostart",
+    "label": "Launch at Login",
+    "desc": "Start automatically when you log in to your computer."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.checkInterval",
+    "label": "Check frequency",
+    "desc": "How often the app automatically checks for updates in the background."
+  }
+]

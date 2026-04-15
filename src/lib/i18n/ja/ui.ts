@@ -315,6 +315,10 @@ const ui: Record<string, string> = {
   "invite.copyLink": "招待リンクをコピー",
   "invite.copied": "コピーしました！",
   "invite.linkHint": "QRコードをスキャンできない場合は、このリンクを携帯電話で開いてください",
+
+  // ── Auto-synced from en/ (2026-04-15) ──
+  // TODO: translate the following 1 key(s) into ja
+  "cmdK.sectionSettings": "Settings",
 };
 
 export default ui;

@@ -341,6 +341,7 @@ export type TranslationKey =
   | "cmdK.sectionDevice"
   | "cmdK.sectionLsl"
   | "cmdK.sectionNavigation"
+  | "cmdK.sectionSettings"
   | "cmdK.sectionUtilities"
   | "cmdK.showShortcuts"
   | "cmdK.title"

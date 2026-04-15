@@ -13,10 +13,34 @@ the Free Software Foundation, version 3 only. -->
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
 import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
-import { t } from "$lib/i18n/index.svelte";
+import { t, getLocale } from "$lib/i18n/index.svelte";
 import * as nav from "$lib/navigation";
 import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
+import { SYNONYMS } from "$lib/settings-search-index";
+
+// Load all locale indexes at build time via Vite glob import
+const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>(
+  "$lib/generated/settings-search-index.*.json",
+  { eager: true },
+);
+
+interface SearchIndexEntry {
+  tab: string;
+  key: string;
+  label: string;
+  desc?: string;
+}
+
+/** Resolve the index for the current locale, falling back to EN. */
+function getSearchIndex(): SearchIndexEntry[] {
+  const locale = getLocale();
+  // Glob keys look like: /src/lib/generated/settings-search-index.de.json
+  const match =
+    Object.entries(indexModules).find(([k]) => k.includes(`.${locale}.`)) ??
+    Object.entries(indexModules).find(([k]) => k.includes(".en."));
+  return match?.[1]?.default ?? [];
+}
 
 let open = $state(false);
 let query = $state("");
@@ -37,6 +61,38 @@ interface Command {
 
 const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
 const mod = isMac ? "⌘" : "Ctrl";
+
+const SETTINGS_TAB_ICONS: Record<string, string> = {
+  goals: "🎯", devices: "📡", exg: "📊", lsl: "📶", sleep: "🌙", calibration: "⚙",
+  tts: "🗣", llm: "💬", tools: "🔧", clients: "🔗", embeddings: "🔍", screenshots: "📷",
+  hooks: "🪝", appearance: "🎨", settings: "⚙", shortcuts: "⌨", umap: "🗺",
+  updates: "⬆", permissions: "🔒", tokens: "🔑",
+};
+
+function settingsTabCommands(): Command[] {
+  const index = getSearchIndex();
+  return index.map((entry) => ({
+    id: `settings-${entry.tab}-${entry.key}`,
+    icon: SETTINGS_TAB_ICONS[entry.tab] ?? "⚙",
+    section: t("cmdK.sectionSettings"),
+    label: `${t(`settingsTabs.${entry.tab}`)} › ${entry.label}`,
+    keywords: entry.desc ?? "",
+    action: () => nav.openSettingsTab(entry.tab, entry.key),
+  }));
+}
+
+/**
+ * Expand synonyms in the query. Returns the original query plus
+ * any synonym expansions as separate alternative queries to try.
+ */
+function synonymQueries(q: string): string[] {
+  const words = q.toLowerCase().split(/\s+/);
+  const alts: string[] = [q];
+  for (const w of words) {
+    if (SYNONYMS[w]) alts.push(SYNONYMS[w]);
+  }
+  return alts;
+}
 
 function commands(): Command[] {
   return [
@@ -234,6 +290,9 @@ function commands(): Command[] {
       action: nav.openHelp,
     },
 
+    // ── Settings tabs (deep links) ───────────────────────────────────
+    ...settingsTabCommands(),
+
     // ── Utilities ──────────────────────────────────────────────────────
     {
       id: "show-shortcuts",
@@ -422,8 +481,19 @@ let scored = $derived.by((): ScoredCommand[] => {
     return cmds.map((c) => ({ ...c, matchScore: 0, labelPositions: [] }));
   }
   const q = query.toLowerCase().trim();
+  const queries = synonymQueries(q);
+  // Score against original + synonym-expanded queries, take best
   return cmds
-    .map((c) => scoreCommand(q, c))
+    .map((c) => {
+      let best = scoreCommand(queries[0], c);
+      for (let i = 1; i < queries.length; i++) {
+        const alt = scoreCommand(queries[i], c);
+        if (alt.matchScore > best.matchScore) {
+          best = { ...alt, labelPositions: best.labelPositions.length ? best.labelPositions : alt.labelPositions };
+        }
+      }
+      return best;
+    })
     .filter((c) => Number.isFinite(c.matchScore))
     .sort((a, b) => b.matchScore - a.matchScore);
 });
@@ -435,8 +505,10 @@ let scored = $derived.by((): ScoredCommand[] => {
  */
 let sections = $derived.by((): [string, ScoredCommand[]][] => {
   if (isFiltering) return scored.length ? [["", scored]] : [];
+  // Hide individual settings entries from the default (unfiltered) view
+  const visible = scored.filter((c) => !c.id.startsWith("settings-"));
   const map = new Map<string, ScoredCommand[]>();
-  for (const c of scored) {
+  for (const c of visible) {
     if (!map.has(c.section)) map.set(c.section, []);
     map.get(c.section)?.push(c);
   }

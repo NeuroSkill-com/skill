@@ -318,6 +318,10 @@ const ui: Record<string, string> = {
   "invite.copyLink": "Копіювати посилання запрошення",
   "invite.copied": "Скопійовано!",
   "invite.linkHint": "Відкрийте це посилання на телефоні, якщо не вдається сканувати QR-код",
+
+  // ── Auto-synced from en/ (2026-04-15) ──
+  // TODO: translate the following 1 key(s) into uk
+  "cmdK.sectionSettings": "Settings",
 };
 
 export default ui;

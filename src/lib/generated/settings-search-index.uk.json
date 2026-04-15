@@ -1,0 +1,920 @@
+[
+  {
+    "tab": "appearance",
+    "key": "appearance.accentColor",
+    "label": "Колір акценту",
+    "desc": "Встановлює основний інтерактивний колір — кнопки, активні стани, кільця фокусу та виділення."
+  },
+  {
+    "tab": "appearance",
+    "key": "appearance.highContrast",
+    "label": "Високий контраст",
+    "desc": "Збільшуйте контраст рамок і тексту для кращої видимості."
+  },
+  {
+    "tab": "appearance",
+    "key": "settings.fontSize",
+    "label": "Розмір шрифту",
+    "desc": "Налаштуйте розмір тексту інтерфейсу користувача. Впливає на весь текст у застосунку."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.complete",
+    "label": "Калібрування завершено",
+    "desc": "Усі {n} ітерацій успішно завершено. Мітки збережено для кожної фази."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.baseline",
+    "label": "Очі відкриті / закриті",
+    "desc": "Класичний базовий рівень: спокій з відкритими очима проти закритих. Рекомендується для початківців."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.children",
+    "label": "Діти / Коротка увага",
+    "desc": "Коротші фази (10 с) для дітей або користувачів з обмеженою тривалістю уваги."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.clinical",
+    "label": "Клінічний / Дослідницький",
+    "desc": "Розширений протокол з 5 ітераціями і тривалими фазами для дослідження або клінічного базового рівня."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.focus",
+    "label": "Фокус / Релаксація",
+    "desc": "Нейрофідбек: ментальна арифметика проти спокійного дихання. Загальне використання."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.gaming",
+    "label": "Гейминг / Продуктивність",
+    "desc": "Вимоглива задача проти пасивного відпочинку. Для кіберспорту та біофідбеку."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.meditation",
+    "label": "Медитація",
+    "desc": "Активне мислення проти медитації усвідомленості. Для практикуючих медитацію."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.sleep",
+    "label": "Перед сном / Сонливість",
+    "desc": "Активна пильність проти сонливості. Для дослідження сну."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.preset.stress",
+    "label": "Стрес / Тривога",
+    "desc": "Спокійний відпочинок проти легкого когнітивного стресора. Для відстеження стресу та тривоги."
+  },
+  {
+    "tab": "calibration",
+    "key": "calibration.presets",
+    "label": "Швидкі пресети",
+    "desc": "Виберіть конфігурацію калібрування відповідно до вашої мети, віку та сфери використання."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.actionLabels",
+    "label": "Назви дій",
+    "desc": "Назви, що відображаються під час кожної фази та зберігаються як мітки ЕЕГ."
+  },
+  {
+    "tab": "calibration",
+    "key": "settings.iterations",
+    "label": "Ітерації",
+    "desc": "Кількість повних циклів: Дія 1 → Перерва → Дія 2 → Перерва."
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 через локальний Launcher"
+  },
+  {
+    "tab": "devices",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB послідовний",
+    "desc": "Донгл OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.model",
+    "label": "Модель вбудовування"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.reembed",
+    "label": "Перевбудувати всі мітки",
+    "desc": "Перерахувати вбудовування для всіх існуючих міток з поточною моделлю. Запускайте після зміни моделі."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.enabled",
+    "label": "Автоматичний перезапуск"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.watchdog.timeout",
+    "label": "Перезапуск через (секунди)"
+  },
+  {
+    "tab": "exg",
+    "key": "model.buildQuality",
+    "label": "Якість побудови",
+    "desc": "Ширина пошуку під час побудови. Вище = кращий граф, повільніші вставки."
+  },
+  {
+    "tab": "exg",
+    "key": "model.connectivity",
+    "label": "Зв'язність",
+    "desc": "Кожен вузол зберігає до 2 × M ребер. Вище = кращий recall, більше RAM."
+  },
+  {
+    "tab": "exg",
+    "key": "model.gpuPrecision",
+    "label": "Точність GPU",
+    "desc": "Половинна точність (f16) швидша, повна точність (f32) точніша"
+  },
+  {
+    "tab": "exg",
+    "key": "model.idleReembed",
+    "label": "Фонове вбудовування",
+    "desc": "Автоматично вбудовувати необроблені епохи, коли пристрій неактивний"
+  },
+  {
+    "tab": "exg",
+    "key": "model.reembed",
+    "label": "Повторний embedding",
+    "desc": "Перекодувати всі сирі EXG сесії обраною моделлю та перебудувати HNSW індекси."
+  },
+  {
+    "tab": "exg",
+    "key": "settings.inferenceDevice",
+    "label": "Пристрій виведення",
+    "desc": "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.channels",
+    "label": "Канали",
+    "desc": "Кількість електродів EEG для симуляції."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.lineNoise",
+    "label": "Мережева наводка",
+    "desc": "Додати мережеву наводку 50 Hz або 60 Hz."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.preview",
+    "label": "Попередній перегляд сигналу",
+    "desc": "Перегляд у реальному часі перших 4 каналів."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.quality",
+    "label": "Якість сигналу",
+    "desc": "Налаштуйте відношення сигнал/шум. Вище = чистіший сигнал."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.sampleRate",
+    "label": "Частота дискретизації (Hz)",
+    "desc": "Відліків на секунду на канал."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.template",
+    "label": "Шаблон сигналу",
+    "desc": "Оберіть тип синтетичного сигналу для генерації."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateBadQuality",
+    "label": "EEG поганої якості",
+    "desc": "Зашумлений сигнал із м'язовими артефактами, мережевою наводкою 50/60 Hz та стрибками електродів."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateFile",
+    "label": "З файлу",
+    "desc": "Відтворення відліків із файлу CSV або EDF."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateGoodQuality",
+    "label": "EEG хорошої якості",
+    "desc": "Реалістичний EEG у стані спокою з домінантним альфа-ритмом та рожевим шумом на тлі."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateInterruptions",
+    "label": "Переривчасте з'єднання",
+    "desc": "Хороший сигнал із періодичними випаданнями, що імітують нещільні електроди або бездротові завади."
+  },
+  {
+    "tab": "exg",
+    "key": "veeg.templateSine",
+    "label": "Синусоїди",
+    "desc": "Чисті синусоїди в стандартних частотних смугах (дельта, тета, альфа, бета, гамма)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.duration",
+    "label": "Тривала тривалість",
+    "desc": "Секунди, протягом яких залученість має залишатися вище порогу перед активацією DND."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.enabled",
+    "label": "Увімкнути авто-DND",
+    "desc": "Коли увімкнено, застосунок активує «Не турбувати» на macOS, щойно залученість тримається на високому рівні протягом заданого часу. DND вимикається, щойно залученість знижується."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitDuration",
+    "label": "Затримка виходу з DND",
+    "desc": "Скільки часу оцінка повинна залишатися нижче порогу перед тим, як DND вимкнеться. Запобігає частим перемиканням."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.exitNotification",
+    "label": "Сповіщення про вихід",
+    "desc": "Надсилати сповіщення, коли режим фокусу автоматично деактивується (оцінка впала, поганий сигнал або функцію вимкнено)."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusLookback",
+    "label": "Вікно ретроспективи",
+    "desc": "Якщо фокус був зафіксований у цьому вікні до падіння оцінки, лічильник виходу скидається."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.focusMode",
+    "label": "Режим фокусу",
+    "desc": "Режим фокусу macOS, який активується, коли ваша залученість підтримується. Оберіть із режимів, налаштованих у Системних параметрах → Фокус."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.snrExitThreshold",
+    "label": "Поріг SNR деактивації",
+    "desc": "Якщо співвідношення сигнал/шум залишається нижче цього рівня протягом 1 хвилини, режим фокусу примусово деактивується. Нижчі значення толерують більш зашумлені сигнали."
+  },
+  {
+    "tab": "goals",
+    "key": "dnd.threshold",
+    "label": "Поріг залученості",
+    "desc": "Мінімальний показник залученості (0–100). Розраховується з відношення бета/(альфа+тета) ЕЕГ."
+  },
+  {
+    "tab": "hooks",
+    "key": "hooks.enabled",
+    "label": "Увімкнено"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.autostart",
+    "label": "Автозапуск при старті",
+    "desc": "Автоматично завантажувати активну модель при запуску додатку."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.enabled",
+    "label": "Увімкнути LLM сервер",
+    "desc": "Запустити OpenAI-сумісний сервер інференсу на тому ж порту, що й WebSocket API. Потрібен Cargo feature llm і завантажена модель."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.endpoint",
+    "label": "Кінцева точка API"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.apiKey",
+    "label": "API ключ (необов'язково)",
+    "desc": "Вимагати цей Bearer token для кожного запиту /v1/*."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.attnRot",
+    "label": "Обертання уваги TurboQuant",
+    "desc": "Hadamard-Rotation auf Q/K/V-Tensoren vor dem KV-Cache-Schreiben. якщо немає проблем сумісності з моделлю."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.ctxSize",
+    "label": "Розмір контексту",
+    "desc": "Розмір KV-cache у токенах (порожньо = за замовчуванням моделі)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.flashAttn",
+    "label": "Flash attention",
+    "desc": "Використовувати flash attention для швидшої та ефективнішої self-attention. Підтримується на Metal, CUDA та Vulkan."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuLayers",
+    "label": "GPU шари",
+    "desc": "Шари для офлоаду на GPU (0 = лише CPU). Потрібно llm-metal / llm-cuda."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.gpuMemThreshold",
+    "label": "Захист пам'яті GPU",
+    "desc": "Мінімальний вільний об'єм GPU/уніфікованої пам'яті перед інференсом. Запобігає збоям Metal/CUDA при нестачі пам'яті. Вимикати не рекомендується."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.kvCacheType",
+    "label": "Квантизація KV-кешу (TurboQuant)",
+    "desc": "Точність зберігання тензорів KV-кешу. Квантизовані типи (Q8_0/Q5_0/Q4_0) значно зменшують використання VRAM. Обертання уваги TurboQuant (нижче) зберігає якість навіть при квантизації."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.offloadKqv",
+    "label": "Вивантажити KQV на GPU",
+    "desc": "Вивантажити тензорні операції K/Q/V на GPU, навіть якщо не всі шари вивантажені."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.parallel",
+    "label": "Макс. одночасних запитів",
+    "desc": "Серіалізує цикли декодування, зберігаючи чуйність HTTP-з'єднань."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.inference.prefill",
+    "label": "Розмір пакету попереднього заповнення",
+    "desc": "Керує кількістю токенів, що обробляються за один виклик декодування під час обробки промпту."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.autoload",
+    "label": "Автозавантаження візуального кодера",
+    "desc": "Автоматично завантажує найкращий доступний візуальний проектор (mmproj) під час запуску сервера."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mmproj.nThreads",
+    "label": "Потоки енкодера",
+    "desc": "Потоки CPU для візуального/аудіо-енкодера."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.size",
+    "label": "{gb} GB"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.braveApiKey",
+    "label": "API-ключ Brave Search",
+    "desc": "Безкоштовно: 2 000 запитів/місяць. Отримайте ключ на brave.com/search/api"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.contextCompression",
+    "label": "Стиснення контексту",
+    "desc": "Стискає результати інструментів для економії контекстного вікна. Рекомендовано для малих моделей (< 8K контексту). Допомагає моделі завершувати багатокрокові ланцюжки (напр. пошук, потім завантаження)."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxCallsPerRound",
+    "label": "Макс. викликів на раунд",
+    "desc": "Скільки інструментів модель може викликати за один раунд."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.maxRounds",
+    "label": "Макс. раундів",
+    "desc": "Скільки циклів мислення→інструмент→мислення дозволено на повідомлення."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryBaseDelay",
+    "label": "Базова затримка",
+    "desc": "Початкова затримка в мілісекундах перед першою повторною спробою. Подвоюється з кожною спробою."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retryMaxRetries",
+    "label": "Макс. спроб",
+    "desc": "Кількість повторних спроб після першої невдачі. 0 = без повторів."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.retrySection",
+    "label": "Повторна спроба мережі",
+    "desc": "Повторити веб-інструменти (пошук, завантаження, місцезнаходження) при тимчасових помилках з експоненційною затримкою."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searchProvider",
+    "label": "Постачальник пошуку",
+    "desc": "Оберіть бекенд веб-пошуку. Brave Search потребує безкоштовний API-ключ. SearXNG потребує URL власного екземпляра."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.searxngUrl",
+    "label": "URL екземпляра SearXNG",
+    "desc": "Базова URL-адреса вашого власного екземпляра SearXNG."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillApi",
+    "label": "Skill API",
+    "desc": "Дозволити LLM запитувати API NeuroSkill — стан пристрою, сеанси ЕЕГ, мітки, пошук, хуки, калібрування, TTS тощо."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsRefresh",
+    "label": "Автооновлення навичок",
+    "desc": "Періодично завантажувати найновіші навички спільноти з GitHub. 0 для вимкнення."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.skillsSyncOnLaunch",
+    "label": "Синхронізувати при запуску",
+    "desc": "Завжди завантажувати найновіші навички при запуску додатку"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.suggestSkill",
+    "label": "Навчіть NeuroSkill чомусь новому",
+    "desc": "Запропонуйте навичку в Discord — від протоколів до автоматизацій, все можливо."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webCache",
+    "label": "Веб-кеш",
+    "desc": "Кешування результатів пошуку та завантаження на диск."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.verbose",
+    "label": "Детальне логування LLM",
+    "desc": "Показувати сирий вивід llama.cpp / clip_model_loader у логу. За замовчуванням вимкнено."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.autoConnect",
+    "label": "Auto-Connect",
+    "desc": "Automatically scan for LSL streams every 10 s and connect to paired sources when found. The session starts immediately — no manual action needed."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.idleTimeout",
+    "label": "Тайм-аут простою",
+    "desc": "Автоматично завершувати сеанс, якщо цей час не надходить жодного зразка. Корисно, якщо LSL-джерело зависло або призупинилось без відключення."
+  },
+  {
+    "tab": "lsl",
+    "key": "lsl.localStreams",
+    "label": "Local LSL Streams",
+    "desc": "Discover EEG/EXG streams broadcast via Lab Streaming Layer on your local network. Any LSL-compatible device (OpenBCI, BrainFlow, Emotiv via BrainFlow, MATLAB, Python pylsl, etc.) can be used as a data source."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.accessibility",
+    "label": "Спеціальні можливості",
+    "desc": "Відстеження активності клавіатури та миші використовує CGEventTap (macOS) для запису часових міток останнього натискання клавіші та руху миші. Жодних натискань клавіш чи положень курсору не зберігається — лише Unix-секундні мітки. На macOS для цього потрібен дозвіл «Спеціальні можливості»."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.bluetooth",
+    "label": "Bluetooth",
+    "desc": "Bluetooth використовується для підключення до BCI-гарнітури (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian тощо). На macOS система показує одноразовий запит дозволу під час першого сканування. На Linux і Windows спеціальних дозволів не потрібно."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.calendar",
+    "label": "Календар",
+    "desc": "Інструменти календаря можуть читати події для надання контексту планування. Дозвіл запитується macOS за потреби."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.fullDiskAccess",
+    "label": "Повний доступ до диска",
+    "desc": "Потрібен для безпосереднього визначення режиму фокусування через системну базу даних. Без нього застосунок переходить на повільніший застарілий метод. Рекомендовано для надійної інтеграції з режимом «Не турбувати»."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.location",
+    "label": "Служби місцезнаходження",
+    "desc": "На macOS служби місцезнаходження використовують CoreLocation (GPS/Wi-Fi/стільниковий) для точного позиціонування. На Linux та Windows застосунок використовує IP-геолокацію без потреби дозволу. Якщо служби місцезнаходження відхилено, застосунок автоматично переходить на IP-геолокацію."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.notifications",
+    "label": "Сповіщення",
+    "desc": "Сповіщення надсилаються, коли ви досягаєте щоденної мети запису і коли доступне оновлення програмного забезпечення. На macOS і Windows ОС запитує дозвіл під час першого надсилання сповіщення."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.screenRecording",
+    "label": "Запис екрана",
+    "desc": "Потрібно для захоплення вікон інших програм для системи вбудовування знімків екрана. macOS приховує вміст вікон без цього дозволу."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyAccessibility",
+    "label": "Спеціальні можливості",
+    "desc": "Для запису часових міток подій клавіатури та миші з метою контекстуалізації активності. Зберігається лише час події — ніколи те, що було введено чи де був курсор."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyBluetooth",
+    "label": "Bluetooth",
+    "desc": "Для виявлення BCI-гарнітури та потокової передачі даних через BLE."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyCalendar",
+    "label": "Календар",
+    "desc": "Щоб надати контекст планування інструментам ШІ, щоб асистент міг посилатися на ваші майбутні події."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyLocation",
+    "label": "Місцезнаходження",
+    "desc": "Для надання точного контексту місцезнаходження для LLM та зберігання даних GPS поряд з даними здоров’я. Переходить на IP-геолокацію у разі відмови."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyNotifications",
+    "label": "Сповіщення",
+    "desc": "Щоб сповіщати про досягнення щоденної мети запису та доступність оновлень."
+  },
+  {
+    "tab": "permissions",
+    "key": "perm.whyScreenRecording",
+    "label": "Запис екрана",
+    "desc": "Для захоплення активного вікна для пошуку візуальної подібності та крос-модальної кореляції EEG. Зберігаються лише обрані знімки — ніколи безперервний запис."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.embeddingModel",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.gpuToggle",
+    "label": "Прискорення GPU",
+    "desc": "Використовувати GPU для вбудовування зображень та OCR. Вимкніть для примусового використання CPU (звільняє GPU для LLM/EEG)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.imageSize",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.interval",
+    "label": "Інтервал захоплення",
+    "desc": "Вирівняно з епохами вбудовування ЕЕГ (по 5 с). 1× = кожна епоха, 2× = кожна друга, до 12× (60 с)."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.modelChanged",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.ocrToggle",
+    "label": "Вилучення тексту OCR",
+    "desc": "Вилучати текст зі знімків екрана для текстового пошуку. Працює на зображенні повної роздільності перед зменшенням."
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.quality",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "screenshots",
+    "key": "screenshots.reembed",
+    "label": "Screenshots",
+    "desc": "Screenshots"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.activeWindowToggle",
+    "label": "Відстежувати активне вікно",
+    "desc": "Записувати, яка програма та вікно на передньому плані. Зберігається локально в activity.sqlite, не передається."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.apiToken",
+    "label": "Автентифікація API",
+    "desc": "Якщо встановлено, всі HTTP та WebSocket API запити повинні включати цей токен у заголовку Authorization. Залиште порожнім для вимкнення автентифікації."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.autoFitToggle",
+    "label": "Автопідбір висоти панелі",
+    "desc": "Розширює або зменшує головне вікно відповідно до вмісту панелі, обмежуючись висотою екрана."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dailyGoal",
+    "label": "Щоденна ціль",
+    "desc": "Встановіть щоденну ціль запису. Прогрес відображається на інформаційній панелі."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.dataDir",
+    "label": "Каталог даних",
+    "desc": "Де зберігаються всі дані ЕЕГ, ембедінги, мітки та логи."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.geoProvider",
+    "label": "Постачальник геолокації",
+    "desc": "Оберіть, як застосунок визначає ваше місцезнаходження для метаданих сеансу. «Вимкнено» вимикає геолокацію, «Локально» використовує GPS пристрою, а «Віддалено» звертається до зовнішнього сервісу."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.hfEndpoint",
+    "label": "Ендпоінт HuggingFace",
+    "desc": "Необов'язкова дзеркальна/базова URL-адреса для завантаження моделей (LLM + EXG + TTS). Типово використовується HF_ENDPOINT або https://huggingface.co."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.inputActivityToggle",
+    "label": "Відстежувати клавіатуру та мишу",
+    "desc": "Посекундний запис активності клавіатури та миші. Не потребує спеціальних дозволів. Зберігається в activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.language",
+    "label": "Мова",
+    "desc": "Оберіть мову відображення. За замовчуванням: мова системи."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBands",
+    "label": "Діапазони",
+    "desc": "Знімки потужності діапазонів"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logBluetooth",
+    "label": "Пристрої",
+    "desc": "Сканер пристроїв і життєвий цикл сесії"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logChatStore",
+    "label": "Сховище чату",
+    "desc": "Операції SQLite чату (збереження, міграція, відкриття)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logEmbedder",
+    "label": "Кодер",
+    "desc": "Кодер ZUNA та вставки HNSW"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logFilter",
+    "label": "Фільтр",
+    "desc": "Кроки GPU-фільтра"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHistory",
+    "label": "Історія",
+    "desc": "Завантаження сесій та сканування CSV"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logHooks",
+    "label": "Hooks",
+    "desc": "Матчер hooks, тригери та сповіщення"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logIroh",
+    "label": "Мережа Iroh",
+    "desc": "Реле, QUIC, попередження IPv6 (демон — дуже шумно)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logScanner",
+    "label": "Сканер",
+    "desc": "Мультитранспортне виявлення пристроїв (BLE, USB, Cortex)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logTools",
+    "label": "Tools",
+    "desc": "Виконання викликів інструментів (виклик, безпека, час)"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.logWebsocket",
+    "label": "WebSocket",
+    "desc": "WS-з'єднання та повідомлення"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.openbci",
+    "label": "OpenBCI",
+    "desc": "Налаштуйте плату OpenBCI для підключення разом із іншим BCI-пристроєм або замість нього."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.wsHost",
+    "label": "Адреса прослуховування",
+    "desc": "Режим LAN відкриває API для всіх пристроїв у мережі. Потрібен перезапуск."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetDefault",
+    "label": "За замовчуванням",
+    "desc": "Стандартний 8-годинний цикл — 23:00 до 07:00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetEarlyBird",
+    "label": "Ранній птах",
+    "desc": "Ранній розклад — 21:30 до 05:30 (8 год)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetLongSleeper",
+    "label": "Довго сплю",
+    "desc": "Розширене 10-годинне вікно — 22:00 до 08:00."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetNightOwl",
+    "label": "Нічна сова",
+    "desc": "Пізній розклад — 01:00 до 09:00 (8 год)."
+  },
+  {
+    "tab": "sleep",
+    "key": "sleepSettings.presetShortSleeper",
+    "label": "Мало сплю",
+    "desc": "Компактне 6-годинне вікно — 00:00 до 06:00."
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclAdmin",
+    "label": "Admin",
+    "desc": "Full access"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclReadOnly",
+    "label": "Read Only",
+    "desc": "GET endpoints only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.aclStream",
+    "label": "Stream",
+    "desc": "EEG events, status, bands only"
+  },
+  {
+    "tab": "tokens",
+    "key": "tokens.defaultToken",
+    "label": "Default Token",
+    "desc": "Built-in admin token used by the app. Cannot be deleted."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.editFile",
+    "label": "Редагування файлу",
+    "desc": "Дозволити точкові зміни пошук-і-заміна в існуючих файлах."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.location",
+    "label": "Місцезнаходження",
+    "desc": "Дозволяє приблизний пошук країни, регіону, міста та часового поясу за IP."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.readFile",
+    "label": "Читання файлу",
+    "desc": "Дозволити читання текстових файлів. Великі файли розбиваються на сторінки з offset/limit."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.skillsSection",
+    "label": "Навички агента",
+    "desc": "Навички надають спеціалізовані інструкції, які LLM може завантажувати на вимогу. Увімкніть або вимкніть окремі навички."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webFetch",
+    "label": "Завантаження сторінки",
+    "desc": "Дозволяє завантажувати текстовий вміст публічної HTTP(S) сторінки."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.webSearch",
+    "label": "Вебпошук",
+    "desc": "Веб-пошук через налаштованого постачальника пошуку."
+  },
+  {
+    "tab": "tools",
+    "key": "llm.tools.writeFile",
+    "label": "Запис файлу",
+    "desc": "Дозволити створення або перезапис файлів. Батьківські каталоги створюються автоматично."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendKitten",
+    "label": "KittenTTS",
+    "desc": "Компактна ONNX-модель, швидка на будь-якому CPU, лише англійська."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.backendNeutts",
+    "label": "NeuTTS",
+    "desc": "GGUF LLM-бекбон з декодером NeuCodec. Клонує будь-який голос; підтримує англійську, німецьку, французьку, іспанську."
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.preloadOnStartup",
+    "label": "Попереднє завантаження рушія при запуску",
+    "desc": "Прогріває активний рушій у фоні при запуску програми"
+  },
+  {
+    "tab": "tts",
+    "key": "ttsTab.requirements",
+    "label": "Потрібний espeak-ng у PATH",
+    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.cooldownMs",
+    "label": "Охолодження GPU",
+    "desc": "Пауза в мілісекундах між епохами навчання. 0 = максимальна пропускна здатність GPU. Збільшення знижує навантаження на GPU."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.negSampleRate",
+    "label": "Частота негативної вибірки",
+    "desc": "Випадкові пари не-сусідів на позитивне ребро за епоху. Вище = сильніше розділення, повільніше навчання."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nEpochs",
+    "label": "Епохи оптимізації",
+    "desc": "Кількість ітерацій градієнтного спуску. Більше епох = тонше розташування, повільніший розрахунок."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.nNeighbors",
+    "label": "k найближчих сусідів",
+    "desc": "Кількість сусідів для побудови KNN-графу. Менші значення зберігають локальні деталі; більші — глобальну структуру."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.repulsion",
+    "label": "Відштовхування",
+    "desc": "Керує тим, наскільки сильно точки-не-сусіди відштовхуються. Вищі значення дають більш розділені кластери між сесіями A і B."
+  },
+  {
+    "tab": "umap",
+    "key": "umapSettings.timeout",
+    "label": "Тайм-аут навчання",
+    "desc": "Максимальний час для оптимізатора UMAP. Навчання зупиняється, якщо досягнуто ліміту."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoCheck",
+    "label": "Перевіряти автоматично",
+    "desc": "Перевіряти оновлення раз на день під час запуску застосунку."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autostart",
+    "label": "Запуск під час входу",
+    "desc": "Запускається автоматично при вході в систему."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.checkInterval",
+    "label": "Частота перевірки",
+    "desc": "Як часто застосунок автоматично перевіряє оновлення у фоні."
+  }
+]

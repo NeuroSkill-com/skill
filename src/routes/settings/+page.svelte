@@ -174,6 +174,54 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+/**
+ * After switching tabs, find the setting label in the rendered DOM and scroll to it.
+ * Uses the i18n key to resolve the translated text, then searches the tab panel
+ * for a text node containing that label and scrolls its container into view.
+ */
+function scrollToSetting(key: string): void {
+  // Wait for Svelte to render the new tab content
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const label = t(key);
+      if (!label) return;
+
+      const panel = document.querySelector("[role='tabpanel']");
+      if (!panel) return;
+
+      // Walk text nodes looking for the label
+      const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) =>
+          node.textContent?.trim().includes(label)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT,
+      });
+
+      const textNode = walker.nextNode();
+      if (!textNode?.parentElement) return;
+
+      // Find the nearest meaningful container to highlight
+      // (walk up to find a label/section row, not just the bare <span>)
+      let target = textNode.parentElement;
+      for (let i = 0; i < 4 && target.parentElement; i++) {
+        const p = target.parentElement;
+        // Stop at a reasonable block container
+        if (p.classList.contains("flex") && p.offsetHeight > 20) {
+          target = p;
+          break;
+        }
+        target = p;
+      }
+
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // Flash highlight
+      target.classList.add("setting-highlight");
+      setTimeout(() => target.classList.remove("setting-highlight"), 2000);
+    }, 100);
+  });
+}
+
 let unlisten: UnlistenFn | null = null;
 let fontObserver: MutationObserver | null = null;
 let splitRoot: HTMLDivElement | null = null;
@@ -273,9 +321,17 @@ onMount(async () => {
   }
 
   // Listen for switch-tab events (emitted when settings is already open)
-  unlisten = await listen<string>("switch-tab", (ev) => {
-    if (TAB_IDS.includes(ev.payload as Tab)) {
-      tab = ev.payload as Tab;
+  unlisten = await listen<string | { tab: string; settingKey: string | null }>("switch-tab", (ev) => {
+    // Support both old string payload and new object payload
+    const payload = typeof ev.payload === "string"
+      ? { tab: ev.payload, settingKey: null }
+      : ev.payload;
+
+    if (TAB_IDS.includes(payload.tab as Tab)) {
+      tab = payload.tab as Tab;
+      if (payload.settingKey) {
+        scrollToSetting(payload.settingKey);
+      }
     }
   });
 });
@@ -406,3 +462,20 @@ $effect(() => {
   </div>
 
 </main>
+
+<style>
+  :global(.setting-highlight) {
+    animation: setting-flash 2s ease-out;
+    border-radius: 0.5rem;
+  }
+  @keyframes setting-flash {
+    0%, 15% {
+      background-color: rgb(59 130 246 / 0.15);
+      box-shadow: 0 0 0 2px rgb(59 130 246 / 0.3);
+    }
+    100% {
+      background-color: transparent;
+      box-shadow: 0 0 0 2px transparent;
+    }
+  }
+</style>
