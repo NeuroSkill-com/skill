@@ -49,7 +49,8 @@ let shuttingDown = false;
 let showHelp = false;
 let renderQueued = false;
 let forceKillTimer = null;
-let startupPhase = true;
+const logoAnimStart = Date.now();
+const logoAnimDuration = 4000; // 4 seconds to slide from center to top
 
 const ESC = String.fromCharCode(27);
 // Strip all ANSI/VT escape sequences:
@@ -147,11 +148,11 @@ function center(text, width) {
 }
 
 function requestRender() {
-  if (renderQueued || startupPhase) return;
+  if (renderQueued) return;
   renderQueued = true;
   setTimeout(() => {
     renderQueued = false;
-    if (!startupPhase) render();
+    render();
   }, 16);
 }
 
@@ -240,7 +241,22 @@ function render() {
     return i === 0 ? `${padded.slice(0, -1)}™` : padded;
   });
 
-  process.stdout.write("\x1b[?25l\x1b[2J\x1b[H");
+  // Animate logo from vertically centered to row 1 over logoAnimDuration
+  const elapsed = Date.now() - logoAnimStart;
+  const animT = Math.min(1, elapsed / logoAnimDuration);
+  // Ease-out cubic for smooth deceleration
+  const eased = 1 - Math.pow(1 - animT, 3);
+  const centerY = Math.max(1, Math.floor((rows - art.length) / 2));
+  const logoRow = Math.round(centerY + (1 - centerY) * eased);
+  const animating = animT < 1;
+
+  // Only full-clear during animation (logo is moving, need to erase old position).
+  // Once settled, just hide cursor and overwrite in place to avoid flicker.
+  if (animating) {
+    process.stdout.write("\x1b[?25l\x1b[2J\x1b[H");
+  } else {
+    process.stdout.write("\x1b[?25l");
+  }
 
   // Gradient endpoints per row: left color → right color, fading vertically
   const gradientRows = [
@@ -273,32 +289,38 @@ function render() {
     return out + "\x1b[0m";
   }
 
-  let row = 1;
   const RST = "\x1b[0m";
   const DIMPINK = "\x1b[38;2;140;70;100m";
   for (let i = 0; i < art.length; i++) {
+    const r = logoRow + i;
+    if (r < 1 || r > rows) continue;
     const line = art[i];
     const centered = center(line, cols);
     if (i === 0) {
-      // ™ at the end in dim color
       const tmIdx = centered.lastIndexOf("™");
       const body = centered.slice(0, tmIdx);
       const colored = colorizeLineGradient(body, i) + `${DIMPINK}™${RST}`;
-      process.stdout.write(`\x1b[${row};1H${fitText(colored, cols)}`);
+      process.stdout.write(`\x1b[${r};1H${fitText(colored, cols)}`);
     } else {
-      process.stdout.write(`\x1b[${row};1H${fitText(colorizeLineGradient(centered, i), cols)}`);
+      process.stdout.write(`\x1b[${r};1H${fitText(colorizeLineGradient(centered, i), cols)}`);
     }
-    row += 1;
   }
 
+  // Only show log/help lines and panes once the logo has settled at the top
+  const infoRow = logoRow + art.length;
   const logLine = `Logs: daemon=${daemonLogPath} | tauri=${tauriLogPath}`;
-  process.stdout.write(`\x1b[${row};1H${fitText(logLine, cols)}`);
-  row += 1;
+  if (infoRow <= rows) process.stdout.write(`\x1b[${infoRow};1H${fitText(logLine, cols)}`);
 
+  const helpRow = infoRow + 1;
   const helpLine = showHelp
     ? "Keys: Tab switch pane | ↑/k up | ↓/j down | PgUp/PgDn page | g top | G bottom | f follow | mouse wheel scroll | ? help | q quit"
     : "Press ? for key help (mouse wheel supported)";
-  process.stdout.write(`\x1b[${row};1H${fitText(helpLine, cols)}`);
+  if (helpRow <= rows) process.stdout.write(`\x1b[${helpRow};1H${fitText(helpLine, cols)}`);
+
+  // Schedule next animation frame if still animating
+  if (animating) {
+    setTimeout(requestRender, 16);
+  }
 
   for (let r = contentTop; r <= contentBottom; r++) {
     process.stdout.write(`\x1b[${r};${dividerCol}H│`);
@@ -588,86 +610,4 @@ panes.tauri.status = "running";
 daemonChild = startProcess("daemon", panes.daemon, daemonLog);
 tauriChild = startProcess("tauri", panes.tauri, tauriLog);
 
-// Startup flash: show logo centered for a moment, then transition to full TUI
-function renderStartupFlash(step) {
-  if (shuttingDown || !startupPhase) return;
-  const cols = Math.max(40, process.stdout.columns || 120);
-  const rows = Math.max(18, process.stdout.rows || 40);
-
-  const artRaw = [
-    "███╗   ██╗███████╗██╗   ██╗██████╗  ██████╗ ███████╗██╗  ██╗██╗██╗     ██╗",
-    "████╗  ██║██╔════╝██║   ██║██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██║██║     ██║",
-    "██╔██╗ ██║█████╗  ██║   ██║██████╔╝██║   ██║███████╗█████╔╝ ██║██║     ██║",
-    "██║╚██╗██║██╔══╝  ██║   ██║██╔══██╗██║   ██║╚════██║██╔═██╗ ██║██║     ██║",
-    "██║ ╚████║███████╗╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██╗██║███████╗███████╗",
-    "╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝",
-  ];
-
-  // Brightness ramps up over steps 0-4, then holds
-  const brightness = Math.min(1, step / 4);
-
-  const gradientRows = [
-    { l: [255, 0, 200],  r: [255, 80, 120] },
-    { l: [255, 20, 180],  r: [255, 100, 110] },
-    { l: [245, 40, 160],  r: [250, 110, 100] },
-    { l: [230, 55, 140],  r: [240, 115, 95] },
-    { l: [210, 65, 125],  r: [225, 120, 90] },
-    { l: [180, 80, 110],  r: [200, 120, 90] },
-  ];
-
-  function lerpColor(c1, c2, t) {
-    return [
-      Math.round(c1[0] + (c2[0] - c1[0]) * t),
-      Math.round(c1[1] + (c2[1] - c1[1]) * t),
-      Math.round(c1[2] + (c2[2] - c1[2]) * t),
-    ];
-  }
-
-  function scaleColor(c, s) {
-    return [Math.round(c[0] * s), Math.round(c[1] * s), Math.round(c[2] * s)];
-  }
-
-  // Pad all lines to the same width so centering is uniform
-  const artMaxW = Math.max(...artRaw.map((l) => [...l].length));
-  const art = artRaw.map((l) => l + " ".repeat(Math.max(0, artMaxW - [...l].length)));
-
-  process.stdout.write("\x1b[?25l\x1b[2J\x1b[H");
-
-  const startRow = Math.max(1, Math.floor((rows - art.length) / 2));
-
-  for (let i = 0; i < art.length; i++) {
-    const line = art[i];
-    const centered = center(line, cols);
-    const chars = [...centered];
-    const grad = gradientRows[Math.min(i, gradientRows.length - 1)];
-    let out = "";
-    for (let ci = 0; ci < chars.length; ci++) {
-      const t = chars.length > 1 ? ci / (chars.length - 1) : 0;
-      const base = lerpColor(grad.l, grad.r, t);
-      const [r, g, b] = scaleColor(base, brightness);
-      out += `\x1b[38;2;${r};${g};${b}m${chars[ci]}`;
-    }
-    out += "\x1b[0m";
-    process.stdout.write(`\x1b[${startRow + i};1H${out}`);
-  }
-
-  if (step < 8) {
-    setTimeout(() => renderStartupFlash(step + 1), 60);
-  } else {
-    // Hold the logo briefly, then transition to full TUI
-    setTimeout(() => {
-      startupPhase = false;
-      try { render(); } catch { /* render will be retried by next output */ }
-    }, 400);
-  }
-}
-
-renderStartupFlash(0);
-
-// Safety: ensure we always exit startup phase even if animation errors
-setTimeout(() => {
-  if (startupPhase) {
-    startupPhase = false;
-    try { render(); } catch { /* ignore */ }
-  }
-}, 2000);
+render();
