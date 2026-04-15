@@ -309,18 +309,57 @@ jobs:
           # install script downloads "latest" and the cache would serve stale files.
           key: windows-vulkan-sdk-v1-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
 
+      - name: Cache NSIS
+        uses: actions/cache@v5
+        with:
+          path: |
+            C:\Program Files (x86)\NSIS
+            C:\nsis
+          key: windows-nsis-v1
+
       - name: Install NSIS + Vulkan SDK (parallel)
         shell: powershell
         run: |
           # ── NSIS (background) ────────────────────────────────────────────────
           $nsisJob = Start-Job -ScriptBlock {
             $makensis = Get-Command makensis -ErrorAction SilentlyContinue
-            if (-not $makensis) {
-              Write-Output "[info] NSIS not found on PATH; installing via Chocolatey"
-              choco install nsis -y --no-progress
-              if ($LASTEXITCODE -ne 0) {
-                throw "Failed to install NSIS via Chocolatey (exit $LASTEXITCODE)"
+            if ($makensis) {
+              Write-Output "[ok] NSIS already on PATH: $($makensis.Source)"
+              return
+            }
+
+            # Try Chocolatey first, fall back to direct download
+            $installed = $false
+            for ($i = 1; $i -le 2; $i++) {
+              try {
+                Write-Output "[info] NSIS not found; installing via Chocolatey (attempt $i)"
+                choco install nsis -y --no-progress 2>&1
+                if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+              } catch {
+                Write-Output "[warn] choco attempt $i failed: $($_.Exception.Message)"
               }
+              Start-Sleep -Seconds (3 * $i)
+            }
+
+            if (-not $installed) {
+              Write-Output "[warn] Chocolatey unavailable; falling back to direct NSIS download"
+              $nsisVer = "3.10"
+              $url = "https://sourceforge.net/projects/nsis/files/NSIS%203/$nsisVer/nsis-$nsisVer.zip/download"
+              $zip = Join-Path $env:TEMP "nsis-$nsisVer.zip"
+              $dest = "C:\nsis"
+              Invoke-WebRequest -Uri $url -OutFile $zip -UserAgent "Mozilla/5.0" -MaximumRedirection 10
+              Expand-Archive -Path $zip -DestinationPath $dest -Force
+              # The zip extracts into a subdirectory
+              $innerDir = Get-ChildItem -Path $dest -Directory | Select-Object -First 1
+              if ($innerDir) {
+                # Move contents up so makensis.exe is at C:\nsis\makensis.exe
+                Get-ChildItem -Path $innerDir.FullName | Move-Item -Destination $dest -Force
+                Remove-Item $innerDir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+              }
+              if (-not (Test-Path (Join-Path $dest "makensis.exe"))) {
+                throw "NSIS direct download failed: makensis.exe not found in $dest"
+              }
+              Write-Output "[ok] Installed NSIS $nsisVer via direct download to $dest"
             }
           }
 
@@ -349,7 +388,8 @@ jobs:
             $candidatePaths = @(
               "C:\Program Files (x86)\NSIS",
               "C:\Program Files\NSIS",
-              "$env:LOCALAPPDATA\NSIS"
+              "$env:LOCALAPPDATA\NSIS",
+              "C:\nsis"
             )
             $nsisDir = $null
             foreach ($path in $candidatePaths) {
