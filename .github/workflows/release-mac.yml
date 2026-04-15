@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,28 +24,39 @@ jobs:
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       # Catches "forgot to bump the version" before wasting 20 min on a build.
-      - name: Verify version matches tag
+      - name: Resolve version
         id: version_meta
         run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"   # strip leading 'v'  →  1.2.3
           CONF_VERSION=$(
             grep '"version"' src-tauri/tauri.conf.json \
             | head -1 \
             | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
           )
-          if [ "$VERSION" != "$CONF_VERSION" ]; then
-            echo "::error::Tag version ($VERSION) does not match" \
-                 "tauri.conf.json version ($CONF_VERSION)."
-            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
-                 "src-tauri/Cargo.toml, then re-tag."
-            exit 1
+
+          IS_RELEASE="${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+
+          if [ "$IS_RELEASE" = "true" ]; then
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+            if [ "$VERSION" != "$CONF_VERSION" ]; then
+              echo "::error::Tag version ($VERSION) does not match" \
+                   "tauri.conf.json version ($CONF_VERSION)."
+              echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
+                   "src-tauri/Cargo.toml, then re-tag."
+              exit 1
+            fi
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "TAG=$TAG" >> "$GITHUB_ENV"
+          else
+            VERSION="$CONF_VERSION"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "TAG=" >> "$GITHUB_ENV"
           fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG"         >> "$GITHUB_ENV"
-          echo "✓ Version verified: $VERSION"
+          echo "✓ Version: $VERSION (release=$IS_RELEASE)"
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -523,6 +535,7 @@ DPLIST
       # cryptography with no macOS-API bundling code, so it does not hit the
       # SIGILL that kills `npx tauri build`.
       - name: Recreate updater artifact from signed .app
+        if: steps.version_meta.outputs.is_release == 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -558,6 +571,7 @@ DPLIST
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
+        if: steps.version_meta.outputs.is_release == 'true'
         id: artifacts
         run: |
           BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
@@ -603,6 +617,7 @@ DPLIST
       #   NeuroSkill.app.tar.gz              — Tauri updater bundle
       #   NeuroSkill.app.tar.gz.sig          — Ed25519 signature for the updater
       - name: Prepare changelog notes for release
+        if: steps.version_meta.outputs.is_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -654,6 +669,7 @@ DPLIST
           rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
 
       - name: Create GitHub Release
+        if: steps.version_meta.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name:               ${{ steps.version_meta.outputs.tag }}
@@ -681,6 +697,7 @@ DPLIST
       # and ignores the rest, so a partial manifest is valid while other platform
       # builds are still in flight.
       - name: Update latest.json
+        if: steps.version_meta.outputs.is_release == 'true'
         env:
           GH_TOKEN:     ${{ github.token }}
           GH_REPO:      ${{ github.repository }}
@@ -752,9 +769,20 @@ DPLIST
           gh release upload "$TAG" latest.json --clobber
           echo "✓ latest.json uploaded to release $TAG"
 
+      # ── Upload CI artifacts (manual / on-demand builds only) ────────────────
+      - name: Upload build artifacts
+        if: steps.version_meta.outputs.is_release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuroSkill-macOS-${{ steps.version_meta.outputs.version }}
+          path: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 14
+
       # ── Discord notification ────────────────────────────────────────────────
       - name: Notify Discord of release
-        if: always()
+        if: always() && steps.version_meta.outputs.is_release == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
