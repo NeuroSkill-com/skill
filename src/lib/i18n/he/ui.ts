@@ -310,9 +310,7 @@ const ui: Record<string, string> = {
   "invite.copied": "הועתק!",
   "invite.linkHint": "פתח את הקישור הזה בטלפון אם אינך יכול לסרוק את קוד ה-QR",
 
-  // ── Auto-synced from en/ (2026-04-15) ──
-  // TODO: translate the following 1 key(s) into he
-  "cmdK.sectionSettings": "Settings",
+  "cmdK.sectionSettings": "הגדרות",
 };
 
 export default ui;

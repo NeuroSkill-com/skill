@@ -326,9 +326,7 @@ const ui: Record<string, string> = {
   "invite.copied": "Copié !",
   "invite.linkHint": "Ouvrez ce lien sur le téléphone si vous ne pouvez pas scanner le code QR",
 
-  // ── Auto-synced from en/ (2026-04-15) ──
-  // TODO: translate the following 1 key(s) into fr
-  "cmdK.sectionSettings": "Settings",
+  "cmdK.sectionSettings": "Paramètres",
 };
 
 export default ui;
