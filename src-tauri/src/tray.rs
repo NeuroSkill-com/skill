@@ -59,6 +59,13 @@ static LAST_STRUCTURE_KEY: Mutex<String> = Mutex::new(String::new());
 /// for in-place item updates without `TrayIcon::menu()` (which doesn't exist).
 static CURRENT_MENU: Mutex<Option<Menu<tauri::Wry>>> = Mutex::new(None);
 
+/// Keep the previous menu alive briefly after a rebuild so that macOS AppKit
+/// can finish processing any in-flight click events before the old native menu
+/// items (and their backing `String` data) are deallocated.  Without this,
+/// clicking a menu item while a `set_menu` rebuild races in can cause a
+/// use-after-free panic inside `muda::MenuItem::fire_menu_item_click`.
+static PREV_MENU: Mutex<Option<Menu<tauri::Wry>>> = Mutex::new(None);
+
 #[derive(Clone)]
 struct TrayDownloadItem {
     filename: String,
@@ -701,9 +708,15 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         }
         if let Ok(m) = build_menu(app, &st) {
             let _ = tray.set_menu(Some(m.clone()));
-            *CURRENT_MENU
+            // Stash the old menu so it stays alive while AppKit finishes any
+            // in-flight click callbacks (prevents use-after-free in muda).
+            let old = CURRENT_MENU
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(m);
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .replace(m);
+            *PREV_MENU
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = old;
             *LAST_STRUCTURE_KEY
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = s_key;
