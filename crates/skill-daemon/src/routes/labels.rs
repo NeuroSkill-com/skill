@@ -130,7 +130,7 @@ fn f32_to_blob(v: &[f32]) -> Vec<u8> {
     v.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
-const EMBED_MODEL_NAME: &str = "nomic-embed-text-v1.5";
+pub(crate) const EMBED_MODEL_NAME: &str = "nomic-embed-text-v1.5";
 
 #[cfg(test)]
 mod tests {

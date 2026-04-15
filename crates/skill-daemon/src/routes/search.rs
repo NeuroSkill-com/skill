@@ -240,6 +240,22 @@ fn interactive_search_impl(
 
     let text_neighbors = skill_label_index::search_by_text_vec(&query_vec, k_text, 64, skill_dir, label_index);
 
+    // If no results, check whether there are labels that need re-embedding.
+    let mut warning: Option<String> = None;
+    if text_neighbors.is_empty() {
+        if let Some(store) = skill_data::label_store::LabelStore::open(skill_dir) {
+            let total = store.count();
+            if total > 0 {
+                let stale = store.rows_needing_embed(super::labels::EMBED_MODEL_NAME).len() as u64;
+                if stale > 0 {
+                    warning = Some(format!(
+                        "{stale} of {total} labels need re-embedding. POST /v1/labels/reembed to fix."
+                    ));
+                }
+            }
+        }
+    }
+
     // Add text_label nodes.
     for (i, nb) in text_neighbors.iter().enumerate() {
         let node_id = format!("tl{i}");
@@ -306,13 +322,20 @@ fn interactive_search_impl(
         }
     }
 
-    serde_json::json!({
+    let mut result = serde_json::json!({
         "nodes": nodes,
         "edges": edges,
         "dot": "",
         "svg": "",
         "svg_col": "",
-    })
+    });
+    if let Some(w) = warning {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("warning".into(), serde_json::json!(w));
+    }
+    result
 }
 
 async fn compare_search(
