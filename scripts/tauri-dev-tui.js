@@ -51,6 +51,8 @@ let renderQueued = false;
 let forceKillTimer = null;
 const logoAnimStart = Date.now();
 const logoAnimDuration = 4000; // 4 seconds to slide from center to top
+let lastEegTick = 0; // tracks EEG wave offset for slower updates
+let eegTimer = null; // separate timer for EEG animation
 
 const ESC = String.fromCharCode(27);
 // Strip all ANSI/VT escape sequences:
@@ -141,12 +143,6 @@ function fitText(text, width) {
   return `${taken.text}${reset}…`;
 }
 
-function center(text, width) {
-  if (text.length >= width) return text.slice(0, width);
-  const left = Math.floor((width - text.length) / 2);
-  return `${" ".repeat(left)}${text}`;
-}
-
 function requestRender() {
   if (renderQueued) return;
   renderQueued = true;
@@ -159,7 +155,7 @@ function requestRender() {
 function getLayout() {
   const cols = Math.max(40, process.stdout.columns || 120);
   const rows = Math.max(18, process.stdout.rows || 40);
-  const headerRows = 8;
+  const headerRows = 8; // 6 logo + log + help
   const footerRows = 1;
   const contentTop = headerRows + 1;
   const contentBottom = rows - footerRows;
@@ -241,13 +237,13 @@ function render() {
     return i === 0 ? `${padded.slice(0, -1)}™` : padded;
   });
 
-  // Animate logo from vertically centered to row 1 over logoAnimDuration
+  // Animate logo from bottom to row 1 over logoAnimDuration
   const elapsed = Date.now() - logoAnimStart;
   const animT = Math.min(1, elapsed / logoAnimDuration);
   // Ease-out cubic for smooth deceleration
-  const eased = 1 - Math.pow(1 - animT, 3);
-  const centerY = Math.max(1, Math.floor((rows - art.length) / 2));
-  const logoRow = Math.round(centerY + (1 - centerY) * eased);
+  const eased = 1 - (1 - animT) ** 3;
+  const bottomY = Math.max(1, rows - art.length);
+  const logoRow = Math.round(bottomY + (1 - bottomY) * eased);
   const animating = animT < 1;
 
   // Only full-clear during animation (logo is moving, need to erase old position).
@@ -260,12 +256,12 @@ function render() {
 
   // Gradient endpoints per row: left color → right color, fading vertically
   const gradientRows = [
-    { l: [255, 0, 200],  r: [255, 80, 120] },   // vivid magenta → coral
-    { l: [255, 20, 180],  r: [255, 100, 110] },
-    { l: [245, 40, 160],  r: [250, 110, 100] },
-    { l: [230, 55, 140],  r: [240, 115, 95] },
-    { l: [210, 65, 125],  r: [225, 120, 90] },
-    { l: [180, 80, 110],  r: [200, 120, 90] },   // dim mauve → muted coral
+    { l: [255, 0, 200], r: [255, 80, 120] }, // vivid magenta → coral
+    { l: [255, 20, 180], r: [255, 100, 110] },
+    { l: [245, 40, 160], r: [250, 110, 100] },
+    { l: [230, 55, 140], r: [240, 115, 95] },
+    { l: [210, 65, 125], r: [225, 120, 90] },
+    { l: [180, 80, 110], r: [200, 120, 90] }, // dim mauve → muted coral
   ];
 
   function lerpColor(c1, c2, t) {
@@ -276,37 +272,99 @@ function render() {
     ];
   }
 
-  function colorizeLineGradient(line, rowIdx) {
-    const chars = [...line];
-    const grad = gradientRows[Math.min(rowIdx, gradientRows.length - 1)];
-    const len = chars.length;
-    let out = "";
-    for (let ci = 0; ci < len; ci++) {
-      const t = len > 1 ? ci / (len - 1) : 0;
-      const [r, g, b] = lerpColor(grad.l, grad.r, t);
-      out += `\x1b[38;2;${r};${g};${b}m${chars[ci]}`;
-    }
-    return out + "\x1b[0m";
-  }
-
   const RST = "\x1b[0m";
   const DIMPINK = "\x1b[38;2;140;70;100m";
+
+  // EEG channels — always fixed at rows 1-6, full width with labels
+  const eegChannels = [
+    {
+      label: "Fz",
+      pattern: [0, 0, 0, 0, 1, 3, 5, 7, 5, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0],
+      speed: 1.0,
+    },
+    {
+      label: "Cz",
+      pattern: [0, 1, 2, 1, 0, 1, 2, 3, 2, 1, 0, 1, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 0, 1, 2, 1, 0, 0, 1],
+      speed: 1.4,
+    },
+    {
+      label: "Pz",
+      pattern: [0, 0, 1, 2, 3, 2, 1, 0, 0, 0, 0, 1, 2, 4, 6, 4, 2, 1, 0, 0, 0, 0, 0, 1, 2, 3, 2, 1, 0, 0],
+      speed: 0.8,
+    },
+    {
+      label: "Oz",
+      pattern: [1, 2, 1, 0, 1, 2, 1, 0, 1, 2, 3, 2, 1, 0, 1, 2, 1, 0, 1, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0],
+      speed: 1.8,
+    },
+    {
+      label: "T3",
+      pattern: [0, 0, 0, 1, 2, 4, 6, 7, 6, 4, 2, 1, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 1, 2, 1],
+      speed: 0.6,
+    },
+    {
+      label: "T4",
+      pattern: [0, 1, 0, 1, 0, 1, 2, 3, 2, 1, 0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0, 1, 0, 1, 0, 1],
+      speed: 2.0,
+    },
+  ];
+  const waveChars = "▁▂▃▄▅▆▇█";
+  const labelWidth = 3; // "Fz " etc.
+
+  // Render EEG at fixed rows 1-6
+  for (let i = 0; i < eegChannels.length; i++) {
+    const r = 1 + i;
+    if (r > rows) continue;
+    const ch = eegChannels[i];
+    const offset = Math.floor(lastEegTick * ch.speed);
+    const pLen = ch.pattern.length;
+    const eegWidth = cols - labelWidth - 1; // full width minus label
+
+    // Label
+    let line = `\x1b[38;2;100;100;100m${ch.label} ${RST}`;
+
+    // Wave
+    for (let x = 0; x < eegWidth; x++) {
+      const idx = (((x + offset) % pLen) + pLen) % pLen;
+      const val = ch.pattern[idx];
+      const intensity = val / 7;
+      const cr = Math.round(30 + 50 * intensity);
+      const cg = Math.round(15 + 25 * intensity);
+      const cb = Math.round(40 + 50 * intensity);
+      line += `\x1b[38;2;${cr};${cg};${cb}m${waveChars[Math.min(val, waveChars.length - 1)]}`;
+    }
+    process.stdout.write(`\x1b[${r};1H${line}${RST}`);
+  }
+
+  // Overlay the logo on top (animates from bottom to row 1)
   for (let i = 0; i < art.length; i++) {
     const r = logoRow + i;
     if (r < 1 || r > rows) continue;
-    const line = art[i];
-    const centered = center(line, cols);
-    if (i === 0) {
-      const tmIdx = centered.lastIndexOf("™");
-      const body = centered.slice(0, tmIdx);
-      const colored = colorizeLineGradient(body, i) + `${DIMPINK}™${RST}`;
-      process.stdout.write(`\x1b[${r};1H${fitText(colored, cols)}`);
-    } else {
-      process.stdout.write(`\x1b[${r};1H${fitText(colorizeLineGradient(centered, i), cols)}`);
+
+    const artLine = art[i];
+    const artChars = [...artLine];
+    const artVisW = artChars.length;
+    const leftPad = Math.max(0, Math.floor((cols - artVisW) / 2));
+    const grad = gradientRows[Math.min(i, gradientRows.length - 1)];
+
+    let logoOut = "";
+    for (let ci = 0; ci < artChars.length; ci++) {
+      const ch2 = artChars[ci];
+      if (ch2 === " ") {
+        // Skip spaces — let the EEG show through
+        logoOut += "\x1b[1C";
+      } else if (i === 0 && ci === artChars.length - 1 && ch2 === "™") {
+        logoOut += `${DIMPINK}™`;
+      } else {
+        const t = artChars.length > 1 ? ci / (artChars.length - 1) : 0;
+        const [lr, lg, lb] = lerpColor(grad.l, grad.r, t);
+        logoOut += `\x1b[38;2;${lr};${lg};${lb}m${ch2}`;
+      }
     }
+    process.stdout.write(`\x1b[${r};${leftPad + 1}H${logoOut}${RST}`);
   }
 
-  // Only show log/help lines and panes once the logo has settled at the top
+  // Show log/help lines below the logo's current position
   const infoRow = logoRow + art.length;
   const logLine = `Logs: daemon=${daemonLogPath} | tauri=${tauriLogPath}`;
   if (infoRow <= rows) process.stdout.write(`\x1b[${infoRow};1H${fitText(logLine, cols)}`);
@@ -463,6 +521,10 @@ function killChildTree(child, signal = "SIGTERM") {
 }
 
 function finalizeExit(code = 0) {
+  if (eegTimer) {
+    clearInterval(eegTimer);
+    eegTimer = null;
+  }
   if (forceKillTimer) {
     clearTimeout(forceKillTimer);
     forceKillTimer = null;
@@ -609,5 +671,12 @@ panes.tauri.status = "running";
 
 daemonChild = startProcess("daemon", panes.daemon, daemonLog);
 tauriChild = startProcess("tauri", panes.tauri, tauriLog);
+
+// Slow EEG tick — advances wave offset every 250ms and triggers a render
+eegTimer = setInterval(() => {
+  if (shuttingDown) return;
+  lastEegTick += 1;
+  requestRender();
+}, 250);
 
 render();
