@@ -52,8 +52,81 @@ pub fn router() -> Router<AppState> {
         .route("/search/eeg", post(search_eeg))
         .route("/search/eeg/stream", post(search_eeg_stream))
         .route("/search/compare", post(compare_search))
+        .route("/search/commands", post(search_commands))
         .route("/search/global-index/stats", get(global_index_stats))
         .route("/search/global-index/rebuild", post(global_index_rebuild))
+}
+
+// ── Cmd-K semantic command search ──────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CommandCandidate {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommandSearchRequest {
+    pub query: String,
+    pub candidates: Vec<CommandCandidate>,
+}
+
+/// Cosine similarity between two vectors.
+fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if na == 0.0 || nb == 0.0 {
+        0.0
+    } else {
+        dot / (na * nb)
+    }
+}
+
+/// Semantic search over Cmd-K command candidates using text embeddings.
+/// Embeds the query and all candidate texts, returns top-5 by cosine similarity.
+async fn search_commands(
+    State(state): State<AppState>,
+    Json(req): Json<CommandSearchRequest>,
+) -> Json<serde_json::Value> {
+    let embedder = state.text_embedder.clone();
+    let query = req.query;
+    let candidates = req.candidates;
+
+    let result = tokio::task::spawn_blocking(move || {
+        let query_vec = match embedder.embed(&query) {
+            Some(v) => v,
+            None => return serde_json::json!({ "results": [] }),
+        };
+
+        // Batch-embed all candidates
+        let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
+        let cand_vecs = match embedder.embed_batch(texts) {
+            Some(v) => v,
+            None => return serde_json::json!({ "results": [] }),
+        };
+
+        // Score and rank
+        let mut scored: Vec<(usize, f32)> = cand_vecs
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (i, cosine_sim(&query_vec, v)))
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let results: Vec<serde_json::Value> = scored
+            .iter()
+            .take(5)
+            .filter(|(_, s)| *s > 0.3) // threshold for relevance
+            .map(|(i, s)| serde_json::json!({ "id": candidates[*i].id, "score": s }))
+            .collect();
+
+        serde_json::json!({ "results": results })
+    })
+    .await
+    .unwrap_or_else(|_| serde_json::json!({ "results": [] }));
+
+    Json(result)
 }
 
 async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<serde_json::Value> {

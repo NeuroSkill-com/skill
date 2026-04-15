@@ -62,7 +62,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleepDesc": "Alert wakefulness vs. drowsiness. For sleep research & wind-down tracking.",
   "calibration.preset.gaming": "Gaming / Performance",
   "calibration.preset.gamingDesc": "High-demand task vs. passive rest. For esports and peak-performance biofeedback.",
-  "calibration.preset.children": "Children / Short Attention",
+  "calibration.preset.children": "Short Attention",
   "calibration.preset.childrenDesc": "Shorter phases (10 s) for children or users with limited focus endurance.",
   "calibration.preset.clinical": "Clinical / Research",
   "calibration.preset.clinicalDesc":

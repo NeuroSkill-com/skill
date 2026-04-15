@@ -32,7 +32,7 @@
   {
     "tab": "calibration",
     "key": "calibration.preset.children",
-    "label": "儿童 / 短注意力",
+    "label": "短注意力",
     "desc": "较短阶段（10 秒），适合儿童或注意力持续时间有限的用户。"
   },
   {

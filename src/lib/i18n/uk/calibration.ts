@@ -56,7 +56,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleepDesc": "Активна пильність проти сонливості. Для дослідження сну.",
   "calibration.preset.gaming": "Гейминг / Продуктивність",
   "calibration.preset.gamingDesc": "Вимоглива задача проти пасивного відпочинку. Для кіберспорту та біофідбеку.",
-  "calibration.preset.children": "Діти / Коротка увага",
+  "calibration.preset.children": "Коротка увага",
   "calibration.preset.childrenDesc": "Коротші фази (10 с) для дітей або користувачів з обмеженою тривалістю уваги.",
   "calibration.preset.clinical": "Клінічний / Дослідницький",
   "calibration.preset.clinicalDesc":

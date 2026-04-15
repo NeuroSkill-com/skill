@@ -34,8 +34,9 @@ import {
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { getDevices, pairDevice as pairDeviceCmd } from "$lib/daemon/devices";
+import { daemonGet } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { daemonStatus } from "$lib/daemon/status.svelte";
+import { daemonStatus, setDaemonLatency } from "$lib/daemon/status.svelte";
 import {
   ArtifactEvents,
   BrainStateScores,
@@ -129,7 +130,7 @@ async function launchDaemon() {
   try {
     await invoke("start_daemon_dev");
   } catch (e) {
-    addToast("error", "Daemon", `Failed to start daemon: ${e}`, 6000);
+    addToast("error", t("daemon.connection"), `Failed to start engine: ${e}`, 6000);
   } finally {
     // Give it a moment, then reset if still not connected
     setTimeout(() => {
@@ -147,6 +148,86 @@ $effect(() => {
     startDaemonCountdown();
   }
 });
+
+// ── Engine status popover ────────────────────────────────────────────────
+let enginePopoverOpen = $state(false);
+let engineWsClients = $state(0);
+
+// Latency ping — runs every 5 s while connected.
+let latencyTimer: ReturnType<typeof setInterval> | null = null;
+
+async function pingDaemon() {
+  if (daemonStatus.state !== "connected") return;
+  try {
+    const t0 = performance.now();
+    await daemonGet("/healthz");
+    setDaemonLatency(Math.round(performance.now() - t0));
+  } catch {
+    setDaemonLatency(null as unknown as number);
+  }
+}
+
+async function refreshEngineDetails() {
+  try {
+    const clients = await daemonInvoke<{ id: string }[]>("get_ws_clients");
+    engineWsClients = Array.isArray(clients) ? clients.length : 0;
+  } catch {
+    engineWsClients = 0;
+  }
+}
+
+$effect(() => {
+  if (daemonStatus.state === "connected") {
+    pingDaemon();
+    if (!latencyTimer) latencyTimer = setInterval(pingDaemon, 5000);
+  } else {
+    if (latencyTimer) { clearInterval(latencyTimer); latencyTimer = null; }
+  }
+});
+
+function toggleEnginePopover() {
+  enginePopoverOpen = !enginePopoverOpen;
+  if (enginePopoverOpen) refreshEngineDetails();
+}
+
+/** Compute the engine uptime string from lastConnectedAt. */
+function engineUptime(): string {
+  if (!daemonStatus.lastConnectedAt) return "—";
+  const secs = Math.floor((Date.now() - daemonStatus.lastConnectedAt) / 1000);
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+/** Richer engine state: streaming / idle / connecting / error / offline. */
+const engineState = $derived.by(() => {
+  if (daemonStatus.state !== "connected") return daemonStatus.state;
+  // If device is connected and samples are flowing, it's streaming
+  return status.state === "connected" && status.sample_count > 0 ? "streaming" : "idle";
+});
+
+const engineDotClass = $derived.by(() => {
+  switch (engineState) {
+    case "streaming": return "bg-green-500";
+    case "idle": return "bg-green-500/60";
+    case "connecting": return "bg-amber-400 animate-pulse";
+    case "error": return "bg-red-500";
+    default: return "bg-red-500";
+  }
+});
+
+async function restartDaemon() {
+  daemonLaunching = true;
+  try {
+    await invoke("start_daemon_dev");
+  } catch (e) {
+    addToast("error", t("daemon.connection"), `${e}`, 6000);
+  } finally {
+    setTimeout(() => { daemonLaunching = false; }, 5000);
+  }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface EegPacket {
@@ -1411,6 +1492,7 @@ onDestroy(() => {
     modelDlTimer = null;
   }
   clearDaemonCountdown();
+  if (latencyTimer) { clearInterval(latencyTimer); latencyTimer = null; }
   autoHeightRo?.disconnect();
   autoHeightRo = null;
   if (autoHeightTimer) {
@@ -2583,22 +2665,55 @@ useWindowTitle("window.title.main");
         {/if}
       </p>
       <div class="flex items-center gap-2 shrink-0">
-          <span class="flex items-center gap-1" title="{t('daemon.titlePrefix')}: {daemonStatus.state}">
-            <span class="inline-block h-1.5 w-1.5 rounded-full {daemonStatus.state === 'connected' ? 'bg-green-500' : daemonStatus.state === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'}"></span>
-            {#if daemonStatus.state !== "connected" && (daemonCountdown > 0 || daemonLaunching)}
-              <button
-                class="text-[0.48rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer tabular-nums"
-                title={t("daemon.launchNow")}
-                onclick={() => { clearDaemonCountdown(); launchDaemon(); }}
-              >
-                {#if daemonLaunching}
-                  {t("daemon.starting")}
-                {:else}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <span class="relative flex items-center gap-1 cursor-pointer select-none" title="{t('daemon.titlePrefix')}: {engineState}" onclick={toggleEnginePopover} onkeydown={(e) => e.key === 'Enter' && toggleEnginePopover()} role="button" tabindex="0">
+            <span class="inline-block h-1.5 w-1.5 rounded-full {engineDotClass}"></span>
+            {#if daemonStatus.state === "error" || daemonStatus.state === "disconnected"}
+              {#if daemonLaunching}
+                <span class="text-[0.48rem] text-muted-foreground/50 tabular-nums">{t("daemon.starting")}</span>
+              {:else if daemonCountdown > 0}
+                <button
+                  class="text-[0.48rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer tabular-nums"
+                  title={t("daemon.launchNow")}
+                  onclick={(e) => { e.stopPropagation(); clearDaemonCountdown(); launchDaemon(); }}
+                >
                   {t("daemon.launchingIn", { secs: daemonCountdown })}
-                {/if}
-              </button>
+                </button>
+              {:else}
+                <button
+                  class="text-[0.48rem] text-red-400 hover:text-red-300 cursor-pointer font-medium"
+                  title={t("daemon.restartTitle")}
+                  onclick={(e) => { e.stopPropagation(); restartDaemon(); }}
+                >
+                  {t("daemon.restart")}
+                </button>
+              {/if}
             {:else}
-              <span class="text-[0.48rem] text-muted-foreground/30">{daemonStatus.state === 'connected' ? t('daemon.stateConnected') : daemonStatus.state === 'connecting' ? t('daemon.stateConnecting') : daemonStatus.state === 'error' ? t('daemon.stateError') : t('daemon.stateDisconnected')}</span>
+              <span class="text-[0.48rem] text-muted-foreground/30 tabular-nums">
+                {engineState === "streaming" ? t("daemon.streaming") : engineState === "idle" ? t("daemon.idle") : t("daemon.stateConnecting")}
+                {#if daemonStatus.latencyMs != null}
+                  <span class="text-muted-foreground/20 ml-0.5">{daemonStatus.latencyMs}ms</span>
+                {/if}
+              </span>
+            {/if}
+
+            <!-- Engine details popover -->
+            {#if enginePopoverOpen}
+              <div class="engine-popover absolute bottom-full right-0 mb-2 w-48 rounded-md border border-border bg-popover p-2.5 shadow-lg text-[0.6rem] text-popover-foreground z-50" transition:fade={{ duration: 120 }}>
+                <div class="font-medium text-[0.65rem] mb-1.5">{t("daemon.popoverTitle")}</div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+                  <span class="text-muted-foreground">{t("daemon.uptime")}</span>
+                  <span class="text-right tabular-nums">{engineUptime()}</span>
+                  {#if daemonStatus.version}
+                    <span class="text-muted-foreground">{t("daemon.version")}</span>
+                    <span class="text-right tabular-nums">{daemonStatus.version}</span>
+                  {/if}
+                  <span class="text-muted-foreground">{t("daemon.latency")}</span>
+                  <span class="text-right tabular-nums">{daemonStatus.latencyMs != null ? `${daemonStatus.latencyMs}ms` : "—"}</span>
+                  <span class="text-muted-foreground">{t("daemon.wsClients")}</span>
+                  <span class="text-right tabular-nums">{engineWsClients}</span>
+                </div>
+              </div>
             {/if}
           </span>
         <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>

@@ -58,7 +58,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.gaming": "Jeu / Performance",
   "calibration.preset.gamingDesc":
     "Tâche très exigeante vs repos passif. Pour l'e-sport et le biofeedback haute performance.",
-  "calibration.preset.children": "Enfants / Courte attention",
+  "calibration.preset.children": "Courte attention",
   "calibration.preset.childrenDesc":
     "Phases plus courtes (10 s) pour enfants ou utilisateurs à durée d'attention limitée.",
   "calibration.preset.clinical": "Clinique / Recherche",

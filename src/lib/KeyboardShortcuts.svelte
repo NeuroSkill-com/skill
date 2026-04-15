@@ -24,6 +24,12 @@ let searchShortcut = $state("");
 let settingsShortcut = $state("");
 let calibrationShortcut = $state("");
 let focusTimerShortcut = $state("");
+let chatShortcut = $state("");
+let compareShortcut = $state("");
+let helpShortcut = $state("");
+let historyShortcut = $state("");
+let apiShortcut = $state("");
+let themeShortcut = $state("");
 
 /** Pretty-print a Tauri accelerator string for display.
  *  "CmdOrCtrl+Shift+L" → "⌘⇧L" on Mac, "Ctrl+Shift+L" elsewhere. */
@@ -65,7 +71,13 @@ let globalShortcuts = $derived<ShortcutEntry[]>([
   { keys: pretty(searchShortcut), label: "settings.shortcutSearch", section: "shortcuts.sectionGlobal" },
   { keys: pretty(settingsShortcut), label: "settings.shortcutSettings", section: "shortcuts.sectionGlobal" },
   { keys: pretty(calibrationShortcut), label: "shortcuts.openCalibration", section: "shortcuts.sectionGlobal" },
-  { keys: pretty(focusTimerShortcut), label: "focusTimer.title", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(focusTimerShortcut), label: "settings.shortcutFocusTimer", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(chatShortcut), label: "settings.shortcutChat", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(compareShortcut), label: "settings.shortcutCompare", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(helpShortcut), label: "settings.shortcutHelp", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(historyShortcut), label: "settings.shortcutHistory", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(apiShortcut), label: "settings.shortcutApi", section: "shortcuts.sectionGlobal" },
+  { keys: pretty(themeShortcut), label: "settings.shortcutTheme", section: "shortcuts.sectionGlobal" },
 ]);
 
 const windowShortcuts: ShortcutEntry[] = [
@@ -87,12 +99,19 @@ let sections = $derived(() => {
 
 async function fetchShortcuts() {
   try {
-    [labelShortcut, searchShortcut, settingsShortcut, calibrationShortcut, focusTimerShortcut] = await Promise.all([
+    [labelShortcut, searchShortcut, settingsShortcut, calibrationShortcut, focusTimerShortcut,
+     chatShortcut, compareShortcut, helpShortcut, historyShortcut, apiShortcut, themeShortcut] = await Promise.all([
       invoke<string>("get_label_shortcut"),
       invoke<string>("get_search_shortcut"),
       invoke<string>("get_settings_shortcut"),
       invoke<string>("get_calibration_shortcut"),
       invoke<string>("get_focus_timer_shortcut"),
+      invoke<string>("get_chat_shortcut"),
+      invoke<string>("get_compare_shortcut"),
+      invoke<string>("get_help_shortcut"),
+      invoke<string>("get_history_shortcut"),
+      invoke<string>("get_api_shortcut"),
+      invoke<string>("get_theme_shortcut"),
     ]);
   } catch (_) {
     /* backend unavailable — keep defaults */

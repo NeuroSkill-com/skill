@@ -32,7 +32,7 @@
   {
     "tab": "calibration",
     "key": "calibration.preset.children",
-    "label": "Niños / Atención Corta",
+    "label": "Atención Corta",
     "desc": "Fases más cortas (10 s) para niños o usuarios con resistencia de concentración limitada."
   },
   {

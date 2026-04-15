@@ -367,6 +367,8 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.shortcuts.api_shortcut = data.api_shortcut;
         s.shortcuts.theme_shortcut = data.theme_shortcut;
         s.shortcuts.focus_timer_shortcut = data.focus_timer_shortcut;
+        s.shortcuts.chat_shortcut = data.chat_shortcut;
+        s.shortcuts.compare_shortcut = data.compare_shortcut;
         let mut profiles = data.calibration_profiles;
         if profiles.is_empty() {
             profiles.push(CalibrationProfile::from_legacy(&data.calibration));

@@ -503,21 +503,32 @@ const settings: Record<string, string> = {
   "tokens.defaultTokenDesc": "应用使用的内置管理员令牌。不可删除。刷新以生成新令牌 — 应用会自动使用新令牌。",
   "tokens.refresh": "刷新",
 
-  "daemon.connection": "守护进程连接",
-  "daemon.unreachable": "无法连接到守护进程：{error}。部分功能可能不可用。",
-  "daemon.authFailed": "守护进程认证失败。令牌可能已被刷新。",
-  "daemon.wsError": "守护进程 WebSocket 连接已断开。",
-  "daemon.stateConnected": "守护进程",
+  "daemon.connection": "引擎",
+  "daemon.unreachable": "无法连接到引擎：{error}。部分功能可能不可用。",
+  "daemon.authFailed": "引擎认证失败。令牌可能已被刷新。",
+  "daemon.wsError": "引擎 WebSocket 连接已断开。",
+  "daemon.stateConnected": "引擎",
   "daemon.stateConnecting": "连接中",
   "daemon.stateError": "错误",
   "daemon.stateDisconnected": "离线",
-  "daemon.titlePrefix": "守护进程",
-  "daemon.notConnectedWarning": "守护进程未连接。校准数据将不会被记录。",
+  "daemon.titlePrefix": "引擎",
+  "daemon.notConnectedWarning": "引擎未连接。校准数据将不会被记录。",
   "daemon.auth": "认证 ✓",
   "daemon.protocol": "协议",
   "daemon.launchingIn": "离线 · {secs}秒后启动",
   "daemon.starting": "启动中…",
   "daemon.launchNow": "点击立即启动",
+  "daemon.restart": "重启",
+  "daemon.restartTitle": "点击重启引擎",
+  "daemon.stateChangeConnected": "引擎已重新连接。",
+  "daemon.stateChangeDisconnected": "引擎已断开 — 正在重新连接…",
+  "daemon.popoverTitle": "引擎状态",
+  "daemon.uptime": "运行时间",
+  "daemon.version": "版本",
+  "daemon.latency": "延迟",
+  "daemon.wsClients": "WS 客户端",
+  "daemon.streaming": "传输中",
+  "daemon.idle": "空闲",
   "settingsTabs.lsl": "LSL",
 
   // ── LSL 标签页 ──────────────────────────────────────────────────────────────
@@ -616,6 +627,9 @@ const settings: Record<string, string> = {
   "settings.hfEndpointDesc":
     "用于模型下载（LLM + EXG + TTS）的可选镜像/基础 URL。默认跟随 HF_ENDPOINT 或 https://huggingface.co。",
   "settings.hfEndpointCurrent": "当前",
+
+  "settings.shortcutChat": "聊天",
+  "settings.shortcutCompare": "比较",
 };
 
 export default settings;

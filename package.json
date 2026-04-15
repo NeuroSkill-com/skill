@@ -43,6 +43,7 @@
     "tauri:build:mac:dmg": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh && bash scripts/create-macos-dmg.sh",
     "tauri:build:win:nsis": "node scripts/tauri-build.js build --no-bundle && powershell -ExecutionPolicy Bypass -File scripts/create-windows-nsis.ps1",
     "brew:cask:generate": "bash scripts/generate-homebrew-cask.sh",
+    "pull": "git pull && git submodule update --init --recursive --remote",
     "stop": "pkill -f skill-daemon && echo 'skill-daemon stopped' || echo 'no skill-daemon running'",
     "daemon": "npx tsx scripts/daemon.ts",
     "skill": "npx tsx neuroskill/cli.ts",

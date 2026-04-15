@@ -58,7 +58,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleepDesc": "清醒警觉与困倦对比。适用于睡眠研究和入睡跟踪。",
   "calibration.preset.gaming": "游戏 / 高性能",
   "calibration.preset.gamingDesc": "高强度任务与被动休息对比。适用于电子竞技和巅峰表现生物反馈。",
-  "calibration.preset.children": "儿童 / 短注意力",
+  "calibration.preset.children": "短注意力",
   "calibration.preset.childrenDesc": "较短阶段（10 秒），适合儿童或注意力持续时间有限的用户。",
   "calibration.preset.clinical": "临床 / 研究",
   "calibration.preset.clinicalDesc": "扩展的 5 次迭代方案，具有较长的动作阶段，适用于研究或临床基线。",

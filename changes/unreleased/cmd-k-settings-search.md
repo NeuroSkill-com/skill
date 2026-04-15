@@ -6,3 +6,11 @@
 - Add Command Palette button to the title bar of every window. Clicking the command-key icon opens Cmd-K, matching the keyboard shortcut behavior.
 - Selecting a setting in Cmd-K now opens the Settings window, switches to the correct tab, scrolls to the exact setting, and flashes a blue highlight to draw attention to it.
 - Wire settings index generation into `npm run dev`, `npm run build`, and `npm run bump` so indexes are always up to date before commits and builds.
+- Add Chat and Compare shortcuts to the Shortcuts settings tab, making all 11 global shortcuts user-configurable. The Compare shortcut (previously hardcoded to Cmd+Shift+M) is now customizable like all others.
+- Tray menu now reflects user-customized shortcuts for all actions including Chat and Compare.
+- The keyboard shortcuts overlay (? key) now shows all 11 global shortcuts, matching the Shortcuts settings tab and tray menu.
+
+### Fixes
+
+- Global keyboard shortcuts no longer steal keystrokes from other apps. Shortcuts are now only registered when a Skill window is focused and unregistered when all windows lose focus, so the focused app always gets the keystroke first. The "Open NeuroSkill" shortcut (Cmd+Shift+O) remains always-on so users can bring the app to the foreground from anywhere.
+- Fix Chat shortcut not being loaded from saved settings on app startup.

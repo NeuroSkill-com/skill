@@ -60,7 +60,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleepDesc": "각성 상태 vs. 졸림. 수면 연구 및 이완 추적에 적합합니다.",
   "calibration.preset.gaming": "게임 / 퍼포먼스",
   "calibration.preset.gamingDesc": "고강도 작업 vs. 수동적 휴식. e스포츠 및 최고 성능 바이오피드백에 적합합니다.",
-  "calibration.preset.children": "어린이 / 짧은 집중",
+  "calibration.preset.children": "짧은 집중",
   "calibration.preset.childrenDesc": "어린이 또는 집중 지속 시간이 짧은 사용자를 위한 짧은 단계(10초)입니다.",
   "calibration.preset.clinical": "임상 / 연구용",
   "calibration.preset.clinicalDesc": "연구 또는 임상 베이스라인을 위한 긴 동작 단계의 5회 반복 프로토콜입니다.",
