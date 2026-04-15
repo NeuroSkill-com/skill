@@ -99,7 +99,8 @@ mod tray_setup;
 
 // ── Imports for run() / generate_handler! ────────────────────────────────────
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
@@ -130,7 +131,9 @@ use shortcut_cmds::{
     set_help_shortcut, set_history_shortcut, set_label_shortcut, set_search_shortcut,
     set_settings_shortcut, set_theme_shortcut,
 };
-use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
+use shortcut_cmds::{
+    get_chat_shortcut, get_compare_shortcut, set_chat_shortcut, set_compare_shortcut,
+};
 use shutdown::run_blocking_exit_shutdown;
 use tts::{
     tts_get_voice, tts_init, tts_list_neutts_voices, tts_list_voices, tts_set_voice, tts_speak,
@@ -184,6 +187,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .manage(Mutex::new(AppState::new_boxed()))
+        .manage(Arc::new(AtomicBool::new(false))) // tracks whether any window is focused
         .manage(job_queue::JobQueue::new())
         .setup(|app| setup::setup_app(app).map_err(Into::into))
         .invoke_handler(tauri::generate_handler![
@@ -323,6 +327,8 @@ pub fn run() {
             open_downloads_window,
             get_chat_shortcut,
             set_chat_shortcut,
+            get_compare_shortcut,
+            set_compare_shortcut,
             tts_unload,
             tts_get_voice,
             tts_list_neutts_voices,
@@ -371,6 +377,32 @@ pub fn run() {
                     }
                     tauri::WindowEvent::Focused(focused) => {
                         eprintln!("[window-event] label={label} Focused({focused})");
+                        let any_focused = app.state::<Arc<AtomicBool>>();
+                        if *focused {
+                            // A window gained focus — register shortcuts if not already
+                            if !any_focused.swap(true, Ordering::SeqCst) {
+                                if let Err(e) = shortcut_cmds::apply_all_shortcuts(app) {
+                                    eprintln!("[shortcut] re-register on focus: {e}");
+                                }
+                            }
+                        } else {
+                            // A window lost focus — check if ANY window still has focus
+                            // (small delay to allow focus to transfer between our windows)
+                            let handle = app.clone();
+                            let flag = any_focused.inner().clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(150));
+                                let still_focused = handle.webview_windows().values().any(|w| {
+                                    w.is_focused().unwrap_or(false)
+                                });
+                                if !still_focused {
+                                    flag.store(false, Ordering::SeqCst);
+                                    if let Err(e) = shortcut_cmds::unregister_all_shortcuts(&handle) {
+                                        eprintln!("[shortcut] unregister on blur: {e}");
+                                    }
+                                }
+                            });
+                        }
                     }
                     tauri::WindowEvent::Moved(pos) => {
                         eprintln!("[window-event] label={label} Moved({},{})", pos.x, pos.y);

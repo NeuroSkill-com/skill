@@ -24,6 +24,8 @@ let historyShortcut = $state("");
 let apiShortcut = $state("");
 let themeShortcut = $state("");
 let focusTimerShortcut = $state("");
+let chatShortcut = $state("");
+let compareShortcut = $state("");
 let shortcutError = $state("");
 let recording = $state(false);
 let recordingTarget = $state<string>("label");
@@ -104,6 +106,8 @@ const SHORTCUT_COMMANDS: Record<string, string> = {
   api: "set_api_shortcut",
   theme: "set_theme_shortcut",
   focusTimer: "set_focus_timer_shortcut",
+  chat: "set_chat_shortcut",
+  compare: "set_compare_shortcut",
 };
 
 function getShortcutValue(target: string): string {
@@ -116,6 +120,8 @@ function getShortcutValue(target: string): string {
   if (target === "api") return apiShortcut;
   if (target === "theme") return themeShortcut;
   if (target === "focusTimer") return focusTimerShortcut;
+  if (target === "chat") return chatShortcut;
+  if (target === "compare") return compareShortcut;
   return "";
 }
 
@@ -129,6 +135,8 @@ function setShortcutValue(target: string, val: string) {
   if (target === "api") apiShortcut = val;
   if (target === "theme") themeShortcut = val;
   if (target === "focusTimer") focusTimerShortcut = val;
+  if (target === "chat") chatShortcut = val;
+  if (target === "compare") compareShortcut = val;
 }
 
 async function applyShortcut(acc: string, target: string = recordingTarget) {
@@ -175,6 +183,8 @@ onMount(async () => {
   apiShortcut = await invoke<string>("get_api_shortcut");
   themeShortcut = await invoke<string>("get_theme_shortcut");
   focusTimerShortcut = await invoke<string>("get_focus_timer_shortcut");
+  chatShortcut = await invoke<string>("get_chat_shortcut");
+  compareShortcut = await invoke<string>("get_compare_shortcut");
 });
 </script>
 
@@ -201,6 +211,8 @@ onMount(async () => {
         ["api",         t("settings.shortcutApi"),         apiShortcut],
         ["theme",       t("settings.shortcutTheme"),       themeShortcut],
         ["focusTimer",  t("settings.shortcutFocusTimer"),  focusTimerShortcut],
+        ["chat",        t("settings.shortcutChat"),        chatShortcut],
+        ["compare",     t("settings.shortcutCompare"),     compareShortcut],
       ] as [string, string, string][]) as [target, label, value]}
         <div class="flex items-center gap-3 px-4 py-2.5">
           <span class="text-[0.72rem] font-semibold text-foreground w-[120px] shrink-0">{label}</span>

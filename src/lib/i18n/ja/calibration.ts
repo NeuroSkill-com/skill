@@ -61,7 +61,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.gaming": "ゲーム / パフォーマンス",
   "calibration.preset.gamingDesc":
     "高負荷タスクvs受動的休息。eスポーツやピークパフォーマンスのバイオフィードバックに。",
-  "calibration.preset.children": "子供 / 短い注意力",
+  "calibration.preset.children": "短い注意力",
   "calibration.preset.childrenDesc": "集中力の持続が難しい子供やユーザー向けの短いフェーズ（10秒）。",
   "calibration.preset.clinical": "臨床 / 研究",
   "calibration.preset.clinicalDesc":

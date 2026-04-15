@@ -13,10 +13,14 @@ the Free Software Foundation, version 3 only. -->
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
 import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
+import { getDeviceStatus } from "$lib/daemon/devices";
+import { daemonPost } from "$lib/daemon/http";
 import { t, getLocale } from "$lib/i18n/index.svelte";
 import * as nav from "$lib/navigation";
-import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
+import { getHighContrast, toggleHighContrast, toggleTheme, getResolved, setTheme } from "$lib/stores/theme.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
+import { recordUsage, usageBoost, getRecentIds } from "$lib/stores/cmdk-history.svelte";
+import { typoMatch } from "$lib/fuzzy-utils";
 import { SYNONYMS } from "$lib/settings-search-index";
 
 // Load all locale indexes at build time via Vite glob import
@@ -46,6 +50,9 @@ let open = $state(false);
 let query = $state("");
 let active = $state(0);
 let inputEl: HTMLInputElement | undefined = $state();
+let deviceConnected = $state(false);
+let semanticResults = $state<ScoredCommand[]>([]);
+let semanticDebounce: ReturnType<typeof setTimeout> | undefined;
 
 // ── Command definitions ────────────────────────────────────────────────────
 
@@ -57,6 +64,8 @@ interface Command {
   keywords?: string;
   shortcut?: string;
   action: () => void | Promise<void>;
+  /** If set, Tab key toggles this from the palette without closing. */
+  toggle?: { get: () => boolean; set: (v: boolean) => void };
 }
 
 const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
@@ -313,8 +322,21 @@ function commands(): Command[] {
       section: t("cmdK.sectionUtilities"),
       label: getHighContrast() ? t("cmdK.highContrastOff") : t("cmdK.highContrastOn"),
       keywords: t("cmdK.kw.highContrast"),
+      toggle: { get: getHighContrast, set: (v) => { import("$lib/stores/theme.svelte").then(m => m.setHighContrast(v)); } },
       action: () => {
         toggleHighContrast();
+        close();
+      },
+    },
+    {
+      id: "toggle-dark-mode",
+      icon: "🌗",
+      section: t("cmdK.sectionUtilities"),
+      label: getResolved() === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+      keywords: "dark light mode theme toggle switch appearance color colour",
+      toggle: { get: () => getResolved() === "dark", set: (v) => setTheme(v ? "dark" : "light") },
+      action: () => {
+        toggleTheme();
         close();
       },
     },
@@ -419,6 +441,17 @@ function fuzzyScore(query: string, text: string): { score: number; positions: nu
  * Label match positions are kept for character-level highlight rendering.
  * Returns `matchScore: -Infinity` when no field matches.
  */
+// ── Contextual boosting ─────────────────────────────────────────────────────
+
+/** Sections that get a score boost when a device is connected. */
+const DEVICE_SECTIONS_PATTERN = /device|exg|eeg|calibration|lsl/i;
+
+function contextBoost(cmd: Command): number {
+  if (deviceConnected && DEVICE_SECTIONS_PATTERN.test(cmd.section)) return 12;
+  if (!deviceConnected && cmd.id.startsWith("settings-devices")) return 8;
+  return 0;
+}
+
 function scoreCommand(q: string, cmd: Command): ScoredCommand {
   if (!q) return { ...cmd, matchScore: 0, labelPositions: [] };
 
@@ -427,14 +460,29 @@ function scoreCommand(q: string, cmd: Command): ScoredCommand {
   const im = fuzzyScore(q, cmd.id);
   const sm = fuzzyScore(q, cmd.section);
 
-  const best = Math.max(
+  let best = Math.max(
     lm ? lm.score * 1.0 : -Infinity,
     km ? km.score * 0.7 : -Infinity,
     im ? im.score * 0.4 : -Infinity,
     sm ? sm.score * 0.2 : -Infinity,
   );
 
-  if (!Number.isFinite(best)) return { ...cmd, matchScore: -Infinity, labelPositions: [] };
+  // Typo tolerance fallback — if no fuzzy match, try edit distance
+  if (!Number.isFinite(best)) {
+    const typoLabel = typoMatch(q, cmd.label);
+    const typoKw = cmd.keywords ? typoMatch(q, cmd.keywords) : null;
+    const typoScore = Math.max(typoLabel ?? -Infinity, typoKw ?? -Infinity);
+    if (Number.isFinite(typoScore)) {
+      best = typoScore;
+    } else {
+      return { ...cmd, matchScore: -Infinity, labelPositions: [] };
+    }
+  }
+
+  // Apply usage frequency/recency boost
+  best += usageBoost(cmd.id);
+  // Apply contextual device boost
+  best += contextBoost(cmd);
 
   return {
     ...cmd,
@@ -475,15 +523,48 @@ const isFiltering = $derived(query.trim().length > 0);
  * • No query   → all commands in their original order.
  * • With query → only matching commands, sorted best-score-first.
  */
+// ── Prefix-based command modes ────────────────────────────────────────────
+// > system commands only, @ settings only, # history/sessions, / skills
+
+function parsePrefixMode(raw: string): { prefix: string; q: string } {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith(">")) return { prefix: ">", q: trimmed.slice(1).trim() };
+  if (trimmed.startsWith("@")) return { prefix: "@", q: trimmed.slice(1).trim() };
+  return { prefix: "", q: trimmed };
+}
+
+function filterByPrefix(cmds: Command[], prefix: string): Command[] {
+  if (prefix === ">") return cmds.filter((c) => !c.id.startsWith("settings-"));
+  if (prefix === "@") return cmds.filter((c) => c.id.startsWith("settings-"));
+  return cmds;
+}
+
 let scored = $derived.by((): ScoredCommand[] => {
   const cmds = commands();
-  if (!query.trim()) {
-    return cmds.map((c) => ({ ...c, matchScore: 0, labelPositions: [] }));
+  const { prefix, q } = parsePrefixMode(query);
+
+  if (!q && !prefix) {
+    // Show recent commands at top, then the rest
+    const recentIds = getRecentIds(5);
+    const recentSet = new Set(recentIds);
+    const recentCmds = recentIds
+      .map((id) => cmds.find((c) => c.id === id))
+      .filter((c): c is Command => !!c)
+      .map((c) => ({ ...c, matchScore: 0, labelPositions: [] as number[] }));
+    const rest = cmds
+      .filter((c) => !recentSet.has(c.id))
+      .map((c) => ({ ...c, matchScore: 0, labelPositions: [] as number[] }));
+    return [...recentCmds, ...rest];
   }
-  const q = query.toLowerCase().trim();
-  const queries = synonymQueries(q);
+
+  const filtered = filterByPrefix(cmds, prefix);
+  if (!q) {
+    return filtered.map((c) => ({ ...c, matchScore: 0, labelPositions: [] }));
+  }
+
+  const queries = synonymQueries(q.toLowerCase());
   // Score against original + synonym-expanded queries, take best
-  return cmds
+  return filtered
     .map((c) => {
       let best = scoreCommand(queries[0], c);
       for (let i = 1; i < queries.length; i++) {
@@ -504,21 +585,77 @@ let scored = $derived.by((): ScoredCommand[] => {
  * • With query → single nameless group (flat sorted list, no header rendered).
  */
 let sections = $derived.by((): [string, ScoredCommand[]][] => {
-  if (isFiltering) return scored.length ? [["", scored]] : [];
+  if (isFiltering) {
+    const result: [string, ScoredCommand[]][] = scored.length ? [["", scored]] : [];
+    // Append semantic (NLP) results if available and fuzzy results are sparse
+    if (semanticResults.length > 0) {
+      const fuzzyIds = new Set(scored.map((c) => c.id));
+      const unique = semanticResults.filter((c) => !fuzzyIds.has(c.id));
+      if (unique.length > 0) result.push(["Suggested", unique]);
+    }
+    return result;
+  }
   // Hide individual settings entries from the default (unfiltered) view
   const visible = scored.filter((c) => !c.id.startsWith("settings-"));
+  // Split recent from the rest
+  const recentIds = new Set(getRecentIds(5));
+  const recent = visible.filter((c) => recentIds.has(c.id));
+  const rest = visible.filter((c) => !recentIds.has(c.id));
+
+  const result: [string, ScoredCommand[]][] = [];
+  if (recent.length > 0) result.push(["Recent", recent]);
+
   const map = new Map<string, ScoredCommand[]>();
-  for (const c of visible) {
+  for (const c of rest) {
     if (!map.has(c.section)) map.set(c.section, []);
     map.get(c.section)?.push(c);
   }
-  return [...map.entries()];
+  for (const entry of map.entries()) result.push(entry);
+  return result;
 });
 
 // Reset keyboard selection whenever the result set changes
 $effect(() => {
   void scored;
   active = 0;
+});
+
+// Debounced semantic search — fires when fuzzy results are sparse
+$effect(() => {
+  const q = query.trim();
+  const fuzzyCount = scored.length;
+  clearTimeout(semanticDebounce);
+  semanticResults = [];
+
+  if (q.length < 6 || fuzzyCount > 5) return;
+
+  semanticDebounce = setTimeout(async () => {
+    try {
+      const cmds = commands();
+      const candidates = cmds.map((c) => ({
+        id: c.id,
+        text: `${c.label} ${c.keywords ?? ""} ${c.section}`,
+      }));
+      const res = await daemonPost<{ results: { id: string; score: number }[] }>(
+        "/v1/search/commands",
+        { query: q, candidates },
+        5000,
+      );
+      if (res?.results?.length) {
+        const cmdMap = new Map(cmds.map((c) => [c.id, c]));
+        semanticResults = res.results
+          .slice(0, 5)
+          .map((r): ScoredCommand | undefined => {
+            const cmd = cmdMap.get(r.id);
+            if (!cmd) return undefined;
+            return { ...cmd, matchScore: r.score, labelPositions: [] as number[] };
+          })
+          .filter((c): c is ScoredCommand => !!c);
+      }
+    } catch {
+      // Daemon unavailable or route not yet deployed — gracefully degrade
+    }
+  }, 300);
 });
 
 // ── Keyboard handling ──────────────────────────────────────────────────────
@@ -549,6 +686,13 @@ function handleInputKeydown(e: KeyboardEvent) {
     e.preventDefault();
     active = Math.max(active - 1, 0);
     scrollActiveIntoView();
+  } else if (e.key === "Tab" && scored.length > 0) {
+    // Tab toggles the active command if it has a toggle
+    const cmd = scored[active];
+    if (cmd?.toggle) {
+      e.preventDefault();
+      cmd.toggle.set(!cmd.toggle.get());
+    }
   } else if (e.key === "Enter" && scored.length > 0) {
     e.preventDefault();
     runCommand(scored[active]);
@@ -565,8 +709,13 @@ function scrollActiveIntoView() {
 function openPalette() {
   query = "";
   active = 0;
+  semanticResults = [];
   open = true;
   requestAnimationFrame(() => inputEl?.focus());
+  // Refresh device status for contextual boosting
+  getDeviceStatus<{ state: string }>()
+    .then((s) => { deviceConnected = s.state === "connected"; })
+    .catch(() => { deviceConnected = false; });
 }
 
 function close() {
@@ -574,6 +723,7 @@ function close() {
 }
 
 function runCommand(cmd: Command) {
+  recordUsage(cmd.id);
   close();
   cmd.action();
 }
@@ -681,6 +831,14 @@ onDestroy(() => {
                   {#if seg.hi}<span class="text-blue-500 dark:text-blue-400 font-bold">{seg.t}</span>{:else}{seg.t}{/if}
                 {/each}
               </span>
+              {#if cmd.toggle}
+                <span class="text-[0.6rem] font-mono shrink-0 px-1.5 py-0.5 rounded
+                             {cmd.toggle.get()
+                               ? 'bg-blue-500/20 text-blue-500 dark:text-blue-400'
+                               : 'bg-muted-foreground/10 text-muted-foreground/50'}">
+                  {cmd.toggle.get() ? "ON" : "OFF"}
+                </span>
+              {/if}
               {#if cmd.shortcut}
                 <kbd class="text-[0.55rem] font-mono text-muted-foreground/50 border border-border
                             dark:border-white/[0.08] rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap">
@@ -698,6 +856,9 @@ onDestroy(() => {
                 text-[0.55rem] text-muted-foreground/50">
       <span>↑↓ {t("cmdK.navigate")}</span>
       <span>↵ {t("cmdK.run")}</span>
+      <span>⇥ Toggle</span>
+      <span class="opacity-50">@ settings</span>
+      <span class="opacity-50">&gt; commands</span>
       <span class="ml-auto">{t("cmdK.footerHint")}</span>
     </div>
   </div>

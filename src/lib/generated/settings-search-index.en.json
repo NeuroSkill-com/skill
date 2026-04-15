@@ -32,7 +32,7 @@
   {
     "tab": "calibration",
     "key": "calibration.preset.children",
-    "label": "Children / Short Attention",
+    "label": "Short Attention",
     "desc": "Shorter phases (10 s) for children or users with limited focus endurance."
   },
   {

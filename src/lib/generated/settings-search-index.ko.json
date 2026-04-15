@@ -32,7 +32,7 @@
   {
     "tab": "calibration",
     "key": "calibration.preset.children",
-    "label": "어린이 / 짧은 집중",
+    "label": "짧은 집중",
     "desc": "어린이 또는 집중 지속 시간이 짧은 사용자를 위한 짧은 단계(10초)입니다."
   },
   {

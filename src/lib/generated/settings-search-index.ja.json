@@ -32,7 +32,7 @@
   {
     "tab": "calibration",
     "key": "calibration.preset.children",
-    "label": "子供 / 短い注意力",
+    "label": "短い注意力",
     "desc": "集中力の持続が難しい子供やユーザー向けの短いフェーズ（10秒）。"
   },
   {

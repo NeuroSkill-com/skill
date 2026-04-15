@@ -13,6 +13,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::history_cmds::open_history_window;
 use crate::llm::cmds::open_chat_window;
+use crate::session_analysis::open_compare_window;
 use crate::tray::refresh_tray;
 use crate::window_cmds::{
     open_api_window, open_calibration_window_inner, open_focus_timer_window, open_help_window,
@@ -43,13 +44,36 @@ where
         .map_err(|e| e.to_string())
 }
 
+/// Unregister focus-gated shortcuts (called when all windows lose focus).
+/// Keeps the "Open NeuroSkill" (CmdOrCtrl+Shift+O) shortcut registered
+/// since that's how users bring the app back to the foreground.
+pub(crate) fn unregister_all_shortcuts(app: &AppHandle) -> Result<(), String> {
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|e| e.to_string())?;
+    // Re-register the always-on "show app" shortcut
+    register_show_app(app)?;
+    eprintln!("[shortcut] unregistered focus-gated shortcuts (app lost focus)");
+    Ok(())
+}
+
+/// Register the "Open NeuroSkill™" shortcut — always active regardless of focus.
+fn register_show_app(app: &AppHandle) -> Result<(), String> {
+    register_one(app, "CmdOrCtrl+Shift+O", |a| {
+        if let Some(win) = a.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    })
+}
+
 /// Unregister every global shortcut and re-register all configured ones.
 pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     app.global_shortcut()
         .unregister_all()
         .map_err(|e| e.to_string())?;
 
-    let (label, search, settings, calibration, help, history, api, theme, focus_timer) = {
+    let (label, search, settings, calibration, help, history, api, theme, focus_timer, compare) = {
         let r = app.app_state();
         let g = r.lock_or_recover();
         (
@@ -62,6 +86,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
             g.shortcuts.api_shortcut.clone(),
             g.shortcuts.theme_shortcut.clone(),
             g.shortcuts.focus_timer_shortcut.clone(),
+            g.shortcuts.compare_shortcut.clone(),
         )
     };
 
@@ -135,6 +160,14 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         eprintln!("[shortcut] focus_timer: {e}");
     }
 
+    if let Err(e) = register_one(app, &compare, |a| {
+        tauri::async_runtime::spawn(async move {
+            let _ = open_compare_window(a).await;
+        });
+    }) {
+        eprintln!("[shortcut] compare: {e}");
+    }
+
     {
         let chat = {
             let r = app.app_state();
@@ -151,12 +184,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     }
 
     // "Open NeuroSkill™" — always CmdOrCtrl+Shift+O (not user-configurable)
-    if let Err(e) = register_one(app, "CmdOrCtrl+Shift+O", |a| {
-        if let Some(win) = a.get_webview_window("main") {
-            let _ = win.show();
-            let _ = win.set_focus();
-        }
-    }) {
+    if let Err(e) = register_show_app(app) {
         eprintln!("[shortcut] open_skill: {e}");
     }
 
@@ -235,6 +263,12 @@ shortcut_pair!(
 );
 
 shortcut_pair!(get_chat_shortcut, set_chat_shortcut, chat_shortcut, "chat");
+shortcut_pair!(
+    get_compare_shortcut,
+    set_compare_shortcut,
+    compare_shortcut,
+    "compare"
+);
 
 #[cfg(test)]
 mod tests {

@@ -554,6 +554,9 @@ pub fn default_focus_timer_shortcut() -> String {
 pub fn default_chat_shortcut() -> String {
     "CmdOrCtrl+Shift+I".into()
 }
+pub fn default_compare_shortcut() -> String {
+    "CmdOrCtrl+Shift+M".into()
+}
 pub fn default_hook_distance_threshold() -> f32 {
     0.1
 }
@@ -656,6 +659,8 @@ pub struct UserSettings {
     pub focus_timer_shortcut: String,
     #[serde(default = "default_chat_shortcut")]
     pub chat_shortcut: String,
+    #[serde(default = "default_compare_shortcut")]
+    pub compare_shortcut: String,
     /// Legacy two-action config — read once to migrate; never written back.
     #[serde(default, skip_serializing)]
     pub calibration: CalibrationConfig,
@@ -1005,6 +1010,7 @@ impl Default for UserSettings {
             theme_shortcut: default_theme_shortcut(),
             focus_timer_shortcut: default_focus_timer_shortcut(),
             chat_shortcut: default_chat_shortcut(),
+            compare_shortcut: default_compare_shortcut(),
             calibration: CalibrationConfig::default(),
             calibration_profiles: Vec::new(),
             active_calibration_id: String::new(),

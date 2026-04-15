@@ -58,7 +58,7 @@ const calibration: Record<string, string> = {
   "calibration.preset.sleepDesc": "ערנות מלאה לעומת ישנוניות. למחקר שינה.",
   "calibration.preset.gaming": "גיימינג / ביצועים",
   "calibration.preset.gamingDesc": "משימה תובענית לעומת מנוחה פסיבית. לאי-ספורט וביופידבק.",
-  "calibration.preset.children": "ילדים / קשב קצר",
+  "calibration.preset.children": "קשב קצר",
   "calibration.preset.childrenDesc": "שלבים קצרים יותר (10 שניות) לילדים או משתמשים עם קשב מוגבל.",
   "calibration.preset.clinical": "קליני / מחקר",
   "calibration.preset.clinicalDesc": "פרוטוקול מורחב עם 5 איטרציות לשלבי פעולה ארוכים למחקר או בסיס קליני.",

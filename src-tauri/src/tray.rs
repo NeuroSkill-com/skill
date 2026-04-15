@@ -131,6 +131,7 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let ts = g.shortcuts.theme_shortcut.clone();
     let ft = g.shortcuts.focus_timer_shortcut.clone();
     let chat = g.shortcuts.chat_shortcut.clone();
+    let compare = g.shortcuts.compare_shortcut.clone();
     drop(g);
 
     let llm_downloads = tray_download_fingerprint(app);
@@ -148,7 +149,7 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let state = st.state.as_str();
 
     format!(
-        "{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{llm_downloads}"
+        "{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{compare}|{llm_downloads}"
     )
 }
 
@@ -249,10 +250,13 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
             g.shortcuts.focus_timer_shortcut.clone(),
         )
     };
-    let chat_shortcut = {
+    let (chat_shortcut, compare_shortcut) = {
         let r = app.app_state();
-        let s = r.lock_or_recover().shortcuts.chat_shortcut.clone();
-        s
+        let g = r.lock_or_recover();
+        (
+            g.shortcuts.chat_shortcut.clone(),
+            g.shortcuts.compare_shortcut.clone(),
+        )
     };
 
     let menu = Menu::new(app)?;
@@ -488,7 +492,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         "compare",
         "Compare…",
         true,
-        Some("CmdOrCtrl+Shift+M"),
+        Some(compare_shortcut.as_str()),
     )?)?;
     menu.append(&MenuItem::with_id(
         app,

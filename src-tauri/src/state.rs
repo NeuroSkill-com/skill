@@ -23,7 +23,7 @@ use skill_eeg::eeg_filter::FilterConfig;
 use skill_eeg::eeg_model_config::{load_model_config, EegModelStatus, ExgModelConfig};
 use skill_eeg::eeg_quality::SignalQuality;
 
-use crate::settings::default_chat_shortcut;
+use crate::settings::{default_chat_shortcut, default_compare_shortcut};
 
 // Re-export from skill-data (canonical definition).
 pub use skill_data::device::PairedDevice;
@@ -236,6 +236,7 @@ pub struct ShortcutState {
     pub theme_shortcut: String,
     pub focus_timer_shortcut: String,
     pub chat_shortcut: String,
+    pub compare_shortcut: String,
 }
 
 impl Default for ShortcutState {
@@ -251,6 +252,7 @@ impl Default for ShortcutState {
             theme_shortcut: default_theme_shortcut(),
             focus_timer_shortcut: default_focus_timer_shortcut(),
             chat_shortcut: default_chat_shortcut(),
+            compare_shortcut: default_compare_shortcut(),
         }
     }
 }
