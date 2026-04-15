@@ -172,11 +172,14 @@ jobs:
           APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
         run: |
           echo "Checking notarization credentials …"
-          if ! xcrun notarytool history \
+          OUTPUT=$(xcrun notarytool history \
                 --apple-id  "$APPLE_ID"       \
                 --password  "$APPLE_PASSWORD"  \
                 --team-id   "$APPLE_TEAM_ID"   \
-                --output-format json 2>&1 | grep -q '"history"'; then
+                --output-format json 2>&1) || true
+          if echo "$OUTPUT" | grep -q '"history"'; then
+            echo "✓ Notarization credentials are valid."
+          elif echo "$OUTPUT" | grep -qi "unauthorized\|invalid.*credentials\|401"; then
             echo "::error::Apple notarization credentials are invalid."
             echo "::error::Generate a new app-specific password at"
             echo "::error::  https://appleid.apple.com → Sign-In and Security"
@@ -184,8 +187,11 @@ jobs:
             echo "::error::Then update the APPLE_PASSWORD secret in:"
             echo "::error::  GitHub → Settings → Environments → Release → Secrets"
             exit 1
+          else
+            echo "::warning::Could not verify notarization credentials (Apple API may be intermittent)."
+            echo "::warning::Output: $OUTPUT"
+            echo "Proceeding — actual notarization will fail later if credentials are invalid."
           fi
-          echo "✓ Notarization credentials are valid."
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Apple Developer certificate → temporary keychain ─────────────────────
