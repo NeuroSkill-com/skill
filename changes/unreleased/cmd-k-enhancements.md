@@ -8,6 +8,6 @@
 - Add semantic search fallback to Cmd-K via fastembed embeddings. When fuzzy results are sparse and the query is 6+ characters, a debounced request to the daemon's `/v1/search/commands` endpoint returns semantically similar commands in a "Suggested" section. Handles natural language queries like "make text bigger" or "reduce eye strain".
 - Add toggle dark/light mode command to the Cmd-K palette.
 
-### Daemon
+### Server
 
 - Add `POST /v1/search/commands` endpoint for semantic command search. Accepts a query and candidate list, embeds both with nomic-embed-text-v1.5 via fastembed, and returns the top 5 results ranked by cosine similarity.

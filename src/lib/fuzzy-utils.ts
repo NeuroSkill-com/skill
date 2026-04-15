@@ -25,8 +25,8 @@ export function damerauLevenshtein(a: string, b: string): number {
     for (let j = 1; j <= lb; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       d[i * w + j] = Math.min(
-        d[(i - 1) * w + j] + 1,       // deletion
-        d[i * w + (j - 1)] + 1,       // insertion
+        d[(i - 1) * w + j] + 1, // deletion
+        d[i * w + (j - 1)] + 1, // insertion
         d[(i - 1) * w + (j - 1)] + cost, // substitution
       );
       // transposition
@@ -44,7 +44,10 @@ export function damerauLevenshtein(a: string, b: string): number {
  */
 export function typoMatch(query: string, text: string, maxDist = 2): number | null {
   const q = query.toLowerCase();
-  const words = text.toLowerCase().split(/[\s\-_./›]+/).filter(w => w.length > 0);
+  const words = text
+    .toLowerCase()
+    .split(/[\s\-_./›]+/)
+    .filter((w) => w.length > 0);
 
   let bestScore = Infinity;
   for (const word of words) {

@@ -9,8 +9,8 @@
 - Add Chat and Compare shortcuts to the Shortcuts settings tab, making all 11 global shortcuts user-configurable. The Compare shortcut (previously hardcoded to Cmd+Shift+M) is now customizable like all others.
 - Tray menu now reflects user-customized shortcuts for all actions including Chat and Compare.
 - The keyboard shortcuts overlay (? key) now shows all 11 global shortcuts, matching the Shortcuts settings tab and tray menu.
-
-### Fixes
-
 - Global keyboard shortcuts no longer steal keystrokes from other apps. Shortcuts are now only registered when a Skill window is focused and unregistered when all windows lose focus, so the focused app always gets the keystroke first. The "Open NeuroSkill" shortcut (Cmd+Shift+O) remains always-on so users can bring the app to the foreground from anywhere.
+
+### Bugfixes
+
 - Fix Chat shortcut not being loaded from saved settings on app startup.

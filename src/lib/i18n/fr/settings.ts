@@ -656,7 +656,8 @@ const settings: Record<string, string> = {
   "tokens.refresh": "Refresh",
 
   "daemon.connection": "Moteur",
-  "daemon.unreachable": "Impossible de joindre le moteur : {error}. Certaines fonctionnalités peuvent être indisponibles.",
+  "daemon.unreachable":
+    "Impossible de joindre le moteur : {error}. Certaines fonctionnalités peuvent être indisponibles.",
   "daemon.authFailed": "Échec d'authentification du moteur.",
   "daemon.wsError": "Connexion WebSocket du moteur perdue.",
   "daemon.stateConnected": "moteur",

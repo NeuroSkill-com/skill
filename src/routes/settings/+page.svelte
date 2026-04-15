@@ -192,9 +192,7 @@ function scrollToSetting(key: string): void {
       // Walk text nodes looking for the label
       const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT, {
         acceptNode: (node) =>
-          node.textContent?.trim().includes(label)
-            ? NodeFilter.FILTER_ACCEPT
-            : NodeFilter.FILTER_REJECT,
+          node.textContent?.trim().includes(label) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
       });
 
       const textNode = walker.nextNode();
@@ -323,9 +321,7 @@ onMount(async () => {
   // Listen for switch-tab events (emitted when settings is already open)
   unlisten = await listen<string | { tab: string; settingKey: string | null }>("switch-tab", (ev) => {
     // Support both old string payload and new object payload
-    const payload = typeof ev.payload === "string"
-      ? { tab: ev.payload, settingKey: null }
-      : ev.payload;
+    const payload = typeof ev.payload === "string" ? { tab: ev.payload, settingKey: null } : ev.payload;
 
     if (TAB_IDS.includes(payload.tab as Tab)) {
       tab = payload.tab as Tab;
