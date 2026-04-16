@@ -20,6 +20,14 @@ on:
         description: "Run LSL E2E integration test (32-ch 256 Hz pipeline, ~30 s)"
         type: boolean
         default: false
+      run_coverage:
+        description: "Run Rust code coverage (cargo-llvm-cov, ~20 min)"
+        type: boolean
+        default: false
+      coverage_min_lines:
+        description: "Minimum line coverage percentage gate"
+        type: string
+        default: '55'
 
 # Cancel superseded runs on the same branch / PR — avoids wasting runner
 # minutes when multiple commits are pushed in quick succession.
@@ -1066,6 +1074,100 @@ jobs:
           path: lsl-e2e-report.txt
           retention-days: 30
 
+  # ── Rust code coverage ────────────────────────────────────────────────────────
+  coverage:
+    name: Rust — code coverage
+    runs-on: ubuntu-latest
+    needs: rust-check
+    timeout-minutes: 90
+    if: github.event_name == 'workflow_dispatch' && inputs.run_coverage == true
+    env:
+      RUSTC_WRAPPER: ""
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Fetch skills submodule
+        run: git submodule update --init --depth=1 skills
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af 2>/dev/null || true
+          df -h /
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2.9.0
+        with:
+          workspaces: ". -> src-tauri/target"
+          shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
+          save-if: false
+          cache-targets: false
+          cache-on-failure: false
+
+      - name: Cache + install Tauri system deps (incl. mold + clang)
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev libappindicator3-dev
+            librsvg2-dev patchelf libssl-dev
+            libudev-dev libdbus-1-dev pkg-config
+            libespeak-ng-dev libasound2-dev
+            libpipewire-0.3-dev libgbm-dev
+            cmake binutils mold clang
+            protobuf-compiler libopenblas-dev
+          version: tauri-rust-check-v5
+
+      - name: Setup Vulkan SDK
+        uses: ./.github/actions/setup-vulkan-linux
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Generate coverage (lcov + threshold)
+        env:
+          COVERAGE_MIN_LINES: ${{ inputs.coverage_min_lines || '55' }}
+        run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov \
+            --workspace \
+            --exclude iroh_test_client \
+            --exclude iroh-example-client \
+            --exclude skill \
+            --no-default-features \
+            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --lcov \
+            --output-path lcov.info
+
+          cargo llvm-cov \
+            --workspace \
+            --exclude iroh_test_client \
+            --exclude iroh-example-client \
+            --exclude skill \
+            --no-default-features \
+            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --summary-only \
+            --fail-under-lines ${COVERAGE_MIN_LINES}
+
+      - name: Upload lcov artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: lcov.info
+          retention-days: 30
+
   # ── Security audit ────────────────────────────────────────────────────────────
   #
   # Merged the previous separate cargo-audit + audit jobs into one.
@@ -1113,7 +1215,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e]
+    needs: [rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e, coverage]
     if: always()
     steps:
       - uses: actions/checkout@v6
@@ -1130,6 +1232,7 @@ jobs:
           AUDIT="${{ needs.audit.result }}"
           LLM_E2E="${{ needs.llm-e2e.result }}"
           LSL_E2E="${{ needs.lsl-e2e.result }}"
+          COVERAGE="${{ needs.coverage.result }}"
 
           # Determine overall status — Rust (Linux), Windows, and Frontend are
           # required gates.  Audit and LLM E2E are advisory.
@@ -1147,6 +1250,7 @@ jobs:
           EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || ([ "$AUDIT" = "skipped" ] && echo "⏭️" || echo "⚠️"))
           EMOJI_LLM=$([ "$LLM_E2E" = "success" ] && echo "✅" || ([ "$LLM_E2E" = "skipped" ] && echo "⏭️" || echo "⚠️"))
           EMOJI_LSL=$([ "$LSL_E2E" = "success" ] && echo "✅" || ([ "$LSL_E2E" = "skipped" ] && echo "⏭️" || echo "⚠️"))
+          EMOJI_COV=$([ "$COVERAGE" = "success" ] && echo "✅" || ([ "$COVERAGE" = "skipped" ] && echo "⏭️" || echo "⚠️"))
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           REF="${{ github.ref_name }}"
@@ -1171,7 +1275,8 @@ jobs:
                   {\"name\": \"Frontend\", \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\", \"value\": \"$EMOJI_AUDIT $AUDIT\", \"inline\": true},
                   {\"name\": \"LLM E2E\", \"value\": \"$EMOJI_LLM $LLM_E2E\", \"inline\": true},
-                  {\"name\": \"LSL E2E\", \"value\": \"$EMOJI_LSL $LSL_E2E\", \"inline\": true}
+                  {\"name\": \"LSL E2E\", \"value\": \"$EMOJI_LSL $LSL_E2E\", \"inline\": true},
+                  {\"name\": \"Coverage\", \"value\": \"$EMOJI_COV $COVERAGE\", \"inline\": true}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]

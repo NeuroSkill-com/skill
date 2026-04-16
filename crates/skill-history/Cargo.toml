@@ -14,8 +14,11 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { workspace = true }
 csv        = "1"
-parquet      = { version = "58", default-features = false, features = ["arrow"] }
-arrow-array  = "58"
+parquet      = { version = "58", default-features = false, features = ["arrow"], optional = true }
+arrow-array  = { version = "58", optional = true }
+
+[features]
+parquet = ["dep:parquet", "dep:arrow-array"]
 
 [dev-dependencies]
 tempfile = "3"

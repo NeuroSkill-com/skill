@@ -4,6 +4,8 @@
 
 //! Tests for session_parquet.rs
 
+#![cfg(feature = "parquet")]
+
 use skill_data::session_parquet::{eeg_parquet_path, ParquetState};
 use std::path::PathBuf;
 use tempfile::tempdir;

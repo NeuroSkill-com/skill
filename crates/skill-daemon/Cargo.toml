@@ -65,10 +65,10 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 skill-daemon-common = { path = "../skill-daemon-common" }
 skill-lsl           = { path = "../skill-lsl" }
 skill-devices       = { path = "../skill-devices" }
-skill-data          = { path = "../skill-data" }
+skill-data          = { path = "../skill-data", features = ["parquet"] }
 skill-settings      = { path = "../skill-settings" }
 skill-constants     = { path = "../skill-constants" }
-skill-history       = { path = "../skill-history" }
+skill-history       = { path = "../skill-history", features = ["parquet"] }
 skill-label-index   = { path = "../skill-label-index" }
 skill-jobs          = { path = "../skill-jobs" }
 skill-commands      = { path = "../skill-commands" }
@@ -88,7 +88,7 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-zuna-rs             = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
+zuna-rs             = { version = "0.1.2", default-features = false, features = ["ndarray"], optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
 reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }

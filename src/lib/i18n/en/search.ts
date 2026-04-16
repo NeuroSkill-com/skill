@@ -57,6 +57,8 @@ const search: Record<string, string> = {
   "search.emptyState": "Pick a time range and click Search to find EEG embeddings and their nearest neighbours.",
   "search.searchingIndices": "Searching across all daily HNSW indices…",
   "search.noResults": "No embeddings found in {start} – {end}",
+  "search.reembedDesc":
+    "{stale} of {total} labels use an older embedding model and can\u2019t be searched. Re-embed them to fix this.",
   "search.daysSearched": "Days searched: {days}",
   "search.query": "Query",
   "search.prev": "← Prev",

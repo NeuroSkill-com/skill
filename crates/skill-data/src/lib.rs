@@ -29,7 +29,9 @@ pub mod oura_sync;
 pub mod ppg_analysis;
 pub mod screenshot_store;
 pub mod session_csv;
+#[cfg(feature = "parquet")]
 pub mod session_parquet;
+pub mod session_paths;
 pub mod session_writer;
 pub mod util;
 

@@ -56,6 +56,8 @@ const search: Record<string, string> = {
     "Elija un rango de tiempo y haga clic en Buscar para encontrar incrustaciones de EEG y sus vecinos más cercanos.",
   "search.searchingIndices": "Buscando en todos los índices HNSW diarios...",
   "search.noResults": "No se encontraron incrustaciones en {start} – {end}",
+  "search.reembedDesc":
+    "{stale} de {total} etiquetas usan un modelo de embeddings anterior y no se pueden buscar. Vuelve a incrustarlas para solucionarlo.",
   "search.daysSearched": "Días buscados: {days}",
   "search.query": "Consulta",
   "search.prev": "← Anterior",

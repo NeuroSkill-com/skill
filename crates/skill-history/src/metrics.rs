@@ -23,6 +23,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     };
 
     // Parquet path: convert to CSV-style records and process identically.
+    #[cfg(feature = "parquet")]
     if metrics_path.extension().and_then(|e| e.to_str()) == Some("parquet") {
         return load_metrics_from_parquet(&metrics_path);
     }
@@ -321,6 +322,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     })
 }
 
+#[cfg(feature = "parquet")]
 /// Read metrics from a Parquet file.  Converts each row batch into the same
 /// index-based field access used by the CSV path, then delegates to the
 /// shared aggregation logic.

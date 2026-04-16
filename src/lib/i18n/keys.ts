@@ -1991,6 +1991,7 @@ export type TranslationKey =
   | "search.openSession"
   | "search.pageOf"
   | "search.prev"
+  | "search.reembedDesc"
   | "search.queriesRange"
   | "search.query"
   | "search.querySummary"

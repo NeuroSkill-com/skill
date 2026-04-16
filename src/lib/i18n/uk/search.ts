@@ -55,6 +55,8 @@ const search: Record<string, string> = {
     "Оберіть часовий діапазон і натисніть Пошук, щоб знайти вбудовування ЕЕГ та їх найближчих сусідів.",
   "search.searchingIndices": "Пошук по всіх щоденних індексах HNSW…",
   "search.noResults": "Вбудовувань не знайдено в {start} – {end}",
+  "search.reembedDesc":
+    "{stale} з {total} міток використовують стару модель ембедингів і не можуть бути знайдені. Перевбудуйте їх, щоб виправити це.",
   "search.daysSearched": "Обшукані дні: {days}",
   "search.query": "Запит",
   "search.prev": "← Попередня",

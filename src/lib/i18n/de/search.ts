@@ -55,6 +55,8 @@ const search: Record<string, string> = {
     "Wählen Sie einen Zeitraum und klicken Sie auf Suchen, um EEG-Embeddings und ihre nächsten Nachbarn zu finden.",
   "search.searchingIndices": "Durchsuche alle täglichen HNSW-Indizes…",
   "search.noResults": "Keine Embeddings gefunden in {start} – {end}",
+  "search.reembedDesc":
+    "{stale} von {total} Labels verwenden ein älteres Embedding-Modell und können nicht durchsucht werden. Betten Sie sie neu ein, um dies zu beheben.",
   "search.daysSearched": "Durchsuchte Tage: {days}",
   "search.query": "Abfrage",
   "search.prev": "← Zurück",

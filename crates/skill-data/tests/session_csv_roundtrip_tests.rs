@@ -139,7 +139,7 @@ fn csv_state_8ch_write() {
 
 #[test]
 fn parquet_path_helpers() {
-    use skill_data::session_parquet::{eeg_parquet_path, metrics_parquet_path, ppg_parquet_path};
+    use skill_data::session_paths::{eeg_parquet_path, metrics_parquet_path, ppg_parquet_path};
     let base = Path::new("/data/exg_1700000000.csv");
     assert_eq!(
         eeg_parquet_path(base).file_name().unwrap().to_str().unwrap(),

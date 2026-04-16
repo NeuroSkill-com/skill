@@ -56,6 +56,8 @@ const search: Record<string, string> = {
     "Sélectionnez une plage horaire et cliquez sur Rechercher pour trouver les embeddings EEG et leurs voisins les plus proches.",
   "search.searchingIndices": "Recherche dans tous les index HNSW quotidiens...",
   "search.noResults": "Aucun embedding trouvé dans {start} - {end}",
+  "search.reembedDesc":
+    "{stale} labels sur {total} utilisent un ancien modèle d\u2019embedding et ne peuvent pas être recherchés. Ré-encodez-les pour corriger cela.",
   "search.daysSearched": "Jours recherchés : {days}",
   "search.query": "Requête",
   "search.prev": "← Préc",

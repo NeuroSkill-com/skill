@@ -55,6 +55,8 @@ const search: Record<string, string> = {
   "search.emptyState": "시간 범위를 선택하고 검색을 클릭하여 EEG 임베딩과 최근접 이웃을 찾으세요.",
   "search.searchingIndices": "모든 일별 HNSW 인덱스에서 검색 중…",
   "search.noResults": "{start} – {end}에서 임베딩을 찾을 수 없습니다",
+  "search.reembedDesc":
+    "{total}개 중 {stale}개의 라벨이 이전 임베딩 모델을 사용하여 검색할 수 없습니다. 재임베딩하여 해결하세요.",
   "search.daysSearched": "검색한 일수: {days}",
   "search.query": "쿼리",
   "search.prev": "← 이전",

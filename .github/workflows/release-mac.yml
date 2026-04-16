@@ -360,34 +360,24 @@ jobs:
             cp "$DAEMON_SRC" "$DAEMON_APP/Contents/MacOS/skill-daemon"
             chmod +x "$DAEMON_APP/Contents/MacOS/skill-daemon"
             cp "src-tauri/icons/icon.icns" "$DAEMON_APP/Contents/Resources/icon.icns"
-            cat > "$DAEMON_APP/Contents/Info.plist" << DPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key>
-  <string>skill-daemon</string>
-  <key>CFBundleIdentifier</key>
-  <string>com.neuroskill.skill-daemon</string>
-  <key>CFBundleName</key>
-  <string>Skill Daemon</string>
-  <key>CFBundleDisplayName</key>
-  <string>Skill Daemon</string>
-  <key>CFBundleVersion</key>
-  <string>${{ steps.version_meta.outputs.version }}</string>
-  <key>CFBundleShortVersionString</key>
-  <string>${{ steps.version_meta.outputs.version }}</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleIconFile</key>
-  <string>icon</string>
-  <key>LSBackgroundOnly</key>
-  <true/>
-  <key>LSUIElement</key>
-  <true/>
-</dict>
-</plist>
-DPLIST
+            python3 - "$DAEMON_APP/Contents/Info.plist" "${{ steps.version_meta.outputs.version }}" <<'DPLIST'
+            import plistlib, sys
+            out, version = sys.argv[1], sys.argv[2]
+            data = {
+                "CFBundleExecutable":         "skill-daemon",
+                "CFBundleIdentifier":         "com.neuroskill.skill-daemon",
+                "CFBundleName":               "Skill Daemon",
+                "CFBundleDisplayName":        "Skill Daemon",
+                "CFBundleVersion":            version,
+                "CFBundleShortVersionString": version,
+                "CFBundlePackageType":        "APPL",
+                "CFBundleIconFile":           "icon",
+                "LSBackgroundOnly":           True,
+                "LSUIElement":                True,
+            }
+            with open(out, "wb") as f:
+                plistlib.dump(data, f, fmt=plistlib.FMT_XML)
+            DPLIST
             echo "✓ skill-daemon.app sidecar bundled."
            else
             echo "::error::skill-daemon sidecar not found after build."

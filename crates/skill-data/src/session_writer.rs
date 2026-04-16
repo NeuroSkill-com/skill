@@ -7,6 +7,7 @@ use std::path::Path;
 
 use crate::ppg_analysis::PpgMetrics;
 use crate::session_csv::CsvState;
+#[cfg(feature = "parquet")]
 use crate::session_parquet::ParquetState;
 use anyhow::Context;
 use skill_eeg::eeg_bands::BandSnapshot;
@@ -15,14 +16,18 @@ use skill_eeg::eeg_bands::BandSnapshot;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageFormat {
     Csv,
+    #[cfg(feature = "parquet")]
     Parquet,
+    #[cfg(feature = "parquet")]
     Both,
 }
 
 impl StorageFormat {
     pub fn parse(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
+            #[cfg(feature = "parquet")]
             "parquet" => Self::Parquet,
+            #[cfg(feature = "parquet")]
             "both" => Self::Both,
             _ => Self::Csv,
         }
@@ -31,7 +36,9 @@ impl StorageFormat {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Csv => "csv",
+            #[cfg(feature = "parquet")]
             Self::Parquet => "parquet",
+            #[cfg(feature = "parquet")]
             Self::Both => "both",
         }
     }
@@ -41,8 +48,25 @@ impl StorageFormat {
 #[allow(clippy::large_enum_variant)]
 pub enum SessionWriter {
     Csv(CsvState),
+    #[cfg(feature = "parquet")]
     Parquet(ParquetState),
+    #[cfg(feature = "parquet")]
     Both(CsvState, ParquetState),
+}
+
+macro_rules! dispatch {
+    ($self:expr, $method:ident ( $($arg:expr),* $(,)? )) => {
+        match $self {
+            Self::Csv(c) => c.$method($($arg),*),
+            #[cfg(feature = "parquet")]
+            Self::Parquet(p) => p.$method($($arg),*),
+            #[cfg(feature = "parquet")]
+            Self::Both(c, p) => {
+                c.$method($($arg),*);
+                p.$method($($arg),*);
+            }
+        }
+    };
 }
 
 impl SessionWriter {
@@ -52,7 +76,9 @@ impl SessionWriter {
             StorageFormat::Csv => CsvState::open_with_labels(csv_path, labels)
                 .map(SessionWriter::Csv)
                 .context("CSV open error"),
+            #[cfg(feature = "parquet")]
             StorageFormat::Parquet => ParquetState::open_with_labels(csv_path, labels).map(SessionWriter::Parquet),
+            #[cfg(feature = "parquet")]
             StorageFormat::Both => {
                 let csv = CsvState::open_with_labels(csv_path, labels).context("CSV open error")?;
                 let pq = ParquetState::open_with_labels(csv_path, labels)?;
@@ -62,14 +88,7 @@ impl SessionWriter {
     }
 
     pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
-        match self {
-            Self::Csv(c) => c.push_eeg(electrode, samples, packet_ts, sample_rate),
-            Self::Parquet(p) => p.push_eeg(electrode, samples, packet_ts, sample_rate),
-            Self::Both(c, p) => {
-                c.push_eeg(electrode, samples, packet_ts, sample_rate);
-                p.push_eeg(electrode, samples, packet_ts, sample_rate);
-            }
-        }
+        dispatch!(self, push_eeg(electrode, samples, packet_ts, sample_rate));
     }
 
     pub fn push_ppg(
@@ -80,36 +99,15 @@ impl SessionWriter {
         packet_ts: f64,
         ppg_vitals: Option<&PpgMetrics>,
     ) {
-        match self {
-            Self::Csv(c) => c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
-            Self::Parquet(p) => p.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
-            Self::Both(c, p) => {
-                c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals);
-                p.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals);
-            }
-        }
+        dispatch!(self, push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals));
     }
 
     pub fn push_metrics(&mut self, eeg_csv_path: &Path, snap: &BandSnapshot) {
-        match self {
-            Self::Csv(c) => c.push_metrics(eeg_csv_path, snap),
-            Self::Parquet(p) => p.push_metrics(eeg_csv_path, snap),
-            Self::Both(c, p) => {
-                c.push_metrics(eeg_csv_path, snap);
-                p.push_metrics(eeg_csv_path, snap);
-            }
-        }
+        dispatch!(self, push_metrics(eeg_csv_path, snap));
     }
 
     pub fn push_fnirs(&mut self, eeg_csv_path: &Path, channels: &[f64], channel_names: &[String], timestamp_s: f64) {
-        match self {
-            Self::Csv(c) => c.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s),
-            Self::Parquet(p) => p.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s),
-            Self::Both(c, p) => {
-                c.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s);
-                p.push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s);
-            }
-        }
+        dispatch!(self, push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s));
     }
 
     pub fn push_imu(
@@ -120,25 +118,11 @@ impl SessionWriter {
         gyro: Option<[f32; 3]>,
         mag: Option<[f32; 3]>,
     ) {
-        match self {
-            Self::Csv(c) => c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
-            Self::Parquet(p) => p.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
-            Self::Both(c, p) => {
-                c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag);
-                p.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag);
-            }
-        }
+        dispatch!(self, push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag));
     }
 
     pub fn flush(&mut self) {
-        match self {
-            Self::Csv(c) => c.flush(),
-            Self::Parquet(p) => p.flush(),
-            Self::Both(c, p) => {
-                c.flush();
-                p.flush();
-            }
-        }
+        dispatch!(self, flush());
     }
 }
 
@@ -154,6 +138,7 @@ mod tests {
         assert_eq!(StorageFormat::parse(""), StorageFormat::Csv);
     }
 
+    #[cfg(feature = "parquet")]
     #[test]
     fn storage_format_parse_parquet() {
         assert_eq!(StorageFormat::parse("parquet"), StorageFormat::Parquet);
@@ -161,6 +146,7 @@ mod tests {
         assert_eq!(StorageFormat::parse("Parquet"), StorageFormat::Parquet);
     }
 
+    #[cfg(feature = "parquet")]
     #[test]
     fn storage_format_parse_both() {
         assert_eq!(StorageFormat::parse("both"), StorageFormat::Both);
@@ -170,12 +156,10 @@ mod tests {
     #[test]
     fn storage_format_as_str_roundtrip() {
         assert_eq!(StorageFormat::Csv.as_str(), "csv");
-        assert_eq!(StorageFormat::Parquet.as_str(), "parquet");
-        assert_eq!(StorageFormat::Both.as_str(), "both");
-
-        // Roundtrip
-        for fmt in [StorageFormat::Csv, StorageFormat::Parquet, StorageFormat::Both] {
-            assert_eq!(StorageFormat::parse(fmt.as_str()), fmt);
+        #[cfg(feature = "parquet")]
+        {
+            assert_eq!(StorageFormat::Parquet.as_str(), "parquet");
+            assert_eq!(StorageFormat::Both.as_str(), "both");
         }
     }
 }

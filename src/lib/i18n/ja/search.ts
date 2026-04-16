@@ -57,6 +57,8 @@ const search: Record<string, string> = {
   "search.emptyState": "時間範囲を選択して検索をクリックすると、EEG埋め込みとその最近傍が見つかります。",
   "search.searchingIndices": "すべてのデイリーHNSWインデックスを検索中…",
   "search.noResults": "{start}〜{end}に埋め込みが見つかりません",
+  "search.reembedDesc":
+    "{total}件中{stale}件のラベルが古い埋め込みモデルを使用しており、検索できません。再埋め込みで修正できます。",
   "search.daysSearched": "検索日数：{days}",
   "search.query": "クエリ",
   "search.prev": "← 前へ",

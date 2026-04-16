@@ -437,6 +437,31 @@ let showIxGraph = $state(true);
 let showIxCard = $state(true); // single collapsible card: query + pipeline + button
 let ixDedupeLabels = $state(true); // deduplicate found_labels by text
 let ixUsePca = $state(true); // cluster found_labels by embedding similarity
+
+// ── Reembed banner (shown when search returns no results due to stale embeddings) ──
+let ixReembedNeeded = $state<{ stale: number; total: number; current_model: string } | null>(null);
+let ixReembedding = $state(false);
+let ixReembedDone = $state("");
+
+async function doIxReembed() {
+  ixReembedding = true;
+  ixReembedDone = "";
+  try {
+    const result = await daemonInvoke<{ ok: boolean; updated?: number; error?: string }>("reembed_labels");
+    if (result.ok) {
+      ixReembedDone = t("labels.reindex.done", { updated: String(result.updated ?? 0) });
+      ixReembedNeeded = null;
+      // Re-run the search with updated embeddings
+      await searchInteractive();
+    } else {
+      ixReembedDone = t("labels.reindex.error", { error: result.error ?? "unknown" });
+    }
+  } catch (e) {
+    ixReembedDone = t("labels.reindex.error", { error: String(e) });
+  } finally {
+    ixReembedding = false;
+  }
+}
 let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
 /**
  * Screenshot results.  Keys are `"parentNodeId_filename"`, values carry
@@ -518,6 +543,8 @@ async function searchInteractive() {
   ixDot = "";
   ixSvg = "";
   ixSvgCol = "";
+  ixReembedNeeded = null;
+  ixReembedDone = "";
   dotSavedPath = "";
   svgSavedPath = "";
   svgError = "";
@@ -529,6 +556,7 @@ async function searchInteractive() {
       dot: string;
       svg: string;
       svg_col: string;
+      reembed_needed?: { stale: number; total: number; current_model: string };
     }>("interactive_search", {
       query: ixQuery.trim(),
       kText: ixKText,
@@ -553,6 +581,7 @@ async function searchInteractive() {
     ixDot = res.dot;
     ixSvg = res.svg;
     ixSvgCol = res.svg_col;
+    ixReembedNeeded = res.reembed_needed ?? null;
     ixSearched = true;
   } catch (e) {
     error = String(e);
@@ -1764,8 +1793,38 @@ useWindowTitle("window.title.search");
         </div>
 
       {:else if ixNodes.length === 0}
-        <div class="flex flex-col items-center justify-center h-full gap-2 text-center px-8">
-          <p class="text-[0.78rem] text-muted-foreground/60">{t("search.interactiveNoResults")}</p>
+        <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
+          {#if ixReembedNeeded}
+            <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 px-5 py-4 flex flex-col gap-2 max-w-sm text-left">
+              <div class="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0 text-amber-500">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span class="text-[0.72rem] font-semibold text-amber-600 dark:text-amber-400">
+                  {t("labels.reindex.title")}
+                </span>
+              </div>
+              <p class="text-[0.62rem] text-amber-600/80 dark:text-amber-400/80 leading-relaxed">
+                {t("search.reembedDesc", {
+                  stale: String(ixReembedNeeded.stale),
+                  total: String(ixReembedNeeded.total),
+                })}
+              </p>
+              <div class="flex gap-2 mt-1">
+                <Button size="sm" onclick={doIxReembed} disabled={ixReembedding} class="text-[0.62rem] h-7 px-3">
+                  {ixReembedding ? t("labels.reindex.running") : t("labels.reindex.btn")}
+                </Button>
+              </div>
+              {#if ixReembedDone}
+                <p class="text-[0.6rem] {ixReembedDone.includes('failed') ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">{ixReembedDone}</p>
+              {/if}
+            </div>
+          {:else}
+            <p class="text-[0.78rem] text-muted-foreground/60">{t("search.interactiveNoResults")}</p>
+          {/if}
         </div>
 
       {:else}

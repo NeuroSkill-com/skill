@@ -13,6 +13,7 @@ pub enum SessionError {
     CsvOpen { path: PathBuf, source: std::io::Error },
 
     /// Failed to create or open a Parquet file.
+    #[cfg(feature = "parquet")]
     #[error("failed to open Parquet file {path}: {source}")]
     ParquetOpen {
         path: PathBuf,

@@ -73,7 +73,7 @@ fn extract_timestamp(fname: &str) -> Option<u64> {
 /// Given a base EEG path (`.csv` or `.parquet`), find the corresponding
 /// metrics data file, preferring `.parquet` if it exists, falling back to `.csv`.
 pub fn find_metrics_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
-    use skill_data::session_parquet::metrics_parquet_path;
+    use skill_data::session_paths::metrics_parquet_path;
     let pq = metrics_parquet_path(eeg_path);
     if pq.exists() {
         return Some(pq);
@@ -87,7 +87,7 @@ pub fn find_metrics_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
 
 /// Given a base EEG path, find the corresponding PPG data file.
 pub fn find_ppg_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
-    use skill_data::session_parquet::ppg_parquet_path;
+    use skill_data::session_paths::ppg_parquet_path;
     let pq = ppg_parquet_path(eeg_path);
     if pq.exists() {
         return Some(pq);
@@ -946,12 +946,14 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
 
 /// Read the first and last timestamp from a metrics file (CSV or Parquet).
 fn read_metrics_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
+    #[cfg(feature = "parquet")]
     if metrics_path.extension().and_then(|e| e.to_str()) == Some("parquet") {
         return read_metrics_parquet_time_range(metrics_path);
     }
     read_metrics_csv_time_range(metrics_path)
 }
 
+#[cfg(feature = "parquet")]
 fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
     use arrow_array::Array;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
