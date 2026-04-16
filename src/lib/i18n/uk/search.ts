@@ -66,6 +66,7 @@ const search: Record<string, string> = {
   "search.pageOf": "Сторінка {page} з {total}",
   "search.queriesRange": "запити {start}–{end}",
   "search.endAfterStart": "Час закінчення повинен бути після часу початку.",
+  "search.allDevices": "Усі пристрої",
   "search.filterByLabel": "Фільтр за міткою…",
   "search.labeledOnly": "Тільки з мітками",
   "search.viewSession": "Переглянути сесію",

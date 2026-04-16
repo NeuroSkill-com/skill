@@ -62,6 +62,7 @@ const search: Record<string, string> = {
   "search.pageOf": "עמוד {page} מתוך {total}",
   "search.queriesRange": "שאילתות {start}–{end}",
   "search.endAfterStart": "זמן הסיום חייב להיות אחרי זמן ההתחלה.",
+  "search.allDevices": "כל המכשירים",
   "search.filterByLabel": "סינון לפי תווית…",
   "search.labeledOnly": "עם תוויות בלבד",
   "search.viewSession": "הצג הפעלה",

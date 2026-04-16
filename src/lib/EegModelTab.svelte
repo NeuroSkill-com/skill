@@ -6,7 +6,6 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- EEG Model tab — Encoder status · HNSW index · Model source -->
 <script lang="ts">
-import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
@@ -265,9 +264,9 @@ onMount(async () => {
     })
     .catch(() => {});
 
-  unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
-    reembedProgress = ev.payload;
-    const s = ev.payload.status;
+  unlistenReembed = onDaemonEvent("reembed-progress", (ev) => {
+    reembedProgress = ev.payload as unknown as ReembedProgress;
+    const s = reembedProgress.status;
     if (s === "complete" || s === "done" || s === "idle_done" || s === "paused" || s.startsWith("error")) {
       reembedRunning = false;
       loadReembedEstimate();

@@ -215,7 +215,8 @@ function extractWarnings(output) {
         !/0 warnings/i.test(line) &&
         !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
         !/^warning: \S+@\S+:/i.test(line.trim()) &&
-        !/^warning: build failed/i.test(line.trim()),
+        !/^warning: build failed/i.test(line.trim()) &&
+        !/DeprecationWarning|--trace-deprecation/i.test(line),
     );
 }
 

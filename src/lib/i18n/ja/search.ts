@@ -68,6 +68,7 @@ const search: Record<string, string> = {
   "search.pageOf": "{total}ページ中{page}ページ",
   "search.queriesRange": "クエリ {start}〜{end}",
   "search.endAfterStart": "終了時刻は開始時刻より後である必要があります。",
+  "search.allDevices": "すべてのデバイス",
   "search.filterByLabel": "ラベルでフィルター…",
   "search.labeledOnly": "ラベル付きのみ",
   "search.viewSession": "セッションを表示",

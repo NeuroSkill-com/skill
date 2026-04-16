@@ -189,6 +189,13 @@ onMount(() => {
     )
     .catch(() => {});
 
+  // Load available devices for the filter dropdown.
+  daemonInvoke<{ devices: string[] }>("list_search_devices")
+    .then((r) => {
+      deviceList = r.devices;
+    })
+    .catch(() => {});
+
   return () => {
     window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
   };
@@ -225,6 +232,8 @@ let streamDone = $state(0);
 let streamDays = $state<string[]>([]);
 let labelFilter = $state("");
 let labelsOnly = $state(false);
+let deviceFilter = $state("all");
+let deviceList = $state<string[]>([]);
 let result = $state<SearchResult | null>(null);
 let showAnalysis = $state(true);
 
@@ -451,6 +460,7 @@ async function searchEeg() {
       endUtc,
       k: kVal || undefined,
       ef: efVal || undefined,
+      deviceName: deviceFilter !== "all" ? deviceFilter : undefined,
       onProgress: ch,
     });
     result = { ...acc };
@@ -1109,6 +1119,18 @@ useWindowTitle("window.title.search");
                         bg-background px-1.5 py-1 text-[0.72rem] text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
         </div>
+        {#if deviceList.length > 0}
+          <select bind:value={deviceFilter}
+                  aria-label="Filter by device"
+                  class="rounded border border-border dark:border-white/[0.1]
+                         bg-background px-1.5 py-1 text-[0.68rem]
+                         focus:outline-none focus:ring-1 focus:ring-ring max-w-[10rem] truncate">
+            <option value="all">{t("search.allDevices")}</option>
+            {#each deviceList as dev}
+              <option value={dev}>{dev}</option>
+            {/each}
+          </select>
+        {/if}
         {#if error}
           <span class="text-[0.62rem] text-destructive flex-1 truncate" title={error}>{error}</span>
         {:else}

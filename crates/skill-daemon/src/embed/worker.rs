@@ -556,6 +556,7 @@ pub(crate) struct ZunaGpuState {
 }
 
 #[cfg(feature = "embed-zuna-gpu-f16")]
+#[allow(dead_code)]
 pub(crate) struct ZunaGpuF16State {
     encoder: zuna_rs::ZunaEncoder<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>,
     data_config: zuna_rs::config::DataConfig,
@@ -1010,8 +1011,11 @@ fn encode_zuna_gpu(state: &ZunaGpuState, msg: &EpochMsg) -> Option<Vec<f32>> {
 }
 
 // ── GPU f16 ZUNA encoder ────────────────────────────────────────────────────
+// Currently unused for batch reembed (burn f16→f32 extraction bug).
+// Kept for future use when zuna-rs/burn fix the TypeMismatch issue.
 
 #[cfg(feature = "embed-zuna-gpu-f16")]
+#[allow(dead_code)]
 fn load_zuna_gpu_f16(config: &ExgModelConfig) -> Option<ZunaGpuF16State> {
     match skill_exg::resolve_hf_weights(&config.hf_repo) {
         Some((weights_path, config_path)) => {
@@ -1041,6 +1045,7 @@ fn load_zuna_gpu_f16(config: &ExgModelConfig) -> Option<ZunaGpuF16State> {
 }
 
 #[cfg(feature = "embed-zuna-gpu-f16")]
+#[allow(dead_code)]
 fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f32>> {
     use std::collections::HashMap as HM;
     let n_ch = msg.channel_names.len().min(msg.samples.len());
@@ -1067,7 +1072,13 @@ fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f3
         &device,
     )
     .ok()?;
-    let epochs = state.encoder.encode_batches(batches).ok()?;
+    let epochs = match state.encoder.encode_batches(batches) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("[encode-gpu-f16] encode_batches failed: {e}");
+            return None;
+        }
+    };
     epochs.first().map(|ep| {
         let dim = ep.output_dim();
         let n_tok = ep.n_tokens();
@@ -1090,31 +1101,32 @@ fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f3
 
 // ── Public API for batch reembedding ─────────────────────────────────────────
 
-/// Opaque encoder for batch reembed — prefers GPU f16, then f32, then CPU.
+/// Opaque encoder for batch reembed — GPU f32 or CPU.
+///
+/// GPU f16 is intentionally excluded: burn's `TensorData::to_vec::<f32>()`
+/// has a TypeMismatch bug when the wgpu backend uses half-precision floats,
+/// so embeddings cannot be extracted. Real-time streaming uses f16 fine
+/// because it goes through a different code path.
 pub enum PublicEncoder {
     Cpu(Encoder),
     #[cfg(feature = "embed-zuna-gpu")]
-    Gpu(ZunaGpuState),
-    #[cfg(feature = "embed-zuna-gpu-f16")]
-    GpuF16(Box<ZunaGpuF16State>),
+    Gpu(Box<ZunaGpuState>),
 }
 
-/// Load an encoder for batch reembed: tries GPU f16 → GPU f32 → CPU.
+/// Load an encoder for batch reembed: tries GPU f32 → CPU.
+///
+/// GPU f16 is intentionally skipped for batch reembed because burn's
+/// `TensorData::to_vec::<f32>()` has a TypeMismatch bug when the backend
+/// uses half-precision floats — the embeddings cannot be extracted as f32.
+/// Real-time streaming uses f16 fine because it goes through a different
+/// code path that doesn't extract to Vec.
 pub fn load_encoder_public(config: &ExgModelConfig, skill_dir: &Path) -> Option<PublicEncoder> {
     if matches!(config.model_backend, ExgModelBackend::Zuna) {
-        // Try GPU f16 first (fastest on Apple Silicon / modern GPUs).
-        #[cfg(feature = "embed-zuna-gpu-f16")]
-        {
-            if let Some(gpu) = load_zuna_gpu_f16(config) {
-                return Some(PublicEncoder::GpuF16(Box::new(gpu)));
-            }
-            warn!("GPU f16 unavailable, trying GPU f32");
-        }
-        // Fall back to GPU f32.
+        // GPU f32 — works correctly with TensorData extraction.
         #[cfg(feature = "embed-zuna-gpu")]
         {
             if let Some(gpu) = load_zuna_gpu(config) {
-                return Some(PublicEncoder::Gpu(gpu));
+                return Some(PublicEncoder::Gpu(Box::new(gpu)));
             }
             warn!("GPU f32 unavailable, falling back to CPU");
         }
@@ -1141,7 +1153,5 @@ pub fn encode_raw_public(
         PublicEncoder::Cpu(enc) => encode_epoch(enc, &msg),
         #[cfg(feature = "embed-zuna-gpu")]
         PublicEncoder::Gpu(gpu) => encode_zuna_gpu(gpu, &msg),
-        #[cfg(feature = "embed-zuna-gpu-f16")]
-        PublicEncoder::GpuF16(gpu) => encode_zuna_gpu_f16(gpu, &msg),
     }
 }

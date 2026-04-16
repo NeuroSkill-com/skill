@@ -8,6 +8,91 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.122] — 2026-04-16
+
+### Features
+
+- Add recent/frequent command ranking to Cmd-K. Commands you use most often and most recently appear at the top in a "Recent" section, with frequency and recency boosts applied to search scoring.
+- Add typo tolerance to Cmd-K search. Misspellings like "drak mode" or "calbriation" now find the right result using Damerau-Levenshtein edit distance as a fallback when fuzzy matching fails.
+- Add contextual boosting to Cmd-K. Device, EEG, Calibration, and LSL commands are ranked higher when a device is connected; Devices settings are boosted when no device is connected.
+- Add keyboard-driven toggles in Cmd-K. Toggleable settings (dark mode, high contrast) show an ON/OFF indicator and can be flipped with the Tab key without closing the palette.
+- Add prefix-based command filtering to Cmd-K. Type `>` to show only system commands or `@` to show only settings.
+- Add semantic search fallback to Cmd-K via fastembed embeddings. When fuzzy results are sparse and the query is 6+ characters, a debounced request to the daemon's `/v1/search/commands` endpoint returns semantically similar commands in a "Suggested" section. Handles natural language queries like "make text bigger" or "reduce eye strain".
+- Add toggle dark/light mode command to the Cmd-K palette.
+
+- Add deep-link search for individual settings in the Command Palette (Cmd-K). 154 settings across all 20 tabs are now searchable by name, description, and synonyms — typing "DND", "dark mode", "GPU", "OCR", etc. instantly finds the right setting.
+- Auto-generate per-locale search indexes from i18n translation files and Tab components. Indexes are built for all 9 languages (EN, DE, ES, FR, HE, JA, KO, UK, ZH) and stay in sync automatically via a Vite plugin that watches for changes during development.
+- Add synonym expansion to Cmd-K fuzzy search. Common abbreviations like DND, BT, GPU, OCR, LLM, and 30+ others are expanded before matching so users can search using shorthand.
+- Add Command Palette button to the title bar of every window. Clicking the command-key icon opens Cmd-K, matching the keyboard shortcut behavior.
+- Selecting a setting in Cmd-K now opens the Settings window, switches to the correct tab, scrolls to the exact setting, and flashes a blue highlight to draw attention to it.
+- Wire settings index generation into `npm run dev`, `npm run build`, and `npm run bump` so indexes are always up to date before commits and builds.
+- Add Chat and Compare shortcuts to the Shortcuts settings tab, making all 11 global shortcuts user-configurable. The Compare shortcut (previously hardcoded to Cmd+Shift+M) is now customizable like all others.
+- Tray menu now reflects user-customized shortcuts for all actions including Chat and Compare.
+- The keyboard shortcuts overlay (? key) now shows all 11 global shortcuts, matching the Shortcuts settings tab and tray menu.
+- Global keyboard shortcuts no longer steal keystrokes from other apps. Shortcuts are now only registered when a Skill window is focused and unregistered when all windows lose focus, so the focused app always gets the keystroke first. The "Open NeuroSkill" shortcut (Cmd+Shift+O) remains always-on so users can bring the app to the foreground from anywhere.
+
+- **Session sidecar `device_kind`**: JSON sidecars now include `device_kind` (e.g. "muse", "awear", "openbci") alongside `device_name` and `channel_names`. Enables reliable device identification during reembedding when a day directory contains sessions from different devices. Backward compatible — old sidecars without this field are handled gracefully.
+
+- **Embedding coverage dashboard** in Settings → EXG → Re-embed. Shows a color-coded coverage bar (green ≥95%, amber ≥50%, red <50%), total/embedded/missing epoch counts, and estimated time remaining based on current embed speed.
+- **Per-day breakdown table** in the re-embed section. Expandable table showing each day's total epochs, embedded count, missing count, and a mini coverage bar — makes it easy to identify which days have gaps.
+- **Idle reembed status indicator**. When background embedding is enabled, the UI now shows whether it's actively processing (with day + progress), or waiting for the idle timeout to elapse, instead of running silently.
+- **Re-embed progress improvements**. Progress bar now shows indeterminate animation during encoder loading, percentage + ETA during processing, amber bar when paused (device reconnected), red bar with error detail on failure.
+- **EEG embedding coverage in Search page**. Corpus stats banner and empty-state panel now show epoch embedding coverage (e.g. "12,400/14,200 (87%)") with color coding, so you know at a glance whether your data is fully searchable.
+
+- **Multi-modal search**: Interactive search now returns screenshots (proximity + OCR text similarity) and EEG epochs alongside text labels. New `kScreenshots`, `kLabels`, and `reachMinutes` parameters control result depth.
+- **Search corpus stats**: New `GET /search/stats` endpoint and SSE streaming variant (`/search/stats/stream`) show EEG days, sessions, recording time, label counts, screenshot counts, and embedding model info. Stats appear in the search UI for all modes.
+- **Daemon test mode**: `POST /v1/test/begin` pauses background work (screenshots, OCR, re-embed) for stable E2E testing. `POST /v1/test/end` resumes. Debug builds only (`#[cfg(debug_assertions)]`).
+- **Daemon readiness**: `/readyz` now returns `{ok, ready, test_mode}` — `ready` is set after the TCP listener binds. `SKILL_DAEMON_TOKEN` env var allows injecting auth tokens for isolated test daemons.
+- **Interactive test picker**: `npm test` shows a TUI picker (Node.js, cross-platform) with 17 suites. Arrow keys + space to toggle, enter to run.
+- **Rust version guard**: `npm run tauri dev` and `npm run test:clippy` check Rust >= 1.95 and prompt `rustup update stable` if outdated.
+
+### Bugfixes
+
+- Fix Chat shortcut not being loaded from saved settings on app startup.
+
+- **Reembed silent failures**: Added diagnostic logging on first extract failure and first encode failure per batch. Previously all epoch failures were completely silent, making it impossible to debug why 27K+ epochs would fail with zero output.
+- **CSV channel length mismatch**: The CSV parser now skips entire rows when any channel value fails to parse, preventing channels from accumulating different sample counts. Previously, individual parse failures were silently skipped per-channel, creating mismatched-length arrays that the ZUNA encoder rejected.
+- **Mixed-device reembedding**: CSVs with fewer columns than the metadata expects (e.g. different device in the same day directory) now use available columns instead of skipping all rows. The column count is detected per-file from the CSV header.
+- **Reconnect respects test mode**: The BLE reconnect loop now pauses when `test_mode` is active, preventing background connection attempts from interfering with E2E tests.
+- **`cpu-only` feature build**: Fixed compilation errors in `skill-daemon` when built with `--no-default-features --features cpu-only`. The `#[cfg(not(feature = "llm"))]` fallback paths referenced `AppState` fields that don't exist without the `llm` feature. Replaced with static stubs. This fixes the CI coverage job.
+- **Clippy 1.95**: Fixed `sort_by` → `sort_by_key(Reverse)` in skill-history, `collapsible_match` in connect_wired, `checked_div` in iroh_remote.
+- **Prebuilt llama naming**: Updated download URL from `q1-metal`/`q1-vulkan` to `metal-static`/`vulkan-static` to match current release asset names.
+
+- **Fix macOS DMG creation stream error**: Added retry logic (up to 3 attempts) to the `appdmg` invocation in `scripts/create-macos-dmg.sh`. The `ERR_STREAM_WRITE_AFTER_END` race condition in appdmg's internal file-copy stream is now caught and retried automatically, with partial DMG cleanup between attempts.
+
+- **Search hang fixed**: Removed expensive `collect_search_meta` (session JSON parsing) from the search hot path. Corpus stats are now fetched separately via a dedicated endpoint.
+- **Label stale count**: `count_needing_embed()` uses `SELECT COUNT(*)` instead of loading all stale rows into memory.
+- **Heredoc terminators**: Fixed indented heredoc terminators (`DPLIST`, `PYEOF`) in release-mac, release-linux, and pr-build workflows that caused `syntax error: unexpected end of file`.
+- **Flaky env var test**: Added `Mutex` guard to `enforce_path_integrity` tests in skill-tools to prevent parallel env var races.
+- **A11y errors**: Added `aria-label` to 3 unlabeled inputs in `EegModelTab.svelte`.
+- **Smoke test auth**: Added Bearer token to all HTTP requests in `test.ts` (was sending unauthenticated). Updated 20+ REST paths from old Tauri-era shortcuts to `/v1/` daemon endpoints. Score: 83/275 → 341/0.
+- **E2E test isolation**: Daemon token and data E2E tests now spawn isolated daemons on random ports with temp skill dirs. Can run in parallel.
+- **Pre-checkout CI step**: `free-disk-space` step inlined for workflows that run it before `actions/checkout`.
+- **ESM import fix**: Removed Node 22-only `glob` import and `require()` calls from `ci.mjs` (broke on Node 20 CI runners).
+
+### Refactor
+
+- **Dead scripts removed**: Deleted `prepare-daemon-sidecar.sh` (superseded by `.js`), `adopt_anyhow.py` (unused), `check_windows_manifest.py` (ported to Node).
+- **Screenshot store reuse**: Interactive search opens the screenshot store once and reuses it for both proximity and OCR searches.
+- **E2E helpers**: New `src/tests/e2e-helpers.ts` with `spawnDaemon()`, `testBegin()`/`testEnd()`, `isDaemonReady()`, `freePort()` shared across all E2E test files.
+
+### Build
+
+- **CI scripts consolidated**: Replaced ~960 lines of duplicated inline YAML with a single `scripts/ci.mjs` (Node.js, 12 subcommands). Zero Python dependency for builds — all scripts are Node.js + bash.
+- **Release workflows refactored**: All 3 release workflows (macOS, Linux, Windows) support `workflow_dispatch` for on-demand builds. On-demand runs upload artifacts (14-day retention) without touching GitHub Releases.
+- **macOS .app bundling**: Extracted 120-line inline YAML into `scripts/assemble-macos-app.sh`. Fixed heredoc terminator bug that caused CI failures.
+- **Pre-push hook**: Runs `ci.mjs self-test` when CI scripts change, and `daemon-client.test.ts` when daemon proxy files change.
+- **CI dry-run**: `npm run ci:dry-run` runs the full release pipeline locally without signing/pushing. `--skip-compile` for fast iteration.
+- **Clippy 1.95 fixes**: `sort_by` → `sort_by_key(Reverse)`, collapsible match arms, `checked_div`.
+
+### Server
+
+- Add `POST /v1/search/commands` endpoint for semantic command search. Accepts a query and candidate list, embeds both with nomic-embed-text-v1.5 via fastembed, and returns the top 5 results ranked by cosine similarity.
+
+- `GET /v1/models/estimate-reembed` response now includes `embedded`, `missing`, `coverage_pct`, `avg_embed_ms`, `eta_secs`, `per_day` (per-day breakdown array), and `idle_reembed` (background reembed status with active/idle_secs/done/total/current_day).
+- `GET /v1/search/stats/stream` slow-tier stats now include `eeg_total_epochs`, `eeg_embedded_epochs`, and `eeg_missing_epochs`.
+- New `IdleReembedStatus` struct in daemon state tracks background reembed progress and idle countdown, updated in real-time by the idle reembed loop.
+
 ## [0.0.121] — 2026-04-15
 
 ### Features

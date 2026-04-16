@@ -64,6 +64,7 @@ const search: Record<string, string> = {
   "search.pageOf": "第 {page} 页，共 {total} 页",
   "search.queriesRange": "查询 {start}–{end}",
   "search.endAfterStart": "结束时间必须晚于开始时间。",
+  "search.allDevices": "所有设备",
   "search.filterByLabel": "按标签筛选…",
   "search.labeledOnly": "仅已标记",
   "search.viewSession": "查看会话",

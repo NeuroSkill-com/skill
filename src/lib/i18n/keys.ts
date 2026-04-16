@@ -1950,6 +1950,7 @@ export type TranslationKey =
   | "search.exportSavedTitle"
   | "search.exportSavingDot"
   | "search.exportSvgTitle"
+  | "search.allDevices"
   | "search.filterByLabel"
   | "search.from"
   | "search.imageEmptyState"

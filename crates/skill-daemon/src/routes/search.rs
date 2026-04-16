@@ -42,6 +42,8 @@ pub struct SearchRequest {
     pub reach_minutes: Option<u64>,
     #[allow(dead_code)]
     pub mode: Option<String>,
+    /// Filter by device name (e.g. "MuseS-F921"). `None` or `"all"` = all devices.
+    pub device_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +59,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/search/stats", get(search_corpus_stats))
         .route("/search/stats/stream", get(search_corpus_stats_stream))
+        .route("/search/devices", get(list_search_devices))
         .route("/search/eeg", post(search_eeg))
         .route("/search/eeg/stream", post(search_eeg_stream))
         .route("/search/compare", post(compare_search))
@@ -205,6 +208,7 @@ async fn search_eeg_stream(
     let end_utc = req.end_utc.unwrap_or(0);
     let k = req.k.unwrap_or(5) as usize;
     let ef = req.ef.unwrap_or(50) as usize;
+    let device_filter = req.device_name.filter(|d| !d.is_empty() && d != "all");
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Event>(64);
 
@@ -217,13 +221,67 @@ async fn search_eeg_stream(
         };
 
         // Emit "started" first, then results one by one.
-        skill_commands::stream_search_inner(&skill_dir, start_utc, end_utc, k, ef, None, &|progress| {
-            emit(progress);
-        });
+        skill_commands::stream_search_inner(
+            &skill_dir,
+            start_utc,
+            end_utc,
+            k,
+            ef,
+            None,
+            device_filter.as_deref(),
+            &|progress| {
+                emit(progress);
+            },
+        );
     });
 
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(15)))
+}
+
+/// GET /search/devices — list distinct device names across all days.
+async fn list_search_devices(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let devices = tokio::task::spawn_blocking(move || {
+        let mut names = std::collections::BTreeSet::new();
+        let Ok(entries) = std::fs::read_dir(&skill_dir) else {
+            return Vec::new();
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if !p.is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(s) = name.to_str() else { continue };
+            if s.len() != 8 || !s.starts_with("20") {
+                continue;
+            }
+            let db = p.join(skill_constants::SQLITE_FILE);
+            if !db.exists() {
+                continue;
+            }
+            if let Ok(conn) = rusqlite::Connection::open_with_flags(
+                &db,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            ) {
+                let mut stmt = conn
+                    .prepare("SELECT DISTINCT device_name FROM embeddings WHERE device_name IS NOT NULL AND device_name != ''")
+                    .ok();
+                if let Some(ref mut st) = stmt {
+                    let _ = st.query_map([], |row| row.get::<_, String>(0)).map(|rows| {
+                        for r in rows.flatten() {
+                            names.insert(r);
+                        }
+                    });
+                }
+            }
+        }
+        names.into_iter().collect::<Vec<_>>()
+    })
+    .await
+    .unwrap_or_default();
+    Json(serde_json::json!({ "devices": devices }))
 }
 
 /// GET /search/stats — fast corpus metadata (tier 1+2, <50ms).
@@ -841,6 +899,7 @@ mod tests {
                 k_screenshots: None,
                 reach_minutes: None,
                 mode: None,
+                device_name: None,
             }),
         )
         .await;
@@ -865,6 +924,7 @@ mod tests {
                 k_screenshots: None,
                 reach_minutes: None,
                 mode: None,
+                device_name: None,
             }),
         )
         .await;
@@ -890,6 +950,7 @@ mod tests {
                 k_screenshots: None,
                 reach_minutes: None,
                 mode: None,
+                device_name: None,
             }),
         )
         .await;

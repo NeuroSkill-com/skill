@@ -246,6 +246,15 @@ struct RawEmb {
 
 /// Read every embedding in [start_ts, end_ts] from a single day's SQLite.
 fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<RawEmb> {
+    read_embeddings_in_range_filtered(db_path, start_ts, end_ts, None)
+}
+
+fn read_embeddings_in_range_filtered(
+    db_path: &Path,
+    start_ts: i64,
+    end_ts: i64,
+    device_filter: Option<&str>,
+) -> Vec<RawEmb> {
     let conn = match skill_data::util::open_readonly(db_path) {
         Ok(c) => c,
         Err(e) => {
@@ -254,13 +263,34 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
         }
     };
 
-    let mut stmt = match conn.prepare(
-        "SELECT hnsw_id, timestamp, eeg_embedding
-         FROM embeddings
-         WHERE timestamp BETWEEN ?1 AND ?2
-           AND length(eeg_embedding) >= 4
-         ORDER BY timestamp",
-    ) {
+    let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(dev) = device_filter {
+        (
+            "SELECT hnsw_id, timestamp, eeg_embedding \
+             FROM embeddings \
+             WHERE timestamp BETWEEN ?1 AND ?2 \
+               AND length(eeg_embedding) >= 4 \
+               AND device_name = ?3 \
+             ORDER BY timestamp"
+                .into(),
+            vec![
+                Box::new(start_ts) as Box<dyn rusqlite::types::ToSql>,
+                Box::new(end_ts),
+                Box::new(dev.to_string()),
+            ],
+        )
+    } else {
+        (
+            "SELECT hnsw_id, timestamp, eeg_embedding \
+             FROM embeddings \
+             WHERE timestamp BETWEEN ?1 AND ?2 \
+               AND length(eeg_embedding) >= 4 \
+             ORDER BY timestamp"
+                .into(),
+            vec![Box::new(start_ts) as Box<dyn rusqlite::types::ToSql>, Box::new(end_ts)],
+        )
+    };
+
+    let mut stmt = match conn.prepare(&sql) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("[search] prepare: {e}");
@@ -268,7 +298,8 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
         }
     };
 
-    stmt.query_map(params![start_ts, end_ts], |row| {
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    stmt.query_map(param_refs.as_slice(), |row| {
         let hnsw_id: i64 = row.get(0)?;
         let timestamp: i64 = row.get(1)?;
         let blob: Vec<u8> = row.get(2)?;
@@ -588,7 +619,7 @@ pub fn search_embeddings_in_range_for(
 /// This is the pure-logic core that both the Tauri command and the WebSocket
 /// handler delegate to.  The caller is responsible for running this on a
 /// blocking thread if needed.
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 pub fn stream_search_inner(
     skill_dir: &Path,
     start_utc: u64,
@@ -596,9 +627,20 @@ pub fn stream_search_inner(
     k: usize,
     ef: usize,
     global_index: GlobalIndexHandle,
+    device_filter: Option<&str>,
     emit: &dyn Fn(SearchProgress),
 ) {
-    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna");
+    stream_search_inner_for(
+        skill_dir,
+        start_utc,
+        end_utc,
+        k,
+        ef,
+        global_index,
+        device_filter,
+        emit,
+        "zuna",
+    );
 }
 
 /// Model-aware variant of [`stream_search_inner`].
@@ -610,6 +652,7 @@ pub fn stream_search_inner_for(
     k: usize,
     ef: usize,
     global_index: GlobalIndexHandle,
+    device_filter: Option<&str>,
     emit: &dyn Fn(SearchProgress),
     model_backend: &str,
 ) {
@@ -646,7 +689,7 @@ pub fn stream_search_inner_for(
         if !db_path.exists() {
             continue;
         }
-        let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
+        let embs = read_embeddings_in_range_filtered(&db_path, start_ts, end_ts, device_filter);
         let _ = date; // used only for db_path
         for emb in embs {
             query_embs.push((dd_idx, emb));

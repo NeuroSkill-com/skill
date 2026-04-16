@@ -66,6 +66,7 @@ const search: Record<string, string> = {
   "search.pageOf": "Seite {page} von {total}",
   "search.queriesRange": "Abfragen {start}–{end}",
   "search.endAfterStart": "Die Endzeit muss nach der Startzeit liegen.",
+  "search.allDevices": "Alle Geräte",
   "search.filterByLabel": "Nach Label filtern…",
   "search.labeledOnly": "Nur mit Labels",
   "search.viewSession": "Sitzung anzeigen",

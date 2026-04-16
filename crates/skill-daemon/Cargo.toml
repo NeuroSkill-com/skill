@@ -13,7 +13,7 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
 cpu-only = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 # GPU-accelerated ZUNA encoder (Metal on macOS, Vulkan on Linux)
@@ -89,7 +89,7 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-zuna-rs             = { version = "0.1.2", default-features = false, features = ["ndarray"], optional = true }
+zuna-rs             = { version = "0.1.3", default-features = false, features = ["ndarray"], optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
 reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }

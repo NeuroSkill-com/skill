@@ -469,7 +469,7 @@ const llm: Record<string, string> = {
   "model.idleReembedWaiting": "アイドル{remaining}秒後に開始",
   "model.idleReembedIdle": "アイドル期間を待機中",
   "search.eegCoverage": "EEGカバレッジ",
-  "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
+  "search.eegCoverageLabel": "{embedded}件/{total}件 ({pct}%)",
 };
 
 export default llm;

@@ -107,6 +107,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
 
   // Search
   search_corpus_stats: [G, "/v1/search/stats"],
+  list_search_devices: [G, "/v1/search/devices"],
   search_labels_by_text: [P, "/v1/labels/search"],
   interactive_search: [P, "/v1/search/eeg"],
   regenerate_interactive_svg: [P, "/v1/search/eeg"],

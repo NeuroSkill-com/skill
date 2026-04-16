@@ -454,7 +454,7 @@ const llm: Record<string, string> = {
   "model.idleReembedWaiting": "空闲 {remaining} 秒后开始",
   "model.idleReembedIdle": "等待空闲时段",
   "search.eegCoverage": "EEG 覆盖率",
-  "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
+  "search.eegCoverageLabel": "{embedded}/{total}（{pct}%）",
 };
 
 export default llm;

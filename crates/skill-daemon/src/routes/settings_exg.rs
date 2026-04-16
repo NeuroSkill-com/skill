@@ -124,6 +124,14 @@ pub(crate) fn run_batch_reembed_with_cancel(
 ) -> anyhow::Result<()> {
     tracing::info!("[reembed] starting batch reembed");
 
+    // Emit immediate feedback so the UI progress bar shows activity.
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({ "status": "loading_encoder", "total": 0, "done": 0 }),
+    });
+
     // 1. Load the encoder (tries GPU first, falls back to CPU).
     let config = load_model_config(skill_dir);
     let encoder = crate::embed::load_encoder_public(&config, skill_dir);
@@ -135,10 +143,23 @@ pub(crate) fn run_batch_reembed_with_cancel(
     }
     let encoder = encoder.unwrap();
 
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({ "status": "scanning", "total": 0, "done": 0 }),
+    });
+
     // 2. Scan all day directories for sessions with missing embeddings.
     let mut total_needed = 0u64;
     let mut total_done = 0u64;
     let mut total_failed = 0u64;
+    // Track channel counts that produced consecutive encode failures so we can
+    // skip further attempts with the same channel count (e.g. 32-ch generic
+    // channels that cause GPU autotune hangs).
+    let mut skip_ch_counts: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut consecutive_failures_by_ch: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    const CONSECUTIVE_FAIL_LIMIT: u32 = 5;
 
     let mut day_dirs: Vec<_> = std::fs::read_dir(skill_dir)?
         .filter_map(|e| e.ok())
@@ -152,6 +173,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
         .map(|e| e.path())
         .collect();
     day_dirs.sort();
+    day_dirs.reverse(); // Most recent days first — users care about recent data.
 
     // First pass: count total needed.
     for day_dir in &day_dirs {
@@ -207,10 +229,10 @@ pub(crate) fn run_batch_reembed_with_cancel(
             continue;
         }
 
-        // Read session metadata from JSON sidecar.
-        let (channel_names, sample_rate) = read_session_meta(day_dir, &csv_files);
-        if channel_names.is_empty() || sample_rate == 0.0 {
-            tracing::warn!("[reembed] skipping {} — no channel metadata", day_dir.display());
+        // Read session metadata (sample rate). Channel names are now per-segment.
+        let (_channel_names, sample_rate) = read_session_meta(day_dir, &csv_files);
+        if sample_rate == 0.0 {
+            tracing::warn!("[reembed] skipping {} — no sample rate metadata", day_dir.display());
             continue;
         }
 
@@ -245,7 +267,8 @@ pub(crate) fn run_batch_reembed_with_cancel(
         );
 
         // Load all raw CSV data for this day into a time-indexed buffer.
-        let raw_data = load_day_csv_data(day_dir, &csv_files, &channel_names, sample_rate);
+        // Each segment carries its own channel names from the CSV header.
+        let raw_data = load_day_csv_data(day_dir, &csv_files, sample_rate);
 
         let epoch_samples = (sample_rate * 5.0) as usize; // 5-second epoch
         let commit_size = batch_size.max(10); // commit every N epochs for write efficiency
@@ -274,12 +297,11 @@ pub(crate) fn run_batch_reembed_with_cancel(
             for (row_id, ts_ms) in chunk {
                 let ts_secs = (*ts_ms as f64) / 1000.0;
 
-                let samples = extract_epoch_samples(&raw_data, ts_secs, epoch_samples, channel_names.len());
+                let (samples, seg_ch_names) = extract_epoch_samples(&raw_data, ts_secs, epoch_samples);
                 if samples.is_empty() {
                     if total_failed == 0 {
                         tracing::warn!(
-                            "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples}, channels={})",
-                            channel_names.len()
+                            "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples})",
                         );
                     }
                     total_failed += 1;
@@ -287,8 +309,26 @@ pub(crate) fn run_batch_reembed_with_cancel(
                     continue;
                 }
 
+                let n_ch = samples.len();
+
+                // Skip channel counts that have failed repeatedly (prevents GPU
+                // hangs on unsupported channel configurations).
+                if skip_ch_counts.contains(&n_ch) {
+                    total_failed += 1;
+                    total_done += 1;
+                    continue;
+                }
+
+                // Log first encode attempt per channel count for diagnostics.
+                if total_done == 0 || (total_done > 0 && total_done == total_failed) {
+                    tracing::info!(
+                        "[reembed] first encode: channels={n_ch}, samples_per_ch={}, ts={ts_secs:.1}s",
+                        samples.first().map(|s| s.len()).unwrap_or(0),
+                    );
+                }
+
                 let t0 = std::time::Instant::now();
-                let embedding = encode_raw_samples(&encoder, &samples, &channel_names, sample_rate);
+                let embedding = encode_raw_samples(&encoder, &samples, &seg_ch_names, sample_rate);
                 let ms = t0.elapsed().as_millis();
 
                 if let Some(emb) = embedding {
@@ -300,15 +340,24 @@ pub(crate) fn run_batch_reembed_with_cancel(
                     if ms > 2000 {
                         tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
                     }
+                    // Reset failure counter on success.
+                    consecutive_failures_by_ch.remove(&n_ch);
                 } else {
                     if total_failed == 0 {
                         tracing::warn!(
-                            "[reembed] first encode failure at ts={ts_secs:.1}s (channels={}, samples_per_ch={}, rate={sample_rate}Hz)",
-                            samples.len(),
+                            "[reembed] first encode failure at ts={ts_secs:.1}s (channels={n_ch}, samples_per_ch={}, rate={sample_rate}Hz)",
                             samples.first().map(|s| s.len()).unwrap_or(0),
                         );
                     }
                     total_failed += 1;
+                    let count = consecutive_failures_by_ch.entry(n_ch).or_insert(0);
+                    *count += 1;
+                    if *count >= CONSECUTIVE_FAIL_LIMIT {
+                        tracing::warn!(
+                            "[reembed] skipping all {n_ch}-channel epochs after {CONSECUTIVE_FAIL_LIMIT} consecutive failures"
+                        );
+                        skip_ch_counts.insert(n_ch);
+                    }
                 }
 
                 total_done += 1;
@@ -326,7 +375,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
                     "total": total_needed,
                     "done": total_done,
                     "failed": total_failed,
-                    "day": day_name,
+                    "date": day_name,
                 }),
             });
 
@@ -438,19 +487,14 @@ fn read_session_meta(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
 
 /// Timestamp-indexed raw EEG data: Vec<(timestamp_secs, Vec<Vec<f32>> channels×samples)>.
 struct RawDayData {
-    /// Sorted list of (start_time_secs, samples_per_channel[ch][sample]).
-    segments: Vec<(f64, Vec<Vec<f32>>)>,
+    /// Sorted list of (start_time_secs, channel_names, samples_per_channel[ch][sample]).
+    segments: Vec<(f64, Vec<String>, Vec<Vec<f32>>)>,
     sample_rate: f64,
 }
 
 /// Load all raw CSV data for a day directory.
-fn load_day_csv_data(
-    _day_dir: &std::path::Path,
-    csv_files: &[std::path::PathBuf],
-    channel_names: &[String],
-    sample_rate: f64,
-) -> RawDayData {
-    let n_ch = channel_names.len();
+/// Each segment stores its own channel names read from the CSV header.
+fn load_day_csv_data(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf], sample_rate: f64) -> RawDayData {
     let mut segments = Vec::new();
 
     for csv_path in csv_files {
@@ -461,20 +505,23 @@ fn load_day_csv_data(
         use std::io::BufRead;
         let mut lines = reader.lines();
 
-        // Read header to detect actual column count for this CSV.
+        // Read header to detect channel names and column count for this CSV.
         let header_line = lines.next();
-        let csv_cols = header_line
+        let header_str = header_line
             .as_ref()
             .and_then(|r| r.as_ref().ok())
-            .map(|h| h.split(',').count().saturating_sub(1)) // minus timestamp column
-            .unwrap_or(0);
-        if csv_cols == 0 {
+            .cloned()
+            .unwrap_or_default();
+        let header_cols: Vec<&str> = header_str.split(',').collect();
+        if header_cols.len() < 2 {
             continue;
         }
-
-        // Use the lesser of expected channels and actual CSV columns.
-        // Different devices may produce different column counts.
-        let file_ch = n_ch.min(csv_cols);
+        // Channel names: all columns after the timestamp column.
+        let seg_channel_names: Vec<String> = header_cols[1..].iter().map(|s| s.trim().to_string()).collect();
+        let file_ch = seg_channel_names.len();
+        if file_ch == 0 {
+            continue;
+        }
         let mut channels: Vec<Vec<f32>> = vec![Vec::new(); file_ch];
         let mut first_ts: Option<f64> = None;
 
@@ -521,7 +568,7 @@ fn load_day_csv_data(
                 }
             }
             if channels.iter().all(|c| !c.is_empty()) {
-                segments.push((ts, channels));
+                segments.push((ts, seg_channel_names.clone(), channels));
             }
         }
     }
@@ -531,13 +578,9 @@ fn load_day_csv_data(
 }
 
 /// Extract a 5-second window of samples at the given epoch timestamp.
-fn extract_epoch_samples(
-    data: &RawDayData,
-    epoch_ts_secs: f64,
-    epoch_samples: usize,
-    n_channels: usize,
-) -> Vec<Vec<f32>> {
-    for (seg_start, channels) in &data.segments {
+/// Returns (samples, channel_names) for the matching segment.
+fn extract_epoch_samples(data: &RawDayData, epoch_ts_secs: f64, epoch_samples: usize) -> (Vec<Vec<f32>>, Vec<String>) {
+    for (seg_start, seg_ch_names, channels) in &data.segments {
         let seg_len = channels[0].len();
         let seg_end = *seg_start + (seg_len as f64 / data.sample_rate);
 
@@ -545,23 +588,18 @@ fn extract_epoch_samples(
         if epoch_ts_secs >= *seg_start && epoch_ts_secs < seg_end {
             let offset = ((epoch_ts_secs - seg_start) * data.sample_rate) as usize;
             let end = (offset + epoch_samples).min(seg_len);
-            if end - offset < epoch_samples / 2 {
+            if end - offset < epoch_samples {
                 continue;
-            } // too few samples
+            } // encoder requires full 5 s epoch
 
-            // Use available channels (may be fewer than n_channels for different devices).
-            let avail = channels.len().min(n_channels);
-            if avail == 0 {
-                continue;
-            }
-            let mut result = Vec::with_capacity(avail);
-            for ch in channels.iter().take(avail) {
+            let mut result = Vec::with_capacity(channels.len());
+            for ch in channels {
                 result.push(ch[offset..end].to_vec());
             }
-            return result;
+            return (result, seg_ch_names.clone());
         }
     }
-    vec![]
+    (vec![], vec![])
 }
 
 /// Encode raw samples using the loaded encoder.
@@ -966,5 +1004,477 @@ mod tests {
         assert_eq!(family_id_to_backend("reve-base"), "reve");
         assert_eq!(family_id_to_backend("osf-base"), "osf");
         assert_eq!(family_id_to_backend("steegformer-x"), "steegformer");
+    }
+
+    // ── Helpers for reembed tests ─────────────────────────────────────────
+
+    /// Write a CSV file with the given header and rows.
+    fn write_csv(dir: &std::path::Path, name: &str, header: &str, rows: &[String]) {
+        let path = dir.join(name);
+        let mut contents = String::from(header);
+        contents.push('\n');
+        for row in rows {
+            contents.push_str(row);
+            contents.push('\n');
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    /// Generate N rows of EEG data for `n_ch` channels starting at `start_ts`.
+    fn gen_rows(start_ts: f64, n_rows: usize, n_ch: usize, sample_rate: f64) -> Vec<String> {
+        (0..n_rows)
+            .map(|i| {
+                let ts = start_ts + i as f64 / sample_rate;
+                let vals: Vec<String> = (0..n_ch)
+                    .map(|c| format!("{:.4}", (c as f64 + i as f64).sin()))
+                    .collect();
+                format!("{ts:.6},{}", vals.join(","))
+            })
+            .collect()
+    }
+
+    /// Build a CSV header for n_ch channels using Muse-style names.
+    fn muse_header() -> &'static str {
+        "timestamp_s,TP9,AF7,AF8,TP10"
+    }
+
+    /// Build a CSV header for n_ch generic channels.
+    fn generic_header(n_ch: usize) -> String {
+        let names: Vec<String> = (1..=n_ch).map(|i| format!("Ch{i}")).collect();
+        format!("timestamp_s,{}", names.join(","))
+    }
+
+    // ── find_eeg_csvs ─────────────────────────────────────────────────────
+
+    #[test]
+    fn find_eeg_csvs_filters_correctly() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        std::fs::write(d.join("exg_100.csv"), "").unwrap();
+        std::fs::write(d.join("exg_100_metrics.csv"), "").unwrap();
+        std::fs::write(d.join("exg_100_ppg.csv"), "").unwrap();
+        std::fs::write(d.join("exg_100_imu.csv"), "").unwrap();
+        std::fs::write(d.join("exg_200.csv"), "").unwrap();
+        std::fs::write(d.join("other.csv"), "").unwrap();
+
+        let csvs = find_eeg_csvs(d);
+        let names: Vec<&str> = csvs.iter().filter_map(|p| p.file_name()?.to_str()).collect();
+        assert_eq!(names, vec!["exg_100.csv", "exg_200.csv"]);
+    }
+
+    #[test]
+    fn find_eeg_csvs_empty_dir() {
+        let td = tempfile::tempdir().unwrap();
+        assert!(find_eeg_csvs(td.path()).is_empty());
+    }
+
+    // ── read_session_meta ─────────────────────────────────────────────────
+
+    #[test]
+    fn read_session_meta_from_json_sidecar() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 10, 4, 256.0));
+        std::fs::write(
+            d.join("exg_100.json"),
+            r#"{"channel_names":["TP9","AF7","AF8","TP10"],"sample_rate":256.0}"#,
+        )
+        .unwrap();
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let (ch, sr) = read_session_meta(d, &csvs);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
+        assert_eq!(sr, 256.0);
+    }
+
+    #[test]
+    fn read_session_meta_json_with_sample_rate_hz() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 10, 4, 256.0));
+        std::fs::write(
+            d.join("exg_100.json"),
+            r#"{"channel_names":["TP9","AF7","AF8","TP10"],"sample_rate_hz":512.0}"#,
+        )
+        .unwrap();
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let (ch, sr) = read_session_meta(d, &csvs);
+        assert_eq!(sr, 512.0);
+        assert_eq!(ch.len(), 4);
+    }
+
+    #[test]
+    fn read_session_meta_fallback_to_csv_header() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 10, 4, 256.0));
+        // No JSON sidecar — should read from CSV header with default 256 Hz.
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let (ch, sr) = read_session_meta(d, &csvs);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
+        assert_eq!(sr, 256.0);
+    }
+
+    #[test]
+    fn read_session_meta_no_files() {
+        let td = tempfile::tempdir().unwrap();
+        let (ch, sr) = read_session_meta(td.path(), &[]);
+        assert!(ch.is_empty());
+        assert_eq!(sr, 0.0);
+    }
+
+    #[test]
+    fn read_session_meta_corrupt_json_falls_back() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 10, 4, 256.0));
+        std::fs::write(d.join("exg_100.json"), "NOT JSON").unwrap();
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let (ch, sr) = read_session_meta(d, &csvs);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
+        assert_eq!(sr, 256.0);
+    }
+
+    #[test]
+    fn read_session_meta_json_missing_sample_rate_defaults() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 10, 4, 256.0));
+        std::fs::write(
+            d.join("exg_100.json"),
+            r#"{"channel_names":["TP9","AF7","AF8","TP10"]}"#,
+        )
+        .unwrap();
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let (ch, sr) = read_session_meta(d, &csvs);
+        assert_eq!(ch.len(), 4);
+        assert_eq!(sr, 256.0); // defaults when channels present but no rate
+    }
+
+    // ── load_day_csv_data ─────────────────────────────────────────────────
+
+    #[test]
+    fn load_csv_4ch_muse_absolute_timestamps() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        let ts = 1775512049.0;
+        write_csv(d, "exg_1775512049.csv", muse_header(), &gen_rows(ts, 2560, 4, 256.0));
+
+        let csvs = vec![d.join("exg_1775512049.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 1);
+        let (start, ch_names, channels) = &data.segments[0];
+        assert!((*start - ts).abs() < 0.01);
+        assert_eq!(ch_names, &["TP9", "AF7", "AF8", "TP10"]);
+        assert_eq!(channels.len(), 4);
+        assert_eq!(channels[0].len(), 2560);
+    }
+
+    #[test]
+    fn load_csv_32ch_virtual_relative_timestamps() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        // Relative timestamps (device clock) — segment start from filename.
+        write_csv(
+            d,
+            "exg_1775512049.csv",
+            &generic_header(32),
+            &gen_rows(7.867, 1536, 32, 256.0),
+        );
+
+        let csvs = vec![d.join("exg_1775512049.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 1);
+        let (start, ch_names, channels) = &data.segments[0];
+        assert_eq!(*start, 1775512049.0); // from filename, not relative ts
+        assert_eq!(ch_names.len(), 32);
+        assert_eq!(ch_names[0], "Ch1");
+        assert_eq!(channels.len(), 32);
+        assert_eq!(channels[0].len(), 1536);
+    }
+
+    #[test]
+    fn load_csv_mixed_devices_separate_segments() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        // Session 1: 32-ch virtual EEG with relative timestamps.
+        write_csv(d, "exg_1000.csv", &generic_header(32), &gen_rows(5.0, 1536, 32, 256.0));
+        // Session 2: 4-ch Muse with absolute timestamps.
+        write_csv(d, "exg_2000.csv", muse_header(), &gen_rows(2000.0, 2560, 4, 256.0));
+
+        let csvs = vec![d.join("exg_1000.csv"), d.join("exg_2000.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 2);
+
+        // First segment: 32-ch, start from filename.
+        assert_eq!(data.segments[0].0, 1000.0);
+        assert_eq!(data.segments[0].1.len(), 32);
+        assert_eq!(data.segments[0].2.len(), 32);
+
+        // Second segment: 4-ch, absolute timestamps.
+        assert!((data.segments[1].0 - 2000.0).abs() < 0.01);
+        assert_eq!(data.segments[1].1.len(), 4);
+        assert_eq!(data.segments[1].2.len(), 4);
+    }
+
+    #[test]
+    fn load_csv_empty_file_skipped() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        std::fs::write(d.join("exg_100.csv"), "").unwrap();
+        write_csv(d, "exg_200.csv", muse_header(), &gen_rows(200.0, 1280, 4, 256.0));
+
+        let csvs = vec![d.join("exg_100.csv"), d.join("exg_200.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 1);
+    }
+
+    #[test]
+    fn load_csv_header_only_no_data_skipped() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        write_csv(d, "exg_100.csv", muse_header(), &[]);
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 0);
+    }
+
+    #[test]
+    fn load_csv_partial_rows_skipped() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        // Row with too few columns should be skipped.
+        let rows = vec![
+            "100.0,1.0,2.0,3.0,4.0".into(),
+            "100.004,1.0,2.0".into(), // incomplete row
+            "100.008,1.0,2.0,3.0,4.0".into(),
+        ];
+        write_csv(d, "exg_100.csv", muse_header(), &rows);
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 1);
+        assert_eq!(data.segments[0].2[0].len(), 2); // only 2 valid rows
+    }
+
+    #[test]
+    fn load_csv_nan_values_skip_row() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        let rows = vec![
+            "100.0,1.0,2.0,3.0,4.0".into(),
+            "100.004,NaN,2.0,3.0,4.0".into(), // unparseable as f32 by parse
+            "100.008,1.0,2.0,3.0,4.0".into(),
+        ];
+        write_csv(d, "exg_100.csv", muse_header(), &rows);
+
+        let csvs = vec![d.join("exg_100.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        // "NaN" does parse as f32, so the row is kept.
+        // If it didn't parse, it would be skipped.
+        let row_count = data.segments[0].2[0].len();
+        assert!(row_count >= 2); // at least the valid rows
+    }
+
+    // ── extract_epoch_samples ─────────────────────────────────────────────
+
+    fn make_raw_data(segments: Vec<(f64, Vec<String>, Vec<Vec<f32>>)>, sample_rate: f64) -> RawDayData {
+        RawDayData { segments, sample_rate }
+    }
+
+    fn make_segment(start: f64, n_ch: usize, n_samples: usize, ch_prefix: &str) -> (f64, Vec<String>, Vec<Vec<f32>>) {
+        let ch_names: Vec<String> = (1..=n_ch).map(|i| format!("{ch_prefix}{i}")).collect();
+        let channels: Vec<Vec<f32>> = (0..n_ch)
+            .map(|c| (0..n_samples).map(|s| (c * 1000 + s) as f32).collect())
+            .collect();
+        (start, ch_names, channels)
+    }
+
+    #[test]
+    fn extract_full_epoch_from_middle_of_segment() {
+        let seg = make_segment(1000.0, 4, 2560, "TP");
+        let data = make_raw_data(vec![seg], 256.0);
+        let epoch_samples = 1280; // 5s at 256Hz
+
+        let (samples, ch_names) = extract_epoch_samples(&data, 1002.0, epoch_samples);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(samples[0].len(), 1280);
+        assert_eq!(ch_names, vec!["TP1", "TP2", "TP3", "TP4"]);
+    }
+
+    #[test]
+    fn extract_at_segment_start() {
+        let seg = make_segment(1000.0, 4, 2560, "Ch");
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1000.0, 1280);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(samples[0].len(), 1280);
+    }
+
+    #[test]
+    fn extract_near_end_insufficient_samples_returns_empty() {
+        // Segment is 6 seconds. Epoch at 1.5s leaves only 4.5s — not enough for 5s epoch.
+        let seg = make_segment(1000.0, 4, 1536, "Ch"); // 6s at 256Hz
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1001.5, 1280);
+        assert!(samples.is_empty());
+    }
+
+    #[test]
+    fn extract_before_any_segment_returns_empty() {
+        let seg = make_segment(1000.0, 4, 2560, "Ch");
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 999.0, 1280);
+        assert!(samples.is_empty());
+    }
+
+    #[test]
+    fn extract_after_all_segments_returns_empty() {
+        let seg = make_segment(1000.0, 4, 2560, "Ch");
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1020.0, 1280);
+        assert!(samples.is_empty());
+    }
+
+    #[test]
+    fn extract_between_segments_returns_empty() {
+        let seg1 = make_segment(1000.0, 4, 1280, "Ch"); // 5s
+        let seg2 = make_segment(1010.0, 4, 1280, "Ch"); // starts 5s after seg1 ends
+        let data = make_raw_data(vec![seg1, seg2], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1006.0, 1280);
+        assert!(samples.is_empty());
+    }
+
+    #[test]
+    fn extract_from_second_segment_returns_correct_channels() {
+        // Simulate mixed-device day: seg1 is 32-ch, seg2 is 4-ch Muse.
+        let seg1 = make_segment(1000.0, 32, 2560, "Ch");
+        let seg2 = make_segment(2000.0, 4, 2560, "TP");
+        let data = make_raw_data(vec![seg1, seg2], 256.0);
+
+        // Epoch falls in seg2.
+        let (samples, ch_names) = extract_epoch_samples(&data, 2002.0, 1280);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(ch_names, vec!["TP1", "TP2", "TP3", "TP4"]);
+    }
+
+    #[test]
+    fn extract_from_first_segment_returns_32_channels() {
+        let seg1 = make_segment(1000.0, 32, 2560, "Ch");
+        let seg2 = make_segment(2000.0, 4, 2560, "TP");
+        let data = make_raw_data(vec![seg1, seg2], 256.0);
+
+        let (samples, ch_names) = extract_epoch_samples(&data, 1002.0, 1280);
+        assert_eq!(samples.len(), 32);
+        assert_eq!(ch_names.len(), 32);
+        assert_eq!(ch_names[0], "Ch1");
+    }
+
+    #[test]
+    fn extract_empty_data_returns_empty() {
+        let data = make_raw_data(vec![], 256.0);
+        let (samples, ch_names) = extract_epoch_samples(&data, 1000.0, 1280);
+        assert!(samples.is_empty());
+        assert!(ch_names.is_empty());
+    }
+
+    #[test]
+    fn extract_exact_boundary_fits() {
+        // Segment is exactly 5s — epoch at start should fit.
+        let seg = make_segment(1000.0, 4, 1280, "Ch"); // exactly 5s
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1000.0, 1280);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(samples[0].len(), 1280);
+    }
+
+    #[test]
+    fn extract_one_sample_short_returns_empty() {
+        // Segment is 1279 samples — epoch of 1280 should NOT fit.
+        let seg = make_segment(1000.0, 4, 1279, "Ch");
+        let data = make_raw_data(vec![seg], 256.0);
+
+        let (samples, _) = extract_epoch_samples(&data, 1000.0, 1280);
+        assert!(samples.is_empty());
+    }
+
+    // ── Integration: load + extract round-trip ────────────────────────────
+
+    #[test]
+    fn roundtrip_muse_session_load_and_extract() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        let ts = 1776125671.0;
+        // 20s of Muse data at 256Hz = 5120 samples.
+        write_csv(d, "exg_1776125671.csv", muse_header(), &gen_rows(ts, 5120, 4, 256.0));
+
+        let csvs = vec![d.join("exg_1776125671.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments.len(), 1);
+        assert_eq!(data.segments[0].1, vec!["TP9", "AF7", "AF8", "TP10"]);
+
+        // Extract epoch from middle.
+        let (samples, ch) = extract_epoch_samples(&data, ts + 5.0, 1280);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(samples[0].len(), 1280);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
+    }
+
+    #[test]
+    fn roundtrip_mixed_day_extracts_correct_device() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+
+        // Session 1: 32-ch virtual EEG, 6s, relative timestamps.
+        write_csv(d, "exg_1000.csv", &generic_header(32), &gen_rows(5.0, 1536, 32, 256.0));
+        // Session 2: 4-ch Muse, 20s, absolute timestamps.
+        write_csv(d, "exg_2000.csv", muse_header(), &gen_rows(2000.0, 5120, 4, 256.0));
+
+        let csvs = vec![d.join("exg_1000.csv"), d.join("exg_2000.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+
+        // Epoch in 32-ch session — too short for 5s (6s total, epoch at 1.5s leaves 4.5s).
+        let (samples, _) = extract_epoch_samples(&data, 1001.5, 1280);
+        assert!(samples.is_empty());
+
+        // Epoch in 4-ch Muse session — should succeed with Muse channel names.
+        let (samples, ch) = extract_epoch_samples(&data, 2005.0, 1280);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
+    }
+
+    #[test]
+    fn roundtrip_virtual_eeg_long_session() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        // 170K samples (667s), relative timestamps.
+        write_csv(
+            d,
+            "exg_1775519576.csv",
+            &generic_header(32),
+            &gen_rows(216.0, 10240, 32, 256.0), // 40s — shorter for test speed
+        );
+
+        let csvs = vec![d.join("exg_1775519576.csv")];
+        let data = load_day_csv_data(d, &csvs, 256.0);
+        assert_eq!(data.segments[0].0, 1775519576.0); // from filename
+
+        // Epoch 33s into the session (offset 216s from device, but segment start is filename ts).
+        // offset in data = (1775519576 + 33 - 1775519576) * 256 = 33 * 256 = 8448
+        let (samples, ch) = extract_epoch_samples(&data, 1775519576.0 + 33.0, 1280);
+        assert_eq!(samples.len(), 32);
+        assert_eq!(samples[0].len(), 1280);
+        assert_eq!(ch[0], "Ch1");
     }
 }
