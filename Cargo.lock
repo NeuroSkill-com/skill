@@ -17390,6 +17390,8 @@ dependencies = [
 [[package]]
 name = "zuna-rs"
 version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78f1c0e35e0ee1a7741476678dcbfe2b308cc36f43004851b9aaf09d1e3c819f"
 dependencies = [
  "anyhow",
  "burn",

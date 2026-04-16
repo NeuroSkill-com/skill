@@ -91,6 +91,22 @@ function analysisChips(sa: SearchAnalysis): Array<[string, string, string]> {
   ];
 }
 
+// ── Corpus-wide stats (fetched once on mount) ───────────────────────────
+let corpusStats = $state<{
+  eeg_days: number;
+  eeg_first_day: string;
+  eeg_last_day: string;
+  eeg_total_sessions: number;
+  eeg_total_secs: number;
+  label_total: number;
+  label_stale: number;
+  label_text_index: number;
+  label_eeg_index: number;
+  label_embed_model: string;
+  screenshot_total: number;
+  screenshot_embedded: number;
+} | null>(null);
+
 // ── Mode ─────────────────────────────────────────────────────────────────
 type SearchMode = "eeg" | "text" | "interactive" | "images";
 let mode = $state<SearchMode>("interactive");
@@ -131,6 +147,11 @@ onMount(() => {
         imgToken = token;
       }),
     )
+    .catch(() => {});
+
+  // Fetch corpus stats on mount for all search modes
+  daemonInvoke<typeof corpusStats>("search_corpus_stats", {})
+    .then((s) => { corpusStats = s; })
     .catch(() => {});
 
   return () => {
@@ -439,6 +460,21 @@ let ixDedupeLabels = $state(true); // deduplicate found_labels by text
 let ixUsePca = $state(true); // cluster found_labels by embedding similarity
 
 let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
+/** Search corpus metadata returned from the backend. */
+let ixMeta = $state<{
+  eeg_days: number;
+  eeg_first_day: string;
+  eeg_last_day: string;
+  eeg_total_sessions: number;
+  eeg_total_secs: number;
+  label_total: number;
+  label_stale: number;
+  label_text_index: number;
+  label_eeg_index: number;
+  label_embed_model: string;
+  screenshot_total: number;
+  screenshot_embedded: number;
+} | null>(null);
 /**
  * Screenshot results.  Keys are `"parentNodeId_filename"`, values carry
  * the screenshot data.  The parentNodeId portion tells us which graph
@@ -530,12 +566,14 @@ async function searchInteractive() {
       dot: string;
       svg: string;
       svg_col: string;
+      meta?: typeof ixMeta;
       reembed_needed?: { stale: number; total: number; current_model: string };
     }>("interactive_search", {
       query: ixQuery.trim(),
       kText: ixKText,
       kEeg: ixKEeg,
       kLabels: ixKLabels,
+      kScreenshots: 5,
       reachMinutes: ixReachMinutes,
       usePca: ixUsePca,
       svgLabels: {
@@ -555,6 +593,7 @@ async function searchInteractive() {
     ixDot = res.dot;
     ixSvg = res.svg;
     ixSvgCol = res.svg_col;
+    ixMeta = res.meta ?? null;
     ixSearched = true;
 
     // Auto re-embed stale labels and retry the search transparently
@@ -1370,6 +1409,27 @@ useWindowTitle("window.title.search");
           <p class="text-[0.8rem] text-muted-foreground/50 max-w-[280px] leading-relaxed">
             {t("search.emptyState")}
           </p>
+          {#if corpusStats}
+            <div class="flex flex-col gap-1 text-[0.6rem] text-muted-foreground/45 tabular-nums max-w-[320px]">
+              {#if corpusStats.eeg_days > 0}
+                <div class="flex items-center justify-center gap-3">
+                  <span><span class="font-semibold text-foreground/50">{corpusStats.eeg_days}</span> day{corpusStats.eeg_days !== 1 ? "s" : ""} of EEG</span>
+                  <span><span class="font-semibold text-foreground/50">{corpusStats.eeg_total_sessions}</span> session{corpusStats.eeg_total_sessions !== 1 ? "s" : ""}</span>
+                  <span><span class="font-semibold text-foreground/50">{fmtSecs(corpusStats.eeg_total_secs)}</span></span>
+                </div>
+                <span class="text-[0.5rem] text-muted-foreground/30">{corpusStats.eeg_first_day} – {corpusStats.eeg_last_day}</span>
+              {:else}
+                <span class="text-muted-foreground/30">No EEG recordings yet</span>
+              {/if}
+              <div class="flex items-center justify-center gap-3 mt-0.5">
+                <span><span class="font-semibold text-foreground/50">{corpusStats.label_total}</span> labels</span>
+                {#if corpusStats.screenshot_total > 0}
+                  <span><span class="font-semibold text-foreground/50">{corpusStats.screenshot_total}</span> screenshots</span>
+                {/if}
+                <span class="text-muted-foreground/25">{corpusStats.label_embed_model}</span>
+              </div>
+            </div>
+          {/if}
         </div>
 
       {:else if searching && !result}
@@ -1423,6 +1483,21 @@ useWindowTitle("window.title.search");
               {fmtDateTime(result.start_utc)} → {fmtDateTime(result.end_utc)}
             </span>
           </div>
+          <!-- Corpus context line -->
+          {#if corpusStats && corpusStats.eeg_days > 0}
+            <div class="flex items-center gap-2.5 px-4 py-1 border-b border-border dark:border-white/[0.04]
+                        text-[0.5rem] text-muted-foreground/40 tabular-nums select-none">
+              <span>Searching {result.searched_days.length} of <span class="text-foreground/50">{corpusStats.eeg_days}</span> days</span>
+              <span class="text-muted-foreground/15">·</span>
+              <span><span class="text-foreground/50">{corpusStats.eeg_total_sessions}</span> sessions total</span>
+              <span class="text-muted-foreground/15">·</span>
+              <span><span class="text-foreground/50">{fmtSecs(corpusStats.eeg_total_secs)}</span> recorded</span>
+              <span class="text-muted-foreground/15">·</span>
+              <span><span class="text-foreground/50">{corpusStats.label_total}</span> labels</span>
+              <span class="text-muted-foreground/15">·</span>
+              <span class="text-muted-foreground/25">{corpusStats.label_embed_model}</span>
+            </div>
+          {/if}
 
           <!-- ── Collapsible analysis ─────────────────────────────────── -->
           {#if searchAnalysis}
@@ -1928,6 +2003,45 @@ useWindowTitle("window.title.search");
             {showIxGraph ? `▲ ${t("search.interactiveGraphHide")}` : `▼ ${t("search.interactiveGraphShow")}`}
           </button>
         </div>
+
+        <!-- Corpus metadata banner -->
+        {#if ixMeta}
+          <div class="flex items-center gap-3 px-4 py-1.5 border-b border-border dark:border-white/[0.04]
+                      bg-muted/10 text-[0.5rem] text-muted-foreground/55 tabular-nums select-none flex-wrap">
+            {#if ixMeta.eeg_days > 0}
+              <span title="EEG recording days">
+                <span class="font-semibold text-foreground/50">{ixMeta.eeg_days}</span> day{ixMeta.eeg_days !== 1 ? "s" : ""}
+                {#if ixMeta.eeg_first_day && ixMeta.eeg_last_day}
+                  <span class="text-muted-foreground/35">({ixMeta.eeg_first_day}–{ixMeta.eeg_last_day})</span>
+                {/if}
+              </span>
+              <span class="text-muted-foreground/20">·</span>
+              <span title="Recording sessions">
+                <span class="font-semibold text-foreground/50">{ixMeta.eeg_total_sessions}</span> session{ixMeta.eeg_total_sessions !== 1 ? "s" : ""}
+              </span>
+              <span class="text-muted-foreground/20">·</span>
+              <span title="Total recording time">
+                <span class="font-semibold text-foreground/50">{fmtSecs(ixMeta.eeg_total_secs)}</span> recorded
+              </span>
+              <span class="text-muted-foreground/20">·</span>
+            {/if}
+            <span title="Labels in database (text index / EEG index)">
+              <span class="font-semibold text-foreground/50">{ixMeta.label_total}</span> labels
+              <span class="text-muted-foreground/30">({ixMeta.label_text_index} text / {ixMeta.label_eeg_index} eeg)</span>
+              {#if ixMeta.label_stale > 0}
+                <span class="text-amber-500/70">{ixMeta.label_stale} stale</span>
+              {/if}
+            </span>
+            {#if ixMeta.screenshot_total > 0}
+              <span class="text-muted-foreground/20">·</span>
+              <span title="Screenshots (embedded / total)">
+                <span class="font-semibold text-foreground/50">{ixMeta.screenshot_embedded}</span>/<span class="font-semibold text-foreground/50">{ixMeta.screenshot_total}</span> screenshots
+              </span>
+            {/if}
+            <span class="text-muted-foreground/20">·</span>
+            <span title="Embedding model" class="text-muted-foreground/30">{ixMeta.label_embed_model}</span>
+          </div>
+        {/if}
 
         <!-- 3D Graph panel -->
         <div class="border-b border-border dark:border-white/[0.05] shrink-0">

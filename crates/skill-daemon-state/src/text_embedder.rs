@@ -32,6 +32,15 @@ impl SharedTextEmbedder {
         }
     }
 
+    /// Create a handle that never loads the model (always returns `None`).
+    /// Useful for unit tests that don't need real embeddings.
+    pub fn new_noop() -> Self {
+        let s = Self::new();
+        // Mark the Once as done so ensure_loaded is a no-op, leaving inner as None.
+        s.init.call_once(|| {});
+        s
+    }
+
     /// Ensure the model is loaded (called at most once).
     fn ensure_loaded(&self) {
         let inner = self.inner.clone();

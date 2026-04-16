@@ -106,6 +106,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   set_daemon_watchdog: [P, "/v1/settings/daemon-watchdog"],
 
   // Search
+  search_corpus_stats: [G, "/v1/search/stats"],
   search_labels_by_text: [P, "/v1/labels/search"],
   interactive_search: [P, "/v1/search/eeg"],
   regenerate_interactive_svg: [P, "/v1/search/eeg"],
