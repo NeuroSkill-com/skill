@@ -43,7 +43,8 @@ for optional build acceleration.
 │   ├── routes/          # Page routes
 │   └── tests/           # Frontend tests
 ├── src-tauri/           # Tauri app shell
-├── scripts/             # Build & CI scripts
+├── scripts/             # Build & CI scripts (ci.py is the shared CI entry point)
+│   └── ci.py            # Cross-platform CI helpers (version, changelog, discord, etc.)
 └── changes/             # Changelog fragments
 ```
 
@@ -132,10 +133,56 @@ export RUSTC_WRAPPER=sccache
 
 ### Commit Checklist
 
-The pre-commit hook automatically checks:
+The **pre-commit** hook automatically checks:
 - i18n key synchronisation (when i18n files are staged)
 - Frontend formatting via Biome
 - Rust formatting via `cargo fmt`
+
+The **pre-push** hook runs scoped checks based on changed files:
+- Frontend: `biome check` + `vitest related` on changed files
+- Rust: `cargo clippy` + `cargo test` on affected crates
+- CI scripts: `python3 scripts/ci.py self-test` when `ci.py` or workflows change
+- Daemon guard: `vitest run daemon-client.test.ts` when daemon proxy or scripts change
+
+### CI & Releases
+
+All CI logic lives in `scripts/ci.py` — a single Python file with subcommands that
+runs on macOS, Linux, and Windows. Workflows call it instead of inline bash/PowerShell.
+
+```bash
+# Validate ci.py and workflow references
+npm run ci:test
+
+# Local release dry-run (builds frontend + Rust + .app bundle + changelog)
+npm run ci:dry-run
+
+# Same but skip compile (reuse existing binaries — fast iteration)
+npm run ci:dry-run:fast
+```
+
+**Available `ci.py` commands:**
+
+| Command | What it does |
+|---------|-------------|
+| `resolve-version` | Read version from tauri.conf.json, validate against git tag |
+| `verify-secrets NAME...` | Check that env vars are non-empty (no values printed) |
+| `prepare-changelog VER OUT [RANGE]` | Extract changelog + contributors to markdown |
+| `update-latest-json --platform P ...` | Merge platform entry into Tauri updater manifest |
+| `discord-notify --status S ...` | Send Discord webhook notification |
+| `download-llama PLAT TARGET FEAT` | Download + validate prebuilt llama.cpp libs |
+| `import-apple-cert` | Import .p12 certificate into temporary keychain (macOS) |
+| `validate-notarization` | Check Apple notarization credentials pre-flight (macOS) |
+| `free-disk-space` | Remove unused toolchains on Linux runners |
+| `install-protoc-windows` | Install protoc via Chocolatey or direct download |
+| `self-test` | Validate all commands + workflow references |
+| `dry-run-release [--target T] [--skip-compile]` | Full local release pipeline |
+
+**Release workflows** (all support on-demand via `workflow_dispatch`):
+- `release-mac.yml` — macOS aarch64 (.app + .dmg)
+- `release-linux.yml` — Linux x86_64 (.deb + .rpm + portable tar)
+- `release-windows.yml` — Windows x64 (.exe NSIS installer)
+
+Tag-triggered runs publish to GitHub Releases. On-demand runs upload artifacts (14-day retention).
 
 ### Changelog Fragments
 

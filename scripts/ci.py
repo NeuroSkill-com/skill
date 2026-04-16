@@ -28,11 +28,21 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
 import urllib.request
 import urllib.error
 
+# Current subcommand name — set by main() for log prefixes.
+_CMD = "ci"
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def log(msg):
+    """Print with [command] prefix for easy grep in CI logs."""
+    print(f"[{_CMD}] {msg}", flush=True)
+
 
 def gh_output(key, value):
     """Append key=value to GITHUB_OUTPUT."""
@@ -40,6 +50,7 @@ def gh_output(key, value):
     if path:
         with open(path, "a") as f:
             f.write(f"{key}={value}\n")
+    log(f"output {key}={value}")
 
 
 def gh_env(key, value):
@@ -48,6 +59,7 @@ def gh_env(key, value):
     if path:
         with open(path, "a") as f:
             f.write(f"{key}={value}\n")
+    log(f"env {key}={value}")
 
 
 def gh_path(directory):
@@ -56,14 +68,15 @@ def gh_path(directory):
     if path:
         with open(path, "a") as f:
             f.write(f"{directory}\n")
+    log(f"path +={directory}")
 
 
 def error(msg):
-    print(f"::error::{msg}")
+    print(f"::error::[{_CMD}] {msg}", flush=True)
 
 
 def warning(msg):
-    print(f"::warning::{msg}")
+    print(f"::warning::[{_CMD}] {msg}", flush=True)
 
 
 def conf_version():
@@ -77,8 +90,16 @@ def conf_version():
 
 
 def run(cmd, **kwargs):
-    """Run a command, return CompletedProcess."""
-    return subprocess.run(cmd, **kwargs)
+    """Run a command with logging. Returns CompletedProcess."""
+    label = " ".join(str(c) for c in cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+    log(f"$ {label}")
+    result = subprocess.run(cmd, **kwargs)
+    if result.returncode != 0 and kwargs.get("check"):
+        # check=True raises on its own, but log first
+        pass
+    elif result.returncode != 0 and not kwargs.get("capture_output"):
+        log(f"  (exit {result.returncode})")
+    return result
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -391,7 +412,7 @@ def cmd_install_protoc_windows(_args):
         if shutil.which("protoc"):
             installed = True
             break
-        import time
+        log(f"choco attempt {i} failed, retrying in {5*i}s...")
         time.sleep(5 * i)
 
     if not installed:
@@ -417,6 +438,155 @@ def cmd_install_protoc_windows(_args):
     if not shutil.which("protoc"):
         raise RuntimeError("protoc installation failed after all attempts")
     run(["protoc", "--version"])
+
+
+def cmd_self_test(_args):
+    """Validate that ci.py itself is healthy: syntax, imports, all commands parse."""
+    errors = []
+
+    # 1. Verify every command function exists and is callable
+    command_map = {
+        "resolve-version": cmd_resolve_version,
+        "verify-secrets": cmd_verify_secrets,
+        "prepare-changelog": cmd_prepare_changelog,
+        "update-latest-json": cmd_update_latest_json,
+        "discord-notify": cmd_discord_notify,
+        "download-llama": cmd_download_llama,
+        "import-apple-cert": cmd_import_apple_cert,
+        "validate-notarization": cmd_validate_notarization,
+        "free-disk-space": cmd_free_disk_space,
+        "install-protoc-windows": cmd_install_protoc_windows,
+        "self-test": cmd_self_test,
+        "dry-run-release": cmd_dry_run_release,
+    }
+    for name, fn in command_map.items():
+        if not callable(fn):
+            errors.append(f"  {name}: not callable")
+        else:
+            log(f"✓ {name}")
+
+    # 2. Verify all workflow files reference only known commands
+    import glob
+    known = set(command_map.keys())
+    for yml in glob.glob(".github/workflows/*.yml"):
+        with open(yml) as f:
+            for i, line in enumerate(f, 1):
+                if "scripts/ci.py" in line:
+                    # Extract the subcommand (word after ci.py)
+                    m = re.search(r'scripts/ci\.py\s+([a-z][-a-z]*)', line)
+                    if m and m.group(1) not in known:
+                        errors.append(f"  {yml}:{i}: unknown command '{m.group(1)}'")
+
+    # 3. Verify conf_version works
+    try:
+        v = conf_version()
+        log(f"✓ conf_version() = {v}")
+    except Exception as e:
+        errors.append(f"  conf_version(): {e}")
+
+    if errors:
+        error("self-test failed:")
+        for e in errors:
+            print(e, flush=True)
+        sys.exit(1)
+
+    log(f"✓ all {len(command_map)} commands OK")
+
+
+def cmd_dry_run_release(args):
+    """Local release dry-run — builds everything but skips signing/notarization/upload.
+
+    Exercises the same pipeline as the CI release workflow:
+      1. resolve-version
+      2. npm build
+      3. cargo build (skill + skill-daemon)
+      4. assemble .app bundle
+      5. prepare changelog
+      6. report artifact locations
+    """
+    target = args.target
+    skip_compile = args.skip_compile
+
+    # 1. Version
+    log("Step 1/6: resolve version")
+    version = conf_version()
+    log(f"version = {version}")
+
+    # 2. Frontend
+    log("Step 2/6: build frontend")
+    if not skip_compile:
+        run(["npm", "run", "build"], check=True)
+    else:
+        log("(skipped)")
+
+    # 3. Cargo build
+    log("Step 3/6: cargo build")
+    if not skip_compile:
+        run(["cargo", "build", "--release", "--target", target,
+             "-p", "skill", "--features", "custom-protocol"],
+            check=True, cwd="src-tauri")
+        run(["cargo", "build", "--release", "--target", target,
+             "-p", "skill-daemon", "--features", "llm"],
+            check=True, cwd="src-tauri")
+    else:
+        log("(skipped)")
+
+    # 4. Assemble .app
+    log("Step 4/6: assemble .app bundle")
+    binary = f"src-tauri/target/{target}/release/skill"
+    if not os.path.exists(binary):
+        if skip_compile:
+            warning(f"Binary not found at {binary} — run without --skip-compile first")
+            log("(skipped — no binary)")
+        else:
+            error(f"Binary not found at {binary} after build")
+            sys.exit(1)
+    else:
+        run(["bash", "scripts/assemble-macos-app.sh", target], check=True)
+
+    # 5. Changelog
+    log("Step 5/6: prepare changelog")
+    changelog = "dry-run-release-notes.md"
+    try:
+        tag = f"v{version}"
+        result = run(["git", "describe", "--tags", "--abbrev=0", f"{tag}^"],
+                     capture_output=True, text=True)
+        prev = result.stdout.strip() if result.returncode == 0 else ""
+        commit_range = f"{prev}..HEAD" if prev else "HEAD~20..HEAD"
+    except Exception:
+        commit_range = "HEAD~20..HEAD"
+
+    # Reuse our own prepare-changelog
+    class FakeArgs:
+        pass
+    fa = FakeArgs()
+    fa.version = version
+    fa.output = changelog
+    fa.range = commit_range
+    cmd_prepare_changelog(fa)
+
+    # 6. Report
+    log("Step 6/6: summary")
+    bundle_dir = f"src-tauri/target/{target}/release/bundle/macos"
+    app = os.path.join(bundle_dir, "NeuroSkill.app")
+
+    print("\n" + "=" * 60, flush=True)
+    print(f"  Dry-run release: v{version} ({target})", flush=True)
+    print("=" * 60, flush=True)
+    if os.path.isdir(app):
+        # Get app size
+        total = sum(
+            os.path.getsize(os.path.join(dp, f))
+            for dp, _, fns in os.walk(app)
+            for f in fns
+        )
+        print(f"  .app bundle:  {app}  ({total / 1_048_576:.1f} MB)", flush=True)
+    else:
+        print(f"  .app bundle:  (not found)", flush=True)
+    print(f"  changelog:    {changelog}", flush=True)
+    print(f"\n  To run:   open '{app}'", flush=True)
+    print(f"  To sign:  APPLE_SIGNING_IDENTITY=... bash scripts/assemble-macos-app.sh {target}", flush=True)
+    print("=" * 60 + "\n", flush=True)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -461,8 +631,19 @@ def main():
     sub.add_parser("validate-notarization")
     sub.add_parser("free-disk-space")
     sub.add_parser("install-protoc-windows")
+    sub.add_parser("self-test", help="Validate ci.py commands parse correctly")
+
+    dr = sub.add_parser("dry-run-release", help="Local release dry-run (no push/sign/notarize)")
+    dr.add_argument("--target", default="aarch64-apple-darwin",
+                    help="Rust target triple (default: aarch64-apple-darwin)")
+    dr.add_argument("--skip-compile", action="store_true",
+                    help="Skip cargo build (use existing binaries)")
 
     args = p.parse_args()
+
+    global _CMD
+    _CMD = args.command
+
     commands = {
         "resolve-version": cmd_resolve_version,
         "verify-secrets": cmd_verify_secrets,
@@ -474,8 +655,34 @@ def main():
         "validate-notarization": cmd_validate_notarization,
         "free-disk-space": cmd_free_disk_space,
         "install-protoc-windows": cmd_install_protoc_windows,
+        "self-test": cmd_self_test,
+        "dry-run-release": cmd_dry_run_release,
     }
-    commands[args.command](args)
+
+    t0 = time.monotonic()
+    log(f"starting")
+    try:
+        commands[args.command](args)
+    except SystemExit:
+        raise  # preserve explicit exit codes
+    except subprocess.CalledProcessError as e:
+        elapsed = time.monotonic() - t0
+        error(f"Command failed (exit {e.returncode}): {' '.join(str(c) for c in e.cmd)}")
+        if e.stdout:
+            print(f"[{_CMD}] stdout:\n{e.stdout.strip()}", flush=True)
+        if e.stderr:
+            print(f"[{_CMD}] stderr:\n{e.stderr.strip()}", flush=True)
+        error(f"Failed after {elapsed:.1f}s")
+        sys.exit(e.returncode or 1)
+    except Exception as e:
+        elapsed = time.monotonic() - t0
+        error(f"{type(e).__name__}: {e}")
+        traceback.print_exc()
+        error(f"Failed after {elapsed:.1f}s")
+        sys.exit(1)
+
+    elapsed = time.monotonic() - t0
+    log(f"done ({elapsed:.1f}s)")
 
 
 if __name__ == "__main__":

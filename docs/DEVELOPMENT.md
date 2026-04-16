@@ -117,10 +117,38 @@ git tag vX.X.X
 git push --tags
 ```
 
-## Release (local)
+## Release
+
+### Local dry-run
+
+Test the full release pipeline locally without pushing or signing:
 
 ```bash
-act push
-bash release.sh --dry-run
-SKIP_UPLOAD=1 bash release.sh
+npm run ci:dry-run             # Full build + bundle + changelog
+npm run ci:dry-run:fast        # Skip compile (reuse existing binaries)
+```
+
+### On-demand CI build
+
+All release workflows support `workflow_dispatch` — trigger from GitHub Actions UI
+or CLI. On-demand runs upload artifacts (14-day retention) without touching Releases:
+
+```bash
+gh workflow run "Release - Mac"
+gh workflow run "Release — Linux"
+gh workflow run "Release - Windows"
+```
+
+### Tagged release
+
+```bash
+npm run bump          # Bump version + compile changelog
+npm run tag           # Create + push git tag
+# CI picks up the tag and publishes to GitHub Releases automatically
+```
+
+### CI script validation
+
+```bash
+npm run ci:test       # Verify ci.py commands + workflow references
 ```

@@ -96,6 +96,13 @@ if [ -n "$FRONTEND_CHANGED" ]; then
   fi
 fi
 
+# CI script self-test — catches broken commands before they hit CI
+CI_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^scripts/ci\.py$|^\.github/workflows/' || true)"
+if [ -n "$CI_CHANGED" ]; then
+  echo "🔎 Pre-push: CI script self-test"
+  python3 scripts/ci.py self-test
+fi
+
 RUST_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.rs$|^Cargo.toml$|^Cargo.lock$|^src-tauri/Cargo.toml$|^crates/.*/Cargo.toml$' || true)"
 if [ -n "$RUST_CHANGED" ]; then
   echo "🔎 Pre-push: Rust checks (changed crates)"
