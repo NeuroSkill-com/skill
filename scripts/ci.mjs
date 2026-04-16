@@ -25,10 +25,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync
 import { basename, join, dirname } from "path";
 import { tmpdir } from "os";
 import { createWriteStream } from "fs";
-import { get as httpsGet } from "https";
-import { pipeline } from "stream/promises";
-import { createReadStream, createWriteStream as cws } from "fs";
-import { glob } from "fs";
+import https from "https";
+import http from "http";
 
 // ── Globals ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +96,7 @@ function run(cmd, opts = {}) {
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const follow = (u) => {
-      const proto = u.startsWith("https") ? require("https") : require("http");
+      const proto = u.startsWith("https") ? https : http;
       proto.get(u, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           follow(res.headers.location);
