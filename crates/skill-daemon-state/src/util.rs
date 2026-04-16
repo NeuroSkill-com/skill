@@ -114,6 +114,14 @@ fn restrict_windows_acl(path: &Path) -> anyhow::Result<()> {
 // ── Token management ───────────────────────────────────────────────────────
 
 pub fn load_or_create_token() -> anyhow::Result<String> {
+    // Allow env-var override for E2E tests (isolated daemon instances).
+    if let Ok(token) = std::env::var("SKILL_DAEMON_TOKEN") {
+        if !token.is_empty() {
+            info!("using auth token from SKILL_DAEMON_TOKEN env var");
+            return Ok(token);
+        }
+    }
+
     let token_path = token_path()?;
 
     if token_path.exists() {

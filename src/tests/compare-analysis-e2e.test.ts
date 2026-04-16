@@ -3,14 +3,7 @@
 // Runs against the LIVE daemon (port 18445) with real session data.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  PORT,
-  isDaemonAlive,
-  readToken,
-  testBegin,
-  testEnd,
-  api as apiHelper,
-} from "./e2e-helpers";
+import { api as apiHelper, DEFAULT_PORT, isDaemonAlive, readToken, testBegin, testEnd } from "./e2e-helpers";
 
 let TOKEN = "";
 let canRun = false;
@@ -22,7 +15,13 @@ try {
 }
 
 // Mock Tauri invoke so http.ts can bootstrap
-const bootstrap = { port: PORT, token: TOKEN, compatible_protocol: true, daemon_version: "0.1.0", protocol_version: 1 };
+const bootstrap = {
+  port: DEFAULT_PORT,
+  token: TOKEN,
+  compatible_protocol: true,
+  daemon_version: "0.1.0",
+  protocol_version: 1,
+};
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => bootstrap) }));
 
 // Typed API helper bound to our token
@@ -41,8 +40,12 @@ const LARGE = { startUtc: 1776125671, endUtc: 1776160000, expectedMinEpochs: 500
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe.skipIf(!canRun)("compare analysis endpoints (live daemon)", () => {
-  beforeAll(async () => { await testBegin(TOKEN); });
-  afterAll(async () => { await testEnd(TOKEN); });
+  beforeAll(async () => {
+    await testBegin(TOKEN);
+  });
+  afterAll(async () => {
+    await testEnd(TOKEN);
+  });
 
   // ── /v1/analysis/metrics ────────────────────────────────────────────────
 

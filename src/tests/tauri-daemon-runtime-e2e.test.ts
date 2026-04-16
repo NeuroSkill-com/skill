@@ -1,26 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { type ChildProcess, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { hasDaemonBinary, type IsolatedDaemon, spawnDaemon } from "./e2e-helpers";
 
-const TEST_PORT = 18545;
-const BASE = `http://127.0.0.1:${TEST_PORT}`;
-const TOKEN_PATH = join(homedir(), "Library/Application Support/skill/daemon/auth.token");
-const DAEMON_BIN = "src-tauri/target/debug/skill-daemon";
-
-let canRun = false;
-try {
-  const { statSync } = await import("node:fs");
-  canRun = statSync(DAEMON_BIN).isFile();
-} catch {
-  canRun = false;
-}
+const canRun = hasDaemonBinary();
 
 let bootstrap = {
-  port: TEST_PORT,
+  port: 0,
   token: "",
   compatible_protocol: true,
   daemon_version: "",
@@ -35,39 +21,15 @@ const tauriInvoke = vi.fn(async (cmd: string) => {
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauriInvoke }));
 
 describe.skipIf(!canRun)("tauri runtime e2e via real daemon", () => {
-  let daemon: ChildProcess;
+  let d: IsolatedDaemon;
 
   beforeAll(async () => {
-    daemon = spawn(DAEMON_BIN, [], {
-      env: {
-        ...process.env,
-        SKILL_DAEMON_ADDR: `127.0.0.1:${TEST_PORT}`,
-        RUST_LOG: "error",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let ready = false;
-    for (let i = 0; i < 80; i++) {
-      try {
-        const r = await fetch(`${BASE}/healthz`, { signal: AbortSignal.timeout(200) });
-        if (r.ok) {
-          ready = true;
-          break;
-        }
-      } catch {
-        // not ready
-      }
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    if (!ready) throw new Error("Daemon did not become ready in 12s");
-
-    const token = readFileSync(TOKEN_PATH, "utf-8").trim();
-    bootstrap = { ...bootstrap, token };
+    d = await spawnDaemon();
+    bootstrap = { ...bootstrap, port: d.port, token: d.token };
   }, 30_000);
 
-  afterAll(() => {
-    daemon?.kill();
+  afterAll(async () => {
+    await d?.stop();
   });
 
   it("http.ts can talk to real daemon", async () => {

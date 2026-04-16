@@ -61,10 +61,16 @@ check_macos() {
 
   hdiutil attach "$dmg" -mountpoint "$mnt" -nobrowse >/dev/null
 
-  local app_dir daemon_bin app_bin
+  local app_dir app_bin daemon_bin
   app_dir="$mnt/NeuroSkill.app"
   app_bin="$app_dir/Contents/MacOS/NeuroSkill"
-  daemon_bin="$app_dir/Contents/MacOS/skill-daemon"
+
+  # Daemon may be a nested .app bundle or a flat binary
+  if [[ -f "$app_dir/Contents/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon" ]]; then
+    daemon_bin="$app_dir/Contents/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon"
+  else
+    daemon_bin="$app_dir/Contents/MacOS/skill-daemon"
+  fi
 
   [[ -f "$app_bin" ]] || fail "App binary missing in DMG: $app_bin"
   [[ -f "$daemon_bin" ]] || fail "Daemon sidecar missing in DMG: $daemon_bin"

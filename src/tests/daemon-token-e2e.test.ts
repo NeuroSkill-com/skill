@@ -1,72 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { type ChildProcess, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { baseUrl, hasDaemonBinary, type IsolatedDaemon, spawnDaemon } from "./e2e-helpers";
 
-const TEST_PORT = 18544; // Use a different port to avoid conflicts
-const BASE = `http://127.0.0.1:${TEST_PORT}`;
-const TOKEN_PATH = join(homedir(), "Library/Application Support/skill/daemon/auth.token");
-
-// Skip if daemon binary doesn't exist (CI without full build)
-const DAEMON_BIN = "src-tauri/target/debug/skill-daemon";
-let canRun = false;
-try {
-  const { statSync } = await import("node:fs");
-  canRun = statSync(DAEMON_BIN).isFile();
-} catch {
-  canRun = false;
-}
-
-async function api<T>(path: string, token: string, method = "GET", body?: unknown): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return resp.json() as Promise<T>;
-}
+const canRun = hasDaemonBinary();
 
 describe.skipIf(!canRun)("daemon token E2E", () => {
-  let daemon: ChildProcess;
+  let d: IsolatedDaemon;
   let token: string;
+  let BASE: string;
+
+  async function api<T>(path: string, tok: string, method = "GET", body?: unknown): Promise<T> {
+    const resp = await fetch(`${BASE}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return resp.json() as Promise<T>;
+  }
 
   beforeAll(async () => {
-    // Start daemon (binary must already be built)
-    daemon = spawn(DAEMON_BIN, [], {
-      env: {
-        ...process.env,
-        SKILL_DAEMON_ADDR: `127.0.0.1:${TEST_PORT}`,
-        RUST_LOG: "error",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    daemon.stderr?.on("data", (d: Buffer) => process.stderr.write(d));
-
-    // Wait for readiness
-    let ready = false;
-    for (let i = 0; i < 50; i++) {
-      try {
-        const r = await fetch(`${BASE}/healthz`, {
-          signal: AbortSignal.timeout(200),
-        });
-        if (r.ok) {
-          ready = true;
-          break;
-        }
-      } catch {
-        /* not ready */
-      }
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    if (!ready) throw new Error("Daemon did not become ready in 10s");
-
-    token = readFileSync(TOKEN_PATH, "utf-8").trim();
+    d = await spawnDaemon();
+    token = d.token;
+    BASE = baseUrl(d.port);
 
     // Clean up any leftover tokens from previous runs
     try {
@@ -97,7 +53,7 @@ describe.skipIf(!canRun)("daemon token E2E", () => {
     } catch {
       /* daemon already stopped */
     }
-    daemon?.kill();
+    await d?.stop();
   });
 
   it("healthz responds", async () => {

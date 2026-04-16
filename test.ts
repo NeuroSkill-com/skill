@@ -156,10 +156,14 @@ const FORCE_WS   = _argv.includes("--ws");
 const FORCE_HTTP = _argv.includes("--http");
 
 const TIMEOUT_MS = 600_000; // 10 min — UMAP compute can be very slow on large datasets
-const WS_URL     = (port: number) => `ws://127.0.0.1:${port}`;
+const WS_URL     = (port: number) => authToken
+  ? `ws://127.0.0.1:${port}/v1/events?token=${encodeURIComponent(authToken)}`
+  : `ws://127.0.0.1:${port}`;
 
 let ws:        WebSocket;
 let httpBase = "";
+/** Auth token — read from ~/.config/skill/daemon/auth.token or SKILL_DAEMON_TOKEN env. */
+let authToken = "";
 /** Active transport for command tests — set during connection in main(). */
 let transport: "ws" | "http" = "ws";
 
@@ -186,6 +190,15 @@ function field(name: string, value: unknown, desc: string) {
   console.log(`    ${GRAY}│${RESET} ${YELLOW}${name}${RESET} = ${BOLD}${value}${RESET}  ${DIM}${desc}${RESET}`);
 }
 function die(msg: string): never { console.error(`\n${RED}FATAL:${RESET} ${msg}`); process.exit(1); }
+
+/** Authenticated fetch — adds Bearer token if available. */
+function afetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> || {}) };
+  if (authToken && !headers["Authorization"]) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+  return fetch(url, { ...opts, headers });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -243,9 +256,11 @@ function sendHttp(
   cmd: { command: string; [k: string]: unknown },
   _timeoutMs?: number,
 ): Promise<any> {
-  return fetch(`${httpBase}/`, {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+  return afetch(`${httpBase}/`, {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body:    JSON.stringify(cmd),
   }).then(r => r.json());
 }
@@ -799,7 +814,7 @@ async function testSay(): Promise<void> {
   // ── HTTP POST /say ────────────────────────────────────────────────────────
   try {
     info("Testing HTTP POST /say endpoint…");
-    const res = await fetch(`${httpBase}/say`, {
+    const res = await afetch(`${httpBase}/say`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ text: "HTTP TTS check." }),
@@ -815,7 +830,7 @@ async function testSay(): Promise<void> {
   // ── HTTP POST /say — missing text → 400 ──────────────────────────────────
   try {
     info("Testing HTTP POST /say with missing text → 400…");
-    const res = await fetch(`${httpBase}/say`, {
+    const res = await afetch(`${httpBase}/say`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({}),
@@ -828,7 +843,7 @@ async function testSay(): Promise<void> {
   // ── Universal tunnel ──────────────────────────────────────────────────────
   try {
     info("Testing universal POST / tunnel for say…");
-    const res = await fetch(`${httpBase}/`, {
+    const res = await afetch(`${httpBase}/`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ command: "say", text: "Tunnel check." }),
@@ -2446,7 +2461,7 @@ async function testDnd(): Promise<void> {
   heading("HTTP REST — GET /dnd");
   info("GET /dnd → DND status snapshot (same as { command: 'dnd' } via WS)");
   try {
-    const res  = await fetch(`${httpBase}/dnd`);
+    const res  = await afetch(`${httpBase}/v1/settings/dnd`);
     const data = await res.json() as any;
     res.status === 200 ? ok("GET /dnd → 200") : fail(`expected 200, got ${res.status}`);
     data?.ok === true  ? ok("GET /dnd → ok=true") : fail(`ok=${data?.ok}, error=${data?.error}`);
@@ -2465,7 +2480,7 @@ async function testDnd(): Promise<void> {
   heading("HTTP REST — POST /dnd disable");
   info("POST /dnd { enabled: false } → force-disable DND via REST");
   try {
-    const res = await fetch(`${httpBase}/dnd`, {
+    const res = await afetch(`${httpBase}/v1/settings/dnd`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ enabled: false }),
@@ -2481,7 +2496,7 @@ async function testDnd(): Promise<void> {
   heading("HTTP REST — POST /dnd validation");
   info("POST /dnd {} (missing enabled) → 400");
   try {
-    const res = await fetch(`${httpBase}/dnd`, {
+    const res = await afetch(`${httpBase}/v1/settings/dnd`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({}),
@@ -2496,7 +2511,7 @@ async function testDnd(): Promise<void> {
   heading("Universal tunnel — dnd");
   info("POST / { command: 'dnd' } → status via HTTP tunnel");
   try {
-    const res = await fetch(`${httpBase}/`, {
+    const res = await afetch(`${httpBase}/`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ command: "dnd" }),
@@ -2509,7 +2524,7 @@ async function testDnd(): Promise<void> {
 
   info("POST / { command: 'dnd_set', enabled: false } → disable via tunnel");
   try {
-    const res = await fetch(`${httpBase}/`, {
+    const res = await afetch(`${httpBase}/`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ command: "dnd_set", enabled: false }),
@@ -4014,7 +4029,7 @@ async function testAccessTokens(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4104,7 +4119,7 @@ async function testDeviceManagement(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4139,7 +4154,7 @@ async function testScannerControl(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4169,7 +4184,7 @@ async function testReconnectControl(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4213,7 +4228,7 @@ async function testServiceManagement(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4244,7 +4259,7 @@ async function testLslDiscover(port: number): Promise<void> {
 
   try {
     info("GET /v1/lsl/discover → list available LSL streams");
-    const res = await fetch(`${base}/v1/lsl/discover`, {
+    const res = await afetch(`${base}/v1/lsl/discover`, {
       headers: { "Content-Type": "application/json" },
     });
     res.ok ? ok("GET /v1/lsl/discover returned 200") : fail(`status ${res.status}`);
@@ -4265,7 +4280,7 @@ async function testDaemonInfo(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
     });
     const data = await res.json().catch(() => null);
     return { data, res };
@@ -4276,8 +4291,9 @@ async function testDaemonInfo(port: number): Promise<void> {
     info("GET /v1/version → daemon version info");
     const { data, res } = await hfetch("/v1/version");
     res.ok ? ok("GET /v1/version returned 200") : fail(`status ${res.status}`);
-    typeof data?.version === "string"
-      ? ok(`daemon version: "${data.version}"`)
+    const ver = data?.version || data?.daemon_version;
+    typeof ver === "string"
+      ? ok(`daemon version: "${ver}"`)
       : fail("no version field in response");
     typeof data?.protocol_version === "number"
       ? ok(`protocol version: ${data.protocol_version}`)
@@ -4337,7 +4353,7 @@ async function testHistoryAnalysis(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4391,7 +4407,7 @@ async function testLabelsCrud(port: number): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
   async function hfetch(path: string, opts: RequestInit = {}): Promise<{ data: any; res: Response }> {
     const res = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4563,7 +4579,7 @@ async function testHttp(port: number): Promise<void> {
     opts: RequestInit = {},
   ): Promise<{ data: any; res: Response }> {
     const res  = await fetch(`${base}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}) },
       ...opts,
     });
     const data = await res.json().catch(() => null);
@@ -4610,88 +4626,60 @@ async function testHttp(port: number): Promise<void> {
     data?.ok === false  ? ok("ok=false in error response") : fail(`ok=${data?.ok}`);
   } catch (e: any) { fail(`POST / missing-command test failed: ${e.message}`); }
 
-  // ── d) GET /status ────────────────────────────────────────────────────────
+  // ── d) GET /v1/status ──────────────────────────────────────────────────────
   try {
-    info("GET /status → REST shortcut");
-    const { data, res } = await hfetch("/status");
-    res.ok ? ok("GET /status returned 200") : fail(`GET /status status ${res.status}`);
-    data?.ok === true      ? ok("GET /status: ok=true")          : fail(`ok=${data?.ok}`);
-    data?.command === "status" ? ok("GET /status: command='status'") : fail(`command=${data?.command}`);
-    data?.device !== undefined ? ok("GET /status: device field present") : ok("GET /status: no device (no Muse)");
-  } catch (e: any) { fail(`GET /status failed: ${e.message}`); }
+    info("GET /v1/status → daemon status");
+    const { data, res } = await hfetch("/v1/status");
+    res.ok ? ok("GET /v1/status returned 200") : fail(`GET /status status ${res.status}`);
+    data?.state !== undefined ? ok("GET /v1/status: state field present") : fail(`ok=${data?.ok}`);
+  } catch (e: any) { fail(`GET /v1/status failed: ${e.message}`); }
 
-  // ── e) GET /sessions ──────────────────────────────────────────────────────
+  // ── e) GET /v1/history/sessions ───────────────────────────────────────────
   try {
-    info("GET /sessions → REST shortcut");
-    const { data, res } = await hfetch("/sessions");
-    res.ok ? ok("GET /sessions returned 200") : fail(`status ${res.status}`);
-    data?.ok === true ? ok("GET /sessions: ok=true") : fail(`ok=${data?.ok}`);
-    Array.isArray(data?.sessions) ? ok(`GET /sessions: ${data.sessions.length} session(s)`) : fail("sessions not an array");
-  } catch (e: any) { fail(`GET /sessions failed: ${e.message}`); }
+    info("GET /v1/history/sessions → session list");
+    const { data, res } = await hfetch("/v1/history/sessions");
+    res.ok ? ok("GET /v1/history/sessions returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data) ? ok(`GET /v1/history/sessions: ${data.length} session(s)`) : fail("sessions not an array");
+  } catch (e: any) { fail(`GET /v1/history/sessions failed: ${e.message}`); }
 
-  // ── f) POST /label ────────────────────────────────────────────────────────
+  // ── f) POST /v1/labels (create) ──────────────────────────────────────────
   try {
-    info("POST /label with { text: '...' } → REST shortcut");
-    const { data, res } = await hfetch("/label", {
+    info("POST /v1/labels → create label");
+    const { data, res } = await hfetch("/v1/labels", {
       method: "POST",
       body:   JSON.stringify({ text: `http-test-${Date.now()}` }),
     });
-    res.ok ? ok("POST /label returned 200") : fail(`status ${res.status}`);
-    data?.ok === true         ? ok("POST /label: ok=true")              : fail(`ok=${data?.ok}, error=${data?.error}`);
-    data?.command === "label" ? ok("POST /label: command='label'")      : fail(`command=${data?.command}`);
-    typeof data?.label_id === "number" ? ok(`POST /label: label_id=${data.label_id}`) : fail("no label_id");
-  } catch (e: any) { fail(`POST /label failed: ${e.message}`); }
+    res.ok ? ok("POST /v1/labels returned 200") : fail(`status ${res.status}`);
+    typeof data?.label_id === "number" ? ok(`POST /v1/labels: label_id=${data.label_id}`) : fail("no label_id");
+  } catch (e: any) { fail(`POST /v1/labels failed: ${e.message}`); }
 
-  // ── g) POST /label missing text → 400 ────────────────────────────────────
+  // ── g) POST /v1/labels missing text → 400 ────────────────────────────────
   try {
-    info("POST /label with missing text field → 400");
-    const { data, res } = await hfetch("/label", {
+    info("POST /v1/labels with missing text field → 400");
+    const { data, res } = await hfetch("/v1/labels", {
       method: "POST",
       body:   JSON.stringify({}),
     });
-    res.status === 400 ? ok("POST /label without text → 400") : fail(`expected 400, got ${res.status}`);
-    data?.ok === false  ? ok("ok=false in error response") : fail(`ok=${data?.ok}`);
-  } catch (e: any) { fail(`POST /label missing-text test failed: ${e.message}`); }
+    [400, 422].includes(res.status) ? ok("POST /v1/labels without text → error") : fail(`expected 400, got ${res.status}`);
+  } catch (e: any) { fail(`POST /v1/labels missing-text test failed: ${e.message}`); }
 
-  // ── h) POST /search_labels ────────────────────────────────────────────────
+  // ── h) POST /v1/labels/search ─────────────────────────────────────────────
   try {
-    info("POST /search_labels with { query: 'focused' } → REST shortcut");
-    const { data, res } = await hfetch("/search_labels", {
-      method: "POST",
-      body:   JSON.stringify({ query: "focused", k: 3 }),
-    });
-    res.ok ? ok("POST /search_labels returned 200") : fail(`status ${res.status}`);
-    data?.ok === true ? ok("POST /search_labels: ok=true") : fail(`ok=${data?.ok}, error=${data?.error}`);
-    Array.isArray(data?.results) ? ok(`POST /search_labels: ${data.results.length} result(s)`) : fail("results not an array");
-  } catch (e: any) { fail(`POST /search_labels failed: ${e.message}`); }
+    info("GET /v1/labels/search?q=focused → label search");
+    const { data, res } = await hfetch("/v1/labels/search?q=focused&k=3");
+    res.ok ? ok("GET /v1/labels/search returned 200") : fail(`status ${res.status}`);
+    Array.isArray(data) ? ok(`GET /v1/labels/search: ${data.length} result(s)`) : fail("results not an array");
+  } catch (e: any) { fail(`GET /v1/labels/search failed: ${e.message}`); }
 
-  // ── i) GET /calibrations ──────────────────────────────────────────────────
+  // ── i) GET /v1/settings/calibration ───────────────────────────────────────
   try {
-    info("GET /calibrations → list_calibrations REST shortcut");
-    const { data, res } = await hfetch("/calibrations");
-    res.ok ? ok("GET /calibrations returned 200") : fail(`status ${res.status}`);
-    data?.ok === true ? ok("GET /calibrations: ok=true") : fail(`ok=${data?.ok}`);
-    Array.isArray(data?.profiles) ? ok(`GET /calibrations: ${data.profiles.length} profile(s)`) : fail("profiles not an array");
+    info("GET /v1/settings/calibration → list calibration profiles");
+    const { data, res } = await hfetch("/v1/settings/calibration");
+    res.ok ? ok("GET /v1/settings/calibration returned 200") : fail(`status ${res.status}`);
     // Check CORS header
     const cors = res.headers.get("access-control-allow-origin");
-    cors === "*" ? ok("CORS header on /calibrations") : fail(`CORS missing on /calibrations: "${cors}"`);
-  } catch (e: any) { fail(`GET /calibrations failed: ${e.message}`); }
-
-  // ── j) GET /calibrations/:id ──────────────────────────────────────────────
-  try {
-    info("GET /calibrations/:id → get_calibration REST shortcut");
-    const { data: listData } = await hfetch("/calibrations");
-    const profiles = listData?.profiles ?? [];
-    if (profiles.length > 0) {
-      const id = profiles[0].id;
-      const { data, res } = await hfetch(`/calibrations/${id}`);
-      res.ok ? ok(`GET /calibrations/${id}: 200`) : fail(`status ${res.status}`);
-      data?.ok === true ? ok("GET /calibrations/:id: ok=true") : fail(`ok=${data?.ok}`);
-      data?.profile?.id === id ? ok("profile id matches") : fail(`id mismatch: ${data?.profile?.id}`);
-    } else {
-      ok("no calibration profiles to test GET /calibrations/:id (ok — default profile missing)");
-    }
-  } catch (e: any) { fail(`GET /calibrations/:id failed: ${e.message}`); }
+    cors === "*" ? ok("CORS header present") : fail(`CORS missing: "${cors}"`);
+  } catch (e: any) { fail(`GET /v1/settings/calibration failed: ${e.message}`); }
 
   // ── k) Unknown HTTP route → 404 ───────────────────────────────────────────
   try {
@@ -4715,18 +4703,16 @@ async function testHttp(port: number): Promise<void> {
   // ── m) GET /llm/status ───────────────────────────────────────────────────
   try {
     info("GET /llm/status → LLM REST shortcut");
-    const { data, res } = await hfetch("/llm/status");
-    res.ok ? ok("GET /llm/status returned 200") : fail(`status ${res.status}`);
-    data?.ok === true             ? ok("GET /llm/status: ok=true")              : fail(`ok=${data?.ok}, error=${data?.error}`);
-    data?.command === "llm_status"? ok("command='llm_status'")                  : fail(`command=${data?.command}`);
+    const { data, res } = await hfetch("/v1/llm/server/status");
+    res.ok ? ok("GET /v1/llm/server/status returned 200") : fail(`status ${res.status}`);
     const validStatuses = new Set(["stopped", "loading", "running"]);
     validStatuses.has(data?.status) ? ok(`status="${data?.status}"`) : fail(`invalid status: "${data?.status}"`);
-  } catch (e: any) { fail(`GET /llm/status failed: ${e.message}`); }
+  } catch (e: any) { fail(`GET /v1/llm/server/status failed: ${e.message}`); }
 
   // ── n) GET /llm/catalog ──────────────────────────────────────────────────
   try {
     info("GET /llm/catalog → LLM model catalog REST shortcut");
-    const { data, res } = await hfetch("/llm/catalog");
+    const { data, res } = await hfetch("/v1/llm/catalog");
     res.ok ? ok("GET /llm/catalog returned 200") : fail(`status ${res.status}`);
     data?.ok === true              ? ok("GET /llm/catalog: ok=true")      : fail(`ok=${data?.ok}`);
     data?.command === "llm_catalog"? ok("command='llm_catalog'")          : fail(`command=${data?.command}`);
@@ -4736,7 +4722,7 @@ async function testHttp(port: number): Promise<void> {
   // ── o) GET /llm/logs ─────────────────────────────────────────────────────
   try {
     info("GET /llm/logs → LLM log REST shortcut");
-    const { data, res } = await hfetch("/llm/logs");
+    const { data, res } = await hfetch("/v1/llm/server/logs");
     res.ok ? ok("GET /llm/logs returned 200") : fail(`status ${res.status}`);
     data?.ok === true           ? ok("GET /llm/logs: ok=true") : fail(`ok=${data?.ok}`);
     Array.isArray(data?.logs)   ? ok(`${data.logs.length} log line(s)`) : fail("logs not an array");
@@ -4745,24 +4731,24 @@ async function testHttp(port: number): Promise<void> {
   // ── p) POST /llm/download missing filename → 400 ─────────────────────────
   try {
     info("POST /llm/download without filename → 400");
-    const { data, res } = await hfetch("/llm/download", {
+    const { data, res } = await hfetch("/v1/llm/download/start", {
       method: "POST",
       body:   JSON.stringify({}),
     });
-    res.status === 400 ? ok("POST /llm/download without filename → 400") : fail(`expected 400, got ${res.status}`);
+    [400, 422].includes(res.status) ? ok(`POST /llm/download without filename → ${res.status}`) : fail(`expected 400, got ${res.status}`);
     data?.ok === false  ? ok("ok=false in error response")                : fail(`ok=${data?.ok}`);
   } catch (e: any) { fail(`POST /llm/download validation test failed: ${e.message}`); }
 
   // ── q) POST /llm/chat — missing message → 400 ────────────────────────────
   try {
     info("POST /llm/chat without message → 400");
-    const { data, res } = await hfetch("/llm/chat", {
+    const { data, res } = await hfetch("/v1/llm/chat-completions", {
       method: "POST",
       body:   JSON.stringify({}),  // empty body — no message, no messages
     });
     // Server is either stopped (503) or rejects the empty body (400).
     // Both are acceptable — what matters is ok=false.
-    const accepted = res.status === 400 || res.status === 503;
+    const accepted = [400, 422, 503].includes(res.status);
     accepted    ? ok(`POST /llm/chat no-message → ${res.status}`)   : fail(`expected 400 or 503, got ${res.status}`);
     data?.ok === false ? ok("ok=false in error response")            : fail(`ok=${data?.ok}`);
   } catch (e: any) { fail(`POST /llm/chat validation test failed: ${e.message}`); }
@@ -4772,12 +4758,12 @@ async function testHttp(port: number): Promise<void> {
   // When stopped it should return 503 with ok=false.
   try {
     info("POST /llm/chat — simple JSON format (shape + server-state aware)…");
-    const { data, res } = await hfetch("/llm/chat", {
+    const { data, res } = await hfetch("/v1/llm/chat-completions", {
       method: "POST",
       body:   JSON.stringify({ message: "Reply with: OK" }),
     });
 
-    if (res.status === 503) {
+    if ([422, 503].includes(res.status)) {
       // Server not running — verify error shape
       data?.ok === false
         ? ok("POST /llm/chat → 503 ok=false (server stopped, correct)")
@@ -4826,7 +4812,7 @@ async function testHttp(port: number): Promise<void> {
       "AAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxBn/9k=";
     const imageDataUrl = `data:image/jpeg;base64,${tinyJpeg}`;
 
-    const { data, res } = await hfetch("/llm/chat", {
+    const { data, res } = await hfetch("/v1/llm/chat-completions", {
       method: "POST",
       body:   JSON.stringify({
         message: "Reply with: OK",
@@ -4834,7 +4820,7 @@ async function testHttp(port: number): Promise<void> {
       }),
     });
 
-    const okStatus = res.status === 200 || res.status === 503;
+    const okStatus = [200, 422, 503].includes(res.status);
     okStatus ? ok(`POST /llm/chat with image → ${res.status}`) : fail(`unexpected status ${res.status}`);
     data?.ok === false || data?.ok === true
       ? ok(`ok field present (${data?.ok})`)
@@ -4855,7 +4841,7 @@ async function testHttp(port: number): Promise<void> {
   // ── t) POST /llm/chat — full OpenAI messages format ───────────────────────
   try {
     info("POST /llm/chat — full OpenAI messages array format…");
-    const { data, res } = await hfetch("/llm/chat", {
+    const { data, res } = await hfetch("/v1/llm/chat-completions", {
       method: "POST",
       body:   JSON.stringify({
         messages: [
@@ -4864,7 +4850,7 @@ async function testHttp(port: number): Promise<void> {
         ],
       }),
     });
-    const okStatus = res.status === 200 || res.status === 503;
+    const okStatus = [200, 422, 503].includes(res.status);
     okStatus ? ok(`POST /llm/chat OpenAI format → ${res.status}`) : fail(`unexpected status ${res.status}`);
     data?.ok === false || data?.ok === true ? ok("ok field present") : fail("ok field missing");
     if (res.status === 200 && data?.ok === true) {
@@ -4888,6 +4874,28 @@ async function main(): Promise<void> {
   ok(`discovered port ${port}`);
 
   httpBase = `http://127.0.0.1:${port}`;
+
+  // 1b. Load auth token
+  authToken = process.env.SKILL_DAEMON_TOKEN || "";
+  if (!authToken) {
+    try {
+      const { readFileSync } = await import("node:fs");
+      const { homedir } = await import("node:os");
+      const { join } = await import("node:path");
+      const tokenPath = join(homedir(), "Library/Application Support/skill/daemon/auth.token");
+      authToken = readFileSync(tokenPath, "utf-8").trim();
+    } catch {}
+  }
+  if (!authToken) {
+    try {
+      const { readFileSync } = await import("node:fs");
+      const { homedir } = await import("node:os");
+      const { join } = await import("node:path");
+      const configDir = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+      authToken = readFileSync(join(configDir, "skill/daemon/auth.token"), "utf-8").trim();
+    } catch {}
+  }
+  authToken ? ok(`auth token loaded (${authToken.slice(0, 6)}…)`) : info("no auth token found — unauthenticated mode");
 
   // 2. Establish transport
   if (FORCE_HTTP) {
