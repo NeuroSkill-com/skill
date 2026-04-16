@@ -24,6 +24,8 @@ use skill_settings::{HookRule, LslPairedStream};
 #[cfg(feature = "llm")]
 use skill_llm::{LlmConfig, LlmLogBuffer, LlmStateCell};
 
+use crate::reconnect_state::ReconnectState;
+use crate::session_handle::SessionHandle;
 use crate::text_embedder::SharedTextEmbedder;
 use crate::tracker::DaemonTracker;
 use skill_label_index::LabelIndexState;
@@ -91,7 +93,7 @@ pub struct AppState {
     #[cfg(feature = "llm")]
     pub llm_state_cell: LlmStateCell,
     /// Active OpenBCI session handle (cancel sender).
-    pub session_handle: Arc<Mutex<Option<crate::session_runner::SessionHandle>>>,
+    pub session_handle: Arc<Mutex<Option<SessionHandle>>>,
     /// Shared EXG model status (download progress, encoder state, etc.).
     pub exg_model_status: Arc<Mutex<skill_eeg::eeg_model_config::EegModelStatus>>,
     /// Cancel flag for the EXG weights download thread.
@@ -102,7 +104,7 @@ pub struct AppState {
     /// Daemon-owned HNSW indices for label search (text, context, EEG).
     pub label_index: Arc<LabelIndexState>,
     /// Reconnect state machine (daemon-authoritative).
-    pub reconnect: Arc<Mutex<crate::reconnect::ReconnectState>>,
+    pub reconnect: Arc<Mutex<ReconnectState>>,
     /// Shared text embedder (nomic-embed-text-v1.5) used for labels, hooks,
     /// screenshot OCR, and screenshot search.
     pub text_embedder: SharedTextEmbedder,
@@ -192,7 +194,7 @@ impl AppState {
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_cancel: Arc::new(AtomicBool::new(false)),
             label_index: Arc::new(LabelIndexState::new()),
-            reconnect: Arc::new(Mutex::new(crate::reconnect::ReconnectState::default())),
+            reconnect: Arc::new(Mutex::new(ReconnectState::default())),
             text_embedder: SharedTextEmbedder::new(),
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
         }

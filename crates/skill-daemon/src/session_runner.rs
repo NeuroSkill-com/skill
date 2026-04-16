@@ -16,16 +16,12 @@ use skill_devices::openbci::board::Board;
 use skill_devices::session::openbci::OpenBciAdapter;
 use skill_devices::session::DeviceInfo;
 use skill_settings::OpenBciConfig;
-use tokio::sync::oneshot;
 use tracing::info;
 
 #[cfg(target_os = "windows")]
 use tracing::warn;
 
-/// Handle returned to the caller so a session can be cancelled.
-pub struct SessionHandle {
-    pub cancel_tx: oneshot::Sender<()>,
-}
+pub use skill_daemon_state::SessionHandle;
 
 pub(crate) fn create_and_start_board(config: &OpenBciConfig) -> anyhow::Result<(OpenBciAdapter, Box<dyn Board>)> {
     use skill_devices::openbci::board::{cyton::CytonBoard, cyton_daisy::CytonDaisyBoard};

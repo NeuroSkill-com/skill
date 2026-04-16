@@ -8,31 +8,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
 use tracing::info;
 
 use crate::state::AppState;
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-/// Maximum number of automatic reconnect attempts before giving up.
-/// 12 attempts ≈ 51 seconds of total backoff.
-pub const MAX_RETRY_ATTEMPTS: u32 = 12;
+pub use skill_daemon_state::reconnect_state::{ReconnectState, MAX_RETRY_ATTEMPTS};
 
 /// Continuous reconnect cadence (seconds) used by the auto-reconnect loop.
 const AUTO_RECONNECT_CADENCE_SECS: u32 = 3;
-
-// ── Reconnect state ─────────────────────────────────────────────────────────
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct ReconnectState {
-    /// Whether auto-reconnect is enabled.
-    pub pending: bool,
-    /// Current retry attempt number.
-    pub attempt: u32,
-    /// Countdown seconds until next retry.
-    pub countdown: u32,
-}
 
 // ── Pure decision logic ─────────────────────────────────────────────────────
 

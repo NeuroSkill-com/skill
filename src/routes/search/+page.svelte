@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
+import { openSettingsTab } from "$lib/navigation";
 import { generateUmapPlaceholder } from "$lib/compare-types";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -1813,10 +1814,17 @@ useWindowTitle("window.title.search");
                   total: String(ixReembedNeeded.total),
                 })}
               </p>
-              <div class="flex gap-2 mt-1">
+              <div class="flex items-center gap-2 mt-1">
                 <Button size="sm" onclick={doIxReembed} disabled={ixReembedding} class="text-[0.62rem] h-7 px-3">
                   {ixReembedding ? t("labels.reindex.running") : t("labels.reindex.btn")}
                 </Button>
+                <button
+                  type="button"
+                  onclick={() => openSettingsTab("embeddings", "embeddings.reembed")}
+                  class="text-[0.58rem] text-amber-600/60 dark:text-amber-400/60 hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-2 transition-colors"
+                >
+                  {t("search.reembedOpenSettings")}
+                </button>
               </div>
               {#if ixReembedDone}
                 <p class="text-[0.6rem] {ixReembedDone.includes('failed') ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">{ixReembedDone}</p>

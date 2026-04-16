@@ -3,7 +3,6 @@
 #![allow(clippy::needless_return)]
 
 mod activity;
-mod auth;
 mod auth_middleware;
 pub(crate) mod background;
 pub(crate) mod cmd_dispatch;
@@ -17,13 +16,18 @@ mod scanner;
 mod service_installer;
 pub(crate) mod session;
 pub(crate) mod session_runner;
-mod state;
-pub(crate) mod text_embedder;
-mod tracker;
+
+// Re-export from skill-daemon-state for internal use via `crate::` paths
+pub(crate) use skill_daemon_state::auth;
+pub(crate) use skill_daemon_state::state;
+pub(crate) use skill_daemon_state::text_embedder;
+// tracker is accessed via skill_daemon_state::tracker where needed
+// Note: util is a local module that re-exports from skill_daemon_state::util
+// plus adds daemon-specific functions (spawn_session_for_target)
 pub(crate) mod util;
 
-use state::AppState;
-use util::load_or_create_token;
+use skill_daemon_state::util::load_or_create_token;
+use skill_daemon_state::AppState;
 
 use std::{net::SocketAddr, path::PathBuf};
 

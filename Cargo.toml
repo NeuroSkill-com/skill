@@ -47,6 +47,8 @@ members = [
     "crates/iroh_test_client",
     "crates/iroh-example-client",
     "crates/skill-daemon-common",
+    "crates/skill-daemon-state",
+    "crates/skill-daemon-routes",
     "crates/skill-daemon",
 ]
 

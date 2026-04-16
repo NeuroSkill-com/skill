@@ -12197,6 +12197,7 @@ dependencies = [
  "skill-commands",
  "skill-constants",
  "skill-daemon-common",
+ "skill-daemon-state",
  "skill-data",
  "skill-devices",
  "skill-eeg",
@@ -12241,6 +12242,42 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "skill-daemon-routes"
+version = "0.1.0"
+dependencies = [
+ "skill-daemon-state",
+ "skill-llm",
+]
+
+[[package]]
+name = "skill-daemon-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "dirs",
+ "fastembed",
+ "hex",
+ "rand 0.10.1",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "skill-constants",
+ "skill-daemon-common",
+ "skill-devices",
+ "skill-eeg",
+ "skill-iroh",
+ "skill-label-index",
+ "skill-llm",
+ "skill-lsl",
+ "skill-settings",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

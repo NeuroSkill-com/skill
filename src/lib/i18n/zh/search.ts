@@ -56,6 +56,7 @@ const search: Record<string, string> = {
   "search.noResults": "在 {start} – {end} 中未找到嵌入",
   "search.reembedDesc":
     "{total} 个标签中有 {stale} 个使用旧的嵌入模型，无法被搜索到。重新嵌入即可修复。",
+  "search.reembedOpenSettings": "打开嵌入设置",
   "search.daysSearched": "已搜索天数：{days}",
   "search.query": "查询",
   "search.prev": "← 上一页",

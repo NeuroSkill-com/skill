@@ -1992,6 +1992,7 @@ export type TranslationKey =
   | "search.pageOf"
   | "search.prev"
   | "search.reembedDesc"
+  | "search.reembedOpenSettings"
   | "search.queriesRange"
   | "search.query"
   | "search.querySummary"

@@ -63,6 +63,7 @@ hf-hub = "0.5"
 sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 skill-daemon-common = { path = "../skill-daemon-common" }
+skill-daemon-state  = { path = "../skill-daemon-state" }
 skill-lsl           = { path = "../skill-lsl" }
 skill-devices       = { path = "../skill-devices" }
 skill-data          = { path = "../skill-data", features = ["parquet"] }

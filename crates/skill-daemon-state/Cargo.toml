@@ -1,0 +1,40 @@
+[package]
+name = "skill-daemon-state"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Shared state types for skill-daemon — extracted for parallel compilation"
+
+[features]
+default = ["llm"]
+llm = ["skill-llm/llm"]
+
+[dependencies]
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+base64     = { workspace = true }
+dirs       = "6"
+fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+hex        = "0.4"
+rand       = "0.10"
+serde      = { workspace = true }
+serde_json = { workspace = true }
+sha2       = "0.10"
+tokio      = { version = "1", features = ["sync", "rt-multi-thread", "macros", "time"] }
+tracing    = "0.1"
+
+skill-constants     = { path = "../skill-constants" }
+skill-daemon-common = { path = "../skill-daemon-common" }
+skill-devices       = { path = "../skill-devices" }
+skill-eeg           = { path = "../skill-eeg" }
+skill-iroh          = { path = "../skill-iroh" }
+skill-label-index   = { path = "../skill-label-index" }
+skill-llm           = { path = "../skill-llm" }
+skill-lsl           = { path = "../skill-lsl" }
+skill-settings      = { path = "../skill-settings" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

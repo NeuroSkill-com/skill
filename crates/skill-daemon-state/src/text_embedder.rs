@@ -12,14 +12,14 @@ use std::sync::{Arc, Mutex, Once};
 /// The ~130 MB ONNX model is loaded **lazily** on first use (not at daemon
 /// startup) so the GPU isn't hammered during init.
 #[derive(Clone)]
-pub(crate) struct SharedTextEmbedder {
+pub struct SharedTextEmbedder {
     inner: Arc<Mutex<Option<fastembed::TextEmbedding>>>,
     init: Arc<Once>,
 }
 
 impl SharedTextEmbedder {
     /// Create a new handle **without** loading the model yet.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(None)),
             init: Arc::new(Once::new()),
@@ -53,7 +53,7 @@ impl SharedTextEmbedder {
 
     /// Embed a single text string.  Returns `None` if the model is not loaded
     /// or embedding fails.
-    pub(crate) fn embed(&self, text: &str) -> Option<Vec<f32>> {
+    pub fn embed(&self, text: &str) -> Option<Vec<f32>> {
         self.ensure_loaded();
         let mut guard = self.inner.lock().ok()?;
         let model = guard.as_mut()?;
@@ -66,7 +66,7 @@ impl SharedTextEmbedder {
     }
 
     /// Embed multiple texts in a single batch.
-    pub(crate) fn embed_batch(&self, texts: Vec<&str>) -> Option<Vec<Vec<f32>>> {
+    pub fn embed_batch(&self, texts: Vec<&str>) -> Option<Vec<Vec<f32>>> {
         self.ensure_loaded();
         let mut guard = self.inner.lock().ok()?;
         let model = guard.as_mut()?;
