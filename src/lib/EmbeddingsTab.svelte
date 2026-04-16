@@ -99,17 +99,41 @@ async function load() {
   // The daemon currently uses nomic-embed-text-v1.5 (hardcoded).
   // Switching requires re-embedding all labels.
   const knownModels: ModelInfo[] = [
-    { code: "nomic-ai/nomic-embed-text-v1.5", dim: 768, description: "Nomic Embed Text v1.5 — high-quality 768d, recommended" },
-    { code: "nomic-ai/nomic-embed-text-v1.5-Q", dim: 768, description: "Nomic Embed Text v1.5 quantized — faster, slightly less accurate" },
+    {
+      code: "nomic-ai/nomic-embed-text-v1.5",
+      dim: 768,
+      description: "Nomic Embed Text v1.5 — high-quality 768d, recommended",
+    },
+    {
+      code: "nomic-ai/nomic-embed-text-v1.5-Q",
+      dim: 768,
+      description: "Nomic Embed Text v1.5 quantized — faster, slightly less accurate",
+    },
     { code: "nomic-ai/nomic-embed-text-v1", dim: 768, description: "Nomic Embed Text v1 — previous generation 768d" },
     { code: "BAAI/bge-small-en-v1.5", dim: 384, description: "BGE Small EN v1.5 — fast, compact 384d" },
     { code: "BAAI/bge-small-en-v1.5-Q", dim: 384, description: "BGE Small EN v1.5 quantized — fastest, 384d" },
     { code: "BAAI/bge-base-en-v1.5", dim: 768, description: "BGE Base EN v1.5 — balanced 768d" },
     { code: "BAAI/bge-large-en-v1.5", dim: 1024, description: "BGE Large EN v1.5 — highest quality 1024d" },
-    { code: "sentence-transformers/all-MiniLM-L6-v2", dim: 384, description: "All-MiniLM-L6-v2 — lightweight 384d, good for general use" },
-    { code: "sentence-transformers/all-MiniLM-L12-v2", dim: 384, description: "All-MiniLM-L12-v2 — deeper 384d variant" },
-    { code: "sentence-transformers/all-mpnet-base-v2", dim: 768, description: "MPNet Base v2 — strong 768d general-purpose" },
-    { code: "sentence-transformers/paraphrase-MiniLM-L12-v2", dim: 384, description: "Paraphrase MiniLM — 384d, good for semantic similarity" },
+    {
+      code: "sentence-transformers/all-MiniLM-L6-v2",
+      dim: 384,
+      description: "All-MiniLM-L6-v2 — lightweight 384d, good for general use",
+    },
+    {
+      code: "sentence-transformers/all-MiniLM-L12-v2",
+      dim: 384,
+      description: "All-MiniLM-L12-v2 — deeper 384d variant",
+    },
+    {
+      code: "sentence-transformers/all-mpnet-base-v2",
+      dim: 768,
+      description: "MPNet Base v2 — strong 768d general-purpose",
+    },
+    {
+      code: "sentence-transformers/paraphrase-MiniLM-L12-v2",
+      dim: 384,
+      description: "Paraphrase MiniLM — 384d, good for semantic similarity",
+    },
     { code: "intfloat/multilingual-e5-small", dim: 384, description: "Multilingual E5 Small — 384d, 100+ languages" },
     { code: "intfloat/multilingual-e5-base", dim: 768, description: "Multilingual E5 Base — 768d, 100+ languages" },
     { code: "mixedbread-ai/mxbai-embed-large-v1", dim: 1024, description: "MxBAI Embed Large — top-tier 1024d" },
@@ -140,10 +164,9 @@ async function load() {
 async function applyModel() {
   saving = true;
   try {
-    const r = await daemonInvoke<{ ok: boolean; model?: string; error?: string }>(
-      "set_embedding_model",
-      { model: currentCode },
-    );
+    const r = await daemonInvoke<{ ok: boolean; model?: string; error?: string }>("set_embedding_model", {
+      model: currentCode,
+    });
     if (r.ok) {
       addToast("success", t("embeddings.modelApplied"), currentCode, 3000);
       staleCount = 0;
