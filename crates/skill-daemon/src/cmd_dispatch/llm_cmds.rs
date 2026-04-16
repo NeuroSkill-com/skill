@@ -390,8 +390,8 @@ pub(super) async fn cmd_llm_logs(state: &AppState) -> Result<Value, String> {
 
     #[cfg(not(feature = "llm"))]
     {
-        let logs = state.llm_logs.lock().map(|g| g.clone()).unwrap_or_default();
-        Ok(json!({ "logs": logs }))
+        let _ = state;
+        Ok(json!({ "logs": [] }))
     }
 }
 

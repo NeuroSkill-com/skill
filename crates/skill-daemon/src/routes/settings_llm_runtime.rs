@@ -349,20 +349,13 @@ pub(crate) async fn llm_server_status_impl(State(state): State<AppState>) -> Jso
 
     #[cfg(not(feature = "llm"))]
     {
-        let status = state
-            .llm_status
-            .lock()
-            .map(|g| g.clone())
-            .unwrap_or_else(|_| "stopped".into());
-        let model_name = state.llm_model_name.lock().map(|g| g.clone()).unwrap_or_default();
-        let supports_vision = state.llm_mmproj_name.lock().map(|g| g.is_some()).unwrap_or(false);
-        let supports_tools = status == "running";
+        let _ = state;
         Json(serde_json::json!({
-            "status": status,
-            "model_name": model_name,
-            "n_ctx": if supports_tools { 8192 } else { 0 },
-            "supports_vision": supports_vision,
-            "supports_tools": supports_tools,
+            "status": "stopped",
+            "model_name": "",
+            "n_ctx": 0,
+            "supports_vision": false,
+            "supports_tools": false,
             "start_error": serde_json::Value::Null
         }))
     }
@@ -381,7 +374,8 @@ pub(crate) async fn llm_server_logs_impl(State(state): State<AppState>) -> Json<
 
     #[cfg(not(feature = "llm"))]
     {
-        Json(state.llm_logs.lock().map(|g| g.clone()).unwrap_or_default())
+        let _ = state;
+        Json(Vec::<serde_json::Value>::new())
     }
 }
 
