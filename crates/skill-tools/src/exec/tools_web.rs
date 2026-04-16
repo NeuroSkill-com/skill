@@ -162,7 +162,7 @@ fn build_compact_search_response(
             (i, search::score_rendered_text(text))
         })
         .collect();
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     // Indices of the best 2 rendered results (score > 30).
     let best_rendered: std::collections::HashSet<usize> = scored

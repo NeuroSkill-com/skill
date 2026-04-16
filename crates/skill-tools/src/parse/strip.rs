@@ -237,12 +237,10 @@ fn find_unclosed_brace(content: &str, open: u8, close: u8) -> Option<(usize, usi
                 }
                 depth += 1;
             }
-            b if b == close => {
-                if depth > 0 {
-                    depth -= 1;
-                    if depth == 0 {
-                        start = None;
-                    }
+            b if b == close && depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    start = None;
                 }
             }
             _ => {}
