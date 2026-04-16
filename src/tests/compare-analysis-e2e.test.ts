@@ -2,25 +2,21 @@
 // End-to-end tests for the compare window's analysis endpoints.
 // Runs against the LIVE daemon (port 18445) with real session data.
 
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
-
-// ── Live daemon config ─────────────────────────────────────────────────────
-// The daemon is already running (started by the Tauri app).
-const PORT = 18445;
-const BASE = `http://127.0.0.1:${PORT}`;
-const TOKEN_PATH = join(homedir(), "Library/Application Support/skill/daemon/auth.token");
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  PORT,
+  isDaemonAlive,
+  readToken,
+  testBegin,
+  testEnd,
+  api as apiHelper,
+} from "./e2e-helpers";
 
 let TOKEN = "";
 let canRun = false;
 try {
-  const r = await fetch(`${BASE}/healthz`, { signal: AbortSignal.timeout(500) });
-  if (r.ok) {
-    TOKEN = readFileSync(TOKEN_PATH, "utf-8").trim();
-    canRun = true;
-  }
+  canRun = await isDaemonAlive();
+  if (canRun) TOKEN = readToken();
 } catch {
   canRun = false;
 }
@@ -29,17 +25,9 @@ try {
 const bootstrap = { port: PORT, token: TOKEN, compatible_protocol: true, daemon_version: "0.1.0", protocol_version: 1 };
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => bootstrap) }));
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
+// Typed API helper bound to our token
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}: ${await resp.text()}`);
-  return resp.json() as Promise<T>;
+  return apiHelper<T>(TOKEN, path, method, body);
 }
 
 // ── Real session ranges from the local database ──────────────────────────────
@@ -53,6 +41,9 @@ const LARGE = { startUtc: 1776125671, endUtc: 1776160000, expectedMinEpochs: 500
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe.skipIf(!canRun)("compare analysis endpoints (live daemon)", () => {
+  beforeAll(async () => { await testBegin(TOKEN); });
+  afterAll(async () => { await testEnd(TOKEN); });
+
   // ── /v1/analysis/metrics ────────────────────────────────────────────────
 
   describe("GET session metrics", () => {

@@ -31,8 +31,14 @@ pub(crate) async fn healthz() -> Json<HealthResponse> {
     Json(HealthResponse { ok: true })
 }
 
-pub(crate) async fn readyz() -> Json<HealthResponse> {
-    Json(HealthResponse { ok: true })
+pub(crate) async fn readyz(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let ready = state.ready.load(std::sync::atomic::Ordering::Relaxed);
+    let test_mode = state.test_mode.load(std::sync::atomic::Ordering::Relaxed);
+    Json(serde_json::json!({
+        "ok": ready,
+        "ready": ready,
+        "test_mode": test_mode,
+    }))
 }
 
 /// Serve a screenshot image by bare filename (e.g., `20260413081553.webp`).

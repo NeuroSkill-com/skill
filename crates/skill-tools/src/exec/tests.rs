@@ -454,8 +454,12 @@ fn enforce_path_integrity_allows_tmp() {
     assert!(enforce_path_integrity(&p).is_ok());
 }
 
+/// Serialize tests that mutate SKILL_DISABLE_STRICT_PATH_SAFETY.
+static PATH_SAFETY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn enforce_path_integrity_rejects_outside_roots() {
+    let _guard = PATH_SAFETY_ENV_LOCK.lock().unwrap();
     // /etc is unlikely to be under home/cwd/tmp
     let p = std::path::PathBuf::from("/etc/passwd");
     std::env::remove_var("SKILL_DISABLE_STRICT_PATH_SAFETY");
@@ -465,15 +469,11 @@ fn enforce_path_integrity_rejects_outside_roots() {
 
 #[test]
 fn enforce_path_integrity_disabled_by_env() {
-    // This test must run alone (env var race). Use a path under /tmp which is
-    // always allowed, then verify the env-var bypass *additionally* allows /etc.
-    // We test the bypass indirectly: if the var is "1", any path should pass.
+    let _guard = PATH_SAFETY_ENV_LOCK.lock().unwrap();
     let prev = std::env::var("SKILL_DISABLE_STRICT_PATH_SAFETY").ok();
     std::env::set_var("SKILL_DISABLE_STRICT_PATH_SAFETY", "1");
-    // /usr/bin is outside cwd/home/tmp on most systems
     let p = std::path::PathBuf::from("/usr/bin/env");
     let result = enforce_path_integrity(&p);
-    // Restore
     match prev {
         Some(v) => std::env::set_var("SKILL_DISABLE_STRICT_PATH_SAFETY", v),
         None => std::env::remove_var("SKILL_DISABLE_STRICT_PATH_SAFETY"),

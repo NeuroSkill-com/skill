@@ -827,6 +827,7 @@ onDestroy(() => {
             <span class="text-[0.55rem] text-muted-foreground/70">{t("model.gpuPrecisionDesc")}</span>
           </div>
           <select
+            aria-label={t("model.gpuPrecision")}
             value={reembedConfig.gpu_precision}
             onchange={(e) => { reembedConfig.gpu_precision = (e.target as HTMLSelectElement).value; saveReembedConfig(); }}
             class="text-[0.65rem] rounded border border-border dark:border-white/[0.08]
@@ -843,6 +844,7 @@ onDestroy(() => {
             <span class="text-[0.55rem] text-muted-foreground/70">{t("model.idleReembedDesc")}</span>
           </div>
           <input type="checkbox"
+            aria-label={t("model.idleReembed")}
             checked={reembedConfig.idle_reembed_enabled}
             onchange={(e) => { reembedConfig.idle_reembed_enabled = (e.target as HTMLInputElement).checked; saveReembedConfig(); }}
             class="w-4 h-4 rounded border-border accent-blue-500" />
@@ -852,6 +854,7 @@ onDestroy(() => {
           <div class="flex items-center justify-between gap-4">
             <span class="text-[0.65rem] text-muted-foreground">{t("model.idleDelay")}</span>
             <select
+              aria-label={t("model.idleDelay")}
               value={String(reembedConfig.idle_reembed_delay_secs)}
               onchange={(e) => { reembedConfig.idle_reembed_delay_secs = Number((e.target as HTMLSelectElement).value); saveReembedConfig(); }}
               class="text-[0.6rem] rounded border border-border dark:border-white/[0.08]

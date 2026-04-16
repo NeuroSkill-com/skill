@@ -132,7 +132,7 @@ for suite in "${SUITES[@]}"; do
       fi
       ;;
     vitest)
-      run_suite "vitest run" npx vitest run || { $STOP_ON_FAIL && break; }
+      run_suite "vitest run" npx vitest run --exclude 'src/tests/*-e2e*' --exclude 'src/tests/*e2e*' || { $STOP_ON_FAIL && break; }
       ;;
     rust)
       run_suite "rust tests (tier 1)" bash scripts/test-fast.sh || { $STOP_ON_FAIL && break; }
@@ -150,10 +150,20 @@ for suite in "${SUITES[@]}"; do
       run_suite "Windows manifest" node scripts/check-windows-manifest.mjs || { $STOP_ON_FAIL && break; }
       ;;
     smoke)
-      run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
+      if command -v tmux >/dev/null 2>&1 && [ -t 0 ]; then
+        run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "smoke test" "requires tmux + interactive terminal"
+      fi
       ;;
     daemon)
-      run_suite "daemon packaging" bash scripts/test-daemon-packaging.sh || { $STOP_ON_FAIL && break; }
+      if ls src-tauri/target/*/release/bundle/dmg/*.dmg >/dev/null 2>&1 || \
+         ls src-tauri/target/*/release/bundle/deb/*.deb >/dev/null 2>&1 || \
+         ls src-tauri/target/*/release/bundle/nsis/*.exe >/dev/null 2>&1; then
+        run_suite "daemon packaging" bash scripts/test-daemon-packaging.sh || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "daemon packaging" "no build artifacts (run npm run tauri:build first)"
+      fi
       ;;
     e2e)
       if [ -f "src-tauri/target/release/skill-daemon" ] || [ -f "src-tauri/target/debug/skill-daemon" ]; then

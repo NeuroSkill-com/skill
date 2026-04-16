@@ -110,6 +110,14 @@ pub struct AppState {
     pub text_embedder: SharedTextEmbedder,
     /// When `false` (default), iroh/Quinn/relay logs are suppressed.
     pub iroh_logs_enabled: Arc<AtomicBool>,
+    /// When `true`, background work (screenshot capture, OCR backfill, idle
+    /// re-embed, auto-scanner, auto-connect) is paused.  Used by E2E tests
+    /// to get a stable daemon state.  Only settable via `POST /v1/test/begin`
+    /// in debug builds.
+    pub test_mode: Arc<AtomicBool>,
+    /// Readiness flag: set to `true` once all startup init is complete
+    /// (HNSW indices loaded, text embedder lazy-inited, etc.).
+    pub ready: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -197,6 +205,8 @@ impl AppState {
             reconnect: Arc::new(Mutex::new(ReconnectState::default())),
             text_embedder: SharedTextEmbedder::new(),
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
+            test_mode: Arc::new(AtomicBool::new(false)),
+            ready: Arc::new(AtomicBool::new(false)),
         }
     }
 }

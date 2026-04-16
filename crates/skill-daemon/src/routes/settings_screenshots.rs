@@ -53,7 +53,13 @@ pub(crate) struct DaemonScreenshotContext {
 
 impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
     fn config(&self) -> skill_screenshots::ScreenshotConfig {
+        // In test mode, disable screenshot capture so E2E tests get stable results.
         if let Some(ref st) = self.state {
+            if st.test_mode.load(std::sync::atomic::Ordering::Relaxed) {
+                let mut cfg = self.config.clone();
+                cfg.enabled = false;
+                return cfg;
+            }
             let skill_dir = st.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
             return skill_settings::load_settings(&skill_dir).screenshot;
         }

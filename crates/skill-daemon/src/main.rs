@@ -219,11 +219,16 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::api::router())
         .merge(routes::analysis::router())
         .merge(routes::search::router())
-        .merge(routes::iroh::router())
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth_middleware::auth_middleware,
-        ));
+        .merge(routes::iroh::router());
+
+    // Test-mode endpoints — debug builds only
+    #[cfg(debug_assertions)]
+    let v1 = v1.merge(routes::test_mode::router());
+
+    let v1 = v1.route_layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth_middleware::auth_middleware,
+    ));
 
     // Root-level command tunnel for CLI HTTP mode (POST / with JSON body)
     let root_cmd = Router::new()
@@ -300,6 +305,8 @@ async fn main() -> anyhow::Result<()> {
     info!(%addr, "skill daemon listening");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    state.ready.store(true, std::sync::atomic::Ordering::Relaxed);
+    info!("daemon ready (accepting requests)");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown)
         .await?;

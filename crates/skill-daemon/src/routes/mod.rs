@@ -17,3 +17,5 @@ pub(crate) mod settings_llm_runtime;
 pub(crate) mod settings_lsl;
 pub(crate) mod settings_screenshots;
 pub(crate) mod settings_ui;
+#[cfg(debug_assertions)]
+pub(crate) mod test_mode;
