@@ -648,7 +648,7 @@ pub(crate) async fn trigger_weights_download_impl(State(state): State<AppState>)
     Json(serde_json::json!({ "ok": true, "message": "weights download started" }))
 }
 
-fn now_unix_ms() -> u64 {
+pub(crate) fn now_unix_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)

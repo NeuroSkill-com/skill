@@ -297,6 +297,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "switch_llm_mmproj",
   "switch_llm_model",
   "test_dnd",
+  "stream_reembed",
   "trigger_reembed",
   "trigger_weights_download",
   "update_label",
