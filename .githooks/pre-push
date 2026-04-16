@@ -87,6 +87,13 @@ if [ -n "$FRONTEND_CHANGED" ]; then
     # shellcheck disable=SC2086
     npx vitest related --run $VITEST_RELATED_FILES
   fi
+
+  # Guard/meta tests read source files via fs, not import — vitest related
+  # can't detect the dependency.  Run them when daemon or scripts change.
+  DAEMON_OR_SCRIPTS="$(echo "$FRONTEND_CHANGED" | grep -E '^(src/lib/daemon/|scripts/)' || true)"
+  if [ -n "$DAEMON_OR_SCRIPTS" ]; then
+    npx vitest run src/tests/daemon-client.test.ts
+  fi
 fi
 
 RUST_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.rs$|^Cargo.toml$|^Cargo.lock$|^src-tauri/Cargo.toml$|^crates/.*/Cargo.toml$' || true)"
