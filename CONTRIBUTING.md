@@ -18,6 +18,9 @@ cd skill
 # Install all platform dependencies + JS deps (interactive)
 npm run setup
 
+# Ensure Rust is up to date (CI uses latest stable)
+rustup update stable
+
 # Run in development mode (starts Vite dev server + Tauri)
 npm run tauri dev
 

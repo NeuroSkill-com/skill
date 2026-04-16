@@ -121,6 +121,7 @@ for suite in "${SUITES[@]}"; do
       run_suite "biome check" npx biome check src/ scripts/ || { $STOP_ON_FAIL && break; }
       ;;
     clippy)
+      run_suite "rust version check" node scripts/check-rust-version.mjs --verbose || { $STOP_ON_FAIL && break; }
       run_suite "cargo clippy (workspace)" cargo clippy --locked --workspace --exclude skill -- -D warnings || { $STOP_ON_FAIL && break; }
       run_suite "cargo clippy (app)" cargo clippy -p skill --locked -- -D warnings || { $STOP_ON_FAIL && break; }
       ;;
