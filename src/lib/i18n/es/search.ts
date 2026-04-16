@@ -68,6 +68,7 @@ const search: Record<string, string> = {
   "search.queriesRange": "consultas {start}–{end}",
   "search.endAfterStart": "La hora de finalización debe ser posterior a la hora de inicio.",
   "search.allDevices": "Todos los dispositivos",
+  "search.rebuildLabelIndex": "Reconstruir índice EEG",
   "search.filterByLabel": "Filtrar por etiqueta…",
   "search.labeledOnly": "Sólo etiquetado",
   "search.viewSession": "Ver sesión",

@@ -69,6 +69,7 @@ const search: Record<string, string> = {
   "search.queriesRange": "queries {start}–{end}",
   "search.endAfterStart": "End time must be after start time.",
   "search.allDevices": "All devices",
+  "search.rebuildLabelIndex": "Rebuild EEG index",
   "search.filterByLabel": "Filter by label…",
   "search.labeledOnly": "Labeled only",
   "search.viewSession": "View Session",

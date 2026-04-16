@@ -116,6 +116,13 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                 if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
                     warn!("[idle-reembed] failed: {e}");
                 }
+                // Rebuild label EEG index so interactive search picks up new embeddings.
+                let skill_dir = state_clone.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+                let stats = skill_label_index::rebuild(&skill_dir, &state_clone.label_index);
+                info!(
+                    "[idle-reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
+                    stats.text_nodes, stats.eeg_nodes, stats.eeg_skipped
+                );
                 // Mark idle reembed as done.
                 if let Ok(mut st) = state_clone.idle_reembed_state.lock() {
                     st.active = false;

@@ -269,6 +269,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "refresh_llm_catalog",
   "resume_llm_download",
   "list_search_devices",
+  "rebuild_label_index",
   "search_corpus_stats",
   "search_labels_by_text",
   "search_screenshots_by_text",

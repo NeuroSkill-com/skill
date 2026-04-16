@@ -2073,6 +2073,17 @@ useWindowTitle("window.title.search");
 
         <!-- Corpus metadata banner -->
         {#if corpusStats}
+          {@const eegTotal = corpusStats.eeg_total_epochs ?? 0}
+          {@const eegDone = corpusStats.eeg_embedded_epochs ?? 0}
+          {@const eegPct = eegTotal > 0 ? Math.round(eegDone / eegTotal * 100) : 100}
+          {@const scrTotal = corpusStats.screenshot_total}
+          {@const scrDone = corpusStats.screenshot_embedded}
+          {@const scrPct = scrTotal > 0 ? Math.round(scrDone / scrTotal * 100) : 100}
+          {@const lblTotal = corpusStats.label_total}
+          {@const lblEeg = corpusStats.label_eeg_index}
+          {@const lblText = corpusStats.label_text_index}
+          {@const lblStale = corpusStats.label_stale ?? 0}
+          {@const anyIssue = eegPct < 100 || scrPct < 100 || lblEeg === 0 && lblTotal > 0 && eegDone > 0 || lblStale > 0}
           <div class="flex items-center gap-3 px-4 py-1.5 border-b border-border dark:border-white/[0.04]
                       bg-muted/10 text-[0.5rem] text-muted-foreground/55 tabular-nums select-none flex-wrap">
             {#if corpusStats.eeg_days > 0}
@@ -2096,31 +2107,90 @@ useWindowTitle("window.title.search");
               {/if}
               <span class="text-muted-foreground/20">·</span>
             {/if}
-            <span title="Labels in database (text index / EEG index)">
-              <span class="font-semibold text-foreground/50">{corpusStats.label_total}</span> labels
-              <span class="text-muted-foreground/30">({corpusStats.label_text_index} text / {corpusStats.label_eeg_index} eeg)</span>
-              {#if corpusStats.label_stale != null && corpusStats.label_stale > 0}
-                <span class="text-amber-500/70">{corpusStats.label_stale} stale</span>
-              {/if}
+            <span title="Labels (text / EEG index)">
+              <span class="font-semibold text-foreground/50">{lblTotal}</span> labels
+              <span class="text-muted-foreground/30">({lblText} text / {lblEeg} eeg)</span>
             </span>
-            {#if corpusStats.screenshot_total > 0}
+            {#if scrTotal > 0}
               <span class="text-muted-foreground/20">·</span>
               <span title="Screenshots (embedded / total)">
-                <span class="font-semibold text-foreground/50">{corpusStats.screenshot_embedded}</span>/<span class="font-semibold text-foreground/50">{corpusStats.screenshot_total}</span> screenshots
+                <span class="font-semibold text-foreground/50">{scrDone}</span>/<span class="font-semibold text-foreground/50">{scrTotal}</span> screenshots
               </span>
             {/if}
-            {#if corpusStats.eeg_total_epochs != null && corpusStats.eeg_total_epochs > 0}
-              {@const covPct = Math.round(((corpusStats.eeg_embedded_epochs ?? 0) / corpusStats.eeg_total_epochs) * 100)}
+            {#if eegTotal > 0}
               <span class="text-muted-foreground/20">·</span>
               <span title="EEG embedding coverage" class="flex items-center gap-1">
-                <span class="{covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
-                  {(corpusStats.eeg_embedded_epochs ?? 0).toLocaleString()}/{corpusStats.eeg_total_epochs.toLocaleString()} epochs ({covPct}%)
+                <span class="{eegPct >= 95 ? 'text-emerald-500/70' : eegPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                  {eegDone.toLocaleString()}/{eegTotal.toLocaleString()} epochs ({eegPct}%)
                 </span>
               </span>
             {/if}
             <span class="text-muted-foreground/20">·</span>
             <span title="Embedding model" class="text-muted-foreground/30">{corpusStats.label_embed_model}</span>
           </div>
+
+          <!-- Embedding health banner — shown when any modality needs attention -->
+          {#if anyIssue}
+            <div class="flex flex-col gap-1.5 px-4 py-2 border-b border-amber-500/15
+                        bg-amber-500/[0.03] text-[0.5rem]">
+              <!-- EXG epochs -->
+              {#if eegTotal > 0 && eegPct < 100}
+                <div class="flex items-center gap-2">
+                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-amber-600/80 uppercase">EXG</span>
+                  <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500
+                                {eegPct >= 80 ? 'bg-emerald-500' : eegPct >= 40 ? 'bg-amber-500' : 'bg-red-400'}"
+                         style="width:{eegPct}%"></div>
+                  </div>
+                  <span class="w-20 shrink-0 text-right tabular-nums text-muted-foreground/60">
+                    {eegDone.toLocaleString()}/{eegTotal.toLocaleString()} ({eegPct}%)
+                  </span>
+                </div>
+              {/if}
+              <!-- Screenshots -->
+              {#if scrTotal > 0 && scrPct < 100}
+                <div class="flex items-center gap-2">
+                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-cyan-600/80 uppercase">IMG</span>
+                  <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                    <div class="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                         style="width:{scrPct}%"></div>
+                  </div>
+                  <span class="w-20 shrink-0 text-right tabular-nums text-muted-foreground/60">
+                    {scrDone.toLocaleString()}/{scrTotal.toLocaleString()} ({scrPct}%)
+                  </span>
+                </div>
+              {/if}
+              <!-- Label EEG index -->
+              {#if lblTotal > 0 && lblEeg === 0 && eegDone > 0}
+                <div class="flex items-center gap-2">
+                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-violet-600/80 uppercase">LBL</span>
+                  <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                    <div class="h-full rounded-full bg-red-400" style="width:0%"></div>
+                  </div>
+                  <span class="w-20 shrink-0 text-right tabular-nums text-muted-foreground/60">
+                    {lblEeg}/{lblTotal} (0%)
+                  </span>
+                  <button
+                    onclick={async () => {
+                      try {
+                        const r = await daemonInvoke<{ ok: boolean; eeg_nodes?: number }>("rebuild_label_index");
+                        if (r.ok && r.eeg_nodes != null && corpusStats) {
+                          corpusStats.label_eeg_index = r.eeg_nodes;
+                        }
+                      } catch {}
+                    }}
+                    class="shrink-0 text-[0.48rem] text-amber-600 hover:text-amber-500
+                           underline underline-offset-2 cursor-pointer font-semibold"
+                  >{t("search.rebuildLabelIndex")}</button>
+                </div>
+              {:else if lblStale > 0}
+                <div class="flex items-center gap-2">
+                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-violet-600/80 uppercase">LBL</span>
+                  <span class="text-amber-500/70">{lblStale} stale label{lblStale !== 1 ? "s" : ""} need re-embedding</span>
+                </div>
+              {/if}
+            </div>
+          {/if}
         {/if}
 
         <!-- 3D Graph panel -->

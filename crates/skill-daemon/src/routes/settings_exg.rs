@@ -77,6 +77,7 @@ pub(crate) async fn trigger_reembed_impl(State(state): State<AppState>) -> Json<
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let events_tx = state.events_tx.clone();
     let model_status = state.exg_model_status.clone();
+    let label_index = state.label_index.clone();
 
     // Check if reembed is already running (use model_status as a simple guard).
     {
@@ -106,6 +107,15 @@ pub(crate) async fn trigger_reembed_impl(State(state): State<AppState>) -> Json<
                 payload: serde_json::json!({ "status": "error", "message": e.to_string() }),
             });
         }
+        // Rebuild label EEG index so interactive search can bridge text → EEG.
+        // Labels created before embeddings existed will now have EEG entries.
+        let stats = skill_label_index::rebuild(&skill_dir, &label_index);
+        tracing::info!(
+            "[reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
+            stats.text_nodes,
+            stats.eeg_nodes,
+            stats.eeg_skipped
+        );
     });
 
     Json(serde_json::json!({ "ok": true, "message": "reembed started" }))

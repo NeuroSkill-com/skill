@@ -1951,6 +1951,7 @@ export type TranslationKey =
   | "search.exportSavingDot"
   | "search.exportSvgTitle"
   | "search.allDevices"
+  | "search.rebuildLabelIndex"
   | "search.filterByLabel"
   | "search.from"
   | "search.imageEmptyState"

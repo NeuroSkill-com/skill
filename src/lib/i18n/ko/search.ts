@@ -67,6 +67,7 @@ const search: Record<string, string> = {
   "search.queriesRange": "쿼리 {start}–{end}",
   "search.endAfterStart": "종료 시간은 시작 시간 이후여야 합니다.",
   "search.allDevices": "모든 기기",
+  "search.rebuildLabelIndex": "EEG 인덱스 재구축",
   "search.filterByLabel": "라벨로 필터…",
   "search.labeledOnly": "라벨 있는 것만",
   "search.viewSession": "세션 보기",

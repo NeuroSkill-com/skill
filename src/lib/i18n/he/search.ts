@@ -63,6 +63,7 @@ const search: Record<string, string> = {
   "search.queriesRange": "שאילתות {start}–{end}",
   "search.endAfterStart": "זמן הסיום חייב להיות אחרי זמן ההתחלה.",
   "search.allDevices": "כל המכשירים",
+  "search.rebuildLabelIndex": "בנה מחדש אינדקס EEG",
   "search.filterByLabel": "סינון לפי תווית…",
   "search.labeledOnly": "עם תוויות בלבד",
   "search.viewSession": "הצג הפעלה",
