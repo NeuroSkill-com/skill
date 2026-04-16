@@ -18,18 +18,17 @@ DEST="${LLAMA_PREBUILT_DIR:-.llama-prebuilt}"
 # Detect platform
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)
-    # Default to q1+metal for Apple Silicon
-    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-q1-metal}"
+    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-metal-static}"
     TARGET="aarch64-apple-darwin"
     PLATFORM="macos"
     ;;
   Linux-x86_64)
-    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-q1}"
+    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-vulkan-static}"
     TARGET="x86_64-unknown-linux-gnu"
     PLATFORM="linux"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-q1}"
+    SUFFIX="${LLAMA_PREBUILT_SUFFIX:-vulkan-static}"
     TARGET="x86_64-pc-windows-msvc"
     PLATFORM="windows"
     ;;

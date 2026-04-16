@@ -73,12 +73,13 @@ function confVersion() {
 }
 
 function run(cmd, opts = {}) {
-  const label = Array.isArray(cmd) ? cmd.join(" ") : cmd;
+  const isArray = Array.isArray(cmd);
+  const label = isArray ? cmd.join(" ") : cmd;
   log(`$ ${label}`);
-  const args = Array.isArray(cmd) ? cmd : [cmd];
+  const args = isArray ? cmd : [cmd];
   const result = spawnSync(args[0], args.slice(1), {
     stdio: opts.capture ? "pipe" : "inherit",
-    shell: true,
+    shell: !isArray,  // shell only for string commands, not arrays
     encoding: "utf8",
     cwd: opts.cwd,
     env: { ...process.env, ...opts.env },
@@ -316,7 +317,7 @@ function cmdDiscordNotify(args) {
 
 async function cmdDownloadLlama(args) {
   const [plat, target, feature] = args._;
-  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-${plat}-${target}-q1-${feature}.tar.gz`;
+  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-${plat}-${target}-${feature}-static.tar.gz`;
   const tmp = process.env.RUNNER_TEMP || tmpdir();
   const archive = join(tmp, `llama-prebuilt-${plat}.tar.gz`);
   const dest = join(tmp, `llama-prebuilt-${plat}`);
