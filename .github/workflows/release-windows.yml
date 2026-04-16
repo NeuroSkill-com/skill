@@ -49,7 +49,7 @@ jobs:
           GITHUB_REF:        ${{ github.ref }}
           GITHUB_REF_NAME:   ${{ github.ref_name }}
           DRY_RUN:           ${{ inputs.dry_run || 'false' }}
-        run: bash scripts/ci-resolve-version.sh
+        run: python3 scripts/ci.py resolve-version
 
       # ── MSVC developer environment ────────────────────────────────────────────
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
@@ -210,8 +210,7 @@ jobs:
         run: npm ci
 
       - name: Install protoc (Windows)
-        shell: powershell
-        run: scripts/ci-install-protoc-windows.ps1
+        run: python3 scripts/ci.py install-protoc-windows
 
 
       - name: Build frontend
@@ -333,9 +332,8 @@ jobs:
           Write-Host "[ok] NSIS_DIR=$nsisDir"
 
       - name: Download prebuilt llama libs (Windows, optional)
-        shell: powershell
         shell: bash
-        run: bash scripts/ci-download-llama-prebuilt.sh windows x86_64-pc-windows-msvc vulkan
+        run: python3 scripts/ci.py download-llama windows x86_64-pc-windows-msvc vulkan
 
       # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
       # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
@@ -846,7 +844,7 @@ jobs:
           TAG="${{ steps.version_meta.outputs.tag }}"
           PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
           RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          bash scripts/ci-prepare-changelog.sh \
+          python3 scripts/ci.py prepare-changelog \
             "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create / update GitHub Release
@@ -874,7 +872,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 scripts/ci-update-latest-json.py
+          python3 scripts/ci.py update-latest-json
           --platform windows-x86_64
           --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.nsis_zip_name }}"
           --sig-file "${{ steps.artifacts.outputs.nsis_sig }}"
@@ -912,7 +910,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
-          bash scripts/ci-discord-notify.sh
+          python3 scripts/ci.py discord-notify
           --status  "${{ job.status }}"
           --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Windows ${{ job.status == 'success' && 'Published' || 'Failed' }}"
           --version "${{ steps.version_meta.outputs.version }}"

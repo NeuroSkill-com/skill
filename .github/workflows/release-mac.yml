@@ -30,7 +30,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF:        ${{ github.ref }}
           GITHUB_REF_NAME:   ${{ github.ref_name }}
-        run: bash scripts/ci-resolve-version.sh
+        run: python3 scripts/ci.py resolve-version
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -70,7 +70,7 @@ jobs:
 
       - name: Download prebuilt llama libs (macOS, optional)
         shell: bash
-        run: bash scripts/ci-download-llama-prebuilt.sh macos aarch64-apple-darwin metal
+        run: python3 scripts/ci.py download-llama macos aarch64-apple-darwin metal
 
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
@@ -86,7 +86,7 @@ jobs:
           APPLE_TEAM_ID:                 ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:     ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: >-
-          bash scripts/ci-verify-secrets.sh
+          python3 scripts/ci.py verify-secrets
           APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
           APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY
 
@@ -101,7 +101,7 @@ jobs:
           APPLE_ID:       ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
-        run: bash scripts/ci-validate-apple-notarization.sh
+        run: python3 scripts/ci.py validate-notarization
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Apple Developer certificate → temporary keychain ─────────────────────
@@ -117,7 +117,7 @@ jobs:
         env:
           APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: bash scripts/ci-import-apple-cert.sh
+        run: python3 scripts/ci.py import-apple-cert
 
       # ── Compile: frontend + Rust binary + Daemon ─────────────────────────────
       #
@@ -335,7 +335,7 @@ jobs:
           TAG="${{ steps.version_meta.outputs.tag }}"
           PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
           RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          bash scripts/ci-prepare-changelog.sh \
+          python3 scripts/ci.py prepare-changelog \
             "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create GitHub Release
@@ -371,7 +371,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 scripts/ci-update-latest-json.py
+          python3 scripts/ci.py update-latest-json
           --platform darwin-aarch64
           --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.app_tar_name }}"
           --sig-file "${{ steps.artifacts.outputs.app_sig }}"
@@ -396,7 +396,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
-          bash scripts/ci-discord-notify.sh
+          python3 scripts/ci.py discord-notify
           --status  "${{ job.status }}"
           --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — macOS ${{ job.status == 'success' && 'Published' || 'Failed' }}"
           --version "${{ steps.version_meta.outputs.version }}"

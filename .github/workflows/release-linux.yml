@@ -21,7 +21,7 @@ jobs:
     steps:
       # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
       - name: Free disk space
-        run: bash scripts/ci-free-disk-space.sh
+        run: python3 scripts/ci.py free-disk-space
 
       # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout
@@ -36,7 +36,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF:        ${{ github.ref }}
           GITHUB_REF_NAME:   ${{ github.ref_name }}
-        run: bash scripts/ci-resolve-version.sh
+        run: python3 scripts/ci.py resolve-version
 
       # ── System dependencies ───────────────────────────────────────────────────
       # Linux compile + system package flow requires WebKit2GTK and supporting
@@ -109,7 +109,7 @@ jobs:
       - name: Verify signing secrets are present
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: bash scripts/ci-verify-secrets.sh TAURI_SIGNING_PRIVATE_KEY
+        run: python3 scripts/ci.py verify-secrets TAURI_SIGNING_PRIVATE_KEY
 
       # ── Vulkan SDK ────────────────────────────────────────────────────────────
       # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
@@ -119,7 +119,7 @@ jobs:
 
       - name: Download prebuilt llama libs (Linux, optional)
         shell: bash
-        run: bash scripts/ci-download-llama-prebuilt.sh linux x86_64-unknown-linux-gnu vulkan
+        run: python3 scripts/ci.py download-llama linux x86_64-unknown-linux-gnu vulkan
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Build frontend ────────────────────────────────────────────────────────
@@ -374,7 +374,7 @@ jobs:
           TAG="${{ steps.version_meta.outputs.tag }}"
           PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
           RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          bash scripts/ci-prepare-changelog.sh \
+          python3 scripts/ci.py prepare-changelog \
             "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create / update GitHub Release
@@ -405,7 +405,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 scripts/ci-update-latest-json.py
+          python3 scripts/ci.py update-latest-json
           --platform linux-x86_64
           --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.portable_tar_name }}"
           --sig-file "${{ steps.integrity.outputs.portable_tar_sig }}"
@@ -431,7 +431,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
-          bash scripts/ci-discord-notify.sh
+          python3 scripts/ci.py discord-notify
           --status  "${{ job.status }}"
           --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Linux ${{ job.status == 'success' && 'Published' || 'Failed' }}"
           --version "${{ steps.version_meta.outputs.version }}"

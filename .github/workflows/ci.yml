@@ -86,7 +86,7 @@ jobs:
       # Without this, the Rust build cache restore + compile fills the ~14 GB
       # runner disk and causes "No space left on device" failures.
       - name: Free disk space
-        run: bash scripts/ci-free-disk-space.sh
+        run: python3 scripts/ci.py free-disk-space
 
       - uses: actions/checkout@v6
         with:
@@ -133,7 +133,7 @@ jobs:
         uses: ./.github/actions/setup-vulkan-linux
 
       - name: Download prebuilt llama libs (Linux, optional)
-        run: bash scripts/ci-download-llama-prebuilt.sh linux x86_64-unknown-linux-gnu vulkan
+        run: python3 scripts/ci.py download-llama linux x86_64-unknown-linux-gnu vulkan
 
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
@@ -566,8 +566,7 @@ jobs:
           fi
 
       - name: Install protoc (Windows)
-        shell: powershell
-        run: scripts/ci-install-protoc-windows.ps1
+        run: python3 scripts/ci.py install-protoc-windows
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -629,7 +628,7 @@ jobs:
 
       - name: Download prebuilt llama libs (Windows, optional)
         shell: bash
-        run: bash scripts/ci-download-llama-prebuilt.sh windows x86_64-pc-windows-msvc vulkan
+        run: python3 scripts/ci.py download-llama windows x86_64-pc-windows-msvc vulkan
 
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
@@ -944,7 +943,7 @@ jobs:
         run: git submodule update --init --depth=1 skills
 
       - name: Free disk space
-        run: bash scripts/ci-free-disk-space.sh
+        run: python3 scripts/ci.py free-disk-space
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
