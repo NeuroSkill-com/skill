@@ -154,12 +154,12 @@ impl IrohRemoteAdapter {
         // PPG interleaving
         let ppg_ch = chunk.ppg_data.len();
         let ppg_spc = if ppg_ch > 0 { chunk.ppg_data[0].len() } else { 0 };
-        let ppg_stride = if ppg_spc > 0 { spc / ppg_spc } else { 0 };
+        let ppg_stride = spc.checked_div(ppg_spc).unwrap_or(0);
         let mut ppg_idx = 0usize;
 
         // IMU interleaving
         let imu_n = chunk.imu_data.len();
-        let imu_stride = if imu_n > 0 { spc / imu_n } else { 0 };
+        let imu_stride = spc.checked_div(imu_n).unwrap_or(0);
         let mut imu_idx = 0usize;
 
         for i in 0..spc {
