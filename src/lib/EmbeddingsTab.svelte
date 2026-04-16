@@ -11,6 +11,7 @@ import { Button } from "$lib/components/ui/button";
 import { Separator } from "$lib/components/ui/separator";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
+import { addToast } from "$lib/stores/toast.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ModelInfo {
@@ -94,15 +95,43 @@ const grouped = $derived.by(() => {
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
-  [models, currentCode, staleCount] = await Promise.all([
-    daemonInvoke<ModelInfo[]>("list_embedding_models"),
-    daemonInvoke<string>("get_embedding_model"),
-    daemonInvoke<number>("get_stale_label_count"),
-  ]);
-  // Sort: put default (bge-small-en) first, then alphabetically
+  // All fastembed-supported text embedding models.
+  // The daemon currently uses nomic-embed-text-v1.5 (hardcoded).
+  // Switching requires re-embedding all labels.
+  const knownModels: ModelInfo[] = [
+    { code: "nomic-ai/nomic-embed-text-v1.5", dim: 768, description: "Nomic Embed Text v1.5 — high-quality 768d, recommended" },
+    { code: "nomic-ai/nomic-embed-text-v1.5-Q", dim: 768, description: "Nomic Embed Text v1.5 quantized — faster, slightly less accurate" },
+    { code: "nomic-ai/nomic-embed-text-v1", dim: 768, description: "Nomic Embed Text v1 — previous generation 768d" },
+    { code: "BAAI/bge-small-en-v1.5", dim: 384, description: "BGE Small EN v1.5 — fast, compact 384d" },
+    { code: "BAAI/bge-small-en-v1.5-Q", dim: 384, description: "BGE Small EN v1.5 quantized — fastest, 384d" },
+    { code: "BAAI/bge-base-en-v1.5", dim: 768, description: "BGE Base EN v1.5 — balanced 768d" },
+    { code: "BAAI/bge-large-en-v1.5", dim: 1024, description: "BGE Large EN v1.5 — highest quality 1024d" },
+    { code: "sentence-transformers/all-MiniLM-L6-v2", dim: 384, description: "All-MiniLM-L6-v2 — lightweight 384d, good for general use" },
+    { code: "sentence-transformers/all-MiniLM-L12-v2", dim: 384, description: "All-MiniLM-L12-v2 — deeper 384d variant" },
+    { code: "sentence-transformers/all-mpnet-base-v2", dim: 768, description: "MPNet Base v2 — strong 768d general-purpose" },
+    { code: "sentence-transformers/paraphrase-MiniLM-L12-v2", dim: 384, description: "Paraphrase MiniLM — 384d, good for semantic similarity" },
+    { code: "intfloat/multilingual-e5-small", dim: 384, description: "Multilingual E5 Small — 384d, 100+ languages" },
+    { code: "intfloat/multilingual-e5-base", dim: 768, description: "Multilingual E5 Base — 768d, 100+ languages" },
+    { code: "mixedbread-ai/mxbai-embed-large-v1", dim: 1024, description: "MxBAI Embed Large — top-tier 1024d" },
+    { code: "Alibaba-NLP/gte-base-en-v1.5", dim: 768, description: "GTE Base EN v1.5 — strong 768d from Alibaba" },
+    { code: "BAAI/bge-m3", dim: 1024, description: "BGE-M3 — multilingual, multi-granularity 1024d" },
+  ];
+  try {
+    const raw = await daemonInvoke<ModelInfo[] | Record<string, unknown>>("list_embedding_models");
+    models = Array.isArray(raw) && raw.length > 0 ? raw : knownModels;
+  } catch {
+    models = knownModels;
+  }
+  try {
+    const r = await daemonInvoke<{ model: string }>("get_embedding_model");
+    currentCode = r.model || models[0]?.code || "";
+  } catch {
+    currentCode = models[0]?.code ?? "";
+  }
+  staleCount = 0;
   models.sort((a, b) => {
-    if (a.code === "Xenova/bge-small-en-v1.5") return -1;
-    if (b.code === "Xenova/bge-small-en-v1.5") return 1;
+    if (a.code === "nomic-ai/nomic-embed-text-v1.5") return -1;
+    if (b.code === "nomic-ai/nomic-embed-text-v1.5") return 1;
     return a.code.localeCompare(b.code);
   });
 }
@@ -111,8 +140,18 @@ async function load() {
 async function applyModel() {
   saving = true;
   try {
-    await daemonInvoke("set_embedding_model", { modelCode: currentCode });
-    staleCount = 0; // backfill runs in background after set_embedding_model
+    const r = await daemonInvoke<{ ok: boolean; model?: string; error?: string }>(
+      "set_embedding_model",
+      { model: currentCode },
+    );
+    if (r.ok) {
+      addToast("success", t("embeddings.modelApplied"), currentCode, 3000);
+      staleCount = 0;
+    } else {
+      addToast("warning", t("embeddings.modelFailed"), r.error ?? "Unknown error", 5000);
+    }
+  } catch (e) {
+    addToast("warning", t("embeddings.modelFailed"), String(e), 5000);
   } finally {
     saving = false;
   }

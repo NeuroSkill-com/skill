@@ -7,6 +7,8 @@
 /** DE "search" namespace translations. */
 const search: Record<string, string> = {
   "embeddings.model": "Einbettungsmodell",
+  "embeddings.modelApplied": "Embedding model applied",
+  "embeddings.modelFailed": "Failed to apply model",
   "embeddings.info":
     "Einbettungen werden für den Text und Kontext jedes Labels generiert. Beim ersten Start werden die Modellgewichte einmalig heruntergeladen und lokal gespeichert. Kleinere Modelle (≤384d) sind schnell; größere erzeugen reichhaltigere Repräsentationen.",
   "embeddings.sharedNote":

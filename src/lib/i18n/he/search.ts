@@ -7,6 +7,8 @@
 /** HE "search" namespace translations. */
 const search: Record<string, string> = {
   "embeddings.model": "מודל הטמעה",
+  "embeddings.modelApplied": "Embedding model applied",
+  "embeddings.modelFailed": "Failed to apply model",
   "embeddings.info":
     "הטמעות נוצרות עבור הטקסט וההקשר של כל תווית. בשימוש הראשון משקלי המודל מורדים פעם אחת ומאוחסנים מקומית. מודלים קטנים (≤384d) מהירים; גדולים יותר מייצרים ייצוגים עשירים יותר.",
   "embeddings.sharedNote":

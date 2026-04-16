@@ -765,6 +765,8 @@ export type TranslationKey =
   | "embeddings.dimLegend"
   | "embeddings.info"
   | "embeddings.model"
+  | "embeddings.modelApplied"
+  | "embeddings.modelFailed"
   | "embeddings.reembed"
   | "embeddings.reembedBtn"
   | "embeddings.reembedDesc"

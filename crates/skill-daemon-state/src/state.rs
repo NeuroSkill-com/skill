@@ -223,7 +223,13 @@ impl AppState {
             idle_reembed_state: Arc::new(Mutex::new(IdleReembedStatus::default())),
             label_index: Arc::new(LabelIndexState::new()),
             reconnect: Arc::new(Mutex::new(ReconnectState::default())),
-            text_embedder: SharedTextEmbedder::new(),
+            text_embedder: {
+                let te = SharedTextEmbedder::new();
+                if !settings.text_embedding_model.is_empty() {
+                    te.set_model_code(&settings.text_embedding_model);
+                }
+                te
+            },
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
             test_mode: Arc::new(AtomicBool::new(false)),
             ready: Arc::new(AtomicBool::new(false)),

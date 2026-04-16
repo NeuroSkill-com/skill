@@ -7,6 +7,8 @@
 /** UK "search" namespace translations. */
 const search: Record<string, string> = {
   "embeddings.model": "Модель вбудовування",
+  "embeddings.modelApplied": "Embedding model applied",
+  "embeddings.modelFailed": "Failed to apply model",
   "embeddings.info":
     "Вбудовування генеруються для тексту та контексту кожної мітки. При першому використанні ваги моделі завантажуються один раз і кешуються локально. Менші моделі (≤384d) швидші; більші дають насиченіші представлення.",
   "embeddings.sharedNote":

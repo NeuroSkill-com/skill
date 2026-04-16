@@ -7,6 +7,8 @@
 /** English "search" namespace — reference translation. */
 const search: Record<string, string> = {
   "embeddings.model": "Embedding Model",
+  "embeddings.modelApplied": "Embedding model applied",
+  "embeddings.modelFailed": "Failed to apply model",
   "embeddings.info":
     "Embeddings are generated for each label's text and context. On first use the model weights are downloaded once and cached locally. Smaller models (≤384d) are fast; larger models produce richer representations.",
   "embeddings.sharedNote":

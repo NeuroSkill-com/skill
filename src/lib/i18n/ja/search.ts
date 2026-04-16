@@ -7,6 +7,8 @@
 /** JA "search" namespace. */
 const search: Record<string, string> = {
   "embeddings.model": "埋め込みモデル",
+  "embeddings.modelApplied": "Embedding model applied",
+  "embeddings.modelFailed": "Failed to apply model",
   "embeddings.info":
     "埋め込みは各ラベルのテキストとコンテキストに対して生成されます。初回使用時にモデルの重みが一度ダウンロードされ、ローカルにキャッシュされます。小さいモデル（384次元以下）は高速です。大きいモデルはより豊かな表現を生成します。",
   "embeddings.sharedNote":

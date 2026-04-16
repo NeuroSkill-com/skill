@@ -118,9 +118,9 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
 
   // Models / EEG (aliases: get_embedding_model, list_embedding_models, etc.)
   get_eeg_model_config: [G, "/v1/models/config"],
-  get_embedding_model: [G, "/v1/models/config"], // alias
+  get_embedding_model: [G, "/v1/models/text-embedding"],
+  set_embedding_model: [P, "/v1/models/text-embedding"],
   set_eeg_model_config: [P, "/v1/models/config"],
-  set_embedding_model: [P, "/v1/models/config"], // alias
   get_eeg_model_status: [G, "/v1/models/status"],
   get_exg_catalog: [G, "/v1/models/exg-catalog"],
   list_embedding_models: [G, "/v1/models/exg-catalog"], // alias

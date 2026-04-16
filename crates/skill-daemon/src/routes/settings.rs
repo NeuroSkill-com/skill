@@ -407,6 +407,10 @@ fn exg_routes() -> Router<AppState> {
         .route("/models/estimate-reembed", get(estimate_reembed))
         .route("/models/rebuild-index", post(rebuild_index))
         .route("/models/exg-catalog", get(get_exg_catalog))
+        .route(
+            "/models/text-embedding",
+            get(get_text_embedding_model).post(set_text_embedding_model),
+        )
 }
 
 fn llm_routes() -> Router<AppState> {
@@ -547,6 +551,42 @@ async fn rebuild_index() -> Json<serde_json::Value> {
 
 async fn get_exg_catalog(state: State<AppState>) -> Json<serde_json::Value> {
     settings_exg::get_exg_catalog_impl(state).await
+}
+
+async fn get_text_embedding_model(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let code = state.text_embedder.model_code();
+    Json(serde_json::json!({ "model": code }))
+}
+
+async fn set_text_embedding_model(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let Some(code) = body.get("model").or(body.get("modelCode")).and_then(|v| v.as_str()) else {
+        return Json(serde_json::json!({ "ok": false, "error": "missing 'model' field" }));
+    };
+    let code = code.to_string();
+    let embedder = state.text_embedder.clone();
+    let state_clone = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        embedder.set_model_code(&code);
+        let ok = embedder.reload();
+        if ok {
+            let mut settings = load_user_settings(&state_clone);
+            settings.text_embedding_model = code.clone();
+            save_user_settings(&state_clone, &settings);
+        }
+        (ok, code)
+    })
+    .await;
+
+    match result {
+        Ok((true, code)) => Json(serde_json::json!({ "ok": true, "model": code })),
+        Ok((false, code)) => {
+            Json(serde_json::json!({ "ok": false, "error": format!("failed to load model '{code}'") }))
+        }
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
 }
 
 async fn get_hooks(state: State<AppState>) -> Json<Vec<skill_settings::HookRule>> {
