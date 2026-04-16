@@ -53,22 +53,37 @@ for optional build acceleration.
 ### Running Tests
 
 ```bash
-# ── Fast feedback (daily development) ─────────────────────────────
-npm run test:rust          # Tier 1 Rust: ~5 s warm, ~27 s clean (350 tests)
-npm test                   # Frontend (Vitest): 683 tests in ~7 s
+# ── Interactive picker (shows all options) ────────────────────────
+npm test                   # Arrow keys + space to pick, enter to run
 
-# ── Full Rust test suite ──────────────────────────────────────────
-npm run test:rust:all      # All 3 tiers (~65 s clean, ~650 Rust tests)
+# ── Quick shortcuts ───────────────────────────────────────────────
+npm run test:fast          # fmt + lint + clippy + vitest + rust + ci + types
+npm run test:all           # everything including deny, smoke, e2e
 
-# ── Tiered Rust runner (scripts/test-fast.sh) ─────────────────────
-bash scripts/test-fast.sh              # Tier 1 only
-bash scripts/test-fast.sh --tier 2     # Tiers 1-2
-bash scripts/test-fast.sh --all        # All tiers
-bash scripts/test-fast.sh --continue   # Don't stop on first failure
-
-# ── Slow / CI-only ────────────────────────────────────────────────
-npm run test:llm:e2e       # LLM E2E (downloads model, ~15 s cached)
+# ── Individual suites ─────────────────────────────────────────────
+npm run test:fmt           # Rust + frontend formatting
+npm run test:lint          # Frontend lint (biome)
+npm run test:clippy        # Rust clippy
+npm run test:deny          # Dependency audit (cargo deny)
+npm run test:vitest        # Frontend unit tests (vitest)
+npm run test:types         # TypeScript/Svelte type checking
+npm run test:rust          # Tier 1 Rust tests (~5 s warm)
+npm run test:rust:all      # All Rust tiers (~65 s clean)
+npm run test:ci            # CI script self-test
+npm run test:i18n          # i18n key validation
+npm run test:changelog     # Changelog fragment check
+npm run test:e2e           # LLM E2E (downloads model, ~15 s cached)
 npm run test:smoke         # Build verification
+
+# ── Git hook checks ──────────────────────────────────────────────
+npm run test:hooks         # pre-commit + pre-push (full)
+npm run test:pre-commit    # Just pre-commit checks
+npm run test:pre-push      # Full pre-push suite
+
+# ── Mix and match ─────────────────────────────────────────────────
+bash scripts/test-all.sh clippy vitest ci      # Run specific suites
+bash scripts/test-all.sh --continue all        # Don't stop on first failure
+bash scripts/test-all.sh --list                # Show available suites
 ```
 
 #### Rust Test Tiers

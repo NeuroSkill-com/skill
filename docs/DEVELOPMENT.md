@@ -76,15 +76,74 @@ npm run sync:readme:supported
 npm run sync:readme:supported:check
 ```
 
-## Pre-commit checks
+## Testing
 
-- `cargo clippy --all-targets --all-features -- -D warnings` (in `src-tauri`)
-- `npm run check`
+### Quick commands
+
+```bash
+npm test                   # Interactive picker — shows all suites, pick what to run
+npm run test:fast          # fmt + lint + clippy + vitest + rust + ci + types
+npm run test:all           # everything including deny, smoke, daemon, e2e
+```
+
+### Individual suites
+
+```bash
+npm run test:fmt           # cargo fmt + biome format check
+npm run test:lint          # biome check (frontend lint)
+npm run test:clippy        # cargo clippy (workspace + app)
+npm run test:deny          # cargo deny (dependency audit)
+npm run test:vitest        # vitest run (frontend unit tests)
+npm run test:types         # svelte-check (TypeScript/Svelte)
+npm run test:rust          # Rust tier 1 (~5s warm)
+npm run test:rust:all      # Rust all tiers (~65s clean)
+npm run test:ci            # ci.py self-test
+npm run test:i18n          # i18n key validation
+npm run test:changelog     # Changelog fragment check
+npm run test:e2e           # LLM E2E test
+npm run test:smoke         # Build verification smoke test
+```
+
+### Git hook suites
+
+Run the same checks as the git hooks without committing/pushing:
+
+```bash
+npm run test:hooks         # pre-commit + pre-push (full)
+npm run test:pre-commit    # Just pre-commit checks
+npm run test:pre-push      # Full pre-push suite
+```
+
+### Mix and match
+
+```bash
+bash scripts/test-all.sh clippy vitest ci       # specific suites
+bash scripts/test-all.sh --continue all         # don't stop on first failure
+bash scripts/test-all.sh --list                 # show available suites
+```
+
+## Git hooks
+
+### Pre-commit
+
+- i18n key sync (when i18n files staged)
+- Frontend formatting via Biome
+- Rust formatting via `cargo fmt`
+
+### Pre-push
+
+Scoped checks based on changed files:
+- Frontend changes: `biome check` + `vitest related`
+- Rust changes: `cargo clippy` + `cargo test` on affected crates
+- CI changes: `python3 scripts/ci.py self-test`
+- Daemon/scripts changes: `vitest run daemon-client.test.ts`
+
+Full mode (runs everything): `PREPUSH_FULL=1 git push`
 
 Emergency bypass:
 
 ```bash
-git commit --no-verify
+git push --no-verify
 ```
 
 ## Versioning
