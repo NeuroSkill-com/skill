@@ -30,6 +30,23 @@ use crate::text_embedder::SharedTextEmbedder;
 use crate::tracker::DaemonTracker;
 use skill_label_index::LabelIndexState;
 
+/// Observable snapshot of the idle-reembed background loop.
+#[derive(Clone, Default, Debug, serde::Serialize)]
+pub struct IdleReembedStatus {
+    /// Whether the idle reembed loop is currently processing epochs.
+    pub active: bool,
+    /// Seconds since the device was last connected (idle duration).
+    pub idle_secs: u64,
+    /// How many seconds of idle time are required before reembed starts.
+    pub delay_secs: u64,
+    /// Total epochs that need embedding in the current run.
+    pub total: u64,
+    /// Epochs completed so far in the current run.
+    pub done: u64,
+    /// Current day directory being processed (e.g. "20260415").
+    pub current_day: String,
+}
+
 /// Shared application state threaded through all axum handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -101,6 +118,8 @@ pub struct AppState {
     /// Cancel flag for the background idle reembed task.
     /// Set to `true` when a device connects to immediately pause reembedding.
     pub idle_reembed_cancel: Arc<AtomicBool>,
+    /// Observable state for the idle reembed background loop.
+    pub idle_reembed_state: Arc<Mutex<IdleReembedStatus>>,
     /// Daemon-owned HNSW indices for label search (text, context, EEG).
     pub label_index: Arc<LabelIndexState>,
     /// Reconnect state machine (daemon-authoritative).
@@ -201,6 +220,7 @@ impl AppState {
             exg_model_status: Arc::new(Mutex::new(skill_eeg::eeg_model_config::EegModelStatus::default())),
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_cancel: Arc::new(AtomicBool::new(false)),
+            idle_reembed_state: Arc::new(Mutex::new(IdleReembedStatus::default())),
             label_index: Arc::new(LabelIndexState::new()),
             reconnect: Arc::new(Mutex::new(ReconnectState::default())),
             text_embedder: SharedTextEmbedder::new(),

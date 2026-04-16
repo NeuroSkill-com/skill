@@ -292,6 +292,7 @@ ICON_ICNS="$TAURI_DIR/icons/icon.icns"
 node - <<NODEJS
 const appdmg = require('appdmg');
 const path = require('path');
+const fs = require('fs');
 
 const spec = {
   title: 'NeuroSkill',
@@ -308,17 +309,17 @@ const spec = {
 
 // Icon (version-badged volume icon, falls back to plain app icon)
 const icnsPath = '${VOL_ICNS}';
-try { require('fs').accessSync(icnsPath); spec.icon = icnsPath; } catch {}
+try { fs.accessSync(icnsPath); spec.icon = icnsPath; } catch {}
 
 // Background
 const bgPath = '${BG_2X}';
 const bg1xPath = '${BG_1X}';
 const bgColorFile = '${STAGE}/bg_color.txt';
 try {
-  require('fs').accessSync(bg1xPath);
+  fs.accessSync(bg1xPath);
   spec.background = bg1xPath;
   try {
-    spec['background-color'] = require('fs').readFileSync(bgColorFile, 'utf8').trim();
+    spec['background-color'] = fs.readFileSync(bgColorFile, 'utf8').trim();
   } catch {
     spec['background-color'] = '#1e1e1e';
   }
@@ -334,34 +335,52 @@ const docs = [
 for (const doc of docs) {
   const p = path.join(root, doc.name);
   try {
-    require('fs').accessSync(p);
+    fs.accessSync(p);
     spec.contents.push({ x: doc.x, y: doc.y, type: 'file', path: p });
   } catch {}
 }
 
 console.log('  appdmg spec:', JSON.stringify(spec, null, 2));
 
-const ee = appdmg({
-  target: '${DMG_OUT}',
-  basepath: root,
-  specification: spec,
-});
+const MAX_RETRIES = 3;
+let attempt = 0;
 
-ee.on('progress', info => {
-  if (info.type === 'step-begin') {
-    process.stdout.write('  ' + info.title + ' …\\n');
-  }
-});
+function run() {
+  attempt++;
+  // Remove partial DMG from previous failed attempt
+  try { fs.unlinkSync('${DMG_OUT}'); } catch {}
 
-ee.on('finish', () => {
-  console.log('  ✓ DMG created via appdmg');
-  process.exit(0);
-});
+  const ee = appdmg({
+    target: '${DMG_OUT}',
+    basepath: root,
+    specification: spec,
+  });
 
-ee.on('error', err => {
-  console.error('  ✖ appdmg error:', err);
-  process.exit(1);
-});
+  ee.on('progress', info => {
+    if (info.type === 'step-begin') {
+      process.stdout.write('  ' + info.title + ' …\\n');
+    }
+  });
+
+  ee.on('finish', () => {
+    console.log('  ✓ DMG created via appdmg' + (attempt > 1 ? ' (attempt ' + attempt + ')' : ''));
+    process.exit(0);
+  });
+
+  ee.on('error', err => {
+    const isStreamError = err && (err.code === 'ERR_STREAM_WRITE_AFTER_END'
+      || (err.message && err.message.includes('write after end')));
+    if (isStreamError && attempt < MAX_RETRIES) {
+      console.warn('  ⚠ appdmg stream error on attempt ' + attempt + ', retrying …');
+      setTimeout(run, 2000);
+    } else {
+      console.error('  ✖ appdmg error:', err);
+      process.exit(1);
+    }
+  });
+}
+
+run();
 NODEJS
 
 if [[ ! -f "$DMG_OUT" ]]; then

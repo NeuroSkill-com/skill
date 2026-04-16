@@ -438,6 +438,20 @@ const llm: Record<string, string> = {
   "llm.tools.suggestSkillDesc": "הציעו skill ב-Discord — מפרוטוקולים ועד אוטומציות, הכל אפשרי.",
   "llm.tools.skillsLicense": "רישיון אתי AI100",
   "llm.tools.skillsLicenseLabel": "רישיון אתי",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "כיסוי הטמעות",
+  "model.coverageSummary": "{embedded} מתוך {total} אפוקות הוטמעו ({pct}%)",
+  "model.coverageMissing": "{missing} אפוקות דורשות הטמעה",
+  "model.coverageComplete": "כל האפוקות הוטמעו",
+  "model.coverageEta": "זמן משוער: {eta}",
+  "model.perDayBreakdown": "פירוט לפי יום",
+  "model.idleReembedActive": "הטמעה ברקע פעילה",
+  "model.idleReembedProcessing": "מעבד {day} ({done}/{total})",
+  "model.idleReembedWaiting": "מתחיל לאחר {remaining}ש׳ חוסר פעילות",
+  "model.idleReembedIdle": "ממתין לתקופת חוסר פעילות",
+  "search.eegCoverage": "כיסוי EEG",
+  "search.eegCoverageLabel": "{embedded} מתוך {total} ({pct}%)",
 };
 
 export default llm;

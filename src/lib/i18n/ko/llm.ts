@@ -451,6 +451,20 @@ const llm: Record<string, string> = {
     "--features llm (선택적으로 llm-metal / llm-cuda / llm-mtmd)으로 재빌드하여 내장 OpenAI 호환 추론 서버를 활성화하세요.",
   "llm.endpoints.title": "OpenAI 호환 엔드포인트",
   "llm.endpoints.hint": "모든 엔드포인트는 WebSocket / REST API와 같은 포트에서 제공됩니다.",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "임베딩 커버리지",
+  "model.coverageSummary": "{total}개 에포크 중 {embedded}개 임베딩됨 ({pct}%)",
+  "model.coverageMissing": "{missing}개 에포크 임베딩 필요",
+  "model.coverageComplete": "모든 에포크 임베딩 완료",
+  "model.coverageEta": "예상 완료: {eta}",
+  "model.perDayBreakdown": "일별 내역",
+  "model.idleReembedActive": "백그라운드 임베딩 활성",
+  "model.idleReembedProcessing": "{day} 처리 중 ({done}/{total})",
+  "model.idleReembedWaiting": "유휴 {remaining}초 후 시작",
+  "model.idleReembedIdle": "유휴 기간 대기 중",
+  "search.eegCoverage": "EEG 커버리지",
+  "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
 };
 
 export default llm;

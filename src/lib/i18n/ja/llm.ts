@@ -456,6 +456,20 @@ const llm: Record<string, string> = {
     "組み込みOpenAI互換推論サーバーを有効にするには、--features llm（オプションでllm-metal / llm-cuda / llm-mtmd）で再ビルドしてください。",
   "llm.endpoints.title": "OpenAI互換エンドポイント",
   "llm.endpoints.hint": "すべてのエンドポイントはWebSocket / REST APIと同じポートで提供されます。",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "埋め込みカバレッジ",
+  "model.coverageSummary": "{total}エポック中{embedded}件が埋め込み済み（{pct}%）",
+  "model.coverageMissing": "{missing}エポックの埋め込みが必要",
+  "model.coverageComplete": "全エポック埋め込み済み",
+  "model.coverageEta": "推定完了: {eta}",
+  "model.perDayBreakdown": "日別内訳",
+  "model.idleReembedActive": "バックグラウンド埋め込み実行中",
+  "model.idleReembedProcessing": "{day}を処理中（{done}/{total}）",
+  "model.idleReembedWaiting": "アイドル{remaining}秒後に開始",
+  "model.idleReembedIdle": "アイドル期間を待機中",
+  "search.eegCoverage": "EEGカバレッジ",
+  "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
 };
 
 export default llm;

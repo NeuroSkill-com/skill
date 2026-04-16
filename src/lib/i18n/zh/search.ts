@@ -215,6 +215,18 @@ const search: Record<string, string> = {
   "search.imageResultsCount": "张截图",
   "search.imageEmptyState": `搜索从截图中提取的文本。使用"文本匹配"进行精确子串搜索，或使用"语义"进行基于含义的搜索。`,
   "search.imageNoResults": "未找到匹配的截图。",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "查询",
+  "search.nodeText": "文本",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "发现",
+  "search.nodeScreenshots": "截图",
+  "search.nodeQueryTip": "查询嵌入",
+  "search.nodeTextTip": "文本标签匹配",
+  "search.nodeEegTip": "EEG邻近时段",
+  "search.nodeFoundTip": "EEG点附近发现的标签",
+  "search.nodeScreenshotsTip": "匹配附近的截图",
 };
 
 export default search;

@@ -57,6 +57,16 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
 
             // Check if we've been idle long enough.
             let idle_secs = last_connected.elapsed().as_secs();
+
+            // Always update observable idle state (so the UI shows countdown).
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                st.idle_secs = idle_secs;
+                st.delay_secs = cfg.idle_reembed_delay_secs;
+                if !reembed_running {
+                    st.active = false;
+                }
+            }
+
             if idle_secs < cfg.idle_reembed_delay_secs {
                 continue;
             }
@@ -73,6 +83,11 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                 .unwrap_or(0);
 
             if needed == 0 {
+                if let Ok(mut st) = state.idle_reembed_state.lock() {
+                    st.active = false;
+                    st.total = 0;
+                    st.done = 0;
+                }
                 continue;
             }
 
@@ -85,6 +100,13 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             state.idle_reembed_cancel.store(false, Ordering::Relaxed);
             reembed_running = true;
 
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                st.active = true;
+                st.total = needed as u64;
+                st.done = 0;
+                st.current_day = String::new();
+            }
+
             let state_clone = state.clone();
             let use_gpu = cfg.idle_reembed_gpu;
             let throttle_ms = cfg.idle_reembed_throttle_ms;
@@ -93,6 +115,10 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             tokio::task::spawn_blocking(move || {
                 if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
                     warn!("[idle-reembed] failed: {e}");
+                }
+                // Mark idle reembed as done.
+                if let Ok(mut st) = state_clone.idle_reembed_state.lock() {
+                    st.active = false;
                 }
                 // Signal completion.
                 let _ = state_clone.events_tx.send(skill_daemon_common::EventEnvelope {
@@ -147,15 +173,47 @@ fn count_missing_embeddings(skill_dir: &std::path::Path) -> i64 {
 fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_size: usize) -> anyhow::Result<()> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let cancel = &state.idle_reembed_cancel;
+    let idle_state = &state.idle_reembed_state;
+
+    // Subscribe to progress events so we can mirror them into the observable state.
+    let mut rx = state.events_tx.subscribe();
+
+    // Spawn a helper thread to update idle_reembed_state from progress events.
+    let idle_state_clone = idle_state.clone();
+    let updater = std::thread::spawn(move || {
+        while let Ok(ev) = rx.blocking_recv() {
+            if ev.r#type != "reembed-progress" {
+                continue;
+            }
+            let done = ev.payload.get("done").and_then(|v| v.as_u64()).unwrap_or(0);
+            let total = ev.payload.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+            let day = ev.payload.get("day").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let status = ev.payload.get("status").and_then(|v| v.as_str()).unwrap_or("");
+            if let Ok(mut st) = idle_state_clone.lock() {
+                st.done = done;
+                if total > 0 {
+                    st.total = total;
+                }
+                if !day.is_empty() {
+                    st.current_day = day;
+                }
+            }
+            if matches!(status, "done" | "idle_done" | "complete" | "paused") {
+                break;
+            }
+        }
+    });
 
     // Delegate to the existing batch reembed function but with cancel checking.
-    // Re-use the same infrastructure from settings_exg.
-    crate::routes::settings_exg::run_batch_reembed_with_cancel(
+    let result = crate::routes::settings_exg::run_batch_reembed_with_cancel(
         &skill_dir,
         &state.events_tx,
         cancel,
         use_gpu,
         throttle_ms,
         batch_size,
-    )
+    );
+
+    let _ = updater.join();
+    result
 }

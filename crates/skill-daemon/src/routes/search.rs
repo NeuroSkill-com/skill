@@ -322,11 +322,53 @@ fn collect_slow_meta(skill_dir: &std::path::Path) -> serde_json::Value {
         .map(|s| s.count_needing_embed(super::labels::EMBED_MODEL_NAME))
         .unwrap_or(0);
 
+    // Scan all day SQLite DBs for embedding coverage.
+    let (eeg_total_epochs, eeg_embedded_epochs) = count_epoch_coverage(skill_dir);
+
     serde_json::json!({
         "eeg_total_sessions": history_stats.total_sessions,
         "eeg_total_secs": history_stats.total_secs,
         "label_stale": label_stale,
+        "eeg_total_epochs": eeg_total_epochs,
+        "eeg_embedded_epochs": eeg_embedded_epochs,
+        "eeg_missing_epochs": eeg_total_epochs - eeg_embedded_epochs,
     })
+}
+
+/// Count total vs embedded epochs across all day directories.
+fn count_epoch_coverage(skill_dir: &std::path::Path) -> (i64, i64) {
+    let Ok(entries) = std::fs::read_dir(skill_dir) else {
+        return (0, 0);
+    };
+    let mut total = 0i64;
+    let mut embedded = 0i64;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let db_path = path.join(skill_constants::SQLITE_FILE);
+        if !db_path.exists() {
+            continue;
+        }
+        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        else {
+            continue;
+        };
+        let t: i64 = conn
+            .query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get(0))
+            .unwrap_or(0);
+        let m: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        total += t;
+        embedded += m;
+    }
+    (total, embedded)
 }
 
 /// Build an interactive cross-modal search graph.
@@ -761,12 +803,22 @@ mod tests {
 
         let meta = collect_slow_meta(td.path());
 
-        for field in ["eeg_total_sessions", "eeg_total_secs", "label_stale"] {
+        for field in [
+            "eeg_total_sessions",
+            "eeg_total_secs",
+            "label_stale",
+            "eeg_total_epochs",
+            "eeg_embedded_epochs",
+            "eeg_missing_epochs",
+        ] {
             assert!(meta.get(field).is_some(), "slow meta missing: {field}");
         }
         assert_eq!(meta["eeg_total_sessions"], 0);
         assert_eq!(meta["eeg_total_secs"], 0);
         assert_eq!(meta["label_stale"], 0);
+        assert_eq!(meta["eeg_total_epochs"], 0);
+        assert_eq!(meta["eeg_embedded_epochs"], 0);
+        assert_eq!(meta["eeg_missing_epochs"], 0);
     }
 
     // ── search_eeg route dispatch ────────────────────────────────────────

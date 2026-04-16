@@ -276,6 +276,12 @@ pub(crate) fn run_batch_reembed_with_cancel(
 
                 let samples = extract_epoch_samples(&raw_data, ts_secs, epoch_samples, channel_names.len());
                 if samples.is_empty() {
+                    if total_failed == 0 {
+                        tracing::warn!(
+                            "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples}, channels={})",
+                            channel_names.len()
+                        );
+                    }
                     total_failed += 1;
                     total_done += 1;
                     continue;
@@ -295,6 +301,13 @@ pub(crate) fn run_batch_reembed_with_cancel(
                         tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
                     }
                 } else {
+                    if total_failed == 0 {
+                        tracing::warn!(
+                            "[reembed] first encode failure at ts={ts_secs:.1}s (channels={}, samples_per_ch={}, rate={sample_rate}Hz)",
+                            samples.len(),
+                            samples.first().map(|s| s.len()).unwrap_or(0),
+                        );
+                    }
                     total_failed += 1;
                 }
 
@@ -448,15 +461,26 @@ fn load_day_csv_data(
         use std::io::BufRead;
         let mut lines = reader.lines();
 
-        // Skip header.
-        let _header = lines.next();
+        // Read header to detect actual column count for this CSV.
+        let header_line = lines.next();
+        let csv_cols = header_line
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .map(|h| h.split(',').count().saturating_sub(1)) // minus timestamp column
+            .unwrap_or(0);
+        if csv_cols == 0 {
+            continue;
+        }
 
-        let mut channels: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
+        // Use the lesser of expected channels and actual CSV columns.
+        // Different devices may produce different column counts.
+        let file_ch = n_ch.min(csv_cols);
+        let mut channels: Vec<Vec<f32>> = vec![Vec::new(); file_ch];
         let mut first_ts: Option<f64> = None;
 
         for line in lines.map_while(Result::ok) {
             let fields: Vec<&str> = line.split(',').collect();
-            if fields.len() < n_ch + 1 {
+            if fields.len() < file_ch + 1 {
                 continue;
             }
 
@@ -464,8 +488,19 @@ fn load_day_csv_data(
                 first_ts = fields[0].parse::<f64>().ok();
             }
 
-            for (ch, field) in fields[1..].iter().enumerate().take(n_ch) {
+            // Parse all channels for this row; skip the entire row if any channel fails.
+            let mut row_vals = Vec::with_capacity(file_ch);
+            let mut row_ok = true;
+            for field in fields[1..].iter().take(file_ch) {
                 if let Ok(v) = field.parse::<f32>() {
+                    row_vals.push(v);
+                } else {
+                    row_ok = false;
+                    break;
+                }
+            }
+            if row_ok && row_vals.len() == file_ch {
+                for (ch, v) in row_vals.into_iter().enumerate() {
                     channels[ch].push(v);
                 }
             }
@@ -514,8 +549,13 @@ fn extract_epoch_samples(
                 continue;
             } // too few samples
 
-            let mut result = Vec::with_capacity(n_channels);
-            for ch in channels.iter().take(n_channels) {
+            // Use available channels (may be fewer than n_channels for different devices).
+            let avail = channels.len().min(n_channels);
+            if avail == 0 {
+                continue;
+            }
+            let mut result = Vec::with_capacity(avail);
+            for ch in channels.iter().take(avail) {
                 result.push(ch[offset..end].to_vec());
             }
             return result;
@@ -729,17 +769,30 @@ pub(crate) async fn cancel_weights_download_impl(State(state): State<AppState>) 
 
 pub(crate) async fn estimate_reembed_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let avg_embed_ms = state.exg_model_status.lock().map(|s| s.avg_embed_ms).unwrap_or(0.0);
+    let idle_reembed = state.idle_reembed_state.lock().map(|s| s.clone()).unwrap_or_default();
+
     let result = tokio::task::spawn_blocking(move || {
         let mut total_epochs = 0i64;
         let mut missing_embeddings = 0i64;
+        let mut per_day: Vec<serde_json::Value> = Vec::new();
         let Ok(entries) = std::fs::read_dir(&skill_dir) else {
-            return (0, 0);
+            return (0i64, 0i64, Vec::new());
         };
-        for entry in entries.filter_map(|e| e.ok()) {
+        let mut day_dirs: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path().is_dir()
+                    && e.file_name()
+                        .to_str()
+                        .map(|n| n.len() == 8 && n.starts_with("20"))
+                        .unwrap_or(false)
+            })
+            .collect();
+        day_dirs.sort_by_key(|e| e.file_name());
+
+        for entry in &day_dirs {
             let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
             let db_path = path.join(skill_constants::SQLITE_FILE);
             if !db_path.exists() {
                 continue;
@@ -760,14 +813,46 @@ pub(crate) async fn estimate_reembed_impl(State(state): State<AppState>) -> Json
                 .unwrap_or(0);
             total_epochs += t;
             missing_embeddings += m;
+
+            let date = entry.file_name().to_str().unwrap_or("").to_string();
+            per_day.push(serde_json::json!({
+                "date": date,
+                "total": t,
+                "missing": m,
+                "embedded": t - m,
+            }));
         }
-        (total_epochs, missing_embeddings)
+        (total_epochs, missing_embeddings, per_day)
     })
     .await
-    .unwrap_or((0, 0));
+    .unwrap_or((0, 0, Vec::new()));
+
+    let total_epochs = result.0;
+    let missing = result.1;
+    let embedded = total_epochs - missing;
+    let per_day = result.2;
+    let date_dirs = per_day.len() as i64;
+    let coverage_pct = if total_epochs > 0 {
+        (embedded as f64 / total_epochs as f64 * 100.0).round() as u64
+    } else {
+        0
+    };
+    let eta_secs = if avg_embed_ms > 0.0 && missing > 0 {
+        ((missing as f64 * avg_embed_ms) / 1000.0).round() as u64
+    } else {
+        0
+    };
+
     Json(serde_json::json!({
-        "total_epochs": result.0,
-        "embeddings_needed": result.1,
+        "total_epochs": total_epochs,
+        "embedded": embedded,
+        "missing": missing,
+        "date_dirs": date_dirs,
+        "coverage_pct": coverage_pct,
+        "avg_embed_ms": avg_embed_ms,
+        "eta_secs": eta_secs,
+        "per_day": per_day,
+        "idle_reembed": idle_reembed,
     }))
 }
 

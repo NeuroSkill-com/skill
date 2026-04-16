@@ -467,6 +467,20 @@ const llm: Record<string, string> = {
     "Reconstruya con --features llm (y opcionalmente llm-metal/llm-cuda/llm-mtmd) para habilitar el servidor de inferencia integrado compatible con OpenAI.",
   "llm.endpoints.title": "Puntos finales compatibles con OpenAI",
   "llm.endpoints.hint": "Todos los puntos finales se sirven en el mismo puerto que WebSocket/API REST.",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "Cobertura de embedding",
+  "model.coverageSummary": "{embedded} de {total} épocas incrustadas ({pct}%)",
+  "model.coverageMissing": "{missing} épocas necesitan embedding",
+  "model.coverageComplete": "Todas las épocas incrustadas",
+  "model.coverageEta": "Estimado: {eta}",
+  "model.perDayBreakdown": "Desglose por día",
+  "model.idleReembedActive": "Embedding en segundo plano activo",
+  "model.idleReembedProcessing": "Procesando {day} ({done}/{total})",
+  "model.idleReembedWaiting": "Inicia tras {remaining}s de inactividad",
+  "model.idleReembedIdle": "Esperando período de inactividad",
+  "search.eegCoverage": "Cobertura EEG",
+  "search.eegCoverageLabel": "{embedded} de {total} ({pct} %)",
 };
 
 export default llm;

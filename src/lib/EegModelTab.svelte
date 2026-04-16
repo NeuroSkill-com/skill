@@ -47,9 +47,30 @@ interface EegModelStatus {
   download_retry_attempt: number;
   download_retry_in_secs: number;
 }
+interface PerDayEntry {
+  date: string;
+  total: number;
+  missing: number;
+  embedded: number;
+}
+interface IdleReembedStatus {
+  active: boolean;
+  idle_secs: number;
+  delay_secs: number;
+  total: number;
+  done: number;
+  current_day: string;
+}
 interface ReembedEstimate {
+  total_epochs: number;
+  embedded: number;
+  missing: number;
   date_dirs: number;
-  total_sessions: number;
+  coverage_pct: number;
+  avg_embed_ms: number;
+  eta_secs: number;
+  per_day: PerDayEntry[];
+  idle_reembed: IdleReembedStatus;
 }
 interface ReembedProgress {
   done: number;
@@ -92,6 +113,7 @@ let modelConfigSaving = $state(false);
 let reembedEstimate = $state<ReembedEstimate | null>(null);
 let reembedProgress = $state<ReembedProgress | null>(null);
 let reembedRunning = $state(false);
+let perDayExpanded = $state(false);
 let reembedConfig = $state<{
   idle_reembed_enabled: boolean;
   idle_reembed_delay_secs: number;
@@ -120,6 +142,14 @@ let reembedConfig = $state<{
 let hnswRebuilt = $state(false);
 let recoveredEmbeddings = $state(0);
 let hnswRecoveryToastShown = false;
+
+function fmtEta(secs: number): string {
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h}h ${m}m`;
+}
 
 const HNSW_M_PRESETS: number[] = [8, 16, 32, 64];
 const HNSW_EF_PRESETS: number[] = [50, 100, 200, 400];
@@ -237,7 +267,8 @@ onMount(async () => {
 
   unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
     reembedProgress = ev.payload;
-    if (ev.payload.status === "complete" || ev.payload.status.startsWith("error")) {
+    const s = ev.payload.status;
+    if (s === "complete" || s === "done" || s === "idle_done" || s === "paused" || s.startsWith("error")) {
       reembedRunning = false;
       loadReembedEstimate();
     }
@@ -775,49 +806,204 @@ onDestroy(() => {
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
 
+      <!-- ── Embedding coverage ──────────────────────────────────────────── -->
+      {#if reembedEstimate && reembedEstimate.total_epochs > 0}
+        <div class="flex flex-col gap-2.5 px-4 py-3.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              {t("model.embeddingCoverage")}
+            </span>
+            <Badge variant="outline"
+              class="text-[0.56rem] py-0 px-1.5
+                     {reembedEstimate.coverage_pct >= 95
+                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                       : reembedEstimate.coverage_pct >= 50
+                         ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                         : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'}">
+              {reembedEstimate.coverage_pct}%
+            </Badge>
+          </div>
+          <!-- Coverage bar -->
+          <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div class="h-full rounded-full transition-[width] duration-500
+                        {reembedEstimate.coverage_pct >= 95 ? 'bg-emerald-500' : reembedEstimate.coverage_pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}"
+                 style="width:{reembedEstimate.coverage_pct}%"></div>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[0.6rem] text-muted-foreground font-mono">
+              {t("model.coverageSummary", {
+                embedded: reembedEstimate.embedded.toLocaleString(),
+                total: reembedEstimate.total_epochs.toLocaleString(),
+                pct: String(reembedEstimate.coverage_pct),
+              })}
+            </span>
+            {#if reembedEstimate.missing > 0 && reembedEstimate.eta_secs > 0}
+              <span class="text-[0.56rem] text-muted-foreground/70 font-mono">
+                {t("model.coverageEta", { eta: fmtEta(reembedEstimate.eta_secs) })}
+              </span>
+            {/if}
+          </div>
+          {#if reembedEstimate.missing > 0}
+            <span class="text-[0.58rem] text-amber-600 dark:text-amber-400">
+              {t("model.coverageMissing", { missing: reembedEstimate.missing.toLocaleString() })}
+            </span>
+          {:else}
+            <span class="text-[0.58rem] text-emerald-600 dark:text-emerald-400">
+              {t("model.coverageComplete")}
+            </span>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- ── Idle reembed status ─────────────────────────────────────────── -->
+      {#if reembedEstimate?.idle_reembed}
+        {@const ir = reembedEstimate.idle_reembed}
+        {#if ir.active}
+          <div class="flex items-center gap-3 px-4 py-2.5 bg-blue-500/5">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+            <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+              <span class="text-[0.62rem] font-medium text-blue-600 dark:text-blue-400">
+                {t("model.idleReembedActive")}
+              </span>
+              {#if ir.current_day}
+                <span class="text-[0.56rem] text-muted-foreground font-mono">
+                  {t("model.idleReembedProcessing", { day: ir.current_day, done: String(ir.done), total: String(ir.total) })}
+                </span>
+              {/if}
+            </div>
+            {#if ir.total > 0}
+              <Badge variant="outline"
+                class="shrink-0 text-[0.56rem] py-0 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                {ir.total > 0 ? Math.round((ir.done / ir.total) * 100) : 0}%
+              </Badge>
+            {/if}
+          </div>
+        {:else if reembedConfig.idle_reembed_enabled && ir.delay_secs > 0 && ir.idle_secs < ir.delay_secs && reembedEstimate.missing > 0}
+          <div class="flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-[#111118]">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
+            <span class="text-[0.58rem] text-muted-foreground/70">
+              {t("model.idleReembedWaiting", { remaining: String(ir.delay_secs - ir.idle_secs) })}
+            </span>
+          </div>
+        {/if}
+      {/if}
+
+      <!-- ── Re-embed action ─────────────────────────────────────────────── -->
       <div class="flex flex-col gap-3 px-4 py-3.5">
         <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
           {t("model.reembedDesc")}
         </p>
 
         {#if reembedRunning && reembedProgress}
+          {@const pctDone = reembedProgress.total > 0 ? (reembedProgress.done / reembedProgress.total) * 100 : 0}
+          {@const remainEpochs = reembedProgress.total - reembedProgress.done}
+          {@const etaRemain = reembedEstimate?.avg_embed_ms && remainEpochs > 0 ? Math.round((remainEpochs * reembedEstimate.avg_embed_ms) / 1000) : 0}
           <!-- Progress -->
           <div class="flex flex-col gap-2">
-            <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300"
-                   style="width:{reembedProgress.total > 0 ? ((reembedProgress.done / reembedProgress.total) * 100).toFixed(1) : 0}%"></div>
-            </div>
-            <span class="text-[0.6rem] text-muted-foreground/70">
-              {#if reembedProgress.status === "loading_encoder" || reembedProgress.status === "scanning"}
-                {t("model.reembedLoadingEncoder")}
-              {:else if reembedProgress.status === "processing"}
-                {t("model.reembedRunning", { date: reembedProgress.date, done: String(reembedProgress.done), total: String(reembedProgress.total) })}
-              {:else if reembedProgress.status === "complete"}
-                {t("model.reembedComplete", { total: String(reembedProgress.total) })}
-              {:else if reembedProgress.status.startsWith("error")}
-                {t("model.reembedError")}
+            <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+              {#if reembedProgress.status === "started" || reembedProgress.status === "loading_encoder" || reembedProgress.status === "scanning"}
+                <div class="h-full rounded-full bg-blue-500 animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"
+                     style="width:40%"></div>
+              {:else}
+                <div class="h-full rounded-full transition-[width] duration-300
+                            {reembedProgress.status.startsWith('error') ? 'bg-red-500' : reembedProgress.status === 'paused' ? 'bg-amber-500' : 'bg-blue-500'}"
+                     style="width:{pctDone.toFixed(1)}%"></div>
               {/if}
-            </span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[0.6rem] text-muted-foreground/70">
+                {#if reembedProgress.status === "started" || reembedProgress.status === "loading_encoder" || reembedProgress.status === "scanning"}
+                  {t("model.reembedLoadingEncoder")}
+                {:else if reembedProgress.status === "processing" || reembedProgress.status === "running"}
+                  {t("model.reembedRunning", { date: reembedProgress.date, done: String(reembedProgress.done), total: String(reembedProgress.total) })}
+                {:else if reembedProgress.status === "paused"}
+                  Paused — device connected ({reembedProgress.done}/{reembedProgress.total})
+                {:else if reembedProgress.status === "complete" || reembedProgress.status === "done"}
+                  {t("model.reembedComplete", { total: String(reembedProgress.total) })}
+                {:else if reembedProgress.status.startsWith("error")}
+                  {t("model.reembedError")}
+                {/if}
+              </span>
+              {#if (reembedProgress.status === "processing" || reembedProgress.status === "running") && etaRemain > 0}
+                <span class="text-[0.56rem] text-muted-foreground/50 font-mono tabular-nums">
+                  {Math.round(pctDone)}% · ETA {fmtEta(etaRemain)}
+                </span>
+              {/if}
+            </div>
+            {#if reembedProgress.status.startsWith("error")}
+              <p class="text-[0.58rem] text-destructive/80 font-mono break-all leading-relaxed
+                         rounded-md bg-destructive/5 border border-destructive/10 px-2.5 py-2">
+                {t("model.reembedError")} — check encoder weights and CSV data.
+              </p>
+            {/if}
           </div>
         {:else}
           <!-- Estimate + button -->
           <div class="flex items-center justify-between gap-2">
-            {#if reembedEstimate && reembedEstimate.total_sessions > 0}
+            {#if reembedEstimate && reembedEstimate.total_epochs > 0}
               <span class="text-[0.65rem] text-muted-foreground font-mono">
-                {t("model.reembedEstimate", { days: String(reembedEstimate.date_dirs), rows: String(reembedEstimate.total_sessions) })}
+                {t("model.reembedEstimate", { days: String(reembedEstimate.date_dirs), rows: reembedEstimate.total_epochs.toLocaleString() })}
               </span>
             {:else}
               <span class="text-[0.65rem] text-muted-foreground/70">{t("model.reembedNoData")}</span>
             {/if}
             <Button size="sm" variant="outline"
                     class="shrink-0 h-7 text-[0.65rem] px-3"
-                    disabled={reembedRunning || !reembedEstimate || reembedEstimate.total_sessions === 0}
+                    disabled={reembedRunning || !reembedEstimate || reembedEstimate.total_epochs === 0}
                     onclick={startReembed}>
               {t("model.reembedBtn")}
             </Button>
           </div>
         {/if}
       </div>
+
+      <!-- ── Per-day breakdown (collapsible) ─────────────────────────────── -->
+      {#if reembedEstimate && reembedEstimate.per_day && reembedEstimate.per_day.length > 0}
+        <div class="flex flex-col px-4 py-2.5">
+          <button
+            class="flex items-center gap-1.5 text-[0.58rem] text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer select-none"
+            onclick={() => { perDayExpanded = !perDayExpanded; }}>
+            <span class="transition-transform {perDayExpanded ? 'rotate-90' : ''}"
+                  style="display:inline-block">&#9654;</span>
+            {t("model.perDayBreakdown")} ({reembedEstimate.per_day.length} days)
+          </button>
+          {#if perDayExpanded}
+            <div class="mt-2 max-h-48 overflow-y-auto rounded border border-border dark:border-white/[0.06]">
+              <table class="w-full text-[0.56rem]">
+                <thead class="sticky top-0 bg-muted dark:bg-[#111118]">
+                  <tr class="text-muted-foreground">
+                    <th class="text-left px-2 py-1 font-semibold">Date</th>
+                    <th class="text-right px-2 py-1 font-semibold">Total</th>
+                    <th class="text-right px-2 py-1 font-semibold">Embedded</th>
+                    <th class="text-right px-2 py-1 font-semibold">Missing</th>
+                    <th class="text-right px-2 py-1 font-semibold w-16">Coverage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each reembedEstimate.per_day as day}
+                    {@const pct = day.total > 0 ? Math.round((day.embedded / day.total) * 100) : 0}
+                    <tr class="border-t border-border/50 dark:border-white/[0.03]">
+                      <td class="px-2 py-1 font-mono text-foreground">{day.date}</td>
+                      <td class="text-right px-2 py-1 font-mono text-muted-foreground">{day.total.toLocaleString()}</td>
+                      <td class="text-right px-2 py-1 font-mono text-emerald-600 dark:text-emerald-400">{day.embedded.toLocaleString()}</td>
+                      <td class="text-right px-2 py-1 font-mono {day.missing > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground/50'}">{day.missing.toLocaleString()}</td>
+                      <td class="text-right px-2 py-1">
+                        <div class="flex items-center gap-1 justify-end">
+                          <div class="h-1 w-8 rounded-full bg-muted overflow-hidden">
+                            <div class="h-full rounded-full {pct >= 95 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}"
+                                 style="width:{pct}%"></div>
+                          </div>
+                          <span class="text-muted-foreground tabular-nums w-7 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       <!-- GPU precision + idle reembed settings -->
       <div class="flex flex-col gap-3 px-4 py-3.5">

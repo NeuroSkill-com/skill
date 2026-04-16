@@ -220,6 +220,18 @@ const search: Record<string, string> = {
   "label.customTime": "Custom time",
   "label.labelNow": "Label at now",
   "label.resetToNow": "Reset to now",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "שאילתה",
+  "search.nodeText": "טקסט",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "נמצאו",
+  "search.nodeScreenshots": "צילומי מסך",
+  "search.nodeQueryTip": "הטמעת שאילתה",
+  "search.nodeTextTip": "התאמות תוויות טקסט",
+  "search.nodeEegTip": "תקופות EEG שכנות",
+  "search.nodeFoundTip": "תוויות שנמצאו ליד נקודות EEG",
+  "search.nodeScreenshotsTip": "צילומי מסך ליד התאמות",
 };
 
 export default search;

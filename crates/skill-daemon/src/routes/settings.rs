@@ -1400,7 +1400,11 @@ mod tests {
 
         let Json(est) = estimate_reembed(State(st)).await;
         assert!(est.get("total_epochs").is_some());
-        assert!(est.get("embeddings_needed").is_some());
+        assert!(est.get("missing").is_some());
+        assert!(est.get("embedded").is_some());
+        assert!(est.get("coverage_pct").is_some());
+        assert!(est.get("per_day").is_some());
+        assert!(est.get("idle_reembed").is_some());
     }
 
     #[tokio::test]

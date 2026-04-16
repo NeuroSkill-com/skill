@@ -225,6 +225,18 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "キャプチャされたスクリーンショットから抽出されたテキストを検索します。「テキストマッチ」で完全一致検索、「セマンティック」で意味ベースの検索を使用します。",
   "search.imageNoResults": "一致するスクリーンショットが見つかりません。",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "クエリ",
+  "search.nodeText": "テキスト",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "発見",
+  "search.nodeScreenshots": "スクリーンショット",
+  "search.nodeQueryTip": "クエリ埋め込み",
+  "search.nodeTextTip": "テキストラベル一致",
+  "search.nodeEegTip": "EEG近傍エポック",
+  "search.nodeFoundTip": "EEGポイント付近のラベル",
+  "search.nodeScreenshotsTip": "一致付近のスクリーンショット",
 };
 
 export default search;

@@ -96,6 +96,11 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+            // Skip reconnect attempts in test mode.
+            if state.test_mode.load(std::sync::atomic::Ordering::Relaxed) {
+                continue;
+            }
+
             let (device_state, action) = {
                 let rc = reconnect.lock().unwrap_or_else(|e| e.into_inner());
                 let device_state = state.status.lock().map(|s| s.state.clone()).unwrap_or_default();

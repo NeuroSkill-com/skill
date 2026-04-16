@@ -119,6 +119,7 @@ pub(crate) async fn run_adapter_session(
                                 // Capture device identity and channel metadata.
                                 p.serial_number = info.serial_number.clone();
                                 p.firmware_version = info.firmware_version.clone();
+                                p.device_kind = device_kind.to_string();
                                 p.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.csv_path = Some(p.csv_path.display().to_string());

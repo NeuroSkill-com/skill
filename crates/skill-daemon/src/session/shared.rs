@@ -117,6 +117,7 @@ pub struct SessionDeviceId<'a> {
 /// Includes device identity, battery, signal quality, filter config, and
 /// phone info from the daemon status snapshot.  Previously lived in Tauri's
 /// `session_csv.rs`; now fully daemon-authoritative.
+#[allow(clippy::too_many_arguments)]
 pub fn write_session_meta(
     csv_path: &Path,
     device_name: &str,
@@ -125,6 +126,7 @@ pub fn write_session_meta(
     start_utc: u64,
     total_samples: u64,
     device_id: &SessionDeviceId<'_>,
+    device_kind: &str,
 ) {
     write_session_meta_full(
         csv_path,
@@ -134,6 +136,7 @@ pub fn write_session_meta(
         start_utc,
         total_samples,
         device_id,
+        device_kind,
         None,
     );
 }
@@ -148,6 +151,7 @@ pub fn write_session_meta_full(
     start_utc: u64,
     total_samples: u64,
     device_id: &SessionDeviceId<'_>,
+    device_kind: &str,
     status: Option<&skill_daemon_common::StatusResponse>,
 ) {
     let session_end = unix_secs();
@@ -161,6 +165,7 @@ pub fn write_session_meta_full(
         "total_samples": total_samples,
         "sample_rate_hz": sample_rate,
         "device_name": device_name,
+        "device_kind": device_kind,
         "channel_names": channel_names,
         "channel_count": channel_names.len(),
         "firmware_version": device_id.firmware_version,

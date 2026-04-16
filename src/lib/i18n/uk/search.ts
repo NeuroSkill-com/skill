@@ -226,6 +226,18 @@ const search: Record<string, string> = {
   "label.customTime": "Custom time",
   "label.labelNow": "Label at now",
   "label.resetToNow": "Reset to now",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "запит",
+  "search.nodeText": "текст",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "знайдено",
+  "search.nodeScreenshots": "знімки",
+  "search.nodeQueryTip": "Вбудовування запиту",
+  "search.nodeTextTip": "Збіги текстових міток",
+  "search.nodeEegTip": "Сусідні епохи ЕЕГ",
+  "search.nodeFoundTip": "Мітки біля точок ЕЕГ",
+  "search.nodeScreenshotsTip": "Знімки біля збігів",
 };
 
 export default search;

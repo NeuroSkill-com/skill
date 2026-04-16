@@ -71,6 +71,8 @@ pub(crate) struct Pipeline {
     pub(crate) firmware_version: Option<String>,
     pub(crate) serial_number: Option<String>,
     pub(crate) fnirs_channel_names: Vec<String>,
+    /// Device kind tag (e.g. "muse", "awear", "openbci", "emotiv").
+    pub(crate) device_kind: String,
     pub(crate) ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer,
 }
 
@@ -172,6 +174,7 @@ impl Pipeline {
             firmware_version: None,
             serial_number: None,
             fnirs_channel_names: Vec::new(),
+            device_kind: String::new(),
             // 5-second window covers one full HRV epoch at 64 Hz PPG.
             ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer::new(5.0),
         })
@@ -280,6 +283,7 @@ impl Pipeline {
                 firmware_version: self.firmware_version.as_deref(),
                 serial_number: self.serial_number.as_deref(),
             },
+            &self.device_kind,
         );
         info!(
             path = %self.csv_path.display(),

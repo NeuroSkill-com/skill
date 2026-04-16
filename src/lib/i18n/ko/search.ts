@@ -222,6 +222,18 @@ const search: Record<string, string> = {
   "search.imageEmptyState":
     "캡처한 스크린샷에서 추출된 텍스트를 검색합니다. '텍스트 일치'로 정확한 부분 문자열 검색, '시맨틱'으로 의미 기반 검색을 사용하세요.",
   "search.imageNoResults": "일치하는 스크린샷이 없습니다.",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "쿼리",
+  "search.nodeText": "텍스트",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "발견",
+  "search.nodeScreenshots": "스크린샷",
+  "search.nodeQueryTip": "쿼리 임베딩",
+  "search.nodeTextTip": "텍스트 레이블 일치",
+  "search.nodeEegTip": "EEG 이웃 에포크",
+  "search.nodeFoundTip": "EEG 포인트 근처 레이블",
+  "search.nodeScreenshotsTip": "일치 항목 근처 스크린샷",
 };
 
 export default search;

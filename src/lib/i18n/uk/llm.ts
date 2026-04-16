@@ -449,6 +449,20 @@ const llm: Record<string, string> = {
   "chat.noModelBtn": "Відкрити налаштування LLM",
   "chat.noModelHint": "Завантажте модель у Налаштування → LLM, щоб почати.",
   "chat.tokSec": "ток/с",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "Покриття вбудовувань",
+  "model.coverageSummary": "{embedded} з {total} епох вбудовано ({pct}%)",
+  "model.coverageMissing": "{missing} епох потребують вбудовування",
+  "model.coverageComplete": "Усі епохи вбудовані",
+  "model.coverageEta": "Орієнтовно: {eta}",
+  "model.perDayBreakdown": "Розбивка по днях",
+  "model.idleReembedActive": "Фонове вбудовування активне",
+  "model.idleReembedProcessing": "Обробка {day} ({done}/{total})",
+  "model.idleReembedWaiting": "Почнеться після {remaining}с простою",
+  "model.idleReembedIdle": "Очікування періоду простою",
+  "search.eegCoverage": "Покриття ЕЕГ",
+  "search.eegCoverageLabel": "{embedded} з {total} ({pct}%)",
 };
 
 export default llm;

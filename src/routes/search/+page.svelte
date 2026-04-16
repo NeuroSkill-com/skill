@@ -107,6 +107,9 @@ interface CorpusStats {
   eeg_total_sessions?: number;
   eeg_total_secs?: number;
   label_stale?: number;
+  eeg_total_epochs?: number;
+  eeg_embedded_epochs?: number;
+  eeg_missing_epochs?: number;
 }
 let corpusStats = $state<CorpusStats | null>(null);
 
@@ -1437,6 +1440,25 @@ useWindowTitle("window.title.search");
                   {/if}
                 </div>
                 <span class="text-[0.5rem] text-muted-foreground/30">{corpusStats.eeg_first_day} – {corpusStats.eeg_last_day}</span>
+                {#if corpusStats.eeg_total_epochs != null && corpusStats.eeg_total_epochs > 0}
+                  {@const covPct = corpusStats.eeg_total_epochs > 0 ? Math.round(((corpusStats.eeg_embedded_epochs ?? 0) / corpusStats.eeg_total_epochs) * 100) : 0}
+                  <div class="flex items-center justify-center gap-2 mt-0.5">
+                    <span class="text-[0.5rem] {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                      {t("search.eegCoverage")}:
+                    </span>
+                    <div class="h-1 w-12 rounded-full bg-muted/30 overflow-hidden">
+                      <div class="h-full rounded-full {covPct >= 95 ? 'bg-emerald-500/60' : covPct >= 50 ? 'bg-amber-500/60' : 'bg-red-500/60'}"
+                           style="width:{covPct}%"></div>
+                    </div>
+                    <span class="text-[0.5rem] {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                      {t("search.eegCoverageLabel", {
+                        embedded: (corpusStats.eeg_embedded_epochs ?? 0).toLocaleString(),
+                        total: corpusStats.eeg_total_epochs.toLocaleString(),
+                        pct: String(covPct),
+                      })}
+                    </span>
+                  </div>
+                {/if}
               {:else}
                 <span class="text-muted-foreground/30">No EEG recordings yet</span>
               {/if}
@@ -1924,26 +1946,26 @@ useWindowTitle("window.title.search");
         {@const ssCount   = dispNodes.filter(n => n.kind === "screenshot").length}
 
         <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border dark:border-white/[0.05] shrink-0">
-          <!-- Coloured node-kind dots + counts -->
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-violet-500/80 tabular-nums shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>1
+          <!-- Coloured node-kind dots + counts + labels -->
+          <span class="flex items-center gap-0.5 text-[0.52rem] text-violet-500/80 tabular-nums shrink-0" title={t("search.nodeQueryTip")}>
+            <span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>1 <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeQuery")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-blue-500/80 tabular-nums shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>{tlCount}
+          <span class="flex items-center gap-0.5 text-[0.52rem] text-blue-500/80 tabular-nums shrink-0" title={t("search.nodeTextTip")}>
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>{tlCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeText")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-amber-500/80 tabular-nums shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>{epCount}
+          <span class="flex items-center gap-0.5 text-[0.52rem] text-amber-500/80 tabular-nums shrink-0" title={t("search.nodeEegTip")}>
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>{epCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeEeg")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-emerald-500/80 tabular-nums shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if}
+          <span class="flex items-center gap-0.5 text-[0.52rem] text-emerald-500/80 tabular-nums shrink-0" title={t("search.nodeFoundTip")}>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeFound")}</span>
           </span>
           {#if ssCount > 0}
             <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-            <span class="flex items-center gap-0.5 text-[0.52rem] text-cyan-500/80 tabular-nums shrink-0">
-              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount}
+            <span class="flex items-center gap-0.5 text-[0.52rem] text-cyan-500/80 tabular-nums shrink-0" title={t("search.nodeScreenshotsTip")}>
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeScreenshots")}</span>
             </span>
           {/if}
           <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
@@ -2063,6 +2085,15 @@ useWindowTitle("window.title.search");
               <span class="text-muted-foreground/20">·</span>
               <span title="Screenshots (embedded / total)">
                 <span class="font-semibold text-foreground/50">{corpusStats.screenshot_embedded}</span>/<span class="font-semibold text-foreground/50">{corpusStats.screenshot_total}</span> screenshots
+              </span>
+            {/if}
+            {#if corpusStats.eeg_total_epochs != null && corpusStats.eeg_total_epochs > 0}
+              {@const covPct = Math.round(((corpusStats.eeg_embedded_epochs ?? 0) / corpusStats.eeg_total_epochs) * 100)}
+              <span class="text-muted-foreground/20">·</span>
+              <span title="EEG embedding coverage" class="flex items-center gap-1">
+                <span class="{covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                  {(corpusStats.eeg_embedded_epochs ?? 0).toLocaleString()}/{corpusStats.eeg_total_epochs.toLocaleString()} epochs ({covPct}%)
+                </span>
               </span>
             {/if}
             <span class="text-muted-foreground/20">·</span>

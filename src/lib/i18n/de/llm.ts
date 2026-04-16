@@ -453,6 +453,20 @@ const llm: Record<string, string> = {
   "chat.noModelBtn": "LLM-Einstellungen öffnen",
   "chat.noModelHint": "Laden Sie ein Modell unter Einstellungen → LLM herunter, um zu beginnen.",
   "chat.tokSec": "Tok/s",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "Embedding-Abdeckung",
+  "model.coverageSummary": "{embedded} von {total} Epochen eingebettet ({pct}%)",
+  "model.coverageMissing": "{missing} Epochen müssen eingebettet werden",
+  "model.coverageComplete": "Alle Epochen eingebettet",
+  "model.coverageEta": "Voraussichtlich: {eta}",
+  "model.perDayBreakdown": "Aufschlüsselung pro Tag",
+  "model.idleReembedActive": "Hintergrund-Einbettung aktiv",
+  "model.idleReembedProcessing": "Verarbeite {day} ({done}/{total})",
+  "model.idleReembedWaiting": "Startet nach {remaining}s Leerlauf",
+  "model.idleReembedIdle": "Warte auf Leerlaufzeit",
+  "search.eegCoverage": "EEG-Abdeckung",
+  "search.eegCoverageLabel": "{embedded} von {total} ({pct} %)",
 };
 
 export default llm;

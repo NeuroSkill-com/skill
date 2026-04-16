@@ -231,6 +231,18 @@ const search: Record<string, string> = {
   "label.customTime": "Custom time",
   "label.labelNow": "Label at now",
   "label.resetToNow": "Reset to now",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "search.nodeQuery": "requête",
+  "search.nodeText": "texte",
+  "search.nodeEeg": "EEG",
+  "search.nodeFound": "trouvés",
+  "search.nodeScreenshots": "captures",
+  "search.nodeQueryTip": "Embedding de requête",
+  "search.nodeTextTip": "Correspondances textuelles",
+  "search.nodeEegTip": "Époques EEG voisines",
+  "search.nodeFoundTip": "Labels découverts près des points EEG",
+  "search.nodeScreenshotsTip": "Captures près des correspondances",
 };
 
 export default search;

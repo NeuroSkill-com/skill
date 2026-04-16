@@ -441,6 +441,20 @@ const llm: Record<string, string> = {
     "使用 --features llm（以及可选的 llm-metal / llm-cuda / llm-mtmd）重新构建以启用嵌入式 OpenAI 兼容推理服务器。",
   "llm.endpoints.title": "OpenAI 兼容端点",
   "llm.endpoints.hint": "所有端点与 WebSocket / REST API 在同一端口上提供服务。",
+
+  // ── Auto-synced from en/ (2026-04-16) ──
+  "model.embeddingCoverage": "嵌入覆盖率",
+  "model.coverageSummary": "{total} 个 epoch 中已嵌入 {embedded} 个（{pct}%）",
+  "model.coverageMissing": "{missing} 个 epoch 需要嵌入",
+  "model.coverageComplete": "所有 epoch 已嵌入",
+  "model.coverageEta": "预计完成：{eta}",
+  "model.perDayBreakdown": "按日明细",
+  "model.idleReembedActive": "后台嵌入进行中",
+  "model.idleReembedProcessing": "正在处理 {day}（{done}/{total}）",
+  "model.idleReembedWaiting": "空闲 {remaining} 秒后开始",
+  "model.idleReembedIdle": "等待空闲时段",
+  "search.eegCoverage": "EEG 覆盖率",
+  "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
 };
 
 export default llm;
