@@ -216,6 +216,18 @@ impl LabelStore {
 
     /// Return ids + text + context for rows that have never been embedded
     /// OR were embedded with a different model than `current_model`.
+    /// Fast count of labels that need (re-)embedding. Uses `SELECT COUNT(*)`.
+    pub fn count_needing_embed(&self, current_model: &str) -> u64 {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM labels \
+                 WHERE text_embedding IS NULL OR embedding_model IS NULL OR embedding_model != ?1",
+                params![current_model],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64
+    }
+
     pub fn rows_needing_embed(&self, current_model: &str) -> Vec<(i64, String, String)> {
         let mut stmt = match self.conn.prepare(
             "SELECT id, text, context FROM labels \
