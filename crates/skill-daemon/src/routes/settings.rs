@@ -1588,6 +1588,128 @@ mod tests {
         assert!(!p.pause_requested);
     }
 
+    // ── Text embedding model tests ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn get_text_embedding_model_returns_current() {
+        let (_td, st) = mk_state();
+        let Json(v) = get_text_embedding_model(State(st)).await;
+        assert!(v.get("model").is_some());
+        assert!(v["model"].as_str().unwrap().contains('/'));
+    }
+
+    #[tokio::test]
+    async fn set_text_embedding_model_valid_persists() {
+        let (td, st) = mk_state();
+        // Set to bge-small
+        let Json(_) = set_text_embedding_model(
+            State(st.clone()),
+            Json(serde_json::json!({ "model": "BAAI/bge-small-en-v1.5" })),
+        )
+        .await;
+        // Model load may fail in test env (no weights), but the code should be set.
+        let Json(cur) = get_text_embedding_model(State(st.clone())).await;
+        assert_eq!(cur["model"], "BAAI/bge-small-en-v1.5");
+
+        // Verify it was persisted to settings file.
+        let settings = skill_settings::load_settings(td.path());
+        assert_eq!(settings.text_embedding_model, "BAAI/bge-small-en-v1.5");
+    }
+
+    #[tokio::test]
+    async fn set_text_embedding_model_unknown_rejected() {
+        let (_td, st) = mk_state();
+        let Json(v) = set_text_embedding_model(
+            State(st),
+            Json(serde_json::json!({ "model": "nonexistent/fake-model" })),
+        )
+        .await;
+        assert_eq!(v["ok"], false);
+        assert!(v["error"].as_str().unwrap().contains("failed to load"));
+    }
+
+    #[tokio::test]
+    async fn set_text_embedding_model_missing_field_rejected() {
+        let (_td, st) = mk_state();
+        let Json(v) = set_text_embedding_model(State(st), Json(serde_json::json!({}))).await;
+        assert_eq!(v["ok"], false);
+        assert!(v["error"].as_str().unwrap().contains("missing"));
+    }
+
+    // ── Streaming reembed tests ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn trigger_reembed_stream_returns_sse() {
+        use axum::body::Body;
+        use tower::ServiceExt;
+
+        let (_td, st) = mk_state();
+        let app = router().with_state(st);
+
+        let req = axum::http::Request::builder()
+            .method(axum::http::Method::POST)
+            .uri("/models/trigger-reembed/stream")
+            .header("content-type", "application/json")
+            .body(Body::from("{}"))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        assert_eq!(resp.headers().get("content-type").unwrap(), "text/event-stream",);
+    }
+
+    #[tokio::test]
+    async fn trigger_reembed_stream_emits_events() {
+        let (_td, st) = mk_state();
+
+        // Subscribe to broadcast before triggering.
+        let mut rx = st.events_tx.subscribe();
+
+        // Trigger reembed (empty skill_dir = fast, emits loading_encoder → done).
+        let Json(v) = trigger_reembed(State(st.clone())).await;
+        assert_eq!(v["ok"], true);
+
+        // Collect reembed-progress events with a timeout.
+        let mut statuses = Vec::new();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                match rx.recv().await {
+                    Ok(env) if env.r#type == "reembed-progress" => {
+                        let s = env
+                            .payload
+                            .get("status")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let done = s == "done" || s == "error" || s == "idle_done";
+                        statuses.push(s);
+                        if done {
+                            break;
+                        }
+                    }
+                    Ok(_) => continue,
+                    Err(_) => break,
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok(), "reembed should complete within 30s");
+        assert!(!statuses.is_empty(), "should receive at least one status event");
+        assert!(
+            statuses.contains(&"loading_encoder".to_string())
+                || statuses.contains(&"done".to_string())
+                || statuses.contains(&"error".to_string()),
+            "should see loading_encoder or done/error, got: {statuses:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn trigger_reembed_non_stream_still_works() {
+        let (_td, st) = mk_state();
+        let Json(v) = trigger_reembed(State(st)).await;
+        assert_eq!(v["ok"], true);
+    }
+
     #[tokio::test]
     async fn settings_router_contract_core_paths_exist() {
         use axum::body::Body;
