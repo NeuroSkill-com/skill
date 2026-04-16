@@ -130,7 +130,7 @@ jobs:
           APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:  ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: >-
-          python3 scripts/ci.py verify-secrets
+          node scripts/ci.mjs verify-secrets
           APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
           APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY
 
@@ -241,14 +241,14 @@ jobs:
           APPLE_ID:       ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
-        run: python3 scripts/ci.py validate-notarization
+        run: node scripts/ci.mjs validate-notarization
 
       # ── Import Apple Developer certificate into a temporary keychain ─────────
       - name: Import Apple Developer certificate
         env:
           APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: python3 scripts/ci.py import-apple-cert
+        run: node scripts/ci.mjs import-apple-cert
 
       # ── Compile: frontend + Rust binary ──────────────────────────────────────
       # Identical rationale to release-mac.yml — see that file for full details.
@@ -345,7 +345,7 @@ jobs:
 
       - name: Prepare changelog notes for preview artifact
         run: >-
-          python3 scripts/ci.py prepare-changelog
+          node scripts/ci.mjs prepare-changelog
           "${{ steps.label.outputs.conf_version }}" preview-notes.md
 
       # ── Upload to GitHub Actions artifacts (14-day retention) ────────────────

@@ -86,7 +86,7 @@ jobs:
       # Without this, the Rust build cache restore + compile fills the ~14 GB
       # runner disk and causes "No space left on device" failures.
       - name: Free disk space
-        run: python3 scripts/ci.py free-disk-space
+        run: node scripts/ci.mjs free-disk-space
 
       - uses: actions/checkout@v6
         with:
@@ -133,7 +133,7 @@ jobs:
         uses: ./.github/actions/setup-vulkan-linux
 
       - name: Download prebuilt llama libs (Linux, optional)
-        run: python3 scripts/ci.py download-llama linux x86_64-unknown-linux-gnu vulkan
+        run: node scripts/ci.mjs download-llama linux x86_64-unknown-linux-gnu vulkan
 
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
@@ -467,7 +467,7 @@ jobs:
 
       - name: Validate Windows app manifest
         shell: bash
-        run: python scripts/check_windows_manifest.py src-tauri/manifest.xml
+        run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
@@ -566,7 +566,7 @@ jobs:
           fi
 
       - name: Install protoc (Windows)
-        run: python3 scripts/ci.py install-protoc-windows
+        run: node scripts/ci.mjs install-protoc-windows
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -628,7 +628,7 @@ jobs:
 
       - name: Download prebuilt llama libs (Windows, optional)
         shell: bash
-        run: python3 scripts/ci.py download-llama windows x86_64-pc-windows-msvc vulkan
+        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
 
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
@@ -943,7 +943,7 @@ jobs:
         run: git submodule update --init --depth=1 skills
 
       - name: Free disk space
-        run: python3 scripts/ci.py free-disk-space
+        run: node scripts/ci.mjs free-disk-space
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

@@ -33,6 +33,7 @@ for arg in "$@"; do
       echo "  smoke     Build verification smoke test"
       echo "  daemon    Daemon packaging test"
       echo "  e2e       LLM end-to-end test"
+      echo "  a11y      Accessibility audit"
       echo "  i18n      i18n key validation"
       echo "  changelog Changelog fragment check"
       echo "  pre-commit  Run pre-commit hook checks"
@@ -45,7 +46,7 @@ for arg in "$@"; do
       exit 0
       ;;
     fast)  SUITES+=(fmt lint clippy vitest rust ci types) ;;
-    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types i18n changelog smoke daemon e2e) ;;
+    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types a11y i18n changelog smoke daemon e2e) ;;
     hooks) SUITES+=(pre-commit pre-push) ;;
     *)     SUITES+=("$arg") ;;
   esac
@@ -67,10 +68,10 @@ for s in "${SUITES[@]}"; do
 done
 SUITES=("${UNIQUE[@]}")
 
-TOTAL=${#SUITES[@]}
 PASSED=0
 FAILED=0
 SKIPPED=0
+STEP=0
 FAILURES=()
 T_START=$(date +%s)
 
@@ -82,8 +83,8 @@ fi
 run_suite() {
   local name="$1"
   shift
-  local idx=$((PASSED + FAILED + SKIPPED + 1))
-  printf "\n\033[1;36m[%d/%d] %s\033[0m\n" "$idx" "$TOTAL" "$name"
+  STEP=$((STEP + 1))
+  printf "\n\033[1;36m[%d] %s\033[0m\n" "$STEP" "$name"
   local t0=$(date +%s)
 
   if "$@"; then
@@ -104,8 +105,8 @@ run_suite() {
 skip_suite() {
   local name="$1"
   local reason="$2"
-  local idx=$((PASSED + FAILED + SKIPPED + 1))
-  printf "\n\033[1;36m[%d/%d] %s\033[0m\n" "$idx" "$TOTAL" "$name"
+  STEP=$((STEP + 1))
+  printf "\n\033[1;36m[%d] %s\033[0m\n" "$STEP" "$name"
   printf "\033[33m  ⊘ skipped: %s\033[0m\n" "$reason"
   SKIPPED=$((SKIPPED + 1))
 }
@@ -140,10 +141,13 @@ for suite in "${SUITES[@]}"; do
       run_suite "rust tests (all tiers)" bash scripts/test-fast.sh --all || { $STOP_ON_FAIL && break; }
       ;;
     ci)
-      run_suite "ci.py self-test" python3 scripts/ci.py self-test || { $STOP_ON_FAIL && break; }
+      run_suite "ci.mjs self-test" node scripts/ci.mjs self-test || { $STOP_ON_FAIL && break; }
       ;;
     types)
       run_suite "svelte-check" npx svelte-check --tsconfig ./tsconfig.json || { $STOP_ON_FAIL && break; }
+      ;;
+    manifest)
+      run_suite "Windows manifest" node scripts/check-windows-manifest.mjs || { $STOP_ON_FAIL && break; }
       ;;
     smoke)
       run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
@@ -157,6 +161,9 @@ for suite in "${SUITES[@]}"; do
       else
         skip_suite "LLM E2E" "no daemon binary (build first)"
       fi
+      ;;
+    a11y)
+      run_suite "accessibility audit" node scripts/audit-a11y.js --check || { $STOP_ON_FAIL && break; }
       ;;
     i18n)
       run_suite "i18n key validation" npm run -s check:i18n:locales || { $STOP_ON_FAIL && break; }
@@ -176,7 +183,7 @@ for suite in "${SUITES[@]}"; do
       run_suite "cargo clippy (workspace)" cargo clippy --locked --workspace --exclude skill -- -D warnings || { $STOP_ON_FAIL && break; }
       run_suite "cargo clippy (app)" cargo clippy -p skill --locked -- -D warnings || { $STOP_ON_FAIL && break; }
       run_suite "cargo test (workspace)" cargo test --locked --workspace --exclude skill || { $STOP_ON_FAIL && break; }
-      run_suite "ci.py self-test" python3 scripts/ci.py self-test || { $STOP_ON_FAIL && break; }
+      run_suite "ci.mjs self-test" node scripts/ci.mjs self-test || { $STOP_ON_FAIL && break; }
       ;;
     *)
       echo "Unknown suite: $suite (use --list to see available suites)" >&2

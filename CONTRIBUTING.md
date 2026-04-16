@@ -43,8 +43,10 @@ for optional build acceleration.
 │   ├── routes/          # Page routes
 │   └── tests/           # Frontend tests
 ├── src-tauri/           # Tauri app shell
-├── scripts/             # Build & CI scripts (ci.py is the shared CI entry point)
-│   └── ci.py            # Cross-platform CI helpers (version, changelog, discord, etc.)
+├── scripts/             # Build, CI & test scripts (Node.js + bash, no Python)
+│   ├── ci.mjs           # Cross-platform CI helpers (version, changelog, discord, etc.)
+│   ├── test-picker.mjs  # Interactive test suite picker (npm test)
+│   └── test-all.sh      # Test runner with 17 suites + timing + summary
 └── changes/             # Changelog fragments
 ```
 
@@ -70,6 +72,7 @@ npm run test:types         # TypeScript/Svelte type checking
 npm run test:rust          # Tier 1 Rust tests (~5 s warm)
 npm run test:rust:all      # All Rust tiers (~65 s clean)
 npm run test:ci            # CI script self-test
+npm run test:a11y          # Accessibility audit
 npm run test:i18n          # i18n key validation
 npm run test:changelog     # Changelog fragment check
 npm run test:e2e           # LLM E2E (downloads model, ~15 s cached)
@@ -156,16 +159,16 @@ The **pre-commit** hook automatically checks:
 The **pre-push** hook runs scoped checks based on changed files:
 - Frontend: `biome check` + `vitest related` on changed files
 - Rust: `cargo clippy` + `cargo test` on affected crates
-- CI scripts: `python3 scripts/ci.py self-test` when `ci.py` or workflows change
+- CI scripts: `node scripts/ci.mjs self-test` when `ci.mjs` or workflows change
 - Daemon guard: `vitest run daemon-client.test.ts` when daemon proxy or scripts change
 
 ### CI & Releases
 
-All CI logic lives in `scripts/ci.py` — a single Python file with subcommands that
+All CI logic lives in `scripts/ci.mjs` — a single Node.js file with subcommands that
 runs on macOS, Linux, and Windows. Workflows call it instead of inline bash/PowerShell.
 
 ```bash
-# Validate ci.py and workflow references
+# Validate ci.mjs and workflow references
 npm run ci:test
 
 # Local release dry-run (builds frontend + Rust + .app bundle + changelog)
@@ -175,7 +178,7 @@ npm run ci:dry-run
 npm run ci:dry-run:fast
 ```
 
-**Available `ci.py` commands:**
+**Available `ci.mjs` commands:**
 
 | Command | What it does |
 |---------|-------------|

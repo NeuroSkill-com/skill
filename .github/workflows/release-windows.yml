@@ -36,7 +36,7 @@ jobs:
 
       - name: Validate Windows app manifest
         shell: bash
-        run: python scripts/check_windows_manifest.py src-tauri/manifest.xml
+        run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
 
       # ── Resolve version ─────────────────────────────────────────────────────
       # Tag push: verify tag matches tauri.conf.json.
@@ -49,7 +49,7 @@ jobs:
           GITHUB_REF:        ${{ github.ref }}
           GITHUB_REF_NAME:   ${{ github.ref_name }}
           DRY_RUN:           ${{ inputs.dry_run || 'false' }}
-        run: python3 scripts/ci.py resolve-version
+        run: node scripts/ci.mjs resolve-version
 
       # ── MSVC developer environment ────────────────────────────────────────────
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
@@ -210,7 +210,7 @@ jobs:
         run: npm ci
 
       - name: Install protoc (Windows)
-        run: python3 scripts/ci.py install-protoc-windows
+        run: node scripts/ci.mjs install-protoc-windows
 
 
       - name: Build frontend
@@ -333,7 +333,7 @@ jobs:
 
       - name: Download prebuilt llama libs (Windows, optional)
         shell: bash
-        run: python3 scripts/ci.py download-llama windows x86_64-pc-windows-msvc vulkan
+        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
 
       # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
       # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
@@ -844,7 +844,7 @@ jobs:
           TAG="${{ steps.version_meta.outputs.tag }}"
           PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
           RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          python3 scripts/ci.py prepare-changelog \
+          node scripts/ci.mjs prepare-changelog \
             "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create / update GitHub Release
@@ -872,7 +872,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 scripts/ci.py update-latest-json
+          node scripts/ci.mjs update-latest-json
           --platform windows-x86_64
           --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.nsis_zip_name }}"
           --sig-file "${{ steps.artifacts.outputs.nsis_sig }}"
@@ -910,7 +910,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
-          python3 scripts/ci.py discord-notify
+          node scripts/ci.mjs discord-notify
           --status  "${{ job.status }}"
           --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Windows ${{ job.status == 'success' && 'Published' || 'Failed' }}"
           --version "${{ steps.version_meta.outputs.version }}"

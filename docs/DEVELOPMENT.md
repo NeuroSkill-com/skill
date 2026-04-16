@@ -5,7 +5,7 @@
 - Rust (stable)
 - Node.js 18+
 - Tauri CLI v2
-- Python 3 (for model download helper)
+- Python 3 (optional — only for `huggingface_hub` model downloads)
 - Platform-specific build tools:
   - macOS: Xcode Command Line Tools
   - Linux: see [LINUX.md](./LINUX.md)
@@ -97,7 +97,8 @@ npm run test:vitest        # vitest run (frontend unit tests)
 npm run test:types         # svelte-check (TypeScript/Svelte)
 npm run test:rust          # Rust tier 1 (~5s warm)
 npm run test:rust:all      # Rust all tiers (~65s clean)
-npm run test:ci            # ci.py self-test
+npm run test:ci            # ci.mjs self-test
+npm run test:a11y          # Accessibility audit
 npm run test:i18n          # i18n key validation
 npm run test:changelog     # Changelog fragment check
 npm run test:e2e           # LLM E2E test
@@ -135,7 +136,7 @@ bash scripts/test-all.sh --list                 # show available suites
 Scoped checks based on changed files:
 - Frontend changes: `biome check` + `vitest related`
 - Rust changes: `cargo clippy` + `cargo test` on affected crates
-- CI changes: `python3 scripts/ci.py self-test`
+- CI changes: `node scripts/ci.mjs self-test`
 - Daemon/scripts changes: `vitest run daemon-client.test.ts`
 
 Full mode (runs everything): `PREPUSH_FULL=1 git push`
@@ -209,5 +210,5 @@ npm run tag           # Create + push git tag
 ### CI script validation
 
 ```bash
-npm run ci:test       # Verify ci.py commands + workflow references
+npm run ci:test       # Verify ci.mjs commands + workflow references
 ```
