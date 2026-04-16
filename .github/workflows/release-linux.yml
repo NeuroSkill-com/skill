@@ -7,6 +7,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
 
 permissions:
   contents: write   # create/update GitHub Releases and upload assets
@@ -20,17 +21,7 @@ jobs:
     steps:
       # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /usr/local/share/chromium
-          sudo rm -rf /usr/share/swift
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -af 2>/dev/null || true
-          df -h /
+        run: bash scripts/ci-free-disk-space.sh
 
       # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout
@@ -39,28 +30,13 @@ jobs:
           fetch-depth: 0   # full history for git tag --format and changelog generation
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
-      - name: Verify version matches tag
+      - name: Resolve version
         id: version_meta
-        run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          CONF_VERSION=$(
-            grep '"version"' src-tauri/tauri.conf.json \
-            | head -1 \
-            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
-          )
-          if [ "$VERSION" != "$CONF_VERSION" ]; then
-            echo "::error::Tag version ($VERSION) does not match" \
-                 "tauri.conf.json version ($CONF_VERSION)."
-            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
-                 "src-tauri/Cargo.toml, then re-tag."
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG"         >> "$GITHUB_ENV"
-          echo "✓ Version verified: $VERSION"
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+        run: bash scripts/ci-resolve-version.sh
 
       # ── System dependencies ───────────────────────────────────────────────────
       # Linux compile + system package flow requires WebKit2GTK and supporting
@@ -133,12 +109,7 @@ jobs:
       - name: Verify signing secrets are present
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::Secret 'TAURI_SIGNING_PRIVATE_KEY' is empty or not set."
-            exit 1
-          fi
-          echo "✓ TAURI_SIGNING_PRIVATE_KEY is present."
+        run: bash scripts/ci-verify-secrets.sh TAURI_SIGNING_PRIVATE_KEY
 
       # ── Vulkan SDK ────────────────────────────────────────────────────────────
       # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
@@ -148,48 +119,7 @@ jobs:
 
       - name: Download prebuilt llama libs (Linux, optional)
         shell: bash
-        run: |
-          set -euo pipefail
-          URL="https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-linux-x86_64-unknown-linux-gnu-q1-vulkan.tar.gz"
-          ARCHIVE="$RUNNER_TEMP/llama-prebuilt-linux.tar.gz"
-          DEST="$RUNNER_TEMP/llama-prebuilt-linux"
-          EXPECTED_TARGET="x86_64-unknown-linux-gnu"
-          EXPECTED_FEATURE="vulkan"
-          mkdir -p "$DEST"
-
-          if ! curl -fL "$URL" -o "$ARCHIVE"; then
-            echo "[warn] prebuilt llama artifact unavailable; fallback to source build"
-            exit 0
-          fi
-
-          tar -xzf "$ARCHIVE" -C "$DEST"
-          ROOT="$DEST"
-          if [[ ! -d "$ROOT/lib" && ! -d "$ROOT/lib64" && ! -d "$ROOT/bin" ]]; then
-            ROOT="$(find "$DEST" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
-          fi
-
-          if [[ -z "${ROOT:-}" ]]; then
-            echo "[warn] prebuilt llama archive layout invalid; fallback to source build"
-            exit 0
-          fi
-
-          if ! find "$ROOT" -type f \( -name '*.a' -o -name '*.so' \) | head -n1 >/dev/null; then
-            echo "[warn] prebuilt llama archive contains no static/shared libs; fallback to source build"
-            exit 0
-          fi
-
-          if [[ -f "$ROOT/metadata.json" ]]; then
-            TARGET="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("target",""))' "$ROOT/metadata.json")"
-            FEATURES="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("features",""))' "$ROOT/metadata.json")"
-            if [[ "$TARGET" != "$EXPECTED_TARGET" || "$FEATURES" != *"$EXPECTED_FEATURE"* ]]; then
-              echo "[warn] prebuilt metadata mismatch (target=$TARGET features=$FEATURES); fallback to source build"
-              exit 0
-            fi
-          fi
-
-          echo "LLAMA_PREBUILT_DIR=$ROOT" >> "$GITHUB_ENV"
-          echo "LLAMA_PREBUILT_SHARED=0" >> "$GITHUB_ENV"
-          echo "[ok] LLAMA_PREBUILT_DIR=$ROOT"
+        run: bash scripts/ci-download-llama-prebuilt.sh linux x86_64-unknown-linux-gnu vulkan
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Build frontend ────────────────────────────────────────────────────────
@@ -439,57 +369,16 @@ jobs:
       #   SHA256SUMS-linux-x86_64.txt — checksums for Linux artifacts
       #   *.deb.sig / *.rpm.sig / *.tar.gz.sig — detached signatures
       - name: Prepare changelog notes for release
-        shell: bash
+        if: steps.version_meta.outputs.is_release == 'true'
         run: |
-          set -euo pipefail
-
-          VERSION="${{ steps.version_meta.outputs.version }}"
-          CURRENT_TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
-          COMMIT_RANGE="$CURRENT_TAG"
-          if [ -n "$PREV_TAG" ]; then
-            COMMIT_RANGE="$PREV_TAG..$CURRENT_TAG"
-          fi
-
-          TMP_SECTION="release-changelog-section.md"
-          CONTRIBUTORS_FILE="release-contributors.md"
-          RELEASE_BODY="release-notes.md"
-
-          awk -v version="$VERSION" '
-            BEGIN { in_section = 0; found = 0 }
-            $0 ~ ("^## \\[" version "\\]") { in_section = 1; found = 1; next }
-            in_section && $0 ~ /^## \[/ { exit }
-            in_section { print }
-            END { if (!found) exit 2 }
-          ' CHANGELOG.md > "$TMP_SECTION" || true
-
-          git log --format='%aN' $COMMIT_RANGE \
-            | awk '
-                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0) }
-                NF && !seen[$0]++ { print "- " $0 }
-              ' > "$CONTRIBUTORS_FILE"
-
-          {
-            echo "## Changelog"
-            echo
-            if [ -s "$TMP_SECTION" ]; then
-              cat "$TMP_SECTION"
-            else
-              echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
-            fi
-            echo
-            echo "## Contributors"
-            echo
-            if [ -s "$CONTRIBUTORS_FILE" ]; then
-              cat "$CONTRIBUTORS_FILE"
-            else
-              echo "_No commit contributors found in range $COMMIT_RANGE._"
-            fi
-          } > "$RELEASE_BODY"
-
-          rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
+          TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
+          bash scripts/ci-prepare-changelog.sh \
+            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create / update GitHub Release
+        if: steps.version_meta.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
@@ -512,103 +401,41 @@ jobs:
       # platform workflow ran first), merges the linux-x86_64 entry, then
       # re-uploads.  If no latest.json exists yet, creates one from scratch.
       - name: Update latest.json
+        if: steps.version_meta.outputs.is_release == 'true'
         env:
-          GH_TOKEN:          ${{ github.token }}
-          GH_REPO:           ${{ github.repository }}
-          TAG:               ${{ steps.version_meta.outputs.tag }}
-          VERSION:           ${{ steps.version_meta.outputs.version }}
-          PORTABLE_TAR_NAME: ${{ steps.artifacts.outputs.portable_tar_name }}
-          PORTABLE_SIG_PATH: ${{ steps.integrity.outputs.portable_tar_sig }}
-        run: |
-          python3 - <<'PYEOF'
-          import json, os, subprocess, datetime
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/ci-update-latest-json.py
+          --platform linux-x86_64
+          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.portable_tar_name }}"
+          --sig-file "${{ steps.integrity.outputs.portable_tar_sig }}"
+          --tag "${{ steps.version_meta.outputs.tag }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --upload
 
-          version      = os.environ["VERSION"]
-          tag          = os.environ["TAG"]
-          repo         = os.environ["GH_REPO"]
-          tar_name     = os.environ["PORTABLE_TAR_NAME"]
-          sig_path     = os.environ["PORTABLE_SIG_PATH"]
-
-          with open(sig_path) as fh:
-              signature = fh.read().strip()
-
-          download_url = (
-              f"https://github.com/{repo}/releases/download/{tag}/{tar_name}"
-          )
-
-          # Try to download the existing latest.json from the release.
-          dl = subprocess.run(
-              ["gh", "release", "download", tag,
-               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
-              capture_output=True, text=True,
-          )
-
-          if dl.returncode == 0:
-              with open("latest.json", encoding="utf-8-sig") as fh:
-                  manifest = json.load(fh)
-          else:
-              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-              manifest = {
-                  "version":  version,
-                  "notes":    f"NeuroSkill\u2122 v{version}",
-                  "pub_date": pub_date,
-                  "platforms": {},
-              }
-
-          manifest["platforms"]["linux-x86_64"] = {
-              "url":       download_url,
-              "signature": signature,
-          }
-
-          with open("latest.json", "w", encoding="utf-8") as fh:
-              json.dump(manifest, fh, indent=2, ensure_ascii=False)
-              fh.write("\n")
-
-          print("Updated latest.json:")
-          print(json.dumps(manifest, indent=2))
-          PYEOF
-
-          gh release upload "$TAG" latest.json --clobber
-          echo "✓ latest.json uploaded to release $TAG"
+      # ── Upload CI artifacts (on-demand builds only) ──────────────────────────
+      - name: Upload build artifacts
+        if: steps.version_meta.outputs.is_release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuroSkill-Linux-${{ steps.version_meta.outputs.version }}
+          path: |
+            ${{ steps.artifacts.outputs.deb }}
+            ${{ steps.artifacts.outputs.rpm }}
+            ${{ steps.artifacts.outputs.portable_tar }}
+          retention-days: 14
 
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
         if: always()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          JOB_STATUS:          ${{ job.status }}
-        run: |
-          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
-          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          if [[ "$JOB_STATUS" == "success" ]]; then
-            COLOR=3066993
-            TITLE="🚀 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — Linux Published"
-            DESC="NeuroSkill™ Linux build published and ready to download."
-            LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
-          else
-            COLOR=15158332
-            TITLE="💥 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — Linux Failed"
-            DESC="The NeuroSkill™ Linux release build failed. Check the run for details."
-            LINK_LINE="**[View failed run]($RUN_URL)**"
-          fi
-
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"$TITLE\",
-                \"description\": \"$DESC\n\n$LINK_LINE\",
-                \"url\": \"$RUN_URL\",
-                \"color\": $COLOR,
-                \"fields\": [
-                  {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
-                  {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
-                  {\"name\": \"Platform\", \"value\": \"Linux x86_64\",            \"inline\": true},
-                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true},
-                  {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false}
-                ],
-                \"footer\": {\"text\": \"${{ github.repository }}\"}
-              }]
-            }"
+        run: >-
+          bash scripts/ci-discord-notify.sh
+          --status  "${{ job.status }}"
+          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Linux ${{ job.status == 'success' && 'Published' || 'Failed' }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --tag     "${{ steps.version_meta.outputs.tag }}"
+          --platform "Linux x86_64"
+          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

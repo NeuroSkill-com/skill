@@ -195,19 +195,53 @@ for src_rel, dst_rel in resources.items():
         print(f"  ⚠ missing: {src_rel}", file=sys.stderr)
 PYEOF
 
-# ── Frameworks / SvelteKit frontend ───────────────────────────────────────
-# Tauri embeds the frontend into the binary via custom-protocol, so no
-# separate frontend copy is needed.  The binary serves its own assets.
+# ── SvelteKit frontend ───────────────────────────────────────────────────
+# Tauri embeds the frontend into the binary via custom-protocol for dev,
+# but release bundles need the built frontend copied into Resources/app.
+# Set FRONTEND_BUILD_DIR to the SvelteKit build output (e.g. "build").
+FRONTEND_DIR="${FRONTEND_BUILD_DIR:-}"
+if [[ -n "$FRONTEND_DIR" && -d "$FRONTEND_DIR" ]]; then
+  if [[ ! -f "$FRONTEND_DIR/index.html" ]]; then
+    echo "ERROR: FRONTEND_BUILD_DIR=$FRONTEND_DIR exists but has no index.html" >&2
+    exit 1
+  fi
+  rm -rf "$RES_DIR/app"
+  ditto "$FRONTEND_DIR" "$RES_DIR/app"
+  # Validate
+  if [[ ! -f "$RES_DIR/app/index.html" ]]; then
+    echo "ERROR: Frontend assets were not copied into app bundle." >&2
+    exit 1
+  fi
+  JS_COUNT="$(find "$RES_DIR/app/_app/immutable" -type f -name "*.js" 2>/dev/null | wc -l | tr -d ' ')"
+  CSS_COUNT="$(find "$RES_DIR/app/_app/immutable" -type f -name "*.css" 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$JS_COUNT" -eq 0 || "$CSS_COUNT" -eq 0 ]]; then
+    echo "ERROR: Frontend assets look incomplete (js=$JS_COUNT css=$CSS_COUNT)" >&2
+    exit 1
+  fi
+  echo "  ✓ frontend ($JS_COUNT js, $CSS_COUNT css)"
+fi
+
+# ── Daemon LaunchAgent plist template ────────────────────────────────────
+DAEMON_PLIST_SRC="$TAURI_DIR/resources/com.neuroskill.skill-daemon.plist"
+if [[ -f "$DAEMON_PLIST_SRC" ]]; then
+  cp "$DAEMON_PLIST_SRC" "$RES_DIR/com.neuroskill.skill-daemon.plist"
+  echo "  ✓ daemon plist template"
+fi
 
 # ── Entitlements & codesign ───────────────────────────────────────────────
+SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"
 ENTITLEMENTS="$TAURI_DIR/entitlements.plist"
-SIGN_ARGS=(--force --deep --sign -)
+SIGN_ARGS=(--force --deep --sign "$SIGN_ID" --options runtime)
 if [[ -f "$ENTITLEMENTS" ]]; then
   SIGN_ARGS+=(--entitlements "$ENTITLEMENTS")
 fi
 
 codesign "${SIGN_ARGS[@]}" "$APP_DIR"
-echo "  ✓ codesigned (ad-hoc)"
+if [[ "$SIGN_ID" == "-" ]]; then
+  echo "  ✓ codesigned (ad-hoc)"
+else
+  echo "  ✓ codesigned ($SIGN_ID)"
+fi
 
 echo ""
 echo "✓ $APP_DIR"

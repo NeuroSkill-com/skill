@@ -26,37 +26,11 @@ jobs:
       # Catches "forgot to bump the version" before wasting 20 min on a build.
       - name: Resolve version
         id: version_meta
-        run: |
-          CONF_VERSION=$(
-            grep '"version"' src-tauri/tauri.conf.json \
-            | head -1 \
-            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
-          )
-
-          IS_RELEASE="${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}"
-          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
-
-          if [ "$IS_RELEASE" = "true" ]; then
-            TAG="${{ github.ref_name }}"
-            VERSION="${TAG#v}"
-            if [ "$VERSION" != "$CONF_VERSION" ]; then
-              echo "::error::Tag version ($VERSION) does not match" \
-                   "tauri.conf.json version ($CONF_VERSION)."
-              echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
-                   "src-tauri/Cargo.toml, then re-tag."
-              exit 1
-            fi
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-            echo "TAG=$TAG" >> "$GITHUB_ENV"
-          else
-            VERSION="$CONF_VERSION"
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "TAG=" >> "$GITHUB_ENV"
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "✓ Version: $VERSION (release=$IS_RELEASE)"
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+        run: bash scripts/ci-resolve-version.sh
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -96,48 +70,7 @@ jobs:
 
       - name: Download prebuilt llama libs (macOS, optional)
         shell: bash
-        run: |
-          set -euo pipefail
-          URL="https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-macos-aarch64-apple-darwin-q1-metal.tar.gz"
-          ARCHIVE="$RUNNER_TEMP/llama-prebuilt-macos.tar.gz"
-          DEST="$RUNNER_TEMP/llama-prebuilt-macos"
-          EXPECTED_TARGET="aarch64-apple-darwin"
-          EXPECTED_FEATURE="metal"
-          mkdir -p "$DEST"
-
-          if ! curl -fL "$URL" -o "$ARCHIVE"; then
-            echo "[warn] prebuilt llama artifact unavailable; fallback to source build"
-            exit 0
-          fi
-
-          tar -xzf "$ARCHIVE" -C "$DEST"
-          ROOT="$DEST"
-          if [[ ! -d "$ROOT/lib" && ! -d "$ROOT/lib64" && ! -d "$ROOT/bin" ]]; then
-            ROOT="$(find "$DEST" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
-          fi
-
-          if [[ -z "${ROOT:-}" ]]; then
-            echo "[warn] prebuilt llama archive layout invalid; fallback to source build"
-            exit 0
-          fi
-
-          if ! find "$ROOT" -type f \( -name '*.a' -o -name '*.dylib' \) | head -n1 >/dev/null; then
-            echo "[warn] prebuilt llama archive contains no static/shared libs; fallback to source build"
-            exit 0
-          fi
-
-          if [[ -f "$ROOT/metadata.json" ]]; then
-            TARGET="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("target",""))' "$ROOT/metadata.json")"
-            FEATURES="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("features",""))' "$ROOT/metadata.json")"
-            if [[ "$TARGET" != "$EXPECTED_TARGET" || "$FEATURES" != *"$EXPECTED_FEATURE"* ]]; then
-              echo "[warn] prebuilt metadata mismatch (target=$TARGET features=$FEATURES); fallback to source build"
-              exit 0
-            fi
-          fi
-
-          echo "LLAMA_PREBUILT_DIR=$ROOT" >> "$GITHUB_ENV"
-          echo "LLAMA_PREBUILT_SHARED=0" >> "$GITHUB_ENV"
-          echo "[ok] LLAMA_PREBUILT_DIR=$ROOT"
+        run: bash scripts/ci-download-llama-prebuilt.sh macos aarch64-apple-darwin metal
 
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
@@ -152,24 +85,10 @@ jobs:
           APPLE_PASSWORD:                ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:                 ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:     ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          ok=true
-          for var in \
-            APPLE_CERTIFICATE \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_SIGNING_IDENTITY \
-            APPLE_ID \
-            APPLE_PASSWORD \
-            APPLE_TEAM_ID \
-            TAURI_SIGNING_PRIVATE_KEY
-          do
-            if [ -z "${!var}" ]; then
-              echo "::error::Secret '$var' is empty or not set."
-              ok=false
-            fi
-          done
-          $ok || exit 1
-          echo "✓ All signing and notarization secrets are present."
+        run: >-
+          bash scripts/ci-verify-secrets.sh
+          APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+          APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY
 
       # ── Pre-flight: validate Apple notarization credentials ───────────────────
       # xcrun notarytool history authenticates against Apple's API using the same
@@ -182,28 +101,7 @@ jobs:
           APPLE_ID:       ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          echo "Checking notarization credentials …"
-          OUTPUT=$(xcrun notarytool history \
-                --apple-id  "$APPLE_ID"       \
-                --password  "$APPLE_PASSWORD"  \
-                --team-id   "$APPLE_TEAM_ID"   \
-                --output-format json 2>&1) || true
-          if echo "$OUTPUT" | grep -q '"history"'; then
-            echo "✓ Notarization credentials are valid."
-          elif echo "$OUTPUT" | grep -qi "unauthorized\|invalid.*credentials\|401"; then
-            echo "::error::Apple notarization credentials are invalid."
-            echo "::error::Generate a new app-specific password at"
-            echo "::error::  https://appleid.apple.com → Sign-In and Security"
-            echo "::error::  → App-Specific Passwords → Generate"
-            echo "::error::Then update the APPLE_PASSWORD secret in:"
-            echo "::error::  GitHub → Settings → Environments → Release → Secrets"
-            exit 1
-          else
-            echo "::warning::Could not verify notarization credentials (Apple API may be intermittent)."
-            echo "::warning::Output: $OUTPUT"
-            echo "Proceeding — actual notarization will fail later if credentials are invalid."
-          fi
+        run: bash scripts/ci-validate-apple-notarization.sh
 
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Apple Developer certificate → temporary keychain ─────────────────────
@@ -219,36 +117,7 @@ jobs:
         env:
           APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-          # Persist to env so the cleanup step can always find the path.
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"         >> "$GITHUB_ENV"
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          # Keep the keychain unlocked for the duration of the job (6 h max).
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Decode and import the certificate.
-          echo -n "$APPLE_CERTIFICATE" \
-            | base64 --decode -o "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" \
-            -k "$KEYCHAIN_PATH"                    \
-            -P "$APPLE_CERTIFICATE_PASSWORD"        \
-            -T /usr/bin/codesign                    \
-            -T /usr/bin/security
-          rm -f "$RUNNER_TEMP/cert.p12"
-
-          # Allow codesign to use the key without a password prompt.
-          security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Make this keychain searchable by codesign / Tauri.
-          security list-keychains -d user \
-            -s "$KEYCHAIN_PATH" login.keychain
+        run: bash scripts/ci-import-apple-cert.sh
 
       # ── Compile: frontend + Rust binary + Daemon ─────────────────────────────
       #
@@ -324,158 +193,12 @@ jobs:
             fi
           fi
 
-      # ── Assemble .app bundle ──────────────────────────────────────────────
-      #
-      # Reproduces what the Tauri bundler would have done:
-      #   • Contents/MacOS/skill          — the compiled binary
-      #   • Contents/MacOS/skill-daemon   — daemon sidecar binary
-      #   • Contents/Resources/icon.icns  — app icon
-      #   • Contents/Resources/app/        — built SvelteKit frontend (html/js/css/static)
-      #   • Contents/Resources/neutts-samples/   — declared in tauri.conf.json
-      #   • Contents/Info.plist           — Tauri CFBundle* keys merged with
-      #                                     custom keys from src-tauri/Info.plist
-      #
-      # neutts-samples  is committed to git → present after checkout.
-      # espeak-ng-data  is gitignored       → populated by build.rs above.
+      # ── Assemble + sign .app bundle ─────────────────────────────────────
       - name: Create .app bundle
-        run: |
-          APP_NAME="NeuroSkill"
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
-
-          mkdir -p "$APP_BUNDLE/Contents/MacOS"
-          mkdir -p "$APP_BUNDLE/Contents/Resources"
-
-           # Executable
-           cp "src-tauri/target/aarch64-apple-darwin/release/skill" \
-             "$APP_BUNDLE/Contents/MacOS/skill"
-           chmod +x "$APP_BUNDLE/Contents/MacOS/skill"
-
-           # Sidecar: skill-daemon wrapped in its own .app bundle
-           # so it gets the app icon in Activity Monitor / Force Quit.
-           DAEMON_SRC="src-tauri/target/aarch64-apple-darwin/release/skill-daemon"
-           if [ -f "$DAEMON_SRC" ]; then
-            DAEMON_APP="$APP_BUNDLE/Contents/MacOS/skill-daemon.app"
-            mkdir -p "$DAEMON_APP/Contents/MacOS" "$DAEMON_APP/Contents/Resources"
-            cp "$DAEMON_SRC" "$DAEMON_APP/Contents/MacOS/skill-daemon"
-            chmod +x "$DAEMON_APP/Contents/MacOS/skill-daemon"
-            cp "src-tauri/icons/icon.icns" "$DAEMON_APP/Contents/Resources/icon.icns"
-            python3 - "$DAEMON_APP/Contents/Info.plist" "${{ steps.version_meta.outputs.version }}" <<'DPLIST'
-            import plistlib, sys
-            out, version = sys.argv[1], sys.argv[2]
-            data = {
-                "CFBundleExecutable":         "skill-daemon",
-                "CFBundleIdentifier":         "com.neuroskill.skill-daemon",
-                "CFBundleName":               "Skill Daemon",
-                "CFBundleDisplayName":        "Skill Daemon",
-                "CFBundleVersion":            version,
-                "CFBundleShortVersionString": version,
-                "CFBundlePackageType":        "APPL",
-                "CFBundleIconFile":           "icon",
-                "LSBackgroundOnly":           True,
-                "LSUIElement":                True,
-            }
-            with open(out, "wb") as f:
-                plistlib.dump(data, f, fmt=plistlib.FMT_XML)
-            DPLIST
-            echo "✓ skill-daemon.app sidecar bundled."
-           else
-            echo "::error::skill-daemon sidecar not found after build."
-            exit 1
-           fi
-
-          # Icon (CFBundleIconFile references it by stem, without .icns)
-          cp "src-tauri/icons/icon.icns" \
-             "$APP_BUNDLE/Contents/Resources/icon.icns"
-
-          # Frontend build output (defensive copy for release bundle integrity)
-          if [ ! -f "build/index.html" ]; then
-            echo "::error::Expected frontend build output missing: build/index.html"
-            exit 1
-          fi
-          rm -rf "$APP_BUNDLE/Contents/Resources/app"
-          # Use macOS-native copy semantics for app bundle contents.
-          ditto "build" "$APP_BUNDLE/Contents/Resources/app"
-          if [ ! -f "$APP_BUNDLE/Contents/Resources/app/index.html" ]; then
-            echo "::error::Frontend assets were not copied into app bundle."
-            exit 1
-          fi
-          if [ ! -d "$APP_BUNDLE/Contents/Resources/app/_app/immutable" ]; then
-            echo "::error::Missing copied _app/immutable frontend directory in app bundle."
-            exit 1
-          fi
-          JS_COUNT="$(find "$APP_BUNDLE/Contents/Resources/app/_app/immutable" -type f -name "*.js" | wc -l | tr -d ' ')"
-          CSS_COUNT="$(find "$APP_BUNDLE/Contents/Resources/app/_app/immutable" -type f -name "*.css" | wc -l | tr -d ' ')"
-          if [ "$JS_COUNT" -eq 0 ] || [ "$CSS_COUNT" -eq 0 ]; then
-            echo "::error::Copied frontend assets look incomplete (js=$JS_COUNT css=$CSS_COUNT)."
-            exit 1
-          fi
-
-
-          # Resources declared in tauri.conf.json (paths relative to src-tauri/)
-          cp -R "src-tauri/resources/neutts-samples" \
-                "$APP_BUNDLE/Contents/Resources/"
-
-          # Install LaunchDaemon plist for skill-daemon (with correct path)
-          # Note: The daemon plist is a template for reference only.
-          # At runtime the daemon self-registers as a LaunchAgent via
-          # its ServiceInstaller (~/Library/LaunchAgents/), so this
-          # bundled plist is not directly loaded by the system.
-          DAEMON_PLIST_SRC="src-tauri/resources/com.neuroskill.skill-daemon.plist"
-          DAEMON_PLIST_DEST="$APP_BUNDLE/Contents/Resources/com.neuroskill.skill-daemon.plist"
-          if [ -f "$DAEMON_PLIST_SRC" ]; then
-            cp "$DAEMON_PLIST_SRC" "$DAEMON_PLIST_DEST"
-            echo "✓ Daemon plist template bundled."
-          fi
-
-          # Info.plist: merge Tauri-required CFBundle* fields with the custom
-          # keys already in src-tauri/Info.plist (NSBonjourServices, etc.).
-          # Custom keys win when a key exists in both.
-          python3 - "$APP_BUNDLE/Contents" "${{ steps.version_meta.outputs.version }}" <<'PYEOF'
-          import plistlib, sys, os
-          contents, version = sys.argv[1], sys.argv[2]
-          with open("src-tauri/Info.plist", "rb") as f:
-              custom = plistlib.load(f)
-          base = {
-              "CFBundleIdentifier":         "com.neuroskill.skill",
-              "CFBundleExecutable":         "skill",
-              "CFBundleName":               "NeuroSkill",
-              "CFBundleDisplayName":        "NeuroSkill",
-              "CFBundleVersion":            version,
-              "CFBundleShortVersionString": version,
-              "CFBundlePackageType":        "APPL",
-              "CFBundleSignature":          "????",
-              "NSHighResolutionCapable":    True,
-              "NSRequiresAquaSystemAppearance": False,
-              "LSMinimumSystemVersion":     "11.0",
-              "CFBundleIconFile":           "icon",
-          }
-          merged = {**base, **custom}
-          out = os.path.join(contents, "Info.plist")
-          with open(out, "wb") as f:
-              plistlib.dump(merged, f, fmt=plistlib.FMT_XML)
-          print(f"Info.plist written to {out}")
-          for k, v in sorted(merged.items()):
-              print(f"  {k} = {v!r}")
-          PYEOF
-
-          echo "Bundle contents:"
-          find "$APP_BUNDLE" -maxdepth 3 | sort
-
-      # ── Sign .app bundle for DMG ────────────────────────────────────────
-      - name: Sign .app bundle
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          set -euo pipefail
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
-          
-          # --deep signs all nested binaries including skill-daemon
-          codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" \
-            --options runtime \
-            "$APP_BUNDLE"
-          echo "✓ Signed .app bundle at $APP_BUNDLE"
+          FRONTEND_BUILD_DIR: build
+        run: bash scripts/assemble-macos-app.sh aarch64-apple-darwin
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile
@@ -608,55 +331,12 @@ jobs:
       #   NeuroSkill.app.tar.gz.sig          — Ed25519 signature for the updater
       - name: Prepare changelog notes for release
         if: steps.version_meta.outputs.is_release == 'true'
-        shell: bash
         run: |
-          set -euo pipefail
-
-          VERSION="${{ steps.version_meta.outputs.version }}"
-          CURRENT_TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
-          COMMIT_RANGE="$CURRENT_TAG"
-          if [ -n "$PREV_TAG" ]; then
-            COMMIT_RANGE="$PREV_TAG..$CURRENT_TAG"
-          fi
-
-          TMP_SECTION="release-changelog-section.md"
-          CONTRIBUTORS_FILE="release-contributors.md"
-          RELEASE_BODY="release-notes.md"
-
-          awk -v version="$VERSION" '
-            BEGIN { in_section = 0; found = 0 }
-            $0 ~ ("^## \\[" version "\\]") { in_section = 1; found = 1; next }
-            in_section && $0 ~ /^## \[/ { exit }
-            in_section { print }
-            END { if (!found) exit 2 }
-          ' CHANGELOG.md > "$TMP_SECTION" || true
-
-          git log --format='%aN' $COMMIT_RANGE \
-            | awk '
-                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0) }
-                NF && !seen[$0]++ { print "- " $0 }
-              ' > "$CONTRIBUTORS_FILE"
-
-          {
-            echo "## Changelog"
-            echo
-            if [ -s "$TMP_SECTION" ]; then
-              cat "$TMP_SECTION"
-            else
-              echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
-            fi
-            echo
-            echo "## Contributors"
-            echo
-            if [ -s "$CONTRIBUTORS_FILE" ]; then
-              cat "$CONTRIBUTORS_FILE"
-            else
-              echo "_No commit contributors found in range $COMMIT_RANGE._"
-            fi
-          } > "$RELEASE_BODY"
-
-          rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
+          TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
+          bash scripts/ci-prepare-changelog.sh \
+            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create GitHub Release
         if: steps.version_meta.outputs.is_release == 'true'
@@ -689,75 +369,15 @@ jobs:
       - name: Update latest.json
         if: steps.version_meta.outputs.is_release == 'true'
         env:
-          GH_TOKEN:     ${{ github.token }}
-          GH_REPO:      ${{ github.repository }}
-          TAG:          ${{ steps.version_meta.outputs.tag }}
-          VERSION:      ${{ steps.version_meta.outputs.version }}
-          APP_TAR_NAME: ${{ steps.artifacts.outputs.app_tar_name }}
-          APP_SIG_PATH: ${{ steps.artifacts.outputs.app_sig }}
-        run: |
-          python3 - <<'PYEOF'
-          import json, os, subprocess, datetime
-
-          version      = os.environ["VERSION"]
-          tag          = os.environ["TAG"]
-          repo         = os.environ["GH_REPO"]
-          app_tar_name = os.environ["APP_TAR_NAME"]
-          sig_path     = os.environ["APP_SIG_PATH"]
-
-          with open(sig_path) as fh:
-              signature = fh.read().strip()
-
-          # Use the git tag annotation as release notes; fall back gracefully.
-          try:
-              notes = subprocess.check_output(
-                  ["git", "tag", "-l", "--format=%(contents)", tag],
-                  text=True,
-              ).strip()
-          except Exception:
-              notes = ""
-          if not notes:
-              notes = f"NeuroSkill\u2122 v{version}"
-
-          download_url = (
-              f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
-          )
-
-          # Try to download the existing latest.json from the release.
-          # Another platform workflow may have already uploaded one.
-          dl = subprocess.run(
-              ["gh", "release", "download", tag,
-               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
-              capture_output=True, text=True,
-          )
-
-          if dl.returncode == 0:
-              with open("latest.json", encoding="utf-8-sig") as fh:
-                  manifest = json.load(fh)
-          else:
-              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-              manifest = {
-                  "version":  version,
-                  "notes":    notes,
-                  "pub_date": pub_date,
-                  "platforms": {},
-              }
-
-          manifest["platforms"]["darwin-aarch64"] = {
-              "url":       download_url,
-              "signature": signature,
-          }
-
-          with open("latest.json", "w", encoding="utf-8") as fh:
-              json.dump(manifest, fh, indent=2, ensure_ascii=False)
-              fh.write("\n")
-
-          print("Updated latest.json:")
-          print(json.dumps(manifest, indent=2))
-          PYEOF
-
-          gh release upload "$TAG" latest.json --clobber
-          echo "✓ latest.json uploaded to release $TAG"
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/ci-update-latest-json.py
+          --platform darwin-aarch64
+          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.app_tar_name }}"
+          --sig-file "${{ steps.artifacts.outputs.app_sig }}"
+          --tag "${{ steps.version_meta.outputs.tag }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --upload
 
       # ── Upload CI artifacts (manual / on-demand builds only) ────────────────
       - name: Upload build artifacts
@@ -775,39 +395,12 @@ jobs:
         if: always() && steps.version_meta.outputs.is_release == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
-          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          if [[ "$JOB_STATUS" == "success" ]]; then
-            COLOR=3066993
-            TITLE="🚀 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — macOS Published"
-            DESC="NeuroSkill™ macOS build published and ready to download."
-            LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
-          else
-            COLOR=15158332
-            TITLE="💥 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — macOS Failed"
-            DESC="The NeuroSkill™ macOS release build failed. Check the run for details."
-            LINK_LINE="**[View failed run]($RUN_URL)**"
-          fi
-
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"$TITLE\",
-                \"description\": \"$DESC\n\n$LINK_LINE\",
-                \"url\": \"$RUN_URL\",
-                \"color\": $COLOR,
-                \"fields\": [
-                  {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
-                  {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
-                  {\"name\": \"Platform\", \"value\": \"macOS aarch64\",           \"inline\": true},
-                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true},
-                  {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false}
-                ],
-                \"footer\": {\"text\": \"${{ github.repository }}\"}
-              }]
-            }"
+        run: >-
+          bash scripts/ci-discord-notify.sh
+          --status  "${{ job.status }}"
+          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — macOS ${{ job.status == 'success' && 'Published' || 'Failed' }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --tag     "${{ steps.version_meta.outputs.tag }}"
+          --platform "macOS aarch64"
+          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
