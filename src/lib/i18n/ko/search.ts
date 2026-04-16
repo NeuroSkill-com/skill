@@ -7,8 +7,8 @@
 /** Korean "search" namespace. */
 const search: Record<string, string> = {
   "embeddings.model": "임베딩 모델",
-  "embeddings.modelApplied": "Embedding model applied",
-  "embeddings.modelFailed": "Failed to apply model",
+  "embeddings.modelApplied": "임베딩 모델 적용됨",
+  "embeddings.modelFailed": "모델 적용 실패",
   "embeddings.info":
     "각 라벨의 텍스트와 컨텍스트에 대해 임베딩이 생성됩니다. 첫 사용 시 모델 가중치가 한 번 다운로드되어 로컬에 캐시됩니다. 소형 모델(≤384d)은 빠르고, 대형 모델은 더 풍부한 표현을 생성합니다.",
   "embeddings.sharedNote": "이 모델은 앱 전체에서 공유됩니다 — EEG 훅 매칭과 스크린샷 OCR 텍스트 검색에도 사용됩니다.",

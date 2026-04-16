@@ -7,8 +7,8 @@
 /** ZH "search" namespace translations. */
 const search: Record<string, string> = {
   "embeddings.model": "嵌入模型",
-  "embeddings.modelApplied": "Embedding model applied",
-  "embeddings.modelFailed": "Failed to apply model",
+  "embeddings.modelApplied": "嵌入模型已应用",
+  "embeddings.modelFailed": "应用模型失败",
   "embeddings.info":
     "系统会为每个标签的文本和上下文生成嵌入向量。首次使用时，模型权重会下载一次并缓存到本地。较小的模型（≤384维）速度快；较大的模型生成更丰富的表示。",
   "embeddings.sharedNote": "此模型在整个应用中共享——它也用于 EEG 钩子匹配和截图 OCR 文本搜索。",

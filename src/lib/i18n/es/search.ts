@@ -7,8 +7,8 @@
 /** Spanish "search" namespace — reference translation. */
 const search: Record<string, string> = {
   "embeddings.model": "Modelo de incrustación",
-  "embeddings.modelApplied": "Embedding model applied",
-  "embeddings.modelFailed": "Failed to apply model",
+  "embeddings.modelApplied": "Modelo de embeddings aplicado",
+  "embeddings.modelFailed": "No se pudo aplicar el modelo",
   "embeddings.info":
     "Las incrustaciones se generan para el texto y el contexto de cada etiqueta. En el primer uso, los pesos del modelo se descargan una vez y se almacenan en caché localmente. Los modelos más pequeños (≤384d) son rápidos; Los modelos más grandes producen representaciones más ricas.",
   "embeddings.sharedNote":

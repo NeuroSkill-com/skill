@@ -7,8 +7,8 @@
 /** FR "search" namespace translations. */
 const search: Record<string, string> = {
   "embeddings.model": "Modèle d'embedding",
-  "embeddings.modelApplied": "Embedding model applied",
-  "embeddings.modelFailed": "Failed to apply model",
+  "embeddings.modelApplied": "Modèle d'embeddings appliqué",
+  "embeddings.modelFailed": "Échec de l'application du modèle",
   "embeddings.info":
     "Les embeddings sont générés pour le texte et le contexte de chaque étiquette. Lors de la première utilisation, les poids du modèle sont téléchargés une fois et mis en cache localement. Les modèles plus petits (≤384d) sont rapides ; les plus grands produisent des représentations plus riches.",
   "embeddings.sharedNote":
