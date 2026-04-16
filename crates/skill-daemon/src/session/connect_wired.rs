@@ -443,10 +443,8 @@ pub(super) async fn connect_neurosky(target: &str) -> anyhow::Result<Box<dyn Dev
                         }
                         for p in packets {
                             match p {
-                                Packet::RawValue(v) => {
-                                    if tx.blocking_send(v).is_err() {
-                                        return;
-                                    }
+                                Packet::RawValue(v) if tx.blocking_send(v).is_err() => {
+                                    return;
                                 }
                                 Packet::HeadsetDisconnected => return,
                                 _ => {}

@@ -1002,7 +1002,7 @@ pub fn analyze_search_results(result: &skill_commands::SearchResult) -> serde_js
         }
     }
     let mut top_days: Vec<(&str, u32)> = day_dist.into_iter().collect();
-    top_days.sort_by(|a, b| b.1.cmp(&a.1));
+    top_days.sort_by_key(|b| std::cmp::Reverse(b.1));
     top_days.truncate(10);
     let time_span_hours = if all_utcs.len() >= 2 {
         let mn = all_utcs.iter().copied().min().unwrap_or(0);

@@ -639,7 +639,7 @@ pub fn list_sessions_for_day(
     backfill_avg_snr(&day_dir, &mut raw);
 
     let mut sessions: Vec<SessionEntry> = raw.into_iter().map(|(s, _, _)| s).collect();
-    sessions.sort_by(|a, b| b.session_start_utc.cmp(&a.session_start_utc));
+    sessions.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
     sessions
 }
 
