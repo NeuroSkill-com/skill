@@ -105,9 +105,11 @@ Long-form documentation lives in `./docs`:
 
 ## Development (quickstart)
 
+Install the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`curl -LsSf https://hf.co/cli/install.sh | bash` on macOS/Linux, `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"` on Windows), then:
+
 ```bash
 npm run setup -- --yes
-python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Zyphra/ZUNA')"
+hf download Zyphra/ZUNA
 npm run tauri dev
 ```
 

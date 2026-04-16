@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "node -e \"try{require('child_process').execSync('git config core.hooksPath .githooks')}catch{}\"",
     "copy:neutts-samples": "bash scripts/copy-neutts-samples.sh",
-    "dev:guard": "npm run -s check:markdown-renderer",
+    "dev:guard": "node scripts/check-rust-version.mjs && npm run -s check:markdown-renderer",
     "build:settings-index": "npx tsx scripts/build-settings-index.ts",
     "dev": "npm run -s dev:guard && npm run -s build:settings-index && vite dev",
     "build": "npm run -s dev:guard && npm run -s build:settings-index && svelte-kit sync && vite build && npm run -s verify:tauri:frontend",
