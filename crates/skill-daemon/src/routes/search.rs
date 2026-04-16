@@ -56,6 +56,7 @@ pub struct CompareSearchRequest {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/search/stats", get(search_corpus_stats))
+        .route("/search/stats/stream", get(search_corpus_stats_stream))
         .route("/search/eeg", post(search_eeg))
         .route("/search/eeg/stream", post(search_eeg_stream))
         .route("/search/compare", post(compare_search))
@@ -225,28 +226,52 @@ async fn search_eeg_stream(
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(15)))
 }
 
-/// GET /search/stats — corpus metadata for the search UI.
+/// GET /search/stats — fast corpus metadata (tier 1+2, <50ms).
+///
+/// Returns in-memory index sizes, embed model, label count, screenshot count,
+/// and day count/range.  Expensive stats (session parsing, stale label scan)
+/// are omitted — use `/search/stats/stream` for those.
 async fn search_corpus_stats(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let label_index = state.label_index.clone();
-    let result = tokio::task::spawn_blocking(move || collect_search_meta(&skill_dir, &label_index))
+    let result = tokio::task::spawn_blocking(move || collect_fast_meta(&skill_dir, &label_index))
         .await
         .unwrap_or_else(|_| serde_json::json!({}));
     Json(result)
 }
 
-/// Collect metadata about the search corpus so the UI can display stats.
-fn collect_search_meta(
+/// GET /search/stats/stream — SSE that emits "fast" then "slow" events.
+///
+/// The client receives instant stats first, then expensive stats as they
+/// become available — no blocking the UI.
+async fn search_corpus_stats_stream(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let label_index = state.label_index.clone();
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(4);
+
+    tokio::task::spawn_blocking(move || {
+        // Tier 1+2: fast stats (~1–50ms)
+        let fast = collect_fast_meta(&skill_dir, &label_index);
+        let _ = tx.blocking_send(Event::default().event("fast").data(fast.to_string()));
+
+        // Tier 3: slow stats (100ms+)
+        let slow = collect_slow_meta(&skill_dir);
+        let _ = tx.blocking_send(Event::default().event("slow").data(slow.to_string()));
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+    Sse::new(stream)
+}
+
+/// Tier 1+2: in-memory + fast SQL counts. Typically <50ms.
+fn collect_fast_meta(
     skill_dir: &std::path::Path,
     label_index: &std::sync::Arc<skill_label_index::LabelIndexState>,
 ) -> serde_json::Value {
-    let days = skill_history::list_session_days(skill_dir);
-    let total_days = days.len();
-    let first_day = days.first().cloned().unwrap_or_default();
-    let last_day = days.last().cloned().unwrap_or_default();
-
-    let history_stats = skill_history::get_history_stats(skill_dir);
-
+    // Tier 1: pure in-memory (~0ms)
     let text_index_size = label_index
         .text
         .lock()
@@ -260,17 +285,18 @@ fn collect_search_meta(
         .and_then(|g| g.as_ref().map(|i| i.len()))
         .unwrap_or(0);
 
-    let (label_total, label_stale) = if let Some(store) = skill_data::label_store::LabelStore::open(skill_dir) {
-        let total = store.count();
-        let stale = store.rows_needing_embed(super::labels::EMBED_MODEL_NAME).len() as u64;
-        (total, stale)
-    } else {
-        (0, 0)
-    };
+    // Tier 2: single COUNT(*) queries + readdir (~10–50ms)
+    let days = skill_history::list_session_days(skill_dir);
+    let total_days = days.len();
+    let first_day = days.first().cloned().unwrap_or_default();
+    let last_day = days.last().cloned().unwrap_or_default();
+
+    let label_total = skill_data::label_store::LabelStore::open(skill_dir)
+        .map(|s| s.count())
+        .unwrap_or(0);
 
     let (ss_total, ss_embedded) = if let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(skill_dir) {
-        let summary = store.summary_counts();
-        (summary.total, summary.with_embedding)
+        (store.count_all() as u64, store.count_embedded() as u64)
     } else {
         (0, 0)
     };
@@ -279,10 +305,7 @@ fn collect_search_meta(
         "eeg_days": total_days,
         "eeg_first_day": first_day,
         "eeg_last_day": last_day,
-        "eeg_total_sessions": history_stats.total_sessions,
-        "eeg_total_secs": history_stats.total_secs,
         "label_total": label_total,
-        "label_stale": label_stale,
         "label_text_index": text_index_size,
         "label_eeg_index": eeg_index_size,
         "label_embed_model": super::labels::EMBED_MODEL_NAME,
@@ -291,7 +314,23 @@ fn collect_search_meta(
     })
 }
 
+/// Tier 3: expensive stats that parse files or scan rows. 100ms+ on large datasets.
+fn collect_slow_meta(skill_dir: &std::path::Path) -> serde_json::Value {
+    let history_stats = skill_history::get_history_stats(skill_dir);
+
+    let label_stale = skill_data::label_store::LabelStore::open(skill_dir)
+        .map(|s| s.count_needing_embed(super::labels::EMBED_MODEL_NAME))
+        .unwrap_or(0);
+
+    serde_json::json!({
+        "eeg_total_sessions": history_stats.total_sessions,
+        "eeg_total_secs": history_stats.total_secs,
+        "label_stale": label_stale,
+    })
+}
+
 /// Build an interactive cross-modal search graph.
+#[allow(clippy::too_many_arguments)]
 fn interactive_search_impl(
     skill_dir: &std::path::Path,
     query: &str,
@@ -319,14 +358,10 @@ fn interactive_search_impl(
         ..Default::default()
     });
 
-    // ── Collect search metadata so the UI can show what was searched ────
-    let meta = collect_search_meta(skill_dir, label_index);
-
     // Step 1: Embed query text → search labels by text similarity.
     let Some(query_vec) = embedder.embed(query) else {
         return serde_json::json!({
             "nodes": nodes, "edges": edges, "dot": "", "svg": "", "svg_col": "",
-            "meta": meta,
             "error": "failed to embed query text"
         });
     };
@@ -339,7 +374,7 @@ fn interactive_search_impl(
         if let Some(store) = skill_data::label_store::LabelStore::open(skill_dir) {
             let total = store.count();
             if total > 0 {
-                let stale = store.rows_needing_embed(super::labels::EMBED_MODEL_NAME).len() as u64;
+                let stale = store.count_needing_embed(super::labels::EMBED_MODEL_NAME);
                 if stale > 0 {
                     reembed_needed = Some(serde_json::json!({
                         "stale": stale,
@@ -350,6 +385,13 @@ fn interactive_search_impl(
             }
         }
     }
+
+    // Open screenshot store once (reused for proximity + OCR search).
+    let ss_store = if k_screenshots > 0 {
+        skill_data::screenshot_store::ScreenshotStore::open(skill_dir)
+    } else {
+        None
+    };
 
     // Add text_label nodes.
     for (i, nb) in text_neighbors.iter().enumerate() {
@@ -418,8 +460,8 @@ fn interactive_search_impl(
             }
 
             // Step 2b: Find screenshots near this label's timestamp.
-            if let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(skill_dir) {
-                let nearby_screenshots = skill_screenshots::capture::get_around(&store, ts as i64, reach_secs as i32);
+            if let Some(ref store) = ss_store {
+                let nearby_screenshots = skill_screenshots::capture::get_around(store, ts as i64, reach_secs as i32);
                 for (s, ss) in nearby_screenshots.iter().take(k_screenshots).enumerate() {
                     let ss_id = format!("ss{i}_{s}");
                     nodes.push(InteractiveGraphNode {
@@ -464,18 +506,18 @@ fn interactive_search_impl(
 
     // Step 4: Search screenshots by OCR text similarity (semantic, not proximity).
     if k_screenshots > 0 {
-        if let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(skill_dir) {
+        if let Some(ref store) = ss_store {
             let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed(text) };
             let mut ocr_results = skill_screenshots::capture::search_by_ocr_text_embedding(
                 skill_dir,
-                &store,
+                store,
                 query,
                 k_screenshots,
                 &embed_fn,
             );
             // Fall back to substring search if semantic returns nothing.
             if ocr_results.is_empty() {
-                ocr_results = skill_screenshots::capture::search_by_ocr_text_like(&store, query, k_screenshots);
+                ocr_results = skill_screenshots::capture::search_by_ocr_text_like(store, query, k_screenshots);
             }
             for (s, ss) in ocr_results.iter().enumerate() {
                 let ss_id = format!("sst{s}");
@@ -532,7 +574,6 @@ fn interactive_search_impl(
         "dot": "",
         "svg": "",
         "svg_col": "",
-        "meta": meta,
     });
     if let Some(r) = reembed_needed {
         result.as_object_mut().unwrap().insert("reembed_needed".into(), r);
@@ -675,55 +716,57 @@ mod tests {
     // ── interactive_search_impl (empty data) ─────────────────────────────
 
     #[test]
-    fn interactive_search_empty_dir_returns_query_node_and_meta() {
+    fn interactive_search_empty_dir_returns_query_node() {
         let td = TempDir::new().unwrap();
         let label_index = std::sync::Arc::new(skill_label_index::LabelIndexState::default());
-        // Use a no-op embedder that always returns None
         let embedder = crate::text_embedder::SharedTextEmbedder::new_noop();
 
         let result = interactive_search_impl(td.path(), "hello", 3, 5, 2, 5, 10, &embedder, &label_index);
 
-        // Should have at least the query node
+        // Should have at least the query node (noop embedder → error path)
         let nodes = result["nodes"].as_array().unwrap();
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0]["kind"], "query");
         assert_eq!(nodes[0]["text"], "hello");
-
-        // Meta should be present with zero counts
-        let meta = &result["meta"];
-        assert!(meta.is_object());
-        assert_eq!(meta["eeg_days"], 0);
-        assert_eq!(meta["label_total"], 0);
-        assert_eq!(meta["screenshot_total"], 0);
-        assert_eq!(meta["label_embed_model"], super::super::labels::EMBED_MODEL_NAME);
     }
 
     #[test]
-    fn interactive_search_meta_includes_all_expected_fields() {
+    fn collect_fast_meta_includes_expected_fields() {
         let td = TempDir::new().unwrap();
         let label_index = std::sync::Arc::new(skill_label_index::LabelIndexState::default());
-        let embedder = crate::text_embedder::SharedTextEmbedder::new_noop();
 
-        let result = interactive_search_impl(td.path(), "test", 1, 1, 1, 1, 5, &embedder, &label_index);
+        let meta = collect_fast_meta(td.path(), &label_index);
 
-        let meta = &result["meta"];
-        let expected_fields = [
+        for field in [
             "eeg_days",
             "eeg_first_day",
             "eeg_last_day",
-            "eeg_total_sessions",
-            "eeg_total_secs",
             "label_total",
-            "label_stale",
             "label_text_index",
             "label_eeg_index",
             "label_embed_model",
             "screenshot_total",
             "screenshot_embedded",
-        ];
-        for field in &expected_fields {
-            assert!(meta.get(field).is_some(), "meta missing field: {field}");
+        ] {
+            assert!(meta.get(field).is_some(), "fast meta missing: {field}");
         }
+        assert_eq!(meta["eeg_days"], 0);
+        assert_eq!(meta["label_total"], 0);
+        assert_eq!(meta["label_embed_model"], super::super::labels::EMBED_MODEL_NAME);
+    }
+
+    #[test]
+    fn collect_slow_meta_includes_expected_fields() {
+        let td = TempDir::new().unwrap();
+
+        let meta = collect_slow_meta(td.path());
+
+        for field in ["eeg_total_sessions", "eeg_total_secs", "label_stale"] {
+            assert!(meta.get(field).is_some(), "slow meta missing: {field}");
+        }
+        assert_eq!(meta["eeg_total_sessions"], 0);
+        assert_eq!(meta["eeg_total_secs"], 0);
+        assert_eq!(meta["label_stale"], 0);
     }
 
     // ── search_eeg route dispatch ────────────────────────────────────────

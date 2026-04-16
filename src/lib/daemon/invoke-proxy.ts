@@ -244,6 +244,8 @@ const DAEMON_ONLY_COMMANDS = new Set<string>([
   "switch_llm_mmproj",
   "chat_completions_ipc",
   "cancel_tool_call",
+  "interactive_search",
+  "search_corpus_stats",
 ]);
 
 // Active search abort controller — allows cancel from UI.
