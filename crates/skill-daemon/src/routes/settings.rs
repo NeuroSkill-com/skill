@@ -402,6 +402,7 @@ fn exg_routes() -> Router<AppState> {
         )
         .route("/models/status", get(get_model_status))
         .route("/models/trigger-reembed", post(trigger_reembed))
+        .route("/models/trigger-reembed/stream", post(trigger_reembed_stream))
         .route("/models/trigger-weights-download", post(trigger_weights_download))
         .route("/models/cancel-weights-download", post(cancel_weights_download))
         .route("/models/estimate-reembed", get(estimate_reembed))
@@ -531,6 +532,92 @@ async fn set_daemon_watchdog(
 
 async fn trigger_reembed(state: State<AppState>) -> Json<serde_json::Value> {
     settings_exg::trigger_reembed_impl(state).await
+}
+
+async fn trigger_reembed_stream(
+    State(state): State<AppState>,
+) -> axum::response::sse::Sse<
+    impl futures::stream::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
+    use axum::response::sse::Event;
+
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let events_tx = state.events_tx.clone();
+    let label_index = state.label_index.clone();
+    let model_status = state.exg_model_status.clone();
+    let cancel = state.idle_reembed_cancel.clone();
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(64);
+
+    // Subscribe to the broadcast channel BEFORE spawning the reembed task
+    // so we don't miss the first events.
+    let mut broadcast_rx = events_tx.subscribe();
+    let tx_fwd = tx.clone();
+
+    // Forward reembed-progress broadcast events → SSE channel.
+    tokio::spawn(async move {
+        loop {
+            match broadcast_rx.recv().await {
+                Ok(envelope) => {
+                    if envelope.r#type != "reembed-progress" {
+                        continue;
+                    }
+                    let json = serde_json::to_string(&envelope.payload).unwrap_or_default();
+                    let event = Event::default().data(json);
+                    if tx_fwd.send(event).await.is_err() {
+                        break; // client disconnected
+                    }
+                    // Stop forwarding once done/error.
+                    let status = envelope.payload.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                    if status == "done" || status == "error" || status == "idle_done" {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            }
+        }
+    });
+
+    // Spawn the actual reembed work.
+    tokio::task::spawn_blocking(move || {
+        // Guard: reject if weights download is in progress.
+        {
+            let st = model_status.lock().unwrap_or_else(|e| e.into_inner());
+            if st.downloading_weights {
+                let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                    r#type: "reembed-progress".into(),
+                    ts_unix_ms: settings_exg::now_unix_ms(),
+                    correlation_id: None,
+                    payload: serde_json::json!({ "status": "error", "message": "weights download in progress" }),
+                });
+                return;
+            }
+        }
+
+        cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+
+        if let Err(e) = settings_exg::run_batch_reembed_with_cancel(&skill_dir, &events_tx, &cancel, true, 10, 50) {
+            tracing::error!("batch reembed failed: {e}");
+            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "reembed-progress".into(),
+                ts_unix_ms: settings_exg::now_unix_ms(),
+                correlation_id: None,
+                payload: serde_json::json!({ "status": "error", "message": e.to_string() }),
+            });
+        }
+        let stats = skill_label_index::rebuild(&skill_dir, &label_index);
+        tracing::info!(
+            "[reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
+            stats.text_nodes,
+            stats.eeg_nodes,
+            stats.eeg_skipped
+        );
+    });
+
+    let stream = futures::stream::StreamExt::map(tokio_stream::wrappers::ReceiverStream::new(rx), Ok);
+    axum::response::sse::Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(15)))
 }
 
 async fn trigger_weights_download(state: State<AppState>) -> Json<serde_json::Value> {
@@ -1512,6 +1599,7 @@ mod tests {
         let cases = [
             (axum::http::Method::GET, "/models/status"),
             (axum::http::Method::POST, "/models/trigger-reembed"),
+            (axum::http::Method::POST, "/models/trigger-reembed/stream"),
             (axum::http::Method::GET, "/llm/catalog"),
             (axum::http::Method::POST, "/llm/download/start"),
             (axum::http::Method::GET, "/lsl/config"),

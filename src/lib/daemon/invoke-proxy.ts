@@ -125,6 +125,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_exg_catalog: [G, "/v1/models/exg-catalog"],
   list_embedding_models: [G, "/v1/models/exg-catalog"], // alias
   trigger_reembed: [P, "/v1/models/trigger-reembed"],
+  stream_reembed: [P, "/v1/models/trigger-reembed/stream"],
   reembed_all_labels: [P, "/v1/models/trigger-reembed"], // alias
   trigger_weights_download: [P, "/v1/models/trigger-weights-download"],
   cancel_weights_download: [P, "/v1/models/cancel-weights-download"],

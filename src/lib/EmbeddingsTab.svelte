@@ -5,11 +5,11 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Separator } from "$lib/components/ui/separator";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
 
@@ -26,8 +26,8 @@ let currentCode = $state("");
 let staleCount = $state(0);
 let saving = $state(false);
 let reembedding = $state(false);
-let progress = $state<{ done: number; total: number } | null>(null);
-let unlisten: UnlistenFn | null = null;
+let progress = $state<{ done: number; total: number; status?: string } | null>(null);
+let unlistenReembed: (() => void) | null = null;
 
 // ── Reembed config ────────────────────────────────────────────────────────
 interface ReembedConfig {
@@ -184,22 +184,24 @@ async function applyModel() {
 async function reembed() {
   reembedding = true;
   progress = null;
-  try {
-    await daemonInvoke("reembed_all_labels");
-    staleCount = 0;
-  } finally {
-    reembedding = false;
-    progress = null;
-  }
+  await daemonInvoke("trigger_reembed");
+  // Progress tracked via onDaemonEvent("reembed-progress") below.
 }
 
 onMount(async () => {
   await Promise.all([load(), loadReembedConfig(), loadWatchdogConfig()]);
-  unlisten = await listen<{ done: number; total: number }>("embed-progress", (e) => {
-    progress = e.payload;
+  unlistenReembed = onDaemonEvent("reembed-progress", (ev) => {
+    const p = ev.payload as { done?: number; total?: number; status?: string };
+    progress = { done: p.done ?? 0, total: p.total ?? 0, status: p.status };
+    const s = p.status ?? "";
+    if (s === "done" || s === "idle_done" || s === "complete" || s.startsWith("error")) {
+      reembedding = false;
+      progress = null;
+      staleCount = 0;
+    }
   });
 });
-onDestroy(() => unlisten?.());
+onDestroy(() => unlistenReembed?.());
 
 // Dim badge colour
 function dimColor(_dim: number) {

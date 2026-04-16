@@ -20,6 +20,7 @@ import {
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import {
   dateToCompactKey,
   fmtDate,
@@ -196,8 +197,22 @@ onMount(() => {
     })
     .catch(() => {});
 
+  // Listen for reembed progress → auto-refresh corpus stats when done.
+  const unlistenReembed = onDaemonEvent("reembed-progress", (ev) => {
+    const s = (ev.payload as { status?: string }).status ?? "";
+    if (s === "done" || s === "idle_done" || s === "complete") {
+      // Refresh corpus stats after reembed completes.
+      daemonInvoke<CorpusStats>("search_corpus_stats", {})
+        .then((fresh) => {
+          corpusStats = fresh;
+        })
+        .catch(() => {});
+    }
+  });
+
   return () => {
     window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
+    unlistenReembed();
   };
 });
 
