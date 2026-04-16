@@ -44,36 +44,12 @@ jobs:
       - name: Resolve version
         id: version_meta
         shell: bash
-        run: |
-          DRY_RUN="${{ inputs.dry_run || 'false' }}"
-          CONF_VERSION=$(
-            grep '"version"' src-tauri/tauri.conf.json \
-            | head -1 \
-            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
-          )
-
-          if [ "$DRY_RUN" = "true" ]; then
-            VERSION="$CONF_VERSION"
-            TAG="v$VERSION"
-            echo "[dry-run] Using version from tauri.conf.json: $VERSION"
-          else
-            TAG="${{ github.ref_name }}"
-            VERSION="${TAG#v}"
-            if [ "$VERSION" != "$CONF_VERSION" ]; then
-              echo "::error::Tag version ($VERSION) does not match" \
-                   "tauri.conf.json version ($CONF_VERSION)."
-              echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
-                   "src-tauri/Cargo.toml, then re-tag."
-              exit 1
-            fi
-            echo "[ok] Version verified: $VERSION"
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
-          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG"         >> "$GITHUB_ENV"
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+          DRY_RUN:           ${{ inputs.dry_run || 'false' }}
+        run: bash scripts/ci-resolve-version.sh
 
       # ── MSVC developer environment ────────────────────────────────────────────
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
@@ -235,60 +211,7 @@ jobs:
 
       - name: Install protoc (Windows)
         shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          function Test-Protoc {
-            try {
-              $null = & protoc --version
-              return ($LASTEXITCODE -eq 0)
-            } catch {
-              return $false
-            }
-          }
-
-          if (Test-Protoc) {
-            protoc --version
-            exit 0
-          }
-
-          $installed = $false
-          for ($i = 1; $i -le 3; $i++) {
-            try {
-              choco install protoc --no-progress -y
-            } catch {
-              Write-Host "[warn] choco protoc install attempt $i failed: $($_.Exception.Message)"
-            }
-
-            if (Test-Protoc) {
-              $installed = $true
-              break
-            }
-
-            Start-Sleep -Seconds (5 * $i)
-          }
-
-          if (-not $installed) {
-            Write-Host "[warn] Chocolatey unavailable; falling back to direct protoc download"
-            $ver = "25.3"
-            $url = "https://github.com/protocolbuffers/protobuf/releases/download/v$ver/protoc-$ver-win64.zip"
-            $zip = Join-Path $env:RUNNER_TEMP "protoc-$ver-win64.zip"
-            $dest = Join-Path $env:RUNNER_TEMP "protoc-$ver"
-            Invoke-WebRequest -Uri $url -OutFile $zip
-            Expand-Archive -Path $zip -DestinationPath $dest -Force
-            $bin = Join-Path $dest "bin"
-            if (-not (Test-Path (Join-Path $bin "protoc.exe"))) {
-              throw "protoc fallback install failed: protoc.exe not found"
-            }
-            $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            $env:PATH = "$bin;$env:PATH"
-            Write-Host "[ok] Installed protoc via direct download"
-          }
-
-          if (-not (Test-Protoc)) {
-            throw "protoc installation failed after Chocolatey + fallback"
-          }
-          protoc --version
+        run: scripts/ci-install-protoc-windows.ps1
 
 
       - name: Build frontend
@@ -411,50 +334,8 @@ jobs:
 
       - name: Download prebuilt llama libs (Windows, optional)
         shell: powershell
-        run: |
-          $url = "https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-windows-x86_64-pc-windows-msvc-q1-vulkan.tar.gz"
-          $archive = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows.tar.gz"
-          $dest = Join-Path $env:RUNNER_TEMP "llama-prebuilt-windows"
-          $expectedTarget = "x86_64-pc-windows-msvc"
-          $expectedFeature = "vulkan"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-
-          try {
-            Invoke-WebRequest -Uri $url -OutFile $archive
-            tar -xzf $archive -C $dest
-
-            $root = $dest
-            if (-not (Test-Path (Join-Path $root "lib")) -and -not (Test-Path (Join-Path $root "lib64")) -and -not (Test-Path (Join-Path $root "bin"))) {
-              $candidate = Get-ChildItem $dest -Directory | Select-Object -First 1
-              if ($candidate) { $root = $candidate.FullName }
-            }
-
-            if (-not $root -or -not (Test-Path $root)) {
-              Write-Host "[warn] prebuilt llama archive layout invalid; fallback to source build"
-              exit 0
-            }
-
-            $libs = Get-ChildItem -Path $root -Recurse -File -Include *.lib,*.dll -ErrorAction SilentlyContinue | Select-Object -First 1
-            if (-not $libs) {
-              Write-Host "[warn] prebuilt llama archive contains no windows libs; fallback to source build"
-              exit 0
-            }
-
-            $metadataPath = Join-Path $root "metadata.json"
-            if (Test-Path $metadataPath) {
-              $meta = Get-Content $metadataPath -Raw | ConvertFrom-Json
-              if ($meta.target -ne $expectedTarget -or -not ($meta.features -like "*$expectedFeature*")) {
-                Write-Host "[warn] prebuilt metadata mismatch (target=$($meta.target) features=$($meta.features)); fallback to source build"
-                exit 0
-              }
-            }
-
-            "LLAMA_PREBUILT_DIR=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            "LLAMA_PREBUILT_SHARED=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            Write-Host "[ok] LLAMA_PREBUILT_DIR=$root"
-          } catch {
-            Write-Host "[warn] prebuilt llama artifact unavailable or invalid; fallback to source build"
-          }
+        shell: bash
+        run: bash scripts/ci-download-llama-prebuilt.sh windows x86_64-pc-windows-msvc vulkan
 
       # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
       # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
@@ -962,53 +843,11 @@ jobs:
         if: steps.version_meta.outputs.dry_run != 'true'
         shell: bash
         run: |
-          set -euo pipefail
-
-          VERSION="${{ steps.version_meta.outputs.version }}"
-          CURRENT_TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
-          COMMIT_RANGE="$CURRENT_TAG"
-          if [ -n "$PREV_TAG" ]; then
-            COMMIT_RANGE="$PREV_TAG..$CURRENT_TAG"
-          fi
-
-          TMP_SECTION="release-changelog-section.md"
-          CONTRIBUTORS_FILE="release-contributors.md"
-          RELEASE_BODY="release-notes.md"
-
-          awk -v version="$VERSION" '
-            BEGIN { in_section = 0; found = 0 }
-            $0 ~ ("^## \\[" version "\\]") { in_section = 1; found = 1; next }
-            in_section && $0 ~ /^## \[/ { exit }
-            in_section { print }
-            END { if (!found) exit 2 }
-          ' CHANGELOG.md > "$TMP_SECTION" || true
-
-          git log --format='%aN' $COMMIT_RANGE \
-            | awk '
-                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0) }
-                NF && !seen[$0]++ { print "- " $0 }
-              ' > "$CONTRIBUTORS_FILE"
-
-          {
-            echo "## Changelog"
-            echo
-            if [ -s "$TMP_SECTION" ]; then
-              cat "$TMP_SECTION"
-            else
-              echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
-            fi
-            echo
-            echo "## Contributors"
-            echo
-            if [ -s "$CONTRIBUTORS_FILE" ]; then
-              cat "$CONTRIBUTORS_FILE"
-            else
-              echo "_No commit contributors found in range $COMMIT_RANGE._"
-            fi
-          } > "$RELEASE_BODY"
-
-          rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
+          TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
+          bash scripts/ci-prepare-changelog.sh \
+            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
 
       - name: Create / update GitHub Release
         if: steps.version_meta.outputs.dry_run != 'true'
@@ -1031,67 +870,28 @@ jobs:
       # re-uploads.  If no latest.json exists yet, creates one from scratch.
       - name: Update latest.json
         if: steps.version_meta.outputs.dry_run != 'true'
-        shell: powershell
+        shell: bash
         env:
-          GH_TOKEN:     ${{ github.token }}
-          GH_REPO:      ${{ github.repository }}
-          TAG:          ${{ steps.version_meta.outputs.tag }}
-          VERSION:      ${{ steps.version_meta.outputs.version }}
-          NSIS_ZIP_NAME: ${{ steps.artifacts.outputs.nsis_zip_name }}
-          NSIS_SIG_PATH: ${{ steps.artifacts.outputs.nsis_sig }}
-        run: |
-          $version = $env:VERSION
-          $tag = $env:TAG
-          $repo = $env:GH_REPO
-          $zipName = $env:NSIS_ZIP_NAME
-          $sigPath = $env:NSIS_SIG_PATH
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/ci-update-latest-json.py
+          --platform windows-x86_64
+          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.nsis_zip_name }}"
+          --sig-file "${{ steps.artifacts.outputs.nsis_sig }}"
+          --tag "${{ steps.version_meta.outputs.tag }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --upload
 
-          $signature = (Get-Content $sigPath -Raw).Trim()
-          $downloadUrl = "https://github.com/$repo/releases/download/$tag/$zipName"
-
-          # Try to download existing latest.json from the release; fall back to
-          # a fresh manifest when it does not exist yet.
-          & gh release download $tag --pattern latest.json --output latest.json --clobber
-          if ($LASTEXITCODE -eq 0 -and (Test-Path "latest.json")) {
-            $manifest = Get-Content "latest.json" -Raw | ConvertFrom-Json
-          } else {
-            $manifest = [ordered]@{
-              version = $version
-              notes = "NeuroSkill$([char]0x2122) v$version"
-              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-              platforms = [ordered]@{}
-            }
-          }
-
-          if (-not $manifest.platforms) {
-            $manifest | Add-Member -NotePropertyName platforms -NotePropertyValue ([ordered]@{}) -Force
-          }
-
-          # ConvertFrom-Json returns PSCustomObjects; dot-assignment of a new
-          # hyphenated property on a PSCustomObject fails.  Use Add-Member for
-          # PSCustomObjects and bracket-notation for hashtables/ordered dicts.
-          $platformEntry = [ordered]@{
-            url       = $downloadUrl
-            signature = $signature
-          }
-          if ($manifest.platforms -is [System.Collections.IDictionary]) {
-            $manifest.platforms["windows-x86_64"] = $platformEntry
-          } else {
-            $manifest.platforms | Add-Member -NotePropertyName "windows-x86_64" `
-              -NotePropertyValue $platformEntry -Force
-          }
-
-          $json = $manifest | ConvertTo-Json -Depth 20
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("latest.json", $json, $utf8NoBom)
-          Write-Host "Updated latest.json:"
-          Get-Content "latest.json"
-
-          & gh release upload $tag latest.json --clobber
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          Write-Host "[ok] latest.json uploaded to release $tag"
+      # ── Upload CI artifacts (on-demand / dry-run builds only) ────────────────
+      - name: Upload build artifacts
+        if: steps.version_meta.outputs.is_release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuroSkill-Windows-${{ steps.version_meta.outputs.version }}
+          path: |
+            ${{ steps.artifacts.outputs.nsis_exe }}
+            ${{ steps.artifacts.outputs.nsis_zip }}
+          retention-days: 14
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
@@ -1108,56 +908,15 @@ jobs:
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
         if: always() && steps.version_meta.outputs.dry_run != 'true'
-        shell: powershell
+        shell: bash
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          JOB_STATUS:          ${{ job.status }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:DISCORD_WEBHOOK_URL)) {
-            Write-Host "[skip] DISCORD_WEBHOOK_URL is not set; skipping Discord notification."
-            exit 0
-          }
-
-          $commitMsg = (git log -1 --format='%s') | Select-Object -First 1
-          if ($commitMsg.Length -gt 200) { $commitMsg = $commitMsg.Substring(0, 200) }
-          $releaseUrl = "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          if ($env:JOB_STATUS -eq "success") {
-            $color = 3066993
-            $title = "NeuroSkill$([char]0x2122) Release v${{ steps.version_meta.outputs.version }} - Windows Published"
-            $desc  = "NeuroSkill$([char]0x2122) Windows build published and ready to download."
-            $linkLine = "**[Download v${{ steps.version_meta.outputs.version }}]($releaseUrl)**"
-          } else {
-            $color = 15158332
-            $title = "NeuroSkill$([char]0x2122) Release v${{ steps.version_meta.outputs.version }} - Windows Failed"
-            $desc  = "The NeuroSkill$([char]0x2122) Windows release build failed. Check the run for details."
-            $linkLine = "**[View failed run]($runUrl)**"
-          }
-
-          $payload = @{
-            embeds = @(
-              @{
-                title = $title
-                description = "$desc`n`n$linkLine"
-                url = $runUrl
-                color = $color
-                fields = @(
-                  @{ name = "Tag";      value = "${{ steps.version_meta.outputs.tag }}";     inline = $true },
-                  @{ name = "Version";  value = "${{ steps.version_meta.outputs.version }}"; inline = $true },
-                  @{ name = "Platform"; value = "Windows x86_64";                              inline = $true },
-                  @{ name = "Actor";    value = "${{ github.actor }}";                         inline = $true },
-                  @{ name = "Commit Message"; value = $commitMsg;                              inline = $false }
-                )
-                footer = @{ text = "${{ github.repository }}" }
-              }
-            )
-          } | ConvertTo-Json -Depth 10
-
-          try {
-            Invoke-RestMethod -Method Post -Uri $env:DISCORD_WEBHOOK_URL -ContentType "application/json" -Body $payload | Out-Null
-            Write-Host "[ok] Discord notification sent."
-          } catch {
-            Write-Error "Discord webhook request failed: $($_.Exception.Message)"
-            exit 1
-          }
+        run: >-
+          bash scripts/ci-discord-notify.sh
+          --status  "${{ job.status }}"
+          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Windows ${{ job.status == 'success' && 'Published' || 'Failed' }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --tag     "${{ steps.version_meta.outputs.tag }}"
+          --platform "Windows x86_64"
+          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
