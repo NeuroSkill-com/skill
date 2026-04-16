@@ -188,8 +188,9 @@ function paneAtPosition(row, col) {
   return col <= layout.leftWidth ? "daemon" : "tauri";
 }
 
-function clampScroll(pane, height) {
-  const maxScrollBack = Math.max(0, pane.lines.length - height);
+function clampScroll(pane, height, totalLines) {
+  const count = totalLines ?? pane.lines.length;
+  const maxScrollBack = Math.max(0, count - height);
   pane.scrollBack = Math.min(maxScrollBack, Math.max(0, pane.scrollBack));
   if (pane.scrollBack === 0) pane.follow = true;
 }
@@ -200,8 +201,16 @@ function pushChunk(pane, chunk, writer) {
   const parts = data.split(/\n/);
   pane.partial = parts.pop() ?? "";
   for (const part of parts) {
-    pane.lines.push(part);
+    // Handle \r (carriage return): only keep the text after the last \r.
+    // Progress bars (cargo, vite) use \r to overwrite the current line.
+    const crIdx = part.lastIndexOf("\r");
+    const resolved = crIdx >= 0 ? part.slice(crIdx + 1) : part;
+    pane.lines.push(resolved);
   }
+  // Also handle \r within the pending partial — keep only the last segment
+  // so the next render shows the latest progress bar state.
+  const crIdx = pane.partial.lastIndexOf("\r");
+  if (crIdx >= 0) pane.partial = pane.partial.slice(crIdx + 1);
   if (pane.lines.length > 10000) {
     pane.lines.splice(0, pane.lines.length - 10000);
   }
@@ -209,10 +218,13 @@ function pushChunk(pane, chunk, writer) {
 }
 
 function visibleLines(pane, height) {
-  clampScroll(pane, height);
-  const total = pane.lines.length;
+  // Include the in-progress partial line (progress bars use \r without \n,
+  // so they live entirely in partial until the line is complete).
+  const lines = pane.partial ? [...pane.lines, pane.partial] : pane.lines;
+  const total = lines.length;
+  clampScroll(pane, height, total);
   const start = Math.max(0, total - height - pane.scrollBack);
-  return pane.lines.slice(start, start + height);
+  return lines.slice(start, start + height);
 }
 
 function paneStatusLine(pane, isActive) {

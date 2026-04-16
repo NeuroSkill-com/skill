@@ -24,7 +24,6 @@ use parquet::file::properties::WriterProperties;
 
 use crate::ppg_analysis::PpgMetrics;
 use crate::session_csv::{build_metrics_header, PPG_SAMPLE_RATE};
-use crate::session_paths::*;
 use anyhow::Context;
 use skill_eeg::eeg_bands::BandSnapshot;
 

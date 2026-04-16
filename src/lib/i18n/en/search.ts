@@ -59,6 +59,7 @@ const search: Record<string, string> = {
   "search.noResults": "No embeddings found in {start} – {end}",
   "search.reembedDesc":
     "{stale} of {total} labels use an older embedding model and can\u2019t be searched. Re-embed them to fix this.",
+  "search.reembedAuto": "Updating {stale} labels to current model\u2026",
   "search.reembedOpenSettings": "Open Embeddings settings",
   "search.daysSearched": "Days searched: {days}",
   "search.query": "Query",

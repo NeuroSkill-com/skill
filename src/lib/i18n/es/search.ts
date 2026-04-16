@@ -58,6 +58,7 @@ const search: Record<string, string> = {
   "search.noResults": "No se encontraron incrustaciones en {start} – {end}",
   "search.reembedDesc":
     "{stale} de {total} etiquetas usan un modelo de embeddings anterior y no se pueden buscar. Vuelve a incrustarlas para solucionarlo.",
+  "search.reembedAuto": "Actualizando {stale} etiquetas al modelo actual\u2026",
   "search.reembedOpenSettings": "Abrir ajustes de embeddings",
   "search.daysSearched": "Días buscados: {days}",
   "search.query": "Consulta",

@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("daemon auth module (auth.rs)", () => {
-  const src = fs.readFileSync("crates/skill-daemon/src/auth.rs", "utf-8");
+  const src = fs.readFileSync("crates/skill-daemon-state/src/auth.rs", "utf-8");
 
   it("defines TokenAcl variants", () => {
     expect(src).toContain("Admin");

@@ -69,8 +69,8 @@ cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cub
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 # Fix muda ZeroWidth panic in to_png() on macOS (upstream bug in 0.17.2)
 muda            = { path = "patches/muda-0.17.2" }
-emotiv          = { path = "/Users/Shared/emotiv-rs" }  # TODO: switch to 0.0.12 from crates.io once published
-zuna-rs         = { path = "/Users/Shared/zuna-rs" }   # TODO: switch to 0.1.1 from crates.io once published
+# emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
+# zuna-rs: using crates.io 0.1.2 (no patch needed — restore path dep when developing locally)
 
 
 

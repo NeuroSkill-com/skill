@@ -57,6 +57,7 @@ const search: Record<string, string> = {
   "search.noResults": "{start} – {end}에서 임베딩을 찾을 수 없습니다",
   "search.reembedDesc":
     "{total}개 중 {stale}개의 라벨이 이전 임베딩 모델을 사용하여 검색할 수 없습니다. 재임베딩하여 해결하세요.",
+  "search.reembedAuto": "{stale}개의 라벨을 현재 모델로 업데이트 중\u2026",
   "search.reembedOpenSettings": "임베딩 설정 열기",
   "search.daysSearched": "검색한 일수: {days}",
   "search.query": "쿼리",

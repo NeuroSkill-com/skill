@@ -54,8 +54,8 @@ const search: Record<string, string> = {
   "search.emptyState": "选择时间范围并点击搜索，查找 EEG 嵌入及其最近邻。",
   "search.searchingIndices": "正在搜索所有每日 HNSW 索引…",
   "search.noResults": "在 {start} – {end} 中未找到嵌入",
-  "search.reembedDesc":
-    "{total} 个标签中有 {stale} 个使用旧的嵌入模型，无法被搜索到。重新嵌入即可修复。",
+  "search.reembedDesc": "{total} 个标签中有 {stale} 个使用旧的嵌入模型，无法被搜索到。重新嵌入即可修复。",
+  "search.reembedAuto": "正在将 {stale} 个标签更新到当前模型\u2026",
   "search.reembedOpenSettings": "打开嵌入设置",
   "search.daysSearched": "已搜索天数：{days}",
   "search.query": "查询",

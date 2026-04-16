@@ -57,6 +57,7 @@ const search: Record<string, string> = {
   "search.noResults": "Вбудовувань не знайдено в {start} – {end}",
   "search.reembedDesc":
     "{stale} з {total} міток використовують стару модель ембедингів і не можуть бути знайдені. Перевбудуйте їх, щоб виправити це.",
+  "search.reembedAuto": "Оновлення {stale} міток до поточної моделі\u2026",
   "search.reembedOpenSettings": "Відкрити налаштування ембедингів",
   "search.daysSearched": "Обшукані дні: {days}",
   "search.query": "Запит",

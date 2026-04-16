@@ -57,6 +57,7 @@ const search: Record<string, string> = {
   "search.noResults": "Keine Embeddings gefunden in {start} – {end}",
   "search.reembedDesc":
     "{stale} von {total} Labels verwenden ein älteres Embedding-Modell und können nicht durchsucht werden. Betten Sie sie neu ein, um dies zu beheben.",
+  "search.reembedAuto": "{stale} Labels werden auf das aktuelle Modell aktualisiert\u2026",
   "search.reembedOpenSettings": "Embedding-Einstellungen öffnen",
   "search.daysSearched": "Durchsuchte Tage: {days}",
   "search.query": "Abfrage",

@@ -59,6 +59,7 @@ const search: Record<string, string> = {
   "search.noResults": "{start}〜{end}に埋め込みが見つかりません",
   "search.reembedDesc":
     "{total}件中{stale}件のラベルが古い埋め込みモデルを使用しており、検索できません。再埋め込みで修正できます。",
+  "search.reembedAuto": "{stale}件のラベルを現在のモデルに更新中\u2026",
   "search.reembedOpenSettings": "埋め込み設定を開く",
   "search.daysSearched": "検索日数：{days}",
   "search.query": "クエリ",

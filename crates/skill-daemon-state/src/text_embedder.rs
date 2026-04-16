@@ -17,6 +17,12 @@ pub struct SharedTextEmbedder {
     init: Arc<Once>,
 }
 
+impl Default for SharedTextEmbedder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SharedTextEmbedder {
     /// Create a new handle **without** loading the model yet.
     pub fn new() -> Self {

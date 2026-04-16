@@ -52,8 +52,8 @@ const search: Record<string, string> = {
   "search.emptyState": "בחר טווח זמנים ולחץ על חיפוש כדי למצוא הטמעות EEG והשכנים הקרובים ביותר שלהם.",
   "search.searchingIndices": "מחפש בכל אינדקסי HNSW היומיים…",
   "search.noResults": "לא נמצאו הטמעות ב-{start} – {end}",
-  "search.reembedDesc":
-    "{stale} מתוך {total} תוויות משתמשות במודל הטמעה ישן ולא ניתן לחפש בהן. הטמע מחדש כדי לתקן.",
+  "search.reembedDesc": "{stale} מתוך {total} תוויות משתמשות במודל הטמעה ישן ולא ניתן לחפש בהן. הטמע מחדש כדי לתקן.",
+  "search.reembedAuto": "מעדכן {stale} תוויות למודל הנוכחי\u2026",
   "search.reembedOpenSettings": "פתח הגדרות הטמעה",
   "search.daysSearched": "ימים שנחפשו: {days}",
   "search.query": "שאילתה",
