@@ -302,8 +302,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
 
 /// Fetch EEG metrics averaged over `[eeg_start, eeg_end]` for label hydration.
 fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<NeighborMetrics> {
-    let ts_start = (eeg_start as i64) * 1000;
-    let ts_end = (eeg_end as i64) * 1000;
+    let r = skill_data::util::DualTimestampRange::from_unix_secs(eeg_start, eeg_end);
 
     // Accumulators
     let mut relax = 0f64;
@@ -344,13 +343,15 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
                     json_extract(metrics_json, '$.rel_alpha'),
                     json_extract(metrics_json, '$.rel_beta'),
                     json_extract(metrics_json, '$.rel_theta')
-             FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2",
+             FROM embeddings
+             WHERE (timestamp >= ?1 AND timestamp <= ?2)
+                OR (timestamp >= ?3 AND timestamp <= ?4)",
         ) else {
             continue;
         };
 
         let _ = stmt
-            .query_map(params![ts_start, ts_end], |row| {
+            .query_map(params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end], |row| {
                 let g = |i: usize| row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0);
                 relax += g(0);
                 engage += g(1);

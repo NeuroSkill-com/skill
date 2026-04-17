@@ -249,6 +249,39 @@ pub fn unix_to_ts(secs: u64) -> i64 {
         + s as i64
 }
 
+/// Timestamp range params for querying the `embeddings` table.
+///
+/// The `embeddings` table stores timestamps in two formats:
+/// - Unix milliseconds (e.g. `1775512050594`)
+/// - `YYYYMMDDHHmmss × 1000` (e.g. `20260413234815000`)
+///
+/// This struct holds both representations of a `[start, end]` range so callers
+/// can use a single `WHERE (timestamp BETWEEN ?1 AND ?2) OR (timestamp BETWEEN ?3 AND ?4)` clause.
+#[derive(Debug, Clone, Copy)]
+pub struct DualTimestampRange {
+    pub unix_ms_start: i64,
+    pub unix_ms_end: i64,
+    pub dt_start: i64,
+    pub dt_end: i64,
+}
+
+impl DualTimestampRange {
+    /// Create a range from Unix seconds.
+    pub fn from_unix_secs(start: u64, end: u64) -> Self {
+        Self {
+            unix_ms_start: (start as i64) * 1000,
+            unix_ms_end: (end as i64) * 1000,
+            dt_start: unix_to_ts(start) * 1000,
+            dt_end: unix_to_ts(end) * 1000,
+        }
+    }
+
+    /// SQL WHERE clause fragment for dual-format timestamp matching.
+    /// Use with `rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end]`.
+    pub const WHERE_CLAUSE: &'static str =
+        "(timestamp >= ?1 AND timestamp <= ?2) OR (timestamp >= ?3 AND timestamp <= ?4)";
+}
+
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
 pub fn ts_to_unix(ts: i64) -> u64 {
     let s = (ts % 100) as u64;

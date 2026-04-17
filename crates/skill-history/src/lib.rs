@@ -670,7 +670,8 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
 
     let query = "SELECT AVG(json_extract(metrics_json, '$.snr'))
          FROM embeddings
-         WHERE timestamp >= ?1 AND timestamp <= ?2
+         WHERE ((timestamp >= ?1 AND timestamp <= ?2)
+             OR (timestamp >= ?3 AND timestamp <= ?4))
            AND json_extract(metrics_json, '$.snr') IS NOT NULL";
 
     // If prepare fails the column is missing — migrate and bail.
@@ -695,9 +696,11 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         let (Some(s), Some(e)) = (*start, *end) else {
             continue;
         };
-        let ts_start = (s as i64) * 1000;
-        let ts_end = (e as i64) * 1000;
-        if let Ok(avg) = stmt.query_row(rusqlite::params![ts_start, ts_end], |row| row.get::<_, Option<f64>>(0)) {
+        let r = skill_data::util::DualTimestampRange::from_unix_secs(s, e);
+        if let Ok(avg) = stmt.query_row(
+            rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+            |row| row.get::<_, Option<f64>>(0),
+        ) {
             session.avg_snr_db = avg;
         }
     }

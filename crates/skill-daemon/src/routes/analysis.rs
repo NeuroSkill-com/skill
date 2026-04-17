@@ -148,8 +148,7 @@ async fn umap_compare(State(state): State<AppState>, Json(req): Json<CompareRequ
 async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRangeRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let result = tokio::task::spawn_blocking(move || {
-        let start_ms = req.start_utc as i64 * 1000;
-        let end_ms = req.end_utc as i64 * 1000;
+        let r = skill_data::util::DualTimestampRange::from_unix_secs(req.start_utc, req.end_utc);
 
         fn utc_dir(ts: u64) -> String {
             let days = ts / 86400;
@@ -178,17 +177,23 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
             if let Ok(conn) = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
                 let n: i64 = conn
                     .query_row(
-                        "SELECT COUNT(*) FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2",
-                        rusqlite::params![start_ms, end_ms],
-                        |r| r.get(0),
+                        &format!(
+                            "SELECT COUNT(*) FROM embeddings WHERE {}",
+                            skill_data::util::DualTimestampRange::WHERE_CLAUSE
+                        ),
+                        rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+                        |row| row.get(0),
                     )
                     .unwrap_or(0);
                 total += n;
                 let emb: i64 = conn
                     .query_row(
-                        "SELECT COUNT(*) FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2 AND length(eeg_embedding) >= 4",
-                        rusqlite::params![start_ms, end_ms],
-                        |r| r.get(0),
+                        &format!(
+                            "SELECT COUNT(*) FROM embeddings WHERE ({}) AND length(eeg_embedding) >= 4",
+                            skill_data::util::DualTimestampRange::WHERE_CLAUSE
+                        ),
+                        rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+                        |row| row.get(0),
                     )
                     .unwrap_or(0);
                 total_embedded += emb;
