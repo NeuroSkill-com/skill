@@ -363,8 +363,13 @@ const TIMESERIES_MAX_ROWS: usize = 800;
 /// When the total row count exceeds `TIMESERIES_MAX_ROWS`, does a fast COUNT
 /// first and then reads every Nth row to produce an evenly-spaced sample.
 pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<EpochRow> {
+    // Epoch timestamps use two formats in the DB:
+    // - Unix milliseconds (e.g. 1775512050594)
+    // - YYYYMMDDHHmmss × 1000 (e.g. 20260413234815000)
     let ts_start = (start_utc as i64) * 1000;
     let ts_end = (end_utc as i64) * 1000;
+    let dt_start = skill_data::util::unix_to_ts(start_utc) * 1000;
+    let dt_end = skill_data::util::unix_to_ts(end_utc) * 1000;
     let mut rows: Vec<EpochRow> = Vec::new();
 
     for path in dirs_for_range(skill_dir, start_utc, end_utc) {
@@ -383,8 +388,10 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
         // Fast count to decide whether to downsample.
         let total_in_db: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2",
-                rusqlite::params![ts_start, ts_end],
+                "SELECT COUNT(*) FROM embeddings \
+                 WHERE (timestamp >= ?1 AND timestamp <= ?2) \
+                    OR (timestamp >= ?3 AND timestamp <= ?4)",
+                rusqlite::params![ts_start, ts_end, dt_start, dt_end],
                 |r| r.get(0),
             )
             .unwrap_or(0);
@@ -408,14 +415,16 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
                    SELECT timestamp, metrics_json,
                           (ROW_NUMBER() OVER (ORDER BY timestamp)) AS rn
                    FROM embeddings
-                   WHERE timestamp >= ?1 AND timestamp <= ?2
+                   WHERE (timestamp >= ?1 AND timestamp <= ?2)
+                      OR (timestamp >= ?3 AND timestamp <= ?4)
                  ) WHERE rn % {step} = 1
                  ORDER BY timestamp ASC"
             )
         } else {
             "SELECT timestamp, metrics_json
              FROM embeddings
-             WHERE timestamp >= ?1 AND timestamp <= ?2
+             WHERE (timestamp >= ?1 AND timestamp <= ?2)
+                OR (timestamp >= ?3 AND timestamp <= ?4)
              ORDER BY timestamp ASC"
                 .to_string()
         };
@@ -424,7 +433,7 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
             continue;
         };
 
-        let iter = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
+        let iter = stmt.query_map(rusqlite::params![ts_start, ts_end, dt_start, dt_end], |row| {
             let ts_val: i64 = row.get(0)?;
             let json_str: Option<String> = row.get(1)?;
             Ok((ts_val, json_str))
@@ -454,6 +463,8 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
 pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> SessionMetrics {
     let ts_start = (start_utc as i64) * 1000;
     let ts_end = (end_utc as i64) * 1000;
+    let dt_start = skill_data::util::unix_to_ts(start_utc) * 1000;
+    let dt_end = skill_data::util::unix_to_ts(end_utc) * 1000;
 
     let mut total = SessionMetrics::default();
     let mut count = 0u64;
@@ -473,13 +484,16 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
 
         let Ok(mut stmt) = conn.prepare(
             "SELECT metrics_json FROM embeddings
-             WHERE timestamp >= ?1 AND timestamp <= ?2
+             WHERE ((timestamp >= ?1 AND timestamp <= ?2)
+                 OR (timestamp >= ?3 AND timestamp <= ?4))
                AND metrics_json IS NOT NULL",
         ) else {
             continue;
         };
 
-        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| row.get::<_, String>(0));
+        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end, dt_start, dt_end], |row| {
+            row.get::<_, String>(0)
+        });
 
         if let Ok(rows) = rows {
             for json_str in rows.filter_map(std::result::Result::ok) {
@@ -561,6 +575,8 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
 pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> SleepStages {
     let ts_start = (start_utc as i64) * 1000;
     let ts_end = (end_utc as i64) * 1000;
+    let dt_start = skill_data::util::unix_to_ts(start_utc) * 1000;
+    let dt_end = skill_data::util::unix_to_ts(end_utc) * 1000;
 
     struct RawEpoch {
         utc: u64,
@@ -583,12 +599,14 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, metrics_json
-             FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2
+             FROM embeddings
+             WHERE (timestamp >= ?1 AND timestamp <= ?2)
+                OR (timestamp >= ?3 AND timestamp <= ?4)
              ORDER BY timestamp",
         ) else {
             continue;
         };
-        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
+        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end, dt_start, dt_end], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
         });
         if let Ok(rows) = rows {
