@@ -457,7 +457,7 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
         if let Ok(iter) = iter {
             for pair in iter.filter_map(std::result::Result::ok) {
                 let (ts_val, json_str) = pair;
-                let utc = (ts_val / 1000) as f64;
+                let utc = skill_data::util::epoch_ts_to_unix(ts_val) as f64;
                 let blob: MetricsBlob = json_str
                     .as_deref()
                     .and_then(|s| serde_json::from_str(s).ok())
@@ -640,7 +640,7 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
                     continue;
                 }
                 raw.push(RawEpoch {
-                    utc: (ts / 1000) as u64,
+                    utc: skill_data::util::epoch_ts_to_unix(ts),
                     rd: blob.rel_delta,
                     rt: blob.rel_theta,
                     ra: blob.rel_alpha,
