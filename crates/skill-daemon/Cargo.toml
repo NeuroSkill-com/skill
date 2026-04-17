@@ -56,6 +56,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "registry"] }
+ureq       = { version = "3", features = ["native-tls", "json"] }
 urlencoding = "2"
 hex = "0.4"
 async-trait = "0.1"

@@ -12242,6 +12242,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tribev2",
+ "ureq 3.3.0",
  "urlencoding",
  "uuid",
  "zuna-rs",

@@ -154,6 +154,17 @@ pub(crate) struct LlmAddModelRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct HfSearchParams {
+    pub(crate) q: String,
+    pub(crate) limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HfFilesParams {
+    pub(crate) repo: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct LlmFilenameRequest {
     pub(crate) filename: String,
 }
@@ -425,6 +436,8 @@ fn llm_routes() -> Router<AppState> {
         .route("/llm/catalog", get(llm_get_catalog))
         .route("/llm/catalog/refresh", post(llm_refresh_catalog))
         .route("/llm/catalog/add-model", post(llm_add_model))
+        .route("/llm/catalog/search", get(llm_search_hf))
+        .route("/llm/catalog/search/files", get(llm_search_hf_files))
         .route("/llm/downloads", get(llm_get_downloads))
         .route("/llm/download/start", post(llm_download_start))
         .route("/llm/download/cancel", post(llm_download_cancel))
@@ -919,6 +932,17 @@ async fn llm_refresh_catalog(state: State<AppState>) -> Json<serde_json::Value> 
 
 async fn llm_add_model(state: State<AppState>, req: Json<LlmAddModelRequest>) -> Json<serde_json::Value> {
     settings_llm_runtime::llm_add_model_impl(state, req).await
+}
+
+async fn llm_search_hf(state: State<AppState>, query: axum::extract::Query<HfSearchParams>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_search_hf_impl(state, query).await
+}
+
+async fn llm_search_hf_files(
+    state: State<AppState>,
+    query: axum::extract::Query<HfFilesParams>,
+) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_search_hf_files_impl(state, query).await
 }
 
 async fn llm_get_downloads(state: State<AppState>) -> Json<Vec<serde_json::Value>> {

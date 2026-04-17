@@ -573,6 +573,54 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
         }
     }
 
+    // Fallback: if no metrics_json data, try reading from session CSV files.
+    if count == 0 {
+        for path in dirs_for_range(skill_dir, start_utc, end_utc) {
+            // Find CSV files in this day directory.
+            let Ok(entries) = std::fs::read_dir(&path) else {
+                continue;
+            };
+            for entry in entries.filter_map(|e| e.ok()) {
+                let fname = entry.file_name();
+                let fname_str = fname.to_string_lossy();
+                // Match session CSVs (e.g. muse_1772557777.csv) but not _metrics or _ppg
+                if !fname_str.ends_with(".csv") || fname_str.contains("_metrics") || fname_str.contains("_ppg") {
+                    continue;
+                }
+                // Check if this session overlaps our time range by parsing the timestamp from filename
+                // Format: device_TIMESTAMP.csv
+                let csv_path = entry.path();
+                if let Some(result) = crate::metrics::load_metrics_csv(&csv_path) {
+                    // Filter epochs to our time range
+                    for row in &result.timeseries {
+                        let row_utc = row.t as u64;
+                        if row_utc >= start_utc && row_utc <= end_utc {
+                            // Accumulate from the EpochRow
+                            total.rel_delta += row.rd;
+                            total.rel_theta += row.rt;
+                            total.rel_alpha += row.ra;
+                            total.rel_beta += row.rb;
+                            total.rel_gamma += row.rg;
+                            total.relaxation += row.relaxation;
+                            total.engagement += row.engagement;
+                            total.faa += row.faa;
+                            total.tar += row.tar;
+                            total.snr += row.snr;
+                            total.coherence += row.coherence;
+                            total.mood += row.mood;
+                            total.hr += row.hr;
+                            total.meditation += row.med;
+                            total.cognitive_load += row.cog;
+                            total.drowsiness += row.drow;
+                            total.stress_index += row.stress;
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if count > 0 {
         let n = count as f64;
         total.rel_delta /= n;
