@@ -231,6 +231,7 @@ $effect(() => {
 let kVal = $state(10);
 let error = $state("");
 let page = $state(0);
+let rebuildingLabelIndex = $state(false);
 
 // ── EEG mode ─────────────────────────────────────────────────────────────
 const now = new Date();
@@ -2186,17 +2187,23 @@ useWindowTitle("window.title.search");
                     {lblEeg}/{lblTotal} (0%)
                   </span>
                   <button
+                    disabled={rebuildingLabelIndex}
                     onclick={async () => {
+                      rebuildingLabelIndex = true;
                       try {
                         const r = await daemonInvoke<{ ok: boolean; eeg_nodes?: number }>("rebuild_label_index");
-                        if (r.ok && r.eeg_nodes != null && corpusStats) {
-                          corpusStats.label_eeg_index = r.eeg_nodes;
+                        if (r.ok && r.eeg_nodes != null) {
+                          // Force full refresh so @const vars recompute.
+                          const fresh = await daemonInvoke<CorpusStats>("search_corpus_stats", {});
+                          corpusStats = fresh;
                         }
                       } catch {}
+                      rebuildingLabelIndex = false;
                     }}
                     class="shrink-0 text-[0.48rem] text-amber-600 hover:text-amber-500
-                           underline underline-offset-2 cursor-pointer font-semibold"
-                  >{t("search.rebuildLabelIndex")}</button>
+                           underline underline-offset-2 cursor-pointer font-semibold
+                           disabled:opacity-50 disabled:cursor-wait"
+                  >{rebuildingLabelIndex ? "Rebuilding…" : t("search.rebuildLabelIndex")}</button>
                 </div>
               {:else if lblStale > 0}
                 <div class="flex items-center gap-2">

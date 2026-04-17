@@ -202,8 +202,18 @@ use skill_data::util::blob_to_f32;
 /// `[eeg_start, eeg_end]` (unix seconds) and return their component-wise mean.
 /// Returns `None` if no epochs exist in that window.
 pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<Vec<f32>> {
-    let ts_start = (eeg_start as i64) * 1000;
-    let ts_end = (eeg_end as i64) * 1000;
+    // Epoch timestamps in the DB use two formats:
+    // - Unix milliseconds (e.g. 1775512050594)
+    // - YYYYMMDDHHmmss × 1000 (e.g. 20260413234815000)
+    // Labels store eeg_start/eeg_end as Unix seconds.
+    // Query both ranges to match both formats.
+    // For point labels (start == end), widen window by ±30s to catch nearest epoch.
+    // EEG epochs are typically 5s apart so ±30s ensures we catch nearby data.
+    let pad = if eeg_start == eeg_end { 30 } else { 0 };
+    let unix_ms_start = (eeg_start.saturating_sub(pad) as i64) * 1000;
+    let unix_ms_end = ((eeg_end + pad) as i64) * 1000;
+    let dt_start = skill_data::util::unix_to_ts(eeg_start.saturating_sub(pad)) * 1000;
+    let dt_end = skill_data::util::unix_to_ts(eeg_end + pad) * 1000;
 
     let mut sum: Vec<f32> = Vec::new();
     let mut count = 0usize;
@@ -219,13 +229,16 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
 
         let Ok(mut stmt) = conn.prepare(
             "SELECT eeg_embedding FROM embeddings \
-             WHERE timestamp >= ?1 AND timestamp <= ?2",
+             WHERE (timestamp >= ?1 AND timestamp <= ?2) \
+                OR (timestamp >= ?3 AND timestamp <= ?4)",
         ) else {
             continue;
         };
 
         let rows: Vec<Vec<u8>> = stmt
-            .query_map(params![ts_start, ts_end], |row| row.get::<_, Vec<u8>>(0))
+            .query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
+                row.get::<_, Vec<u8>>(0)
+            })
             .ok()?
             .filter_map(std::result::Result::ok)
             .collect();
