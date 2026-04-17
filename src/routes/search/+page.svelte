@@ -36,6 +36,8 @@ import {
   parseDateTimeLocalInput,
 } from "$lib/format";
 import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
+import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
+import { parseAssistantOutput } from "$lib/chat-utils";
 import { t } from "$lib/i18n/index.svelte";
 import {
   buildTextKnnGraph,
@@ -558,6 +560,97 @@ let ixSessions = $state<Array<{ session_id: string; epoch_count: number; duratio
 let ixSelectedNode = $state<import("$lib/search-types").GraphNode | null>(null); // selected node for detail panel
 let ixSortByRelevance = $state(false); // sort displayed nodes by relevance_score
 let ixHiddenKinds = $state<import("$lib/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
+let ixColorMode = $state<"timestamp" | "engagement" | "snr" | "session">("timestamp");
+let ixCompareNode = $state<import("$lib/search-types").GraphNode | null>(null); // second node for compare mode
+let ixDetailTimeseries = $state<Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>>([]);
+
+// ── Insights & value extraction ──────────────────────────────────────────
+let ixLlmSummary = $state("");
+let ixLlmLoading = $state(false);
+let ixShowInsights = $state(false);
+
+// Bookmarks (persisted in localStorage)
+const BOOKMARKS_KEY = "skill_search_bookmarks";
+let ixBookmarks = $state<Array<{ query: string; nodeId: string; kind: string; text: string; timestamp?: number; savedAt: number }>>([]);
+try { ixBookmarks = JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? "[]"); } catch { /* ignore */ }
+function saveBookmark(node: GraphNode) {
+  const entry = { query: ixQuery, nodeId: node.id, kind: node.kind, text: node.text ?? "", timestamp: node.timestamp_unix, savedAt: Date.now() };
+  ixBookmarks = [entry, ...ixBookmarks.filter(b => b.nodeId !== node.id)].slice(0, 50);
+  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(ixBookmarks));
+}
+function removeBookmark(nodeId: string) {
+  ixBookmarks = ixBookmarks.filter(b => b.nodeId !== nodeId);
+  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(ixBookmarks));
+}
+
+// Computed insights from search results
+interface AppEngagement { app: string; avgEngagement: number; count: number }
+interface HourEngagement { hour: number; avgEngagement: number; count: number }
+
+function computeInsights(nodes: GraphNode[]): {
+  appCorrelation: AppEngagement[];
+  hourPattern: HourEngagement[];
+  bestConditions: string[];
+  topMetric: { key: string; value: number } | null;
+} {
+  const eegNodes = nodes.filter(n => n.kind === "eeg_point" && n.eeg_metrics);
+  const ssNodes = nodes.filter(n => n.kind === "screenshot" && n.app_name);
+
+  // App-engagement correlation: match screenshots to nearby EEG by timestamp
+  const appMap = new Map<string, { sum: number; count: number }>();
+  for (const ss of ssNodes) {
+    if (!ss.app_name || !ss.timestamp_unix) continue;
+    // Find nearest EEG epoch
+    const nearest = eegNodes
+      .filter(n => n.timestamp_unix)
+      .sort((a, b) => Math.abs((a.timestamp_unix ?? 0) - ss.timestamp_unix!) - Math.abs((b.timestamp_unix ?? 0) - ss.timestamp_unix!))[0];
+    if (nearest?.eeg_metrics?.engagement != null) {
+      const eng = nearest.eeg_metrics.engagement as number;
+      const entry = appMap.get(ss.app_name) ?? { sum: 0, count: 0 };
+      entry.sum += eng;
+      entry.count++;
+      appMap.set(ss.app_name, entry);
+    }
+  }
+  const appCorrelation: AppEngagement[] = [...appMap.entries()]
+    .map(([app, { sum, count }]) => ({ app, avgEngagement: sum / count, count }))
+    .sort((a, b) => b.avgEngagement - a.avgEngagement);
+
+  // Hour-of-day engagement pattern
+  const hourMap = new Map<number, { sum: number; count: number }>();
+  for (const n of eegNodes) {
+    if (!n.timestamp_unix || !n.eeg_metrics?.engagement) continue;
+    const hour = new Date(n.timestamp_unix * 1000).getHours();
+    const entry = hourMap.get(hour) ?? { sum: 0, count: 0 };
+    entry.sum += n.eeg_metrics.engagement as number;
+    entry.count++;
+    hourMap.set(hour, entry);
+  }
+  const hourPattern: HourEngagement[] = [...hourMap.entries()]
+    .map(([hour, { sum, count }]) => ({ hour, avgEngagement: sum / count, count }))
+    .sort((a, b) => a.hour - b.hour);
+
+  // Best conditions
+  const bestConditions: string[] = [];
+  const bestHour = hourPattern.sort((a, b) => b.avgEngagement - a.avgEngagement)[0];
+  if (bestHour) bestConditions.push(`Peak engagement at ${bestHour.hour}:00 (${bestHour.avgEngagement.toFixed(2)})`);
+  const bestApp = appCorrelation[0];
+  if (bestApp) bestConditions.push(`Highest engagement in ${bestApp.app} (${bestApp.avgEngagement.toFixed(2)})`);
+  // Re-sort hourPattern by hour for display
+  hourPattern.sort((a, b) => a.hour - b.hour);
+
+  // Top metric across all EEG nodes
+  let topMetric: { key: string; value: number } | null = null;
+  if (eegNodes.length > 0) {
+    let maxEng = 0;
+    for (const n of eegNodes) {
+      const eng = (n.eeg_metrics?.engagement as number) ?? 0;
+      if (eng > maxEng) { maxEng = eng; topMetric = { key: "peak engagement", value: eng }; }
+    }
+  }
+
+  return { appCorrelation, hourPattern, bestConditions, topMetric };
+}
 
 // ── Search history (persisted in localStorage) ──────────────────────────
 const HISTORY_KEY = "skill_search_history";
@@ -2215,6 +2308,26 @@ useWindowTitle("window.title.search");
               </div>
             </div>
           {/if}
+
+          <!-- Saved bookmarks -->
+          {#if ixBookmarks.length > 0}
+            <div class="flex flex-col gap-1 mt-3 max-w-[300px]">
+              <span class="text-[0.5rem] text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.savedFindings")}</span>
+              <div class="flex flex-col gap-0.5">
+                {#each ixBookmarks.slice(0, 5) as bm}
+                  <div class="flex items-center gap-1.5 text-[0.55rem]">
+                    <span class="text-amber-500">★</span>
+                    <button onclick={() => { ixQuery = bm.query; searchInteractive(); }}
+                            class="text-muted-foreground/60 hover:text-foreground truncate max-w-[200px] transition-colors text-left">
+                      {bm.text || bm.kind}
+                    </button>
+                    <button onclick={() => removeBookmark(bm.nodeId)}
+                            class="text-muted-foreground/20 hover:text-red-400 transition-colors ml-auto shrink-0">✕</button>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
 
       {:else if ixSearching}
@@ -2389,6 +2502,18 @@ useWindowTitle("window.title.search");
             {/if}
           {/if}
 
+          <!-- Color mode selector -->
+          <select bind:value={ixColorMode}
+                  aria-label="Graph color mode"
+                  class="rounded border border-border dark:border-white/[0.1]
+                         bg-background px-1.5 py-0.5 text-[0.5rem]
+                         focus:outline-none focus:ring-1 focus:ring-ring shrink-0">
+            <option value="timestamp">{t("search.colorTimestamp")}</option>
+            <option value="engagement">{t("search.colorEngagement")}</option>
+            <option value="snr">{t("search.colorSnr")}</option>
+            <option value="session">{t("search.colorSession")}</option>
+          </select>
+
           <!-- Node kind filter toggles -->
           {#each [
             { kind: "eeg_point" as const, label: "EEG", color: "amber" },
@@ -2550,7 +2675,8 @@ useWindowTitle("window.title.search");
               <div style="width:100%; height:500px">
                 <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca}
                                     hiddenKinds={ixHiddenKinds}
-                                    onselect={(n) => { ixSelectedNode = n; }} />
+                                    colorMode={ixColorMode}
+                                    onselect={(n) => { ixSelectedNode = n; ixCompareNode = null; ixDetailTimeseries = []; }} />
               </div>
             {/if}
 
@@ -2582,6 +2708,14 @@ useWindowTitle("window.title.search");
                                    bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
                                    hover:bg-emerald-500/20 transition-colors select-none">{t("search.moreLikeThis")}</button>
                   {/if}
+                  <!-- Bookmark button -->
+                  <button onclick={() => saveBookmark(sn)}
+                          class="text-xs px-3 py-1.5 rounded-md border
+                                 {ixBookmarks.some(b => b.nodeId === sn.id) ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-border/30 bg-muted/10 text-muted-foreground/50 hover:text-foreground'}
+                                 transition-colors select-none"
+                          title={ixBookmarks.some(b => b.nodeId === sn.id) ? t("search.bookmarked") : t("search.bookmark")}>
+                    {ixBookmarks.some(b => b.nodeId === sn.id) ? "★" : "☆"} {t("search.bookmark")}
+                  </button>
                   <button onclick={() => ixSelectedNode = null}
                           class="text-muted-foreground/40 hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/30">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -2629,7 +2763,289 @@ useWindowTitle("window.title.search");
                   </div>
                 {/if}
               {/if}
+
+              <!-- Screenshot preview (for screenshot nodes) -->
+              {#if sn.kind === "screenshot" && sn.filename}
+                <div class="mt-3 rounded-lg border border-border/30 overflow-hidden">
+                  <img src={imgSrc(sn.filename)} alt={sn.window_title ?? "Screenshot"}
+                       class="w-full max-h-48 object-contain bg-black/5" />
+                </div>
+              {/if}
+
+              <!-- EEG sparkline (for eeg_point nodes — fetch on demand) -->
+              {#if sn.kind === "eeg_point" && sn.timestamp_unix}
+                <div class="mt-3">
+                  {#if ixDetailTimeseries.length === 0}
+                    <button onclick={async () => {
+                      const startUtc = (sn.timestamp_unix ?? 0) - 60;
+                      const endUtc = (sn.timestamp_unix ?? 0) + 60;
+                      try {
+                        const ts = await daemonInvoke<Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>>(
+                          "get_session_timeseries", { startUtc, endUtc }
+                        );
+                        ixDetailTimeseries = ts ?? [];
+                      } catch { ixDetailTimeseries = []; }
+                    }}
+                    class="text-xs px-3 py-1.5 rounded-md border border-blue-500/30
+                           bg-blue-500/10 text-blue-600 dark:text-blue-400
+                           hover:bg-blue-500/20 transition-colors select-none">
+                      {t("search.loadEegSparkline")}
+                    </button>
+                  {:else}
+                    <!-- Mini band-power chart -->
+                    {@const pts = ixDetailTimeseries}
+                    {@const maxVal = Math.max(0.01, ...pts.map(p => Math.max(p.ra, p.rb, p.rt)))}
+                    <div class="rounded-lg border border-border/30 bg-muted/5 p-3">
+                      <div class="flex items-center gap-3 mb-2 text-[0.6rem] text-muted-foreground/50">
+                        <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-blue-500 inline-block"></span>α</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-amber-500 inline-block"></span>β</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-emerald-500 inline-block"></span>θ</span>
+                        <span class="ml-auto text-[0.5rem]">{pts.length} epochs · ±60s</span>
+                      </div>
+                      <svg viewBox="0 0 300 60" class="w-full h-16" preserveAspectRatio="none">
+                        {#each [
+                          { data: pts.map(p => p.ra), color: "#3b82f6" },
+                          { data: pts.map(p => p.rb), color: "#f59e0b" },
+                          { data: pts.map(p => p.rt), color: "#10b981" },
+                        ] as line}
+                          <polyline
+                            points={line.data.map((v, i) => `${(i / Math.max(1, line.data.length - 1)) * 300},${58 - (v / maxVal) * 54}`).join(" ")}
+                            fill="none" stroke={line.color} stroke-width="1.5" stroke-linejoin="round" opacity="0.7" />
+                        {/each}
+                        <!-- Marker for the selected timestamp -->
+                        {#if sn.timestamp_unix && pts.length > 0}
+                          {@const tMin = pts[0].t}
+                          {@const tMax = pts[pts.length - 1].t}
+                          {@const tRange = tMax - tMin || 1}
+                          {@const mx = ((sn.timestamp_unix - tMin) / tRange) * 300}
+                          <line x1={mx} y1="0" x2={mx} y2="60" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2" opacity="0.6" />
+                        {/if}
+                      </svg>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
+              <!-- Compare button -->
+              {#if sn.kind === "eeg_point" && !ixCompareNode}
+                <button onclick={() => { ixCompareNode = sn; }}
+                        class="mt-3 text-xs px-3 py-1.5 rounded-md border border-violet-500/30
+                               bg-violet-500/10 text-violet-600 dark:text-violet-400
+                               hover:bg-violet-500/20 transition-colors select-none">
+                  {t("search.compareSelect")}
+                </button>
+              {/if}
             </div>
+
+            <!-- Compare panel (shown when two nodes are selected) -->
+            {#if ixCompareNode && ixSelectedNode && ixCompareNode.id !== ixSelectedNode.id && ixSelectedNode.kind === "eeg_point"}
+              {@const a = ixCompareNode}
+              {@const b = ixSelectedNode}
+              <div class="px-6 py-4 border-t border-violet-500/20 bg-violet-500/5">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="text-sm font-semibold text-violet-600 dark:text-violet-400">{t("search.compareTitle")}</span>
+                  <button onclick={() => ixCompareNode = null}
+                          class="ml-auto text-muted-foreground/40 hover:text-foreground transition-colors text-xs">✕ clear</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs font-mono">
+                  <div class="text-right text-muted-foreground/50">Metric</div>
+                  <div class="text-center font-semibold">Node A</div>
+                  <div class="text-center font-semibold">Node B</div>
+                  {#each ["engagement", "relaxation", "snr", "rel_alpha", "rel_beta", "rel_theta"] as key}
+                    {@const va = (a.eeg_metrics as Record<string, number | null> | null)?.[key]}
+                    {@const vb = (b.eeg_metrics as Record<string, number | null> | null)?.[key]}
+                    {#if va != null || vb != null}
+                      <div class="text-right text-muted-foreground/60">{key}</div>
+                      <div class="text-center">{va != null ? (va as number).toFixed(3) : "—"}</div>
+                      <div class="text-center {va != null && vb != null && (vb as number) > (va as number) ? 'text-emerald-500' : va != null && vb != null && (vb as number) < (va as number) ? 'text-red-400' : ''}">
+                        {vb != null ? (vb as number).toFixed(3) : "—"}
+                      </div>
+                    {/if}
+                  {/each}
+                  {#if a.timestamp_unix && b.timestamp_unix}
+                    <div class="text-right text-muted-foreground/60">time gap</div>
+                    <div class="col-span-2 text-center text-muted-foreground/50">
+                      {Math.abs(a.timestamp_unix - b.timestamp_unix)}s ({(Math.abs(a.timestamp_unix - b.timestamp_unix) / 60).toFixed(1)}m)
+                    </div>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Timeline scrubber — all timestamped nodes on a horizontal axis -->
+        {#if ixNodes.length > 0}
+          {@const tsNodes = ixNodes.filter(n => n.timestamp_unix != null && n.timestamp_unix > 0)}
+          {#if tsNodes.length > 1}
+            {@const tMin = Math.min(...tsNodes.map(n => n.timestamp_unix!))}
+            {@const tMax = Math.max(...tsNodes.map(n => n.timestamp_unix!))}
+            {@const tRange = tMax - tMin || 1}
+            <div class="mx-4 mb-3 rounded-xl border border-border bg-card overflow-hidden shrink-0">
+              <div class="flex items-center gap-2 px-4 py-2 border-b border-border dark:border-white/[0.06]">
+                <span class="text-[0.62rem] font-semibold select-none">{t("search.timelineScrubber")}</span>
+                <span class="text-[0.45rem] text-muted-foreground/45 font-mono">
+                  {new Date(tMin * 1000).toLocaleDateString()} → {new Date(tMax * 1000).toLocaleDateString()}
+                </span>
+              </div>
+              <div class="px-4 py-3">
+                <svg viewBox="0 0 600 40" class="w-full h-10" preserveAspectRatio="xMidYMid meet">
+                  <!-- Track -->
+                  <rect x="0" y="18" width="600" height="4" rx="2" fill="currentColor" opacity="0.08" />
+                  <!-- Nodes as dots -->
+                  {#each tsNodes as n}
+                    {@const x = ((n.timestamp_unix! - tMin) / tRange) * 600}
+                    {@const col = n.kind === "text_label" ? "#3b82f6" : n.kind === "eeg_point" ? "#f59e0b" : n.kind === "found_label" ? "#10b981" : "#06b6d4"}
+                    {@const isSelected = ixSelectedNode?.id === n.id}
+                    <circle cx={x} cy="20" r={isSelected ? 5 : 3}
+                            fill={col} opacity={isSelected ? 1 : 0.5}
+                            class="cursor-pointer"
+                            onclick={() => { ixSelectedNode = n; ixDetailTimeseries = []; }}
+                            role="button" tabindex="-1" aria-label={n.text ?? n.kind}>
+                      <title>{n.kind}: {n.text?.slice(0, 40) ?? ""} ({new Date(n.timestamp_unix! * 1000).toLocaleTimeString()})</title>
+                    </circle>
+                  {/each}
+                </svg>
+              </div>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- ── Insights & Value Panel ──────────────────────────────────── -->
+        {#if ixNodes.length > 0}
+          <div class="mx-4 mb-3 rounded-xl border border-border bg-card overflow-hidden shrink-0">
+            <button onclick={() => ixShowInsights = !ixShowInsights}
+                    class="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/10 transition-colors">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-amber-500/70 shrink-0">
+                <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+              <span class="text-sm font-semibold">{t("search.insightsTitle")}</span>
+              <span class="text-[0.5rem] text-muted-foreground/40">{ixShowInsights ? "▾" : "▸"}</span>
+            </button>
+
+            {#if ixShowInsights}
+              {@const insights = computeInsights([...ixNodes, ...(ixDisplayGraph?.nodes ?? [])])}
+              <div class="px-5 py-4 border-t border-border dark:border-white/[0.06]">
+
+                <!-- Best conditions -->
+                {#if insights.bestConditions.length > 0}
+                  <div class="mb-4">
+                    <h4 class="text-xs font-semibold text-foreground/70 uppercase tracking-wider mb-2">{t("search.optimalConditions")}</h4>
+                    {#each insights.bestConditions as cond}
+                      <p class="text-sm text-foreground/60 flex items-center gap-2 mb-1">
+                        <span class="text-amber-500">★</span> {cond}
+                      </p>
+                    {/each}
+                  </div>
+                {/if}
+
+                <!-- App-engagement correlation -->
+                {#if insights.appCorrelation.length > 0}
+                  <div class="mb-4">
+                    <h4 class="text-xs font-semibold text-foreground/70 uppercase tracking-wider mb-2">{t("search.appCorrelation")}</h4>
+                    <div class="space-y-1.5">
+                      {#each insights.appCorrelation.slice(0, 6) as app}
+                        {@const pct = Math.round(Math.min(1, app.avgEngagement) * 100)}
+                        <div class="flex items-center gap-2 text-xs">
+                          <span class="w-24 truncate text-foreground/60 font-mono">{app.app}</span>
+                          <div class="flex-1 h-2 rounded-full bg-muted/20 overflow-hidden">
+                            <div class="h-full rounded-full bg-amber-500/60 transition-all duration-500" style="width:{pct}%"></div>
+                          </div>
+                          <span class="w-10 text-right font-mono text-muted-foreground/50">{app.avgEngagement.toFixed(2)}</span>
+                          <span class="w-6 text-right text-muted-foreground/30">×{app.count}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Hour-of-day engagement pattern -->
+                {#if insights.hourPattern.length > 0}
+                  <div class="mb-4">
+                    <h4 class="text-xs font-semibold text-foreground/70 uppercase tracking-wider mb-2">{t("search.hourPattern")}</h4>
+                    {#each [Math.max(...insights.hourPattern.map(h => h.avgEngagement), 0.01)] as maxH}
+                    <svg viewBox="0 0 288 50" class="w-full h-12" preserveAspectRatio="none">
+                      {#each insights.hourPattern as hp}
+                        {@const x = hp.hour * 12}
+                        {@const h = (hp.avgEngagement / maxH) * 44}
+                        <rect x={x} y={50 - h} width="10" height={h} rx="2"
+                              fill="#f59e0b" opacity="0.5">
+                          <title>{hp.hour}:00 — eng:{hp.avgEngagement.toFixed(2)} (×{hp.count})</title>
+                        </rect>
+                      {/each}
+                    </svg>
+                    {/each}
+                    <div class="flex justify-between text-[0.45rem] text-muted-foreground/30 font-mono mt-0.5">
+                      <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- LLM Summary -->
+                <div class="border-t border-border/30 pt-3 mt-2">
+                  <div class="flex items-center gap-2 mb-2">
+                    <h4 class="text-xs font-semibold text-foreground/70 uppercase tracking-wider">{t("search.llmSummary")}</h4>
+                    {#if !ixLlmSummary && !ixLlmLoading}
+                      <button onclick={async () => {
+                        ixLlmLoading = true;
+                        try {
+                          const labels = ixNodes.filter(n => n.kind === "text_label" || n.kind === "found_label").map(n => n.text).filter(Boolean).slice(0, 10);
+                          const sessions = ixSessions.slice(0, 5).map(s => `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, ${Math.round(s.duration_secs/60)}min`);
+                          const apps = computeInsights(ixNodes).appCorrelation.slice(0, 5).map(a => `${a.app}: eng=${a.avgEngagement.toFixed(2)}`);
+                          const prompt = `Analyze this EEG search for "${ixQuery}". Labels found: ${labels.join(", ")}. Sessions: ${sessions.join("; ")}. App engagement: ${apps.join("; ")}. Give 2-3 concise insights about patterns, optimal conditions, and recommendations. Be specific and actionable.`;
+                          const { daemonPost } = await import("$lib/daemon/http");
+                          const res = await daemonPost<{ choices?: Array<{ message?: { content?: string } }>; content?: string }>("/v1/llm/chat-completions", {
+                            messages: [{ role: "user", content: prompt }],
+                            temperature: 0.3,
+                            max_tokens: 300,
+                          }, 120_000);
+                          ixLlmSummary = res?.choices?.[0]?.message?.content ?? res?.content ?? "No response from LLM. Make sure a model is loaded in Settings → LLM.";
+                        } catch (err) {
+                          ixLlmSummary = `Could not generate summary: ${err}`;
+                        }
+                        ixLlmLoading = false;
+                      }}
+                      class="text-xs px-2.5 py-1 rounded-md border border-violet-500/30
+                             bg-violet-500/10 text-violet-600 dark:text-violet-400
+                             hover:bg-violet-500/20 transition-colors select-none">
+                        {t("search.generateSummary")}
+                      </button>
+                    {/if}
+                  </div>
+                  {#if ixLlmLoading}
+                    <div class="flex items-center gap-2 text-sm text-muted-foreground/50">
+                      <div class="w-3 h-3 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
+                      {t("search.generatingSummary")}
+                    </div>
+                  {:else if ixLlmSummary}
+                    {@const parsed = parseAssistantOutput(ixLlmSummary)}
+                    <!-- Thinking block (collapsible) -->
+                    {#if parsed.thinking}
+                      {#each [false] as _, _i}
+                        {@const thinkId = `llm-think-${_i}`}
+                        <details class="mb-2 rounded-lg border border-violet-500/15 bg-violet-500/5 overflow-hidden">
+                          <summary class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs text-violet-500/70 hover:text-violet-500 select-none">
+                            <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0"><path d="M6 3l5 5-5 5V3z"/></svg>
+                            Thought
+                            <span class="ml-auto text-[0.6rem] text-muted-foreground/40">{parsed.thinking.trim().split(/\s+/).length} words</span>
+                          </summary>
+                          <div class="px-3 pb-2 pt-1 text-xs text-muted-foreground/60 leading-relaxed border-t border-violet-500/10 whitespace-pre-line">
+                            {parsed.thinking}
+                          </div>
+                        </details>
+                      {/each}
+                    {/if}
+                    <!-- Main content (rendered as markdown) -->
+                    {#if parsed.content}
+                      <div class="text-sm text-foreground/70 leading-relaxed prose prose-sm dark:prose-invert max-w-none
+                                  prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5 prose-headings:text-foreground/80">
+                        <MarkdownRenderer content={parsed.content} />
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
 

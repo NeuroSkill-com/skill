@@ -72,12 +72,13 @@ interface EdgeEntry {
   baseOpacity: number; // opacity at rest
 }
 
-let { nodes, edges, usePca = true, onselect, hiddenKinds = [] }: {
+let { nodes, edges, usePca = true, onselect, hiddenKinds = [], colorMode = "timestamp" }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   usePca?: boolean;
   onselect?: (node: GraphNode | null) => void;
   hiddenKinds?: GraphNode["kind"][];
+  colorMode?: "timestamp" | "engagement" | "snr" | "session";
 } = $props();
 
 // ── Visual constants ─────────────────────────────────────────────────────
@@ -213,7 +214,10 @@ function normalize3(v: [number, number, number]): [number, number, number] {
 
 function computePositions(ns: GraphNode[], usePcaLayout: boolean): Map<string, [number, number, number]> {
   const pos = new Map<string, [number, number, number]>();
-  pos.set("query", [0, 0, 0]);
+  // Place query node at center — match by kind since ID may vary (e.g. "q0")
+  const queryNode = ns.find(n => n.kind === "query");
+  if (queryNode) pos.set(queryNode.id, [0, 0, 0]);
+  pos.set("query", [0, 0, 0]); // fallback
 
   const textLabels = ns.filter((n) => n.kind === "text_label");
   for (let i = 0; i < textLabels.length; i++) {
@@ -483,7 +487,24 @@ function buildGraph() {
       const scale = 1.0 + (1.0 - Math.min(1, node.relevance_score)) * 0.3; // 1.0–1.3x
       radius *= scale;
     }
-    const color = node.kind === "eeg_point" ? eegColor(node.timestamp_unix) : KIND_COLOR[node.kind];
+    // Color based on selected mode
+    let color: number;
+    if (node.kind === "eeg_point") {
+      if (colorMode === "engagement" && node.eeg_metrics?.engagement != null) {
+        color = turboHex(Math.min(1, node.eeg_metrics.engagement as number));
+      } else if (colorMode === "snr" && node.eeg_metrics?.snr != null) {
+        color = turboHex(Math.min(1, (node.eeg_metrics.snr as number) / 20));
+      } else if (colorMode === "session" && node.session_id) {
+        // Hash session_id to a hue
+        let h = 0;
+        for (let ci = 0; ci < node.session_id.length; ci++) h = (h * 31 + node.session_id.charCodeAt(ci)) & 0xffffff;
+        color = h;
+      } else {
+        color = eegColor(node.timestamp_unix);
+      }
+    } else {
+      color = KIND_COLOR[node.kind];
+    }
     const emissive = BASE_EMISSIVE[node.kind];
 
     const geo = new THREE.SphereGeometry(radius, 24, 16);
@@ -862,6 +883,7 @@ $effect(() => {
   const _e = edges.length;
   const _p = usePca; // also rebuild when the PCA toggle flips
   const _h = hiddenKinds.length; // rebuild when filter changes
+  const _cm = colorMode; // rebuild when color mode changes
   if (!loaded || !THREE || (_n === 0 && _e === 0)) return;
   buildGraph();
 });
