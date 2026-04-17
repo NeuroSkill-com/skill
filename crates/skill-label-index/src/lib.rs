@@ -229,19 +229,19 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
 
         let Ok(mut stmt) = conn.prepare(
             "SELECT eeg_embedding FROM embeddings \
-             WHERE (timestamp >= ?1 AND timestamp <= ?2) \
-                OR (timestamp >= ?3 AND timestamp <= ?4)",
+             WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+               AND ((timestamp >= ?1 AND timestamp <= ?2) \
+                 OR (timestamp >= ?3 AND timestamp <= ?4))",
         ) else {
             continue;
         };
 
-        let rows: Vec<Vec<u8>> = stmt
-            .query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
-                row.get::<_, Vec<u8>>(0)
-            })
-            .ok()?
-            .filter_map(std::result::Result::ok)
-            .collect();
+        let Ok(mapped) = stmt.query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
+            row.get::<_, Vec<u8>>(0)
+        }) else {
+            continue; // skip this day if query fails (schema mismatch, locked DB, etc.)
+        };
+        let rows: Vec<Vec<u8>> = mapped.filter_map(std::result::Result::ok).collect();
 
         for blob in rows {
             let v = blob_to_f32(&blob);
