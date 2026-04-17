@@ -363,6 +363,16 @@ const TIMESERIES_MAX_ROWS: usize = 800;
 /// When the total row count exceeds `TIMESERIES_MAX_ROWS`, does a fast COUNT
 /// first and then reads every Nth row to produce an evenly-spaced sample.
 pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<EpochRow> {
+    get_session_timeseries_filtered(skill_dir, start_utc, end_utc, None)
+}
+
+/// Like [`get_session_timeseries`] but optionally filters by device name.
+pub fn get_session_timeseries_filtered(
+    skill_dir: &Path,
+    start_utc: u64,
+    end_utc: u64,
+    device_filter: Option<&str>,
+) -> Vec<EpochRow> {
     // Epoch timestamps use two formats in the DB:
     // - Unix milliseconds (e.g. 1775512050594)
     // - YYYYMMDDHHmmss × 1000 (e.g. 20260413234815000)
@@ -382,24 +392,45 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         migrate_embeddings_schema(&conn);
 
+        // Optional device filter clause.
+        let dev_clause = if device_filter.is_some() {
+            " AND device_name = ?7"
+        } else {
+            ""
+        };
+
         // Fast count to decide whether to downsample.
-        let total_in_db: i64 = conn
-            .query_row(
-                &format!(
-                    "SELECT COUNT(*) FROM embeddings WHERE {}",
-                    skill_data::util::DualTimestampRange::WHERE_CLAUSE
-                ),
-                rusqlite::params![
-                    r.unix_ms_start,
-                    r.unix_ms_end,
-                    r.dt14_start,
-                    r.dt14_end,
-                    r.dt17_start,
-                    r.dt17_end
-                ],
-                |r| r.get(0),
-            )
-            .unwrap_or(0);
+        let where_cl = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
+        let count_sql = format!("SELECT COUNT(*) FROM embeddings WHERE {where_cl}{dev_clause}");
+        let total_in_db: i64 = {
+            let mut count_stmt = conn.prepare(&count_sql).unwrap_or_else(|_| unreachable!());
+            let params_base = rusqlite::params![
+                r.unix_ms_start,
+                r.unix_ms_end,
+                r.dt14_start,
+                r.dt14_end,
+                r.dt17_start,
+                r.dt17_end
+            ];
+            if let Some(dev) = device_filter {
+                count_stmt
+                    .query_row(
+                        rusqlite::params![
+                            r.unix_ms_start,
+                            r.unix_ms_end,
+                            r.dt14_start,
+                            r.dt14_end,
+                            r.dt17_start,
+                            r.dt17_end,
+                            dev
+                        ],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0)
+            } else {
+                count_stmt.query_row(params_base, |r| r.get(0)).unwrap_or(0)
+            }
+        };
         let total_in_db = total_in_db.max(0) as usize;
 
         if total_in_db == 0 {
@@ -414,14 +445,13 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
 
         // Use a CTE with ROW_NUMBER to sample every Nth row inside SQLite,
         // avoiding transfer of rows we'd discard.
-        let where_cl = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
         let query = if step > 1 {
             format!(
                 "SELECT timestamp, metrics_json FROM (
                    SELECT timestamp, metrics_json,
                           (ROW_NUMBER() OVER (ORDER BY timestamp)) AS rn
                    FROM embeddings
-                   WHERE {where_cl}
+                   WHERE {where_cl}{dev_clause}
                  ) WHERE rn % {step} = 1
                  ORDER BY timestamp ASC"
             )
@@ -429,7 +459,7 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
             format!(
                 "SELECT timestamp, metrics_json
                  FROM embeddings
-                 WHERE {where_cl}
+                 WHERE {where_cl}{dev_clause}
                  ORDER BY timestamp ASC"
             )
         };
@@ -438,21 +468,36 @@ pub fn get_session_timeseries(skill_dir: &Path, start_utc: u64, end_utc: u64) ->
             continue;
         };
 
-        let iter = stmt.query_map(
-            rusqlite::params![
-                r.unix_ms_start,
-                r.unix_ms_end,
-                r.dt14_start,
-                r.dt14_end,
-                r.dt17_start,
-                r.dt17_end
-            ],
-            |row| {
-                let ts_val: i64 = row.get(0)?;
-                let json_str: Option<String> = row.get(1)?;
-                Ok((ts_val, json_str))
-            },
-        );
+        fn extract_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Option<String>)> {
+            Ok((row.get(0)?, row.get(1)?))
+        }
+
+        let iter = if let Some(dev) = device_filter {
+            stmt.query_map(
+                rusqlite::params![
+                    r.unix_ms_start,
+                    r.unix_ms_end,
+                    r.dt14_start,
+                    r.dt14_end,
+                    r.dt17_start,
+                    r.dt17_end,
+                    dev
+                ],
+                extract_row,
+            )
+        } else {
+            stmt.query_map(
+                rusqlite::params![
+                    r.unix_ms_start,
+                    r.unix_ms_end,
+                    r.dt14_start,
+                    r.dt14_end,
+                    r.dt17_start,
+                    r.dt17_end
+                ],
+                extract_row,
+            )
+        };
 
         if let Ok(iter) = iter {
             for pair in iter.filter_map(std::result::Result::ok) {

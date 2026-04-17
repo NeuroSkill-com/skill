@@ -40,6 +40,10 @@ interface GraphNode {
   proj_y?: number;
   /** Screenshot image URL — only present on kind === "screenshot" nodes. */
   screenshot_url?: string;
+  /** Session identifier for grouping. */
+  session_id?: string;
+  /** Composite relevance score (0 = best). */
+  relevance_score?: number;
 }
 interface GraphEdge {
   from_id: string;
@@ -68,7 +72,13 @@ interface EdgeEntry {
   baseOpacity: number; // opacity at rest
 }
 
-let { nodes, edges, usePca = true }: { nodes: GraphNode[]; edges: GraphEdge[]; usePca?: boolean } = $props();
+let { nodes, edges, usePca = true, onselect, hiddenKinds = [] }: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  usePca?: boolean;
+  onselect?: (node: GraphNode | null) => void;
+  hiddenKinds?: GraphNode["kind"][];
+} = $props();
 
 // ── Visual constants ─────────────────────────────────────────────────────
 const KIND_COLOR: Record<GraphNode["kind"], number> = {
@@ -336,6 +346,14 @@ async function initScene() {
 
   scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
 
+  // Subtle grid pattern
+  const gridColor = isDark ? 0x1a1a28 : 0xe8ecf0;
+  const grid = new THREE.GridHelper(60, 20, gridColor, gridColor);
+  grid.position.y = -15;
+  grid.material.opacity = isDark ? 0.08 : 0.1;
+  grid.material.transparent = true;
+  scene.add(grid);
+
   buildGraph();
   loaded = true;
   animate();
@@ -361,6 +379,7 @@ async function initScene() {
     onClick(e);
   };
   renderer.domElement.addEventListener("click", canvasClickHandler);
+  renderer.domElement.addEventListener("dblclick", onDblClick);
 
   resizeObs = new ResizeObserver(() => {
     if (!container) return;
@@ -396,10 +415,16 @@ function buildGraph() {
   edgeEntries = [];
   selectedNodeId = null;
 
-  const positions = computePositions(nodes, usePca);
+  // Apply node kind filter
+  const hiddenSet = new Set(hiddenKinds);
+  const visibleNodes = hiddenSet.size > 0 ? nodes.filter(n => !hiddenSet.has(n.kind)) : nodes;
+  const visibleIds = new Set(visibleNodes.map(n => n.id));
+  const visibleEdges = hiddenSet.size > 0 ? edges.filter(e => visibleIds.has(e.from_id) && visibleIds.has(e.to_id)) : edges;
+
+  const positions = computePositions(visibleNodes, usePca);
 
   // EEG time range
-  const eegTs = nodes
+  const eegTs = visibleNodes
     .filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null)
     .map((n) => n.timestamp_unix as number);
   const tMin = eegTs.length ? Math.min(...eegTs) : 0;
@@ -415,13 +440,13 @@ function buildGraph() {
 
   // Max distances per edge kind for normalisation
   const maxDist = new Map<string, number>();
-  for (const e of edges) {
+  for (const e of visibleEdges) {
     const cur = maxDist.get(e.kind) ?? 0;
     if (e.distance > cur) maxDist.set(e.kind, e.distance);
   }
 
   // ── Edges ────────────────────────────────────────────────────────────
-  for (const edge of edges) {
+  for (const edge of visibleEdges) {
     const fromPos = positions.get(edge.from_id);
     const toPos = positions.get(edge.to_id);
     if (!fromPos || !toPos) continue;
@@ -432,7 +457,7 @@ function buildGraph() {
 
     let edgeCol = EDGE_COLOR[edge.kind as keyof typeof EDGE_COLOR] ?? 0x888888;
     if (edge.kind === "eeg_bridge") {
-      const toNode = nodes.find((n) => n.id === edge.to_id);
+      const toNode = visibleNodes.find((n) => n.id === edge.to_id);
       if (toNode?.kind === "eeg_point") edgeCol = eegColor(toNode.timestamp_unix);
     }
 
@@ -448,11 +473,16 @@ function buildGraph() {
   }
 
   // ── Nodes ────────────────────────────────────────────────────────────
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     const pos = positions.get(node.id);
     if (!pos) continue;
 
-    const radius = KIND_RADIUS[node.kind];
+    // Scale EEG nodes by relevance (lower = bigger = better), subtle range
+    let radius = KIND_RADIUS[node.kind];
+    if (node.kind === "eeg_point" && node.relevance_score != null) {
+      const scale = 1.0 + (1.0 - Math.min(1, node.relevance_score)) * 0.3; // 1.0–1.3x
+      radius *= scale;
+    }
     const color = node.kind === "eeg_point" ? eegColor(node.timestamp_unix) : KIND_COLOR[node.kind];
     const emissive = BASE_EMISSIVE[node.kind];
 
@@ -720,6 +750,25 @@ function onMouseMove(e: MouseEvent) {
     if (n.text) lines.push(n.text.slice(0, 80));
     if (n.timestamp_unix) lines.push(fmtDateTimeLocale(n.timestamp_unix));
     if (n.distance > 0) lines.push(`dist: ${n.distance.toFixed(4)}`);
+    if (n.relevance_score != null) lines.push(`relevance: ${n.relevance_score.toFixed(3)}`);
+    if (n.session_id) lines.push(`session: ${n.session_id}`);
+    // Show EEG metrics summary in tooltip
+    if (n.eeg_metrics) {
+      const m = n.eeg_metrics;
+      const parts: string[] = [];
+      if (m.engagement != null) parts.push(`eng:${(m.engagement as number).toFixed(2)}`);
+      if (m.relaxation != null) parts.push(`rel:${(m.relaxation as number).toFixed(2)}`);
+      if (m.snr != null) parts.push(`snr:${(m.snr as number).toFixed(1)}`);
+      if (m.hr != null && (m.hr as number) > 0) parts.push(`hr:${(m.hr as number).toFixed(0)}`);
+      if (parts.length) lines.push(parts.join("  "));
+    }
+    // Show connected edge kinds when a node is selected
+    if (selectedNodeId === n.id) {
+      const edgeKinds = new Set(edgeEntries
+        .filter(ee => ee.fromId === n.id || ee.toId === n.id)
+        .map(ee => ee.line.material.color ? edgeEntries.find(e => e === ee)?.fromId === n.id ? `→ ${edges.find(ed => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}` : `← ${edges.find(ed => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}` : ""));
+      if (edgeKinds.size > 0) lines.push([...edgeKinds].filter(Boolean).join(", "));
+    }
     if (selectedNodeId === null) lines.push("click to highlight connections");
     else if (selectedNodeId === n.id) lines.push("click to deselect");
     tooltip = { x: e.clientX, y: e.clientY - 10, lines };
@@ -732,17 +781,77 @@ function onMouseMove(e: MouseEvent) {
 function onClick(e: MouseEvent) {
   const hit = getHitNode(e);
   if (!hit) {
-    // Click on empty space → deselect
-    if (selectedNodeId !== null) applySelection(null);
+    // Click on empty space → deselect + reset camera
+    if (selectedNodeId !== null) { applySelection(null); onselect?.(null); }
+    resetCamera();
     return;
   }
   // Click same node → deselect; click different node → select it
-  applySelection(hit.node.id === selectedNodeId ? null : hit.node.id);
+  const newSel = hit.node.id === selectedNodeId ? null : hit.node.id;
+  applySelection(newSel);
+  onselect?.(newSel ? hit.node : null);
+}
+
+// ── Reset camera to default position ─────────────────────────────────────
+function resetCamera() {
+  flyTarget = {
+    x: 0, y: 8, z: 28,
+    tx: 0, ty: 0, tz: 0,
+    t: 0,
+  };
+  if (controls) controls.autoRotate = true;
+}
+
+// ── Fly camera to a node (smooth tween) ──────────────────────────────────
+let flyTarget: { x: number; y: number; z: number; tx: number; ty: number; tz: number; t: number } | null = null;
+
+function flyToNode(node: GraphNode) {
+  const ne = nodeEntries.find(n => n.node.id === node.id);
+  if (!ne || !camera || !controls) return;
+  const p = ne.mesh.position;
+  const radius = KIND_RADIUS[node.kind] ?? 0.5;
+  // Target: position the camera at a comfortable distance from the node
+  const dir = camera.position.clone().sub(p).normalize();
+  const dist = radius * 8 + 4;
+  flyTarget = {
+    x: p.x + dir.x * dist,
+    y: p.y + dir.y * dist + 2,
+    z: p.z + dir.z * dist,
+    tx: p.x, ty: p.y, tz: p.z,
+    t: 0,
+  };
+  if (controls) controls.autoRotate = false;
+}
+
+function onDblClick(e: MouseEvent) {
+  const hit = getHitNode(e);
+  if (hit) {
+    flyToNode(hit.node);
+    applySelection(hit.node.id);
+    onselect?.(hit.node);
+  }
 }
 
 // ── Animation loop ────────────────────────────────────────────────────────
 function animate() {
   animId = requestAnimationFrame(animate);
+
+  // Smooth camera fly-to
+  if (flyTarget) {
+    flyTarget.t += 0.03;
+    const t = Math.min(1, flyTarget.t);
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    camera.position.x += (flyTarget.x - camera.position.x) * ease * 0.08;
+    camera.position.y += (flyTarget.y - camera.position.y) * ease * 0.08;
+    camera.position.z += (flyTarget.z - camera.position.z) * ease * 0.08;
+    if (controls) {
+      controls.target.x += (flyTarget.tx - controls.target.x) * ease * 0.08;
+      controls.target.y += (flyTarget.ty - controls.target.y) * ease * 0.08;
+      controls.target.z += (flyTarget.tz - controls.target.z) * ease * 0.08;
+    }
+    if (t >= 1) flyTarget = null;
+  }
+
   controls?.update();
   renderer?.render(scene, camera);
 }
@@ -752,6 +861,7 @@ $effect(() => {
   const _n = nodes.length;
   const _e = edges.length;
   const _p = usePca; // also rebuild when the PCA toggle flips
+  const _h = hiddenKinds.length; // rebuild when filter changes
   if (!loaded || !THREE || (_n === 0 && _e === 0)) return;
   buildGraph();
 });
@@ -851,12 +961,51 @@ function fmtTs(unix: number) {
     </div>
   {/if}
 
+  <!-- Minimap -->
+  {#if loaded && nodeEntries.length > 1}
+    {@const mmSize = 80}
+    {@const mmNodes = nodeEntries.map(ne => ({
+      x: ne.mesh.position.x,
+      z: ne.mesh.position.z,
+      kind: ne.node.kind,
+      selected: ne.node.id === selectedNodeId,
+    }))}
+    {@const xMin = Math.min(...mmNodes.map(n => n.x)) - 2}
+    {@const xMax = Math.max(...mmNodes.map(n => n.x)) + 2}
+    {@const zMin = Math.min(...mmNodes.map(n => n.z)) - 2}
+    {@const zMax = Math.max(...mmNodes.map(n => n.z)) + 2}
+    {@const xRange = xMax - xMin || 1}
+    {@const zRange = zMax - zMin || 1}
+    <div class="absolute bottom-2 right-2 rounded-lg border border-border/30 bg-background/60 backdrop-blur-sm overflow-hidden"
+         style="width:{mmSize}px; height:{mmSize}px;">
+      <svg viewBox="0 0 {mmSize} {mmSize}" width={mmSize} height={mmSize}>
+        {#each mmNodes as mn}
+          {@const mx = ((mn.x - xMin) / xRange) * (mmSize - 8) + 4}
+          {@const mz = ((mn.z - zMin) / zRange) * (mmSize - 8) + 4}
+          <circle cx={mx} cy={mz} r={mn.selected ? 3 : 1.5}
+                  fill={mn.kind === "query" ? "#8b5cf6" : mn.kind === "text_label" ? "#3b82f6" : mn.kind === "eeg_point" ? "#f59e0b" : mn.kind === "found_label" ? "#10b981" : "#06b6d4"}
+                  opacity={mn.selected ? 1 : 0.6} />
+        {/each}
+      </svg>
+    </div>
+  {/if}
+
+  <!-- Reset view button -->
+  <button onclick={resetCamera}
+          class="absolute top-2 left-2 px-2 py-1 rounded-md text-[0.5rem]
+                 bg-background/70 border border-border/40 backdrop-blur-sm
+                 text-muted-foreground/50 hover:text-foreground hover:bg-background/90
+                 transition-colors select-none z-10"
+          title="Reset camera to default view (or click empty space)">
+    ⌂ Reset
+  </button>
+
   <!-- Deselect hint (shown while a node is selected) -->
   {#if selectedNodeId !== null}
     <div class="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2
                 px-2.5 py-1 rounded-full bg-background/80 border border-border/60
                 text-[0.5rem] text-muted-foreground/55 backdrop-blur-sm select-none">
-      click node again or click empty space to deselect
+      click node or empty space to deselect · double-click to zoom · ⌂ to reset
     </div>
   {/if}
 

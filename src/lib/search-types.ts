@@ -105,6 +105,10 @@ export interface GraphNode {
   window_title?: string;
   /** OCR similarity score. */
   ocr_similarity?: number;
+  /** Session identifier for grouping. */
+  session_id?: string;
+  /** Composite relevance score (0 = best). */
+  relevance_score?: number;
 }
 
 export interface GraphEdge {

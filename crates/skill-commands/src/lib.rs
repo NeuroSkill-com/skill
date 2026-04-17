@@ -934,6 +934,17 @@ pub struct InteractiveGraphNode {
     /// Cosine similarity between the query text and the OCR text embedding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ocr_similarity: Option<f32>,
+
+    // ── Session context fields ──────────────────────────────────────────
+    /// Session identifier (date + session index) for grouping.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Device name that recorded this epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    /// Composite relevance score (0 = best). Combines text similarity, temporal distance, EEG quality.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relevance_score: Option<f32>,
 }
 
 /// A directed edge in the interactive search graph.
