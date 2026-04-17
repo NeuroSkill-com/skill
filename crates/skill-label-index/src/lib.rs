@@ -207,9 +207,10 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
     // - YYYYMMDDHHmmss × 1000 (e.g. 20260413234815000)
     // Labels store eeg_start/eeg_end as Unix seconds.
     // Query both ranges to match both formats.
-    // For point labels (start == end), widen window by ±30s to catch nearest epoch.
-    // EEG epochs are typically 5s apart so ±30s ensures we catch nearby data.
-    let pad = if eeg_start == eeg_end { 30 } else { 0 };
+    // Widen window by ±30s to catch nearby epochs.
+    // EEG epochs are typically 5s apart so ±30s ensures we catch nearby data
+    // even for labels with narrow time windows.
+    let pad: u64 = 30;
     let unix_ms_start = (eeg_start.saturating_sub(pad) as i64) * 1000;
     let unix_ms_end = ((eeg_end + pad) as i64) * 1000;
     let dt_start = skill_data::util::unix_to_ts(eeg_start.saturating_sub(pad)) * 1000;
@@ -219,42 +220,73 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
     let mut count = 0usize;
 
     for (_date, dir) in skill_data::util::date_dirs(skill_dir) {
+        // ── 1. Try SQLite embeddings first ───────────────────────────────
         let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() {
+        if db_path.exists() {
+            if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
+                if let Ok(mut stmt) = conn.prepare(
+                    "SELECT eeg_embedding FROM embeddings \
+                     WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+                       AND ((timestamp >= ?1 AND timestamp <= ?2) \
+                         OR (timestamp >= ?3 AND timestamp <= ?4))",
+                ) {
+                    if let Ok(mapped) = stmt.query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
+                        row.get::<_, Vec<u8>>(0)
+                    }) {
+                        for blob in mapped.filter_map(std::result::Result::ok) {
+                            let v = blob_to_f32(&blob);
+                            if v.is_empty() {
+                                continue;
+                            }
+                            if sum.is_empty() {
+                                sum.resize(v.len(), 0.0);
+                            }
+                            if v.len() != sum.len() {
+                                continue;
+                            }
+                            for (s, &x) in sum.iter_mut().zip(v.iter()) {
+                                *s += x;
+                            }
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            // If SQLite found results for this day, skip HNSW fallback.
+            if count > 0 {
+                continue;
+            }
+        }
+
+        // ── 2. Fallback: scan per-day HNSW file ─────────────────────────
+        // Old data may have embeddings only in eeg_embeddings.hnsw with
+        // timestamp payloads but no eeg_embedding column in SQLite.
+        let hnsw_path = dir.join(skill_constants::HNSW_INDEX_FILE);
+        if !hnsw_path.exists() {
             continue;
         }
-        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
+        let Ok(idx) = LabeledIndex::<Cosine, i64>::load_mmap(&hnsw_path, Cosine) else {
             continue;
         };
-
-        let Ok(mut stmt) = conn.prepare(
-            "SELECT eeg_embedding FROM embeddings \
-             WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
-               AND ((timestamp >= ?1 AND timestamp <= ?2) \
-                 OR (timestamp >= ?3 AND timestamp <= ?4))",
-        ) else {
-            continue;
-        };
-
-        let Ok(mapped) = stmt.query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
-            row.get::<_, Vec<u8>>(0)
-        }) else {
-            continue; // skip this day if query fails (schema mismatch, locked DB, etc.)
-        };
-        let rows: Vec<Vec<u8>> = mapped.filter_map(std::result::Result::ok).collect();
-
-        for blob in rows {
-            let v = blob_to_f32(&blob);
-            if v.is_empty() {
+        for i in 0..idx.len() {
+            let ts = *idx.get_payload(i);
+            // Payload timestamps can be Unix ms or YYYYMMDDHHmmss×1000.
+            let in_unix = ts >= unix_ms_start as i64 && ts <= unix_ms_end as i64;
+            let in_dt = ts >= dt_start && ts <= dt_end;
+            if !in_unix && !in_dt {
+                continue;
+            }
+            let emb = idx.get_embedding(i);
+            if emb.is_empty() {
                 continue;
             }
             if sum.is_empty() {
-                sum.resize(v.len(), 0.0);
+                sum.resize(emb.len(), 0.0);
             }
-            if v.len() != sum.len() {
+            if emb.len() != sum.len() {
                 continue;
-            } // dimension mismatch — skip
-            for (s, &x) in sum.iter_mut().zip(v.iter()) {
+            }
+            for (s, &x) in sum.iter_mut().zip(emb.iter()) {
                 *s += x;
             }
             count += 1;
@@ -506,6 +538,12 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
                 eeg_skipped += 1;
             }
         } else {
+            if eeg_skipped < 3 {
+                eprintln!(
+                    "[label_idx] eeg skip: label {} eeg_start={} eeg_end={}",
+                    row.id, row.eeg_start, row.eeg_end
+                );
+            }
             eeg_skipped += 1;
         }
     }
