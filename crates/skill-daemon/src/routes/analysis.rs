@@ -181,7 +181,14 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
                             "SELECT COUNT(*) FROM embeddings WHERE {}",
                             skill_data::util::DualTimestampRange::WHERE_CLAUSE
                         ),
-                        rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+                        rusqlite::params![
+                            r.unix_ms_start,
+                            r.unix_ms_end,
+                            r.dt14_start,
+                            r.dt14_end,
+                            r.dt17_start,
+                            r.dt17_end
+                        ],
                         |row| row.get(0),
                     )
                     .unwrap_or(0);
@@ -192,7 +199,14 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
                             "SELECT COUNT(*) FROM embeddings WHERE ({}) AND length(eeg_embedding) >= 4",
                             skill_data::util::DualTimestampRange::WHERE_CLAUSE
                         ),
-                        rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+                        rusqlite::params![
+                            r.unix_ms_start,
+                            r.unix_ms_end,
+                            r.dt14_start,
+                            r.dt14_end,
+                            r.dt17_start,
+                            r.dt17_end
+                        ],
                         |row| row.get(0),
                     )
                     .unwrap_or(0);

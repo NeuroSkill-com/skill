@@ -211,10 +211,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
     // EEG epochs are typically 5s apart so ±30s ensures we catch nearby data
     // even for labels with narrow time windows.
     let pad: u64 = 30;
-    let unix_ms_start = (eeg_start.saturating_sub(pad) as i64) * 1000;
-    let unix_ms_end = ((eeg_end + pad) as i64) * 1000;
-    let dt_start = skill_data::util::unix_to_ts(eeg_start.saturating_sub(pad)) * 1000;
-    let dt_end = skill_data::util::unix_to_ts(eeg_end + pad) * 1000;
+    let r = skill_data::util::DualTimestampRange::from_unix_secs(eeg_start.saturating_sub(pad), eeg_end + pad);
 
     let mut sum: Vec<f32> = Vec::new();
     let mut count = 0usize;
@@ -224,15 +221,23 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
         let db_path = dir.join(SQLITE_FILE);
         if db_path.exists() {
             if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
-                if let Ok(mut stmt) = conn.prepare(
+                if let Ok(mut stmt) = conn.prepare(&format!(
                     "SELECT eeg_embedding FROM embeddings \
-                     WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
-                       AND ((timestamp >= ?1 AND timestamp <= ?2) \
-                         OR (timestamp >= ?3 AND timestamp <= ?4))",
-                ) {
-                    if let Ok(mapped) = stmt.query_map(params![unix_ms_start, unix_ms_end, dt_start, dt_end], |row| {
-                        row.get::<_, Vec<u8>>(0)
-                    }) {
+                         WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+                           AND ({})",
+                    skill_data::util::DualTimestampRange::WHERE_CLAUSE
+                )) {
+                    if let Ok(mapped) = stmt.query_map(
+                        params![
+                            r.unix_ms_start,
+                            r.unix_ms_end,
+                            r.dt14_start,
+                            r.dt14_end,
+                            r.dt17_start,
+                            r.dt17_end
+                        ],
+                        |row| row.get::<_, Vec<u8>>(0),
+                    ) {
                         for blob in mapped.filter_map(std::result::Result::ok) {
                             let v = blob_to_f32(&blob);
                             if v.is_empty() {
@@ -270,10 +275,11 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
         };
         for i in 0..idx.len() {
             let ts = *idx.get_payload(i);
-            // Payload timestamps can be Unix ms or YYYYMMDDHHmmss×1000.
-            let in_unix = ts >= unix_ms_start as i64 && ts <= unix_ms_end as i64;
-            let in_dt = ts >= dt_start && ts <= dt_end;
-            if !in_unix && !in_dt {
+            // Payload timestamps can be Unix ms, YYYYMMDDHHmmss, or YYYYMMDDHHmmss×1000.
+            let in_unix = ts >= r.unix_ms_start && ts <= r.unix_ms_end;
+            let in_dt14 = ts >= r.dt14_start && ts <= r.dt14_end;
+            let in_dt17 = ts >= r.dt17_start && ts <= r.dt17_end;
+            if !in_unix && !in_dt14 && !in_dt17 {
                 continue;
             }
             let emb = idx.get_embedding(i);
@@ -329,7 +335,7 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
             continue;
         };
 
-        let Ok(mut stmt) = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(&format!(
             "SELECT json_extract(metrics_json, '$.relaxation_score'),
                     json_extract(metrics_json, '$.engagement_score'),
                     json_extract(metrics_json, '$.faa'),
@@ -343,32 +349,41 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
                     json_extract(metrics_json, '$.rel_alpha'),
                     json_extract(metrics_json, '$.rel_beta'),
                     json_extract(metrics_json, '$.rel_theta')
-             FROM embeddings
-             WHERE (timestamp >= ?1 AND timestamp <= ?2)
-                OR (timestamp >= ?3 AND timestamp <= ?4)",
-        ) else {
+             FROM embeddings WHERE {}",
+            skill_data::util::DualTimestampRange::WHERE_CLAUSE
+        )) else {
             continue;
         };
 
         let _ = stmt
-            .query_map(params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end], |row| {
-                let g = |i: usize| row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0);
-                relax += g(0);
-                engage += g(1);
-                faa += g(2);
-                tar += g(3);
-                mood += g(4);
-                meditation += g(5);
-                cog_load += g(6);
-                drowsy += g(7);
-                hr += g(8);
-                snr += g(9);
-                rel_alpha += g(10);
-                rel_beta += g(11);
-                rel_theta += g(12);
-                count += 1;
-                Ok(())
-            })
+            .query_map(
+                params![
+                    r.unix_ms_start,
+                    r.unix_ms_end,
+                    r.dt14_start,
+                    r.dt14_end,
+                    r.dt17_start,
+                    r.dt17_end
+                ],
+                |row| {
+                    let g = |i: usize| row.get::<_, Option<f64>>(i).unwrap_or(None).unwrap_or(0.0);
+                    relax += g(0);
+                    engage += g(1);
+                    faa += g(2);
+                    tar += g(3);
+                    mood += g(4);
+                    meditation += g(5);
+                    cog_load += g(6);
+                    drowsy += g(7);
+                    hr += g(8);
+                    snr += g(9);
+                    rel_alpha += g(10);
+                    rel_beta += g(11);
+                    rel_theta += g(12);
+                    count += 1;
+                    Ok(())
+                },
+            )
             .map(|rows| rows.for_each(drop));
     }
 

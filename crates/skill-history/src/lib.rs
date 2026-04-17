@@ -668,14 +668,16 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
     };
     let _ = conn.execute_batch("PRAGMA busy_timeout=1000;");
 
-    let query = "SELECT AVG(json_extract(metrics_json, '$.snr'))
+    let query = format!(
+        "SELECT AVG(json_extract(metrics_json, '$.snr'))
          FROM embeddings
-         WHERE ((timestamp >= ?1 AND timestamp <= ?2)
-             OR (timestamp >= ?3 AND timestamp <= ?4))
-           AND json_extract(metrics_json, '$.snr') IS NOT NULL";
+         WHERE ({})
+           AND json_extract(metrics_json, '$.snr') IS NOT NULL",
+        skill_data::util::DualTimestampRange::WHERE_CLAUSE
+    );
 
     // If prepare fails the column is missing — migrate and bail.
-    let needs_migration = conn.prepare(query).is_err();
+    let needs_migration = conn.prepare(&query).is_err();
     if needs_migration {
         drop(conn);
         let flags_rw = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
@@ -685,7 +687,7 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         return;
     }
 
-    let Ok(mut stmt) = conn.prepare(query) else {
+    let Ok(mut stmt) = conn.prepare(&query) else {
         return;
     };
 
@@ -698,7 +700,14 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         };
         let r = skill_data::util::DualTimestampRange::from_unix_secs(s, e);
         if let Ok(avg) = stmt.query_row(
-            rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end],
+            rusqlite::params![
+                r.unix_ms_start,
+                r.unix_ms_end,
+                r.dt14_start,
+                r.dt14_end,
+                r.dt17_start,
+                r.dt17_end
+            ],
             |row| row.get::<_, Option<f64>>(0),
         ) {
             session.avg_snr_db = avg;

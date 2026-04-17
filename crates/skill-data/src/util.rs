@@ -249,37 +249,76 @@ pub fn unix_to_ts(secs: u64) -> i64 {
         + s as i64
 }
 
-/// Timestamp range params for querying the `embeddings` table.
-///
-/// The `embeddings` table stores timestamps in two formats:
-/// - Unix milliseconds (e.g. `1775512050594`)
-/// - `YYYYMMDDHHmmss × 1000` (e.g. `20260413234815000`)
-///
-/// This struct holds both representations of a `[start, end]` range so callers
-/// can use a single `WHERE (timestamp BETWEEN ?1 AND ?2) OR (timestamp BETWEEN ?3 AND ?4)` clause.
+// ── Backward-compatible timestamp queries ──────────────────────────────────
+//
+// # Why this exists
+//
+// The `embeddings` table has accumulated three different timestamp formats
+// over the project's history:
+//
+// | Era       | Format                          | Example             | Digits |
+// |-----------|---------------------------------|---------------------|--------|
+// | Mar 2026  | `YYYYMMDDHHmmss` (no ×1000)     | `20260301061412`    | 14     |
+// | Apr 2026+ | `YYYYMMDDHHmmss × 1000`         | `20260413234815000` | 17     |
+// | Mixed     | Unix milliseconds               | `1775512050594`     | 13     |
+//
+// All three formats coexist in production data. Any SQL query that filters
+// by timestamp MUST match all three, or old sessions become invisible.
+//
+// # How to use
+//
+// ```rust
+// use skill_data::util::DualTimestampRange;
+//
+// let r = DualTimestampRange::from_unix_secs(start_utc, end_utc);
+// let sql = format!("SELECT ... FROM embeddings WHERE {}", DualTimestampRange::WHERE_CLAUSE);
+// conn.prepare(&sql)?
+//     .query_map(params![r.unix_ms_start, r.unix_ms_end,
+//                        r.dt14_start, r.dt14_end,
+//                        r.dt17_start, r.dt17_end], ...)?;
+// ```
+//
+// # IMPORTANT
+//
+// Never write raw `WHERE timestamp >= ? AND timestamp <= ?` queries against
+// the embeddings table. Always use `DualTimestampRange` to ensure backward
+// compatibility with all three timestamp formats.
+
+/// Timestamp range for querying the `embeddings` table across all three
+/// historical timestamp formats. See module-level docs above.
 #[derive(Debug, Clone, Copy)]
 pub struct DualTimestampRange {
+    /// Unix milliseconds (e.g. `1775512050000`)
     pub unix_ms_start: i64,
     pub unix_ms_end: i64,
-    pub dt_start: i64,
-    pub dt_end: i64,
+    /// `YYYYMMDDHHmmss` — 14-digit format used in older data (Mar 2026)
+    pub dt14_start: i64,
+    pub dt14_end: i64,
+    /// `YYYYMMDDHHmmss × 1000` — 17-digit format used in newer data (Apr 2026+)
+    pub dt17_start: i64,
+    pub dt17_end: i64,
 }
 
 impl DualTimestampRange {
-    /// Create a range from Unix seconds.
+    /// Create a range from Unix seconds (the format used by labels and UI).
     pub fn from_unix_secs(start: u64, end: u64) -> Self {
+        let dt_start = unix_to_ts(start);
+        let dt_end = unix_to_ts(end);
         Self {
             unix_ms_start: (start as i64) * 1000,
             unix_ms_end: (end as i64) * 1000,
-            dt_start: unix_to_ts(start) * 1000,
-            dt_end: unix_to_ts(end) * 1000,
+            dt14_start: dt_start,
+            dt14_end: dt_end,
+            dt17_start: dt_start * 1000,
+            dt17_end: dt_end * 1000,
         }
     }
 
-    /// SQL WHERE clause fragment for dual-format timestamp matching.
-    /// Use with `rusqlite::params![r.unix_ms_start, r.unix_ms_end, r.dt_start, r.dt_end]`.
+    /// SQL WHERE clause fragment matching all three timestamp formats.
+    ///
+    /// Bind with: `params![r.unix_ms_start, r.unix_ms_end, r.dt14_start, r.dt14_end, r.dt17_start, r.dt17_end]`
     pub const WHERE_CLAUSE: &'static str =
-        "(timestamp >= ?1 AND timestamp <= ?2) OR (timestamp >= ?3 AND timestamp <= ?4)";
+        "(timestamp >= ?1 AND timestamp <= ?2) OR (timestamp >= ?3 AND timestamp <= ?4) OR (timestamp >= ?5 AND timestamp <= ?6)";
 }
 
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
