@@ -321,6 +321,24 @@ impl DualTimestampRange {
         "(timestamp >= ?1 AND timestamp <= ?2) OR (timestamp >= ?3 AND timestamp <= ?4) OR (timestamp >= ?5 AND timestamp <= ?6)";
 }
 
+/// Convert any embeddings-table timestamp to Unix seconds.
+///
+/// Handles all three historical formats:
+/// - Unix milliseconds (13 digits, e.g. `1775512050594`) → divide by 1000
+/// - `YYYYMMDDHHmmss` (14 digits, e.g. `20260301061412`) → calendar conversion
+/// - `YYYYMMDDHHmmss × 1000` (17 digits, e.g. `20260413234815000`) → divide by 1000, then calendar
+pub fn epoch_ts_to_unix(ts: i64) -> u64 {
+    // 14-digit datetime: 10000101000000..99991231235959
+    // These are > 4.1 trillion which overlaps with Unix ms range,
+    // so we use digit count as the discriminator.
+    let digits = if ts > 0 { (ts as f64).log10() as u32 + 1 } else { 0 };
+    match digits {
+        17 => ts_to_unix(ts / 1000), // YYYYMMDDHHmmss × 1000
+        14 => ts_to_unix(ts),        // YYYYMMDDHHmmss
+        _ => (ts / 1000) as u64,     // Unix milliseconds (or unknown → best guess)
+    }
+}
+
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
 pub fn ts_to_unix(ts: i64) -> u64 {
     let s = (ts % 100) as u64;

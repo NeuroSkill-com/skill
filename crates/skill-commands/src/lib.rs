@@ -321,19 +321,11 @@ fn date_from_ts(ts: i64) -> String {
 
 /// Convert a database timestamp (ms) to Unix seconds.
 ///
-/// The embeddings table stores timestamps in two formats:
-/// - Unix milliseconds (e.g., `1775784303872` → year 2026)
-/// - YYYYMMDDHHmmss × 1000 (e.g., `20260414014211000` → Apr 14, 2026 01:42:11)
-///
-/// Detects the format and delegates to `skill_data::util::ts_to_unix` for
-/// the YYYYMMDDHHmmss conversion.
+/// Convert any embeddings-table timestamp to Unix seconds.
+/// Delegates to `skill_data::util::epoch_ts_to_unix` which handles
+/// all three historical timestamp formats.
 fn ts_ms_to_unix(ts: i64) -> u64 {
-    const UNIX_MS_2100: i64 = 4_102_444_800_000;
-    if ts < UNIX_MS_2100 {
-        (ts / 1000) as u64
-    } else {
-        ts_to_unix(ts / 1000)
-    }
+    skill_data::util::epoch_ts_to_unix(ts)
 }
 
 /// Look up a row in `db_path` by its `YYYYMMDDHHmmss` timestamp.
@@ -524,7 +516,7 @@ pub fn search_embeddings_in_range_for(
     let mut results: Vec<QueryEntry> = Vec::with_capacity(query_count);
 
     for (_dd_idx, qemb) in &query_embs {
-        let ts_unix = (qemb.timestamp / 1000) as u64;
+        let ts_unix = skill_data::util::epoch_ts_to_unix(qemb.timestamp);
 
         // Candidates: (date, dir, hnsw_id, timestamp, distance).
         // For the per-day branch we build lightweight tuples referencing
@@ -708,7 +700,7 @@ pub fn stream_search_inner_for(
     });
 
     for (idx, (_dd_idx, qemb)) in query_embs.iter().enumerate() {
-        let ts_unix = (qemb.timestamp / 1000) as u64;
+        let ts_unix = skill_data::util::epoch_ts_to_unix(qemb.timestamp);
 
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
 
