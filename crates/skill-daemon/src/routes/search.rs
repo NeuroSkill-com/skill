@@ -10,7 +10,46 @@ use axum::{
 use futures::stream::{Stream, StreamExt};
 use serde::Deserialize;
 
+use skill_data::screenshot_store::ScreenshotResult;
+
 use crate::state::AppState;
+
+// ── Search result cache ──────────────────────────────────────────────────────
+// Simple bounded cache: key = hash of query+params, value = JSON result.
+static SEARCH_CACHE: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<u64, (std::time::Instant, serde_json::Value)>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+const CACHE_MAX: usize = 8;
+const CACHE_TTL_SECS: u64 = 300; // 5 minutes
+
+fn cache_key(parts: &[&str]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for p in parts {
+        p.hash(&mut h);
+    }
+    h.finish()
+}
+fn cache_get(key: u64) -> Option<serde_json::Value> {
+    let guard = SEARCH_CACHE.lock().ok()?;
+    let (ts, val) = guard.get(&key)?;
+    if ts.elapsed().as_secs() < CACHE_TTL_SECS {
+        Some(val.clone())
+    } else {
+        None
+    }
+}
+fn cache_put(key: u64, val: serde_json::Value) {
+    if let Ok(mut guard) = SEARCH_CACHE.lock() {
+        // Evict oldest if full.
+        if guard.len() >= CACHE_MAX {
+            if let Some(&oldest_key) = guard.iter().min_by_key(|(_, (ts, _))| *ts).map(|(k, _)| k) {
+                guard.remove(&oldest_key);
+            }
+        }
+        guard.insert(key, (std::time::Instant::now(), val));
+    }
+}
 
 /// Unified request for `/v1/search/eeg`.
 ///
@@ -28,22 +67,23 @@ pub struct SearchRequest {
     pub end_utc: Option<u64>,
     pub k: Option<u64>,
     pub ef: Option<u64>,
-    #[allow(dead_code)]
     pub query: Option<String>,
-    #[allow(dead_code)]
     pub k_text: Option<u64>,
-    #[allow(dead_code)]
     pub k_eeg: Option<u64>,
-    #[allow(dead_code)]
     pub k_labels: Option<u64>,
-    #[allow(dead_code)]
     pub k_screenshots: Option<u64>,
-    #[allow(dead_code)]
     pub reach_minutes: Option<u64>,
     #[allow(dead_code)]
     pub mode: Option<String>,
     /// Filter by device name (e.g. "MuseS-F921"). `None` or `"all"` = all devices.
     pub device_name: Option<String>,
+    /// When true, only include EEG epochs with SNR > 0 (positive signal quality).
+    pub snr_positive_only: Option<bool>,
+    /// Optional date-range filter (Unix seconds). Constrains interactive search to a time window.
+    pub filter_start_utc: Option<u64>,
+    pub filter_end_utc: Option<u64>,
+    /// Sort EEG epochs by this metric before taking top-k. Default: "timestamp".
+    pub eeg_rank_by: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,6 +205,28 @@ async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest
         let k_labels = req.k_labels.unwrap_or(2) as usize;
         let k_screenshots = req.k_screenshots.unwrap_or(5) as usize;
         let reach_minutes = req.reach_minutes.unwrap_or(10) as u64;
+        let snr_positive_only = req.snr_positive_only.unwrap_or(false);
+        let device_filter = req.device_name.filter(|d| !d.is_empty() && d != "all");
+        let filter_start = req.filter_start_utc;
+        let filter_end = req.filter_end_utc;
+        let eeg_rank_by = req.eeg_rank_by;
+        // Check cache first.
+        let ck = cache_key(&[
+            &query,
+            &k_text.to_string(),
+            &k_eeg.to_string(),
+            &k_labels.to_string(),
+            &reach_minutes.to_string(),
+            &snr_positive_only.to_string(),
+            device_filter.as_deref().unwrap_or(""),
+            &filter_start.unwrap_or(0).to_string(),
+            &filter_end.unwrap_or(0).to_string(),
+            eeg_rank_by.as_deref().unwrap_or(""),
+        ]);
+        if let Some(cached) = cache_get(ck) {
+            return Json(cached);
+        }
+
         let embedder = state.text_embedder.clone();
         let label_index = state.label_index.clone();
 
@@ -177,6 +239,11 @@ async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest
                 k_labels,
                 k_screenshots,
                 reach_minutes,
+                snr_positive_only,
+                device_filter.as_deref(),
+                filter_start,
+                filter_end,
+                eeg_rank_by.as_deref(),
                 &embedder,
                 &label_index,
             )
@@ -187,6 +254,7 @@ async fn search_eeg(State(state): State<AppState>, Json(req): Json<SearchRequest
                 "nodes": [], "edges": [], "dot": "", "svg": "", "svg_col": ""
             })
         });
+        cache_put(ck, result.clone());
         Json(result)
     } else {
         // No recognized parameters — return empty.
@@ -439,14 +507,108 @@ fn interactive_search_impl(
     k_labels: usize,
     k_screenshots: usize,
     reach_minutes: u64,
+    snr_positive_only: bool,
+    device_filter: Option<&str>,
+    filter_start_utc: Option<u64>,
+    filter_end_utc: Option<u64>,
+    eeg_rank_by: Option<&str>,
     embedder: &crate::text_embedder::SharedTextEmbedder,
     label_index: &std::sync::Arc<skill_label_index::LabelIndexState>,
 ) -> serde_json::Value {
-    use skill_commands::{InteractiveGraphEdge, InteractiveGraphNode};
+    let t_total = std::time::Instant::now();
+    use skill_commands::{InteractiveGraphEdge, InteractiveGraphNode, NeighborMetrics};
     use skill_constants::LABELS_FILE;
 
     let mut nodes: Vec<InteractiveGraphNode> = Vec::new();
     let mut edges: Vec<InteractiveGraphEdge> = Vec::new();
+
+    // ── Session summary accumulators for cross-session comparison ────────
+    struct SessionAccum {
+        relaxation: f64,
+        engagement: f64,
+        snr: f64,
+        rel_alpha: f64,
+        rel_beta: f64,
+        rel_theta: f64,
+        engagement_sq: f64,
+        snr_sq: f64,
+        min_engagement: f64,
+        max_engagement: f64,
+        min_snr: f64,
+        max_snr: f64,
+        min_ts: u64,
+        max_ts: u64,
+        count: u32,
+    }
+    impl SessionAccum {
+        fn new() -> Self {
+            Self {
+                relaxation: 0.0,
+                engagement: 0.0,
+                snr: 0.0,
+                rel_alpha: 0.0,
+                rel_beta: 0.0,
+                rel_theta: 0.0,
+                engagement_sq: 0.0,
+                snr_sq: 0.0,
+                min_engagement: f64::MAX,
+                max_engagement: f64::MIN,
+                min_snr: f64::MAX,
+                max_snr: f64::MIN,
+                min_ts: u64::MAX,
+                max_ts: 0,
+                count: 0,
+            }
+        }
+        /// Returns true if the epoch has any meaningful signal.
+        fn is_valid(ep: &skill_history::EpochRow) -> bool {
+            !(ep.relaxation == 0.0 && ep.engagement == 0.0 && ep.snr == 0.0)
+        }
+        fn add(&mut self, ep: &skill_history::EpochRow, ts: u64) {
+            if !Self::is_valid(ep) {
+                return;
+            }
+            self.relaxation += ep.relaxation;
+            self.engagement += ep.engagement;
+            self.snr += ep.snr;
+            self.rel_alpha += ep.ra;
+            self.rel_beta += ep.rb;
+            self.rel_theta += ep.rt;
+            self.engagement_sq += ep.engagement * ep.engagement;
+            self.snr_sq += ep.snr * ep.snr;
+            if ep.engagement < self.min_engagement {
+                self.min_engagement = ep.engagement;
+            }
+            if ep.engagement > self.max_engagement {
+                self.max_engagement = ep.engagement;
+            }
+            if ep.snr < self.min_snr {
+                self.min_snr = ep.snr;
+            }
+            if ep.snr > self.max_snr {
+                self.max_snr = ep.snr;
+            }
+            if ts < self.min_ts {
+                self.min_ts = ts;
+            }
+            if ts > self.max_ts {
+                self.max_ts = ts;
+            }
+            self.count += 1;
+        }
+        fn stddev(sum: f64, sum_sq: f64, n: f64) -> f64 {
+            if n < 2.0 {
+                return 0.0;
+            }
+            let variance = (sum_sq / n) - (sum / n).powi(2);
+            if variance > 0.0 {
+                variance.sqrt()
+            } else {
+                0.0
+            }
+        }
+    }
+    let mut session_stats: std::collections::HashMap<String, SessionAccum> = std::collections::HashMap::new();
 
     // Query node
     let query_id = "q0".to_string();
@@ -459,6 +621,7 @@ fn interactive_search_impl(
     });
 
     // Step 1: Embed query text → search labels by text similarity.
+    let t_embed = std::time::Instant::now();
     let Some(query_vec) = embedder.embed(query) else {
         return serde_json::json!({
             "nodes": nodes, "edges": edges, "dot": "", "svg": "", "svg_col": "",
@@ -467,6 +630,8 @@ fn interactive_search_impl(
     };
 
     let text_neighbors = skill_label_index::search_by_text_vec(&query_vec, k_text, 64, skill_dir, label_index);
+    let embed_ms = t_embed.elapsed().as_millis();
+    let t_graph = std::time::Instant::now();
 
     // If no results, check whether there are labels that need re-embedding.
     let mut reembed_needed: Option<serde_json::Value> = None;
@@ -493,10 +658,107 @@ fn interactive_search_impl(
         None
     };
 
-    // Add text_label nodes.
-    for (i, nb) in text_neighbors.iter().enumerate() {
+    // Helper: derive a session_id from a Unix timestamp (date + hour bucket).
+    let session_id_from_ts = |ts: u64| -> String {
+        let dt = skill_data::util::unix_to_ts(ts);
+        let date = dt / 1_000_000;
+        let hour = (dt / 10_000) % 100;
+        format!("{date}_{hour:02}h")
+    };
+
+    // Helper: convert EpochRow metrics to NeighborMetrics.
+    let metrics_from_epoch = |ep: &skill_history::EpochRow| -> Option<NeighborMetrics> {
+        if ep.relaxation == 0.0 && ep.engagement == 0.0 && ep.snr == 0.0 {
+            return None;
+        }
+        Some(NeighborMetrics {
+            relaxation: Some(ep.relaxation),
+            engagement: Some(ep.engagement),
+            faa: if ep.faa != 0.0 { Some(ep.faa) } else { None },
+            tar: if ep.tar != 0.0 { Some(ep.tar) } else { None },
+            mood: if ep.mood != 0.0 { Some(ep.mood) } else { None },
+            meditation: None,
+            cognitive_load: None,
+            drowsiness: None,
+            hr: if ep.hr != 0.0 { Some(ep.hr) } else { None },
+            snr: if ep.snr != 0.0 { Some(ep.snr) } else { None },
+            rel_alpha: if ep.ra != 0.0 { Some(ep.ra) } else { None },
+            rel_beta: if ep.rb != 0.0 { Some(ep.rb) } else { None },
+            rel_theta: if ep.rt != 0.0 { Some(ep.rt) } else { None },
+            headache_index: None,
+            migraine_index: None,
+            consciousness_lzc: None,
+            consciousness_wakefulness: None,
+            consciousness_integration: None,
+        })
+    };
+
+    // Helper: create screenshot node.
+    let make_screenshot_node = |id: String, ss: &ScreenshotResult, parent: &str, dist: f32| -> InteractiveGraphNode {
+        InteractiveGraphNode {
+            id,
+            kind: "screenshot".into(),
+            text: if ss.window_title.is_empty() {
+                None
+            } else {
+                Some(ss.window_title.clone())
+            },
+            timestamp_unix: Some(ss.unix_ts),
+            distance: dist,
+            parent_id: Some(parent.to_string()),
+            filename: Some(ss.filename.clone()),
+            app_name: if ss.app_name.is_empty() {
+                None
+            } else {
+                Some(ss.app_name.clone())
+            },
+            window_title: if ss.window_title.is_empty() {
+                None
+            } else {
+                Some(ss.window_title.clone())
+            },
+            ocr_text: if ss.ocr_text.is_empty() {
+                None
+            } else {
+                Some(ss.ocr_text.clone())
+            },
+            ..Default::default()
+        }
+    };
+
+    // Dedup sets for O(1) duplicate detection.
+    let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_eeg_ts: std::collections::HashSet<u64> = std::collections::HashSet::new();
+
+    // Precompute constants used inside the loop.
+    let reach_secs = reach_minutes * 60;
+    let labels_db = skill_dir.join(LABELS_FILE);
+
+    // Add text_label nodes with session context.
+    // Apply optional date-range filter on labels.
+    let filtered_neighbors: Vec<_> = text_neighbors
+        .iter()
+        .filter(|nb| {
+            if nb.eeg_start == 0 {
+                return true;
+            } // no timestamp, keep it
+            if let Some(start) = filter_start_utc {
+                if nb.eeg_start < start {
+                    return false;
+                }
+            }
+            if let Some(end) = filter_end_utc {
+                if nb.eeg_start > end {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+    for (i, nb) in filtered_neighbors.iter().enumerate() {
         let node_id = format!("tl{i}");
         let ts = if nb.eeg_start > 0 { Some(nb.eeg_start) } else { None };
+        let sid = ts.map(|t| session_id_from_ts(t));
         nodes.push(InteractiveGraphNode {
             id: node_id.clone(),
             kind: "text_label".into(),
@@ -504,6 +766,7 @@ fn interactive_search_impl(
             timestamp_unix: ts,
             distance: nb.distance,
             parent_id: Some(query_id.clone()),
+            session_id: sid.clone(),
             ..Default::default()
         });
         edges.push(InteractiveGraphEdge {
@@ -514,31 +777,82 @@ fn interactive_search_impl(
         });
 
         // Step 2: For each text label with a timestamp, find nearby EEG epochs.
-        let reach_secs = reach_minutes * 60;
         if let Some(ts) = ts {
-            // Get EEG epochs from the session range around this label.
-            let eeg_ts =
-                skill_history::get_session_timeseries(skill_dir, ts.saturating_sub(reach_secs), ts + reach_secs);
-            for (j, ep) in eeg_ts.iter().take(k_eeg).enumerate() {
+            let eeg_ts = skill_history::get_session_timeseries_filtered(
+                skill_dir,
+                ts.saturating_sub(reach_secs),
+                ts + reach_secs,
+                device_filter,
+            );
+            // Filter: optionally skip epochs with non-positive SNR (bad signal quality).
+            let mut valid_epochs: Vec<&skill_history::EpochRow> = if snr_positive_only {
+                eeg_ts.iter().filter(|ep| ep.snr > 0.0).collect()
+            } else {
+                eeg_ts.iter().collect()
+            };
+
+            // Rank EEG epochs by selected metric (default: timestamp order).
+            match eeg_rank_by.unwrap_or("timestamp") {
+                "engagement" => valid_epochs.sort_by(|a, b| {
+                    b.engagement
+                        .partial_cmp(&a.engagement)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }),
+                "snr" => valid_epochs.sort_by(|a, b| b.snr.partial_cmp(&a.snr).unwrap_or(std::cmp::Ordering::Equal)),
+                "relaxation" => valid_epochs.sort_by(|a, b| {
+                    b.relaxation
+                        .partial_cmp(&a.relaxation)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }),
+                _ => {} // keep timestamp order
+            }
+
+            for (j, ep) in valid_epochs.iter().take(k_eeg).enumerate() {
+                let ep_ts = ep.t as u64;
+
+                // Dedup EEG epochs across text_labels (overlapping time windows).
+                if !seen_eeg_ts.insert(ep_ts) {
+                    continue;
+                }
+
                 let eeg_id = format!("ep{i}_{j}");
+                let ep_sid = session_id_from_ts(ep_ts);
+
+                let metrics = metrics_from_epoch(ep);
+
+                // Accumulate session stats (skips zero-signal epochs internally)
+                session_stats
+                    .entry(ep_sid.clone())
+                    .or_insert_with(SessionAccum::new)
+                    .add(ep, ep_ts);
+
+                // Time distance from parent label (normalized to reach window)
+                let time_dist = (ep_ts as f64 - ts as f64).abs() / reach_secs as f64;
+
+                // Composite relevance score: text_sim * 0.5 + time_dist * 0.3 + (1 - norm_engagement) * 0.2
+                let norm_engagement = (ep.engagement.clamp(0.0, 1.0)) as f32;
+                let relevance = nb.distance * 0.5 + time_dist as f32 * 0.3 + (1.0 - norm_engagement) * 0.2;
+
                 nodes.push(InteractiveGraphNode {
                     id: eeg_id.clone(),
                     kind: "eeg_point".into(),
-                    timestamp_unix: Some(ep.t as u64),
-                    distance: 0.0,
+                    timestamp_unix: Some(ep_ts),
+                    distance: time_dist as f32,
                     parent_id: Some(node_id.clone()),
+                    eeg_metrics: metrics,
+                    session_id: Some(ep_sid),
+                    relevance_score: Some(relevance),
                     ..Default::default()
                 });
                 edges.push(InteractiveGraphEdge {
                     from_id: node_id.clone(),
                     to_id: eeg_id.clone(),
-                    distance: 0.0,
+                    distance: time_dist as f32,
                     kind: "eeg_bridge".into(),
                 });
 
                 // Step 3: Find labels near each EEG epoch.
-                let labels_db = skill_dir.join(LABELS_FILE);
-                let nearby_labels = skill_commands::get_labels_near(&labels_db, ep.t as u64, reach_secs);
+                let nearby_labels = skill_commands::get_labels_near(&labels_db, ep_ts, reach_secs);
                 for (l, lbl) in nearby_labels.iter().enumerate().take(k_labels) {
                     let fl_id = format!("fl{i}_{j}_{l}");
                     nodes.push(InteractiveGraphNode {
@@ -548,6 +862,7 @@ fn interactive_search_impl(
                         timestamp_unix: Some(lbl.eeg_start),
                         distance: 0.0,
                         parent_id: Some(eeg_id.clone()),
+                        session_id: Some(session_id_from_ts(lbl.eeg_start)),
                         ..Default::default()
                     });
                     edges.push(InteractiveGraphEdge {
@@ -564,38 +879,16 @@ fn interactive_search_impl(
                 let nearby_screenshots = skill_screenshots::capture::get_around(store, ts as i64, reach_secs as i32);
                 for (s, ss) in nearby_screenshots.iter().take(k_screenshots).enumerate() {
                     let ss_id = format!("ss{i}_{s}");
-                    nodes.push(InteractiveGraphNode {
-                        id: ss_id.clone(),
-                        kind: "screenshot".into(),
-                        text: if ss.window_title.is_empty() {
-                            None
-                        } else {
-                            Some(ss.window_title.clone())
-                        },
-                        timestamp_unix: Some(ss.unix_ts),
-                        distance: 0.0,
-                        parent_id: Some(node_id.clone()),
-                        filename: Some(ss.filename.clone()),
-                        app_name: if ss.app_name.is_empty() {
-                            None
-                        } else {
-                            Some(ss.app_name.clone())
-                        },
-                        window_title: if ss.window_title.is_empty() {
-                            None
-                        } else {
-                            Some(ss.window_title.clone())
-                        },
-                        ocr_text: if ss.ocr_text.is_empty() {
-                            None
-                        } else {
-                            Some(ss.ocr_text.clone())
-                        },
-                        ..Default::default()
-                    });
+                    if seen_screenshots.contains(&ss.filename) {
+                        continue;
+                    }
+                    seen_screenshots.insert(ss.filename.clone());
+                    let mut node = make_screenshot_node(ss_id.clone(), ss, &node_id, 0.0);
+                    node.session_id = Some(session_id_from_ts(ss.unix_ts));
+                    nodes.push(node);
                     edges.push(InteractiveGraphEdge {
                         from_id: node_id.clone(),
-                        to_id: ss_id.clone(),
+                        to_id: ss_id,
                         distance: 0.0,
                         kind: "screenshot_prox".into(),
                     });
@@ -615,49 +908,19 @@ fn interactive_search_impl(
                 k_screenshots,
                 &embed_fn,
             );
-            // Fall back to substring search if semantic returns nothing.
             if ocr_results.is_empty() {
                 ocr_results = skill_screenshots::capture::search_by_ocr_text_like(store, query, k_screenshots);
             }
             for (s, ss) in ocr_results.iter().enumerate() {
                 let ss_id = format!("sst{s}");
-                // Skip duplicates already added via proximity.
-                if nodes
-                    .iter()
-                    .any(|n| n.kind == "screenshot" && n.filename.as_deref() == Some(&ss.filename))
-                {
+                if seen_screenshots.contains(&ss.filename) {
                     continue;
                 }
-                nodes.push(InteractiveGraphNode {
-                    id: ss_id.clone(),
-                    kind: "screenshot".into(),
-                    text: if ss.window_title.is_empty() {
-                        None
-                    } else {
-                        Some(ss.window_title.clone())
-                    },
-                    timestamp_unix: Some(ss.unix_ts),
-                    distance: 1.0 - ss.similarity,
-                    parent_id: Some(query_id.clone()),
-                    filename: Some(ss.filename.clone()),
-                    app_name: if ss.app_name.is_empty() {
-                        None
-                    } else {
-                        Some(ss.app_name.clone())
-                    },
-                    window_title: if ss.window_title.is_empty() {
-                        None
-                    } else {
-                        Some(ss.window_title.clone())
-                    },
-                    ocr_text: if ss.ocr_text.is_empty() {
-                        None
-                    } else {
-                        Some(ss.ocr_text.clone())
-                    },
-                    ocr_similarity: Some(ss.similarity),
-                    ..Default::default()
-                });
+                seen_screenshots.insert(ss.filename.clone());
+                let mut node = make_screenshot_node(ss_id.clone(), ss, &query_id, 1.0 - ss.similarity);
+                node.ocr_similarity = Some(ss.similarity);
+                node.session_id = Some(session_id_from_ts(ss.unix_ts));
+                nodes.push(node);
                 edges.push(InteractiveGraphEdge {
                     from_id: query_id.clone(),
                     to_id: ss_id,
@@ -668,12 +931,85 @@ fn interactive_search_impl(
         }
     }
 
+    // ── Cross-session comparison summary ───────────────────────────────
+    let sessions_summary: Vec<serde_json::Value> = {
+        let mut entries: Vec<_> = session_stats.iter().filter(|(_, s)| s.count > 0).collect();
+        entries.sort_by_key(|(k, _)| (*k).clone());
+
+        // Find the best session (highest avg engagement).
+        let best_sid = entries
+            .iter()
+            .max_by(|(_, a), (_, b)| {
+                let avg_a = if a.count > 0 {
+                    a.engagement / a.count as f64
+                } else {
+                    0.0
+                };
+                let avg_b = if b.count > 0 {
+                    b.engagement / b.count as f64
+                } else {
+                    0.0
+                };
+                avg_a.partial_cmp(&avg_b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(sid, _)| (*sid).clone());
+
+        entries
+            .iter()
+            .map(|(sid, s)| {
+                let n = s.count as f64;
+                let duration_secs = if s.max_ts > s.min_ts { s.max_ts - s.min_ts } else { 0 };
+                serde_json::json!({
+                    "session_id": sid,
+                    "epoch_count": s.count,
+                    "duration_secs": duration_secs,
+                    "best": best_sid.as_deref() == Some(sid.as_str()),
+                    "avg_relaxation":      if n > 0.0 { s.relaxation / n } else { 0.0 },
+                    "avg_engagement":      if n > 0.0 { s.engagement / n } else { 0.0 },
+                    "avg_snr":             if n > 0.0 { s.snr / n } else { 0.0 },
+                    "avg_rel_alpha":       if n > 0.0 { s.rel_alpha / n } else { 0.0 },
+                    "avg_rel_beta":        if n > 0.0 { s.rel_beta / n } else { 0.0 },
+                    "avg_rel_theta":       if n > 0.0 { s.rel_theta / n } else { 0.0 },
+                    "stddev_engagement":   SessionAccum::stddev(s.engagement, s.engagement_sq, n),
+                    "stddev_snr":          SessionAccum::stddev(s.snr, s.snr_sq, n),
+                    "min_engagement":      if s.min_engagement < f64::MAX { s.min_engagement } else { 0.0 },
+                    "max_engagement":      if s.max_engagement > f64::MIN { s.max_engagement } else { 0.0 },
+                    "min_snr":             if s.min_snr < f64::MAX { s.min_snr } else { 0.0 },
+                    "max_snr":             if s.max_snr > f64::MIN { s.max_snr } else { 0.0 },
+                })
+            })
+            .collect()
+    };
+
+    let graph_ms = t_graph.elapsed().as_millis();
+    let total_ms = t_total.elapsed().as_millis();
+
+    // System load snapshot.
+    let sys_info = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::nothing()
+            .with_cpu(sysinfo::CpuRefreshKind::everything())
+            .with_memory(sysinfo::MemoryRefreshKind::everything()),
+    );
+    let perf = serde_json::json!({
+        "embed_ms": embed_ms,
+        "graph_ms": graph_ms,
+        "total_ms": total_ms,
+        "node_count": nodes.len(),
+        "edge_count": edges.len(),
+        "snr_positive_only": snr_positive_only,
+        "cpu_usage_pct": sys_info.global_cpu_usage(),
+        "mem_used_mb": sys_info.used_memory() / (1024 * 1024),
+        "mem_total_mb": sys_info.total_memory() / (1024 * 1024),
+    });
+
     let mut result = serde_json::json!({
         "nodes": nodes,
         "edges": edges,
         "dot": "",
         "svg": "",
         "svg_col": "",
+        "sessions": sessions_summary,
+        "perf": perf,
     });
     if let Some(r) = reembed_needed {
         result.as_object_mut().unwrap().insert("reembed_needed".into(), r);
@@ -687,34 +1023,26 @@ async fn compare_search(
 ) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let dir_a = skill_dir.clone();
-    let result_a = tokio::task::spawn_blocking(move || {
-        serde_json::to_value(skill_commands::search_embeddings_in_range(
-            &dir_a,
-            req.a_start_utc,
-            req.a_end_utc,
-            10,
-            50,
-            None,
-        ))
-        .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
-
     let dir_b = skill_dir.clone();
-    let result_b = tokio::task::spawn_blocking(move || {
-        serde_json::to_value(skill_commands::search_embeddings_in_range(
-            &dir_b,
-            req.b_start_utc,
-            req.b_end_utc,
-            10,
-            50,
-            None,
-        ))
-        .unwrap_or_default()
-    })
-    .await
-    .unwrap_or_default();
+    let (a_start, a_end) = (req.a_start_utc, req.a_end_utc);
+    let (b_start, b_end) = (req.b_start_utc, req.b_end_utc);
+
+    let (result_a, result_b) = tokio::join!(
+        tokio::task::spawn_blocking(move || {
+            serde_json::to_value(skill_commands::search_embeddings_in_range(
+                &dir_a, a_start, a_end, 10, 50, None,
+            ))
+            .unwrap_or_default()
+        }),
+        tokio::task::spawn_blocking(move || {
+            serde_json::to_value(skill_commands::search_embeddings_in_range(
+                &dir_b, b_start, b_end, 10, 50, None,
+            ))
+            .unwrap_or_default()
+        }),
+    );
+    let result_a = result_a.unwrap_or_default();
+    let result_b = result_b.unwrap_or_default();
 
     Json(serde_json::json!({ "a": result_a, "b": result_b }))
 }
@@ -821,7 +1149,22 @@ mod tests {
         let label_index = std::sync::Arc::new(skill_label_index::LabelIndexState::default());
         let embedder = crate::text_embedder::SharedTextEmbedder::new_noop();
 
-        let result = interactive_search_impl(td.path(), "hello", 3, 5, 2, 5, 10, &embedder, &label_index);
+        let result = interactive_search_impl(
+            td.path(),
+            "hello",
+            3,
+            5,
+            2,
+            5,
+            10,
+            false,
+            None,
+            None,
+            None,
+            None,
+            &embedder,
+            &label_index,
+        );
 
         // Should have at least the query node (noop embedder → error path)
         let nodes = result["nodes"].as_array().unwrap();
@@ -900,6 +1243,10 @@ mod tests {
                 reach_minutes: None,
                 mode: None,
                 device_name: None,
+                snr_positive_only: None,
+                filter_start_utc: None,
+                filter_end_utc: None,
+                eeg_rank_by: None,
             }),
         )
         .await;
@@ -925,6 +1272,10 @@ mod tests {
                 reach_minutes: None,
                 mode: None,
                 device_name: None,
+                snr_positive_only: None,
+                filter_start_utc: None,
+                filter_end_utc: None,
+                eeg_rank_by: None,
             }),
         )
         .await;
@@ -951,6 +1302,10 @@ mod tests {
                 reach_minutes: None,
                 mode: None,
                 device_name: None,
+                snr_positive_only: None,
+                filter_start_utc: None,
+                filter_end_utc: None,
+                eeg_rank_by: None,
             }),
         )
         .await;
@@ -986,7 +1341,22 @@ mod tests {
         let label_index = std::sync::Arc::new(skill_label_index::LabelIndexState::default());
         let embedder = crate::text_embedder::SharedTextEmbedder::new_noop();
 
-        let result = interactive_search_impl(td.path(), "focus", 3, 5, 2, 5, 10, &embedder, &label_index);
+        let result = interactive_search_impl(
+            td.path(),
+            "focus",
+            3,
+            5,
+            2,
+            5,
+            10,
+            false,
+            None,
+            None,
+            None,
+            None,
+            &embedder,
+            &label_index,
+        );
 
         // Since embedder is noop, we get error — but reembed_needed should be set
         // because there's a label without embedding

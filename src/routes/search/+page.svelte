@@ -503,10 +503,12 @@ async function searchEeg() {
 
 // ── Interactive mode ──────────────────────────────────────────────────────
 let ixQuery = $state("");
-let ixKText = $state(5);
-let ixKEeg = $state(5);
-let ixKLabels = $state(3);
-let ixReachMinutes = $state(10); // temporal window around each EEG point (1–60 min)
+// Pipeline params loaded from persisted settings (see SETTINGS_KEY below)
+const _ps = (() => { try { return JSON.parse(localStorage.getItem("skill_search_settings") ?? "{}"); } catch { return {}; } })();
+let ixKText = $state((_ps.kText as number) ?? 5);
+let ixKEeg = $state((_ps.kEeg as number) ?? 5);
+let ixKLabels = $state((_ps.kLabels as number) ?? 3);
+let ixReachMinutes = $state((_ps.reachMinutes as number) ?? 10);
 let ixSearching = $state(false);
 let ixSearched = $state(false);
 let ixStatus = $state("");
@@ -517,8 +519,56 @@ let ixSvg = $state(""); // SVG with PCA scatter layout
 let ixSvgCol = $state(""); // SVG with classic column layout
 let showIxGraph = $state(true);
 let showIxCard = $state(true); // single collapsible card: query + pipeline + button
-let ixDedupeLabels = $state(true); // deduplicate found_labels by text
-let ixUsePca = $state(true); // cluster found_labels by embedding similarity
+// ── Persist pipeline settings ─────────────────────────────────────────────
+const SETTINGS_KEY = "skill_search_settings";
+function loadSettings(): Record<string, unknown> {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}"); } catch { return {}; }
+}
+function saveSetting(key: string, value: unknown) {
+  const s = loadSettings();
+  s[key] = value;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+const _s = loadSettings();
+
+let ixDedupeLabels = $state((_s.dedupeLabels as boolean) ?? true);
+let ixUsePca = $state((_s.usePca as boolean) ?? true);
+let ixSnrPositiveOnly = $state((_s.snrPositiveOnly as boolean) ?? false);
+let ixFilterStartUtc = $state<number | undefined>(_s.filterStartUtc as number | undefined);
+let ixFilterEndUtc = $state<number | undefined>(_s.filterEndUtc as number | undefined);
+let ixEegRankBy = $state((_s.eegRankBy as string) ?? "timestamp");
+let ixShowAdvanced = $state((_s.showAdvanced as boolean) ?? false);
+
+// Auto-persist settings on change
+$effect(() => {
+  saveSetting("dedupeLabels", ixDedupeLabels);
+  saveSetting("usePca", ixUsePca);
+  saveSetting("snrPositiveOnly", ixSnrPositiveOnly);
+  saveSetting("filterStartUtc", ixFilterStartUtc);
+  saveSetting("filterEndUtc", ixFilterEndUtc);
+  saveSetting("eegRankBy", ixEegRankBy);
+  saveSetting("showAdvanced", ixShowAdvanced);
+  saveSetting("kText", ixKText);
+  saveSetting("kEeg", ixKEeg);
+  saveSetting("kLabels", ixKLabels);
+  saveSetting("reachMinutes", ixReachMinutes);
+});
+let ixPerf = $state<{ embed_ms?: number; graph_ms?: number; total_ms?: number; node_count?: number; edge_count?: number; cpu_usage_pct?: number; mem_used_mb?: number; mem_total_mb?: number } | null>(null);
+let ixSessions = $state<Array<{ session_id: string; epoch_count: number; duration_secs: number; best: boolean; avg_engagement: number; avg_snr: number; avg_relaxation: number; stddev_engagement: number }>>([]);
+let ixSelectedNode = $state<import("$lib/search-types").GraphNode | null>(null); // selected node for detail panel
+let ixSortByRelevance = $state(false); // sort displayed nodes by relevance_score
+let ixHiddenKinds = $state<import("$lib/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
+
+// ── Search history (persisted in localStorage) ──────────────────────────
+const HISTORY_KEY = "skill_search_history";
+const MAX_HISTORY = 10;
+let ixSearchHistory = $state<string[]>([]);
+try { ixSearchHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]"); } catch { /* ignore */ }
+function saveToHistory(q: string) {
+  if (!q.trim()) return;
+  ixSearchHistory = [q.trim(), ...ixSearchHistory.filter(h => h !== q.trim())].slice(0, MAX_HISTORY);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(ixSearchHistory));
+}
 
 let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
 /**
@@ -591,8 +641,10 @@ $effect(() => {
 
 async function searchInteractive() {
   if (!ixQuery.trim()) return;
+  saveToHistory(ixQuery.trim());
   // Compress the controls so the results panel gets maximum space
   showIxCard = false;
+  ixSelectedNode = null;
   ixSearching = true;
   ixSearched = false;
   error = "";
@@ -613,6 +665,8 @@ async function searchInteractive() {
       svg: string;
       svg_col: string;
       reembed_needed?: { stale: number; total: number; current_model: string };
+      perf?: { embed_ms: number; graph_ms: number; total_ms: number; node_count: number; edge_count: number; cpu_usage_pct: number; mem_used_mb: number; mem_total_mb: number };
+      sessions?: Array<{ session_id: string; epoch_count: number; duration_secs: number; best: boolean; avg_engagement: number; avg_snr: number; avg_relaxation: number; stddev_engagement: number }>;
     }>("interactive_search", {
       query: ixQuery.trim(),
       kText: ixKText,
@@ -620,6 +674,11 @@ async function searchInteractive() {
       kLabels: ixKLabels,
       kScreenshots: 5,
       reachMinutes: ixReachMinutes,
+      snrPositiveOnly: ixSnrPositiveOnly,
+      deviceName: deviceFilter !== "all" ? deviceFilter : undefined,
+      filterStartUtc: ixFilterStartUtc,
+      filterEndUtc: ixFilterEndUtc,
+      eegRankBy: ixEegRankBy !== "timestamp" ? ixEegRankBy : undefined,
       usePca: ixUsePca,
       svgLabels: {
         layerQuery: t("svg.layerQuery"),
@@ -638,6 +697,8 @@ async function searchInteractive() {
     ixDot = res.dot;
     ixSvg = res.svg;
     ixSvgCol = res.svg_col;
+    ixPerf = res.perf ?? null;
+    ixSessions = res.sessions ?? [];
     ixSearched = true;
 
     // Auto re-embed stale labels and retry the search transparently
@@ -796,10 +857,30 @@ async function fetchIxScreenshots() {
   ixScreenshotMap = results;
 }
 
+function buildBreadcrumb(node: GraphNode, allNodes: GraphNode[]): GraphNode[] {
+  const path: GraphNode[] = [];
+  let cur: GraphNode | undefined = node;
+  for (let i = 0; i < 10 && cur; i++) { // max 10 depth
+    path.unshift(cur);
+    const pid: string | undefined = cur.parent_id;
+    cur = pid != null ? allNodes.find(n => n.id === pid) : undefined;
+  }
+  return path;
+}
+
 function onIxKeydown(e: KeyboardEvent) {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     searchInteractive();
+  }
+  // Escape clears graph selection
+  if (e.key === "Escape" && ixSelectedNode) {
+    ixSelectedNode = null;
+  }
+  // Up arrow in empty textarea cycles through search history
+  if (e.key === "ArrowUp" && !ixQuery.trim() && ixSearchHistory.length > 0) {
+    e.preventDefault();
+    ixQuery = ixSearchHistory[0];
   }
 }
 
@@ -1268,6 +1349,192 @@ useWindowTitle("window.title.search");
               </div>
             </div>
           {/each}
+
+          <!-- Advanced filters toggle -->
+          <button onclick={() => ixShowAdvanced = !ixShowAdvanced}
+                  class="flex items-center gap-1.5 w-full px-3 py-1
+                         border-t border-border dark:border-white/[0.05]
+                         text-[0.5rem] text-muted-foreground/40 hover:text-muted-foreground/70
+                         transition-colors select-none">
+            <span>{ixShowAdvanced ? "▾" : "▸"}</span>
+            <span class="uppercase tracking-widest font-semibold">{t("search.advancedFilters")}</span>
+            {#if ixSnrPositiveOnly || deviceFilter !== "all" || ixFilterStartUtc || ixEegRankBy !== "timestamp"}
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Filters active"></span>
+            {/if}
+          </button>
+
+          {#if ixShowAdvanced}
+          <!-- SNR filter toggle -->
+          <div class="flex items-center gap-2 px-3 py-1.5
+                      border-t border-border dark:border-white/[0.05]
+                      hover:bg-muted/10 transition-colors">
+            <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
+                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                  style="background:#ef4444">6</span>
+            <label for="snr-toggle" class="text-[0.6rem] font-medium text-foreground/70 shrink-0 cursor-pointer">{t("search.snrFilterLabel")}</label>
+            <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.snrFilterHint")}</span>
+            <input id="snr-toggle" type="checkbox" bind:checked={ixSnrPositiveOnly}
+                   class="w-3.5 h-3.5 rounded border-border accent-emerald-600 cursor-pointer shrink-0" />
+          </div>
+
+          <!-- Device filter -->
+          {#if deviceList.length > 0}
+            <div class="flex items-center gap-2 px-3 py-1.5
+                        border-t border-border dark:border-white/[0.05]
+                        hover:bg-muted/10 transition-colors">
+              <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
+                           text-[0.42rem] font-bold text-white shrink-0 select-none"
+                    style="background:#8b5cf6">7</span>
+              <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.deviceFilterLabel")}</span>
+              <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.deviceFilterHint")}</span>
+              <select bind:value={deviceFilter}
+                      aria-label={t("search.deviceFilterLabel")}
+                      class="rounded border border-border dark:border-white/[0.1]
+                             bg-background px-1 py-0.5 text-[0.6rem]
+                             focus:outline-none focus:ring-1 focus:ring-ring max-w-[8rem] truncate shrink-0">
+                <option value="all">{t("search.allDevices")}</option>
+                {#each deviceList as dev}
+                  <option value={dev}>{dev}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+
+          <!-- Date range filter -->
+          <div class="flex items-center gap-2 px-3 py-1.5
+                      border-t border-border dark:border-white/[0.05]
+                      hover:bg-muted/10 transition-colors">
+            <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
+                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                  style="background:#f97316">8</span>
+            <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.dateRangeLabel")}</span>
+            <div class="flex items-center gap-1 flex-1 min-w-0">
+              <input type="datetime-local"
+                     value={ixFilterStartUtc ? new Date(ixFilterStartUtc * 1000).toISOString().slice(0, 16) : ""}
+                     oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterStartUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
+                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
+                            focus:outline-none focus:ring-1 focus:ring-ring flex-1 min-w-0" />
+              <span class="text-[0.5rem] text-muted-foreground/40">→</span>
+              <input type="datetime-local"
+                     value={ixFilterEndUtc ? new Date(ixFilterEndUtc * 1000).toISOString().slice(0, 16) : ""}
+                     oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterEndUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
+                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
+                            focus:outline-none focus:ring-1 focus:ring-ring flex-1 min-w-0" />
+            </div>
+            <!-- Quick date presets -->
+            <div class="flex items-center gap-1 shrink-0">
+              {#each [
+                { label: "24h", mins: 1440 },
+                { label: "7d",  mins: 10080 },
+                { label: "30d", mins: 43200 },
+              ] as p}
+                <button onclick={() => { const now = Math.floor(Date.now() / 1000); ixFilterStartUtc = now - p.mins * 60; ixFilterEndUtc = now; }}
+                        class="px-1.5 py-0.5 rounded text-[0.48rem] border border-border dark:border-white/[0.1]
+                               bg-background hover:bg-muted/40 text-muted-foreground/50 hover:text-foreground
+                               transition-colors select-none">{p.label}</button>
+              {/each}
+              {#if ixFilterStartUtc || ixFilterEndUtc}
+                <button onclick={() => { ixFilterStartUtc = undefined; ixFilterEndUtc = undefined; }}
+                        class="px-1 py-0.5 rounded text-[0.48rem] text-muted-foreground/40 hover:text-foreground
+                               transition-colors select-none">✕</button>
+              {/if}
+            </div>
+          </div>
+
+          <!-- EEG rank-by selector -->
+          <div class="flex items-center gap-2 px-3 py-1.5
+                      border-t border-border dark:border-white/[0.05]
+                      hover:bg-muted/10 transition-colors">
+            <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
+                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                  style="background:#ec4899">9</span>
+            <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.rankByLabel")}</span>
+            <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.rankByHint")}</span>
+            <select bind:value={ixEegRankBy}
+                    aria-label={t("search.rankByLabel")}
+                    class="rounded border border-border dark:border-white/[0.1]
+                           bg-background px-1 py-0.5 text-[0.6rem]
+                           focus:outline-none focus:ring-1 focus:ring-ring shrink-0">
+              <option value="timestamp">{t("search.rankTimestamp")}</option>
+              <option value="engagement">{t("search.rankEngagement")}</option>
+              <option value="snr">{t("search.rankSnr")}</option>
+              <option value="relaxation">{t("search.rankRelaxation")}</option>
+            </select>
+          </div>
+
+          <!-- Perf stats (shown after search) -->
+          {#if ixPerf}
+            <div class="flex items-center gap-3 px-3 py-1 border-t border-border dark:border-white/[0.05]
+                        text-[0.5rem] text-muted-foreground/50 font-mono select-none">
+              <span>{t("search.perfEmbed")} {ixPerf.embed_ms}ms</span>
+              <span>{t("search.perfGraph")} {ixPerf.graph_ms}ms</span>
+              <span class="font-semibold">{t("search.perfTotal")} {ixPerf.total_ms}ms</span>
+              <span>{ixPerf.node_count} {t("search.perfNodes")}</span>
+              <span>{ixPerf.edge_count} {t("search.perfEdges")}</span>
+              <span>{t("search.perfCpu")} {ixPerf.cpu_usage_pct?.toFixed(0)}%</span>
+              <span>{t("search.perfMem")} {ixPerf.mem_used_mb}/{ixPerf.mem_total_mb}MB</span>
+            </div>
+          {/if}
+
+          {/if}<!-- end ixShowAdvanced -->
+
+          <!-- Sessions summary (shown after search) -->
+          {#if ixSessions.length > 0}
+            <div class="px-3 py-1.5 border-t border-border dark:border-white/[0.05]">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[0.55rem] font-semibold text-foreground/60 uppercase tracking-widest select-none">{t("search.sessionsTitle")}</span>
+                <button onclick={() => {
+                  const csv = ["session_id,epoch_count,duration_secs,avg_engagement,avg_snr,avg_relaxation,stddev_engagement,best"]
+                    .concat(ixSessions.map(s => `${s.session_id},${s.epoch_count},${s.duration_secs},${s.avg_engagement?.toFixed(4)},${s.avg_snr?.toFixed(4)},${s.avg_relaxation?.toFixed(4)},${s.stddev_engagement?.toFixed(4)},${s.best}`))
+                    .join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `sessions_${Date.now()}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                }}
+                        class="text-[0.5rem] text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer select-none">
+                  {t("search.exportCsv")}
+                </button>
+              </div>
+              <!-- Cross-session engagement trend chart -->
+              {#if ixSessions.length > 1}
+                {@const maxEng = Math.max(...ixSessions.map(s => s.avg_engagement ?? 0), 0.01)}
+                {@const pts = ixSessions.map((s, i) => `${(i / (ixSessions.length - 1)) * 120},${40 - (s.avg_engagement / maxEng) * 36}`).join(" ")}
+                <svg viewBox="0 0 120 44" class="w-full h-8 mb-1" preserveAspectRatio="none">
+                  <polyline points={pts} fill="none" stroke="#10b981" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.6" />
+                  {#each ixSessions as s, i}
+                    {@const x = (i / (ixSessions.length - 1)) * 120}
+                    {@const y = 40 - (s.avg_engagement / maxEng) * 36}
+                    <circle cx={x} cy={y} r={s.best ? 3 : 2} fill={s.best ? "#10b981" : "#f59e0b"} opacity="0.8" />
+                  {/each}
+                </svg>
+              {/if}
+
+              {#each ixSessions as s}
+                {@const engPct = Math.round(Math.min(1, s.avg_engagement ?? 0) * 100)}
+                {@const snrPct = Math.round(Math.min(1, (s.avg_snr ?? 0) / 20) * 100)}
+                <div class="flex items-center gap-2 py-0.5 text-[0.5rem] font-mono
+                            {s.best ? 'text-emerald-500 font-semibold' : 'text-muted-foreground/50'}">
+                  {#if s.best}<span title={t("search.bestSession")}>★</span>{/if}
+                  <span class="w-20 truncate">{s.session_id}</span>
+                  <span>{s.epoch_count}ep</span>
+                  <span>{Math.round(s.duration_secs / 60)}m</span>
+                  <!-- Mini engagement bar -->
+                  <div class="w-12 h-2 rounded-full bg-muted/20 overflow-hidden shrink-0" title="eng:{s.avg_engagement?.toFixed(2)} ±{s.stddev_engagement?.toFixed(2)}">
+                    <div class="h-full rounded-full transition-all duration-700 ease-out {s.best ? 'bg-emerald-500' : 'bg-amber-500/60'}" style="width:{engPct}%"></div>
+                  </div>
+                  <span class="w-8 text-right">{s.avg_engagement?.toFixed(2)}</span>
+                  <!-- Mini SNR bar -->
+                  <div class="w-8 h-2 rounded-full bg-muted/20 overflow-hidden shrink-0" title="snr:{s.avg_snr?.toFixed(1)}">
+                    <div class="h-full rounded-full transition-all duration-700 ease-out bg-blue-500/50" style="width:{snrPct}%"></div>
+                  </div>
+                  <span class="w-8 text-right">{s.avg_snr?.toFixed(1)}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
 
           <!-- Search button row -->
           <div class="flex items-center gap-2 px-3 py-2
@@ -1933,16 +2200,53 @@ useWindowTitle("window.title.search");
               </div>
             {/each}
           </div>
+
+          <!-- Recent searches -->
+          {#if ixSearchHistory.length > 0}
+            <div class="flex flex-col gap-1 mt-3 max-w-[300px]">
+              <span class="text-[0.5rem] text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.recentSearches")}</span>
+              <div class="flex flex-wrap gap-1">
+                {#each ixSearchHistory.slice(0, 6) as q}
+                  <button onclick={() => { ixQuery = q; searchInteractive(); }}
+                          class="px-2 py-0.5 rounded-full border border-border dark:border-white/[0.08]
+                                 bg-background hover:bg-muted/30 text-[0.55rem] text-muted-foreground/60
+                                 hover:text-foreground transition-colors truncate max-w-[140px]">{q}</button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
 
       {:else if ixSearching}
-        <!-- Loading state with pipeline steps animation -->
+        <!-- Loading skeleton with graph shape + pipeline progress -->
         <div class="flex flex-col items-center justify-center h-full gap-4 px-8">
-          <Spinner size="w-5 h-5" class="text-emerald-500" />
+          <!-- Graph skeleton -->
+          <div class="w-full max-w-sm h-48 rounded-xl border border-border/30 bg-muted/5 relative overflow-hidden">
+            <!-- Animated skeleton circles representing graph nodes -->
+            <div class="absolute inset-0 flex items-center justify-center">
+              <svg viewBox="0 0 200 120" class="w-full h-full opacity-30">
+                <circle cx="100" cy="20" r="8" fill="#8b5cf6" class="animate-pulse" />
+                <circle cx="55" cy="55" r="6" fill="#3b82f6" class="animate-pulse" style="animation-delay:0.2s" />
+                <circle cx="145" cy="55" r="6" fill="#3b82f6" class="animate-pulse" style="animation-delay:0.3s" />
+                <circle cx="35" cy="90" r="4" fill="#f59e0b" class="animate-pulse" style="animation-delay:0.5s" />
+                <circle cx="75" cy="95" r="4" fill="#f59e0b" class="animate-pulse" style="animation-delay:0.6s" />
+                <circle cx="125" cy="90" r="4" fill="#f59e0b" class="animate-pulse" style="animation-delay:0.7s" />
+                <circle cx="165" cy="95" r="4" fill="#f59e0b" class="animate-pulse" style="animation-delay:0.8s" />
+                <line x1="100" y1="28" x2="55" y2="49" stroke="#8b5cf6" stroke-width="1" opacity="0.3" />
+                <line x1="100" y1="28" x2="145" y2="49" stroke="#8b5cf6" stroke-width="1" opacity="0.3" />
+                <line x1="55" y1="61" x2="35" y2="86" stroke="#f59e0b" stroke-width="1" opacity="0.3" />
+                <line x1="55" y1="61" x2="75" y2="91" stroke="#f59e0b" stroke-width="1" opacity="0.3" />
+                <line x1="145" y1="61" x2="125" y2="86" stroke="#f59e0b" stroke-width="1" opacity="0.3" />
+                <line x1="145" y1="61" x2="165" y2="91" stroke="#f59e0b" stroke-width="1" opacity="0.3" />
+              </svg>
+            </div>
+            <!-- Shimmer overlay -->
+            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse"></div>
+          </div>
           <span class="text-[0.78rem] text-muted-foreground">
             {ixStatus || t("search.interactiveSearching")}
           </span>
-          <!-- Animated pipeline -->
+          <!-- Pipeline progress -->
           <div class="flex flex-col gap-2 w-full max-w-xs mt-2">
             {#each [
               { n: 1, label: "Text embedding", col: "#8b5cf6" },
@@ -2032,6 +2336,13 @@ useWindowTitle("window.title.search");
             <span class="text-[0.48rem] text-muted-foreground/50">{t("search.interactiveScreenshots")}</span>
           </label>
 
+          <!-- Sort by relevance toggle -->
+          <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
+            <input type="checkbox" bind:checked={ixSortByRelevance}
+                   class="rounded border-border h-2.5 w-2.5 accent-rose-500" />
+            <span class="text-[0.48rem] text-muted-foreground/50">{t("search.sortRelevance")}</span>
+          </label>
+
           <!-- Export buttons (DOT + SVG) — shown once a search has been run -->
           {#if ixDot}
             <!-- .dot -->
@@ -2077,6 +2388,21 @@ useWindowTitle("window.title.search");
                     title={svgError}>{svgError}</span>
             {/if}
           {/if}
+
+          <!-- Node kind filter toggles -->
+          {#each [
+            { kind: "eeg_point" as const, label: "EEG", color: "amber" },
+            { kind: "found_label" as const, label: "Labels", color: "emerald" },
+            { kind: "screenshot" as const, label: "Screens", color: "cyan" },
+          ] as f}
+            <label class="flex items-center gap-0.5 cursor-pointer select-none shrink-0">
+              <input type="checkbox"
+                     checked={!ixHiddenKinds.includes(f.kind)}
+                     onchange={() => { ixHiddenKinds = ixHiddenKinds.includes(f.kind) ? ixHiddenKinds.filter(k => k !== f.kind) : [...ixHiddenKinds, f.kind]; }}
+                     class="rounded border-border h-2.5 w-2.5 accent-{f.color}-500" />
+              <span class="text-[0.44rem] text-muted-foreground/45">{f.label}</span>
+            </label>
+          {/each}
 
           <!-- Show/hide graph toggle -->
           <button class="ml-auto text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground
@@ -2222,11 +2548,90 @@ useWindowTitle("window.title.search");
 
             {#if showIxGraph}
               <div style="width:100%; height:500px">
-                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca} />
+                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca}
+                                    hiddenKinds={ixHiddenKinds}
+                                    onselect={(n) => { ixSelectedNode = n; }} />
               </div>
             {/if}
+
           </div>
         </div>
+
+        <!-- Node detail panel — separate card below the graph -->
+        {#if ixSelectedNode}
+          {@const sn = ixSelectedNode}
+          {@const kindColor = sn.kind === 'query' ? '#8b5cf6' : sn.kind === 'text_label' ? '#3b82f6' : sn.kind === 'eeg_point' ? '#f59e0b' : sn.kind === 'found_label' ? '#10b981' : '#06b6d4'}
+          <div class="mx-4 mb-3 rounded-xl border border-border bg-card overflow-hidden shrink-0"
+               style="border-left: 3px solid {kindColor}">
+
+            <div class="px-6 py-5">
+              <!-- Header row -->
+              <div class="flex items-center gap-3 mb-4">
+                <span class="w-4 h-4 rounded-full shrink-0" style="background:{kindColor}"></span>
+                <span class="text-base font-semibold text-foreground/90 capitalize">{sn.kind.replace("_", " ")}</span>
+                {#if sn.session_id}
+                  <span class="px-2.5 py-1 rounded-full bg-muted/30 text-xs text-muted-foreground/60 font-mono">{sn.session_id}</span>
+                {/if}
+                {#if sn.relevance_score != null}
+                  <span class="px-2.5 py-1 rounded-full bg-muted/30 text-xs text-muted-foreground/60 font-mono">relevance {sn.relevance_score.toFixed(3)}</span>
+                {/if}
+                <div class="ml-auto flex items-center gap-2">
+                  {#if sn.text && sn.kind !== "query"}
+                    <button onclick={() => { ixQuery = sn.text ?? ""; ixSelectedNode = null; searchInteractive(); }}
+                            class="text-xs px-3 py-1.5 rounded-md border border-emerald-500/30
+                                   bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
+                                   hover:bg-emerald-500/20 transition-colors select-none">{t("search.moreLikeThis")}</button>
+                  {/if}
+                  <button onclick={() => ixSelectedNode = null}
+                          class="text-muted-foreground/40 hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/30">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Breadcrumb trail -->
+              {#each [buildBreadcrumb(sn, ixNodes)] as trail}
+                {#if trail.length > 1}
+                  <div class="flex items-center gap-2 mb-4 text-sm text-muted-foreground/60 overflow-x-auto pb-1">
+                    {#each trail as tn, ti}
+                      {#if ti > 0}<span class="text-muted-foreground/25 text-xs">→</span>{/if}
+                      <button onclick={() => { ixSelectedNode = tn; }}
+                              class="px-2.5 py-1 rounded-md text-xs {tn.id === sn.id ? 'bg-foreground/10 font-semibold text-foreground/80' : 'hover:bg-muted/30 text-muted-foreground/60'} transition-colors truncate max-w-[160px]"
+                              title={tn.text ?? tn.kind}>
+                        {tn.text?.slice(0, 30) ?? tn.kind.replace("_", " ")}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              {/each}
+
+              <!-- Text content -->
+              {#if sn.text}
+                <p class="text-sm text-foreground/80 mb-3 leading-relaxed">{sn.text}</p>
+              {/if}
+
+              <!-- Timestamp -->
+              {#if sn.timestamp_unix}
+                <p class="text-sm text-muted-foreground/50 font-mono mb-3">{new Date(sn.timestamp_unix * 1000).toLocaleString()}</p>
+              {/if}
+
+              <!-- EEG metrics grid -->
+              {#if sn.eeg_metrics}
+                {@const metrics = Object.entries(sn.eeg_metrics).filter(([, v]) => v != null && v !== 0)}
+                {#if metrics.length > 0}
+                  <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 mt-3">
+                    {#each metrics as [key, val]}
+                      <div class="rounded-lg bg-muted/15 border border-border/30 px-3 py-2 text-center">
+                        <div class="text-[0.65rem] text-muted-foreground/50 uppercase tracking-wider mb-1">{key}</div>
+                        <div class="text-sm font-mono font-semibold text-foreground/75">{typeof val === "number" ? val.toFixed(3) : val}</div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {/if}
 
         <!-- ── Time heatmap: days × hours ─────────────────────────────── -->
         {#if ixTimeHeatmap}
