@@ -5,7 +5,9 @@ use axum::{extract::State, Json};
 
 use crate::{
     routes::{
-        settings::{BoolValueRequest, FilenameRequest, LlmAddModelRequest, LlmFilenameRequest},
+        settings::{
+            BoolValueRequest, FilenameRequest, HfFilesParams, HfSearchParams, LlmAddModelRequest, LlmFilenameRequest,
+        },
         settings_io::{load_user_settings, save_user_settings},
     },
     state::AppState,
@@ -447,6 +449,202 @@ pub(crate) async fn llm_refresh_catalog_impl(State(state): State<AppState>) -> J
     }
     persist_llm_catalog(&state);
     Json(serde_json::json!({"ok": true}))
+}
+
+// ── HuggingFace GGUF search ──────────────────────────────────────────────
+
+/// Search HuggingFace Hub for GGUF model repos.
+/// Query: `GET /llm/catalog/search?q=<query>&limit=<n>`
+pub(crate) async fn llm_search_hf_impl(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<HfSearchParams>,
+) -> Json<serde_json::Value> {
+    let query = params.q.trim().to_string();
+    if query.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "empty query"}));
+    }
+    let limit = params.limit.unwrap_or(12).min(50);
+
+    // Resolve HF endpoint from settings or env.
+    let hf_endpoint = {
+        let settings = crate::routes::settings_io::load_user_settings(&state);
+        let ep = settings.hf_endpoint.clone();
+        if ep.is_empty() {
+            std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://huggingface.co".into())
+        } else {
+            ep
+        }
+    };
+
+    let hf_token: Option<String> = std::env::var("HF_TOKEN")
+        .ok()
+        .or_else(|| std::env::var("HUGGING_FACE_HUB_TOKEN").ok());
+
+    // Search HF API for GGUF models.
+    let search_url = format!(
+        "{}/api/models?search={}&filter=gguf&sort=downloads&direction=-1&limit={}",
+        hf_endpoint,
+        urlencoding::encode(&query),
+        limit
+    );
+
+    let result = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let agent = ureq::Agent::new_with_config(
+            ureq::config::Config::builder()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .build(),
+        );
+        let mut req = agent.get(&search_url).header("User-Agent", "skill-app/1.0");
+        if let Some(tok) = &hf_token {
+            req = req.header("Authorization", format!("Bearer {tok}"));
+        }
+        let resp = req.call().map_err(|e| e.to_string())?;
+        let models: Vec<serde_json::Value> = resp.into_body().read_json().map_err(|e| e.to_string())?;
+
+        // For each repo, extract key metadata.
+        let results: Vec<serde_json::Value> = models
+            .into_iter()
+            .filter_map(|m| {
+                let id = m.get("id")?.as_str()?.to_string();
+                let downloads = m.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
+                let likes = m.get("likes").and_then(|v| v.as_u64()).unwrap_or(0);
+                let tags: Vec<String> = m
+                    .get("tags")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|t| t.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                let pipeline_tag = m.get("pipeline_tag").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let author = m.get("author").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let last_modified = m.get("lastModified").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+                Some(serde_json::json!({
+                    "repo": id,
+                    "author": author,
+                    "downloads": downloads,
+                    "likes": likes,
+                    "tags": tags,
+                    "pipeline_tag": pipeline_tag,
+                    "last_modified": last_modified,
+                }))
+            })
+            .collect();
+
+        Ok(serde_json::json!({ "ok": true, "results": results }))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(v)) => Json(v),
+        Ok(Err(e)) => Json(serde_json::json!({"ok": false, "error": e})),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+    }
+}
+
+/// Fetch GGUF files from a specific HF repo.
+/// Query: `GET /llm/catalog/search/files?repo=<repo>`
+pub(crate) async fn llm_search_hf_files_impl(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<HfFilesParams>,
+) -> Json<serde_json::Value> {
+    let repo = params.repo.trim().to_string();
+    if repo.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "empty repo"}));
+    }
+
+    let hf_endpoint = {
+        let settings = crate::routes::settings_io::load_user_settings(&state);
+        let ep = settings.hf_endpoint.clone();
+        if ep.is_empty() {
+            std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://huggingface.co".into())
+        } else {
+            ep
+        }
+    };
+
+    let hf_token: Option<String> = std::env::var("HF_TOKEN")
+        .ok()
+        .or_else(|| std::env::var("HUGGING_FACE_HUB_TOKEN").ok());
+
+    let result = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let agent = ureq::Agent::new_with_config(
+            ureq::config::Config::builder()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .build(),
+        );
+        // Use the tree API which returns actual file sizes (including LFS).
+        let url = format!("{}/api/models/{}/tree/main", hf_endpoint, repo);
+        let mut req = agent.get(&url).header("User-Agent", "skill-app/1.0");
+        if let Some(tok) = &hf_token {
+            req = req.header("Authorization", format!("Bearer {tok}"));
+        }
+        let resp = req.call().map_err(|e| e.to_string())?;
+        let tree: Vec<serde_json::Value> = resp.into_body().read_json().map_err(|e| e.to_string())?;
+
+        let files: Vec<serde_json::Value> = tree
+            .iter()
+            .filter_map(|s| {
+                // Only files, not directories.
+                if s.get("type").and_then(|v| v.as_str()) != Some("file") {
+                    return None;
+                }
+                let path = s.get("path")?.as_str()?;
+                if !path.to_lowercase().ends_with(".gguf") {
+                    return None;
+                }
+                // Skip files in subdirectories and imatrix files.
+                if path.contains('/') {
+                    return None;
+                }
+                if path.to_lowercase().contains("imatrix") {
+                    return None;
+                }
+                // Prefer LFS size, fall back to regular size.
+                let size = s
+                    .get("lfs")
+                    .and_then(|l| l.get("size").and_then(|v| v.as_u64()))
+                    .or_else(|| s.get("size").and_then(|v| v.as_u64()))
+                    .unwrap_or(0);
+                let size_gb = size as f64 / 1_073_741_824.0;
+                let quant = infer_quant(path);
+                let is_mmproj = path.to_ascii_lowercase().contains("mmproj");
+                Some(serde_json::json!({
+                    "filename": path,
+                    "size_gb": (size_gb * 100.0).round() / 100.0,
+                    "quant": quant,
+                    "is_mmproj": is_mmproj,
+                }))
+            })
+            .collect();
+
+        // Fetch README (best-effort, don't fail if unavailable).
+        let readme: Option<String> = {
+            let readme_url = format!("{}/{}/raw/main/README.md", hf_endpoint, repo);
+            let mut rreq = agent.get(&readme_url).header("User-Agent", "skill-app/1.0");
+            if let Some(tok) = &hf_token {
+                rreq = rreq.header("Authorization", format!("Bearer {tok}"));
+            }
+            match rreq.call() {
+                Ok(resp) => {
+                    // Limit to ~32 KB to avoid huge READMEs bloating the response.
+                    let mut body = resp.into_body();
+                    match body.with_config().limit(32_768).read_to_vec() {
+                        Ok(buf) => String::from_utf8(buf).ok(),
+                        Err(_) => None,
+                    }
+                }
+                Err(_) => None,
+            }
+        };
+
+        Ok(serde_json::json!({ "ok": true, "repo": repo, "files": files, "readme": readme }))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(v)) => Json(v),
+        Ok(Err(e)) => Json(serde_json::json!({"ok": false, "error": e})),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+    }
 }
 
 pub(crate) async fn llm_add_model_impl(

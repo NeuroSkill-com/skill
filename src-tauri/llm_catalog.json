@@ -67,6 +67,46 @@
       "params_b": 27.0,
       "max_context_length": 131072
     },
+    "qwen36-35b-a3b": {
+      "name": "Qwen3.6 35B-A3B",
+      "description": "Alibaba's Qwen3.6 MoE model (35B total / ~3B active). High quality with low active compute; fits comfortably in 16 GB VRAM at Q4.",
+      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 35.0,
+      "max_context_length": 131072
+    },
+    "glm-51": {
+      "name": "GLM 5.1",
+      "description": "Zhipu AI's GLM 5.1 chat model in GGUF format. Strong bilingual (Chinese/English) reasoning capabilities.",
+      "repo": "bartowski/zai-org_GLM-5.1-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
+    },
+    "minimax-m27": {
+      "name": "MiniMax M2.7",
+      "description": "MiniMax's M2.7 chat model in GGUF format. Strong multilingual reasoning from MiniMaxAI.",
+      "repo": "bartowski/MiniMaxAI_MiniMax-M2.7-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
+    },
     "gpt-oss-20b": {
       "name": "GPT-OSS 20B",
       "description": "Meta's 20B open-source model. Strong multilingual reasoning; needs 16 GB VRAM for Q4.",

@@ -566,7 +566,9 @@ let ixDetailTimeseries = $state<Array<{ t: number; ra: number; rb: number; rt: n
 
 // ── Insights & value extraction ──────────────────────────────────────────
 let ixLlmSummary = $state("");
+let ixLlmPrompt = $state("");
 let ixLlmLoading = $state(false);
+let ixLlmMaxTokens = $state(1024);
 let ixShowInsights = $state(false);
 
 // Bookmarks (persisted in localStorage)
@@ -594,22 +596,23 @@ function computeInsights(nodes: GraphNode[]): {
   topMetric: { key: string; value: number } | null;
 } {
   const eegNodes = nodes.filter(n => n.kind === "eeg_point" && n.eeg_metrics);
-  const ssNodes = nodes.filter(n => n.kind === "screenshot" && n.app_name);
+  const ssNodes = nodes.filter(n => n.kind === "screenshot" && (n.app_name || n.window_title));
 
   // App-engagement correlation: match screenshots to nearby EEG by timestamp
   const appMap = new Map<string, { sum: number; count: number }>();
   for (const ss of ssNodes) {
-    if (!ss.app_name || !ss.timestamp_unix) continue;
+    const appName = ss.app_name || ss.window_title;
+    if (!appName || !ss.timestamp_unix) continue;
     // Find nearest EEG epoch
     const nearest = eegNodes
       .filter(n => n.timestamp_unix)
       .sort((a, b) => Math.abs((a.timestamp_unix ?? 0) - ss.timestamp_unix!) - Math.abs((b.timestamp_unix ?? 0) - ss.timestamp_unix!))[0];
     if (nearest?.eeg_metrics?.engagement != null) {
       const eng = nearest.eeg_metrics.engagement as number;
-      const entry = appMap.get(ss.app_name) ?? { sum: 0, count: 0 };
+      const entry = appMap.get(appName) ?? { sum: 0, count: 0 };
       entry.sum += eng;
       entry.count++;
-      appMap.set(ss.app_name, entry);
+      appMap.set(appName, entry);
     }
   }
   const appCorrelation: AppEngagement[] = [...appMap.entries()]
@@ -2987,37 +2990,253 @@ useWindowTitle("window.title.search");
                     <h4 class="text-xs font-semibold text-foreground/70 uppercase tracking-wider">{t("search.llmSummary")}</h4>
                     {#if !ixLlmSummary && !ixLlmLoading}
                       <button onclick={async () => {
-                        ixLlmLoading = true;
-                        try {
-                          const labels = ixNodes.filter(n => n.kind === "text_label" || n.kind === "found_label").map(n => n.text).filter(Boolean).slice(0, 10);
-                          const sessions = ixSessions.slice(0, 5).map(s => `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, ${Math.round(s.duration_secs/60)}min`);
-                          const apps = computeInsights(ixNodes).appCorrelation.slice(0, 5).map(a => `${a.app}: eng=${a.avgEngagement.toFixed(2)}`);
-                          const prompt = `Analyze this EEG search for "${ixQuery}". Labels found: ${labels.join(", ")}. Sessions: ${sessions.join("; ")}. App engagement: ${apps.join("; ")}. Give 2-3 concise insights about patterns, optimal conditions, and recommendations. Be specific and actionable.`;
-                          const { daemonPost } = await import("$lib/daemon/http");
-                          const res = await daemonPost<{ choices?: Array<{ message?: { content?: string } }>; content?: string }>("/v1/llm/chat-completions", {
-                            messages: [{ role: "user", content: prompt }],
-                            temperature: 0.3,
-                            max_tokens: 300,
-                          }, 120_000);
-                          ixLlmSummary = res?.choices?.[0]?.message?.content ?? res?.content ?? "No response from LLM. Make sure a model is loaded in Settings → LLM.";
-                        } catch (err) {
-                          ixLlmSummary = `Could not generate summary: ${err}`;
+                        // Build prompt
+                        const labelNodes = ixNodes.filter(n => (n.kind === "text_label" || n.kind === "found_label") && n.text);
+                        const labels = labelNodes.map(n => {
+                          const ts = n.timestamp_unix ? new Date(n.timestamp_unix * 1000).toLocaleString() : "";
+                          return `"${n.text}"${ts ? ` (${ts})` : ""}`;
+                        }).slice(0, 10);
+                        const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix);
+                        const timeRange = eegNodes.length > 0
+                          ? `${new Date(Math.min(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()} → ${new Date(Math.max(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()}`
+                          : "unknown";
+                        const sessions = ixSessions.slice(0, 5).map(s => `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, ${Math.round(s.duration_secs/60)}min`);
+                        const allNodes = [...ixNodes, ...(ixDisplayGraph?.nodes ?? [])];
+                        const apps = computeInsights(allNodes).appCorrelation.slice(0, 5).map(a => `${a.app}: eng=${a.avgEngagement.toFixed(2)}`);
+                        // Include EEG metrics for each epoch
+                        const eegDetails = eegNodes.slice(0, 10).map(n => {
+                          const ts = new Date(n.timestamp_unix! * 1000).toLocaleString();
+                          const m = n.eeg_metrics ?? {};
+                          const parts = [`t=${ts}`, `dist=${n.distance.toFixed(3)}`];
+                          if (m.engagement != null) parts.push(`eng=${(m.engagement as number).toFixed(2)}`);
+                          if (m.relaxation != null) parts.push(`rel=${(m.relaxation as number).toFixed(2)}`);
+                          if (m.snr != null) parts.push(`snr=${(m.snr as number).toFixed(1)}`);
+                          if (m.rel_alpha != null) parts.push(`α=${(m.rel_alpha as number).toFixed(3)}`);
+                          if (m.rel_beta != null) parts.push(`β=${(m.rel_beta as number).toFixed(3)}`);
+                          if (m.rel_theta != null) parts.push(`θ=${(m.rel_theta as number).toFixed(3)}`);
+                          if (m.hr != null && (m.hr as number) > 0) parts.push(`hr=${(m.hr as number).toFixed(0)}`);
+                          if (n.relevance_score != null) parts.push(`relevance=${n.relevance_score.toFixed(3)}`);
+                          if (n.session_id) parts.push(`session=${n.session_id}`);
+                          // Flag epochs with no metrics
+                          if (!m.engagement && !m.relaxation && !m.snr) parts.push("(no EEG metrics stored)");
+                          return parts.join(", ");
+                        }).join("\n  ");
+                        // If no epochs have metrics, try to fetch them on demand
+                        // When graph nodes lack metrics, fetch from session CSV (more reliable than embeddings table)
+                        let fetchedMetrics = "";
+                        if (eegNodes.length > 0 && eegNodes.every(n => !n.eeg_metrics?.engagement)) {
+                          const startUtc = Math.min(...eegNodes.map(n => n.timestamp_unix!));
+                          const endUtc = Math.max(...eegNodes.map(n => n.timestamp_unix!));
+
+                          // Try get_session_metrics first (reads from metrics CSV, more likely to have data)
+                          try {
+                            const sm = await daemonInvoke<Record<string, number>>("get_session_metrics", { startUtc, endUtc });
+                            if (sm && (sm.engagement > 0 || sm.relaxation > 0 || sm.snr > 0)) {
+                              const parts = [`${sm.n_epochs ?? 0} epochs from CSV`];
+                              if (sm.engagement > 0) parts.push(`avg_engagement=${sm.engagement.toFixed(3)}`);
+                              if (sm.relaxation > 0) parts.push(`avg_relaxation=${sm.relaxation.toFixed(3)}`);
+                              if (sm.snr > 0) parts.push(`avg_snr=${sm.snr.toFixed(1)}`);
+                              if (sm.rel_alpha > 0) parts.push(`avg_α=${sm.rel_alpha.toFixed(3)}`);
+                              if (sm.rel_beta > 0) parts.push(`avg_β=${sm.rel_beta.toFixed(3)}`);
+                              if (sm.rel_theta > 0) parts.push(`avg_θ=${sm.rel_theta.toFixed(3)}`);
+                              if (sm.rel_delta > 0) parts.push(`avg_δ=${sm.rel_delta.toFixed(3)}`);
+                              if (sm.rel_gamma > 0) parts.push(`avg_γ=${sm.rel_gamma.toFixed(3)}`);
+                              if (sm.faa) parts.push(`faa=${sm.faa.toFixed(3)}`);
+                              if (sm.hr > 0) parts.push(`avg_hr=${sm.hr.toFixed(0)}`);
+                              if (sm.mood > 0) parts.push(`mood=${sm.mood.toFixed(2)}`);
+                              if (sm.meditation > 0) parts.push(`meditation=${sm.meditation.toFixed(2)}`);
+                              if (sm.cognitive_load > 0) parts.push(`cognitive_load=${sm.cognitive_load.toFixed(2)}`);
+                              if (sm.drowsiness > 0) parts.push(`drowsiness=${sm.drowsiness.toFixed(2)}`);
+                              if (sm.stress_index > 0) parts.push(`stress=${sm.stress_index.toFixed(2)}`);
+                              fetchedMetrics = `\nAggregated EEG metrics from session recordings:\n  ${parts.join(", ")}`;
+                            }
+                          } catch { /* ignore */ }
+
+                          // Fallback: try timeseries (embeddings table)
+                          if (!fetchedMetrics) {
+                            try {
+                              const ts = await daemonInvoke<Array<{ t: number; engagement: number; relaxation: number; snr: number; ra: number; rb: number; rt: number; hr: number }>>(
+                                "get_session_timeseries", { startUtc: startUtc - 5, endUtc: endUtc + 5 }
+                              );
+                              if (ts && ts.length > 0) {
+                                const hasMetrics = ts.filter(r => r.engagement > 0 || r.relaxation > 0 || r.snr > 0);
+                                if (hasMetrics.length > 0) {
+                                  const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+                                  fetchedMetrics = `\nFetched EEG averages (${hasMetrics.length} valid epochs):\n  avg_engagement=${avg(hasMetrics.map(r => r.engagement)).toFixed(3)}, avg_relaxation=${avg(hasMetrics.map(r => r.relaxation)).toFixed(3)}, avg_snr=${avg(hasMetrics.map(r => r.snr)).toFixed(1)}, avg_α=${avg(hasMetrics.map(r => r.ra)).toFixed(3)}, avg_β=${avg(hasMetrics.map(r => r.rb)).toFixed(3)}, avg_θ=${avg(hasMetrics.map(r => r.rt)).toFixed(3)}`;
+                                }
+                              }
+                            } catch { /* ignore */ }
+                          }
+
+                          if (!fetchedMetrics) {
+                            fetchedMetrics = "\nNote: No EEG metrics available for this time range. Metrics are computed during live sessions — these epochs may have been recorded before the analysis pipeline was active.";
+                          }
                         }
-                        ixLlmLoading = false;
+                        // Include label distances (similarity to query)
+                        const labelDetails = labelNodes.slice(0, 10).map(n => {
+                          const ts = n.timestamp_unix ? new Date(n.timestamp_unix * 1000).toLocaleString() : "no time";
+                          return `"${n.text}" (${ts}, dist=${n.distance.toFixed(3)})`;
+                        }).join("; ");
+                        // Session metrics — from backend or derived from nodes
+                        let sessionDetails = ixSessions.slice(0, 5).map(s =>
+                          `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}±${s.stddev_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, relax=${s.avg_relaxation.toFixed(2)}, ${Math.round(s.duration_secs/60)}min, ${s.epoch_count} epochs${s.best ? " [BEST]" : ""}`
+                        ).join("\n  ");
+                        // If no session data from backend, derive from node session_ids
+                        if (!sessionDetails && eegNodes.length > 0) {
+                          const sessionMap = new Map<string, number>();
+                          for (const n of eegNodes) {
+                            if (n.session_id) sessionMap.set(n.session_id, (sessionMap.get(n.session_id) ?? 0) + 1);
+                          }
+                          sessionDetails = [...sessionMap.entries()].map(([sid, count]) => `${sid}: ${count} epochs`).join("; ");
+                        }
+                        // Include screenshot context (OCR text + app)
+                        const ssNodes = allNodes.filter(n => n.kind === "screenshot");
+                        const screenshotContext = ssNodes.slice(0, 5).map(n => {
+                          const ts = n.timestamp_unix ? new Date(n.timestamp_unix * 1000).toLocaleString() : "";
+                          const parts = [];
+                          if (n.app_name) parts.push(`app=${n.app_name}`);
+                          if (n.window_title) parts.push(`title="${n.window_title}"`);
+                          if (ts) parts.push(`time=${ts}`);
+                          if (n.ocr_similarity != null) parts.push(`ocr_sim=${n.ocr_similarity.toFixed(2)}`);
+                          return parts.join(", ");
+                        }).join("\n  ");
+
+                        const prompt = `Analyze this EEG search for "${ixQuery}".
+
+Time range: ${timeRange}. ${eegNodes.length} EEG epochs found.
+
+Labels (sorted by similarity to query "${ixQuery}"):
+  ${labelDetails || "none"}
+
+EEG epochs (with brain metrics):
+  ${eegDetails || "none"}${fetchedMetrics}
+
+Sessions:
+  ${sessionDetails || "none"}
+
+App engagement: ${apps.length > 0 ? apps.join("; ") : "no app data"}.
+
+Screenshots captured nearby:
+  ${screenshotContext || "none"}
+
+Give 2-3 concise, specific insights about:
+1. Brain state patterns (engagement, relaxation, band power ratios) during "${ixQuery}" activities
+2. Optimal conditions (time of day, session characteristics) for peak performance
+3. Actionable recommendations based on the EEG data
+Reference specific metrics and timestamps.`;
+                        ixLlmPrompt = prompt;
+                        ixLlmSummary = ""; // show prompt immediately while streaming
+                        ixLlmLoading = true;
+
+                        // Suggest optimal max_tokens based on prompt size, but user controls final value
+                        const promptTokens = Math.ceil(prompt.length / 4);
+                        const suggested = Math.min(4096, Math.max(512, promptTokens * 2));
+                        if (ixLlmMaxTokens === 1024 && suggested > ixLlmMaxTokens) ixLlmMaxTokens = suggested; // auto-bump only from default
+                        const maxTokens = ixLlmMaxTokens;
+
+                        // Stream via channel callback
+                        let acc = "";
+                        const channel = {
+                          onmessage: (chunk: { type: string; content?: string; message?: string }) => {
+                            if (chunk.type === "delta" && chunk.content) {
+                              acc += chunk.content;
+                              ixLlmSummary = acc;
+                            } else if (chunk.type === "done") {
+                              ixLlmLoading = false;
+                              if (!acc) { ixLlmSummary = "__NO_LLM__"; }
+                              else {
+                                // Auto-save to chat history
+                                const p = parseAssistantOutput(acc);
+                                daemonInvoke<number>("new_chat_session").then(async sid => {
+                                  if (sid > 0) {
+                                    await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
+                                    await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null }).catch(() => {});
+                                    await daemonInvoke("save_chat_message", {
+                                      sessionId: sid, role: "assistant",
+                                      content: [p.leadIn, p.content].filter(s => s.trim()).join("\n\n"),
+                                      thinking: p.thinking || null,
+                                    }).catch(() => {});
+                                  }
+                                }).catch(() => {});
+                              }
+                            } else if (chunk.type === "error") {
+                              ixLlmSummary = "__NO_LLM__";
+                              ixLlmLoading = false;
+                            }
+                          }
+                        };
+                        try {
+                          await daemonInvoke("chat_completions_ipc", {
+                            messages: [{ role: "user", content: prompt }],
+                            params: { temperature: 0.3, max_tokens: maxTokens },
+                            channel,
+                          });
+                        } catch {
+                          if (!acc) ixLlmSummary = "__NO_LLM__";
+                          ixLlmLoading = false;
+                        }
                       }}
                       class="text-xs px-2.5 py-1 rounded-md border border-violet-500/30
                              bg-violet-500/10 text-violet-600 dark:text-violet-400
                              hover:bg-violet-500/20 transition-colors select-none">
                         {t("search.generateSummary")}
                       </button>
+                      <!-- Max tokens slider -->
+                      <div class="flex items-center gap-1.5 ml-auto">
+                        <span class="text-[0.5rem] text-muted-foreground/40 select-none">{t("search.maxTokens")}</span>
+                        <input type="range" min="256" max="4096" step="256" bind:value={ixLlmMaxTokens}
+                               class="w-16 h-1 accent-violet-500 cursor-pointer" />
+                        <span class="text-[0.5rem] text-muted-foreground/50 font-mono w-8 text-right">{ixLlmMaxTokens}</span>
+                      </div>
                     {/if}
                   </div>
-                  {#if ixLlmLoading}
+                  <!-- Show prompt immediately when generating -->
+                  {#if ixLlmPrompt && (ixLlmLoading || ixLlmSummary)}
+                    <details class="mb-2 rounded-lg border border-border/20 bg-muted/5 overflow-hidden" open={!ixLlmSummary}>
+                      <summary class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs text-muted-foreground/50 hover:text-muted-foreground/80 select-none">
+                        <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0"><path d="M6 3l5 5-5 5V3z"/></svg>
+                        Prompt
+                      </summary>
+                      <div class="px-3 pb-2 pt-1 text-xs text-muted-foreground/50 leading-relaxed border-t border-border/10 whitespace-pre-line font-mono">
+                        {ixLlmPrompt}
+                      </div>
+                    </details>
+                  {/if}
+                  {#if ixLlmLoading && !ixLlmSummary}
                     <div class="flex items-center gap-2 text-sm text-muted-foreground/50">
                       <div class="w-3 h-3 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
                       {t("search.generatingSummary")}
                     </div>
-                  {:else if ixLlmSummary}
+                  {:else if ixLlmSummary === "__NO_LLM__"}
+                    <div class="flex flex-col gap-2">
+                      <p class="text-sm text-muted-foreground/60">{t("search.llmNotLoaded")}</p>
+                      <button onclick={async () => {
+                        ixLlmSummary = "";
+                        ixLlmLoading = true;
+                        try {
+                          await daemonInvoke("start_llm_server", {});
+                          // Wait a moment for the server to start
+                          await new Promise(r => setTimeout(r, 3000));
+                          // Retry the summary
+                          const { daemonPost } = await import("$lib/daemon/http");
+                          const res2 = await daemonPost<{ choices?: Array<{ message?: { content?: string } }>; content?: string }>("/v1/llm/chat-completions", {
+                            messages: [{ role: "user", content: ixLlmPrompt }],
+                            temperature: 0.3,
+                            max_tokens: 1024,
+                          }, 120_000);
+                          ixLlmSummary = res2?.choices?.[0]?.message?.content ?? res2?.content ?? "__NO_LLM__";
+                        } catch (err) {
+                          ixLlmSummary = `Could not generate summary: ${err}`;
+                        }
+                        ixLlmLoading = false;
+                      }}
+                      class="text-xs px-3 py-1.5 rounded-md border border-amber-500/30
+                             bg-amber-500/10 text-amber-600 dark:text-amber-400
+                             hover:bg-amber-500/20 transition-colors select-none w-fit">
+                        {t("search.startLlmRetry")}
+                      </button>
+                    </div>
+                  {:else if ixLlmSummary && ixLlmSummary !== "__NO_LLM__"}
                     {@const parsed = parseAssistantOutput(ixLlmSummary)}
                     <!-- Thinking block (collapsible) -->
                     {#if parsed.thinking}
@@ -3038,8 +3257,55 @@ useWindowTitle("window.title.search");
                     <!-- Main content (rendered as markdown) -->
                     {#if parsed.content}
                       <div class="text-sm text-foreground/70 leading-relaxed prose prose-sm dark:prose-invert max-w-none
-                                  prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5 prose-headings:text-foreground/80">
+                                  prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5
+                                  prose-headings:text-foreground/80
+                                  prose-h1:text-sm prose-h1:font-bold prose-h1:mt-3 prose-h1:mb-1.5
+                                  prose-h2:text-sm prose-h2:font-bold prose-h2:mt-3 prose-h2:mb-1.5
+                                  prose-h3:text-xs prose-h3:font-semibold prose-h3:mt-2 prose-h3:mb-1
+                                  prose-h4:text-xs prose-h4:font-semibold prose-h4:mt-2 prose-h4:mb-1
+                                  prose-table:text-xs prose-th:px-2 prose-th:py-1 prose-td:px-2 prose-td:py-1
+                                  prose-blockquote:border-violet-500/30 prose-blockquote:bg-violet-500/5 prose-blockquote:rounded-md prose-blockquote:px-3 prose-blockquote:py-2 prose-blockquote:not-italic
+                                  prose-strong:text-foreground/80
+                                  prose-code:text-xs prose-code:bg-muted/30 prose-code:px-1 prose-code:rounded">
                         <MarkdownRenderer content={parsed.content} />
+                      </div>
+                    {/if}
+                    {#if ixLlmLoading}
+                      <div class="flex items-center gap-2 mt-2 text-xs text-muted-foreground/40">
+                        <div class="w-2.5 h-2.5 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
+                        {t("search.generatingSummary")}
+                      </div>
+                    {:else}
+                      <!-- Continue in Chat button -->
+                      <div class="flex items-center gap-2 mt-3 pt-2 border-t border-border/20">
+                        <button onclick={async () => {
+                          try {
+                            // Create a new chat session with the search conversation
+                            const sid = await daemonInvoke<number>("new_chat_session");
+                            if (sid > 0) {
+                              await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
+                              // Save messages sequentially so they're ordered correctly
+                              await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
+                              // Separate thinking from content for the assistant message
+                              const parsed = parseAssistantOutput(ixLlmSummary);
+                              await daemonInvoke("save_chat_message", {
+                                sessionId: sid,
+                                role: "assistant",
+                                content: [parsed.leadIn, parsed.content].filter(s => s.trim()).join("\n\n"),
+                                thinking: parsed.thinking || null,
+                              });
+                              // Small delay to ensure DB writes are flushed
+                              await new Promise(r => setTimeout(r, 300));
+                            }
+                            const { invoke } = await import("@tauri-apps/api/core");
+                            await invoke("open_chat_window");
+                          } catch { /* ignore nav errors */ }
+                        }}
+                        class="text-xs px-3 py-1.5 rounded-md border border-blue-500/30
+                               bg-blue-500/10 text-blue-600 dark:text-blue-400
+                               hover:bg-blue-500/20 transition-colors select-none">
+                          {t("search.continueInChat")}
+                        </button>
                       </div>
                     {/if}
                   {/if}

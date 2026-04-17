@@ -878,13 +878,11 @@ function animate() {
 }
 
 // ── Reactivity on data change or PCA toggle ──────────────────────────────
+// Rebuild graph when any input changes.
+// Concatenate all deps into a string to force Svelte to track every value.
 $effect(() => {
-  const _n = nodes.length;
-  const _e = edges.length;
-  const _p = usePca; // also rebuild when the PCA toggle flips
-  const _h = hiddenKinds.length; // rebuild when filter changes
-  const _cm = colorMode; // rebuild when color mode changes
-  if (!loaded || !THREE || (_n === 0 && _e === 0)) return;
+  const _trigger = `${nodes.length}|${edges.length}|${usePca}|${colorMode}|${hiddenKinds.join(",")}`;
+  if (!loaded || !THREE || (nodes.length === 0 && edges.length === 0)) return;
   buildGraph();
 });
 

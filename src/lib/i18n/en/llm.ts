@@ -459,6 +459,22 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.focus": "Focus & Performance",
   "chat.prompts.cat.analysis": "Analysis",
 
+  "llm.hfSearch.title": "Search HuggingFace Models",
+  "llm.hfSearch.placeholder": "Search GGUF models on HuggingFace…",
+  "llm.hfSearch.searchBtn": "Search",
+  "llm.hfSearch.searching": "Searching…",
+  "llm.hfSearch.noResults": "No GGUF models found. Try a different query.",
+  "llm.hfSearch.loadingFiles": "Loading files…",
+  "llm.hfSearch.noFiles": "No GGUF files found in this repo.",
+  "llm.hfSearch.colQuant": "Quant",
+  "llm.hfSearch.colSize": "Size",
+  "llm.hfSearch.colFile": "File",
+  "llm.hfSearch.addBtn": "Add",
+  "llm.hfSearch.addDownloadBtn": "Add & Download",
+  "llm.hfSearch.openInBrowser": "Open on HuggingFace",
+  "llm.hfSearch.showReadme": "Show README",
+  "llm.hfSearch.hideReadme": "Hide README",
+
   "llm.noFeature": "LLM support is not compiled in.",
   "llm.noFeatureHint":
     "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",

@@ -17,6 +17,7 @@ import { onDaemonEvent } from "$lib/daemon/ws";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
+import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
 import type { LlmCatalog } from "$lib/llm-helpers";
 
@@ -401,6 +402,13 @@ onDestroy(() => {
   onDeleteModel={deleteModel}
   onSelectModel={selectModel}
   onSelectMmproj={selectMmproj}
+/>
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- HuggingFace model search                                                   -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmHfSearchSection
+  onModelAdded={async () => { await loadCatalog(); await loadHardwareFit(); }}
 />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
