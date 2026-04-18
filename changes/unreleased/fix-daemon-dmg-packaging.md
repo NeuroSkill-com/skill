@@ -2,7 +2,7 @@
 
 - Bump llama-cpp-4 / llama-cpp-sys-4 from 0.2.44 to 0.2.45.
 
-### Bug Fixes
+### Bugfixes
 
 - Fix daemon binary missing from DMG when prebuilt llama retry triggers on CI. The failed link left partial build state that cargo considered "fresh", so the retry silently skipped rebuilding the daemon.
 
