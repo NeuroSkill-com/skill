@@ -3889,16 +3889,15 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "emotiv"
-version = "0.0.12"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebddd41ef37d7ef84dd9d414da0704d1d815153ad2a30f6dca57b11abea450d5"
+checksum = "c28936decb4e5cd37d5e93f3e7edd790970ef34e2f49b969c0193d375c24f14a"
 dependencies = [
  "anyhow",
  "chrono",
  "env_logger",
  "futures-util",
  "log",
- "rand 0.8.6",
  "rustls",
  "serde",
  "serde_json",
