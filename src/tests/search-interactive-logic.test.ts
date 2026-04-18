@@ -121,3 +121,97 @@ describe("closestScreenshot", () => {
     expect(closestScreenshot([], 100)).toBeNull();
   });
 });
+
+// ── AI Summary prompt builder: EEG metrics display ────────────────────────
+
+describe("AI Summary EEG metrics display", () => {
+  // This mirrors the inline logic in +page.svelte lines 3010-3024
+  function buildEegDetail(n: GraphNode): string {
+    const ts = n.timestamp_unix
+      ? new Date(n.timestamp_unix * 1000).toLocaleString()
+      : "unknown";
+    const m = (n.eeg_metrics ?? {}) as Record<string, number | null>;
+    const parts = [`t=${ts}`, `dist=${n.distance.toFixed(3)}`];
+    if (m.engagement != null) parts.push(`eng=${(m.engagement as number).toFixed(2)}`);
+    if (m.relaxation != null) parts.push(`rel=${(m.relaxation as number).toFixed(2)}`);
+    if (m.snr != null) parts.push(`snr=${(m.snr as number).toFixed(1)}`);
+    if (m.rel_alpha != null) parts.push(`α=${(m.rel_alpha as number).toFixed(3)}`);
+    if (m.rel_beta != null) parts.push(`β=${(m.rel_beta as number).toFixed(3)}`);
+    if (m.rel_theta != null) parts.push(`θ=${(m.rel_theta as number).toFixed(3)}`);
+    if (m.hr != null && (m.hr as number) > 0) parts.push(`hr=${(m.hr as number).toFixed(0)}`);
+    if (n.relevance_score != null) parts.push(`relevance=${n.relevance_score.toFixed(3)}`);
+    if (n.session_id) parts.push(`session=${n.session_id}`);
+    if (!m.engagement && !m.relaxation && !m.snr) parts.push("(no EEG metrics stored)");
+    return parts.join(", ");
+  }
+
+  it("shows metrics when eeg_metrics is populated", () => {
+    const node: GraphNode = {
+      id: "ep0_0",
+      kind: "eeg_point",
+      distance: 0.5,
+      timestamp_unix: 1772578071,
+      eeg_metrics: { engagement: 50.0, relaxation: 30.0, snr: 15.0, rel_alpha: 0.025 },
+      relevance_score: 0.4,
+      session_id: "20260303_22h",
+    };
+    const detail = buildEegDetail(node);
+    expect(detail).toContain("eng=50.00");
+    expect(detail).toContain("rel=30.00");
+    expect(detail).toContain("snr=15.0");
+    expect(detail).toContain("α=0.025");
+    expect(detail).not.toContain("(no EEG metrics stored)");
+  });
+
+  it("shows '(no EEG metrics stored)' when eeg_metrics is null", () => {
+    const node: GraphNode = {
+      id: "ep0_0",
+      kind: "eeg_point",
+      distance: 0.997,
+      timestamp_unix: 1772578071,
+      eeg_metrics: null,
+      relevance_score: 0.499,
+      session_id: "20260303_22h",
+    };
+    const detail = buildEegDetail(node);
+    expect(detail).toContain("(no EEG metrics stored)");
+    expect(detail).not.toContain("eng=");
+  });
+
+  it("shows '(no EEG metrics stored)' when eeg_metrics is empty object", () => {
+    const node: GraphNode = {
+      id: "ep0_0",
+      kind: "eeg_point",
+      distance: 0.5,
+      timestamp_unix: 1772578071,
+      eeg_metrics: {},
+    };
+    const detail = buildEegDetail(node);
+    expect(detail).toContain("(no EEG metrics stored)");
+  });
+
+  it("shows '(no EEG metrics stored)' when all metrics are zero", () => {
+    const node: GraphNode = {
+      id: "ep0_0",
+      kind: "eeg_point",
+      distance: 0.5,
+      timestamp_unix: 1772578071,
+      eeg_metrics: { engagement: 0, relaxation: 0, snr: 0 },
+    };
+    const detail = buildEegDetail(node);
+    // Note: engagement=0 is falsy → triggers the "(no EEG metrics stored)" check
+    expect(detail).toContain("(no EEG metrics stored)");
+  });
+
+  it("includes hr when present and > 0", () => {
+    const node: GraphNode = {
+      id: "ep0_0",
+      kind: "eeg_point",
+      distance: 0.5,
+      timestamp_unix: 1772578071,
+      eeg_metrics: { engagement: 50, relaxation: 30, snr: 15, hr: 72 },
+    };
+    const detail = buildEegDetail(node);
+    expect(detail).toContain("hr=72");
+  });
+});

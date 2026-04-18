@@ -20,6 +20,7 @@ pub mod active_window;
 pub mod activity_store;
 pub mod device;
 pub mod dnd;
+pub mod eeg_scores;
 pub mod error;
 pub mod gpu_stats;
 pub mod health_store;

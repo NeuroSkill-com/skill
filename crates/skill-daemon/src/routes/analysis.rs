@@ -54,6 +54,7 @@ pub fn router() -> Router<AppState> {
         .route("/analysis/location", post(session_location))
         .route("/analysis/embedding-count", post(embedding_count))
         .route("/analysis/umap", post(umap_compare))
+        .route("/analysis/backfill-metrics", post(backfill_metrics))
 }
 
 async fn get_metrics(State(state): State<AppState>, Json(req): Json<TimeRangeRequest>) -> Json<serde_json::Value> {
@@ -273,6 +274,16 @@ async fn session_location(
     .await
     .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()}));
     Json(result)
+}
+
+async fn backfill_metrics(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || skill_history::backfill_eeg_metrics(&skill_dir))
+        .await
+        .unwrap_or_default();
+    // Invalidate search cache so enriched metrics appear immediately.
+    crate::routes::search::cache_clear();
+    Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 #[cfg(test)]
