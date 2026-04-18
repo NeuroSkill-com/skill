@@ -250,7 +250,8 @@ const search: Record<string, string> = {
   "search.timelineScrubber": "Línea de tiempo",
   "search.insightsTitle": "Perspectivas y patrones",
   "search.insightsNoEeg": "No hay datos EEG en estos resultados. Intente aumentar la profundidad del puente EEG.",
-  "search.insightsMetricsPending": "Se encontraron épocas EEG pero las métricas aún se están calculando. Inténtelo de nuevo en breve.",
+  "search.insightsMetricsPending":
+    "Se encontraron épocas EEG pero las métricas aún se están calculando. Inténtelo de nuevo en breve.",
   "search.insightsNoData": "No hay suficientes datos para generar información.",
   "search.optimalConditions": "Condiciones óptimas",
   "search.appCorrelation": "App × Compromiso",

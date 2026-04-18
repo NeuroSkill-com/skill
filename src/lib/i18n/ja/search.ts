@@ -248,7 +248,8 @@ const search: Record<string, string> = {
   "search.timelineScrubber": "タイムライン",
   "search.insightsTitle": "インサイトとパターン",
   "search.insightsNoEeg": "これらの結果にEEGデータがありません。EEGブリッジ深度を増やしてみてください。",
-  "search.insightsMetricsPending": "EEGエポックが見つかりましたが、メトリクスはまだ計算中です。しばらくしてから再試行してください。",
+  "search.insightsMetricsPending":
+    "EEGエポックが見つかりましたが、メトリクスはまだ計算中です。しばらくしてから再試行してください。",
   "search.insightsNoData": "インサイトを生成するのに十分なデータがありません。",
   "search.optimalConditions": "最適な条件",
   "search.appCorrelation": "アプリ × エンゲージメント",

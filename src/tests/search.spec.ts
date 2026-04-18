@@ -132,18 +132,14 @@ test.describe("Search page", () => {
     // Switch modes rapidly to provoke any reactive loop
     for (const m of ["text", "eeg", "interactive", "images", "interactive"]) {
       await page.evaluate((mode) => {
-        window.dispatchEvent(
-          new CustomEvent("skill:search-set-mode", { detail: { mode } }),
-        );
+        window.dispatchEvent(new CustomEvent("skill:search-set-mode", { detail: { mode } }));
       }, m);
       await page.waitForTimeout(200);
     }
 
     await page.waitForTimeout(1000);
 
-    const loopErrors = errors.filter(
-      (e) => e.includes("effect_update_depth_exceeded") || e.includes("infinite"),
-    );
+    const loopErrors = errors.filter((e) => e.includes("effect_update_depth_exceeded") || e.includes("infinite"));
     expect(loopErrors).toHaveLength(0);
 
     await page.screenshot({ path: "test-results/search-no-infinite-loop.png" });
@@ -153,9 +149,7 @@ test.describe("Search page", () => {
     await openSearch(page, "interactive");
 
     await page.evaluate(() => {
-      window.dispatchEvent(
-        new CustomEvent("skill:search-set-mode", { detail: { mode: "text" } }),
-      );
+      window.dispatchEvent(new CustomEvent("skill:search-set-mode", { detail: { mode: "text" } }));
     });
     await page.waitForTimeout(500);
 
@@ -202,9 +196,7 @@ test.describe("Search page", () => {
 
       const panelText = await page.locator("body").innerText();
       const hasContent =
-        panelText.includes("Peak engagement") ||
-        panelText.includes("Safari") ||
-        panelText.includes("engagement");
+        panelText.includes("Peak engagement") || panelText.includes("Safari") || panelText.includes("engagement");
       expect(hasContent).toBe(true);
     }
 
