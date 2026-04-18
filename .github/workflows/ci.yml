@@ -353,7 +353,7 @@ jobs:
 
       - name: Upload Rust health metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-health-rust-check
           path: ci-metrics/
@@ -452,7 +452,7 @@ jobs:
 
       - name: Upload Frontend health metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-health-frontend-check
           path: ci-metrics/
@@ -844,7 +844,7 @@ jobs:
 
       - name: Upload E2E report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: llm-e2e-report
           path: llm-e2e-report.txt
@@ -924,7 +924,7 @@ jobs:
 
       - name: Upload E2E report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lsl-e2e-report
           path: lsl-e2e-report.txt
@@ -1008,7 +1008,7 @@ jobs:
 
       - name: Upload lcov artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-lcov
           path: lcov.info

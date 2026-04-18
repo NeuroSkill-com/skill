@@ -597,7 +597,7 @@ jobs:
       # durations.  Upload it so slow crates can be identified and targeted.
       - name: Upload cargo build timings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cargo-timings-windows
           path: src-tauri/target/cargo-timings/
@@ -883,7 +883,7 @@ jobs:
       # ── Upload CI artifacts (on-demand / dry-run builds only) ────────────────
       - name: Upload build artifacts
         if: steps.version_meta.outputs.is_release != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NeuroSkill-Windows-${{ steps.version_meta.outputs.version }}
           path: |

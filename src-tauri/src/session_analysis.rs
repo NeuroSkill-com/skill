@@ -49,6 +49,12 @@ pub(crate) async fn open_compare_window_with_sessions(
     end_b: i64,
 ) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("compare") {
+        // Navigate away first so WebKit tears down its ScrollingTree
+        // before the window is destroyed (prevents SIGSEGV in WebCore).
+        let _ = win.eval("window.stop()");
+        if let Ok(url) = "about:blank".parse() {
+            let _ = win.navigate(url);
+        }
         let _ = win.close();
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }

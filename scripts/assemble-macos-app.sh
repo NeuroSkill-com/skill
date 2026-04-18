@@ -67,6 +67,15 @@ if [[ -f "$DAEMON_SRC" ]]; then
   cp "$DAEMON_SRC" "$DAEMON_MACOS/skill-daemon"
   chmod +x "$DAEMON_MACOS/skill-daemon"
 
+  # Copy Frameworks (dylibs that daemon links via @executable_path/../Frameworks/)
+  DAEMON_FRAMEWORKS_SRC="$TAURI_DIR/target/$TARGET/release/Frameworks"
+  if [[ -d "$DAEMON_FRAMEWORKS_SRC" ]]; then
+    DAEMON_FRAMEWORKS="$DAEMON_CONTENTS/Frameworks"
+    mkdir -p "$DAEMON_FRAMEWORKS"
+    cp "$DAEMON_FRAMEWORKS_SRC"/*.dylib "$DAEMON_FRAMEWORKS/" 2>/dev/null || true
+    echo "  ✓ daemon Frameworks ($(ls "$DAEMON_FRAMEWORKS" | wc -l | tr -d ' ') dylibs)"
+  fi
+
   # Copy icon
   if [[ -f "$TAURI_DIR/icons/icon.icns" ]]; then
     cp "$TAURI_DIR/icons/icon.icns" "$DAEMON_RES/icon.icns"

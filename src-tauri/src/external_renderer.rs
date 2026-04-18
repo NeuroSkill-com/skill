@@ -32,6 +32,19 @@ pub(crate) fn setup(app: &mut tauri::App) {
         // Channel to detect initial page-load completion (DOM ready).
         let (load_tx, load_rx) = mpsc::sync_channel::<()>(1);
 
+        /// Navigate to `about:blank` and sleep briefly before destroying a
+        /// webview.  This gives WebKit's `ScrollingTree` and display-link
+        /// callbacks time to detach, avoiding a use-after-free crash in
+        /// `WebCore::ScrollingTree::takePendingScrollUpdates()`.
+        fn safe_destroy(win: &tauri::WebviewWindow) {
+            let _ = win.eval("window.stop()");
+            if let Ok(url) = "about:blank".parse() {
+                let _ = win.navigate(url);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let _ = win.destroy();
+        }
+
         let window = tauri::WebviewWindowBuilder::new(
             &handle,
             &label,
@@ -53,14 +66,14 @@ pub(crate) fn setup(app: &mut tauri::App) {
 
         loop {
             if skill_headless::is_fetch_cancelled() {
-                let _ = window.destroy();
+                safe_destroy(&window);
                 anyhow::bail!("cancelled by user");
             }
             if load_rx.try_recv().is_ok() {
                 break;
             }
             if Instant::now() > deadline {
-                let _ = window.destroy();
+                safe_destroy(&window);
                 anyhow::bail!("page load timeout (30s)");
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -85,7 +98,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
 
         loop {
             if skill_headless::is_fetch_cancelled() {
-                let _ = window.destroy();
+                safe_destroy(&window);
                 anyhow::bail!("cancelled by user");
             }
 
@@ -117,7 +130,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
         }
 
         if skill_headless::is_fetch_cancelled() {
-            let _ = window.destroy();
+            safe_destroy(&window);
             anyhow::bail!("cancelled by user");
         }
 
@@ -163,13 +176,13 @@ pub(crate) fn setup(app: &mut tauri::App) {
             std::thread::sleep(Duration::from_millis(100));
 
             if skill_headless::is_fetch_cancelled() {
-                let _ = window.destroy();
+                safe_destroy(&window);
                 anyhow::bail!("cancelled by user");
             }
 
             if let Ok(title) = window.title() {
                 if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
-                    let _ = window.destroy();
+                    safe_destroy(&window);
                     return Ok(text.to_string());
                 }
             }
@@ -179,7 +192,7 @@ pub(crate) fn setup(app: &mut tauri::App) {
             }
         }
 
-        let _ = window.destroy();
+        safe_destroy(&window);
         anyhow::bail!("content extraction timeout")
     });
 }

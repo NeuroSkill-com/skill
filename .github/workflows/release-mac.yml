@@ -52,6 +52,13 @@ jobs:
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
 
+      - name: Configure sccache for GitHub Actions cache
+        shell: bash
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
+
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -205,7 +212,7 @@ jobs:
       # durations.  Upload it so slow crates can be identified and targeted.
       - name: Upload cargo build timings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cargo-timings-macos
           path: src-tauri/target/cargo-timings/
@@ -382,7 +389,7 @@ jobs:
       # ── Upload CI artifacts (manual / on-demand builds only) ────────────────
       - name: Upload build artifacts
         if: steps.version_meta.outputs.is_release != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NeuroSkill-macOS-${{ steps.version_meta.outputs.version }}
           path: |

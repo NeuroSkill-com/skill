@@ -226,7 +226,7 @@ jobs:
       # durations.  Upload it so slow crates can be identified and targeted.
       - name: Upload cargo build timings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cargo-timings-linux
           path: src-tauri/target/cargo-timings/
@@ -324,7 +324,7 @@ jobs:
 
       - name: Upload Linux release health metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-health-release-linux
           path: ci-metrics/release-linux.json
@@ -421,7 +421,7 @@ jobs:
       # ── Upload CI artifacts (on-demand builds only) ──────────────────────────
       - name: Upload build artifacts
         if: steps.version_meta.outputs.is_release != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NeuroSkill-Linux-${{ steps.version_meta.outputs.version }}
           path: |
