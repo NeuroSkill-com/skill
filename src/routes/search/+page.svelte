@@ -2835,6 +2835,7 @@ useWindowTitle("window.title.search");
                     {ixBookmarks.some(b => b.nodeId === sn.id) ? "★" : "☆"} {t("search.bookmark")}
                   </button>
                   <button onclick={() => ixSelectedNode = null}
+                          aria-label="Close"
                           class="text-muted-foreground/40 hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/30">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg>
                   </button>
@@ -3019,6 +3020,7 @@ useWindowTitle("window.title.search");
                             fill={col} opacity={isSelected ? 1 : 0.5}
                             class="cursor-pointer"
                             onclick={() => { ixSelectedNode = n; ixDetailTimeseries = []; }}
+                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { ixSelectedNode = n; ixDetailTimeseries = []; } }}
                             role="button" tabindex="-1" aria-label={n.text ?? n.kind}>
                       <title>{n.kind}: {n.text?.slice(0, 40) ?? ""} ({new Date(n.timestamp_unix! * 1000).toLocaleTimeString()})</title>
                     </circle>

@@ -55,8 +55,9 @@ describe("app-engagement correlation", () => {
       }
     }
 
-    expect(appMap.get("VS Code")).toBeDefined();
-    expect(appMap.get("VS Code")?.sum / appMap.get("VS Code")?.count).toBe(0.8);
+    const vsCode = appMap.get("VS Code");
+    expect(vsCode).toBeDefined();
+    expect(vsCode!.sum / vsCode!.count).toBe(0.8);
   });
 
   it("uses window_title as fallback for app_name", () => {

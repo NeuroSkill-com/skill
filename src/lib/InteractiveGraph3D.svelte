@@ -198,8 +198,8 @@ let mouse!: THREE_NS.Vector2;
 let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
 
 // Richer scene-object records
-let nodeEntries: NodeEntry[] = [];
-let edgeEntries: EdgeEntry[] = [];
+let nodeEntries: NodeEntry[] = $state([]);
+let edgeEntries: EdgeEntry[] = $state([]);
 
 // ── Layout helpers ────────────────────────────────────────────────────────
 function fibSphere(i: number, n: number): [number, number, number] {
