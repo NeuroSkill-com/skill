@@ -621,9 +621,22 @@ let ixLlmScreenshots = $state<Array<{ url: string; label: string }>>([]);
 let ixLlmVisionSummary = $state("");
 let ixShowInsights = $state(false);
 
+/** Build markdown for screenshot images currently shown in the AI summary. */
+function buildScreenshotMarkdown(): string {
+  if (ixLlmScreenshots.length === 0) return "";
+  const imgs = ixLlmScreenshots.map(ss => {
+    const alt = ss.label || "Screenshot";
+    return `![${alt}](${ss.url})`;
+  }).join("\n");
+  return `\n\n**Screenshots**\n\n${imgs}`;
+}
+
 /** Save the completed AI summary to a chat session for "Continue in Chat". */
 function saveSummaryToChat(summary: string) {
-  const p = parseAssistantOutput(summary);
+  const ssMarkdown = buildScreenshotMarkdown();
+  const visionSection = ixLlmVisionSummary ? `\n\n---\n\n**Screenshot Analysis**\n\n${ixLlmVisionSummary}` : "";
+  const full = summary + ssMarkdown + visionSection;
+  const p = parseAssistantOutput(full);
   daemonInvoke<{ id: number }>("new_chat_session")
     .then(async (res) => {
       const sid = res?.id ?? 0;
@@ -838,9 +851,9 @@ $effect(() => {
   const _len = ixNodes.length;
   if (ixSearched && _show && _len > 0) {
     fetchIxScreenshots();
-  } else if (!_show) {
-    ixScreenshotMap = new Map();
   }
+  // Note: don't clear ixScreenshotMap when toggle is off —
+  // the data is still needed for AI summary screenshot analysis.
 });
 
 async function searchInteractive() {
@@ -967,6 +980,8 @@ async function searchInteractive() {
       ixSearching = false;
       ixStatus = "";
     }
+    // Always fetch screenshots after search (for AI summary, even if graph toggle is off)
+    fetchIxScreenshots(true);
   } catch (e) {
     error = String(e);
   } finally {
@@ -985,69 +1000,11 @@ type SsEntry = { filename: string; appName: string; windowTitle: string; unixTs:
  *
  * Deduplicates by filename so the same screenshot doesn't appear twice.
  */
-/**
- * Fetch screenshots independently (for AI summary) without affecting the toggle state.
- * Returns the map directly instead of writing to ixScreenshotMap.
- */
-async function fetchIxScreenshotsDirect(): Promise<Map<string, SsEntry>> {
-  if (ixNodes.length === 0) return new Map();
-
-  type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number };
-  const results = new Map<string, SsEntry>();
-  const usedFilenames = new Set<string>();
-
-  function addResult(nodeId: string, r: SsResult) {
-    if (usedFilenames.has(r.filename)) return;
-    usedFilenames.add(r.filename);
-    results.set(`${nodeId}\0${r.filename}`, {
-      filename: r.filename,
-      appName: r.app_name,
-      windowTitle: r.window_title,
-      unixTs: r.unix_ts,
-      similarity: r.similarity ?? 0,
-    });
-  }
-
-  const promises: Promise<void>[] = [];
-  promises.push(
-    (async () => {
-      try {
-        const hits = await daemonInvoke<SsResult[]>("search_screenshots_by_text", {
-          query: ixQuery.trim(), k: 5, mode: "semantic",
-        });
-        for (const h of hits) addResult("query", h);
-      } catch { /* no semantic index or model */ }
-    })(),
-  );
-  const eegNodes = ixNodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null);
-  for (const node of eegNodes) {
-    promises.push(
-      (async () => {
-        try {
-          const around = await daemonInvoke<SsResult[]>("get_screenshots_around", {
-            timestamp: Math.floor(node.timestamp_unix!), windowSecs: 1800,
-          });
-          if (around.length > 0) {
-            const sorted = [...around].sort(
-              (a, b) => Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!),
-            );
-            addResult(node.id, { ...sorted[0], similarity: 0 });
-          }
-        } catch { /* skip */ }
-      })(),
-    );
-  }
-  await Promise.all(promises);
-  return results;
-}
-
-async function fetchIxScreenshots() {
-  if (!ixShowScreenshots) {
-    ixScreenshotMap = new Map();
+async function fetchIxScreenshots(force = false) {
+  if (!force && !ixShowScreenshots) {
     return;
   }
   if (ixNodes.length === 0) {
-    ixScreenshotMap = new Map();
     return;
   }
 
@@ -3202,10 +3159,7 @@ useWindowTitle("window.title.search");
                           ? `${new Date(Math.min(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()} → ${new Date(Math.max(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()}`
                           : "unknown";
                         const sessions = ixSessions.slice(0, 5).map(s => `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, ${Math.round(s.duration_secs/60)}min`);
-                        // Fetch screenshots for AI analysis independently of toggle
-                        const ssMap = ixScreenshotMap.size > 0
-                          ? ixScreenshotMap
-                          : await fetchIxScreenshotsDirect();
+                        // Screenshots are always fetched after search (even with toggle off)
                         const allNodes = [...ixNodes, ...(ixDisplayGraph?.nodes ?? [])];
                         const apps = computeInsights(allNodes).appCorrelation.slice(0, 5).map(a => `${a.app}: eng=${a.avgEngagement.toFixed(2)}`);
                         // Include EEG metrics for each epoch
@@ -3305,7 +3259,7 @@ useWindowTitle("window.title.search");
                         const ssNodes: Array<{kind: string; filename?: string; app_name?: string; window_title?: string; timestamp_unix?: number; ocr_similarity?: number}> =
                           allNodes.filter(n => n.kind === "screenshot").length > 0
                             ? allNodes.filter(n => n.kind === "screenshot")
-                            : [...ssMap.values()].map(ss => ({
+                            : [...ixScreenshotMap.values()].map(ss => ({
                                 kind: "screenshot" as const,
                                 filename: ss.filename,
                                 app_name: ss.appName,
@@ -3419,8 +3373,7 @@ Reference specific metrics and timestamps.`;
                             }
 
                             if (!st.supports_vision) {
-                              // No vision available — skip screenshot analysis
-                              ixLlmScreenshots = [];
+                              // No vision available — keep thumbnails but skip vision analysis
                             } else {
                               // Fetch screenshot images as base64
                               ixLlmPhase = "vision-analyzing";
@@ -3699,9 +3652,9 @@ Reference specific metrics and timestamps.`;
                                 ixLlmSessionId = sid;
                                 await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
                                 await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
-                                const fullSummary = ixLlmVisionSummary
-                                  ? ixLlmSummary + "\n\n---\n\n**Screenshot Analysis**\n\n" + ixLlmVisionSummary
-                                  : ixLlmSummary;
+                                const ssMarkdown = buildScreenshotMarkdown();
+                                const visionSection = ixLlmVisionSummary ? `\n\n---\n\n**Screenshot Analysis**\n\n${ixLlmVisionSummary}` : "";
+                                const fullSummary = ixLlmSummary + ssMarkdown + visionSection;
                                 const parsed = parseAssistantOutput(fullSummary);
                                 await daemonInvoke("save_chat_message", {
                                   sessionId: sid,
@@ -3722,6 +3675,7 @@ Reference specific metrics and timestamps.`;
                         </button>
                       </div>
                     {/if}
+                    <DisclaimerFooter />
                   {/if}
                 </div>
               </div>
