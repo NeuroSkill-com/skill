@@ -624,10 +624,12 @@ let ixShowInsights = $state(false);
 /** Build markdown for screenshot images currently shown in the AI summary. */
 function buildScreenshotMarkdown(): string {
   if (ixLlmScreenshots.length === 0) return "";
-  const imgs = ixLlmScreenshots.map(ss => {
-    const alt = ss.label || "Screenshot";
-    return `![${alt}](${ss.url})`;
-  }).join("\n");
+  const imgs = ixLlmScreenshots
+    .map((ss) => {
+      const alt = ss.label || "Screenshot";
+      return `![${alt}](${ss.url})`;
+    })
+    .join("\n");
   return `\n\n**Screenshots**\n\n${imgs}`;
 }
 
