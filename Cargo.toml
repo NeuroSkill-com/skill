@@ -13,6 +13,7 @@
 
 [workspace]
 resolver = "2"
+exclude = ["patches/muda-0.17.2"]
 members = [
     "src-tauri",
     "crates/skill-autostart",
