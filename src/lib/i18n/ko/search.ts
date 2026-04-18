@@ -285,6 +285,10 @@ const search: Record<string, string> = {
   "search.nodeEegTip": "EEG 이웃 에포크",
   "search.nodeFoundTip": "EEG 포인트 근처 레이블",
   "search.nodeScreenshotsTip": "일치 항목 근처 스크린샷",
+
+  // ── Auto-synced from en/ (2026-04-18) ──
+  // TODO: translate the following 1 key(s) into ko
+  "search.maxTokens": "Tokens",
 };
 
 export default search;

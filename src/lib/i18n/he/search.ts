@@ -284,6 +284,10 @@ const search: Record<string, string> = {
   "search.nodeEegTip": "תקופות EEG שכנות",
   "search.nodeFoundTip": "תוויות שנמצאו ליד נקודות EEG",
   "search.nodeScreenshotsTip": "צילומי מסך ליד התאמות",
+
+  // ── Auto-synced from en/ (2026-04-18) ──
+  // TODO: translate the following 1 key(s) into he
+  "search.maxTokens": "Tokens",
 };
 
 export default search;

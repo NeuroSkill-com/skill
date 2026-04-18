@@ -290,6 +290,10 @@ const search: Record<string, string> = {
   "search.nodeEegTip": "Сусідні епохи ЕЕГ",
   "search.nodeFoundTip": "Мітки біля точок ЕЕГ",
   "search.nodeScreenshotsTip": "Знімки біля збігів",
+
+  // ── Auto-synced from en/ (2026-04-18) ──
+  // TODO: translate the following 1 key(s) into uk
+  "search.maxTokens": "Tokens",
 };
 
 export default search;

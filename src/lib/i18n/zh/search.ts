@@ -278,6 +278,10 @@ const search: Record<string, string> = {
   "search.nodeEegTip": "EEG邻近时段",
   "search.nodeFoundTip": "EEG点附近发现的标签",
   "search.nodeScreenshotsTip": "匹配附近的截图",
+
+  // ── Auto-synced from en/ (2026-04-18) ──
+  // TODO: translate the following 1 key(s) into zh
+  "search.maxTokens": "Tokens",
 };
 
 export default search;

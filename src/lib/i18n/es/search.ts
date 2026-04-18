@@ -295,6 +295,10 @@ const search: Record<string, string> = {
   "search.nodeEegTip": "Épocas EEG vecinas",
   "search.nodeFoundTip": "Etiquetas cerca de puntos EEG",
   "search.nodeScreenshotsTip": "Capturas cerca de coincidencias",
+
+  // ── Auto-synced from en/ (2026-04-18) ──
+  // TODO: translate the following 1 key(s) into es
+  "search.maxTokens": "Tokens",
 };
 
 export default search;
