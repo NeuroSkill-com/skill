@@ -27,17 +27,24 @@ const MOCK_COMMANDS = {
   get_embedding_overlap: { overlap_secs: 0 },
   get_exg_inference_device: { device: "cpu" },
   get_eeg_model_config: {
-    model_backend: "zuna", hf_repo: "Zyphra/ZUNA",
-    hnsw_m: 16, hnsw_ef_construction: 200, data_norm: 10,
+    model_backend: "zuna",
+    hf_repo: "Zyphra/ZUNA",
+    hnsw_m: 16,
+    hnsw_ef_construction: 200,
+    data_norm: 10,
   },
   get_eeg_model_status: { encoder_loaded: false, weights_found: false, downloading_weights: false },
   get_screenshot_config: { enabled: false },
   get_screenshot_metrics: {},
   get_screenshots_dir: ["/tmp/screenshots", 18445],
   get_reembed_config: {
-    idle_reembed_enabled: false, idle_reembed_delay_secs: 1800,
-    idle_reembed_gpu: true, gpu_precision: "f16",
-    idle_reembed_throttle_ms: 10, batch_size: 10, batch_delay_ms: 50,
+    idle_reembed_enabled: false,
+    idle_reembed_delay_secs: 1800,
+    idle_reembed_gpu: true,
+    gpu_precision: "f16",
+    idle_reembed_throttle_ms: 10,
+    batch_size: 10,
+    batch_delay_ms: 50,
   },
   estimate_reembed: { total_epochs: 0, embeddings_needed: 0 },
   get_sleep_config: {},
@@ -58,33 +65,52 @@ const MOCK_COMMANDS = {
     nodes: [
       { id: "q0", kind: "query", text: "work", distance: 0 },
       {
-        id: "tl0", kind: "text_label", text: "working on project",
-        distance: 0.12, parent_id: "q0", timestamp_unix: 1710000000,
+        id: "tl0",
+        kind: "text_label",
+        text: "working on project",
+        distance: 0.12,
+        parent_id: "q0",
+        timestamp_unix: 1710000000,
         session_id: "20260310_10h",
       },
       {
-        id: "ep0_0", kind: "eeg_point", distance: 0.25,
-        parent_id: "tl0", timestamp_unix: 1710000060,
+        id: "ep0_0",
+        kind: "eeg_point",
+        distance: 0.25,
+        parent_id: "tl0",
+        timestamp_unix: 1710000060,
         session_id: "20260310_10h",
         relevance_score: 0.22,
         eeg_metrics: { engagement: 0.82, relaxation: 0.55, snr: 14, rel_alpha: 0.32, rel_beta: 0.21, rel_theta: 0.12 },
       },
       {
-        id: "ep0_1", kind: "eeg_point", distance: 0.45,
-        parent_id: "tl0", timestamp_unix: 1710003600,
+        id: "ep0_1",
+        kind: "eeg_point",
+        distance: 0.45,
+        parent_id: "tl0",
+        timestamp_unix: 1710003600,
         session_id: "20260310_11h",
         relevance_score: 0.41,
         eeg_metrics: { engagement: 0.55, relaxation: 0.68, snr: 9, rel_alpha: 0.28, rel_beta: 0.18, rel_theta: 0.15 },
       },
       {
-        id: "fl0", kind: "found_label", text: "deep focus",
-        distance: 0.3, parent_id: "ep0_0", timestamp_unix: 1710000120,
+        id: "fl0",
+        kind: "found_label",
+        text: "deep focus",
+        distance: 0.3,
+        parent_id: "ep0_0",
+        timestamp_unix: 1710000120,
         session_id: "20260310_10h",
       },
       {
-        id: "ss0", kind: "screenshot", text: "VS Code",
-        distance: 0.5, parent_id: "tl0", timestamp_unix: 1710000030,
-        app_name: "Code", window_title: "main.rs — VS Code",
+        id: "ss0",
+        kind: "screenshot",
+        text: "VS Code",
+        distance: 0.5,
+        parent_id: "tl0",
+        timestamp_unix: 1710000030,
+        app_name: "Code",
+        window_title: "main.rs — VS Code",
         filename: "screen_001.png",
       },
     ],
@@ -95,23 +121,40 @@ const MOCK_COMMANDS = {
       { from_id: "ep0_0", to_id: "fl0", distance: 0.3, kind: "label_prox" },
       { from_id: "tl0", to_id: "ss0", distance: 0.5, kind: "screenshot_link" },
     ],
-    dot: "", svg: "", svg_col: "",
+    dot: "",
+    svg: "",
+    svg_col: "",
     sessions: [
       {
-        session_id: "20260310_10h", epoch_count: 42, duration_secs: 1200,
-        best: true, avg_engagement: 0.78, avg_snr: 13.2,
-        avg_relaxation: 0.52, stddev_engagement: 0.09,
+        session_id: "20260310_10h",
+        epoch_count: 42,
+        duration_secs: 1200,
+        best: true,
+        avg_engagement: 0.78,
+        avg_snr: 13.2,
+        avg_relaxation: 0.52,
+        stddev_engagement: 0.09,
       },
       {
-        session_id: "20260310_11h", epoch_count: 18, duration_secs: 540,
-        best: false, avg_engagement: 0.55, avg_snr: 8.5,
-        avg_relaxation: 0.65, stddev_engagement: 0.15,
+        session_id: "20260310_11h",
+        epoch_count: 18,
+        duration_secs: 540,
+        best: false,
+        avg_engagement: 0.55,
+        avg_snr: 8.5,
+        avg_relaxation: 0.65,
+        stddev_engagement: 0.15,
       },
     ],
     perf: {
-      embed_ms: 8, graph_ms: 32, total_ms: 40,
-      node_count: 6, edge_count: 5,
-      cpu_usage_pct: 15, mem_used_mb: 800, mem_total_mb: 16384,
+      embed_ms: 8,
+      graph_ms: 32,
+      total_ms: 40,
+      node_count: 6,
+      edge_count: 5,
+      cpu_usage_pct: 15,
+      mem_used_mb: 800,
+      mem_total_mb: 16384,
     },
   },
   search_screenshots_by_text: [],
@@ -135,7 +178,6 @@ async function runSearch(page: Page) {
 }
 
 test.describe("Search insights & AI features", () => {
-
   // ── Color mode selector ─────────────────────────────────────────────────
 
   test("color mode dropdown is visible after search", async ({ page }) => {
@@ -196,7 +238,7 @@ test.describe("Search insights & AI features", () => {
     await openInteractive(page);
     const body = await page.locator("body").innerText();
     // SNR toggle should NOT be visible by default (collapsed)
-    const snrToggle = page.locator("#snr-toggle");
+    const _snrToggle = page.locator("#snr-toggle");
     // It may or may not be visible depending on persisted settings
     // Just verify the page renders
     expect(body.length).toBeGreaterThan(100);
@@ -210,7 +252,7 @@ test.describe("Search insights & AI features", () => {
     await openInteractive(page);
     await runSearch(page);
     await page.waitForTimeout(500);
-    expect(errors.filter(e => e.includes("TypeError"))).toHaveLength(0);
+    expect(errors.filter((e) => e.includes("TypeError"))).toHaveLength(0);
   });
 
   // ── Search history chips in empty state ───────────────────────────────

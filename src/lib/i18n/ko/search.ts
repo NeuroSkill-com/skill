@@ -217,7 +217,6 @@ const search: Record<string, string> = {
   "labels.reindex.done": "재임베딩 완료 — {updated}개 라벨 업데이트됨.",
   "labels.reindex.error": "재임베딩 실패: {error}",
 
-
   "search.snrFilterLabel": "SNR > 0만",
   "search.snrFilterHint": "신호 품질이 낮은 에포크를 제외합니다.",
   "search.deviceFilterLabel": "디바이스",

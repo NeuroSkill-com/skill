@@ -953,7 +953,7 @@ async function newChat() {
   histIdx = -1;
   histDraft = "";
   try {
-    const res = await daemonInvoke<{id: number}>("new_chat_session");
+    const res = await daemonInvoke<{ id: number }>("new_chat_session");
     sessionId = res?.id ?? 0;
     await sidebarRef?.refresh();
   } catch (e) {}

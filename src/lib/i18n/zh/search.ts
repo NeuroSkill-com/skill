@@ -211,7 +211,6 @@ const search: Record<string, string> = {
   "labels.reindex.done": "重新嵌入完成 — 已更新{updated}个标签。",
   "labels.reindex.error": "重新嵌入失败：{error}",
 
-
   "search.snrFilterLabel": "仅 SNR > 0",
   "search.snrFilterHint": "排除信号质量低的时段。",
   "search.deviceFilterLabel": "设备",

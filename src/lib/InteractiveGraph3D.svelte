@@ -72,7 +72,14 @@ interface EdgeEntry {
   baseOpacity: number; // opacity at rest
 }
 
-let { nodes, edges, usePca = true, onselect, hiddenKinds = [], colorMode = "timestamp" }: {
+let {
+  nodes,
+  edges,
+  usePca = true,
+  onselect,
+  hiddenKinds = [],
+  colorMode = "timestamp",
+}: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   usePca?: boolean;
@@ -215,7 +222,7 @@ function normalize3(v: [number, number, number]): [number, number, number] {
 function computePositions(ns: GraphNode[], usePcaLayout: boolean): Map<string, [number, number, number]> {
   const pos = new Map<string, [number, number, number]>();
   // Place query node at center — match by kind since ID may vary (e.g. "q0")
-  const queryNode = ns.find(n => n.kind === "query");
+  const queryNode = ns.find((n) => n.kind === "query");
   if (queryNode) pos.set(queryNode.id, [0, 0, 0]);
   pos.set("query", [0, 0, 0]); // fallback
 
@@ -421,9 +428,10 @@ function buildGraph() {
 
   // Apply node kind filter
   const hiddenSet = new Set(hiddenKinds);
-  const visibleNodes = hiddenSet.size > 0 ? nodes.filter(n => !hiddenSet.has(n.kind)) : nodes;
-  const visibleIds = new Set(visibleNodes.map(n => n.id));
-  const visibleEdges = hiddenSet.size > 0 ? edges.filter(e => visibleIds.has(e.from_id) && visibleIds.has(e.to_id)) : edges;
+  const visibleNodes = hiddenSet.size > 0 ? nodes.filter((n) => !hiddenSet.has(n.kind)) : nodes;
+  const visibleIds = new Set(visibleNodes.map((n) => n.id));
+  const visibleEdges =
+    hiddenSet.size > 0 ? edges.filter((e) => visibleIds.has(e.from_id) && visibleIds.has(e.to_id)) : edges;
 
   const positions = computePositions(visibleNodes, usePca);
 
@@ -785,9 +793,17 @@ function onMouseMove(e: MouseEvent) {
     }
     // Show connected edge kinds when a node is selected
     if (selectedNodeId === n.id) {
-      const edgeKinds = new Set(edgeEntries
-        .filter(ee => ee.fromId === n.id || ee.toId === n.id)
-        .map(ee => ee.line.material.color ? edgeEntries.find(e => e === ee)?.fromId === n.id ? `→ ${edges.find(ed => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}` : `← ${edges.find(ed => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}` : ""));
+      const edgeKinds = new Set(
+        edgeEntries
+          .filter((ee) => ee.fromId === n.id || ee.toId === n.id)
+          .map((ee) =>
+            ee.line.material.color
+              ? edgeEntries.find((e) => e === ee)?.fromId === n.id
+                ? `→ ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`
+                : `← ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`
+              : "",
+          ),
+      );
       if (edgeKinds.size > 0) lines.push([...edgeKinds].filter(Boolean).join(", "));
     }
     if (selectedNodeId === null) lines.push("click to highlight connections");
@@ -803,7 +819,10 @@ function onClick(e: MouseEvent) {
   const hit = getHitNode(e);
   if (!hit) {
     // Click on empty space → deselect + reset camera
-    if (selectedNodeId !== null) { applySelection(null); onselect?.(null); }
+    if (selectedNodeId !== null) {
+      applySelection(null);
+      onselect?.(null);
+    }
     resetCamera();
     return;
   }
@@ -816,8 +835,12 @@ function onClick(e: MouseEvent) {
 // ── Reset camera to default position ─────────────────────────────────────
 function resetCamera() {
   flyTarget = {
-    x: 0, y: 8, z: 28,
-    tx: 0, ty: 0, tz: 0,
+    x: 0,
+    y: 8,
+    z: 28,
+    tx: 0,
+    ty: 0,
+    tz: 0,
     t: 0,
   };
   if (controls) controls.autoRotate = true;
@@ -827,7 +850,7 @@ function resetCamera() {
 let flyTarget: { x: number; y: number; z: number; tx: number; ty: number; tz: number; t: number } | null = null;
 
 function flyToNode(node: GraphNode) {
-  const ne = nodeEntries.find(n => n.node.id === node.id);
+  const ne = nodeEntries.find((n) => n.node.id === node.id);
   if (!ne || !camera || !controls) return;
   const p = ne.mesh.position;
   const radius = KIND_RADIUS[node.kind] ?? 0.5;
@@ -838,7 +861,9 @@ function flyToNode(node: GraphNode) {
     x: p.x + dir.x * dist,
     y: p.y + dir.y * dist + 2,
     z: p.z + dir.z * dist,
-    tx: p.x, ty: p.y, tz: p.z,
+    tx: p.x,
+    ty: p.y,
+    tz: p.z,
     t: 0,
   };
   if (controls) controls.autoRotate = false;
@@ -861,7 +886,7 @@ function animate() {
   if (flyTarget) {
     flyTarget.t += 0.03;
     const t = Math.min(1, flyTarget.t);
-    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    const ease = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // easeInOutQuad
     camera.position.x += (flyTarget.x - camera.position.x) * ease * 0.08;
     camera.position.y += (flyTarget.y - camera.position.y) * ease * 0.08;
     camera.position.z += (flyTarget.z - camera.position.z) * ease * 0.08;

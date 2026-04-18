@@ -1445,10 +1445,8 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
                     continue;
                 }
                 let diff = (csv_epochs[check_idx].0 - utc_secs).abs();
-                if diff <= tolerance {
-                    if best.is_none() || diff < best.unwrap().0 {
-                        best = Some((diff, &csv_epochs[check_idx].1));
-                    }
+                if diff <= tolerance && (best.is_none() || diff < best.unwrap().0) {
+                    best = Some((diff, &csv_epochs[check_idx].1));
                 }
             }
 
@@ -1620,7 +1618,7 @@ pub fn lookup_csv_metrics_for_range(skill_dir: &Path, start_utc: u64, end_utc: u
 }
 
 /// Find the closest CSV epoch for a given UTC timestamp within ±3s tolerance.
-pub fn find_closest_csv_epoch<'a>(csv_epochs: &'a [EpochRow], utc_secs: f64) -> Option<&'a EpochRow> {
+pub fn find_closest_csv_epoch(csv_epochs: &[EpochRow], utc_secs: f64) -> Option<&EpochRow> {
     let tolerance = 3.0;
     let idx = csv_epochs
         .binary_search_by(|probe| probe.t.partial_cmp(&utc_secs).unwrap_or(std::cmp::Ordering::Equal))
@@ -1632,10 +1630,8 @@ pub fn find_closest_csv_epoch<'a>(csv_epochs: &'a [EpochRow], utc_secs: f64) -> 
             continue;
         }
         let diff = (csv_epochs[check_idx].t - utc_secs).abs();
-        if diff <= tolerance {
-            if best.is_none() || diff < best.unwrap().0 {
-                best = Some((diff, &csv_epochs[check_idx]));
-            }
+        if diff <= tolerance && (best.is_none() || diff < best.unwrap().0) {
+            best = Some((diff, &csv_epochs[check_idx]));
         }
     }
     best.map(|(_, row)| row)

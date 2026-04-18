@@ -1028,7 +1028,7 @@ fn interactive_search_impl(
             .iter()
             .map(|(sid, s)| {
                 let n = s.count as f64;
-                let duration_secs = if s.max_ts > s.min_ts { s.max_ts - s.min_ts } else { 0 };
+                let duration_secs = s.max_ts.saturating_sub(s.min_ts);
                 serde_json::json!({
                     "session_id": sid,
                     "epoch_count": s.count,

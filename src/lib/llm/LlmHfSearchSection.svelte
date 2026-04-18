@@ -8,13 +8,13 @@
   • Add model + optionally start download
 -->
 <script lang="ts">
+import { marked } from "marked";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { fmtGB } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
-import { daemonGet, daemonPost } from "$lib/daemon/http";
-import { marked } from "marked";
 
 /** Strip YAML frontmatter (--- ... ---) from markdown. */
 function stripFrontmatter(md: string): string {
@@ -164,7 +164,13 @@ function fmtDate(iso: string): string {
   }
 }
 
-const NOTABLE_TAGS = new Set(["text-generation", "text2text-generation", "conversational", "image-text-to-text", "vision"]);
+const NOTABLE_TAGS = new Set([
+  "text-generation",
+  "text2text-generation",
+  "conversational",
+  "image-text-to-text",
+  "vision",
+]);
 </script>
 
 <section class="flex flex-col gap-2">

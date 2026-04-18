@@ -222,7 +222,6 @@ const search: Record<string, string> = {
   "labels.reindex.done": "Re-incrustación completa — {updated} etiquetas actualizadas.",
   "labels.reindex.error": "Re-incrustación fallida: {error}",
 
-
   "search.snrFilterLabel": "Solo SNR > 0",
   "search.snrFilterHint": "Excluir épocas con baja calidad de señal.",
   "search.deviceFilterLabel": "Dispositivo",

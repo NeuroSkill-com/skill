@@ -285,10 +285,11 @@ async function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
       const content = choice?.message?.content ?? result?.content ?? "";
       if (content) {
         // Emit progressively — wait for browser paint between chunks
-        const raf = () => new Promise<void>(r => {
-          if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => r());
-          else setTimeout(r, 16);
-        });
+        const raf = () =>
+          new Promise<void>((r) => {
+            if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => r());
+            else setTimeout(r, 16);
+          });
         const words = content.split(/(\s+)/);
         let batch = "";
         for (let i = 0; i < words.length; i++) {

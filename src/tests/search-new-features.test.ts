@@ -12,20 +12,12 @@
 // - buildDisplayGraph with new node fields
 
 import { describe, expect, it } from "vitest";
-import {
-  buildDisplayGraph,
-  serialiseNodesForBackend,
-  serialiseEdgesForBackend,
-} from "$lib/search-interactive-logic";
+import { buildDisplayGraph, serialiseNodesForBackend } from "$lib/search-interactive-logic";
 import type { GraphEdge, GraphNode } from "$lib/search-types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function mkNode(
-  id: string,
-  kind: GraphNode["kind"] = "eeg_point",
-  overrides: Partial<GraphNode> = {},
-): GraphNode {
+function mkNode(id: string, kind: GraphNode["kind"] = "eeg_point", overrides: Partial<GraphNode> = {}): GraphNode {
   return { id, kind, text: "test", distance: 0.1, ...overrides };
 }
 
@@ -52,9 +44,7 @@ describe("relevance_score on GraphNode", () => {
       mkNode("b", "eeg_point", { relevance_score: 0.2 }),
       mkNode("c", "eeg_point", { relevance_score: 0.5 }),
     ];
-    const sorted = [...nodes].sort(
-      (a, b) => (a.relevance_score ?? 1) - (b.relevance_score ?? 1),
-    );
+    const sorted = [...nodes].sort((a, b) => (a.relevance_score ?? 1) - (b.relevance_score ?? 1));
     expect(sorted[0].id).toBe("b");
     expect(sorted[1].id).toBe("c");
     expect(sorted[2].id).toBe("a");
@@ -79,7 +69,7 @@ describe("session_id on GraphNode", () => {
     for (const n of nodes) {
       const sid = n.session_id ?? "unknown";
       if (!groups.has(sid)) groups.set(sid, []);
-      groups.get(sid)!.push(n);
+      groups.get(sid)?.push(n);
     }
     expect(groups.get("20260303_22h")).toHaveLength(2);
     expect(groups.get("20260304_10h")).toHaveLength(1);
@@ -102,9 +92,36 @@ describe("session summary", () => {
 
   it("identifies best session by highest avg engagement", () => {
     const sessions: SessionSummary[] = [
-      { session_id: "s1", epoch_count: 10, duration_secs: 600, best: false, avg_engagement: 0.5, avg_snr: 10, avg_relaxation: 0.3, stddev_engagement: 0.1 },
-      { session_id: "s2", epoch_count: 8, duration_secs: 480, best: true, avg_engagement: 0.8, avg_snr: 12, avg_relaxation: 0.4, stddev_engagement: 0.05 },
-      { session_id: "s3", epoch_count: 12, duration_secs: 720, best: false, avg_engagement: 0.3, avg_snr: 8, avg_relaxation: 0.6, stddev_engagement: 0.2 },
+      {
+        session_id: "s1",
+        epoch_count: 10,
+        duration_secs: 600,
+        best: false,
+        avg_engagement: 0.5,
+        avg_snr: 10,
+        avg_relaxation: 0.3,
+        stddev_engagement: 0.1,
+      },
+      {
+        session_id: "s2",
+        epoch_count: 8,
+        duration_secs: 480,
+        best: true,
+        avg_engagement: 0.8,
+        avg_snr: 12,
+        avg_relaxation: 0.4,
+        stddev_engagement: 0.05,
+      },
+      {
+        session_id: "s3",
+        epoch_count: 12,
+        duration_secs: 720,
+        best: false,
+        avg_engagement: 0.3,
+        avg_snr: 8,
+        avg_relaxation: 0.6,
+        stddev_engagement: 0.2,
+      },
     ];
     const best = sessions.find((s) => s.best);
     expect(best?.session_id).toBe("s2");
@@ -113,8 +130,26 @@ describe("session summary", () => {
 
   it("only one session is marked as best", () => {
     const sessions: SessionSummary[] = [
-      { session_id: "s1", epoch_count: 5, duration_secs: 300, best: true, avg_engagement: 0.9, avg_snr: 15, avg_relaxation: 0.5, stddev_engagement: 0.05 },
-      { session_id: "s2", epoch_count: 5, duration_secs: 300, best: false, avg_engagement: 0.7, avg_snr: 12, avg_relaxation: 0.4, stddev_engagement: 0.1 },
+      {
+        session_id: "s1",
+        epoch_count: 5,
+        duration_secs: 300,
+        best: true,
+        avg_engagement: 0.9,
+        avg_snr: 15,
+        avg_relaxation: 0.5,
+        stddev_engagement: 0.05,
+      },
+      {
+        session_id: "s2",
+        epoch_count: 5,
+        duration_secs: 300,
+        best: false,
+        avg_engagement: 0.7,
+        avg_snr: 12,
+        avg_relaxation: 0.4,
+        stddev_engagement: 0.1,
+      },
     ];
     expect(sessions.filter((s) => s.best)).toHaveLength(1);
   });
@@ -125,7 +160,16 @@ describe("session summary", () => {
 describe("CSV export format", () => {
   it("generates valid CSV from session data", () => {
     const sessions = [
-      { session_id: "s1", epoch_count: 10, duration_secs: 600, best: true, avg_engagement: 0.5, avg_snr: 10.0, avg_relaxation: 0.3, stddev_engagement: 0.1 },
+      {
+        session_id: "s1",
+        epoch_count: 10,
+        duration_secs: 600,
+        best: true,
+        avg_engagement: 0.5,
+        avg_snr: 10.0,
+        avg_relaxation: 0.3,
+        stddev_engagement: 0.1,
+      },
     ];
     const header = "session_id,epoch_count,duration_secs,avg_engagement,avg_snr,avg_relaxation,stddev_engagement,best";
     const rows = sessions.map(

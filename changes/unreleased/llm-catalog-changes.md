@@ -1,5 +1,3 @@
-## [Unreleased]
-
 ### Features
 
 - **LLM catalog**: Added Qwen3.6 35B-A3B (MoE), MiniMax M2.7, and GLM 5.1 models to the local LLM catalog.

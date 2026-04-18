@@ -98,7 +98,7 @@ describe("invoke-proxy route table", () => {
     const newSessionCalls = [...searchSrc.matchAll(/daemonInvoke.*new_chat_session/g)];
     expect(newSessionCalls.length).toBeGreaterThan(0);
     for (const match of newSessionCalls) {
-      expect(match[0]).toContain("{id: number}");
+      expect(match[0]).toContain("id: number");
     }
     // Must not do `const sid = await daemonInvoke<number>("new_chat_session")`
     expect(searchSrc).not.toMatch(/daemonInvoke<number>\("new_chat_session"\)/);
@@ -106,7 +106,7 @@ describe("invoke-proxy route table", () => {
     // Check chat page
     const chatSrc = fs.readFileSync("src/routes/chat/+page.svelte", "utf-8");
     expect(chatSrc).not.toMatch(/daemonInvoke<number>\("new_chat_session"\)/);
-    expect(chatSrc).toContain('{id: number}>("new_chat_session")');
+    expect(chatSrc).toContain('id: number }>("new_chat_session")');
   });
 
   it("chat_completions_ipc emits deltas progressively", async () => {

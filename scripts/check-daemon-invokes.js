@@ -300,6 +300,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "stream_reembed",
   "trigger_reembed",
   "trigger_weights_download",
+  "backfill_eeg_metrics",
   "update_label",
   "load_chat_session",
   "list_chat_sessions",

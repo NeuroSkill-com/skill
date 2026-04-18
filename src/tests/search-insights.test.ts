@@ -9,7 +9,7 @@
 // - LLM prompt building (metrics, sessions, screenshots)
 // - Color mode logic
 
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { GraphNode } from "$lib/search-types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,16 +32,20 @@ describe("app-engagement correlation", () => {
     });
 
     // Simulate the correlation logic
-    const ssNodes = [ss].filter(n => n.kind === "screenshot" && (n.app_name || n.window_title));
-    const eegNodes = [eeg].filter(n => n.kind === "eeg_point" && n.eeg_metrics);
+    const ssNodes = [ss].filter((n) => n.kind === "screenshot" && (n.app_name || n.window_title));
+    const eegNodes = [eeg].filter((n) => n.kind === "eeg_point" && n.eeg_metrics);
     const appMap = new Map<string, { sum: number; count: number }>();
 
     for (const s of ssNodes) {
       const appName = s.app_name || s.window_title || "";
       if (!appName || !s.timestamp_unix) continue;
       const nearest = eegNodes
-        .filter(n => n.timestamp_unix)
-        .sort((a, b) => Math.abs((a.timestamp_unix ?? 0) - s.timestamp_unix!) - Math.abs((b.timestamp_unix ?? 0) - s.timestamp_unix!))[0];
+        .filter((n) => n.timestamp_unix)
+        .sort(
+          (a, b) =>
+            Math.abs((a.timestamp_unix ?? 0) - (s.timestamp_unix ?? 0)) -
+            Math.abs((b.timestamp_unix ?? 0) - (s.timestamp_unix ?? 0)),
+        )[0];
       if (nearest?.eeg_metrics?.engagement != null) {
         const eng = nearest.eeg_metrics.engagement as number;
         const entry = appMap.get(appName) ?? { sum: 0, count: 0 };
@@ -52,7 +56,7 @@ describe("app-engagement correlation", () => {
     }
 
     expect(appMap.get("VS Code")).toBeDefined();
-    expect(appMap.get("VS Code")!.sum / appMap.get("VS Code")!.count).toBe(0.8);
+    expect(appMap.get("VS Code")?.sum / appMap.get("VS Code")?.count).toBe(0.8);
   });
 
   it("uses window_title as fallback for app_name", () => {
@@ -66,7 +70,7 @@ describe("app-engagement correlation", () => {
 
   it("handles no screenshots gracefully", () => {
     const nodes = [mkNode("ep0", "eeg_point", { timestamp_unix: 1000, eeg_metrics: { engagement: 0.5 } })];
-    const ssNodes = nodes.filter(n => n.kind === "screenshot");
+    const ssNodes = nodes.filter((n) => n.kind === "screenshot");
     expect(ssNodes).toHaveLength(0);
   });
 });
@@ -92,7 +96,7 @@ describe("hour-of-day engagement pattern", () => {
     }
 
     // At least one hour should have 2 entries
-    const maxCount = Math.max(...[...hourMap.values()].map(v => v.count));
+    const maxCount = Math.max(...[...hourMap.values()].map((v) => v.count));
     expect(maxCount).toBeGreaterThanOrEqual(2);
   });
 });
@@ -124,7 +128,7 @@ describe("bookmark system", () => {
     ];
     // Dedup logic: keep latest, filter older
     const newEntry = bookmarks[2];
-    const deduped = [newEntry, ...bookmarks.filter(b => b.nodeId !== newEntry.nodeId)];
+    const deduped = [newEntry, ...bookmarks.filter((b) => b.nodeId !== newEntry.nodeId)];
     expect(deduped).toHaveLength(2);
     expect(deduped[0].text).toBe("z"); // latest first
   });
@@ -134,7 +138,7 @@ describe("bookmark system", () => {
       { nodeId: "ep0", text: "a" },
       { nodeId: "ep1", text: "b" },
     ];
-    const removed = bookmarks.filter(b => b.nodeId !== "ep0");
+    const removed = bookmarks.filter((b) => b.nodeId !== "ep0");
     expect(removed).toHaveLength(1);
     expect(removed[0].nodeId).toBe("ep1");
   });
@@ -158,7 +162,7 @@ describe("breadcrumb building", () => {
       for (let i = 0; i < 10 && cur; i++) {
         path.unshift(cur);
         const pid: string | undefined = cur.parent_id;
-        cur = pid != null ? allNodes.find(n => n.id === pid) : undefined;
+        cur = pid != null ? allNodes.find((n) => n.id === pid) : undefined;
       }
       return path;
     }
@@ -187,7 +191,7 @@ describe("search history", () => {
     const q = "b"; // existing entry
 
     // Save logic: move to front, dedup, limit
-    history = [q, ...history.filter(h => h !== q)].slice(0, MAX);
+    history = [q, ...history.filter((h) => h !== q)].slice(0, MAX);
     expect(history[0]).toBe("b");
     expect(history).toHaveLength(3); // no duplicate
   });
@@ -195,7 +199,7 @@ describe("search history", () => {
   it("adds new entry at front", () => {
     let history = ["a", "b"];
     const q = "new";
-    history = [q, ...history.filter(h => h !== q)].slice(0, 10);
+    history = [q, ...history.filter((h) => h !== q)].slice(0, 10);
     expect(history[0]).toBe("new");
     expect(history).toHaveLength(3);
   });
@@ -212,7 +216,7 @@ describe("LLM prompt building", () => {
       session_id: "20260310_10h",
     });
 
-    const m = node.eeg_metrics!;
+    const m = node.eeg_metrics ?? {};
     const parts: string[] = [];
     if (m.engagement != null) parts.push(`eng=${(m.engagement as number).toFixed(2)}`);
     if (m.relaxation != null) parts.push(`rel=${(m.relaxation as number).toFixed(2)}`);
@@ -278,7 +282,7 @@ describe("color mode logic", () => {
 
   it("falls back to timestamp when metrics missing", () => {
     const node = mkNode("ep0", "eeg_point", { timestamp_unix: 1000 });
-    const mode = "engagement";
+    const _mode = "engagement";
     const hasMetric = node.eeg_metrics?.engagement != null;
     expect(hasMetric).toBe(false);
     // Should fall back — not crash

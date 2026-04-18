@@ -220,7 +220,6 @@ const search: Record<string, string> = {
   "labels.reindex.done": "再埋め込み完了 — {updated}件のラベルを更新しました。",
   "labels.reindex.error": "再埋め込みに失敗: {error}",
 
-
   "search.snrFilterLabel": "SNR > 0 のみ",
   "search.snrFilterHint": "信号品質の低いエポックを除外します。",
   "search.deviceFilterLabel": "デバイス",

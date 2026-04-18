@@ -127,9 +127,7 @@ describe("closestScreenshot", () => {
 describe("AI Summary EEG metrics display", () => {
   // This mirrors the inline logic in +page.svelte lines 3010-3024
   function buildEegDetail(n: GraphNode): string {
-    const ts = n.timestamp_unix
-      ? new Date(n.timestamp_unix * 1000).toLocaleString()
-      : "unknown";
+    const ts = n.timestamp_unix ? new Date(n.timestamp_unix * 1000).toLocaleString() : "unknown";
     const m = (n.eeg_metrics ?? {}) as Record<string, number | null>;
     const parts = [`t=${ts}`, `dist=${n.distance.toFixed(3)}`];
     if (m.engagement != null) parts.push(`eng=${(m.engagement as number).toFixed(2)}`);

@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
+import { parseAssistantOutput } from "$lib/chat-utils";
 import { generateUmapPlaceholder } from "$lib/compare-types";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -36,9 +37,8 @@ import {
   parseDateTimeLocalInput,
 } from "$lib/format";
 import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
-import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
-import { parseAssistantOutput } from "$lib/chat-utils";
 import { t } from "$lib/i18n/index.svelte";
+import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
 import {
   buildTextKnnGraph,
   computeIxTimeHeatmap,
@@ -509,7 +509,13 @@ async function searchEeg() {
 // ── Interactive mode ──────────────────────────────────────────────────────
 let ixQuery = $state("");
 // Pipeline params loaded from persisted settings (see SETTINGS_KEY below)
-const _ps = (() => { try { return JSON.parse(localStorage.getItem("skill_search_settings") ?? "{}"); } catch { return {}; } })();
+const _ps = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("skill_search_settings") ?? "{}");
+  } catch {
+    return {};
+  }
+})();
 let ixKText = $state((_ps.kText as number) ?? 5);
 let ixKEeg = $state((_ps.kEeg as number) ?? 5);
 let ixKLabels = $state((_ps.kLabels as number) ?? 3);
@@ -527,7 +533,11 @@ let showIxCard = $state(true); // single collapsible card: query + pipeline + bu
 // ── Persist pipeline settings ─────────────────────────────────────────────
 const SETTINGS_KEY = "skill_search_settings";
 function loadSettings(): Record<string, unknown> {
-  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}"); } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
 }
 function saveSetting(key: string, value: unknown) {
   const s = loadSettings();
@@ -558,14 +568,36 @@ $effect(() => {
   saveSetting("kLabels", ixKLabels);
   saveSetting("reachMinutes", ixReachMinutes);
 });
-let ixPerf = $state<{ embed_ms?: number; graph_ms?: number; total_ms?: number; node_count?: number; edge_count?: number; cpu_usage_pct?: number; mem_used_mb?: number; mem_total_mb?: number } | null>(null);
-let ixSessions = $state<Array<{ session_id: string; epoch_count: number; duration_secs: number; best: boolean; avg_engagement: number; avg_snr: number; avg_relaxation: number; stddev_engagement: number }>>([]);
+let ixPerf = $state<{
+  embed_ms?: number;
+  graph_ms?: number;
+  total_ms?: number;
+  node_count?: number;
+  edge_count?: number;
+  cpu_usage_pct?: number;
+  mem_used_mb?: number;
+  mem_total_mb?: number;
+} | null>(null);
+let ixSessions = $state<
+  Array<{
+    session_id: string;
+    epoch_count: number;
+    duration_secs: number;
+    best: boolean;
+    avg_engagement: number;
+    avg_snr: number;
+    avg_relaxation: number;
+    stddev_engagement: number;
+  }>
+>([]);
 let ixSelectedNode = $state<import("$lib/search-types").GraphNode | null>(null); // selected node for detail panel
 let ixSortByRelevance = $state(false); // sort displayed nodes by relevance_score
 let ixHiddenKinds = $state<import("$lib/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
 let ixColorMode = $state<"timestamp" | "engagement" | "snr" | "session">("timestamp");
 let ixCompareNode = $state<import("$lib/search-types").GraphNode | null>(null); // second node for compare mode
-let ixDetailTimeseries = $state<Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>>([]);
+let ixDetailTimeseries = $state<
+  Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>
+>([]);
 
 // ── Insights & value extraction ──────────────────────────────────────────
 let ixLlmSummary = $state("");
@@ -574,44 +606,73 @@ let ixLlmLoading = $state(false);
 let ixLlmMaxTokens = $state(2048);
 let ixLlmSessionId = $state(0);
 let ixLlmPhase = $state<"" | "text" | "vision-loading" | "vision-analyzing" | "done">("");
-let ixLlmScreenshots = $state<Array<{url: string; label: string}>>([]);
+let ixLlmScreenshots = $state<Array<{ url: string; label: string }>>([]);
 let ixShowInsights = $state(false);
 
 /** Save the completed AI summary to a chat session for "Continue in Chat". */
 function saveSummaryToChat(summary: string) {
   const p = parseAssistantOutput(summary);
-  daemonInvoke<{id: number}>("new_chat_session").then(async (res) => {
-    const sid = res?.id ?? 0;
-    if (sid > 0) {
-      ixLlmSessionId = sid;
-      await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
-      await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null }).catch(() => {});
-      await daemonInvoke("save_chat_message", {
-        sessionId: sid, role: "assistant",
-        content: [p.leadIn, p.content].filter(s => s.trim()).join("\n\n"),
-        thinking: p.thinking || null,
-      }).catch(() => {});
-    }
-  }).catch(() => {});
+  daemonInvoke<{ id: number }>("new_chat_session")
+    .then(async (res) => {
+      const sid = res?.id ?? 0;
+      if (sid > 0) {
+        ixLlmSessionId = sid;
+        await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
+        await daemonInvoke("save_chat_message", {
+          sessionId: sid,
+          role: "user",
+          content: ixLlmPrompt,
+          thinking: null,
+        }).catch(() => {});
+        await daemonInvoke("save_chat_message", {
+          sessionId: sid,
+          role: "assistant",
+          content: [p.leadIn, p.content].filter((s) => s.trim()).join("\n\n"),
+          thinking: p.thinking || null,
+        }).catch(() => {});
+      }
+    })
+    .catch(() => {});
 }
 
 // Bookmarks (persisted in localStorage)
 const BOOKMARKS_KEY = "skill_search_bookmarks";
-let ixBookmarks = $state<Array<{ query: string; nodeId: string; kind: string; text: string; timestamp?: number; savedAt: number }>>([]);
-try { ixBookmarks = JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? "[]"); } catch { /* ignore */ }
+let ixBookmarks = $state<
+  Array<{ query: string; nodeId: string; kind: string; text: string; timestamp?: number; savedAt: number }>
+>([]);
+try {
+  ixBookmarks = JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? "[]");
+} catch {
+  /* ignore */
+}
 function saveBookmark(node: GraphNode) {
-  const entry = { query: ixQuery, nodeId: node.id, kind: node.kind, text: node.text ?? "", timestamp: node.timestamp_unix, savedAt: Date.now() };
-  ixBookmarks = [entry, ...ixBookmarks.filter(b => b.nodeId !== node.id)].slice(0, 50);
+  const entry = {
+    query: ixQuery,
+    nodeId: node.id,
+    kind: node.kind,
+    text: node.text ?? "",
+    timestamp: node.timestamp_unix,
+    savedAt: Date.now(),
+  };
+  ixBookmarks = [entry, ...ixBookmarks.filter((b) => b.nodeId !== node.id)].slice(0, 50);
   localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(ixBookmarks));
 }
 function removeBookmark(nodeId: string) {
-  ixBookmarks = ixBookmarks.filter(b => b.nodeId !== nodeId);
+  ixBookmarks = ixBookmarks.filter((b) => b.nodeId !== nodeId);
   localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(ixBookmarks));
 }
 
 // Computed insights from search results
-interface AppEngagement { app: string; avgEngagement: number; count: number }
-interface HourEngagement { hour: number; avgEngagement: number; count: number }
+interface AppEngagement {
+  app: string;
+  avgEngagement: number;
+  count: number;
+}
+interface HourEngagement {
+  hour: number;
+  avgEngagement: number;
+  count: number;
+}
 
 function computeInsights(nodes: GraphNode[]): {
   appCorrelation: AppEngagement[];
@@ -619,8 +680,8 @@ function computeInsights(nodes: GraphNode[]): {
   bestConditions: string[];
   topMetric: { key: string; value: number } | null;
 } {
-  const eegNodes = nodes.filter(n => n.kind === "eeg_point" && n.eeg_metrics);
-  const ssNodes = nodes.filter(n => n.kind === "screenshot" && (n.app_name || n.window_title));
+  const eegNodes = nodes.filter((n) => n.kind === "eeg_point" && n.eeg_metrics);
+  const ssNodes = nodes.filter((n) => n.kind === "screenshot" && (n.app_name || n.window_title));
 
   // App-engagement correlation: match screenshots to nearby EEG by timestamp
   const appMap = new Map<string, { sum: number; count: number }>();
@@ -629,8 +690,12 @@ function computeInsights(nodes: GraphNode[]): {
     if (!appName || !ss.timestamp_unix) continue;
     // Find nearest EEG epoch
     const nearest = eegNodes
-      .filter(n => n.timestamp_unix)
-      .sort((a, b) => Math.abs((a.timestamp_unix ?? 0) - ss.timestamp_unix!) - Math.abs((b.timestamp_unix ?? 0) - ss.timestamp_unix!))[0];
+      .filter((n) => n.timestamp_unix)
+      .sort(
+        (a, b) =>
+          Math.abs((a.timestamp_unix ?? 0) - (ss.timestamp_unix ?? 0)) -
+          Math.abs((b.timestamp_unix ?? 0) - (ss.timestamp_unix ?? 0)),
+      )[0];
     if (nearest?.eeg_metrics?.engagement != null) {
       const eng = nearest.eeg_metrics.engagement as number;
       const entry = appMap.get(appName) ?? { sum: 0, count: 0 };
@@ -672,7 +737,10 @@ function computeInsights(nodes: GraphNode[]): {
     let maxEng = 0;
     for (const n of eegNodes) {
       const eng = (n.eeg_metrics?.engagement as number) ?? 0;
-      if (eng > maxEng) { maxEng = eng; topMetric = { key: "peak engagement", value: eng }; }
+      if (eng > maxEng) {
+        maxEng = eng;
+        topMetric = { key: "peak engagement", value: eng };
+      }
     }
   }
 
@@ -683,10 +751,14 @@ function computeInsights(nodes: GraphNode[]): {
 const HISTORY_KEY = "skill_search_history";
 const MAX_HISTORY = 10;
 let ixSearchHistory = $state<string[]>([]);
-try { ixSearchHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]"); } catch { /* ignore */ }
+try {
+  ixSearchHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+} catch {
+  /* ignore */
+}
 function saveToHistory(q: string) {
   if (!q.trim()) return;
-  ixSearchHistory = [q.trim(), ...ixSearchHistory.filter(h => h !== q.trim())].slice(0, MAX_HISTORY);
+  ixSearchHistory = [q.trim(), ...ixSearchHistory.filter((h) => h !== q.trim())].slice(0, MAX_HISTORY);
   localStorage.setItem(HISTORY_KEY, JSON.stringify(ixSearchHistory));
 }
 
@@ -785,8 +857,26 @@ async function searchInteractive() {
       svg: string;
       svg_col: string;
       reembed_needed?: { stale: number; total: number; current_model: string };
-      perf?: { embed_ms: number; graph_ms: number; total_ms: number; node_count: number; edge_count: number; cpu_usage_pct: number; mem_used_mb: number; mem_total_mb: number };
-      sessions?: Array<{ session_id: string; epoch_count: number; duration_secs: number; best: boolean; avg_engagement: number; avg_snr: number; avg_relaxation: number; stddev_engagement: number }>;
+      perf?: {
+        embed_ms: number;
+        graph_ms: number;
+        total_ms: number;
+        node_count: number;
+        edge_count: number;
+        cpu_usage_pct: number;
+        mem_used_mb: number;
+        mem_total_mb: number;
+      };
+      sessions?: Array<{
+        session_id: string;
+        epoch_count: number;
+        duration_secs: number;
+        best: boolean;
+        avg_engagement: number;
+        avg_snr: number;
+        avg_relaxation: number;
+        stddev_engagement: number;
+      }>;
     }>("interactive_search", {
       query: ixQuery.trim(),
       kText: ixKText,
@@ -980,10 +1070,11 @@ async function fetchIxScreenshots() {
 function buildBreadcrumb(node: GraphNode, allNodes: GraphNode[]): GraphNode[] {
   const path: GraphNode[] = [];
   let cur: GraphNode | undefined = node;
-  for (let i = 0; i < 10 && cur; i++) { // max 10 depth
+  for (let i = 0; i < 10 && cur; i++) {
+    // max 10 depth
     path.unshift(cur);
     const pid: string | undefined = cur.parent_id;
-    cur = pid != null ? allNodes.find(n => n.id === pid) : undefined;
+    cur = pid != null ? allNodes.find((n) => n.id === pid) : undefined;
   }
   return path;
 }

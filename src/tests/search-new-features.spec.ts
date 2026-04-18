@@ -68,20 +68,30 @@ const MOCK_COMMANDS = {
     nodes: [
       { id: "q0", kind: "query", text: "test query", distance: 0 },
       {
-        id: "tl0", kind: "text_label", text: "focus session",
-        distance: 0.15, parent_id: "q0", timestamp_unix: 1710000000,
+        id: "tl0",
+        kind: "text_label",
+        text: "focus session",
+        distance: 0.15,
+        parent_id: "q0",
+        timestamp_unix: 1710000000,
         session_id: "20260310_10h",
       },
       {
-        id: "ep0_0", kind: "eeg_point", distance: 0.3,
-        parent_id: "tl0", timestamp_unix: 1710000060,
+        id: "ep0_0",
+        kind: "eeg_point",
+        distance: 0.3,
+        parent_id: "tl0",
+        timestamp_unix: 1710000060,
         session_id: "20260310_10h",
         relevance_score: 0.25,
         eeg_metrics: { relaxation: 0.6, engagement: 0.8, snr: 12 },
       },
       {
-        id: "ep0_1", kind: "eeg_point", distance: 0.5,
-        parent_id: "tl0", timestamp_unix: 1710000120,
+        id: "ep0_1",
+        kind: "eeg_point",
+        distance: 0.5,
+        parent_id: "tl0",
+        timestamp_unix: 1710000120,
         session_id: "20260310_10h",
         relevance_score: 0.45,
         eeg_metrics: { relaxation: 0.4, engagement: 0.5, snr: 8 },
@@ -98,23 +108,34 @@ const MOCK_COMMANDS = {
     sessions: [
       {
         session_id: "20260310_10h",
-        epoch_count: 42, duration_secs: 1200,
+        epoch_count: 42,
+        duration_secs: 1200,
         best: true,
-        avg_engagement: 0.72, avg_snr: 11.5,
-        avg_relaxation: 0.55, stddev_engagement: 0.12,
+        avg_engagement: 0.72,
+        avg_snr: 11.5,
+        avg_relaxation: 0.55,
+        stddev_engagement: 0.12,
       },
       {
         session_id: "20260311_14h",
-        epoch_count: 28, duration_secs: 840,
+        epoch_count: 28,
+        duration_secs: 840,
         best: false,
-        avg_engagement: 0.45, avg_snr: 8.2,
-        avg_relaxation: 0.38, stddev_engagement: 0.18,
+        avg_engagement: 0.45,
+        avg_snr: 8.2,
+        avg_relaxation: 0.38,
+        stddev_engagement: 0.18,
       },
     ],
     perf: {
-      embed_ms: 12, graph_ms: 45, total_ms: 57,
-      node_count: 4, edge_count: 3,
-      cpu_usage_pct: 23.5, mem_used_mb: 1024, mem_total_mb: 16384,
+      embed_ms: 12,
+      graph_ms: 45,
+      total_ms: 57,
+      node_count: 4,
+      edge_count: 3,
+      cpu_usage_pct: 23.5,
+      mem_used_mb: 1024,
+      mem_total_mb: 16384,
     },
   },
   search_screenshots_by_text: [],
@@ -151,7 +172,7 @@ test.describe("Interactive search — new features", () => {
     await openInteractive(page);
     // Wait for devices to load
     await page.waitForTimeout(500);
-    const options = page.locator('select[aria-label] option');
+    const options = page.locator("select[aria-label] option");
     // Should have "All devices" + 2 devices
     const count = await options.count();
     expect(count).toBeGreaterThanOrEqual(1);
