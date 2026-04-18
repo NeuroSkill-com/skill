@@ -701,6 +701,11 @@ pub(crate) async fn llm_add_model_impl(
         cat.auto_select();
     }
     persist_llm_catalog(&state);
+
+    if should_download {
+        spawn_model_download(state, req.filename.clone());
+    }
+
     Json(serde_json::json!({"ok": true, "filename": req.filename}))
 }
 

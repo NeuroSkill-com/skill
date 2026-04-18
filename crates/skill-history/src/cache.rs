@@ -137,111 +137,161 @@ fn dirs_for_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<std::pa
     dirs
 }
 
+/// Deserialize a JSON value as f64, treating null as 0.0.
+fn null_as_zero<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    let opt = <Option<f64> as serde::Deserialize>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or(0.0))
+}
+
 /// Serde helper: deserialize a single metrics_json blob into an EpochRow.
 #[derive(serde::Deserialize, Default)]
 struct MetricsBlob {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rel_delta: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rel_theta: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rel_alpha: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rel_beta: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rel_gamma: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     relaxation_score: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     engagement_score: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     faa: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     tar: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     bar: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     dtr: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     pse: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     apf: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     bps: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     snr: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     coherence: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     mu_suppression: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     mood: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     tbr: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     sef95: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     spectral_centroid: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     hjorth_activity: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     hjorth_mobility: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     hjorth_complexity: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     permutation_entropy: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     higuchi_fd: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     dfa_exponent: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     sample_entropy: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     pac_theta_gamma: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     laterality_index: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     hr: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     rmssd: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     sdnn: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     pnn50: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     lf_hf_ratio: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     respiratory_rate: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     spo2_estimate: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     perfusion_idx: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     stress_index: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     blink_count: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     blink_rate: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     head_pitch: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     head_roll: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     stillness: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     nod_count: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     shake_count: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     meditation: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     cognitive_load: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_zero")]
     drowsiness: f64,
 }
 
 impl MetricsBlob {
     fn to_epoch_row(&self, utc: f64) -> EpochRow {
+        // Recompute derived metrics when null (0.0) but band powers are available.
+        use skill_data::eeg_scores;
+        let has_bands = self.rel_alpha > 0.0 || self.rel_theta > 0.0 || self.rel_beta > 0.0;
+
+        let med = if self.meditation != 0.0 {
+            self.meditation
+        } else if has_bands {
+            let rmssd_opt = if self.rmssd > 0.0 { Some(self.rmssd) } else { None };
+            eeg_scores::meditation(self.rel_alpha, self.rel_beta, self.stillness, rmssd_opt)
+        } else {
+            0.0
+        };
+
+        let cog = if self.cognitive_load != 0.0 {
+            self.cognitive_load
+        } else if has_bands {
+            eeg_scores::cognitive_load(self.rel_theta, self.rel_alpha)
+        } else {
+            0.0
+        };
+
+        let drow = if self.drowsiness != 0.0 {
+            self.drowsiness
+        } else if has_bands {
+            let tar = if self.tar != 0.0 {
+                self.tar
+            } else if self.rel_alpha > 0.01 {
+                self.rel_theta / self.rel_alpha
+            } else {
+                1.0
+            };
+            eeg_scores::drowsiness(tar, self.rel_alpha)
+        } else {
+            0.0
+        };
+
+        let stress = if self.stress_index != 0.0 {
+            self.stress_index
+        } else if self.hr > 0.0 && self.rmssd > 0.0 && self.sdnn > 0.0 {
+            eeg_scores::stress_index(self.hr, self.rmssd, self.sdnn)
+        } else {
+            0.0
+        };
+
         EpochRow {
             t: utc,
             rd: self.rel_delta,
@@ -282,7 +332,7 @@ impl MetricsBlob {
             resp: self.respiratory_rate,
             spo2: self.spo2_estimate,
             perf: self.perfusion_idx,
-            stress: self.stress_index,
+            stress,
             blinks: self.blink_count,
             blink_r: self.blink_rate,
             pitch: self.head_pitch,
@@ -290,9 +340,9 @@ impl MetricsBlob {
             still: self.stillness,
             nods: self.nod_count,
             shakes: self.shake_count,
-            med: self.meditation,
-            cog: self.cognitive_load,
-            drow: self.drowsiness,
+            med,
+            cog,
+            drow,
             gpu: 0.0,
             gpu_render: 0.0,
             gpu_tiler: 0.0,
@@ -1279,6 +1329,318 @@ pub fn compute_status_history(
     })
 }
 
+// ── Backfill metrics_json from CSV ───────────────────────────────────────────
+
+/// Result of a backfill operation.
+#[derive(Debug, Default, serde::Serialize)]
+pub struct BackfillResult {
+    pub updated: usize,
+    pub scanned: usize,
+    pub skipped: usize,
+}
+
+/// Backfill `metrics_json` in the embeddings table for rows where it is NULL,
+/// by matching timestamps against the session `_metrics.csv` files.
+///
+/// Each 5-second EEG epoch in the CSV is matched to the closest embedding row
+/// within a ±3 second tolerance window.
+pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
+    let mut result = BackfillResult::default();
+
+    // Iterate all day directories.
+    let Ok(entries) = std::fs::read_dir(skill_dir) else {
+        return result;
+    };
+    let mut day_dirs: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name();
+            let s = name.to_string_lossy();
+            s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) && e.path().is_dir()
+        })
+        .map(|e| e.path())
+        .collect();
+    day_dirs.sort();
+
+    for day_dir in day_dirs {
+        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
+        if !db_path.exists() {
+            continue;
+        }
+
+        // Collect CSV timeseries for this day directory.
+        let Ok(dir_entries) = std::fs::read_dir(&day_dir) else {
+            continue;
+        };
+        let mut csv_epochs: Vec<(f64, String)> = Vec::new(); // (utc_secs, metrics_json)
+        for entry in dir_entries.filter_map(|e| e.ok()) {
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy().to_string();
+            // Match session CSVs like exg_TIMESTAMP.csv but not _metrics or _ppg
+            if !fname_str.ends_with(".csv")
+                || fname_str.contains("_metrics")
+                || fname_str.contains("_ppg")
+                || fname_str.contains("_cache")
+            {
+                continue;
+            }
+            let csv_path = entry.path();
+            if let Some(csv_result) = crate::metrics::load_metrics_csv(&csv_path) {
+                for row in &csv_result.timeseries {
+                    if row.relaxation == 0.0 && row.engagement == 0.0 && row.snr == 0.0 {
+                        continue; // Skip zero-signal epochs
+                    }
+                    let json = epoch_row_to_metrics_json(row);
+                    csv_epochs.push((row.t, json));
+                }
+            }
+        }
+
+        if csv_epochs.is_empty() {
+            continue;
+        }
+        // Sort CSV epochs by timestamp for binary search.
+        csv_epochs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Open DB read-write.
+        let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+            continue;
+        };
+        let _ = conn.execute_batch("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
+        migrate_embeddings_schema(&conn);
+
+        // Find embeddings with NULL metrics_json.
+        let Ok(mut stmt) = conn.prepare("SELECT rowid, timestamp FROM embeddings WHERE metrics_json IS NULL") else {
+            continue;
+        };
+        let rows: Vec<(i64, i64)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if rows.is_empty() {
+            continue;
+        }
+
+        let Ok(mut update_stmt) = conn.prepare("UPDATE embeddings SET metrics_json = ?1 WHERE rowid = ?2") else {
+            continue;
+        };
+
+        for (rowid, ts_raw) in &rows {
+            result.scanned += 1;
+            let utc_secs = skill_data::util::epoch_ts_to_unix(*ts_raw) as f64;
+
+            // Binary search for closest CSV epoch within ±3s tolerance.
+            let tolerance = 3.0;
+            let idx = csv_epochs
+                .binary_search_by(|probe| probe.0.partial_cmp(&utc_secs).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or_else(|i| i);
+
+            let mut best: Option<(f64, &str)> = None;
+            for &check_idx in &[idx.saturating_sub(1), idx, idx + 1] {
+                if check_idx >= csv_epochs.len() {
+                    continue;
+                }
+                let diff = (csv_epochs[check_idx].0 - utc_secs).abs();
+                if diff <= tolerance {
+                    if best.is_none() || diff < best.unwrap().0 {
+                        best = Some((diff, &csv_epochs[check_idx].1));
+                    }
+                }
+            }
+
+            if let Some((_, json)) = best {
+                if update_stmt.execute(rusqlite::params![json, rowid]).is_ok() {
+                    result.updated += 1;
+                } else {
+                    result.skipped += 1;
+                }
+            } else {
+                result.skipped += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "[backfill] done: {} updated, {} scanned, {} skipped",
+        result.updated, result.scanned, result.skipped
+    );
+    result
+}
+
+/// Serializable struct matching the MetricsBlob field names for backfill.
+#[derive(serde::Serialize)]
+struct MetricsBlobOut {
+    rel_delta: f64,
+    rel_theta: f64,
+    rel_alpha: f64,
+    rel_beta: f64,
+    rel_gamma: f64,
+    relaxation_score: f64,
+    engagement_score: f64,
+    faa: f64,
+    tar: f64,
+    bar: f64,
+    dtr: f64,
+    tbr: f64,
+    pse: f64,
+    apf: f64,
+    bps: f64,
+    snr: f64,
+    coherence: f64,
+    mu_suppression: f64,
+    mood: f64,
+    sef95: f64,
+    spectral_centroid: f64,
+    hjorth_activity: f64,
+    hjorth_mobility: f64,
+    hjorth_complexity: f64,
+    permutation_entropy: f64,
+    higuchi_fd: f64,
+    dfa_exponent: f64,
+    sample_entropy: f64,
+    pac_theta_gamma: f64,
+    laterality_index: f64,
+    hr: f64,
+    rmssd: f64,
+    sdnn: f64,
+    pnn50: f64,
+    lf_hf_ratio: f64,
+    respiratory_rate: f64,
+    spo2_estimate: f64,
+    perfusion_idx: f64,
+    stress_index: f64,
+    blink_count: f64,
+    blink_rate: f64,
+    head_pitch: f64,
+    head_roll: f64,
+    stillness: f64,
+    nod_count: f64,
+    shake_count: f64,
+    meditation: f64,
+    cognitive_load: f64,
+    drowsiness: f64,
+}
+
+/// Convert an EpochRow back to a metrics_json string compatible with MetricsBlob.
+fn epoch_row_to_metrics_json(row: &EpochRow) -> String {
+    let blob = MetricsBlobOut {
+        rel_delta: row.rd,
+        rel_theta: row.rt,
+        rel_alpha: row.ra,
+        rel_beta: row.rb,
+        rel_gamma: row.rg,
+        relaxation_score: row.relaxation,
+        engagement_score: row.engagement,
+        faa: row.faa,
+        tar: row.tar,
+        bar: row.bar,
+        dtr: row.dtr,
+        tbr: row.tbr,
+        pse: row.pse,
+        apf: row.apf,
+        bps: row.bps,
+        snr: row.snr,
+        coherence: row.coherence,
+        mu_suppression: row.mu,
+        mood: row.mood,
+        sef95: row.sef95,
+        spectral_centroid: row.sc,
+        hjorth_activity: row.ha,
+        hjorth_mobility: row.hm,
+        hjorth_complexity: row.hc,
+        permutation_entropy: row.pe,
+        higuchi_fd: row.hfd,
+        dfa_exponent: row.dfa,
+        sample_entropy: row.se,
+        pac_theta_gamma: row.pac,
+        laterality_index: row.lat,
+        hr: row.hr,
+        rmssd: row.rmssd,
+        sdnn: row.sdnn,
+        pnn50: row.pnn50,
+        lf_hf_ratio: row.lf_hf,
+        respiratory_rate: row.resp,
+        spo2_estimate: row.spo2,
+        perfusion_idx: row.perf,
+        stress_index: row.stress,
+        blink_count: row.blinks,
+        blink_rate: row.blink_r,
+        head_pitch: row.pitch,
+        head_roll: row.roll,
+        stillness: row.still,
+        nod_count: row.nods,
+        shake_count: row.shakes,
+        meditation: row.med,
+        cognitive_load: row.cog,
+        drowsiness: row.drow,
+    };
+    serde_json::to_string(&blob).unwrap_or_default()
+}
+
+/// Look up per-epoch metrics from CSV for a specific time range.
+/// Returns a sorted Vec of (utc_secs, EpochRow) that can be used to enrich
+/// search results when embeddings lack metrics_json.
+pub fn lookup_csv_metrics_for_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<EpochRow> {
+    let mut rows: Vec<EpochRow> = Vec::new();
+
+    for path in dirs_for_range(skill_dir, start_utc, end_utc) {
+        let Ok(dir_entries) = std::fs::read_dir(&path) else {
+            continue;
+        };
+        for entry in dir_entries.filter_map(|e| e.ok()) {
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy().to_string();
+            if !fname_str.ends_with(".csv")
+                || fname_str.contains("_metrics")
+                || fname_str.contains("_ppg")
+                || fname_str.contains("_cache")
+            {
+                continue;
+            }
+            let csv_path = entry.path();
+            if let Some(csv_result) = crate::metrics::load_metrics_csv(&csv_path) {
+                for row in csv_result.timeseries {
+                    let row_utc = row.t as u64;
+                    if row_utc >= start_utc
+                        && row_utc <= end_utc
+                        && (row.relaxation != 0.0 || row.engagement != 0.0 || row.snr != 0.0)
+                    {
+                        rows.push(row);
+                    }
+                }
+            }
+        }
+    }
+    rows.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
+    rows
+}
+
+/// Find the closest CSV epoch for a given UTC timestamp within ±3s tolerance.
+pub fn find_closest_csv_epoch<'a>(csv_epochs: &'a [EpochRow], utc_secs: f64) -> Option<&'a EpochRow> {
+    let tolerance = 3.0;
+    let idx = csv_epochs
+        .binary_search_by(|probe| probe.t.partial_cmp(&utc_secs).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or_else(|i| i);
+
+    let mut best: Option<(f64, &EpochRow)> = None;
+    for &check_idx in &[idx.saturating_sub(1), idx, idx.min(csv_epochs.len().saturating_sub(1))] {
+        if check_idx >= csv_epochs.len() {
+            continue;
+        }
+        let diff = (csv_epochs[check_idx].t - utc_secs).abs();
+        if diff <= tolerance {
+            if best.is_none() || diff < best.unwrap().0 {
+                best = Some((diff, &csv_epochs[check_idx]));
+            }
+        }
+    }
+    best.map(|(_, row)| row)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1852,5 +2214,278 @@ mod tests {
         assert_eq!(insights["total_neighbors"], 2);
         assert!(insights["distance_stats"].is_object());
         assert!(insights["time_span_hours"].as_f64().unwrap() > 0.0);
+    }
+
+    // ── metrics_from_epoch equivalence tests ────────────────────────────
+
+    #[test]
+    fn timeseries_returns_nonzero_engagement_from_metrics_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        let json = sample_metrics_json(0.3, 0.2, 0.25, 0.15);
+        let rows_data: Vec<(i64, String)> = (0..5).map(|i| (base_ts + i * 5000, json.clone())).collect();
+        let rows_ref: Vec<(i64, &str)> = rows_data.iter().map(|(ts, j)| (*ts, j.as_str())).collect();
+        create_fixture_db(dir.path(), "20231114", &rows_ref);
+
+        let result = get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert_eq!(result.len(), 5);
+        // engagement_score=50 in sample_metrics_json → EpochRow.engagement
+        assert!(
+            (result[0].engagement - 50.0).abs() < 0.01,
+            "engagement should be 50.0, got {}",
+            result[0].engagement
+        );
+        assert!(
+            (result[0].relaxation - 50.0).abs() < 0.01,
+            "relaxation should be 50.0, got {}",
+            result[0].relaxation
+        );
+        assert!(
+            (result[0].snr - 15.0).abs() < 0.01,
+            "snr should be 15.0, got {}",
+            result[0].snr
+        );
+    }
+
+    #[test]
+    fn timeseries_returns_zero_engagement_from_empty_metrics_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        // Empty JSON → all fields default to 0
+        let rows: Vec<(i64, &str)> = (0..3).map(|i| (base_ts + i * 5000, "{}")).collect();
+        create_fixture_db(dir.path(), "20231114", &rows);
+
+        let result = get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].engagement, 0.0, "empty JSON should give 0 engagement");
+        assert_eq!(result[0].relaxation, 0.0, "empty JSON should give 0 relaxation");
+        assert_eq!(result[0].snr, 0.0, "empty JSON should give 0 snr");
+    }
+
+    #[test]
+    fn timeseries_null_metrics_json_gives_zero_engagement() {
+        let dir = tempfile::tempdir().unwrap();
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let db_path = day_dir.join("eeg.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                device_id TEXT,
+                device_name TEXT,
+                hnsw_id INTEGER DEFAULT 0,
+                eeg_embedding BLOB,
+                label TEXT,
+                metrics_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
+        )
+        .unwrap();
+        // Insert with NULL metrics_json
+        conn.execute(
+            "INSERT INTO embeddings (timestamp, metrics_json) VALUES (?1, NULL)",
+            rusqlite::params![1700000000000i64],
+        )
+        .unwrap();
+
+        let result = get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].engagement, 0.0, "NULL metrics_json should give 0 engagement");
+    }
+
+    // ── 14-digit timestamp format tests ────────────────────────────────
+
+    #[test]
+    fn timeseries_14digit_timestamps_return_metrics() {
+        let dir = tempfile::tempdir().unwrap();
+        let json = sample_metrics_json(0.3, 0.2, 0.25, 0.15);
+        // 14-digit format: 20260303224751 (2026-03-03 22:47:51 UTC)
+        let rows: Vec<(i64, String)> = vec![
+            (20260303224751, json.clone()),
+            (20260303224753, json.clone()),
+            (20260303224756, json.clone()),
+        ];
+        let rows_ref: Vec<(i64, &str)> = rows.iter().map(|(ts, j)| (*ts, j.as_str())).collect();
+        create_fixture_db(dir.path(), "20260303", &rows_ref);
+
+        // The search time range in unix seconds
+        // 20260303224751 → 2026-03-03 22:47:51 UTC → unix 1772578071
+        let result = get_session_timeseries(dir.path(), 1772578060, 1772578090);
+        assert!(!result.is_empty(), "should find epochs with 14-digit timestamps");
+        assert!(
+            (result[0].engagement - 50.0).abs() < 0.01,
+            "14-digit epochs should have engagement=50.0, got {}",
+            result[0].engagement
+        );
+    }
+
+    // ── epoch_row_to_metrics_json roundtrip ─────────────────────────────
+
+    #[test]
+    fn epoch_row_to_metrics_json_roundtrip() {
+        let row = EpochRow {
+            t: 1700000000.0,
+            engagement: 50.0,
+            relaxation: 30.0,
+            snr: 15.0,
+            ra: 0.025,
+            rb: 0.05,
+            rt: 0.06,
+            rd: 0.3,
+            rg: 0.05,
+            faa: 0.1,
+            mood: 60.0,
+            hr: 72.0,
+            med: 55.0,
+            cog: 40.0,
+            drow: 10.0,
+            ..Default::default()
+        };
+        let json_str = epoch_row_to_metrics_json(&row);
+        let blob: MetricsBlob = serde_json::from_str(&json_str).unwrap();
+        let back = blob.to_epoch_row(1700000000.0);
+        assert!((back.engagement - 50.0).abs() < 0.01);
+        assert!((back.relaxation - 30.0).abs() < 0.01);
+        assert!((back.snr - 15.0).abs() < 0.01);
+        assert!((back.ra - 0.025).abs() < 0.001);
+        assert!((back.hr - 72.0).abs() < 0.01);
+    }
+
+    // ── find_closest_csv_epoch ──────────────────────────────────────────
+
+    #[test]
+    fn find_closest_csv_epoch_exact_match() {
+        let epochs = vec![
+            EpochRow {
+                t: 100.0,
+                engagement: 10.0,
+                ..Default::default()
+            },
+            EpochRow {
+                t: 105.0,
+                engagement: 20.0,
+                ..Default::default()
+            },
+            EpochRow {
+                t: 110.0,
+                engagement: 30.0,
+                ..Default::default()
+            },
+        ];
+        let found = find_closest_csv_epoch(&epochs, 105.0);
+        assert!(found.is_some());
+        assert!((found.unwrap().engagement - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn find_closest_csv_epoch_within_tolerance() {
+        let epochs = vec![
+            EpochRow {
+                t: 100.0,
+                engagement: 10.0,
+                ..Default::default()
+            },
+            EpochRow {
+                t: 105.0,
+                engagement: 20.0,
+                ..Default::default()
+            },
+        ];
+        let found = find_closest_csv_epoch(&epochs, 106.5); // within 3s of 105
+        assert!(found.is_some());
+        assert!((found.unwrap().engagement - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn find_closest_csv_epoch_outside_tolerance() {
+        let epochs = vec![EpochRow {
+            t: 100.0,
+            engagement: 10.0,
+            ..Default::default()
+        }];
+        let found = find_closest_csv_epoch(&epochs, 110.0); // >3s away
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn find_closest_csv_epoch_empty_slice() {
+        let found = find_closest_csv_epoch(&[], 100.0);
+        assert!(found.is_none());
+    }
+
+    // ── backfill_eeg_metrics ────────────────────────────────────────────
+
+    #[test]
+    fn backfill_skips_dir_without_csvs() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a DB with NULL metrics_json but no CSV files
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let db_path = day_dir.join("eeg.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                device_id TEXT,
+                device_name TEXT,
+                hnsw_id INTEGER DEFAULT 0,
+                eeg_embedding BLOB,
+                label TEXT,
+                metrics_json TEXT
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO embeddings (timestamp, metrics_json) VALUES (?1, NULL)",
+            rusqlite::params![1700000000000i64],
+        )
+        .unwrap();
+        drop(conn);
+
+        let result = backfill_eeg_metrics(dir.path());
+        assert_eq!(result.updated, 0, "no CSV → no backfill");
+        assert_eq!(result.scanned, 0, "no CSV → should not even scan DB rows");
+    }
+
+    #[test]
+    fn backfill_empty_dir_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = backfill_eeg_metrics(dir.path());
+        assert_eq!(result.updated, 0);
+        assert_eq!(result.scanned, 0);
+        assert_eq!(result.skipped, 0);
+    }
+
+    #[test]
+    #[ignore] // requires real data at ~/.skill
+    fn real_data_timeseries_has_metrics() {
+        let skill_dir = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join(".skill");
+        if !skill_dir.exists() {
+            return;
+        }
+        let epochs = get_session_timeseries(&skill_dir, 1772578069, 1772579269);
+        if epochs.is_empty() {
+            return;
+        }
+        let with_metrics = epochs
+            .iter()
+            .filter(|ep| ep.engagement != 0.0 || ep.relaxation != 0.0 || ep.snr != 0.0)
+            .count();
+        assert!(
+            with_metrics > 0,
+            "real data should have epochs with metrics: found {}/{} with nonzero eng/rel/snr",
+            with_metrics,
+            epochs.len()
+        );
+        eprintln!("Real data: {}/{} epochs have metrics", with_metrics, epochs.len());
+        for ep in epochs.iter().take(3) {
+            eprintln!(
+                "  t={:.0} eng={:.1} rel={:.1} snr={:.1}",
+                ep.t, ep.engagement, ep.relaxation, ep.snr
+            );
+        }
     }
 }

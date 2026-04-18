@@ -39,6 +39,13 @@ fn cache_get(key: u64) -> Option<serde_json::Value> {
         None
     }
 }
+/// Clear the search result cache (e.g. after backfill enriches metrics).
+pub fn cache_clear() {
+    if let Ok(mut guard) = SEARCH_CACHE.lock() {
+        guard.clear();
+    }
+}
+
 fn cache_put(key: u64, val: serde_json::Value) {
     if let Ok(mut guard) = SEARCH_CACHE.lock() {
         // Evict oldest if full.
@@ -677,9 +684,9 @@ fn interactive_search_impl(
             faa: if ep.faa != 0.0 { Some(ep.faa) } else { None },
             tar: if ep.tar != 0.0 { Some(ep.tar) } else { None },
             mood: if ep.mood != 0.0 { Some(ep.mood) } else { None },
-            meditation: None,
-            cognitive_load: None,
-            drowsiness: None,
+            meditation: if ep.med != 0.0 { Some(ep.med) } else { None },
+            cognitive_load: if ep.cog != 0.0 { Some(ep.cog) } else { None },
+            drowsiness: if ep.drow != 0.0 { Some(ep.drow) } else { None },
             hr: if ep.hr != 0.0 { Some(ep.hr) } else { None },
             snr: if ep.snr != 0.0 { Some(ep.snr) } else { None },
             rel_alpha: if ep.ra != 0.0 { Some(ep.ra) } else { None },
@@ -729,6 +736,9 @@ fn interactive_search_impl(
     // Dedup sets for O(1) duplicate detection.
     let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut seen_eeg_ts: std::collections::HashSet<u64> = std::collections::HashSet::new();
+
+    // Lazy CSV metrics fallback: loaded on first epoch that lacks metrics_json.
+    let mut csv_fallback: Option<Vec<skill_history::EpochRow>> = None;
 
     // Precompute constants used inside the loop.
     let reach_secs = reach_minutes * 60;
@@ -818,7 +828,67 @@ fn interactive_search_impl(
                 let eeg_id = format!("ep{i}_{j}");
                 let ep_sid = session_id_from_ts(ep_ts);
 
-                let metrics = metrics_from_epoch(ep);
+                let mut metrics = metrics_from_epoch(ep);
+
+                // Fallback: if embedding lacks metrics, try CSV lookup.
+                let mut csv_engagement = ep.engagement;
+                if metrics.is_none() {
+                    // Lazy-load CSV epochs on first miss.
+                    if csv_fallback.is_none() {
+                        let global_start = filtered_neighbors
+                            .iter()
+                            .filter_map(|nb| {
+                                if nb.eeg_start > 0 {
+                                    Some(nb.eeg_start.saturating_sub(reach_secs))
+                                } else {
+                                    None
+                                }
+                            })
+                            .min()
+                            .unwrap_or(0);
+                        let global_end = filtered_neighbors
+                            .iter()
+                            .filter_map(|nb| {
+                                if nb.eeg_start > 0 {
+                                    Some(nb.eeg_start + reach_secs)
+                                } else {
+                                    None
+                                }
+                            })
+                            .max()
+                            .unwrap_or(0);
+                        csv_fallback = Some(skill_history::lookup_csv_metrics_for_range(
+                            skill_dir,
+                            global_start,
+                            global_end,
+                        ));
+                    }
+                    if let Some(ref csv_epochs) = csv_fallback {
+                        if let Some(csv_row) = skill_history::find_closest_csv_epoch(csv_epochs, ep_ts as f64) {
+                            csv_engagement = csv_row.engagement;
+                            metrics = Some(NeighborMetrics {
+                                relaxation: Some(csv_row.relaxation),
+                                engagement: Some(csv_row.engagement),
+                                faa: if csv_row.faa != 0.0 { Some(csv_row.faa) } else { None },
+                                tar: if csv_row.tar != 0.0 { Some(csv_row.tar) } else { None },
+                                mood: if csv_row.mood != 0.0 { Some(csv_row.mood) } else { None },
+                                meditation: if csv_row.med != 0.0 { Some(csv_row.med) } else { None },
+                                cognitive_load: if csv_row.cog != 0.0 { Some(csv_row.cog) } else { None },
+                                drowsiness: if csv_row.drow != 0.0 { Some(csv_row.drow) } else { None },
+                                hr: if csv_row.hr != 0.0 { Some(csv_row.hr) } else { None },
+                                snr: if csv_row.snr != 0.0 { Some(csv_row.snr) } else { None },
+                                rel_alpha: if csv_row.ra != 0.0 { Some(csv_row.ra) } else { None },
+                                rel_beta: if csv_row.rb != 0.0 { Some(csv_row.rb) } else { None },
+                                rel_theta: if csv_row.rt != 0.0 { Some(csv_row.rt) } else { None },
+                                headache_index: None,
+                                migraine_index: None,
+                                consciousness_lzc: None,
+                                consciousness_wakefulness: None,
+                                consciousness_integration: None,
+                            });
+                        }
+                    }
+                }
 
                 // Accumulate session stats (skips zero-signal epochs internally)
                 session_stats
@@ -830,7 +900,7 @@ fn interactive_search_impl(
                 let time_dist = (ep_ts as f64 - ts as f64).abs() / reach_secs as f64;
 
                 // Composite relevance score: text_sim * 0.5 + time_dist * 0.3 + (1 - norm_engagement) * 0.2
-                let norm_engagement = (ep.engagement.clamp(0.0, 1.0)) as f32;
+                let norm_engagement = (csv_engagement.clamp(0.0, 1.0)) as f32;
                 let relevance = nb.distance * 0.5 + time_dist as f32 * 0.3 + (1.0 - norm_engagement) * 0.2;
 
                 nodes.push(InteractiveGraphNode {
@@ -1429,5 +1499,170 @@ mod tests {
         let json = serde_json::to_value(&edge).unwrap();
         assert_eq!(json["kind"], "ocr_sim");
         assert!((json["distance"].as_f64().unwrap() - 0.15).abs() < 1e-6);
+    }
+
+    // ── metrics_from_epoch ──────────────────────────────────────────────
+
+    #[test]
+    fn metrics_from_epoch_returns_some_for_nonzero_metrics() {
+        // Simulate what interactive_search_impl does
+        let metrics_from_epoch = |ep: &skill_history::EpochRow| -> Option<skill_commands::NeighborMetrics> {
+            if ep.relaxation == 0.0 && ep.engagement == 0.0 && ep.snr == 0.0 {
+                return None;
+            }
+            Some(skill_commands::NeighborMetrics {
+                relaxation: Some(ep.relaxation),
+                engagement: Some(ep.engagement),
+                snr: if ep.snr != 0.0 { Some(ep.snr) } else { None },
+                ..Default::default()
+            })
+        };
+
+        let ep = skill_history::EpochRow {
+            t: 1700000000.0,
+            engagement: 50.0,
+            relaxation: 30.0,
+            snr: 15.0,
+            ..Default::default()
+        };
+        let m = metrics_from_epoch(&ep);
+        assert!(m.is_some(), "should return Some for nonzero engagement/relaxation/snr");
+        let m = m.unwrap();
+        assert!((m.engagement.unwrap() - 50.0).abs() < 0.01);
+        assert!((m.relaxation.unwrap() - 30.0).abs() < 0.01);
+        assert!((m.snr.unwrap() - 15.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn metrics_from_epoch_returns_none_for_all_zero() {
+        let metrics_from_epoch = |ep: &skill_history::EpochRow| -> Option<skill_commands::NeighborMetrics> {
+            if ep.relaxation == 0.0 && ep.engagement == 0.0 && ep.snr == 0.0 {
+                return None;
+            }
+            Some(skill_commands::NeighborMetrics::default())
+        };
+
+        let ep = skill_history::EpochRow {
+            t: 1700000000.0,
+            engagement: 0.0,
+            relaxation: 0.0,
+            snr: 0.0,
+            ..Default::default()
+        };
+        assert!(
+            metrics_from_epoch(&ep).is_none(),
+            "should return None when all three are zero"
+        );
+    }
+
+    // ── End-to-end: timeseries → metrics_from_epoch pipeline ────────────
+
+    #[test]
+    fn timeseries_to_metrics_pipeline_with_valid_json() {
+        let dir = TempDir::new().unwrap();
+        let base_ts = 1700000000i64 * 1000;
+        let json = serde_json::json!({
+            "rel_delta": 0.3, "rel_theta": 0.2, "rel_alpha": 0.025, "rel_beta": 0.05,
+            "rel_gamma": 0.05, "relaxation_score": 30.0, "engagement_score": 50.0,
+            "snr": 15.0, "faa": 0.1, "mood": 60.0, "hr": 72.0
+        })
+        .to_string();
+        let rows_data: Vec<(i64, String)> = (0..3).map(|i| (base_ts + i * 5000, json.clone())).collect();
+        let rows_ref: Vec<(i64, &str)> = rows_data.iter().map(|(ts, j)| (*ts, j.as_str())).collect();
+
+        // Create fixture DB
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let db_path = day_dir.join("eeg.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                device_id TEXT, device_name TEXT,
+                hnsw_id INTEGER DEFAULT 0,
+                eeg_embedding BLOB, label TEXT,
+                metrics_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
+        )
+        .unwrap();
+        for (ts, j) in &rows_ref {
+            conn.execute(
+                "INSERT INTO embeddings (timestamp, metrics_json) VALUES (?1, ?2)",
+                rusqlite::params![ts, j],
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        // Step 1: get timeseries
+        let epochs = skill_history::get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert!(!epochs.is_empty(), "should find epochs");
+
+        // Step 2: metrics_from_epoch (same logic as interactive_search_impl)
+        for ep in &epochs {
+            assert!(
+                ep.engagement != 0.0 || ep.relaxation != 0.0 || ep.snr != 0.0,
+                "epoch at t={} should have nonzero metrics (eng={}, rel={}, snr={})",
+                ep.t,
+                ep.engagement,
+                ep.relaxation,
+                ep.snr
+            );
+        }
+
+        // Step 3: Would produce metrics in the search response (not "(no EEG metrics stored)")
+        let has_metrics = epochs
+            .iter()
+            .filter(|ep| ep.engagement != 0.0 || ep.relaxation != 0.0 || ep.snr != 0.0)
+            .count();
+        assert_eq!(has_metrics, epochs.len(), "all epochs should have metrics");
+    }
+
+    #[test]
+    fn timeseries_to_metrics_pipeline_with_null_json() {
+        let dir = TempDir::new().unwrap();
+        let day_dir = dir.path().join("20231114");
+        std::fs::create_dir_all(&day_dir).unwrap();
+        let db_path = day_dir.join("eeg.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                device_id TEXT, device_name TEXT,
+                hnsw_id INTEGER DEFAULT 0,
+                eeg_embedding BLOB, label TEXT,
+                metrics_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
+        )
+        .unwrap();
+        // NULL metrics_json
+        conn.execute(
+            "INSERT INTO embeddings (timestamp, metrics_json) VALUES (?1, NULL)",
+            rusqlite::params![1700000000000i64],
+        )
+        .unwrap();
+        drop(conn);
+
+        let epochs = skill_history::get_session_timeseries(dir.path(), 1700000000, 1700000050);
+        assert!(!epochs.is_empty());
+        // All zero → metrics_from_epoch would return None → "(no EEG metrics stored)"
+        assert_eq!(epochs[0].engagement, 0.0);
+        assert_eq!(epochs[0].relaxation, 0.0);
+        assert_eq!(epochs[0].snr, 0.0);
+    }
+
+    // ── cache_clear ────────────────────────────────────────────────────
+
+    #[test]
+    fn cache_clear_removes_all_entries() {
+        let key = cache_key(&["test", "cache"]);
+        cache_put(key, serde_json::json!({"cached": true}));
+        assert!(cache_get(key).is_some(), "should be cached");
+        cache_clear();
+        assert!(cache_get(key).is_none(), "cache should be empty after clear");
     }
 }

@@ -192,6 +192,9 @@ onMount(() => {
     )
     .catch(() => {});
 
+  // Fire-and-forget: backfill metrics_json for old embeddings from CSV data.
+  daemonInvoke("backfill_eeg_metrics", {}).catch(() => {});
+
   // Load available devices for the filter dropdown.
   daemonInvoke<{ devices: string[] }>("list_search_devices")
     .then((r) => {
@@ -3014,6 +3017,12 @@ useWindowTitle("window.title.search");
                           if (m.rel_alpha != null) parts.push(`α=${(m.rel_alpha as number).toFixed(3)}`);
                           if (m.rel_beta != null) parts.push(`β=${(m.rel_beta as number).toFixed(3)}`);
                           if (m.rel_theta != null) parts.push(`θ=${(m.rel_theta as number).toFixed(3)}`);
+                          if (m.faa != null) parts.push(`faa=${(m.faa as number).toFixed(3)}`);
+                          if (m.mood != null && (m.mood as number) > 0) parts.push(`mood=${(m.mood as number).toFixed(1)}`);
+                          if (m.meditation != null && (m.meditation as number) > 0) parts.push(`meditation=${(m.meditation as number).toFixed(1)}`);
+                          if (m.cognitive_load != null && (m.cognitive_load as number) > 0) parts.push(`cognitive_load=${(m.cognitive_load as number).toFixed(1)}`);
+                          if (m.drowsiness != null && (m.drowsiness as number) > 0) parts.push(`drowsiness=${(m.drowsiness as number).toFixed(1)}`);
+                          if (m.tar != null) parts.push(`tar=${(m.tar as number).toFixed(3)}`);
                           if (m.hr != null && (m.hr as number) > 0) parts.push(`hr=${(m.hr as number).toFixed(0)}`);
                           if (n.relevance_score != null) parts.push(`relevance=${n.relevance_score.toFixed(3)}`);
                           if (n.session_id) parts.push(`session=${n.session_id}`);

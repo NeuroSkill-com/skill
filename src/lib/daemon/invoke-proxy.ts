@@ -93,6 +93,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_session_location: [P, "/v1/analysis/location"],
   get_session_embedding_count: [P, "/v1/analysis/embedding-count"],
   compute_umap_compare: [P, "/v1/analysis/umap"],
+  backfill_eeg_metrics: [P, "/v1/analysis/backfill-metrics"],
 
   // Labels
   submit_label: [P, "/v1/labels"],
