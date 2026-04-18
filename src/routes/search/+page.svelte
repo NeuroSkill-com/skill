@@ -571,8 +571,10 @@ let ixDetailTimeseries = $state<Array<{ t: number; ra: number; rb: number; rt: n
 let ixLlmSummary = $state("");
 let ixLlmPrompt = $state("");
 let ixLlmLoading = $state(false);
-let ixLlmMaxTokens = $state(1024);
+let ixLlmMaxTokens = $state(2048);
 let ixLlmSessionId = $state(0);
+let ixLlmPhase = $state<"" | "text" | "vision-loading" | "vision-analyzing" | "done">("");
+let ixLlmScreenshots = $state<Array<{url: string; label: string}>>([]);
 let ixShowInsights = $state(false);
 
 /** Save the completed AI summary to a chat session for "Continue in Chat". */
@@ -3156,11 +3158,13 @@ Reference specific metrics and timestamps.`;
                         ixLlmSummary = ""; // show prompt immediately while streaming
                         ixLlmSessionId = 0; // new summary = new session
                         ixLlmLoading = true;
+                        ixLlmPhase = "text";
+                        ixLlmScreenshots = [];
 
                         // Suggest optimal max_tokens based on prompt size, but user controls final value
                         const promptTokens = Math.ceil(prompt.length / 4);
-                        const suggested = Math.min(4096, Math.max(512, promptTokens * 2));
-                        if (ixLlmMaxTokens === 1024 && suggested > ixLlmMaxTokens) ixLlmMaxTokens = suggested; // auto-bump only from default
+                        const suggested = Math.min(8192, Math.max(2048, promptTokens * 2));
+                        if (ixLlmMaxTokens <= 2048 && suggested > ixLlmMaxTokens) ixLlmMaxTokens = suggested;
                         const maxTokens = ixLlmMaxTokens;
 
                         // ── Phase 1: Stream text summary ──────────────
@@ -3187,89 +3191,122 @@ Reference specific metrics and timestamps.`;
                           if (!acc) ixLlmSummary = "__NO_LLM__";
                           ixLlmLoading = false;
                         }
-                        if (!acc) { ixLlmLoading = false; return; }
+                        if (!acc) { ixLlmLoading = false; ixLlmPhase = ""; return; }
 
                         // ── Phase 2: Screenshot vision follow-up ─────
                         const screenshotFiles = ssNodes.slice(0, 3).filter(n => n.filename);
                         if (screenshotFiles.length > 0) {
+                          // Show screenshot thumbnails immediately
+                          ixLlmScreenshots = screenshotFiles.map(sn => ({
+                            url: imgSrc(sn.filename!),
+                            label: [sn.app_name, sn.window_title, sn.timestamp_unix ? new Date(sn.timestamp_unix * 1000).toLocaleString() : ""].filter(Boolean).join(" — "),
+                          }));
+
                           try {
-                            // Check if vision is supported; if not, try loading mmproj
+                            // Ensure vision is available — load mmproj if needed
                             type LlmStatus = { supports_vision?: boolean; status?: string };
                             let st = await daemonInvoke<LlmStatus>("get_llm_server_status");
+
                             if (!st.supports_vision) {
-                              // Check if a downloaded mmproj exists in the catalog
                               type CatEntry = { filename: string; is_mmproj: boolean; state: string };
                               type Catalog = { entries: CatEntry[] };
                               const cat = await daemonInvoke<Catalog>("get_llm_catalog");
                               const mmproj = cat?.entries?.find(e => e.is_mmproj && e.state === "downloaded");
                               if (mmproj) {
-                                acc += "\n\n*Loading vision model...*";
-                                ixLlmSummary = acc;
+                                ixLlmPhase = "vision-loading";
                                 await daemonInvoke("switch_llm_mmproj", { filename: mmproj.filename });
-                                // Wait for server to restart with vision support
-                                for (let i = 0; i < 30; i++) {
+                                // Wait for server to restart with vision
+                                for (let i = 0; i < 60; i++) {
                                   await new Promise(r => setTimeout(r, 1000));
                                   st = await daemonInvoke<LlmStatus>("get_llm_server_status");
                                   if (st.supports_vision) break;
                                   if (st.status === "stopped") break;
                                 }
-                                // Remove loading message
-                                acc = acc.replace("\n\n*Loading vision model...*", "");
-                                ixLlmSummary = acc;
                               }
                             }
 
-                            if (st.supports_vision) {
+                            if (!st.supports_vision) {
+                              // No vision available — skip screenshot analysis
+                              ixLlmScreenshots = [];
+                            } else {
                               // Fetch screenshot images as base64
+                              ixLlmPhase = "vision-analyzing";
                               const imgParts: Array<{type: string; text?: string; image_url?: {url: string}}> = [];
-                              imgParts.push({ type: "text", text: `You just analyzed EEG data for "${ixQuery}". Here are ${screenshotFiles.length} screenshot(s) captured during those sessions. Describe what was on screen and how it relates to the brain state patterns you identified. Be concise (2-3 sentences per screenshot).` });
+                              imgParts.push({ type: "text", text: `Now look at these ${screenshotFiles.length} screenshot(s) captured during the "${ixQuery}" sessions. Update and enhance your analysis by incorporating what you see on screen. Explain how the visible activity relates to the EEG brain state patterns (engagement, relaxation, focus) you identified. Rewrite your full response with the screenshot context integrated — don't repeat raw metrics, but add new insights from the visual context.` });
+
+                              let loadedCount = 0;
                               for (const sn of screenshotFiles) {
-                                const url = imgSrc(sn.filename!);
-                                const resp = await fetch(url);
-                                if (!resp.ok) continue;
-                                const blob = await resp.blob();
-                                const buf = await blob.arrayBuffer();
-                                const bytes = new Uint8Array(buf);
-                                let b64 = "";
-                                for (let i = 0; i < bytes.length; i += 8192) {
-                                  b64 += String.fromCharCode(...bytes.subarray(i, i + 8192));
-                                }
-                                b64 = btoa(b64);
-                                const mime = blob.type || "image/webp";
-                                imgParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } });
-                                const ts = sn.timestamp_unix ? new Date(sn.timestamp_unix * 1000).toLocaleString() : "";
-                                const label = [sn.app_name, sn.window_title, ts].filter(Boolean).join(" — ");
-                                if (label) imgParts.push({ type: "text", text: `(${label})` });
+                                try {
+                                  const url = imgSrc(sn.filename!);
+                                  // Convert to PNG via canvas (LLM decoder doesn't support WebP)
+                                  const dataUrl: string = await new Promise((resolve, reject) => {
+                                    const img = new Image();
+                                    img.crossOrigin = "anonymous";
+                                    img.onload = () => {
+                                      const canvas = document.createElement("canvas");
+                                      canvas.width = img.naturalWidth;
+                                      canvas.height = img.naturalHeight;
+                                      const ctx2d = canvas.getContext("2d");
+                                      if (!ctx2d) { reject(new Error("no canvas")); return; }
+                                      ctx2d.drawImage(img, 0, 0);
+                                      resolve(canvas.toDataURL("image/png"));
+                                    };
+                                    img.onerror = () => reject(new Error("img load failed"));
+                                    img.src = url;
+                                  });
+                                  imgParts.push({ type: "image_url", image_url: { url: dataUrl } });
+                                  const ts = sn.timestamp_unix ? new Date(sn.timestamp_unix * 1000).toLocaleString() : "";
+                                  const label = [sn.app_name, sn.window_title, ts].filter(Boolean).join(" — ");
+                                  if (label) imgParts.push({ type: "text", text: `(${label})` });
+                                  loadedCount++;
+                                } catch { /* skip this screenshot */ }
                               }
 
-                              if (imgParts.length > 1) {
-                                acc += "\n\n---\n\n**Screenshot Analysis:**\n\n";
-                                ixLlmSummary = acc;
+                              if (loadedCount > 0) {
+                                const textSummary = acc; // preserve original
+                                let visionError = "";
+                                let visionAcc = "";
+
                                 const visionChannel = {
-                                  onmessage: (chunk2: { type: string; content?: string }) => {
+                                  onmessage: (chunk2: { type: string; content?: string; message?: string }) => {
                                     if (chunk2.type === "delta" && chunk2.content) {
-                                      acc += chunk2.content;
-                                      ixLlmSummary = acc;
+                                      visionAcc += chunk2.content;
+                                      // Replace the display with the enhanced version
+                                      ixLlmSummary = visionAcc;
+                                    } else if (chunk2.type === "error") {
+                                      visionError = chunk2.message ?? "Vision analysis failed";
                                     }
-                                    // "done" handled after await
                                   }
                                 };
                                 try {
                                   await daemonInvoke("chat_completions_ipc", {
                                     messages: [
                                       { role: "user", content: prompt },
-                                      { role: "assistant", content: acc.split("---")[0].trim() },
+                                      { role: "assistant", content: textSummary },
                                       { role: "user", content: imgParts },
                                     ],
                                     params: { temperature: 0.3, max_tokens: maxTokens },
                                     channel: visionChannel,
                                   });
-                                } catch { /* vision follow-up failed, text summary still valid */ }
+                                } catch (e) {
+                                  visionError = String(e);
+                                }
+                                if (visionAcc) {
+                                  // Use the enhanced version
+                                  acc = visionAcc;
+                                } else if (visionError) {
+                                  console.warn("Vision analysis error:", visionError);
+                                }
+                                // If vision failed, keep the original text summary (acc unchanged)
                               }
                             }
-                          } catch { /* vision setup failed, text summary still valid */ }
+                          } catch (e) {
+                            // Vision failed — log but keep text summary
+                            console.warn("Screenshot vision analysis failed:", e);
+                          }
                         }
 
+                        ixLlmPhase = "done";
                         ixLlmLoading = false;
                         saveSummaryToChat(acc);
                       }}
@@ -3281,7 +3318,7 @@ Reference specific metrics and timestamps.`;
                       <!-- Max tokens slider -->
                       <div class="flex items-center gap-1.5 ml-auto">
                         <span class="text-[0.5rem] text-muted-foreground/40 select-none">{t("search.maxTokens")}</span>
-                        <input type="range" min="256" max="4096" step="256" bind:value={ixLlmMaxTokens}
+                        <input type="range" min="512" max="8192" step="256" bind:value={ixLlmMaxTokens}
                                class="w-16 h-1 accent-violet-500 cursor-pointer" />
                         <span class="text-[0.5rem] text-muted-foreground/50 font-mono w-8 text-right">{ixLlmMaxTokens}</span>
                       </div>
@@ -3302,7 +3339,7 @@ Reference specific metrics and timestamps.`;
                   {#if ixLlmLoading && !ixLlmSummary}
                     <div class="flex items-center gap-2 text-sm text-muted-foreground/50">
                       <div class="w-3 h-3 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
-                      {t("search.generatingSummary")}
+                      Analyzing EEG data...
                     </div>
                   {:else if ixLlmSummary === "__NO_LLM__"}
                     <div class="flex flex-col gap-2">
@@ -3367,12 +3404,75 @@ Reference specific metrics and timestamps.`;
                         <MarkdownRenderer content={parsed.content} />
                       </div>
                     {/if}
-                    {#if ixLlmLoading}
+                    <!-- Screenshot thumbnails -->
+                    {#if ixLlmScreenshots.length > 0}
+                      <div class="mt-3 pt-3 border-t border-border/20">
+                        <div class="flex items-center gap-2 mb-2.5">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                               class="w-3.5 h-3.5 shrink-0 {ixLlmPhase === 'vision-analyzing' ? 'text-cyan-500' : 'text-muted-foreground/50'}">
+                            <rect x="2" y="3" width="20" height="14" rx="2"/><circle cx="8" cy="10" r="2"/>
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                          </svg>
+                          <span class="text-[0.65rem] font-semibold text-foreground/60 uppercase tracking-wider">
+                            {ixLlmScreenshots.length} Screenshot{ixLlmScreenshots.length !== 1 ? "s" : ""} Found
+                          </span>
+                          {#if ixLlmPhase === "vision-loading"}
+                            <div class="flex items-center gap-1.5 ml-1">
+                              <div class="w-2 h-2 rounded-full border border-amber-500/40 border-t-amber-500 animate-spin"></div>
+                              <span class="text-[0.6rem] text-amber-500/70">Loading vision model...</span>
+                            </div>
+                          {:else if ixLlmPhase === "vision-analyzing"}
+                            <div class="flex items-center gap-1.5 ml-1">
+                              <div class="w-2 h-2 rounded-full border border-cyan-500/40 border-t-cyan-500 animate-spin"></div>
+                              <span class="text-[0.6rem] text-cyan-500/70">Analyzing...</span>
+                            </div>
+                          {:else if ixLlmPhase === "done" || !ixLlmLoading}
+                            <span class="text-[0.5rem] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500/70 font-medium">done</span>
+                          {/if}
+                        </div>
+                        <div class="flex gap-2 overflow-x-auto pb-1">
+                          {#each ixLlmScreenshots as ss, idx}
+                            {@const analyzing = ixLlmPhase === "vision-analyzing"}
+                            {@const loading = ixLlmPhase === "vision-loading"}
+                            <div class="shrink-0 flex flex-col items-start gap-0.5">
+                              <div class="relative rounded-md border overflow-hidden
+                                          {analyzing ? 'border-cyan-500/40 ring-1 ring-cyan-500/30' : 'border-border/30'}
+                                          {loading ? 'opacity-50' : ''}">
+                                <img src={ss.url} alt={ss.label}
+                                     class="h-20 w-auto max-w-[14rem] object-cover bg-muted/20"
+                                     onerror={(e) => {
+                                       const t = e.currentTarget as HTMLImageElement;
+                                       t.style.height = "3rem";
+                                       t.style.width = "5rem";
+                                       t.alt = "Failed to load";
+                                     }}
+                                     loading="lazy" />
+                                {#if analyzing}
+                                  <div class="absolute inset-0 bg-cyan-500/5 animate-pulse pointer-events-none"></div>
+                                {/if}
+                              </div>
+                              {#if ss.label}
+                                <span class="text-[0.5rem] text-muted-foreground/40 truncate max-w-[14rem] leading-tight">
+                                  {ss.label}
+                                </span>
+                              {/if}
+                            </div>
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
+
+                    {#if ixLlmLoading && ixLlmPhase === "text"}
                       <div class="flex items-center gap-2 mt-2 text-xs text-muted-foreground/40">
                         <div class="w-2.5 h-2.5 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
-                        {t("search.generatingSummary")}
+                        Generating...
                       </div>
-                    {:else}
+                    {:else if ixLlmLoading && ixLlmPhase === "vision-analyzing"}
+                      <div class="flex items-center gap-2 mt-2 text-xs text-cyan-500/50">
+                        <div class="w-2.5 h-2.5 rounded-full border-2 border-cyan-500/30 border-t-cyan-500 animate-spin"></div>
+                        Analyzing screenshots...
+                      </div>
+                    {:else if !ixLlmLoading}
                       <!-- Continue in Chat button -->
                       <div class="flex items-center gap-2 mt-3 pt-2 border-t border-border/20">
                         <button onclick={async () => {

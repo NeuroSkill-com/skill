@@ -272,78 +272,42 @@ async function handleChannelCommand(cmd: string, args: AnyArgs): Promise<void> {
   };
 
   if (cmd === "chat_completions_ipc") {
-    // Chat: SSE streaming via fetch — tokens arrive progressively.
+    // Chat completions: POST then progressively emit content.
+    // WKWebView buffers SSE responses, so we use a non-streaming POST
+    // and simulate streaming by emitting the content in small chunks.
     try {
-      const b = await (await import("./http")).getDaemonBaseUrl();
-      const url = `http://127.0.0.1:${b.port}${path.startsWith("/") ? path : `/${path}`}`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${b.token}`,
-        },
-        body: JSON.stringify({ ...rest, stream: true }),
-        signal: AbortSignal.timeout(300_000),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        emit({ type: "error", message: text || `${resp.status} ${resp.statusText}` });
+      const result = await daemonPost<AnyArgs>(path, rest, 300_000);
+      if (result?.error) {
+        emit({ type: "error", message: String(result.error) });
         return;
       }
-
-      const reader = resp.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let promptTokens = 0;
-        let completionTokens = 0;
-        let finishReason = "stop";
-
-        const processLine = (line: string) => {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) return;
-          const json = trimmed.slice(5).trim();
-          if (!json || json === "[DONE]") return;
-          try {
-            const chunk = JSON.parse(json);
-            const choice = chunk?.choices?.[0];
-            const delta = choice?.delta;
-            // Content token
-            if (delta?.content) emit({ type: "delta", content: delta.content });
-            // Reasoning/thinking token
-            if (delta?.reasoning_content) emit({ type: "thinking", content: delta.reasoning_content });
-            if (choice?.finish_reason) finishReason = choice.finish_reason;
-            if (chunk?.usage) {
-              promptTokens = chunk.usage.prompt_tokens ?? promptTokens;
-              completionTokens = chunk.usage.completion_tokens ?? completionTokens;
-            }
-          } catch { /* skip malformed */ }
-        };
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) processLine(line);
+      const choice = result?.choices?.[0];
+      const content = choice?.message?.content ?? result?.content ?? "";
+      if (content) {
+        // Emit progressively — wait for browser paint between chunks
+        const raf = () => new Promise<void>(r => {
+          if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => r());
+          else setTimeout(r, 16);
+        });
+        const words = content.split(/(\s+)/);
+        let batch = "";
+        for (let i = 0; i < words.length; i++) {
+          batch += words[i];
+          if (batch.length >= 30 || i === words.length - 1) {
+            emit({ type: "delta", content: batch });
+            batch = "";
+            if (i < words.length - 1) await raf();
           }
-        } finally {
-          // Flush remaining buffer
-          for (const line of buffer.split("\n")) processLine(line);
         }
-        emit({ type: "done", finish_reason: finishReason, prompt_tokens: promptTokens, completion_tokens: completionTokens });
-      } else {
-        // No streaming support — fall back to non-streaming POST
-        const result = await daemonPost<AnyArgs>(path, rest, 300_000);
-        if (result?.error) { emit({ type: "error", message: String(result.error) }); return; }
-        const choice = result?.choices?.[0];
-        const content = choice?.message?.content ?? result?.content ?? "";
-        if (content) emit({ type: "delta", content });
-        emit({ type: "done", finish_reason: choice?.finish_reason ?? "stop", prompt_tokens: result?.usage?.prompt_tokens ?? 0, completion_tokens: result?.usage?.completion_tokens ?? 0 });
       }
+      const usage = result?.usage;
+      emit({
+        type: "done",
+        finish_reason: choice?.finish_reason ?? result?.finish_reason ?? "stop",
+        prompt_tokens: usage?.prompt_tokens ?? result?.prompt_tokens ?? 0,
+        completion_tokens: usage?.completion_tokens ?? result?.completion_tokens ?? 0,
+        n_ctx: result?.n_ctx ?? 0,
+      });
     } catch (e: unknown) {
       emit({ type: "error", message: String(e) });
     }
