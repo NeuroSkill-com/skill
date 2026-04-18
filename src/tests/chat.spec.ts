@@ -84,7 +84,7 @@ function buildMockScript() {
         case "load_chat_session":
           return Promise.resolve({ session_id: args?.sessionId ?? 1, messages: MESSAGES });
         case "new_chat_session":
-          return Promise.resolve(99);
+          return Promise.resolve({ id: 99 });
         case "save_chat_message":
           return Promise.resolve(100);
         case "save_chat_tool_calls":

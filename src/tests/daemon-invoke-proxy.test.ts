@@ -88,4 +88,40 @@ describe("invoke-proxy route table", () => {
     expect(src).toContain("catch");
     expect(src).toContain("Daemon HTTP failed");
   });
+
+  it("new_chat_session callers extract .id from response object", async () => {
+    const fs = await import("node:fs");
+
+    // Check search page
+    const searchSrc = fs.readFileSync("src/routes/search/+page.svelte", "utf-8");
+    // Must use {id: number} type and extract .id — never treat response as raw number
+    const newSessionCalls = [...searchSrc.matchAll(/daemonInvoke.*new_chat_session/g)];
+    expect(newSessionCalls.length).toBeGreaterThan(0);
+    for (const match of newSessionCalls) {
+      expect(match[0]).toContain("{id: number}");
+    }
+    // Must not do `const sid = await daemonInvoke<number>("new_chat_session")`
+    expect(searchSrc).not.toMatch(/daemonInvoke<number>\("new_chat_session"\)/);
+
+    // Check chat page
+    const chatSrc = fs.readFileSync("src/routes/chat/+page.svelte", "utf-8");
+    expect(chatSrc).not.toMatch(/daemonInvoke<number>\("new_chat_session"\)/);
+    expect(chatSrc).toContain('{id: number}>("new_chat_session")');
+  });
+
+  it("chat_completions_ipc uses SSE streaming (stream: true)", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("src/lib/daemon/invoke-proxy.ts", "utf-8");
+
+    // The chat completions handler must send stream: true for progressive token delivery
+    // Find the handler block: from 'if (cmd === "chat_completions_ipc")' to its closing
+    const handlerStart = src.indexOf('cmd === "chat_completions_ipc"');
+    expect(handlerStart).toBeGreaterThan(-1);
+    const chatBlock = src.slice(handlerStart, handlerStart + 3000);
+    expect(chatBlock).toContain("stream: true");
+    // Must parse SSE "data:" lines
+    expect(chatBlock).toContain('data:');
+    // Must extract delta.content from OpenAI SSE chunks
+    expect(chatBlock).toContain("delta?.content");
+  });
 });

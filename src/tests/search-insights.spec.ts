@@ -51,7 +51,7 @@ const MOCK_COMMANDS = {
   list_search_devices: { devices: ["MuseS-F921"] },
   get_recent_labels: [],
   get_session_timeseries: [],
-  new_chat_session: 42,
+  new_chat_session: { id: 42 },
   rename_chat_session: { ok: true },
   save_chat_message: { ok: true },
   search_labels_by_text: {

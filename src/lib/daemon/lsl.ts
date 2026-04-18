@@ -74,16 +74,16 @@ export async function lslCancelSecondary(_sessionId: string): Promise<void> {
 
 export async function lslPairStream(req: LslPairStreamRequest): Promise<void> {
   await daemonInvoke("lsl_pair_stream", {
-    source_id: req.sourceId,
+    sourceId: req.sourceId,
     name: req.name,
-    stream_type: req.streamType,
+    streamType: req.streamType,
     channels: req.channels,
-    sample_rate: req.sampleRate,
+    sampleRate: req.sampleRate,
   });
 }
 
 export async function lslUnpairStream(sourceId: string): Promise<void> {
-  await daemonInvoke("lsl_unpair_stream", { source_id: sourceId });
+  await daemonInvoke("lsl_unpair_stream", { sourceId: sourceId });
 }
 
 export async function lslIrohStart<T>(): Promise<T> {

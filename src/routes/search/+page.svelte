@@ -575,6 +575,24 @@ let ixLlmMaxTokens = $state(1024);
 let ixLlmSessionId = $state(0);
 let ixShowInsights = $state(false);
 
+/** Save the completed AI summary to a chat session for "Continue in Chat". */
+function saveSummaryToChat(summary: string) {
+  const p = parseAssistantOutput(summary);
+  daemonInvoke<{id: number}>("new_chat_session").then(async (res) => {
+    const sid = res?.id ?? 0;
+    if (sid > 0) {
+      ixLlmSessionId = sid;
+      await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
+      await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null }).catch(() => {});
+      await daemonInvoke("save_chat_message", {
+        sessionId: sid, role: "assistant",
+        content: [p.leadIn, p.content].filter(s => s.trim()).join("\n\n"),
+        thinking: p.thinking || null,
+      }).catch(() => {});
+    }
+  }).catch(() => {});
+}
+
 // Bookmarks (persisted in localStorage)
 const BOOKMARKS_KEY = "skill_search_bookmarks";
 let ixBookmarks = $state<Array<{ query: string; nodeId: string; kind: string; text: string; timestamp?: number; savedAt: number }>>([]);
@@ -3145,49 +3163,115 @@ Reference specific metrics and timestamps.`;
                         if (ixLlmMaxTokens === 1024 && suggested > ixLlmMaxTokens) ixLlmMaxTokens = suggested; // auto-bump only from default
                         const maxTokens = ixLlmMaxTokens;
 
-                        // Stream via channel callback
+                        // ── Phase 1: Stream text summary ──────────────
                         let acc = "";
-                        const channel = {
+                        const textChannel = {
                           onmessage: (chunk: { type: string; content?: string; message?: string }) => {
                             if (chunk.type === "delta" && chunk.content) {
                               acc += chunk.content;
                               ixLlmSummary = acc;
-                            } else if (chunk.type === "done") {
-                              ixLlmLoading = false;
-                              if (!acc) { ixLlmSummary = "__NO_LLM__"; }
-                              else {
-                                // Auto-save to chat history
-                                const p = parseAssistantOutput(acc);
-                                daemonInvoke<{id: number}>("new_chat_session").then(async (res) => {
-                                  const sid = res?.id ?? 0;
-                                  if (sid > 0) {
-                                    ixLlmSessionId = sid;
-                                    await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
-                                    await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null }).catch(() => {});
-                                    await daemonInvoke("save_chat_message", {
-                                      sessionId: sid, role: "assistant",
-                                      content: [p.leadIn, p.content].filter(s => s.trim()).join("\n\n"),
-                                      thinking: p.thinking || null,
-                                    }).catch(() => {});
-                                  }
-                                }).catch(() => {});
-                              }
                             } else if (chunk.type === "error") {
-                              ixLlmSummary = "__NO_LLM__";
+                              ixLlmSummary = acc || "__NO_LLM__";
                               ixLlmLoading = false;
                             }
+                            // "done" handled after await below
                           }
                         };
                         try {
                           await daemonInvoke("chat_completions_ipc", {
                             messages: [{ role: "user", content: prompt }],
                             params: { temperature: 0.3, max_tokens: maxTokens },
-                            channel,
+                            channel: textChannel,
                           });
                         } catch {
                           if (!acc) ixLlmSummary = "__NO_LLM__";
                           ixLlmLoading = false;
                         }
+                        if (!acc) { ixLlmLoading = false; return; }
+
+                        // ── Phase 2: Screenshot vision follow-up ─────
+                        const screenshotFiles = ssNodes.slice(0, 3).filter(n => n.filename);
+                        if (screenshotFiles.length > 0) {
+                          try {
+                            // Check if vision is supported; if not, try loading mmproj
+                            type LlmStatus = { supports_vision?: boolean; status?: string };
+                            let st = await daemonInvoke<LlmStatus>("get_llm_server_status");
+                            if (!st.supports_vision) {
+                              // Check if a downloaded mmproj exists in the catalog
+                              type CatEntry = { filename: string; is_mmproj: boolean; state: string };
+                              type Catalog = { entries: CatEntry[] };
+                              const cat = await daemonInvoke<Catalog>("get_llm_catalog");
+                              const mmproj = cat?.entries?.find(e => e.is_mmproj && e.state === "downloaded");
+                              if (mmproj) {
+                                acc += "\n\n*Loading vision model...*";
+                                ixLlmSummary = acc;
+                                await daemonInvoke("switch_llm_mmproj", { filename: mmproj.filename });
+                                // Wait for server to restart with vision support
+                                for (let i = 0; i < 30; i++) {
+                                  await new Promise(r => setTimeout(r, 1000));
+                                  st = await daemonInvoke<LlmStatus>("get_llm_server_status");
+                                  if (st.supports_vision) break;
+                                  if (st.status === "stopped") break;
+                                }
+                                // Remove loading message
+                                acc = acc.replace("\n\n*Loading vision model...*", "");
+                                ixLlmSummary = acc;
+                              }
+                            }
+
+                            if (st.supports_vision) {
+                              // Fetch screenshot images as base64
+                              const imgParts: Array<{type: string; text?: string; image_url?: {url: string}}> = [];
+                              imgParts.push({ type: "text", text: `You just analyzed EEG data for "${ixQuery}". Here are ${screenshotFiles.length} screenshot(s) captured during those sessions. Describe what was on screen and how it relates to the brain state patterns you identified. Be concise (2-3 sentences per screenshot).` });
+                              for (const sn of screenshotFiles) {
+                                const url = imgSrc(sn.filename!);
+                                const resp = await fetch(url);
+                                if (!resp.ok) continue;
+                                const blob = await resp.blob();
+                                const buf = await blob.arrayBuffer();
+                                const bytes = new Uint8Array(buf);
+                                let b64 = "";
+                                for (let i = 0; i < bytes.length; i += 8192) {
+                                  b64 += String.fromCharCode(...bytes.subarray(i, i + 8192));
+                                }
+                                b64 = btoa(b64);
+                                const mime = blob.type || "image/webp";
+                                imgParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } });
+                                const ts = sn.timestamp_unix ? new Date(sn.timestamp_unix * 1000).toLocaleString() : "";
+                                const label = [sn.app_name, sn.window_title, ts].filter(Boolean).join(" — ");
+                                if (label) imgParts.push({ type: "text", text: `(${label})` });
+                              }
+
+                              if (imgParts.length > 1) {
+                                acc += "\n\n---\n\n**Screenshot Analysis:**\n\n";
+                                ixLlmSummary = acc;
+                                const visionChannel = {
+                                  onmessage: (chunk2: { type: string; content?: string }) => {
+                                    if (chunk2.type === "delta" && chunk2.content) {
+                                      acc += chunk2.content;
+                                      ixLlmSummary = acc;
+                                    }
+                                    // "done" handled after await
+                                  }
+                                };
+                                try {
+                                  await daemonInvoke("chat_completions_ipc", {
+                                    messages: [
+                                      { role: "user", content: prompt },
+                                      { role: "assistant", content: acc.split("---")[0].trim() },
+                                      { role: "user", content: imgParts },
+                                    ],
+                                    params: { temperature: 0.3, max_tokens: maxTokens },
+                                    channel: visionChannel,
+                                  });
+                                } catch { /* vision follow-up failed, text summary still valid */ }
+                              }
+                            }
+                          } catch { /* vision setup failed, text summary still valid */ }
+                        }
+
+                        ixLlmLoading = false;
+                        saveSummaryToChat(acc);
                       }}
                       class="text-xs px-2.5 py-1 rounded-md border border-violet-500/30
                              bg-violet-500/10 text-violet-600 dark:text-violet-400
