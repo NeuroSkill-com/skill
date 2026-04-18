@@ -39,10 +39,10 @@ skill-skills = { path = "../skill-skills" }
 llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "metal", "native"] }
+llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "vulkan", "native"] }
+llama-cpp-4 = { version = "0.2.43", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
 
 [dev-dependencies]
 tempfile = "3"

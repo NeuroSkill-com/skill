@@ -197,6 +197,11 @@ jobs:
               # Clean stale llama-cpp-sys artifacts so cargo rebuilds from source
               find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
               find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
+              # Also clean skill-daemon artifacts — the failed link leaves
+              # partial state that cargo considers "fresh", so without this
+              # the retry skips rebuilding the daemon entirely.
+              find src-tauri/target -name "*skill_daemon*" -exec rm -rf {} + 2>/dev/null || true
+              find src-tauri/target -name "*skill-daemon*" -not -path "*/skill-daemon-*" -exec rm -rf {} + 2>/dev/null || true
               run_cmd
             else
               exit 1

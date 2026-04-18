@@ -6,7 +6,8 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { onMount } from "svelte";
+import { onMount, untrack } from "svelte";
+import { replaceState } from "$app/navigation";
 import { parseAssistantOutput } from "$lib/chat-utils";
 import { generateUmapPlaceholder } from "$lib/compare-types";
 import { Badge } from "$lib/components/ui/badge";
@@ -223,13 +224,15 @@ onMount(() => {
 
 $effect(() => {
   const currentMode = mode;
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("mode") !== currentMode) {
-    params.set("mode", currentMode);
-    const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
-    history.replaceState(history.state, "", next);
-  }
-  emitSearchMode(currentMode);
+  untrack(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") !== currentMode) {
+      params.set("mode", currentMode);
+      const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      replaceState(next, {});
+    }
+    emitSearchMode(currentMode);
+  });
 });
 
 // ── Shared ───────────────────────────────────────────────────────────────
@@ -3099,6 +3102,22 @@ useWindowTitle("window.title.search");
                       <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span>
                     </div>
                   </div>
+                {/if}
+
+                <!-- Empty state when no EEG insights available -->
+                {#if insights.bestConditions.length === 0 && insights.appCorrelation.length === 0 && insights.hourPattern.length === 0}
+                  {@const allNodes = [...ixNodes, ...(ixDisplayGraph?.nodes ?? [])]}
+                  {@const eegCount = allNodes.filter(n => n.kind === "eeg_point").length}
+                  {@const hasMetrics = allNodes.some(n => n.kind === "eeg_point" && n.eeg_metrics?.engagement != null)}
+                  <p class="text-xs text-muted-foreground/50 italic mb-3">
+                    {#if eegCount === 0}
+                      {t("search.insightsNoEeg")}
+                    {:else if !hasMetrics}
+                      {t("search.insightsMetricsPending")}
+                    {:else}
+                      {t("search.insightsNoData")}
+                    {/if}
+                  </p>
                 {/if}
 
                 <!-- LLM Summary -->

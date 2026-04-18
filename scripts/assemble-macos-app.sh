@@ -113,7 +113,9 @@ DPLIST
 
   echo "  ✓ skill-daemon.app"
 else
-  echo "  ⚠ missing daemon sidecar: $DAEMON_SRC" >&2
+  echo "ERROR: missing daemon sidecar: $DAEMON_SRC" >&2
+  echo "The daemon must be built before assembling the .app bundle." >&2
+  exit 1
 fi
 
 # ── Info.plist ────────────────────────────────────────────────────────────
