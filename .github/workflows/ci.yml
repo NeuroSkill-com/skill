@@ -106,7 +106,7 @@ jobs:
       # Swatinem/rust-cache gives smarter per-crate invalidation and automatic
       # pruning vs manual actions/cache — matches the release workflows.
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> src-tauri/target"
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
@@ -527,7 +527,7 @@ jobs:
       # Swatinem/rust-cache is used here (matching the release workflow) for
       # smarter per-crate invalidation vs the manual actions/cache approach.
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> src-tauri/target"
           shared-key: windows-ci-x86_64-pc-windows-msvc-v1
@@ -760,7 +760,7 @@ jobs:
       # so the E2E job picks up clippy's already-compiled artifacts.
       # save-if: false — only rust-check writes to this cache.
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> src-tauri/target"
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
@@ -867,7 +867,7 @@ jobs:
 
       # Reuse rust-check's cached artifacts (save-if: false — only rust-check writes).
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> src-tauri/target"
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
@@ -954,7 +954,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> src-tauri/target"
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
