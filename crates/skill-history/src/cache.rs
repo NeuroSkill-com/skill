@@ -1368,41 +1368,8 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
             continue;
         }
 
-        // Collect CSV timeseries for this day directory.
-        let Ok(dir_entries) = std::fs::read_dir(&day_dir) else {
-            continue;
-        };
-        let mut csv_epochs: Vec<(f64, String)> = Vec::new(); // (utc_secs, metrics_json)
-        for entry in dir_entries.filter_map(|e| e.ok()) {
-            let fname = entry.file_name();
-            let fname_str = fname.to_string_lossy().to_string();
-            // Match session CSVs like exg_TIMESTAMP.csv but not _metrics or _ppg
-            if !fname_str.ends_with(".csv")
-                || fname_str.contains("_metrics")
-                || fname_str.contains("_ppg")
-                || fname_str.contains("_cache")
-            {
-                continue;
-            }
-            let csv_path = entry.path();
-            if let Some(csv_result) = crate::metrics::load_metrics_csv(&csv_path) {
-                for row in &csv_result.timeseries {
-                    if row.relaxation == 0.0 && row.engagement == 0.0 && row.snr == 0.0 {
-                        continue; // Skip zero-signal epochs
-                    }
-                    let json = epoch_row_to_metrics_json(row);
-                    csv_epochs.push((row.t, json));
-                }
-            }
-        }
-
-        if csv_epochs.is_empty() {
-            continue;
-        }
-        // Sort CSV epochs by timestamp for binary search.
-        csv_epochs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Open DB read-write.
+        // Open DB first and check if there are any NULL metrics_json rows.
+        // This avoids loading CSVs when there is nothing to backfill.
         let Ok(conn) = rusqlite::Connection::open(&db_path) else {
             continue;
         };
@@ -1424,6 +1391,38 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
         if rows.is_empty() {
             continue;
         }
+
+        // Only load CSVs when there are rows to backfill.
+        let Ok(dir_entries) = std::fs::read_dir(&day_dir) else {
+            continue;
+        };
+        let mut csv_epochs: Vec<(f64, String)> = Vec::new(); // (utc_secs, metrics_json)
+        for entry in dir_entries.filter_map(|e| e.ok()) {
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy().to_string();
+            if !fname_str.ends_with(".csv")
+                || fname_str.contains("_metrics")
+                || fname_str.contains("_ppg")
+                || fname_str.contains("_cache")
+            {
+                continue;
+            }
+            let csv_path = entry.path();
+            if let Some(csv_result) = crate::metrics::load_metrics_csv(&csv_path) {
+                for row in &csv_result.timeseries {
+                    if row.relaxation == 0.0 && row.engagement == 0.0 && row.snr == 0.0 {
+                        continue;
+                    }
+                    let json = epoch_row_to_metrics_json(row);
+                    csv_epochs.push((row.t, json));
+                }
+            }
+        }
+
+        if csv_epochs.is_empty() {
+            continue;
+        }
+        csv_epochs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
         let Ok(mut update_stmt) = conn.prepare("UPDATE embeddings SET metrics_json = ?1 WHERE rowid = ?2") else {
             continue;
