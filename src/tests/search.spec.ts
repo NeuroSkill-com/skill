@@ -165,9 +165,7 @@ test.describe("Search page", () => {
     await page.goto("http://localhost:1420/search?mode=eeg");
     await page.waitForTimeout(2000);
 
-    const routerErrors = errors.filter(
-      (e) => e.includes("replaceState") || e.includes("router is initialized"),
-    );
+    const routerErrors = errors.filter((e) => e.includes("replaceState") || e.includes("router is initialized"));
     expect(routerErrors).toHaveLength(0);
   });
 

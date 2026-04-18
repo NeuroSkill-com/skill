@@ -223,7 +223,9 @@ onMount(() => {
 });
 
 let routerReady = $state(false);
-afterNavigate(() => { routerReady = true; });
+afterNavigate(() => {
+  routerReady = true;
+});
 
 $effect(() => {
   const currentMode = mode;
