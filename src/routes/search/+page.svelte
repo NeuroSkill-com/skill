@@ -618,6 +618,7 @@ let ixLlmMaxTokens = $state(2048);
 let ixLlmSessionId = $state(0);
 let ixLlmPhase = $state<"" | "text" | "vision-loading" | "vision-analyzing" | "done">("");
 let ixLlmScreenshots = $state<Array<{ url: string; label: string }>>([]);
+let ixLlmVisionSummary = $state("");
 let ixShowInsights = $state(false);
 
 /** Save the completed AI summary to a chat session for "Continue in Chat". */
@@ -3346,8 +3347,9 @@ Give 2-3 concise, specific insights about:
 3. Actionable recommendations based on the EEG data
 Reference specific metrics and timestamps.`;
                         ixLlmPrompt = prompt;
-                        ixLlmSummary = ""; // show prompt immediately while streaming
-                        ixLlmSessionId = 0; // new summary = new session
+                        ixLlmSummary = "";
+                        ixLlmVisionSummary = "";
+                        ixLlmSessionId = 0;
                         ixLlmLoading = true;
                         ixLlmPhase = "text";
                         ixLlmScreenshots = [];
@@ -3423,7 +3425,7 @@ Reference specific metrics and timestamps.`;
                               // Fetch screenshot images as base64
                               ixLlmPhase = "vision-analyzing";
                               const imgParts: Array<{type: string; text?: string; image_url?: {url: string}}> = [];
-                              imgParts.push({ type: "text", text: `Now look at these ${screenshotFiles.length} screenshot(s) captured during the "${ixQuery}" sessions. Update and enhance your analysis by incorporating what you see on screen. Explain how the visible activity relates to the EEG brain state patterns (engagement, relaxation, focus) you identified. Rewrite your full response with the screenshot context integrated — don't repeat raw metrics, but add new insights from the visual context.` });
+                              imgParts.push({ type: "text", text: `Now look at these ${screenshotFiles.length} screenshot(s) captured during the "${ixQuery}" sessions. Provide additional insights based on what you see on screen. Explain how the visible activity relates to the EEG brain state patterns (engagement, relaxation, focus) you identified. Do NOT repeat your previous analysis — only add new observations from the visual context.` });
 
                               let loadedCount = 0;
                               for (const sn of screenshotFiles) {
@@ -3457,13 +3459,13 @@ Reference specific metrics and timestamps.`;
                                 const textSummary = acc; // preserve original
                                 let visionError = "";
                                 let visionAcc = "";
+                                ixLlmVisionSummary = "";
 
                                 const visionChannel = {
                                   onmessage: (chunk2: { type: string; content?: string; message?: string }) => {
                                     if (chunk2.type === "delta" && chunk2.content) {
                                       visionAcc += chunk2.content;
-                                      // Replace the display with the enhanced version
-                                      ixLlmSummary = visionAcc;
+                                      ixLlmVisionSummary = visionAcc;
                                     } else if (chunk2.type === "error") {
                                       visionError = chunk2.message ?? "Vision analysis failed";
                                     }
@@ -3482,13 +3484,9 @@ Reference specific metrics and timestamps.`;
                                 } catch (e) {
                                   visionError = String(e);
                                 }
-                                if (visionAcc) {
-                                  // Use the enhanced version
-                                  acc = visionAcc;
-                                } else if (visionError) {
+                                if (!visionAcc && visionError) {
                                   console.warn("Vision analysis error:", visionError);
                                 }
-                                // If vision failed, keep the original text summary (acc unchanged)
                               }
                             }
                           } catch (e) {
@@ -3653,6 +3651,30 @@ Reference specific metrics and timestamps.`;
                       </div>
                     {/if}
 
+                    <!-- Vision analysis (rendered below screenshots) -->
+                    {#if ixLlmVisionSummary}
+                      {@const vParsed = parseAssistantOutput(ixLlmVisionSummary)}
+                      <div class="mt-3 pt-3 border-t border-border/20">
+                        <div class="flex items-center gap-1.5 mb-2">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                               class="w-3.5 h-3.5 shrink-0 text-cyan-500/70">
+                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+                          </svg>
+                          <span class="text-[0.65rem] font-semibold text-foreground/60 uppercase tracking-wider">Screenshot Analysis</span>
+                        </div>
+                        <div class="text-[0.72rem] leading-relaxed text-foreground/80
+                                    prose prose-xs dark:prose-invert max-w-none
+                                    prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5
+                                    prose-headings:text-foreground/90
+                                    prose-h3:text-[0.7rem] prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1
+                                    prose-h4:text-xs prose-h4:font-semibold prose-h4:mt-2 prose-h4:mb-1
+                                    prose-strong:text-foreground/80
+                                    prose-code:text-xs prose-code:bg-muted/30 prose-code:px-1 prose-code:rounded">
+                          <MarkdownRenderer content={vParsed.content} />
+                        </div>
+                      </div>
+                    {/if}
+
                     {#if ixLlmLoading && ixLlmPhase === "text"}
                       <div class="flex items-center gap-2 mt-2 text-xs text-muted-foreground/40">
                         <div class="w-2.5 h-2.5 rounded-full border-2 border-violet-500/30 border-t-violet-500 animate-spin"></div>
@@ -3677,7 +3699,10 @@ Reference specific metrics and timestamps.`;
                                 ixLlmSessionId = sid;
                                 await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
                                 await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
-                                const parsed = parseAssistantOutput(ixLlmSummary);
+                                const fullSummary = ixLlmVisionSummary
+                                  ? ixLlmSummary + "\n\n---\n\n**Screenshot Analysis**\n\n" + ixLlmVisionSummary
+                                  : ixLlmSummary;
+                                const parsed = parseAssistantOutput(fullSummary);
                                 await daemonInvoke("save_chat_message", {
                                   sessionId: sid,
                                   role: "assistant",
