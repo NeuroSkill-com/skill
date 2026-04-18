@@ -3695,10 +3695,106 @@
     },
     {
       "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ1_M.gguf",
+      "quant": "IQ1_M",
+      "size_gb": 9.36,
+      "description": "Extreme 1-bit; fits 12 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 10.02,
+      "description": "Ultra-small 2-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 10.73,
+      "description": "2-bit; fits 12 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 11.45,
+      "description": "2-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 12.3,
+      "description": "Compact 3-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ3_S.gguf",
+      "quant": "IQ3_S",
+      "size_gb": 12.74,
+      "description": "3-bit; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 14.3,
+      "description": "Small 3-bit; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 15.46,
+      "description": "Medium 3-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 15.69,
+      "description": "3-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
       "filename": "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
       "quant": "IQ4_XS",
       "size_gb": 16.51,
-      "description": "Compact 4-bit; fits 24 GB VRAM",
+      "description": "Compact 4-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 16.8,
+      "description": "4-bit non-linear; good quality/size balance",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 19.46,
+      "description": "4-bit; needs 24 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-MXFP4_MOE.gguf",
+      "quant": "MXFP4_MOE",
+      "size_gb": 20.22,
+      "description": "MX FP4 for MoE layers; fast on supported hardware",
       "advanced": true
     },
     {
@@ -3711,10 +3807,18 @@
     },
     {
       "family": "qwen36-35b-a3b",
-      "filename": "Qwen3.6-35B-A3B-UD-Q3_K_S.gguf",
-      "quant": "Q3_K_S",
-      "size_gb": 14.3,
-      "description": "Smallest practical quant; fits 16 GB VRAM",
+      "filename": "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 20.82,
+      "description": "4-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 23.23,
+      "description": "5-bit; needs 32 GB RAM",
       "advanced": true
     },
     {
@@ -3722,7 +3826,31 @@
       "filename": "Qwen3.6-35B-A3B-UD-Q5_K_M.gguf",
       "quant": "Q5_K_M",
       "size_gb": 24.64,
-      "description": "Higher quality; needs 32 GB RAM",
+      "description": "Higher quality 5-bit; needs 32 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 24.77,
+      "description": "5-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 27.06,
+      "description": "6-bit; high quality, needs 32 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 29.66,
+      "description": "6-bit with important layers at higher precision",
       "advanced": true
     },
     {
@@ -3730,7 +3858,15 @@
       "filename": "Qwen3.6-35B-A3B-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 34.37,
-      "description": "Near-lossless; needs 48 GB RAM",
+      "description": "Near-lossless 8-bit; needs 48 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 35.81,
+      "description": "8-bit with important layers at higher precision",
       "advanced": true
     }
   ]
