@@ -230,7 +230,7 @@ const search: Record<string, string> = {
   "search.rankByLabel": "Ordenar EEG por",
   "search.rankByHint": "Ordenar épocas antes de seleccionar top-k.",
   "search.rankTimestamp": "Marca de tiempo",
-  "search.rankEngagement": "Engagement",
+  "search.rankEngagement": "Compromiso",
   "search.rankSnr": "SNR",
   "search.rankRelaxation": "Relajación",
   "search.sessionsTitle": "Sesiones",
@@ -241,8 +241,8 @@ const search: Record<string, string> = {
   "search.recentSearches": "Búsquedas recientes",
   "search.moreLikeThis": "Más como esto",
   "search.colorTimestamp": "Color: Tiempo",
-  "search.colorEngagement": "Color: Engagement",
-  "search.colorSnr": "Color: SNR",
+  "search.colorEngagement": "Color: Compromiso",
+  "search.colorSnr": "Color: RSR",
   "search.colorSession": "Color: Sesión",
   "search.loadEegSparkline": "Cargar bandas EEG ±60s",
   "search.compareSelect": "Comparar con otro nodo",
@@ -250,8 +250,8 @@ const search: Record<string, string> = {
   "search.timelineScrubber": "Línea de tiempo",
   "search.insightsTitle": "Perspectivas y patrones",
   "search.optimalConditions": "Condiciones óptimas",
-  "search.appCorrelation": "App × Engagement",
-  "search.hourPattern": "Hora del día × Engagement",
+  "search.appCorrelation": "App × Compromiso",
+  "search.hourPattern": "Hora del día × Compromiso",
   "search.llmSummary": "Resumen IA",
   "search.generateSummary": "Generar",
   "search.generatingSummary": "Analizando patrones…",
@@ -296,7 +296,7 @@ const search: Record<string, string> = {
   "search.nodeFoundTip": "Etiquetas cerca de puntos EEG",
   "search.nodeScreenshotsTip": "Capturas cerca de coincidencias",
 
-  "search.maxTokens": "Tokens",
+  "search.maxTokens": "Fichas",
 };
 
 export default search;
