@@ -94,7 +94,7 @@ jobs:
       # maintainer.
       - name: Verify labeler has write access
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -434,7 +434,7 @@ jobs:
       # rather than creating a new one — keeps the PR thread tidy.
       - name: Comment on PR with download link
         if: steps.meta.outputs.pr != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const pr      = Number('${{ steps.meta.outputs.pr }}');

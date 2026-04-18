@@ -214,7 +214,7 @@ jobs:
 
       # ── Upload Linux portable tarball to GitHub Release ─────────────────
       - name: Upload Linux portable tarball
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version_meta.outputs.tag }}
           name: Skill v${{ steps.version_meta.outputs.version }} (Linux)
@@ -384,7 +384,7 @@ jobs:
 
       - name: Create / update GitHub Release
         if: steps.version_meta.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
           name:                    Skill v${{ steps.version_meta.outputs.version }}

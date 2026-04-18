@@ -37,12 +37,20 @@ pub(crate) fn setup(app: &mut tauri::App) {
         /// callbacks time to detach, avoiding a use-after-free crash in
         /// `WebCore::ScrollingTree::takePendingScrollUpdates()`.
         fn safe_destroy(win: &tauri::WebviewWindow) {
+            // Navigate away so WebKit dismantles the scrolling tree while
+            // the webview is still alive.
             let _ = win.eval("window.stop()");
             if let Ok(url) = "about:blank".parse() {
                 let _ = win.navigate(url);
             }
+            // Dispatch the actual destruction to the main thread so it
+            // can't race with WebKit's display-link callback.
+            let owned = win.clone();
+            let _ = win.run_on_main_thread(move || {
+                let _ = owned.destroy();
+            });
+            // Give the main thread time to process the destroy.
             std::thread::sleep(std::time::Duration::from_millis(50));
-            let _ = win.destroy();
         }
 
         let window = tauri::WebviewWindowBuilder::new(
