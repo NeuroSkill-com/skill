@@ -156,6 +156,21 @@ test.describe("Search page", () => {
     expect(page.url()).toContain("mode=text");
   });
 
+  test("no replaceState error before router is initialized", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    // Navigate without waiting for networkidle to catch early init errors
+    await page.addInitScript({ content: buildMockScript() });
+    await page.goto("http://localhost:1420/search?mode=eeg");
+    await page.waitForTimeout(2000);
+
+    const routerErrors = errors.filter(
+      (e) => e.includes("replaceState") || e.includes("router is initialized"),
+    );
+    expect(routerErrors).toHaveLength(0);
+  });
+
   test("insights panel renders after interactive search", async ({ page }) => {
     const mockWithResults = buildMockScript().replace(
       'case "poll_job":',

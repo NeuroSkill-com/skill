@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount, untrack } from "svelte";
-import { replaceState } from "$app/navigation";
+import { afterNavigate, replaceState } from "$app/navigation";
 import { parseAssistantOutput } from "$lib/chat-utils";
 import { generateUmapPlaceholder } from "$lib/compare-types";
 import { Badge } from "$lib/components/ui/badge";
@@ -222,18 +222,19 @@ onMount(() => {
   };
 });
 
+let routerReady = $state(false);
+afterNavigate(() => { routerReady = true; });
+
 $effect(() => {
   const currentMode = mode;
+  const ready = routerReady;
   untrack(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") !== currentMode) {
-      params.set("mode", currentMode);
-      const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
-      try {
+    if (ready) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") !== currentMode) {
+        params.set("mode", currentMode);
+        const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
         replaceState(next, {});
-      } catch {
-        // Router not yet initialized on first render; fall back to native API
-        window.history.replaceState({}, "", next);
       }
     }
     emitSearchMode(currentMode);

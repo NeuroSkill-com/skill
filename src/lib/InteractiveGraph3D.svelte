@@ -17,7 +17,7 @@ the Free Software Foundation, version 3 only. -->
   space to deselect.  Unconnected nodes and edges are dimmed to 10 % opacity.
 -->
 <script lang="ts">
-import { onDestroy, onMount } from "svelte";
+import { onDestroy, onMount, untrack } from "svelte";
 import type * as THREE_NS from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
 import { fmtDateTimeLocale } from "$lib/format";
@@ -908,7 +908,7 @@ function animate() {
 $effect(() => {
   const _trigger = `${nodes.length}|${edges.length}|${usePca}|${colorMode}|${hiddenKinds.join(",")}`;
   if (!loaded || !THREE || (nodes.length === 0 && edges.length === 0)) return;
-  buildGraph();
+  untrack(() => buildGraph());
 });
 
 // ── Theme ─────────────────────────────────────────────────────────────────
