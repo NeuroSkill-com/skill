@@ -3692,6 +3692,46 @@
       "size_gb": 2.8,
       "description": "Recommended — only available quant",
       "recommended": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 16.51,
+      "description": "Compact 4-bit; fits 24 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 20.61,
+      "description": "Best quality/size balance; needs 24 GB VRAM or 32 GB RAM",
+      "recommended": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 14.3,
+      "description": "Smallest practical quant; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 24.64,
+      "description": "Higher quality; needs 32 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 34.37,
+      "description": "Near-lossless; needs 48 GB RAM",
+      "advanced": true
     }
   ]
 }
