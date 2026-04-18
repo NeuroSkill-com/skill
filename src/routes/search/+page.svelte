@@ -984,6 +984,62 @@ type SsEntry = { filename: string; appName: string; windowTitle: string; unixTs:
  *
  * Deduplicates by filename so the same screenshot doesn't appear twice.
  */
+/**
+ * Fetch screenshots independently (for AI summary) without affecting the toggle state.
+ * Returns the map directly instead of writing to ixScreenshotMap.
+ */
+async function fetchIxScreenshotsDirect(): Promise<Map<string, SsEntry>> {
+  if (ixNodes.length === 0) return new Map();
+
+  type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number };
+  const results = new Map<string, SsEntry>();
+  const usedFilenames = new Set<string>();
+
+  function addResult(nodeId: string, r: SsResult) {
+    if (usedFilenames.has(r.filename)) return;
+    usedFilenames.add(r.filename);
+    results.set(`${nodeId}\0${r.filename}`, {
+      filename: r.filename,
+      appName: r.app_name,
+      windowTitle: r.window_title,
+      unixTs: r.unix_ts,
+      similarity: r.similarity ?? 0,
+    });
+  }
+
+  const promises: Promise<void>[] = [];
+  promises.push(
+    (async () => {
+      try {
+        const hits = await daemonInvoke<SsResult[]>("search_screenshots_by_text", {
+          query: ixQuery.trim(), k: 5, mode: "semantic",
+        });
+        for (const h of hits) addResult("query", h);
+      } catch { /* no semantic index or model */ }
+    })(),
+  );
+  const eegNodes = ixNodes.filter((n) => n.kind === "eeg_point" && n.timestamp_unix != null);
+  for (const node of eegNodes) {
+    promises.push(
+      (async () => {
+        try {
+          const around = await daemonInvoke<SsResult[]>("get_screenshots_around", {
+            timestamp: Math.floor(node.timestamp_unix!), windowSecs: 1800,
+          });
+          if (around.length > 0) {
+            const sorted = [...around].sort(
+              (a, b) => Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!),
+            );
+            addResult(node.id, { ...sorted[0], similarity: 0 });
+          }
+        } catch { /* skip */ }
+      })(),
+    );
+  }
+  await Promise.all(promises);
+  return results;
+}
+
 async function fetchIxScreenshots() {
   if (!ixShowScreenshots) {
     ixScreenshotMap = new Map();
@@ -3145,6 +3201,10 @@ useWindowTitle("window.title.search");
                           ? `${new Date(Math.min(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()} → ${new Date(Math.max(...eegNodes.map(n => n.timestamp_unix!)) * 1000).toLocaleString()}`
                           : "unknown";
                         const sessions = ixSessions.slice(0, 5).map(s => `${s.session_id}: eng=${s.avg_engagement.toFixed(2)}, snr=${s.avg_snr.toFixed(1)}, ${Math.round(s.duration_secs/60)}min`);
+                        // Fetch screenshots for AI analysis independently of toggle
+                        const ssMap = ixScreenshotMap.size > 0
+                          ? ixScreenshotMap
+                          : await fetchIxScreenshotsDirect();
                         const allNodes = [...ixNodes, ...(ixDisplayGraph?.nodes ?? [])];
                         const apps = computeInsights(allNodes).appCorrelation.slice(0, 5).map(a => `${a.app}: eng=${a.avgEngagement.toFixed(2)}`);
                         // Include EEG metrics for each epoch
@@ -3239,8 +3299,19 @@ useWindowTitle("window.title.search");
                           }
                           sessionDetails = [...sessionMap.entries()].map(([sid, count]) => `${sid}: ${count} epochs`).join("; ");
                         }
-                        // Include screenshot context (OCR text + app)
-                        const ssNodes = allNodes.filter(n => n.kind === "screenshot");
+                        // Include screenshot context — build from map directly
+                        // (ixDisplayGraph only has screenshot nodes when toggle is on)
+                        const ssNodes: Array<{kind: string; filename?: string; app_name?: string; window_title?: string; timestamp_unix?: number; ocr_similarity?: number}> =
+                          allNodes.filter(n => n.kind === "screenshot").length > 0
+                            ? allNodes.filter(n => n.kind === "screenshot")
+                            : [...ssMap.values()].map(ss => ({
+                                kind: "screenshot" as const,
+                                filename: ss.filename,
+                                app_name: ss.appName,
+                                window_title: ss.windowTitle,
+                                timestamp_unix: ss.unixTs,
+                                ocr_similarity: ss.similarity,
+                              }));
                         const screenshotContext = ssNodes.slice(0, 5).map(n => {
                           const ts = n.timestamp_unix ? new Date(n.timestamp_unix * 1000).toLocaleString() : "";
                           const parts = [];
