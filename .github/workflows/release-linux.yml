@@ -12,6 +12,9 @@ on:
 permissions:
   contents: write   # create/update GitHub Releases and upload assets
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release-linux:
     name: Build & Release — x86_64-unknown-linux-gnu

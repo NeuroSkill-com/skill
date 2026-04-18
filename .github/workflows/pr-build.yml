@@ -60,6 +60,9 @@ permissions:
   contents: read         # checkout
   pull-requests: write   # post download-link comment
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   preview:
     # ── [FIX 1] Fork rejection ────────────────────────────────────────────────
