@@ -572,6 +572,7 @@ let ixLlmSummary = $state("");
 let ixLlmPrompt = $state("");
 let ixLlmLoading = $state(false);
 let ixLlmMaxTokens = $state(1024);
+let ixLlmSessionId = $state(0);
 let ixShowInsights = $state(false);
 
 // Bookmarks (persisted in localStorage)
@@ -3135,6 +3136,7 @@ Give 2-3 concise, specific insights about:
 Reference specific metrics and timestamps.`;
                         ixLlmPrompt = prompt;
                         ixLlmSummary = ""; // show prompt immediately while streaming
+                        ixLlmSessionId = 0; // new summary = new session
                         ixLlmLoading = true;
 
                         // Suggest optimal max_tokens based on prompt size, but user controls final value
@@ -3156,8 +3158,10 @@ Reference specific metrics and timestamps.`;
                               else {
                                 // Auto-save to chat history
                                 const p = parseAssistantOutput(acc);
-                                daemonInvoke<number>("new_chat_session").then(async sid => {
+                                daemonInvoke<{id: number}>("new_chat_session").then(async (res) => {
+                                  const sid = res?.id ?? 0;
                                   if (sid > 0) {
+                                    ixLlmSessionId = sid;
                                     await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
                                     await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null }).catch(() => {});
                                     await daemonInvoke("save_chat_message", {
@@ -3289,25 +3293,26 @@ Reference specific metrics and timestamps.`;
                       <div class="flex items-center gap-2 mt-3 pt-2 border-t border-border/20">
                         <button onclick={async () => {
                           try {
-                            // Create a new chat session with the search conversation
-                            const sid = await daemonInvoke<number>("new_chat_session");
-                            if (sid > 0) {
-                              await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
-                              // Save messages sequentially so they're ordered correctly
-                              await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
-                              // Separate thinking from content for the assistant message
-                              const parsed = parseAssistantOutput(ixLlmSummary);
-                              await daemonInvoke("save_chat_message", {
-                                sessionId: sid,
-                                role: "assistant",
-                                content: [parsed.leadIn, parsed.content].filter(s => s.trim()).join("\n\n"),
-                                thinking: parsed.thinking || null,
-                              });
-                              // Small delay to ensure DB writes are flushed
-                              await new Promise(r => setTimeout(r, 300));
+                            // Reuse the auto-saved session, or create one if it wasn't saved yet
+                            let sid = ixLlmSessionId;
+                            if (!sid) {
+                              const res = await daemonInvoke<{id: number}>("new_chat_session");
+                              sid = res?.id ?? 0;
+                              if (sid > 0) {
+                                ixLlmSessionId = sid;
+                                await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
+                                await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
+                                const parsed = parseAssistantOutput(ixLlmSummary);
+                                await daemonInvoke("save_chat_message", {
+                                  sessionId: sid,
+                                  role: "assistant",
+                                  content: [parsed.leadIn, parsed.content].filter(s => s.trim()).join("\n\n"),
+                                  thinking: parsed.thinking || null,
+                                });
+                              }
                             }
                             const { invoke } = await import("@tauri-apps/api/core");
-                            await invoke("open_chat_window");
+                            await invoke("open_chat_window", { sessionId: sid > 0 ? sid : null });
                           } catch { /* ignore nav errors */ }
                         }}
                         class="text-xs px-3 py-1.5 rounded-md border border-blue-500/30

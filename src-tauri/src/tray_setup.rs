@@ -108,7 +108,7 @@ pub(crate) fn build_tray(
             } else if id == "chat" {
                 let a = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = crate::llm::cmds::open_chat_window(a).await;
+                    let _ = crate::llm::cmds::open_chat_window(a, None).await;
                 });
             } else if id == "downloads" {
                 let a = app.clone();

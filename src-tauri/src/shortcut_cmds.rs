@@ -176,7 +176,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         };
         if let Err(e) = register_one(app, &chat, |a| {
             tauri::async_runtime::spawn(async move {
-                let _ = open_chat_window(a).await;
+                let _ = open_chat_window(a, None).await;
             });
         }) {
             eprintln!("[shortcut] chat: {e}");
