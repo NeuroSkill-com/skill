@@ -296,9 +296,7 @@ const search: Record<string, string> = {
   "search.nodeFoundTip": "Labels in der Nähe von EEG-Punkten",
   "search.nodeScreenshotsTip": "Screenshots in der Nähe",
 
-  // ── Auto-synced from en/ (2026-04-18) ──
-  // TODO: translate the following 1 key(s) into de
-  "search.maxTokens": "Tokens",
+  "search.maxTokens": "Token",
 };
 
 export default search;

@@ -289,9 +289,7 @@ const search: Record<string, string> = {
   "search.nodeFoundTip": "EEGポイント付近のラベル",
   "search.nodeScreenshotsTip": "一致付近のスクリーンショット",
 
-  // ── Auto-synced from en/ (2026-04-18) ──
-  // TODO: translate the following 1 key(s) into ja
-  "search.maxTokens": "Tokens",
+  "search.maxTokens": "トークン",
 };
 
 export default search;

@@ -296,9 +296,7 @@ const search: Record<string, string> = {
   "search.nodeFoundTip": "Labels découverts près des points EEG",
   "search.nodeScreenshotsTip": "Captures près des correspondances",
 
-  // ── Auto-synced from en/ (2026-04-18) ──
-  // TODO: translate the following 1 key(s) into fr
-  "search.maxTokens": "Tokens",
+  "search.maxTokens": "Jetons",
 };
 
 export default search;
