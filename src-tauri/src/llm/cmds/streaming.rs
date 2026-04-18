@@ -3,7 +3,7 @@
 //! IPC chat streaming, abort, and tool-call cancellation commands.
 
 use std::sync::Mutex;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::AppState;
 
@@ -147,18 +147,40 @@ pub fn cancel_tool_call(tool_call_id: String, _state: tauri::State<'_, Mutex<Box
 
 // ── Chat window ───────────────────────────────────────────────────────────────
 
-/// Open (or focus) the floating Chat window.
+/// Open (or focus) the floating Chat window, optionally loading a specific session.
 #[tauri::command]
-pub async fn open_chat_window(app: AppHandle) -> Result<(), String> {
-    crate::window_cmds::focus_or_create(
-        &app,
-        crate::window_cmds::WindowSpec {
-            label: "chat",
-            route: "chat",
-            title: "NeuroSkill™ – Chat",
-            inner_size: (760.0, 680.0),
-            min_inner_size: Some((480.0, 400.0)),
-            ..Default::default()
-        },
-    )
+pub async fn open_chat_window(app: AppHandle, session_id: Option<i64>) -> Result<(), String> {
+    let spec = crate::window_cmds::WindowSpec {
+        label: "chat",
+        route: "chat",
+        title: "NeuroSkill™ – Chat",
+        inner_size: (760.0, 680.0),
+        min_inner_size: Some((480.0, 400.0)),
+        ..Default::default()
+    };
+
+    match session_id.filter(|id| *id > 0) {
+        Some(id) => {
+            let payload = format!("{{\"sessionId\":{id}}}");
+            let is_new = app.get_webview_window("chat").is_none();
+            crate::window_cmds::focus_or_create_with_emit(
+                &app,
+                spec,
+                "chat:load-session",
+                &payload,
+            )?;
+            // For newly created windows, re-emit after the webview mounts
+            if is_new {
+                let app2 = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                    if let Some(win) = app2.get_webview_window("chat") {
+                        let _ = win.emit("chat:load-session", payload);
+                    }
+                });
+            }
+            Ok(())
+        }
+        None => crate::window_cmds::focus_or_create(&app, spec),
+    }
 }

@@ -953,7 +953,8 @@ async function newChat() {
   histIdx = -1;
   histDraft = "";
   try {
-    sessionId = await daemonInvoke<number>("new_chat_session");
+    const res = await daemonInvoke<{id: number}>("new_chat_session");
+    sessionId = res?.id ?? 0;
     await sidebarRef?.refresh();
   } catch (e) {}
   await tick();
@@ -1155,6 +1156,7 @@ function stopTypingLabelTimer() {
 
 let unlistenStatus: (() => void) | undefined;
 let unlistenBands: (() => void) | undefined;
+let unlistenLoadSession: (() => void) | undefined;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 onMount(async () => {
@@ -1253,6 +1255,20 @@ onMount(async () => {
     });
   } catch (e) {}
 
+  // Listen for "continue in chat" from search page
+  try {
+    // biome-ignore lint/suspicious/noExplicitAny: payload may be string or object depending on source
+    unlistenLoadSession = await listen<any>("chat:load-session", async (ev) => {
+      const raw = ev.payload;
+      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const id = data?.sessionId;
+      if (id > 0) {
+        await loadSession(id);
+        await sidebarRef?.refresh();
+      }
+    });
+  } catch (e) {}
+
   // Poll while loading
   startStatusPoll();
 
@@ -1288,6 +1304,7 @@ onMount(async () => {
 onDestroy(() => {
   unlistenStatus?.();
   unlistenBands?.();
+  unlistenLoadSession?.();
   clearInterval(pollTimer);
   stopTypingLabelTimer();
   if (prefillTimer) {
