@@ -229,7 +229,12 @@ $effect(() => {
     if (params.get("mode") !== currentMode) {
       params.set("mode", currentMode);
       const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
-      replaceState(next, {});
+      try {
+        replaceState(next, {});
+      } catch {
+        // Router not yet initialized on first render; fall back to native API
+        window.history.replaceState({}, "", next);
+      }
     }
     emitSearchMode(currentMode);
   });
