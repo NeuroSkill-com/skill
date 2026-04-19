@@ -79,7 +79,6 @@ mod tray;
 
 mod about;
 mod active_window;
-mod calibration_service;
 mod shortcut_cmds;
 
 mod window_cmds;
@@ -143,21 +142,20 @@ use window_cmds::{
     autosize_main_window, check_accessibility_permission, check_bluetooth_power,
     check_screen_recording_permission, close_calibration_window, close_label_window,
     complete_onboarding, create_calibration_profile, delete_calibration_profile, dismiss_whats_new,
-    emit_calibration_event, get_active_calibration, get_app_name, get_app_version,
-    get_calendar_events, get_calendar_permission_status, get_calibration_config,
-    get_calibration_profile, get_data_dir, get_location_permission_status, get_onboarding_complete,
-    get_onboarding_model_download_order, get_whats_new_seen_version, is_session_live,
-    list_calibration_profiles, open_accessibility_settings, open_and_start_calibration,
-    open_api_window, open_bt_settings, open_calendar_settings, open_calibration_window,
-    open_focus_settings, open_focus_timer_window, open_full_disk_access_settings, open_help_window,
-    open_input_monitoring_settings, open_label_window, open_label_window_at, open_labels_window,
-    open_latest_log, open_location_settings, open_model_tab, open_notifications_settings,
-    open_onboarding_window, open_screen_recording_settings, open_search_window,
-    open_session_window, open_settings_window, open_skill_dir, open_updates_window,
-    open_virtual_devices_window, open_whats_new_window, quit_app, record_calibration_completed,
-    request_calendar_permission, request_location_permission, set_active_calibration,
-    set_calibration_config, set_data_dir, set_update_ready, show_main_window,
-    update_calibration_profile,
+    get_active_calibration, get_app_name, get_app_version, get_calendar_events,
+    get_calendar_permission_status, get_calibration_config, get_calibration_profile, get_data_dir,
+    get_location_permission_status, get_onboarding_complete, get_onboarding_model_download_order,
+    get_whats_new_seen_version, is_session_live, list_calibration_profiles,
+    open_accessibility_settings, open_and_start_calibration, open_api_window, open_bt_settings,
+    open_calendar_settings, open_calibration_window, open_focus_settings, open_focus_timer_window,
+    open_full_disk_access_settings, open_help_window, open_input_monitoring_settings,
+    open_label_window, open_label_window_at, open_labels_window, open_latest_log,
+    open_location_settings, open_model_tab, open_notifications_settings, open_onboarding_window,
+    open_screen_recording_settings, open_search_window, open_session_window, open_settings_window,
+    open_skill_dir, open_updates_window, open_virtual_devices_window, open_whats_new_window,
+    quit_app, record_calibration_completed, request_calendar_permission,
+    request_location_permission, set_active_calibration, set_calibration_config, set_data_dir,
+    set_update_ready, show_main_window, update_calibration_profile,
 };
 
 // ── App entry-point ──────────────────────────────────────────────────────────
@@ -271,7 +269,6 @@ pub fn run() {
             record_calibration_completed,
             get_calibration_config,
             set_calibration_config,
-            emit_calibration_event,
             get_app_version,
             get_app_name,
             is_session_live,

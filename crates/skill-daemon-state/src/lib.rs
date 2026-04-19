@@ -9,4 +9,5 @@ pub mod util;
 pub use reconnect_state::ReconnectState;
 pub use session_handle::SessionHandle;
 pub use state::AppState;
+pub use state::CalibrationPhaseSnapshot;
 pub use text_embedder::SharedTextEmbedder;

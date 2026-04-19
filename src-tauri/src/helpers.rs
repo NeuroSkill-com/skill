@@ -253,10 +253,6 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     data.chat_shortcut = s.shortcuts.chat_shortcut.clone();
     data.compare_shortcut = s.shortcuts.compare_shortcut.clone();
 
-    // Calibration
-    data.calibration_profiles = s.calibration_profiles.clone();
-    data.active_calibration_id = s.active_calibration_id.clone();
-
     // UI preferences
     data.onboarding_complete = s.ui.onboarding_complete;
     data.last_seen_whats_new_version = s.ui.last_seen_whats_new_version.clone();

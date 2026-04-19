@@ -47,9 +47,6 @@ function buildMockScript() {
           });
         case "tts_init":
         case "tts_speak":
-        case "emit_calibration_event":
-        case "record_calibration_completed":
-        case "set_active_calibration":
         case "close_calibration_window":
           return Promise.resolve();
 

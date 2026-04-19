@@ -112,7 +112,16 @@ impl ServiceInstaller {
             .join(format!("{}.plist", self.service_name))
     }
 
+    fn log_dir(&self) -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("Library/Logs/NeuroSkill")
+    }
+
     fn plist_content(&self) -> String {
+        let log_dir = self.log_dir();
+        let stdout_log = log_dir.join("skill-daemon.out.log");
+        let stderr_log = log_dir.join("skill-daemon.err.log");
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -129,9 +138,9 @@ impl ServiceInstaller {
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/skill-daemon.out.log</string>
+  <string>{stdout_log}</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/skill-daemon.err.log</string>
+  <string>{stderr_log}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>SKILL_DAEMON_ADDR</key>
@@ -142,18 +151,33 @@ impl ServiceInstaller {
 "#,
             label = self.service_name,
             binary = self.binary_path.display(),
+            stdout_log = stdout_log.display(),
+            stderr_log = stderr_log.display(),
             addr = self.daemon_addr,
         )
     }
 
     fn install_launchagent(&self) -> anyhow::Result<InstallResult> {
         let plist = self.plist_path();
-        let already = plist.exists();
+        let new_content = self.plist_content();
+
+        // If the plist already exists and the binary path hasn't changed,
+        // skip writing and loading — the service is already installed.
+        if plist.exists() {
+            let existing = std::fs::read_to_string(&plist).unwrap_or_default();
+            let binary_str = format!("<string>{}</string>", self.binary_path.display());
+            if existing.contains(&binary_str) {
+                return Ok(InstallResult::AlreadyInstalled);
+            }
+        }
 
         if let Some(parent) = plist.parent() {
             std::fs::create_dir_all(parent).context("create LaunchAgents dir")?;
         }
-        std::fs::write(&plist, self.plist_content()).context("write plist")?;
+        std::fs::create_dir_all(self.log_dir()).context("create log dir")?;
+
+        let already = plist.exists();
+        std::fs::write(&plist, new_content).context("write plist")?;
 
         std::process::Command::new("launchctl")
             .args(["load", "-w", plist.to_str().unwrap_or("")])

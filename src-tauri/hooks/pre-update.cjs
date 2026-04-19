@@ -7,7 +7,7 @@ console.log('[pre-update] Stopping skill-daemon...');
 try {
   if (platform() === 'darwin') {
     // macOS: Unload LaunchAgent
-    execSync('launchctl unload ~/Library/LaunchAgents/com.neuroskill.skill-daemon.plist 2>/dev/null || true');
+    execSync('launchctl unload ~/Library/LaunchAgents/com.skill.daemon.plist 2>/dev/null || true');
     console.log('[pre-update] Stopped macOS LaunchAgent');
   } else if (platform() === 'win32') {
     // Windows: Stop the service

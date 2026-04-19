@@ -5,6 +5,7 @@
 mod activity;
 mod auth_middleware;
 pub(crate) mod background;
+pub(crate) mod calibration_runner;
 pub(crate) mod cmd_dispatch;
 pub(crate) mod embed;
 mod handlers;
@@ -39,6 +40,15 @@ use axum::http::Method;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Handle --uninstall flag: remove the OS service and exit immediately.
+    if std::env::args().any(|a| a == "--uninstall") {
+        let binary_path = std::env::current_exe().unwrap_or_default();
+        let installer = service_installer::ServiceInstaller::new(binary_path);
+        installer.uninstall()?;
+        println!("Service uninstalled successfully.");
+        return Ok(());
+    }
+
     // Write PID file for process management
     let pid_path = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))

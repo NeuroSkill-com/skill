@@ -203,6 +203,12 @@ jobs:
               find src-tauri/target -name "*skill_daemon*" -exec rm -rf {} + 2>/dev/null || true
               find src-tauri/target -name "*skill-daemon*" -not -path "*/skill-daemon-*" -exec rm -rf {} + 2>/dev/null || true
               run_cmd
+              DAEMON_BIN="src-tauri/target/aarch64-apple-darwin/release/skill-daemon"
+              if [ ! -f "$DAEMON_BIN" ]; then
+                echo "::error::Daemon binary not found after source-build retry: $DAEMON_BIN"
+                exit 1
+              fi
+              echo "::notice::Source build succeeded after prebuilt llama failure"
             else
               exit 1
             fi
@@ -214,6 +220,30 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           FRONTEND_BUILD_DIR: build
         run: bash scripts/assemble-macos-app.sh aarch64-apple-darwin
+
+      # ── Smoke-test bundled binaries ──────────────────────────────────────
+      - name: Smoke-test bundled binaries
+        run: |
+          set -euo pipefail
+          APP_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NeuroSkill.app"
+
+          echo "── codesign verification ──"
+          codesign --verify --deep --strict "$APP_DIR"
+          echo "✓ codesign --verify passed"
+
+          echo "── daemon binary check ──"
+          DAEMON_BIN="$APP_DIR/Contents/MacOS/skill-daemon"
+          file "$DAEMON_BIN"
+          file "$DAEMON_BIN" | grep -q "Mach-O.*arm64" \
+            || { echo "::error::skill-daemon is not a valid arm64 Mach-O binary"; exit 1; }
+          echo "✓ skill-daemon is a valid arm64 Mach-O binary"
+
+          echo "── main binary architecture check ──"
+          MAIN_BIN="$APP_DIR/Contents/MacOS/NeuroSkill"
+          lipo -info "$MAIN_BIN"
+          lipo -info "$MAIN_BIN" | grep -q "arm64" \
+            || { echo "::error::NeuroSkill binary does not contain arm64 architecture"; exit 1; }
+          echo "✓ NeuroSkill binary contains arm64 architecture"
 
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile

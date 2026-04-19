@@ -13,8 +13,7 @@ use crate::settings::{
     default_search_shortcut, default_settings_shortcut, default_skill_dir, default_theme,
     default_theme_shortcut, default_track_active_window, default_track_input_activity,
     default_update_check_interval, default_ws_host, default_ws_port, load_umap_config,
-    CalibrationProfile, DoNotDisturbConfig, HookLastTrigger, HookRule, NeuttsConfig,
-    ScreenshotConfig, UmapUserConfig,
+    DoNotDisturbConfig, HookLastTrigger, HookRule, NeuttsConfig, ScreenshotConfig, UmapUserConfig,
 };
 use crate::skill_log::SkillLogger;
 use crate::tts::init_tts_dirs;
@@ -356,9 +355,6 @@ pub struct AppState {
     pub input: InputTrackingState,
     pub embedding: EmbeddingModelState,
 
-    // ── Calibration ───────────────────────────────────────────────────────
-    pub calibration_profiles: Vec<CalibrationProfile>,
-    pub active_calibration_id: String,
     #[allow(dead_code)]
     pub umap_config: UmapUserConfig,
 
@@ -485,8 +481,6 @@ impl Default for AppState {
             input,
             embedding: EmbeddingModelState::new(&skill_dir),
 
-            calibration_profiles: vec![CalibrationProfile::default()],
-            active_calibration_id: "default".into(),
             umap_config: load_umap_config(&skill_dir),
             hooks: Vec::new(),
             hook_runtime: std::sync::Arc::new(std::sync::Mutex::new(

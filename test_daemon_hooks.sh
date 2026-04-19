@@ -13,7 +13,7 @@ node src-tauri/hooks/post-update.cjs
 
 # Verify the plist was copied
 echo "3. Checking LaunchAgent plist:"
-if [ -f "$HOME/Library/LaunchAgents/com.neuroskill.skill-daemon.plist" ]; then
+if [ -f "$HOME/Library/LaunchAgents/com.skill.daemon.plist" ]; then
   echo "   ✓ LaunchAgent plist exists"
 else
   echo "   ✗ LaunchAgent plist not found"

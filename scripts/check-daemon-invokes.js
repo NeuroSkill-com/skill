@@ -136,7 +136,17 @@ const DAEMON_OWNED_COMMANDS = new Set([
 
   // previously typed-client migrated, now also in daemonInvoke proxy
   "cancel_retry",
+  "calibration_start_session",
+  "calibration_cancel_session",
+  "calibration_session_status",
   "cancel_tool_call",
+  "create_calibration_profile",
+  "delete_calibration_profile",
+  "get_active_calibration",
+  "list_calibration_profiles",
+  "record_calibration_completed",
+  "set_active_calibration",
+  "update_calibration_profile",
   "forget_device",
   "get_cortex_ws_state",
   "get_gpu_stats",

@@ -386,7 +386,8 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/calibration/profiles/update",
-            axum::routing::put(super::settings_calibration::update_profile),
+            axum::routing::put(super::settings_calibration::update_profile)
+                .post(super::settings_calibration::update_profile),
         )
         .route(
             "/calibration/profiles/delete",
@@ -395,11 +396,32 @@ pub fn router() -> Router<AppState> {
         .route(
             "/calibration/active",
             get(super::settings_calibration::get_active_profile_id)
-                .put(super::settings_calibration::set_active_profile),
+                .put(super::settings_calibration::set_active_profile)
+                .post(super::settings_calibration::set_active_profile),
         )
         .route(
             "/calibration/auto-start-pending",
             get(super::settings_calibration::auto_start_pending),
+        )
+        .route(
+            "/calibration/session/start",
+            post(super::settings_calibration::start_session),
+        )
+        .route(
+            "/calibration/session/cancel",
+            post(super::settings_calibration::cancel_session),
+        )
+        .route(
+            "/calibration/session/status",
+            get(super::settings_calibration::session_status),
+        )
+        .route(
+            "/calibration/record-completed",
+            post(super::settings_calibration::record_completed),
+        )
+        .route(
+            "/calibration/active-profile",
+            get(super::settings_calibration::get_active_profile),
         )
         .merge(llm_routes())
         .merge(lsl_routes())

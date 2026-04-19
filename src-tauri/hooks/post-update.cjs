@@ -10,14 +10,14 @@ try {
   if (platform() === 'darwin') {
     // macOS: Load LaunchAgent
     const home = process.env.HOME || (process.env.USERPROFILE && process.env.USERPROFILE.replace(/\\/g, '/'));
-    const plistDest = path.join(home, 'Library/LaunchAgents/com.neuroskill.skill-daemon.plist');
+    const plistDest = path.join(home, 'Library/LaunchAgents/com.skill.daemon.plist');
     
     // Copy plist from app bundle if not exists
     const appResources = path.join(
       path.dirname(process.execPath),
       '..',
       'Resources',
-      'com.neuroskill.skill-daemon.plist'
+      'com.skill.daemon.plist'
     );
     
     if (fs.existsSync(appResources) && !fs.existsSync(plistDest)) {

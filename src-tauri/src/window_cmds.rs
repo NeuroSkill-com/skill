@@ -11,10 +11,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings::tilde_path;
-use crate::ws_server::WsBroadcaster;
 use crate::AppStateExt;
 use crate::{
-    default_skill_dir, mutate_and_save, send_toast, unix_secs, AppState, CalibrationConfig,
+    default_skill_dir, mutate_and_save, send_toast, AppState, CalibrationConfig,
     CalibrationProfile, ToastLevel,
 };
 
@@ -949,48 +948,49 @@ pub fn close_calibration_window(app: AppHandle) {
     }
 }
 
-// ── Calibration profile CRUD ──────────────────────────────────────────────────
+// ── Calibration profile CRUD (all proxied to daemon) ──────────────────────────
 
 #[tauri::command]
 pub fn list_calibration_profiles(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<CalibrationProfile> {
-    state.lock_or_recover().calibration_profiles.clone()
+    match crate::daemon_cmds::daemon_get("/v1/calibration/profiles") {
+        Ok(v) => serde_json::from_value(v).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
 }
 
 #[tauri::command]
 pub fn get_calibration_profile(
     id: String,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<CalibrationProfile> {
-    state
-        .lock_or_recover()
-        .calibration_profiles
-        .iter()
-        .find(|p| p.id == id)
-        .cloned()
+    let profiles: Vec<CalibrationProfile> =
+        match crate::daemon_cmds::daemon_get("/v1/calibration/profiles") {
+            Ok(v) => serde_json::from_value(v).unwrap_or_default(),
+            Err(_) => return None,
+        };
+    profiles.into_iter().find(|p| p.id == id)
 }
 
 #[tauri::command]
 pub fn get_active_calibration(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<CalibrationProfile> {
-    let s = state.lock_or_recover();
-    let id = s.active_calibration_id.clone();
-    s.calibration_profiles
-        .iter()
-        .find(|p| p.id == id)
-        .cloned()
-        .or_else(|| s.calibration_profiles.first().cloned())
+    match crate::daemon_cmds::daemon_get("/v1/calibration/active-profile") {
+        Ok(v) => serde_json::from_value(v).ok(),
+        Err(_) => None,
+    }
 }
 
 #[tauri::command]
 pub fn set_active_calibration(
     id: String,
-    app: AppHandle,
+    _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    mutate_and_save(&app, |s| s.active_calibration_id = id);
+    let _ =
+        crate::daemon_cmds::daemon_put("/v1/calibration/active", &serde_json::json!({"id": id}));
 }
 
 #[tauri::command]
@@ -999,7 +999,11 @@ pub fn create_calibration_profile(
     _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
-    crate::calibration_service::create_profile(profile).unwrap_or_default()
+    let body = serde_json::to_value(&profile).unwrap_or_default();
+    match crate::daemon_cmds::daemon_post("/v1/calibration/profiles", &body) {
+        Ok(v) => serde_json::from_value(v).unwrap_or_default(),
+        Err(_) => CalibrationProfile::default(),
+    }
 }
 
 #[tauri::command]
@@ -1008,7 +1012,17 @@ pub fn update_calibration_profile(
     _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    crate::calibration_service::update_profile(profile)
+    let body = serde_json::to_value(&profile).map_err(|e| e.to_string())?;
+    let resp = crate::daemon_cmds::daemon_put("/v1/calibration/profiles/update", &body)?;
+    if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(resp
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("update failed")
+            .to_string())
+    }
 }
 
 #[tauri::command]
@@ -1017,7 +1031,19 @@ pub fn delete_calibration_profile(
     _app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    crate::calibration_service::delete_profile(&id)
+    let resp = crate::daemon_cmds::daemon_post(
+        "/v1/calibration/profiles/delete",
+        &serde_json::json!({"id": id}),
+    )?;
+    if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(resp
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("delete failed")
+            .to_string())
+    }
 }
 
 #[tauri::command]
@@ -1026,16 +1052,10 @@ pub fn record_calibration_completed(
     app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    mutate_and_save(&app, |s| {
-        let target_id = profile_id.unwrap_or_else(|| s.active_calibration_id.clone());
-        if let Some(p) = s
-            .calibration_profiles
-            .iter_mut()
-            .find(|p| p.id == target_id)
-        {
-            p.last_calibration_utc = Some(unix_secs());
-        }
-    });
+    let _ = crate::daemon_cmds::daemon_post(
+        "/v1/calibration/record-completed",
+        &serde_json::json!({"profile_id": profile_id}),
+    );
     send_toast(
         &app,
         ToastLevel::Success,
@@ -1047,14 +1067,12 @@ pub fn record_calibration_completed(
 // ── Legacy calibration compat ──────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_calibration_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> CalibrationConfig {
-    let s = state.lock_or_recover();
-    let id = s.active_calibration_id.clone();
-    let profile = s
-        .calibration_profiles
-        .iter()
-        .find(|p| p.id == id)
-        .or_else(|| s.calibration_profiles.first());
+pub fn get_calibration_config(_state: tauri::State<'_, Mutex<Box<AppState>>>) -> CalibrationConfig {
+    let profile: Option<CalibrationProfile> =
+        match crate::daemon_cmds::daemon_get("/v1/calibration/active-profile") {
+            Ok(v) => serde_json::from_value(v).ok(),
+            Err(_) => None,
+        };
     match profile {
         Some(p) => CalibrationConfig {
             action1_label: p
@@ -1119,12 +1137,6 @@ pub fn autosize_main_window(app: AppHandle, desired_height: f64) -> Result<(), S
         cur_w, target_h,
     )))
     .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn emit_calibration_event(event: String, payload: serde_json::Value, app: AppHandle) {
-    let _ = app.emit(&event, &payload);
-    app.state::<WsBroadcaster>().send(&event, &payload);
 }
 
 #[tauri::command]

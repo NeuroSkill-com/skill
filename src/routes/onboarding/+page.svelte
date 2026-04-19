@@ -17,6 +17,7 @@ import { Card, CardContent } from "$lib/components/ui/card";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { openSettings } from "$lib/navigation";
@@ -229,12 +230,7 @@ const calPhaseBg = $derived.by(() => {
   return "bg-emerald-500";
 });
 
-// ── TTS helpers ────────────────────────────────────────────────────────────
-async function ttsSpeakWait(text: string): Promise<void> {
-  try {
-    await invoke("tts_speak", { text });
-  } catch (e) {}
-}
+// ── TTS helper ────────────────────────────────────────────────────────────
 function ttsSpeak(text: string): void {
   invoke("tts_speak", { text }).catch((_e) => {});
 }
@@ -447,95 +443,33 @@ async function driveAutoModelQueue() {
 }
 
 // ── Calibration helpers ────────────────────────────────────────────────────
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
-}
-
-async function emitCalEvent(event: string, payload: Record<string, unknown> = {}) {
-  await invoke("emit_calibration_event", { event, payload });
-}
-
-async function runCountdown(secs: number): Promise<boolean> {
-  calTotal = secs;
-  calCountdown = secs;
-  while (calCountdown > 0) {
-    await sleep(1000);
-    if (!calRunning) return false;
-    calCountdown--;
-  }
-  return true;
-}
-
 async function startCalibration() {
   if (!calProfile || !isConnected) return;
   calRunning = true;
-  const p = calProfile;
-
-  await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
-  if (!calRunning) return;
-
-  await emitCalEvent("calibration-started", {
-    profile_id: p.id,
-    profile_name: p.name,
-    actions: p.actions.map((a) => a.label),
-    loop_count: p.loop_count,
-  });
-
-  for (let loop = 1; loop <= p.loop_count; loop++) {
-    if (!calRunning) break;
-    for (let ai = 0; ai < p.actions.length; ai++) {
-      if (!calRunning) break;
-      const action = p.actions[ai];
-
-      calPhase = { kind: "action", actionIndex: ai, loop };
-      await ttsSpeakWait(action.label);
-      if (!calRunning) break;
-
-      await emitCalEvent("calibration-action", {
-        action: action.label,
-        action_index: ai,
-        loop,
-        phase: `action_${ai}`,
-      });
-      const actionStart = Math.floor(Date.now() / 1000);
-      if (!(await runCountdown(action.duration_secs))) break;
-      try {
-        await daemonInvoke("submit_label", { labelStartUtc: actionStart, text: action.label });
-      } catch (e) {}
-
-      const isLast = loop === p.loop_count && ai === p.actions.length - 1;
-      if (!isLast && calRunning) {
-        const nextAction = p.actions[(ai + 1) % p.actions.length];
-        calPhase = { kind: "break", actionIndex: ai, loop };
-
-        await ttsSpeakWait("Break.");
-        if (!calRunning) break;
-        await sleep(300);
-        ttsSpeak(`Next: ${nextAction.label}.`);
-
-        await emitCalEvent("calibration-break", { after_action: action.label, loop });
-        if (!(await runCountdown(p.break_duration_secs))) break;
-      }
+  try {
+    const result = await daemonInvoke<{ ok: boolean; error?: string }>(
+      "calibration_start_session",
+      { profile_id: calProfile.id },
+    );
+    if (!result?.ok) {
+      calRunning = false;
+      ttsSpeak(result?.error ?? "Failed to start calibration.");
     }
-  }
-
-  if (calRunning) {
-    calPhase = { kind: "done", actionIndex: 0, loop: calProfile.loop_count };
+  } catch (e) {
     calRunning = false;
-    ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
-    await emitCalEvent("calibration-completed", { loop_count: p.loop_count });
-    await invoke("record_calibration_completed", { profileId: p.id });
-  } else if (calPhase.kind !== "idle") {
-    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+    ttsSpeak("Error: Could not start calibration session.");
   }
 }
 
 async function cancelCalibration() {
   if (!calRunning) return;
   calRunning = false;
-  ttsSpeak("Calibration cancelled.");
-  await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
   calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+  try {
+    await daemonInvoke("calibration_cancel_session");
+  } catch {
+    // ignore
+  }
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -559,9 +493,9 @@ onMount(async () => {
   } catch (e) {}
 
   try {
-    calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
+    calProfile = await daemonInvoke<CalibrationProfile | null>("get_active_calibration");
     if (!calProfile) {
-      const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
+      const profiles = await daemonInvoke<CalibrationProfile[]>("list_calibration_profiles");
       calProfile = profiles[0] ?? null;
     }
   } catch (e) {}
@@ -577,6 +511,55 @@ onMount(async () => {
     }
   });
   invoke("tts_init").catch((_e) => {});
+
+  // ── Daemon WS event subscriptions for calibration ─────────────────────
+  const calUnsubs: (() => void)[] = [];
+
+  calUnsubs.push(onDaemonEvent("calibration-phase", (ev) => {
+    const p = ev.payload as Record<string, number | string | boolean>;
+    if (!p) return;
+    calCountdown = (p.countdown as number) ?? 0;
+    calTotal = (p.total_secs as number) ?? 0;
+    calRunning = (p.running as boolean) ?? false;
+    if (p.kind === "action" || p.kind === "break" || p.kind === "done") {
+      calPhase = {
+        kind: p.kind as Phase["kind"],
+        actionIndex: (p.action_index as number) ?? 0,
+        loop: (p.loop_number as number) ?? 1,
+      };
+    }
+  }));
+
+  calUnsubs.push(onDaemonEvent("calibration-tts", (ev) => {
+    const text = ev.payload?.text as string | undefined;
+    if (text) ttsSpeak(text);
+  }));
+
+  calUnsubs.push(onDaemonEvent("calibration-started", () => {
+    calRunning = true;
+  }));
+
+  calUnsubs.push(onDaemonEvent("calibration-completed", async () => {
+    calRunning = false;
+    calPhase = { kind: "done", actionIndex: 0, loop: calProfile?.loop_count ?? 1 };
+    // Reload profile to get updated last_calibration_utc
+    try {
+      calProfile = await daemonInvoke<CalibrationProfile | null>("get_active_calibration");
+    } catch {}
+  }));
+
+  calUnsubs.push(onDaemonEvent("calibration-cancelled", () => {
+    calRunning = false;
+    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+  }));
+
+  calUnsubs.push(onDaemonEvent("calibration-error", () => {
+    calRunning = false;
+    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+  }));
+
+  // Store unsubs for cleanup
+  unsubs.push(...calUnsubs.map((fn) => fn as unknown as UnlistenFn));
 
   await refreshModelDownloads();
   if (isMac) {
@@ -636,7 +619,7 @@ onDestroy(async () => {
   unlistenTts?.();
   if (calRunning) {
     calRunning = false;
-    await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+    daemonInvoke("calibration_cancel_session").catch(() => {});
   }
   if (modelsTimer) clearInterval(modelsTimer);
 });

@@ -137,6 +137,32 @@ pub struct AppState {
     /// Readiness flag: set to `true` once all startup init is complete
     /// (HNSW indices loaded, text embedder lazy-inited, etc.).
     pub ready: Arc<AtomicBool>,
+    /// Cancel sender for the active daemon-driven calibration session.
+    /// `Some` when a session is running; routes send `()` to cancel.
+    pub calibration_cancel: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    /// Observable snapshot of the current calibration session phase.
+    pub calibration_phase: Arc<Mutex<CalibrationPhaseSnapshot>>,
+}
+
+/// Observable state of the daemon-driven calibration session.
+#[derive(Clone, Default, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CalibrationPhaseSnapshot {
+    /// "idle", "action", "break", "done"
+    pub kind: String,
+    /// Index into the profile's action list (for "action" kind).
+    pub action_index: usize,
+    /// 1-based loop counter.
+    pub loop_number: u32,
+    /// Seconds remaining in the current countdown.
+    pub countdown: u32,
+    /// Total seconds for the current phase.
+    pub total_secs: u32,
+    /// Whether a calibration session is currently running.
+    pub running: bool,
+    /// Profile ID of the running session.
+    pub profile_id: String,
+    /// Profile name of the running session.
+    pub profile_name: String,
 }
 
 impl AppState {
@@ -233,6 +259,8 @@ impl AppState {
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
             test_mode: Arc::new(AtomicBool::new(false)),
             ready: Arc::new(AtomicBool::new(false)),
+            calibration_cancel: Arc::new(Mutex::new(None)),
+            calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
         }
     }
 }

@@ -8,7 +8,7 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 use crate::constants;
 use crate::helpers::AppStateExt;
-use crate::settings::{load_settings, CalibrationProfile};
+use crate::settings::load_settings;
 use crate::shortcut_cmds::apply_all_shortcuts;
 use crate::state::DiscoveredDevice;
 use crate::tray::build_menu;
@@ -369,19 +369,6 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.shortcuts.focus_timer_shortcut = data.focus_timer_shortcut;
         s.shortcuts.chat_shortcut = data.chat_shortcut;
         s.shortcuts.compare_shortcut = data.compare_shortcut;
-        let mut profiles = data.calibration_profiles;
-        if profiles.is_empty() {
-            profiles.push(CalibrationProfile::from_legacy(&data.calibration));
-        }
-        s.calibration_profiles = profiles;
-        s.active_calibration_id = if data.active_calibration_id.is_empty() {
-            s.calibration_profiles
-                .first()
-                .map(|p| p.id.clone())
-                .unwrap_or_default()
-        } else {
-            data.active_calibration_id
-        };
         s.ui.onboarding_complete = data.onboarding_complete;
         s.ui.last_seen_whats_new_version = data.last_seen_whats_new_version;
         s.ui.theme = data.theme;

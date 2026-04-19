@@ -15,6 +15,7 @@ import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonStatus } from "$lib/daemon/status.svelte";
+import { onDaemonEvent } from "$lib/daemon/ws";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -93,8 +94,8 @@ interface CalibrationProfile {
 type PhaseKind = "idle" | "action" | "break" | "done";
 interface Phase {
   kind: PhaseKind;
-  actionIndex: number; // index into profile.actions (for "action" kind)
-  loop: number; // 1-based
+  actionIndex: number;
+  loop: number;
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -108,21 +109,23 @@ let unlisten: UnlistenFn | null = null;
 let unlistenQualityFn: UnlistenFn | null = null;
 let notifGranted = false;
 
+// Daemon WS event unsub functions
+let unsubPhase: (() => void) | null = null;
+let unsubTts: (() => void) | null = null;
+let unsubStarted: (() => void) | null = null;
+let unsubCompleted: (() => void) | null = null;
+let unsubCancelled: (() => void) | null = null;
+let unsubAction: (() => void) | null = null;
+let unsubBreak: (() => void) | null = null;
+let unsubError: (() => void) | null = null;
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 async function closeWindow() {
   if (running) {
-    running = false; // prevent double-emit in onDestroy
-    await emitEvent("calibration-cancelled", { loop: phase.loop });
+    running = false;
+    await daemonInvoke("calibration_cancel_session");
   }
   await invoke("close_calibration_window");
-}
-
-async function emitEvent(event: string, payload: Record<string, unknown> = {}) {
-  await invoke("emit_calibration_event", { event, payload });
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
 }
 
 function timeAgo(utc: number): string {
@@ -140,168 +143,61 @@ async function notify(title: string, body: string) {
   } catch (e) {}
 }
 
-async function runCountdown(secs: number): Promise<boolean> {
-  totalSecs = secs;
-  countdown = secs;
-  const endTime = Date.now() + secs * 1000;
-  while (countdown > 0) {
-    // Sleep until the next whole-second boundary to avoid cumulative drift.
-    const remaining = endTime - Date.now();
-    if (remaining <= 0) {
-      countdown = 0;
-      break;
-    }
-    const nextTick = remaining % 1000 || 1000;
-    await sleep(nextTick);
-    if (!running) return false;
-    countdown = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-  }
-  return true;
-}
-
-// ── Load profiles ──────────────────────────────────────────────────────────
-async function loadProfiles() {
-  profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
-}
-
-async function selectProfile(p: CalibrationProfile) {
-  profile = p;
-  await invoke("set_active_calibration", { id: p.id });
-}
-
 // ── TTS helpers ────────────────────────────────────────────────────────────
-
-/**
- * Await TTS playback to completion before returning.
- * Use before starting a countdown so the timer only ticks after the user
- * has heard the full announcement.  Swallows all errors so TTS failures
- * never block calibration.
- */
-async function ttsSpeakWait(text: string): Promise<void> {
-  try {
-    await invoke("tts_speak", { text });
-  } catch {
-    /* non-fatal */
-  }
-}
 
 /** Fire-and-forget TTS — never throws; failures are silently ignored. */
 function ttsSpeak(text: string): void {
   invoke("tts_speak", { text }).catch((_e) => {});
 }
 
-// ── Calibration loop ───────────────────────────────────────────────────────
+// ── Load profiles (from daemon) ───────────────────────────────────────────
+async function loadProfiles() {
+  profiles = await daemonInvoke<CalibrationProfile[]>("list_calibration_profiles");
+}
+
+async function selectProfile(p: CalibrationProfile) {
+  profile = p;
+  await daemonInvoke("set_active_calibration", { id: p.id });
+}
+
+// ── Calibration control (daemon-driven) ───────────────────────────────────
 async function startCalibration() {
   if (!profile) return;
-  running = true;
-  const p = profile;
 
   // Check daemon connectivity before starting
   try {
     await daemonInvoke("get_status");
   } catch (e) {
-    running = false;
     ttsSpeak("Error: Daemon is not reachable. Please start the daemon and try again.");
-    await emitEvent("calibration-error", { error: "daemon_unreachable", phase: "preflight" });
     return;
   }
 
-  // Announce calibration start and wait for it to finish so the first action
-  // announcement doesn't overlap.
-  await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
-  if (!running) return; // user cancelled during the announcement
+  running = true;
 
-  await emitEvent("calibration-started", {
-    profile_id: p.id,
-    profile_name: p.name,
-    actions: p.actions.map((a) => a.label),
-    loop_count: p.loop_count,
-  });
-
-  for (let loop = 1; loop <= p.loop_count; loop++) {
-    if (!running) break;
-
-    for (let ai = 0; ai < p.actions.length; ai++) {
-      if (!running) break;
-      const action = p.actions[ai];
-
-      // ACTION phase — speak the action label and wait for it to finish
-      // before the countdown begins, so the user hears the full cue first.
-      phase = { kind: "action", actionIndex: ai, loop };
-      await ttsSpeakWait(action.label);
-      if (!running) break; // cancelled during speech
-      await notify(action.label, t("calibration.notifActionBody", { loop: String(loop), total: String(p.loop_count) }));
-      await emitEvent("calibration-action", {
-        action: action.label,
-        action_index: ai,
-        loop,
-        phase: `action_${ai}`,
-      });
-      const actionStart = Math.floor(Date.now() / 1000);
-      if (!(await runCountdown(action.duration_secs))) break;
-      try {
-        const actionEnd = Math.floor(Date.now() / 1000);
-        await daemonInvoke("submit_label", {
-          labelStartUtc: actionStart,
-          text: action.label,
-          eeg_start: actionStart,
-          eeg_end: actionEnd,
-        });
-      } catch (e) {
-        running = false;
-        phase = { kind: "idle", actionIndex: 0, loop: 1 };
-        ttsSpeak("Error: Failed to record calibration data. Please check daemon connection.");
-        await emitEvent("calibration-error", { error: "daemon_unreachable", phase: "action_submission" });
-        return;
-      }
-
-      // BREAK phase — skip only after the very last action of the very last loop
-      const isLast = loop === p.loop_count && ai === p.actions.length - 1;
-      if (!isLast && running) {
-        const nextAction = p.actions[(ai + 1) % p.actions.length];
-        phase = { kind: "break", actionIndex: ai, loop };
-
-        // Announce both parts sequentially so TTS is fully done before the
-        // countdown starts.  This prevents "Next: …" from bleeding into the
-        // next action phase and delaying its countdown.
-        await ttsSpeakWait("Break.");
-        if (!running) break;
-        await sleep(300);
-        await ttsSpeakWait(`Next: ${nextAction.label}.`);
-        if (!running) break;
-
-        await notify(t("calibration.break"), t("calibration.notifBreakBody", { next: nextAction.label }));
-        await emitEvent("calibration-break", { after_action: action.label, loop });
-        if (!(await runCountdown(p.break_duration_secs))) break;
-      }
+  try {
+    const result = await daemonInvoke<{ ok: boolean; error?: string }>(
+      "calibration_start_session",
+      { profile_id: profile.id },
+    );
+    if (!result?.ok) {
+      running = false;
+      ttsSpeak(result?.error ?? "Failed to start calibration session.");
     }
-  }
-
-  if (running) {
-    // Completed all loops normally.
-    phase = { kind: "done", actionIndex: 0, loop: p.loop_count };
+  } catch (e) {
     running = false;
-    ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
-    await notify(t("calibration.complete"), t("calibration.notifDoneBody", { n: String(p.loop_count) }));
-    await emitEvent("calibration-completed", { loop_count: p.loop_count });
-    await invoke("record_calibration_completed", { profileId: p.id });
-    await loadProfiles();
-    profile = profiles.find((x) => x.id === p.id) ?? profile;
-  } else if (phase.kind !== "idle") {
-    // cancelCalibration() set running=false but the loop was mid-sleep when
-    // it returned — ensure we end up in idle in case phase wasn't reset yet.
-    phase = { kind: "idle", actionIndex: 0, loop: 1 };
+    ttsSpeak("Error: Could not start calibration session.");
   }
 }
 
 async function cancelCalibration() {
   if (!running) return;
   running = false;
-  ttsSpeak("Calibration cancelled.");
-  await emitEvent("calibration-cancelled", { loop: phase.loop });
-  // Reset immediately so the UI returns to the start screen without waiting
-  // for the background countdown loop to finish its current sleep(1000).
   phase = { kind: "idle", actionIndex: 0, loop: 1 };
+  try {
+    await daemonInvoke("calibration_cancel_session");
+  } catch {
+    // ignore
+  }
 }
 
 // ── Derived ────────────────────────────────────────────────────────────────
@@ -359,7 +255,7 @@ onMount(async () => {
   if (paramId) {
     profile = profiles.find((p) => p.id === paramId) ?? profiles[0] ?? null;
   } else {
-    profile = (await invoke<CalibrationProfile | null>("get_active_calibration")) ?? profiles[0] ?? null;
+    profile = (await daemonInvoke<CalibrationProfile | null>("get_active_calibration")) ?? profiles[0] ?? null;
   }
 
   if (autostart && profile) startCalibration();
@@ -373,7 +269,6 @@ onMount(async () => {
   });
 
   // Pre-warm TTS engine — listen for progress events BEFORE calling init
-  // so we never miss the first "step" event.
   unlistenTtsFn = await listen<{ phase: string; label: string }>("tts-progress", (ev) => {
     if (ev.payload.phase === "ready") {
       ttsReady = true;
@@ -395,15 +290,102 @@ onMount(async () => {
     elecQuality = ev.payload.channel_quality;
     museConnected = ev.payload.state === "connected";
   });
+
+  // ── Daemon WebSocket event subscriptions ──────────────────────────────
+
+  // Phase ticks — update countdown and phase display
+  unsubPhase = onDaemonEvent("calibration-phase", (ev) => {
+    const p = ev.payload as Record<string, number | string | boolean>;
+    if (!p) return;
+    countdown = (p.countdown as number) ?? 0;
+    totalSecs = (p.total_secs as number) ?? 0;
+    running = (p.running as boolean) ?? false;
+    if (p.kind === "action" || p.kind === "break" || p.kind === "done") {
+      phase = {
+        kind: p.kind as PhaseKind,
+        actionIndex: (p.action_index as number) ?? 0,
+        loop: (p.loop_number as number) ?? 1,
+      };
+    }
+  });
+
+  // TTS cues from daemon — the daemon broadcasts what to speak, we play it
+  unsubTts = onDaemonEvent("calibration-tts", (ev) => {
+    const text = ev.payload?.text as string | undefined;
+    if (text) ttsSpeak(text);
+  });
+
+  // Session started
+  unsubStarted = onDaemonEvent("calibration-started", (_ev) => {
+    running = true;
+  });
+
+  // Action phase notification
+  unsubAction = onDaemonEvent("calibration-action", (ev) => {
+    const p = ev.payload as Record<string, number | string>;
+    if (p) {
+      phase = { kind: "action", actionIndex: (p.action_index as number) ?? 0, loop: (p.loop as number) ?? 1 };
+      notify(
+        String(p.action ?? ""),
+        t("calibration.notifActionBody", { loop: String(p.loop ?? 1), total: String(profile?.loop_count ?? 1) }),
+      );
+    }
+  });
+
+  // Break phase notification
+  unsubBreak = onDaemonEvent("calibration-break", (ev) => {
+    const p = ev.payload as Record<string, string>;
+    if (p) {
+      notify(
+        t("calibration.break"),
+        t("calibration.notifBreakBody", { next: String(p.next_action ?? "") }),
+      );
+    }
+  });
+
+  // Session completed
+  unsubCompleted = onDaemonEvent("calibration-completed", async (_ev) => {
+    running = false;
+    phase = { kind: "done", actionIndex: 0, loop: profile?.loop_count ?? 1 };
+    notify(
+      t("calibration.complete"),
+      t("calibration.notifDoneBody", { n: String(profile?.loop_count ?? 1) }),
+    );
+    await loadProfiles();
+    if (profile) {
+      profile = profiles.find((x) => x.id === profile!.id) ?? profile;
+    }
+  });
+
+  // Session cancelled
+  unsubCancelled = onDaemonEvent("calibration-cancelled", (_ev) => {
+    running = false;
+    phase = { kind: "idle", actionIndex: 0, loop: 1 };
+  });
+
+  // Errors
+  unsubError = onDaemonEvent("calibration-error", (ev) => {
+    running = false;
+    phase = { kind: "idle", actionIndex: 0, loop: 1 };
+    ttsSpeak("Calibration error. Please check daemon connection.");
+  });
 });
 
 onDestroy(async () => {
   unlisten?.();
   unlistenQualityFn?.();
   unlistenTtsFn?.();
+  unsubPhase?.();
+  unsubTts?.();
+  unsubStarted?.();
+  unsubCompleted?.();
+  unsubCancelled?.();
+  unsubAction?.();
+  unsubBreak?.();
+  unsubError?.();
   if (running) {
     running = false;
-    await emitEvent("calibration-cancelled", { loop: phase.loop });
+    daemonInvoke("calibration_cancel_session").catch(() => {});
   }
 });
 

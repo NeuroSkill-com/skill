@@ -232,12 +232,6 @@ if [[ -n "$FRONTEND_DIR" && -d "$FRONTEND_DIR" ]]; then
   echo "  ✓ frontend ($JS_COUNT js, $CSS_COUNT css)"
 fi
 
-# ── Daemon LaunchAgent plist template ────────────────────────────────────
-DAEMON_PLIST_SRC="$TAURI_DIR/resources/com.neuroskill.skill-daemon.plist"
-if [[ -f "$DAEMON_PLIST_SRC" ]]; then
-  cp "$DAEMON_PLIST_SRC" "$RES_DIR/com.neuroskill.skill-daemon.plist"
-  echo "  ✓ daemon plist template"
-fi
 
 # ── Entitlements & codesign ───────────────────────────────────────────────
 SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"

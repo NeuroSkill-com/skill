@@ -112,6 +112,71 @@ pub(crate) async fn delete_profile(
     Json(serde_json::json!({"ok": true}))
 }
 
+// ── Session control routes ────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub(crate) struct StartSessionRequest {
+    pub(crate) profile_id: String,
+}
+
+pub(crate) async fn start_session(
+    State(state): State<AppState>,
+    Json(req): Json<StartSessionRequest>,
+) -> Json<serde_json::Value> {
+    match crate::calibration_runner::spawn_session(&state, &req.profile_id) {
+        Ok(()) => Json(serde_json::json!({"ok": true})),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})),
+    }
+}
+
+pub(crate) async fn cancel_session(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let cancelled = crate::calibration_runner::cancel_session(&state);
+    Json(serde_json::json!({"ok": true, "was_running": cancelled}))
+}
+
+pub(crate) async fn session_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let snap = state.calibration_phase.lock().unwrap().clone();
+    Json(serde_json::to_value(&snap).unwrap_or_default())
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RecordCompletedRequest {
+    pub(crate) profile_id: Option<String>,
+}
+
+pub(crate) async fn record_completed(
+    State(state): State<AppState>,
+    Json(req): Json<RecordCompletedRequest>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    let target_id = req.profile_id.unwrap_or_else(|| settings.active_calibration_id.clone());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if let Some(p) = settings.calibration_profiles.iter_mut().find(|p| p.id == target_id) {
+        p.last_calibration_utc = Some(now);
+        save_user_settings(&state, &settings);
+        state.broadcast("calibration-changed", serde_json::json!({"action": "completed"}));
+        Json(serde_json::json!({"ok": true}))
+    } else {
+        Json(serde_json::json!({"ok": false, "error": "profile not found"}))
+    }
+}
+
+/// Returns the full active CalibrationProfile (not just the ID).
+pub(crate) async fn get_active_profile(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let settings = load_user_settings(&state);
+    let active_id = &settings.active_calibration_id;
+    let profile = settings
+        .calibration_profiles
+        .iter()
+        .find(|p| p.id == *active_id)
+        .or_else(|| settings.calibration_profiles.first())
+        .cloned();
+    Json(serde_json::to_value(&profile).unwrap_or(serde_json::Value::Null))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

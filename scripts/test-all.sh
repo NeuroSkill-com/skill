@@ -9,7 +9,7 @@
 #   bash scripts/test-all.sh --list         # list available suites
 #   bash scripts/test-all.sh --continue     # don't stop on first failure
 #
-# Suites: fmt, lint, clippy, deny, vitest, rust, ci, smoke, daemon, e2e, types
+# Suites: fmt, lint, clippy, deny, vitest, rust, ci, smoke, daemon, daemon-e2e, e2e, types
 
 set -euo pipefail
 
@@ -32,6 +32,7 @@ for arg in "$@"; do
       echo "  types     TypeScript/Svelte type checking"
       echo "  smoke     Build verification smoke test"
       echo "  daemon    Daemon packaging test"
+      echo "  daemon-e2e Daemon service installer E2E (optional)"
       echo "  e2e       LLM end-to-end test"
       echo "  a11y      Accessibility audit"
       echo "  i18n      i18n key validation"
@@ -164,6 +165,13 @@ for suite in "${SUITES[@]}"; do
         run_suite "daemon packaging" bash scripts/test-daemon-packaging.sh || { $STOP_ON_FAIL && break; }
       else
         skip_suite "daemon packaging" "no build artifacts (run npm run tauri:build first)"
+      fi
+      ;;
+    daemon-e2e)
+      if [ -f "src-tauri/target/debug/skill-daemon" ]; then
+        run_suite "daemon E2E" bash scripts/test-daemon-e2e.sh || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "daemon E2E" "no daemon binary (cargo build -p skill-daemon first)"
       fi
       ;;
     e2e)

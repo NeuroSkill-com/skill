@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Calibration tab — multi-profile manager with N-action support. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -153,14 +154,14 @@ function fmtDate(utc: number) {
 }
 
 async function load() {
-  profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
-  const active = await invoke<CalibrationProfile | null>("get_active_calibration");
+  profiles = await daemonInvoke<CalibrationProfile[]>("list_calibration_profiles");
+  const active = await daemonInvoke<CalibrationProfile | null>("get_active_calibration");
   activeId = active?.id ?? profiles[0]?.id ?? "";
 }
 
 async function selectProfile(id: string) {
   activeId = id;
-  await invoke("set_active_calibration", { id });
+  await daemonInvoke("set_active_calibration", { id });
 }
 
 function startEditNew() {
@@ -195,10 +196,10 @@ async function saveEdit() {
   saving = true;
   try {
     if (isNew) {
-      const created = await invoke<CalibrationProfile>("create_calibration_profile", { profile: editing });
+      const created = await daemonInvoke<CalibrationProfile>("create_calibration_profile", { profile: editing });
       await selectProfile(created.id);
     } else {
-      await invoke("update_calibration_profile", { profile: editing });
+      await daemonInvoke("update_calibration_profile", { profile: editing });
     }
     editing = null;
     await load();
@@ -209,7 +210,7 @@ async function saveEdit() {
 
 async function deleteProfile(id: string) {
   if (profiles.length <= 1) return;
-  await invoke("delete_calibration_profile", { id });
+  await daemonInvoke("delete_calibration_profile", { id });
   await load();
 }
 

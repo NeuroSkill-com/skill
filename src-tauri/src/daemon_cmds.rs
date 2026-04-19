@@ -23,13 +23,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Return a ureq agent with a 5 s global timeout so that no HTTP call to the
-/// daemon can block the Tauri setup thread indefinitely.
+/// Return a shared ureq agent with a 5 s global timeout so that HTTP calls to
+/// the daemon reuse connections instead of creating a new agent every time.
 fn daemon_http_agent() -> ureq::Agent {
-    ureq::config::Config::builder()
-        .timeout_global(Some(Duration::from_secs(5)))
-        .build()
-        .new_agent()
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT
+        .get_or_init(|| {
+            ureq::config::Config::builder()
+                .timeout_global(Some(Duration::from_secs(5)))
+                .build()
+                .new_agent()
+        })
+        .clone()
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct DaemonStatus {
@@ -164,6 +169,13 @@ fn resolve_daemon_bin_path() -> String {
         }
     }
 
+    // Last resort: rollback binary in config dir
+    if let Ok(rollback) = daemon_rollback_bin_path() {
+        if rollback.exists() {
+            return rollback.display().to_string();
+        }
+    }
+
     if cfg!(target_os = "windows") {
         "skill-daemon.exe".to_string()
     } else {
@@ -228,10 +240,28 @@ fn update_daemon_rollback_snapshot_best_effort() {
 /// (LaunchAgent on macOS, systemd user unit on Linux, Windows service).
 /// Best-effort: failures are logged but never block app startup.
 fn install_daemon_service_best_effort(base_url: &str) {
-    let url = format!("{base_url}/service/install");
+    let status_url = format!("{base_url}/service/status");
+    let install_url = format!("{base_url}/service/install");
     let token = load_daemon_token().ok();
     std::thread::spawn(move || {
-        let mut req = daemon_http_agent().post(&url);
+        // Check current service status first — skip install if already registered.
+        {
+            let mut status_req = daemon_http_agent().get(&status_url);
+            if let Some(tok) = &token {
+                status_req = status_req.header("Authorization", &format!("Bearer {tok}"));
+            }
+            if let Ok(mut resp) = status_req.call() {
+                let body: serde_json::Value =
+                    resp.body_mut().read_json().unwrap_or(serde_json::json!({}));
+                let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                if status == "running" || status == "stopped" {
+                    eprintln!("[daemon] OS service already installed (status: {status}), skipping install");
+                    return;
+                }
+            }
+        }
+
+        let mut req = daemon_http_agent().post(&install_url);
         if let Some(tok) = &token {
             req = req.header("Authorization", &format!("Bearer {tok}"));
         }
@@ -257,9 +287,20 @@ fn install_daemon_service_best_effort(base_url: &str) {
     });
 }
 
-/// Ensure the daemon process is running.  If it's not reachable, attempt to
-/// spawn it.  Called once during `setup_app`.
+/// Ensure the daemon process is running (non-blocking).
+/// Spawns a background thread that calls [`ensure_daemon_running_blocking`] so
+/// the Tauri window can appear immediately while the daemon connection is
+/// established in the background.
 pub(crate) fn ensure_daemon_running() {
+    std::thread::Builder::new()
+        .name("daemon-ensure".into())
+        .spawn(ensure_daemon_running_blocking)
+        .expect("failed to spawn daemon-ensure thread");
+}
+
+/// Ensure the daemon process is running (blocking).  If it's not reachable,
+/// attempt to spawn it.
+fn ensure_daemon_running_blocking() {
     let base_url = daemon_base_url();
     let addr: std::net::SocketAddr = std::env::var("SKILL_DAEMON_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:18444".to_string())
@@ -1108,6 +1149,28 @@ fn post_json_with_auth_response<TReq: Serialize, TResp: serde::de::DeserializeOw
         .map_err(|err| err.to_string())
 }
 
+fn put_json_with_auth_response<TReq: Serialize, TResp: serde::de::DeserializeOwned>(
+    base_url: &str,
+    token: &str,
+    path: &str,
+    body: &TReq,
+) -> Result<TResp, String> {
+    let url = format!("{base_url}{path}");
+    let payload = serde_json::to_string(body).map_err(|err| err.to_string())?;
+
+    let mut response = daemon_http_agent()
+        .put(&url)
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Content-Type", "application/json")
+        .send(payload.as_str())
+        .map_err(|err| err.to_string())?;
+
+    response
+        .body_mut()
+        .read_json::<TResp>()
+        .map_err(|err| err.to_string())
+}
+
 fn daemon_required_env() -> bool {
     std::env::var("SKILL_DAEMON_REQUIRED")
         .map(|v| {
@@ -1516,6 +1579,17 @@ pub(crate) fn daemon_post(
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
     post_json_with_auth_response(&base_url, &token, path, body)
+}
+
+/// Blocking PUT helper used inside spawn_blocking.
+pub(crate) fn daemon_put(
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    ensure_daemon_for_proxy();
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    put_json_with_auth_response(&base_url, &token, path, body)
 }
 
 async fn daemon_get_async(path: &'static str) -> Result<serde_json::Value, String> {

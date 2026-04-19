@@ -361,6 +361,49 @@ async fn create_label(
     Ok(Json(result))
 }
 
+/// Internal helper for daemon-side callers (e.g. calibration runner).
+/// Submits a label without going through HTTP.
+pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64, eeg_end: u64) -> Result<(), String> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let label_index = state.label_index.clone();
+    let embedder = state.text_embedder.clone();
+    let text = text.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let conn = open_labels_db(&skill_dir).map_err(|e| e.to_string())?;
+        let now_secs = eeg_start;
+
+        let text_emb = embedder.embed(&text);
+        let _ctx_emb: Option<Vec<f32>> = None;
+        let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
+
+        conn.execute(
+            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
+                                 label_start, label_end,
+                                 created_at, text_embedding, context_embedding, embedding_model)
+             VALUES (?1, '', ?2, ?3, ?4, ?5, ?4, ?5, ?6, ?7, NULL, ?8)",
+            rusqlite::params![
+                text,
+                eeg_start as i64,
+                eeg_end as i64,
+                now_secs as i64,
+                now_secs as i64,
+                now_unix(),
+                text_blob,
+                EMBED_MODEL_NAME,
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+        let id = conn.last_insert_rowid();
+
+        let text_emb_ref = text_emb.as_deref().unwrap_or(&[]);
+        let _ = skill_label_index::insert_label(&skill_dir, id, text_emb_ref, &[], eeg_start, eeg_end, &label_index);
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 async fn update_label(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<i64>,

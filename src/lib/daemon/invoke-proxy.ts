@@ -106,6 +106,18 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_daemon_watchdog: [G, "/v1/settings/daemon-watchdog"],
   set_daemon_watchdog: [P, "/v1/settings/daemon-watchdog"],
 
+  // Calibration session
+  calibration_start_session: [P, "/v1/calibration/session/start"],
+  calibration_cancel_session: [P, "/v1/calibration/session/cancel"],
+  calibration_session_status: [G, "/v1/calibration/session/status"],
+  list_calibration_profiles: [G, "/v1/calibration/profiles"],
+  get_active_calibration: [G, "/v1/calibration/active-profile"],
+  set_active_calibration: [P, "/v1/calibration/active"],
+  create_calibration_profile: [P, "/v1/calibration/profiles"],
+  update_calibration_profile: [P, "/v1/calibration/profiles/update"],
+  delete_calibration_profile: [P, "/v1/calibration/profiles/delete"],
+  record_calibration_completed: [P, "/v1/calibration/record-completed"],
+
   // Search
   search_corpus_stats: [G, "/v1/search/stats"],
   list_search_devices: [G, "/v1/search/devices"],
@@ -250,6 +262,16 @@ const DAEMON_ONLY_COMMANDS = new Set<string>([
   "cancel_tool_call",
   "interactive_search",
   "search_corpus_stats",
+  "calibration_start_session",
+  "calibration_cancel_session",
+  "calibration_session_status",
+  "list_calibration_profiles",
+  "get_active_calibration",
+  "set_active_calibration",
+  "record_calibration_completed",
+  "create_calibration_profile",
+  "update_calibration_profile",
+  "delete_calibration_profile",
 ]);
 
 // Active search abort controller — allows cancel from UI.

@@ -28,6 +28,8 @@ import { createWriteStream } from "fs";
 import https from "https";
 import http from "http";
 
+const LLAMA_PREBUILT_TAG = "0.2.46";
+
 // ── Globals ──────────────────────────────────────────────────────────────────
 
 let CMD = "ci";
@@ -317,13 +319,13 @@ function cmdDiscordNotify(args) {
 
 async function cmdDownloadLlama(args) {
   const [plat, target, feature] = args._;
-  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/latest/download/llama-prebuilt-${plat}-${target}-${feature}-static.tar.gz`;
+  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/download/${LLAMA_PREBUILT_TAG}/llama-prebuilt-${plat}-${target}-${feature}-static.tar.gz`;
   const tmp = process.env.RUNNER_TEMP || tmpdir();
   const archive = join(tmp, `llama-prebuilt-${plat}.tar.gz`);
   const dest = join(tmp, `llama-prebuilt-${plat}`);
   mkdirSync(dest, { recursive: true });
 
-  console.log(`Downloading prebuilt llama: ${url}`);
+  console.log(`Downloading prebuilt llama ${LLAMA_PREBUILT_TAG}: ${url}`);
   try {
     await downloadFile(url, archive);
   } catch (e) {

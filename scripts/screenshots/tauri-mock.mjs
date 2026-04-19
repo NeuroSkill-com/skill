@@ -804,7 +804,6 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     update_calibration_profile: () => null,
     delete_calibration_profile: () => null,
     record_calibration_completed: () => null,
-    emit_calibration_event: () => null,
 
     // ── Chat CRUD ────────────────────────────────────────────────────────
     load_chat_session: () => ({ id: 1, title: "Demo", messages: [], created_at: ${Date.now() / 1000 | 0}, archived: false }),
