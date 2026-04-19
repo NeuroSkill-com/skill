@@ -216,15 +216,6 @@ jobs:
           cd "$RUNNER_TEMP/pkgroot"
           tar -czf "$GITHUB_WORKSPACE/NeuroSkill-linux-x86_64.tar.gz" .
 
-      # ── Upload Linux portable tarball to GitHub Release ─────────────────
-      - name: Upload Linux portable tarball
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.version_meta.outputs.tag }}
-          name: Skill v${{ steps.version_meta.outputs.version }} (Linux)
-          generate_release_notes: true
-          files: NeuroSkill-linux-x86_64.tar.gz
-
       # ── Upload cargo build timings ─────────────────────────────────────────
       # The --timings flag produces an HTML report showing per-crate compile
       # durations.  Upload it so slow crates can be identified and targeted.
