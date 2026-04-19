@@ -94,6 +94,8 @@ async function daemonRequest<T>(
   if (!resp.ok) {
     const msg = json?.error || json?.message || `${resp.status} ${resp.statusText}`;
     if (resp.status === 401) {
+      // Token may be stale after daemon restart — force re-bootstrap on next request.
+      invalidateDaemonBootstrap();
       import("./status.svelte")
         .then(({ notifyDaemonError }) => notifyDaemonError("authentication failed"))
         .catch(() => {});

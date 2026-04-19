@@ -70,18 +70,27 @@ pub fn get_device_capabilities(
 
 #[tauri::command]
 pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
-    let daemon_devices = match crate::daemon_cmds::set_preferred_device(id) {
-        Ok(v) => v,
-        Err(err) => {
-            mark_daemon_unavailable(&app, &err);
-            emit_status(&app);
-            return app.app_state().lock_or_recover().discovered.clone();
+    match crate::daemon_cmds::set_preferred_device(id.clone()) {
+        Ok(daemon_devices) => {
+            apply_daemon_devices_to_local(&app, daemon_devices);
+            if let Ok(status) = crate::daemon_cmds::fetch_daemon_status() {
+                apply_daemon_status_to_local(&app, status);
+            }
         }
-    };
-
-    apply_daemon_devices_to_local(&app, daemon_devices);
-    if let Ok(status) = crate::daemon_cmds::fetch_daemon_status() {
-        apply_daemon_status_to_local(&app, status);
+        Err(_err) => {
+            // Daemon unreachable (e.g. auth token mismatch after restart).
+            // Apply preferred change locally so the UI still responds.
+            let r = app.app_state();
+            let mut s = r.lock_or_recover();
+            for d in s.discovered.iter_mut() {
+                d.is_preferred = !id.is_empty() && d.id == id;
+            }
+            s.preferred_id = if id.is_empty() {
+                None
+            } else {
+                Some(id.clone())
+            };
+        }
     }
 
     emit_devices(&app);

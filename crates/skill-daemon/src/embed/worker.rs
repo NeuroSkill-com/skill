@@ -519,6 +519,10 @@ fn embed_worker_main(
 pub(crate) enum Encoder {
     #[cfg(feature = "embed-zuna")]
     Zuna(Box<ZunaState>),
+    #[cfg(feature = "embed-zuna-gpu")]
+    ZunaGpu(Box<ZunaGpuState>),
+    #[cfg(feature = "embed-zuna-gpu-f16")]
+    ZunaGpuF16(Box<ZunaGpuF16State>),
     #[cfg(feature = "embed-luna")]
     Luna(Box<luna_rs::LunaEncoder<burn::backend::NdArray>>),
     #[cfg(feature = "embed-reve")]
@@ -568,8 +572,9 @@ pub(crate) struct NeuroRVQState {
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
+    let use_gpu = skill_settings::load_settings(_skill_dir).exg_inference_device != "cpu";
     let backend = config.model_backend.clone();
-    info!(backend = backend.as_str(), "loading EXG encoder");
+    info!(backend = backend.as_str(), gpu = use_gpu, "loading EXG encoder");
     let result = match &backend {
         #[cfg(feature = "embed-neurorvq")]
         ExgModelBackend::Neurorvq => {
@@ -593,6 +598,23 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
             info!(repo = %config.hf_repo, "loading ZUNA encoder");
+            // Try GPU backends first when user selects GPU.
+            #[cfg(feature = "embed-zuna-gpu-f16")]
+            if use_gpu {
+                if let Some(s) = load_zuna_gpu_f16(config) {
+                    info!("ZUNA GPU f16 encoder loaded");
+                    return Some(Encoder::ZunaGpuF16(Box::new(s)));
+                }
+                warn!("GPU f16 unavailable, trying GPU f32");
+            }
+            #[cfg(feature = "embed-zuna-gpu")]
+            if use_gpu {
+                if let Some(s) = load_zuna_gpu(config) {
+                    info!("ZUNA GPU encoder loaded");
+                    return Some(Encoder::ZunaGpu(Box::new(s)));
+                }
+                warn!("GPU f32 unavailable, falling back to CPU");
+            }
             load_zuna(config)
                 .map(|s| {
                     info!("ZUNA encoder loaded");
@@ -726,6 +748,10 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     match encoder {
         #[cfg(feature = "embed-zuna")]
         Encoder::Zuna(state) => encode_zuna(state, msg),
+        #[cfg(feature = "embed-zuna-gpu")]
+        Encoder::ZunaGpu(state) => encode_zuna_gpu(state, msg),
+        #[cfg(feature = "embed-zuna-gpu-f16")]
+        Encoder::ZunaGpuF16(state) => encode_zuna_gpu_f16(state, msg),
         #[cfg(feature = "embed-luna")]
         Encoder::Luna(enc) => encode_luna(enc, msg),
         #[cfg(feature = "embed-reve")]

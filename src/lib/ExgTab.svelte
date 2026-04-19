@@ -70,14 +70,14 @@ async function setExgInferenceDevice(dev: "gpu" | "cpu") {
   if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
   exgInferenceDeviceSaving = true;
   exgInferenceDevice = dev;
-  await daemonInvoke("set_exg_inference_device", { device: dev }).catch(() => {});
+  await daemonInvoke("set_exg_inference_device", { value: dev }).catch(() => {});
   exgInferenceDeviceSaving = false;
 }
 
 onMount(async () => {
   filter = await daemonInvoke<FilterConfig>("get_filter_config");
   overlapSecs = await daemonInvoke<number>("get_embedding_overlap");
-  exgInferenceDevice = (await daemonInvoke<string>("get_exg_inference_device").catch(() => "gpu")) as "gpu" | "cpu";
+  exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device").then(r => r.value).catch(() => "gpu")) as "gpu" | "cpu";
 });
 </script>
 

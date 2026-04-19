@@ -222,8 +222,49 @@ pub(crate) async fn update_status(
 }
 
 pub(crate) async fn devices(State(state): State<AppState>) -> Json<Vec<DiscoveredDeviceResponse>> {
-    let current = state.devices.lock().map(|g| g.clone()).unwrap_or_default();
-    Json(current)
+    Json(devices_with_paired(&state))
+}
+
+/// Merge `state.devices` (scanner-discovered) with `status.paired_devices`
+/// so that paired devices always appear even when not currently broadcasting.
+/// Also applies the persisted `preferred_id` so `is_preferred` is always correct.
+fn devices_with_paired(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
+    let mut out = state.devices.lock().map(|g| g.clone()).unwrap_or_default();
+    let ids: std::collections::HashSet<String> = out.iter().map(|d| d.id.clone()).collect();
+
+    if let Ok(status) = state.status.lock() {
+        for p in &status.paired_devices {
+            if !ids.contains(&p.id) {
+                out.push(DiscoveredDeviceResponse {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    last_seen: p.last_seen,
+                    last_rssi: 0,
+                    is_paired: true,
+                    is_preferred: false,
+                    transport: if p.id.starts_with("ble:") {
+                        "ble".into()
+                    } else if p.id.starts_with("usb:") {
+                        "usb_serial".into()
+                    } else {
+                        "unknown".into()
+                    },
+                });
+            }
+        }
+    }
+
+    // Apply persisted preferred_id so every response has the correct flag.
+    let preferred_id = crate::routes::settings_io::load_user_settings(state)
+        .preferred_id
+        .unwrap_or_default();
+    if !preferred_id.is_empty() {
+        for d in &mut out {
+            d.is_preferred = d.id == preferred_id;
+        }
+    }
+
+    out
 }
 
 pub(crate) async fn update_devices(
@@ -240,14 +281,20 @@ pub(crate) async fn set_preferred_device(
     State(state): State<AppState>,
     Json(req): Json<SetPreferredDeviceRequest>,
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
-    let mut out = Vec::new();
+    // Persist preferred_id to settings (synchronous so the response reflects it).
+    let mut settings = crate::routes::settings_io::load_user_settings(&state);
+    settings.preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
+    crate::routes::settings_io::save_user_settings(&state, &settings);
+
+    // Also update in-memory devices for consistency.
     if let Ok(mut guard) = state.devices.lock() {
         for d in guard.iter_mut() {
             d.is_preferred = !req.id.is_empty() && d.id == req.id;
         }
-        out = guard.clone();
     }
-    Json(out)
+
+    // Return merged list — devices_with_paired reads preferred_id from settings.
+    Json(devices_with_paired(&state))
 }
 
 pub(crate) async fn pair_device(

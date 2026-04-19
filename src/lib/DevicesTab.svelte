@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Devices tab — paired/discovered devices, OpenBCI config, device API, scanner backends. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { applyPreferred } from "$lib/devices-logic";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
@@ -668,7 +669,21 @@ function expandSupportedCompany(id: SupportedCompanyId) {
 // ── Device actions ─────────────────────────────────────────────────────────
 async function setPreferred(id: string) {
   const cur = devices.find((d) => d.id === id);
-  devices = await setPreferredDevice<DiscoveredDevice>(cur?.is_preferred ? "" : id);
+  const targetId = cur?.is_preferred ? "" : id;
+  // Optimistically update UI immediately.
+  devices = applyPreferred(devices, targetId);
+  try {
+    devices = await setPreferredDevice<DiscoveredDevice>(targetId);
+  } catch {
+    // Daemon HTTP may fail (e.g. auth token mismatch after restart).
+    // Fall back to Tauri invoke which has its own daemon call path
+    // and applies the change locally even if the daemon is unreachable.
+    try {
+      devices = await invoke<DiscoveredDevice[]>("set_preferred_device", { id: targetId });
+    } catch {
+      // Both paths failed — optimistic update still visible.
+    }
+  }
 }
 async function forget(id: string) {
   await forgetDevice(id);

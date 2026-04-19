@@ -113,3 +113,70 @@ export function fmtLastSeen(ts: number): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
+
+// ── Types for merge/preferred helpers ─────────────────────────────────────────
+
+export interface DeviceBase {
+  id: string;
+  name: string;
+  last_seen: number;
+  last_rssi: number;
+  is_paired: boolean;
+  is_preferred: boolean;
+  transport?: string;
+}
+
+export interface PairedInfo {
+  id: string;
+  name: string;
+  last_seen?: number;
+}
+
+// ── Merge & preferred helpers ─────────────────────────────────────────────────
+
+/**
+ * Infer transport type from device ID prefix.
+ */
+function inferTransport(id: string): "ble" | "usb_serial" | "wifi" | undefined {
+  if (id.startsWith("ble:")) return "ble";
+  if (id.startsWith("usb:")) return "usb_serial";
+  if (id.startsWith("wifi:") || id.includes(":") && id.includes(".")) return "wifi";
+  return undefined;
+}
+
+/**
+ * Merge paired devices from status into a base device list.
+ * Devices already in `base` are preserved as-is (including is_preferred).
+ * Devices in `paired` but missing from `base` are added with is_preferred=false.
+ */
+export function mergePairedIntoDevices<T extends DeviceBase>(
+  base: T[],
+  paired: PairedInfo[],
+): T[] {
+  const out = [...base];
+  const byId = new Set(out.map((d) => d.id));
+  for (const p of paired) {
+    if (!byId.has(p.id)) {
+      out.push({
+        id: p.id,
+        name: p.name,
+        last_seen: p.last_seen ?? 0,
+        last_rssi: 0,
+        is_paired: true,
+        is_preferred: false,
+        transport: inferTransport(p.id),
+      } as T);
+      byId.add(p.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Apply a preferred device selection: sets is_preferred=true on the device
+ * matching `targetId`, and is_preferred=false on all others.
+ * If `targetId` is empty, clears all preferred flags.
+ */
+export function applyPreferred<T extends DeviceBase>(devices: T[], targetId: string): T[] {
+  return devices.map((d) => ({ ...d, is_preferred: targetId !== "" && d.id === targetId }));
+}
