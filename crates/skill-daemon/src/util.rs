@@ -10,31 +10,45 @@ pub(crate) fn spawn_session_for_target(state: &AppState, target: Option<&str>) {
 
     // Idempotency guard: if we're already connecting/connected to the same
     // target and have an active session handle, do not cancel/restart.
-    let same_target_active = {
-        let status_same = state
+    // Also prevent reconnect from killing an active session to a *different*
+    // device (e.g. user manually connected device B while reconnect keeps
+    // retrying device A).
+    let (same_target_active, other_target_connected) = {
+        let (status_same, status_connected) = state
             .status
             .lock()
             .ok()
             .map(|s| {
-                (s.state == "connecting" || s.state == "connected")
+                let same = (s.state == "connecting" || s.state == "connected")
                     && (s.target_id.as_deref() == Some(t)
                         || s.target_name.as_deref() == Some(t)
-                        || s.target_display_name.as_deref() == Some(t))
+                        || s.target_display_name.as_deref() == Some(t));
+                let connected_other =
+                    s.state == "connected" && !same && (s.target_id.is_some() || s.target_name.is_some());
+                (same, connected_other)
             })
-            .unwrap_or(false);
+            .unwrap_or((false, false));
         let handle_active = state
             .session_handle
             .lock()
             .ok()
             .map(|slot| slot.is_some())
             .unwrap_or(false);
-        status_same && handle_active
+        (status_same && handle_active, status_connected && handle_active)
     };
     if same_target_active {
         push_device_log(
             state,
             "session",
             &format!("spawn_session_for_target noop: already active target={t}"),
+        );
+        return;
+    }
+    if other_target_connected {
+        push_device_log(
+            state,
+            "session",
+            &format!("spawn_session_for_target noop: another device is connected, won't cancel for target={t}"),
         );
         return;
     }
