@@ -1,27 +1,27 @@
 name: Setup Vulkan SDK (Linux)
-description: Cache and install Vulkan SDK for Linux builds
-
-inputs:
-  cache-key-prefix:
-    description: Cache key prefix
-    required: false
-    default: "linux-vulkan-sdk"
+description: Add LunarG repo and install Vulkan SDK for Linux builds
 
 runs:
   using: composite
   steps:
-    - name: Cache Vulkan SDK
-      id: cache-vulkan
-      uses: actions/cache@v5
-      with:
-        path: |
-          /etc/apt/sources.list.d/lunarg-vulkan-*
-          /usr/lib/x86_64-linux-gnu/libvulkan*
-          /usr/include/vulkan
-          /usr/share/vulkan
-        key: ${{ inputs.cache-key-prefix }}-${{ hashFiles('scripts/install-vulkan-sdk.sh') }}
-
-    - name: Install Vulkan SDK
-      if: steps.cache-vulkan.outputs.cache-hit != 'true'
+    # Add the LunarG apt repository so vulkan-sdk is available to apt.
+    # This must run before the cached apt install step.
+    - name: Add LunarG Vulkan apt repository
       shell: bash
-      run: bash scripts/install-vulkan-sdk.sh
+      run: |
+        set -euo pipefail
+        CODENAME="$(lsb_release -cs 2>/dev/null || source /etc/os-release && echo "$VERSION_CODENAME")"
+        if [[ ! -f "/etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list" ]]; then
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null
+          sudo curl -fsSLo \
+            "/etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list" \
+            "https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list"
+          sudo apt-get update -y -q
+        fi
+
+    - name: Cache + install Vulkan SDK packages
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: vulkan-sdk
+        version: vulkan-sdk-v2
