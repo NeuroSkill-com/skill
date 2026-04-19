@@ -9,8 +9,8 @@ runs:
     - name: Add LunarG Vulkan apt repository
       shell: bash
       run: |
-        set -euo pipefail
-        CODENAME="$(lsb_release -cs 2>/dev/null || source /etc/os-release && echo "$VERSION_CODENAME")"
+        set -eo pipefail
+        CODENAME="$(lsb_release -cs 2>/dev/null || (source /etc/os-release && echo "${VERSION_CODENAME:-noble}"))"
         if [[ ! -f "/etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list" ]]; then
           curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
             | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null
