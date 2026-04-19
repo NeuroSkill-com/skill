@@ -232,7 +232,7 @@ jobs:
           echo "✓ codesign --verify passed"
 
           echo "── daemon binary check ──"
-          DAEMON_BIN="$APP_DIR/Contents/MacOS/skill-daemon"
+          DAEMON_BIN="$APP_DIR/Contents/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon"
           file "$DAEMON_BIN"
           file "$DAEMON_BIN" | grep -q "Mach-O.*arm64" \
             || { echo "::error::skill-daemon is not a valid arm64 Mach-O binary"; exit 1; }
