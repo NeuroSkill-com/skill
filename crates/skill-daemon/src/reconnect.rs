@@ -153,13 +153,16 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
                     "[reconnect] attempt #{} — triggering retry (state={device_state})",
                     action.attempt
                 );
-                // Trigger a session start via the existing session runner.
-                let preferred = state
-                    .status
-                    .lock()
-                    .ok()
-                    .and_then(|s| s.paired_devices.first().map(|d| d.id.clone()));
-                if let Some(target_id) = preferred {
+                // Trigger a session start for the last-targeted device.
+                // Prefer target_id (set when the user explicitly connects a
+                // device) over paired_devices.first() so that reconnect
+                // retries the device the user actually chose.
+                let target = state.status.lock().ok().and_then(|s| {
+                    s.target_id
+                        .clone()
+                        .or_else(|| s.paired_devices.first().map(|d| d.id.clone()))
+                });
+                if let Some(target_id) = target {
                     crate::util::spawn_session_for_target(&state, Some(&target_id));
                 }
             }

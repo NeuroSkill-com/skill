@@ -176,6 +176,7 @@ interface DeviceLogEntry {
 let deviceLog = $state<DeviceLogEntry[]>([]);
 let deviceLogExpanded = $state(false);
 let deviceLogInterval: ReturnType<typeof setInterval> | null = null;
+let devicePollInterval: ReturnType<typeof setInterval> | null = null;
 
 // Fuzzy search: case-insensitive substring + character subsequence matching
 function fuzzyMatch(haystack: string, needle: string): boolean {
@@ -700,6 +701,9 @@ onMount(async () => {
   await loadSerialPorts();
   await refreshDeviceLog();
   deviceLogInterval = setInterval(refreshDeviceLog, 3000);
+  devicePollInterval = setInterval(async () => {
+    try { devices = await getDevices(); } catch (_) { /* daemon may be unreachable */ }
+  }, 3000);
 
   nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
 
@@ -725,6 +729,7 @@ onDestroy(() => {
   unlisteners.forEach((u) => u());
   clearInterval(nowTimer);
   if (deviceLogInterval) clearInterval(deviceLogInterval);
+  if (devicePollInterval) clearInterval(devicePollInterval);
 });
 </script>
 
