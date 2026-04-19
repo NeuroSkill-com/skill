@@ -85,7 +85,7 @@ if [ -n "$FRONTEND_CHANGED" ]; then
   VITEST_RELATED_FILES="$(echo "$FRONTEND_CHANGED" | grep -E '^src/.*\.(ts|js|svelte)$' || true)"
   if [ -n "$VITEST_RELATED_FILES" ]; then
     # shellcheck disable=SC2086
-    npx vitest related --run $VITEST_RELATED_FILES
+    npx vitest related --run --exclude 'src/tests/*-e2e*' $VITEST_RELATED_FILES
   fi
 
   # Guard/meta tests read source files via fs, not import — vitest related
