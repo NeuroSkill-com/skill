@@ -224,6 +224,39 @@ fn update_daemon_rollback_snapshot_best_effort() {
     }
 }
 
+/// Ask the running daemon to install itself as a persistent OS service
+/// (LaunchAgent on macOS, systemd user unit on Linux, Windows service).
+/// Best-effort: failures are logged but never block app startup.
+fn install_daemon_service_best_effort(base_url: &str) {
+    let url = format!("{base_url}/service/install");
+    let token = load_daemon_token().ok();
+    std::thread::spawn(move || {
+        let mut req = daemon_http_agent().post(&url);
+        if let Some(tok) = &token {
+            req = req.header("Authorization", &format!("Bearer {tok}"));
+        }
+        match req.send_empty() {
+            Ok(mut resp) => {
+                let body: serde_json::Value =
+                    resp.body_mut().read_json().unwrap_or(serde_json::json!({}));
+                if body.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    eprintln!("[daemon] OS service installed");
+                } else {
+                    eprintln!(
+                        "[daemon] OS service install returned: {}",
+                        body.get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("[daemon] OS service install request failed: {e}");
+            }
+        }
+    });
+}
+
 /// Ensure the daemon process is running.  If it's not reachable, attempt to
 /// spawn it.  Called once during `setup_app`.
 pub(crate) fn ensure_daemon_running() {
@@ -243,6 +276,7 @@ pub(crate) fn ensure_daemon_running() {
             .is_ok();
         if probe_ok {
             eprintln!("[daemon] already running at {base_url}");
+            install_daemon_service_best_effort(&base_url);
             return;
         }
         eprintln!(
@@ -315,6 +349,7 @@ pub(crate) fn ensure_daemon_running() {
                 .is_ok()
                 {
                     eprintln!("[daemon] ready");
+                    install_daemon_service_best_effort(&base_url);
                     return;
                 }
             }
