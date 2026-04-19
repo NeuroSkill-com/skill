@@ -436,7 +436,7 @@ jobs:
 
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
-        if: always()
+        if: always() && steps.version_meta.outputs.is_release == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
