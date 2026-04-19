@@ -46,11 +46,17 @@ jobs:
           GITHUB_REF_NAME:   ${{ github.ref_name }}
         run: node scripts/ci.mjs resolve-version
 
+      # ── Vulkan SDK repo ─────────────────────────────────────────────────────
+      # Add the LunarG apt repository BEFORE the cached apt install step so
+      # that vulkan-sdk is resolvable by apt in the cache-apt-pkgs-action.
+      - name: Setup Vulkan SDK repository
+        uses: ./.github/actions/setup-vulkan-linux
+
       # ── System dependencies ───────────────────────────────────────────────────
       # Linux compile + system package flow requires WebKit2GTK and supporting
-      # libraries for tauri/wry compilation. We intentionally do not run Tauri
-      # bundling in this workflow.
-      - name: Cache + install system dependencies (incl. mold + clang)
+      # libraries for tauri/wry compilation. vulkan-sdk is included here so
+      # all apt packages are cached in a single cache-apt-pkgs-action call.
+      - name: Cache + install system dependencies (incl. mold + clang + Vulkan)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -72,7 +78,8 @@ jobs:
             clang
             protobuf-compiler
             libopenblas-dev
-          version: tauri-release-linux-v6
+            vulkan-sdk
+          version: tauri-release-linux-v7
 
       # ── Rust toolchain + build cache bootstrap ───────────────────────────────
       - name: Setup Rust bootstrap (Linux)
@@ -118,12 +125,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node scripts/ci.mjs verify-secrets TAURI_SIGNING_PRIVATE_KEY
-
-      # ── Vulkan SDK ────────────────────────────────────────────────────────────
-      # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
-      # Cached and installed via reusable setup action.
-      - name: Setup Vulkan SDK
-        uses: ./.github/actions/setup-vulkan-linux
 
       - name: Download prebuilt llama libs (Linux, optional)
         shell: bash

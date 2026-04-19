@@ -1,11 +1,12 @@
 name: Setup Vulkan SDK (Linux)
-description: Add LunarG repo and install Vulkan SDK for Linux builds
+description: Add LunarG apt repository for Vulkan SDK availability
 
 runs:
   using: composite
   steps:
     # Add the LunarG apt repository so vulkan-sdk is available to apt.
-    # This must run before the cached apt install step.
+    # The actual package install is handled by the caller's cache-apt-pkgs-action
+    # step (vulkan-sdk must be included in that step's package list).
     - name: Add LunarG Vulkan apt repository
       shell: bash
       run: |
@@ -19,9 +20,3 @@ runs:
             "https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list"
           sudo apt-get update -y -q
         fi
-
-    - name: Cache + install Vulkan SDK packages
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: vulkan-sdk
-        version: vulkan-sdk-v2
