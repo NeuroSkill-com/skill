@@ -447,10 +447,9 @@ async function startCalibration() {
   if (!calProfile || !isConnected) return;
   calRunning = true;
   try {
-    const result = await daemonInvoke<{ ok: boolean; error?: string }>(
-      "calibration_start_session",
-      { profile_id: calProfile.id },
-    );
+    const result = await daemonInvoke<{ ok: boolean; error?: string }>("calibration_start_session", {
+      profile_id: calProfile.id,
+    });
     if (!result?.ok) {
       calRunning = false;
       ttsSpeak(result?.error ?? "Failed to start calibration.");
@@ -515,48 +514,60 @@ onMount(async () => {
   // ── Daemon WS event subscriptions for calibration ─────────────────────
   const calUnsubs: (() => void)[] = [];
 
-  calUnsubs.push(onDaemonEvent("calibration-phase", (ev) => {
-    const p = ev.payload as Record<string, number | string | boolean>;
-    if (!p) return;
-    calCountdown = (p.countdown as number) ?? 0;
-    calTotal = (p.total_secs as number) ?? 0;
-    calRunning = (p.running as boolean) ?? false;
-    if (p.kind === "action" || p.kind === "break" || p.kind === "done") {
-      calPhase = {
-        kind: p.kind as Phase["kind"],
-        actionIndex: (p.action_index as number) ?? 0,
-        loop: (p.loop_number as number) ?? 1,
-      };
-    }
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-phase", (ev) => {
+      const p = ev.payload as Record<string, number | string | boolean>;
+      if (!p) return;
+      calCountdown = (p.countdown as number) ?? 0;
+      calTotal = (p.total_secs as number) ?? 0;
+      calRunning = (p.running as boolean) ?? false;
+      if (p.kind === "action" || p.kind === "break" || p.kind === "done") {
+        calPhase = {
+          kind: p.kind as Phase["kind"],
+          actionIndex: (p.action_index as number) ?? 0,
+          loop: (p.loop_number as number) ?? 1,
+        };
+      }
+    }),
+  );
 
-  calUnsubs.push(onDaemonEvent("calibration-tts", (ev) => {
-    const text = ev.payload?.text as string | undefined;
-    if (text) ttsSpeak(text);
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-tts", (ev) => {
+      const text = ev.payload?.text as string | undefined;
+      if (text) ttsSpeak(text);
+    }),
+  );
 
-  calUnsubs.push(onDaemonEvent("calibration-started", () => {
-    calRunning = true;
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-started", () => {
+      calRunning = true;
+    }),
+  );
 
-  calUnsubs.push(onDaemonEvent("calibration-completed", async () => {
-    calRunning = false;
-    calPhase = { kind: "done", actionIndex: 0, loop: calProfile?.loop_count ?? 1 };
-    // Reload profile to get updated last_calibration_utc
-    try {
-      calProfile = await daemonInvoke<CalibrationProfile | null>("get_active_calibration");
-    } catch {}
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-completed", async () => {
+      calRunning = false;
+      calPhase = { kind: "done", actionIndex: 0, loop: calProfile?.loop_count ?? 1 };
+      // Reload profile to get updated last_calibration_utc
+      try {
+        calProfile = await daemonInvoke<CalibrationProfile | null>("get_active_calibration");
+      } catch {}
+    }),
+  );
 
-  calUnsubs.push(onDaemonEvent("calibration-cancelled", () => {
-    calRunning = false;
-    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-cancelled", () => {
+      calRunning = false;
+      calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+    }),
+  );
 
-  calUnsubs.push(onDaemonEvent("calibration-error", () => {
-    calRunning = false;
-    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
-  }));
+  calUnsubs.push(
+    onDaemonEvent("calibration-error", () => {
+      calRunning = false;
+      calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+    }),
+  );
 
   // Store unsubs for cleanup
   unsubs.push(...calUnsubs.map((fn) => fn as unknown as UnlistenFn));

@@ -7,7 +7,6 @@ the Free Software Foundation, version 3 only. -->
 <!-- Calibration tab — multi-profile manager with N-action support. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -19,6 +18,7 @@ import {
   CALIBRATION_BREAK_DURATION_SECS,
   CALIBRATION_LOOP_COUNT,
 } from "$lib/constants";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonStatus } from "$lib/daemon/status.svelte";
 import { fmtDateTimeLocale } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";

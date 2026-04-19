@@ -175,10 +175,9 @@ async function startCalibration() {
   running = true;
 
   try {
-    const result = await daemonInvoke<{ ok: boolean; error?: string }>(
-      "calibration_start_session",
-      { profile_id: profile.id },
-    );
+    const result = await daemonInvoke<{ ok: boolean; error?: string }>("calibration_start_session", {
+      profile_id: profile.id,
+    });
     if (!result?.ok) {
       running = false;
       ttsSpeak(result?.error ?? "Failed to start calibration session.");
@@ -336,10 +335,7 @@ onMount(async () => {
   unsubBreak = onDaemonEvent("calibration-break", (ev) => {
     const p = ev.payload as Record<string, string>;
     if (p) {
-      notify(
-        t("calibration.break"),
-        t("calibration.notifBreakBody", { next: String(p.next_action ?? "") }),
-      );
+      notify(t("calibration.break"), t("calibration.notifBreakBody", { next: String(p.next_action ?? "") }));
     }
   });
 
@@ -347,13 +343,10 @@ onMount(async () => {
   unsubCompleted = onDaemonEvent("calibration-completed", async (_ev) => {
     running = false;
     phase = { kind: "done", actionIndex: 0, loop: profile?.loop_count ?? 1 };
-    notify(
-      t("calibration.complete"),
-      t("calibration.notifDoneBody", { n: String(profile?.loop_count ?? 1) }),
-    );
+    notify(t("calibration.complete"), t("calibration.notifDoneBody", { n: String(profile?.loop_count ?? 1) }));
     await loadProfiles();
     if (profile) {
-      profile = profiles.find((x) => x.id === profile!.id) ?? profile;
+      profile = profiles.find((x) => x.id === profile?.id) ?? profile;
     }
   });
 
@@ -364,7 +357,7 @@ onMount(async () => {
   });
 
   // Errors
-  unsubError = onDaemonEvent("calibration-error", (ev) => {
+  unsubError = onDaemonEvent("calibration-error", (_ev) => {
     running = false;
     phase = { kind: "idle", actionIndex: 0, loop: 1 };
     ttsSpeak("Calibration error. Please check daemon connection.");

@@ -18,12 +18,9 @@
 - Pin prebuilt llama download to specific tag (`0.2.46`) in `ci.mjs` instead of floating `latest`.
 - Add explicit error and exit on daemon binary missing after prebuilt retry in release workflow.
 - Add smoke-test step in release workflow: `codesign --verify`, architecture check with `file`/`lipo`.
+- Add `scripts/test-daemon-e2e.sh` — 19 end-to-end tests covering fresh install, update hooks, uninstall, degraded states, edge cases, and connection reuse.
 
 ### Refactor
 
 - Make `ensure_daemon_running` non-blocking. Window now appears immediately while daemon connection is established on a background thread.
 - Share a single `ureq::Agent` via `OnceLock` instead of creating one per HTTP call.
-
-### Tests
-
-- Add `scripts/test-daemon-e2e.sh` — 19 end-to-end tests covering fresh install, update hooks, uninstall, degraded states, edge cases, and connection reuse.
