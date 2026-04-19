@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Build script for skill-daemon.
 //!
-//! When using prebuilt llama-cpp-sys static archives on Linux, the upstream
-//! build.rs omits `cargo:rustc-link-lib=vulkan` in the prebuilt code path
-//! even though the archives contain Vulkan symbols (ggml-vulkan.cpp).
-//! We emit the link directive here to fix the final link.
+//! Fixes missing linker directives when using prebuilt llama-cpp-sys static
+//! archives on Linux.  The upstream build.rs prebuilt code path omits:
+//!   - `cargo:rustc-link-lib=vulkan` (Vulkan symbols from ggml-vulkan.cpp)
+//!   - `cargo:rustc-link-search` for openblas in its alternatives directory
 
 fn main() {
-    // Only needed on Linux — macOS uses Metal, Windows uses vulkan-1.lib
-    // which the upstream build.rs handles correctly.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         println!("cargo:rustc-link-lib=vulkan");
+
+        // openblas installs to a subdirectory managed by update-alternatives;
+        // the linker won't find it with just -L /usr/lib/x86_64-linux-gnu.
+        for dir in &[
+            "/usr/lib/x86_64-linux-gnu/openblas-pthread",
+            "/usr/lib/x86_64-linux-gnu/openblas-openmp",
+            "/usr/lib/x86_64-linux-gnu",
+        ] {
+            if std::path::Path::new(dir).exists() {
+                println!("cargo:rustc-link-search={dir}");
+            }
+        }
     }
 }
