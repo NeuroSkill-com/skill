@@ -231,7 +231,13 @@ const calPhaseBg = $derived.by(() => {
 });
 
 // ── TTS helper ────────────────────────────────────────────────────────────
+let _lastTtsText = "";
+let _lastTtsTime = 0;
 function ttsSpeak(text: string): void {
+  const now = Date.now();
+  if (text === _lastTtsText && now - _lastTtsTime < 5000) return;
+  _lastTtsText = text;
+  _lastTtsTime = now;
   invoke("tts_speak", { text }).catch((_e) => {});
 }
 

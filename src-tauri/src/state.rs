@@ -338,6 +338,7 @@ impl EmbeddingModelState {
 pub struct AppState {
     // ── Device session ────────────────────────────────────────────────────
     pub status: DeviceStatus,
+    #[allow(dead_code)]
     pub stream: Option<StreamHandle>,
     #[allow(dead_code)]
     pub scanner: Option<ScannerHandle>,

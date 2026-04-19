@@ -14,6 +14,7 @@
 //! hears the full cue ("Eyes Open", "Break — next: Eyes Closed")
 //! before the countdown begins.
 
+use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::oneshot;
@@ -39,22 +40,29 @@ fn unix_secs() -> u64 {
 ///
 /// Returns `Err` if a session is already running or the profile is not found.
 pub fn spawn_session(state: &AppState, profile_id: &str) -> Result<(), String> {
-    let mut cancel_guard = state.calibration_cancel.lock().unwrap();
-    if cancel_guard.is_some() {
+    // Use the atomic flag as the authoritative "is running" check.
+    // This avoids a race where cancel_session() clears the oneshot sender
+    // but the task hasn't exited yet, allowing a duplicate spawn.
+    if state.calibration_running.swap(true, Ordering::AcqRel) {
         return Err("A calibration session is already running".into());
     }
 
     let settings = load_user_settings(state);
-    let profile = settings
+    let profile = match settings
         .calibration_profiles
         .iter()
         .find(|p| p.id == profile_id)
         .cloned()
-        .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
+    {
+        Some(p) => p,
+        None => {
+            state.calibration_running.store(false, Ordering::Release);
+            return Err(format!("Profile '{profile_id}' not found"));
+        }
+    };
 
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
-    *cancel_guard = Some(cancel_tx);
-    drop(cancel_guard);
+    *state.calibration_cancel.lock().unwrap() = Some(cancel_tx);
 
     let st = state.clone();
     tokio::spawn(async move {
@@ -69,9 +77,9 @@ pub fn cancel_session(state: &AppState) -> bool {
     let tx = state.calibration_cancel.lock().unwrap().take();
     if let Some(tx) = tx {
         let _ = tx.send(());
-        set_phase(state, CalibrationPhaseSnapshot::default());
-        state.broadcast("calibration-tts", serde_json::json!({"text": "Calibration cancelled."}));
-        state.broadcast("calibration-cancelled", serde_json::json!({"source": "daemon"}));
+        // Don't clear calibration_running here — the spawned task clears it
+        // on exit, preventing a race where a new spawn slips in before the
+        // old task has fully stopped.
         true
     } else {
         false
@@ -269,8 +277,9 @@ async fn run_session(state: AppState, profile: CalibrationProfile, mut cancel_rx
         }
     }
 
-    // Clear the cancel handle
+    // Clear the cancel handle and running flag
     let _ = state.calibration_cancel.lock().unwrap().take();
+    state.calibration_running.store(false, Ordering::Release);
 
     if completed {
         info!("[calibration] session complete: {} loops", profile.loop_count);
@@ -309,6 +318,7 @@ async fn run_session(state: AppState, profile: CalibrationProfile, mut cancel_rx
 
 fn cleanup_cancelled(state: &AppState) {
     let _ = state.calibration_cancel.lock().unwrap().take();
+    state.calibration_running.store(false, Ordering::Release);
     set_phase(state, CalibrationPhaseSnapshot::default());
     state.broadcast("calibration-tts", serde_json::json!({"text": "Calibration cancelled."}));
     state.broadcast("calibration-cancelled", serde_json::json!({"source": "daemon"}));

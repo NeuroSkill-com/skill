@@ -878,7 +878,7 @@ pub(crate) async fn open_calibration_window_inner(
     {
         let st = app.app_state();
         let guard = st.lock_or_recover();
-        if guard.status.state != "connected" || guard.stream.is_none() {
+        if guard.status.state != "connected" {
             return Err(
                 "Calibration requires a connected BLE device that is streaming data".into(),
             );

@@ -140,6 +140,10 @@ pub struct AppState {
     /// Cancel sender for the active daemon-driven calibration session.
     /// `Some` when a session is running; routes send `()` to cancel.
     pub calibration_cancel: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    /// Guard flag: `true` while a calibration task is alive.  Cleared only
+    /// by the task itself on exit, preventing races where `cancel_session`
+    /// + immediate `spawn_session` starts a duplicate.
+    pub calibration_running: Arc<AtomicBool>,
     /// Observable snapshot of the current calibration session phase.
     pub calibration_phase: Arc<Mutex<CalibrationPhaseSnapshot>>,
 }
@@ -260,6 +264,7 @@ impl AppState {
             test_mode: Arc::new(AtomicBool::new(false)),
             ready: Arc::new(AtomicBool::new(false)),
             calibration_cancel: Arc::new(Mutex::new(None)),
+            calibration_running: Arc::new(AtomicBool::new(false)),
             calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
         }
     }

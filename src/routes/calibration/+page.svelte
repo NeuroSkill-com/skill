@@ -145,8 +145,14 @@ async function notify(title: string, body: string) {
 
 // ── TTS helpers ────────────────────────────────────────────────────────────
 
-/** Fire-and-forget TTS — never throws; failures are silently ignored. */
+/** Fire-and-forget TTS — deduplicates rapid duplicate calls. */
+let _lastTtsText = "";
+let _lastTtsTime = 0;
 function ttsSpeak(text: string): void {
+  const now = Date.now();
+  if (text === _lastTtsText && now - _lastTtsTime < 5000) return;
+  _lastTtsText = text;
+  _lastTtsTime = now;
   invoke("tts_speak", { text }).catch((_e) => {});
 }
 
