@@ -8,6 +8,221 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.123] — 2026-04-19
+
+### Features
+
+- Add daemon calibration session HTTP routes: `POST /v1/calibration/session/start`, `POST /v1/calibration/session/cancel`, `GET /v1/calibration/session/status`.
+- Add `POST /v1/calibration/record-completed` and `GET /v1/calibration/active-profile` daemon routes.
+- Daemon broadcasts `calibration-tts` events with spoken text before each phase, giving the frontend a 4-second window to play TTS audio before the countdown begins.
+
+- Auto-install daemon as persistent OS service on first app launch. The Tauri app calls the daemon's `/service/install` endpoint after startup, registering a LaunchAgent (macOS), systemd user unit (Linux), or Windows service. The daemon now persists across app restarts and reboots.
+- Add `--uninstall` CLI flag to skill-daemon for clean service removal.
+
+- **LLM catalog**: Added Qwen3.6 35B-A3B (MoE), MiniMax M2.7, and GLM 5.1 models to the local LLM catalog.
+- **HuggingFace GGUF search**: New UI section in Settings → LLM to search HuggingFace Hub for GGUF models. Browse repos by downloads/likes, expand to see individual quant files with sizes, and add models to the catalog with one click (optionally starting download immediately). Each repo shows a collapsible README (rendered as markdown with proper table and heading styling, YAML frontmatter stripped) and a direct link to the HuggingFace page. Two new daemon endpoints: `GET /llm/catalog/search` and `GET /llm/catalog/search/files` (the latter also returns the repo README, capped at 32 KB). Fully localized (9 languages).
+
+- **Interactive search: AI summary with streaming.** "Generate" button in the Insights panel sends search context (labels, EEG metrics, sessions, screenshots) to the local LLM via `chat_completions_ipc` with a channel callback. Response streams token-by-token with live markdown rendering via `MarkdownRenderer`. Thinking blocks are shown in a collapsible `<details>` element.
+
+- **Interactive search: rich AI prompt with full EEG context.** The LLM prompt now includes:
+  - Time range and epoch count
+  - Labels with timestamps and similarity distances
+  - EEG epoch metrics: engagement, relaxation, SNR, α/β/θ band powers, heart rate, relevance score, session ID
+  - On-demand timeseries fetch when graph nodes lack stored metrics (computes averages from raw data)
+  - Session metrics with stddev, best-session flag
+  - Screenshot context: app name, window title, timestamp, OCR similarity
+  - Fallback session derivation from node session_ids when backend sessions are empty
+
+- **Interactive search: prompt visibility.** Collapsible "Prompt" section shown immediately when "Generate" is clicked (open by default during generation, collapses after). Shows the exact data sent to the LLM in monospace font.
+
+- **Interactive search: LLM auto-start.** When the LLM is not running, shows "Start LLM and try again" button that calls `start_llm_server`, waits for initialization, and retries the summary automatically.
+
+- **Interactive search: Continue in Chat.** "Continue in Chat →" button after the AI summary creates a new chat session named "Search: {query}", saves the prompt and response as messages, and opens the chat window. Users can ask follow-up questions about their search results.
+
+- **Interactive search: auto-save to chat history.** Every AI summary is automatically saved as a chat session, making all LLM conversations from search discoverable in the chat history regardless of whether the user clicks "Continue in Chat".
+
+- **Interactive search: insights panel.** Collapsible "Insights & Patterns" card with:
+  - Optimal conditions: auto-detected peak engagement hour and best app
+  - App × Engagement correlation: bar chart showing avg engagement per app (uses `window_title` fallback)
+  - Hour-of-day engagement pattern: bar chart across 24 hours
+  - AI summary with streaming, thinking blocks, markdown rendering, and chat integration
+
+- **Interactive search: bookmark/findings system.** Star button in node detail panel saves nodes to localStorage (max 50). Saved findings appear in the empty state with quick re-search and delete controls.
+
+- **Interactive search: graph color mode switcher.** Dropdown to recolor EEG nodes by timestamp (turbo), engagement level, SNR quality, or session (hash-based). Graph reactivity fixed with explicit dependency tracking.
+
+- **Interactive search: timeline scrubber.** Horizontal SVG timeline below the graph showing all timestamped nodes as color-coded clickable dots. Clicking selects the node in the detail panel.
+
+- **Interactive search: EEG sparkline.** "Load EEG bands ±60s" button on EEG point nodes fetches actual timeseries data and renders α (blue), β (amber), θ (green) band power chart with a red marker at the epoch timestamp.
+
+- **Interactive search: screenshot preview.** Inline screenshot thumbnail in the detail panel when a screenshot node is selected.
+
+- **Interactive search: compare mode.** Select two EEG points for side-by-side metrics comparison with green/red diff highlighting and time gap display.
+
+- **Interactive search: node detail panel improvements.** Moved to a separate card below the graph with colored left border, generous spacing, text-sm font sizes, responsive metrics grid, breadcrumb trail, and "More like this" / bookmark buttons.
+
+- **Interactive search: 3D graph enhancements.** Double-click zoom with smooth camera tween, minimap, node kind filtering, subtle grid floor, reset view button, enhanced tooltips with metrics/session/relevance.
+
+- Add device filter to EEG embedding search. A dropdown in the search controls lets users filter by device (e.g. MuseS-F921, AttentivU-053) or search across all devices. Backed by `GET /v1/search/devices` and `device_name` parameter on the streaming search endpoint.
+
+- **Per-epoch EEG metrics in AI summary prompt.** The interactive search AI summary now includes per-epoch metrics (engagement, relaxation, SNR, α/β/θ band powers, FAA, mood, TAR, meditation, cognitive load, drowsiness, heart rate) instead of just "(no EEG metrics stored)". Each 5-second epoch shows its own brain state data.
+
+- **On-the-fly CSV metrics fallback.** When embeddings lack `metrics_json`, the interactive search now lazily loads session `_metrics.csv` files and matches epochs by timestamp (±3s tolerance) to populate metrics from CSV data. This is transparent to the user — metrics appear without needing a backfill.
+
+- **Background metrics backfill from CSV.** New `POST /v1/analysis/backfill-metrics` endpoint patches `metrics_json` in the SQLite embeddings table for rows where it is NULL, matching against `_metrics.csv` by timestamp. Fires automatically on search page load (fire-and-forget). After first run, all future searches find metrics directly in the DB.
+
+- **Recomputation of derived EEG metrics.** When `meditation`, `cognitive_load`, `drowsiness`, or `stress_index` are null in stored `metrics_json` but band powers (α, β, θ, δ) are present, they are recomputed on-the-fly using the same formulas as the live pipeline.
+
+- **Shared EEG score formulas (`skill-data/eeg_scores.rs`).** New module with pure-math functions for computing derived EEG metrics from averaged band powers.
+
+- **Interactive search: EEG metrics on graph nodes.** Each EEG epoch node now carries its full metrics (engagement, relaxation, SNR, alpha/beta/theta, FAA, heart rate, etc.) via the `NeighborMetrics` struct, visible in the tooltip and detail panel.
+
+- **Interactive search: session grouping & cross-session comparison.** Every node gets a `session_id` derived from its timestamp. The results include a session summary with averaged metrics, stddev, min/max engagement/SNR, duration, and band power ratios. The best session (highest avg engagement) is auto-flagged with a ★ marker.
+
+- **Interactive search: cross-session trend chart.** SVG sparkline rendered above the session summary, showing engagement trend across sessions. Best session dot highlighted in green.
+
+- **Interactive search: relevance scoring.** Each EEG node receives a composite `relevance_score` combining text similarity (50%), temporal distance (30%), and engagement (20%). Nodes are optionally sortable by relevance in the UI and rendered larger in the 3D graph for high-relevance matches.
+
+- **Interactive search: SNR quality filter.** New `snrPositiveOnly` toggle (step 6) excludes EEG epochs with non-positive SNR (bad signal quality). Backed by server-side filtering before graph construction.
+
+- **Interactive search: device filter.** Device dropdown (step 7) in the interactive pipeline, filtering EEG epochs by device name at the SQL query level via `get_session_timeseries_filtered()`.
+
+- **Interactive search: date-range filter with presets.** Date-range inputs (step 8) constrain results to a time window. Quick preset buttons (24h, 7d, 30d) with a clear button.
+
+- **Interactive search: EEG epoch ranking.** Rank-by dropdown (step 9) sorts EEG epochs by engagement, SNR, or relaxation before selecting top-k, surfacing the most interesting epochs first.
+
+- **Interactive search: collapsible advanced filters.** Steps 6–9 are grouped behind an "Advanced filters" toggle to keep the default view clean. An amber dot indicator shows when any filter is active.
+
+- **Interactive search: performance timing & system load.** Each search returns `embed_ms`, `graph_ms`, `total_ms` timing plus CPU usage and memory stats via `sysinfo`. Displayed in a compact perf bar.
+
+- **Interactive search: search result caching.** LRU-style cache (8 entries, 5-minute TTL) in the daemon. Repeated searches with identical parameters return instantly without re-embedding.
+
+- **Interactive search: CSV export.** "Export CSV" button in the sessions summary panel downloads a CSV with all session metrics.
+
+- **Interactive search: search history.** Recent queries persisted in localStorage (max 10). Displayed as clickable chips in the empty state for quick re-runs. ArrowUp in empty textarea recalls the last query.
+
+- **Interactive search: pipeline settings persistence.** All pipeline parameters (kText, kEeg, kLabels, reachMinutes, SNR, rankBy, advanced toggle) saved to localStorage and restored on page load.
+
+- **Interactive search: 3D graph improvements.**
+  - **Double-click to zoom:** smoothly flies the camera to the selected node with easeInOutQuad tweening.
+  - **Minimap:** 80×80px SVG overlay in the bottom-right showing all node positions projected to 2D.
+  - **Node kind filtering:** toggle checkboxes to hide/show EEG, Labels, and Screenshot nodes.
+  - **Color mode switcher:** dropdown to recolor EEG nodes by timestamp, engagement, SNR, or session.
+  - **Node sizing by relevance:** higher-relevance EEG nodes render 1.0–1.3× larger.
+  - **Enhanced tooltips:** show relevance score, session ID, and full EEG metrics summary on hover.
+  - **Edge kind labels:** selected node tooltip shows connected edge types (→ text_sim, ← eeg_bridge).
+  - **Subtle grid floor:** transparent grid pattern at y=-15, adapts to dark/light theme.
+  - **Reset view button:** "⌂ Reset" button + click-empty-space to fly camera back to default position.
+
+- **Interactive search: node detail panel.**
+  - Separate card below the graph with generous spacing and readable typography.
+  - Colored left border matching node kind.
+  - Breadcrumb trail showing the full path from query → text_label → eeg_point → found_label.
+  - "More like this" button to re-search using the selected node's text.
+  - Bookmark button to save interesting nodes as findings.
+  - EEG sparkline: "Load EEG bands ±60s" fetches actual timeseries and renders α/β/θ band chart.
+  - Screenshot preview: inline thumbnail for screenshot nodes.
+  - Compare mode: select two EEG points for side-by-side metrics comparison with diff highlighting.
+
+- **Interactive search: timeline scrubber.** Horizontal SVG timeline below the graph showing all timestamped nodes as color-coded dots. Click any dot to select that node.
+
+- **Interactive search: insights & patterns panel.**
+  - Auto-computed activity-engagement correlation: groups screenshots by app and shows avg engagement per app as a bar chart.
+  - Hour-of-day engagement pattern: bar chart showing which hours have highest engagement.
+  - Optimal conditions report: identifies peak engagement time and best app.
+  - AI summary: sends search context to the local LLM for a natural-language analysis of patterns and recommendations.
+  - Bookmark/findings system: save interesting nodes to localStorage, displayed in the empty state for future reference.
+
+- **Interactive search: loading skeleton.** Graph-shaped SVG skeleton with animated nodes and edges replaces the simple spinner during search.
+
+- **Interactive search: animated session bars.** Engagement and SNR progress bars in the session summary have smooth CSS transitions on load.
+
+- **Interactive search: EEG epoch deduplication.** `seen_eeg_ts` HashSet prevents duplicate EEG nodes when multiple text labels have overlapping time windows.
+
+- **Interactive search: parallel compare_search.** Both range queries in `/search/compare` now run concurrently via `tokio::join!`.
+
+- **Interactive search: `get_session_timeseries_filtered()`.** New function in `skill-history` that filters timeseries by device name at the SQL level, used by the interactive search device filter.
+
+- Add text embedding model selection. Settings → Embeddings now shows 16 fastembed models (nomic, BGE, MiniLM, E5, MxBAI, GTE) with dimensions and descriptions. Selecting a model downloads weights and hot-swaps the ONNX runtime in the daemon. Persisted to settings and loaded on startup. Backed by `GET/POST /v1/models/text-embedding` daemon API. Unknown model codes are rejected.
+
+### Bugfixes
+
+- Fix calibration data not being recorded because `record_calibration_completed` wrote to stale local state instead of the daemon.
+- Fix `list_calibration_profiles` returning default profiles instead of daemon-authoritative data.
+
+- Fix prebuilt llama archives missing `libmtmd` (multimodal library). The collect step in the prebuilt CI workflow now includes `libmtmd*` alongside `libllama*`/`libggml*`/`libcommon*`.
+- Bump llama-cpp-4 from 0.2.45 to 0.2.46.
+- Fix double daemon spawn on service install. The installer now checks `/service/status` before calling `/service/install`, and `install_launchagent` skips if the plist already exists with a matching binary path.
+- Fix LaunchAgent label mismatch. Update hooks (`pre-update.cjs`, `post-update.cjs`) and uninstall script now use `com.skill.daemon` instead of stale `com.neuroskill.skill-daemon`.
+- Remove stale `com.neuroskill.skill-daemon.plist` from app bundle Resources.
+- Fix daemon logs written to `/tmp/` (wiped on reboot). LaunchAgent now logs to `~/Library/Logs/NeuroSkill/`.
+- Add rollback binary as last-resort candidate in daemon path resolver.
+
+- Fix EXG reembedding: resolve GPU f16 TypeMismatch bug by using f32 GPU encoder for batch reembed, fix per-segment channel metadata for mixed-device sessions, require full 5s epoch extraction, skip channel counts with consecutive failures, and process most recent days first.
+- Fix reembed progress events not reaching UI (Tauri `listen` → daemon WebSocket `onDaemonEvent`), fix `"day"` → `"date"` field in progress payload, and emit `loading_encoder`/`scanning` status immediately for responsive feedback.
+- Rebuild label EEG HNSW index after manual and idle reembed so interactive search can bridge text labels to EEG epochs.
+- Add 32 unit tests for reembed edge cases: mixed devices, relative timestamps, partial rows, empty files, boundary extraction, and channel count handling.
+
+- Fix daemon binary missing from DMG when prebuilt llama retry triggers on CI. The failed link left partial build state that cargo considered "fresh", so the retry silently skipped rebuilding the daemon.
+
+- **Fixed EEG metrics not appearing in search results.** The `MetricsBlob` deserializer in `skill-history/cache.rs` used `#[serde(default)]` on `f64` fields, which caused the entire JSON deserialization to fail silently when any field was `null` (e.g., `cognitive_load: null`, `drowsiness: null`). All metrics defaulted to zero, causing every epoch to show "(no EEG metrics stored)" in the AI summary prompt. Fixed by adding a `null_as_zero` custom deserializer that treats JSON `null` as `0.0` without failing the parse.
+
+- **Fixed search cache serving stale results after daemon restart.** Added `cache_clear()` to the search module and call it after metrics backfill completes, ensuring enriched metrics appear immediately.
+
+### Refactor
+
+- Move calibration timing loop from frontend to daemon. The daemon now drives all calibration phases (action countdowns, breaks, label submission) via a session runner with wall-clock-aligned timing. The frontend subscribes to WebSocket events for UI updates.
+- Route all calibration commands through daemon HTTP endpoints. Profile CRUD, active profile selection, and calibration completion recording are now daemon-authoritative — the Tauri app is a thin proxy.
+- Remove stale calibration state from Tauri `AppState`. Calibration profiles and active profile ID are no longer cached locally, preventing the save overlay from clobbering daemon-written timestamps.
+- Delete `calibration_service.rs` — inline daemon HTTP calls directly in `window_cmds.rs`.
+- Migrate onboarding calibration wizard to use daemon-driven sessions instead of a local timing loop.
+- Remove unused `emit_calibration_event` Tauri command.
+
+- Make `ensure_daemon_running` non-blocking. Window now appears immediately while daemon connection is established on a background thread.
+- Share a single `ureq::Agent` via `OnceLock` instead of creating one per HTTP call.
+
+### Build
+
+- Fix macOS CI smoke test checking wrong path for daemon binary (`Contents/MacOS/skill-daemon` → `Contents/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon`).
+- Fix Linux CI Vulkan SDK cache restoring system library paths with permission errors. Vulkan SDK is now installed via `cache-apt-pkgs-action` alongside other system dependencies.
+- Fix Linux CI daemon link failure: add `cargo:rustc-link-lib=vulkan` and openblas search paths in daemon `build.rs` for prebuilt llama archives.
+- Fix Linux CI Discord notification firing on manual dispatch builds.
+- Remove duplicate unguarded portable tarball upload step from Linux release workflow.
+- Exclude E2E test files from `vitest related` in pre-push hook.
+- Add all calibration commands to `check-daemon-invokes.js` validation script.
+
+- Pin prebuilt llama download to specific tag (`0.2.46`) in `ci.mjs` instead of floating `latest`.
+- Add explicit error and exit on daemon binary missing after prebuilt retry in release workflow.
+- Add smoke-test step in release workflow: `codesign --verify`, architecture check with `file`/`lipo`.
+- Add `scripts/test-daemon-e2e.sh` — 19 end-to-end tests covering fresh install, update hooks, uninstall, degraded states, edge cases, and connection reuse.
+
+- Add `mtmd` (multimodal) to llama-cpp-4 target-specific dependency features in skill-llm, ensuring prebuilt archives include multimodal symbols.
+- Copy Frameworks directory (dynamic llama dylibs) into daemon `.app` bundle during assembly.
+- Fail app bundle assembly if daemon binary is missing instead of silently continuing.
+- Clean daemon build artifacts during prebuilt llama retry to force a full re-link.
+
+- Add `embed-zuna-gpu` (f32) feature to `embed-exg` for reliable GPU batch reembed.
+- Fix all clippy warnings (dead code, large enum variant, too-many-arguments).
+- Ignore Node.js DeprecationWarning in bump script warning detection.
+
+### UI
+
+- Add embedding health banner to search UI. Shows color-coded progress bars for EXG epochs, screenshots, and label EEG index when any modality is incomplete. Includes inline "Rebuild EEG index" button when the label-to-EEG bridge is empty.
+
+- Move Embeddings tab directly below EXG in the settings sidebar.
+
+### i18n
+
+- Added 80+ translation keys across all 9 locales (en, de, es, fr, he, ja, ko, uk, zh) for AI summary, insights, bookmarks, color modes, timeline, compare, LLM controls, and chat integration.
+
+- Added 60+ new translation keys across all 9 locales (en, de, es, fr, he, ja, ko, uk, zh) covering all new search features: filters, insights, timeline, compare, bookmarks, color modes, and performance stats.
+
+### Dependencies
+
+- Bump llama-cpp-4 / llama-cpp-sys-4 from 0.2.44 to 0.2.45.
+
+- Bump zuna-rs to 0.1.3 (fixes burn f16→f32 tensor extraction bug).
+
 ## [0.0.122] — 2026-04-16
 
 ### Features

@@ -1,9 +1,0 @@
-### Dependencies
-
-- Bump zuna-rs to 0.1.3 (fixes burn f16→f32 tensor extraction bug).
-
-### Build
-
-- Add `embed-zuna-gpu` (f32) feature to `embed-exg` for reliable GPU batch reembed.
-- Fix all clippy warnings (dead code, large enum variant, too-many-arguments).
-- Ignore Node.js DeprecationWarning in bump script warning detection.
