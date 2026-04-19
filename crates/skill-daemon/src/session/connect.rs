@@ -72,9 +72,20 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
                     "session",
                     &format!("connect failed: target={target:?} err={e}"),
                 );
-                if let Ok(mut s) = state2.status.lock() {
-                    s.state = "disconnected".into();
-                    s.device_error = Some(e.to_string());
+                // Only update state if this session is still the current one.
+                // If the target changed (user connected a different device
+                // while this connect was running), don't clobber their session.
+                let still_current = state2
+                    .status
+                    .lock()
+                    .ok()
+                    .map(|s| s.target_id.as_deref() == Some(&target) || s.target_name.as_deref() == Some(&target))
+                    .unwrap_or(true);
+                if still_current {
+                    if let Ok(mut s) = state2.status.lock() {
+                        s.state = "disconnected".into();
+                        s.device_error = Some(e.to_string());
+                    }
                 }
             }
         }
