@@ -1,3 +1,0 @@
-### UI
-
-- Add embedding health banner to search UI. Shows color-coded progress bars for EXG epochs, screenshots, and label EEG index when any modality is incomplete. Includes inline "Rebuild EEG index" button when the label-to-EEG bridge is empty.
