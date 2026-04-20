@@ -1648,12 +1648,14 @@ useWindowTitle("window.title.search");
             <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.dateRangeLabel")}</span>
             <div class="flex items-center gap-1 flex-1 min-w-0">
               <input type="datetime-local"
+                     aria-label="Start date"
                      value={ixFilterStartUtc ? new Date(ixFilterStartUtc * 1000).toISOString().slice(0, 16) : ""}
                      oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterStartUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
                      class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
                             focus:outline-none focus:ring-1 focus:ring-ring flex-1 min-w-0" />
               <span class="text-[0.5rem] text-muted-foreground/40">→</span>
               <input type="datetime-local"
+                     aria-label="End date"
                      value={ixFilterEndUtc ? new Date(ixFilterEndUtc * 1000).toISOString().slice(0, 16) : ""}
                      oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterEndUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
                      class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
