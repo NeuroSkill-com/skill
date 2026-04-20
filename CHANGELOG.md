@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.126] — 2026-04-20
+
+### Features
+
+- daemon restart on launch
+
 ## [0.0.125] — 2026-04-20
 
 ### Features
