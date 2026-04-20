@@ -498,6 +498,55 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
         }
     }
 
+    // If still no target, try to auto-pair the first nearby discovered device.
+    if target.is_none() {
+        let auto = state.devices.lock().ok().and_then(|devs| {
+            let eligible = devs.iter().filter(|d| crate::scanner::is_auto_pair_eligible(d));
+            eligible
+                .clone()
+                .find(|d| crate::scanner::is_known_eeg_ble_name(&d.name))
+                .or_else(|| eligible.clone().next())
+                .cloned()
+        });
+        if let Some(dev) = auto {
+            tracing::info!("[retry-connect] auto-pairing nearby device: {} ({})", dev.name, dev.id);
+            // Pair it.
+            if let Ok(mut guard) = state.devices.lock() {
+                if let Some(d) = guard.iter_mut().find(|d| d.id == dev.id) {
+                    d.is_paired = true;
+                    d.is_preferred = true;
+                }
+            }
+            if let Ok(mut st) = state.status.lock() {
+                if !st.paired_devices.iter().any(|d| d.id == dev.id) {
+                    st.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
+                        id: dev.id.clone(),
+                        name: dev.name.clone(),
+                        last_seen: now_unix_secs(),
+                    });
+                }
+            }
+            persist_paired_devices(&state);
+
+            // Set as preferred.
+            let mut settings = crate::routes::settings_io::load_user_settings(&state);
+            settings.preferred_id = Some(dev.id.clone());
+            crate::routes::settings_io::save_user_settings(&state, &settings);
+
+            state.broadcast("devices-updated", serde_json::json!({ "auto_paired": dev.id }));
+
+            target = Some(dev.id);
+            push_device_log(
+                &state,
+                "session",
+                &format!(
+                    "retry-connect auto-paired and selected target={}",
+                    target.as_ref().unwrap()
+                ),
+            );
+        }
+    }
+
     let resolved_target = target
         .as_deref()
         .map(|t| (t.to_string(), resolve_target_fields(&state, Some(t))));

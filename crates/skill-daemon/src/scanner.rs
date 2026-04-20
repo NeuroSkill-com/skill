@@ -70,6 +70,21 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
         || n.contains("notion")
 }
 
+/// Return `true` when a discovered device is eligible for automatic pairing.
+/// Excludes passive/proxy transports that require manual setup.
+pub(crate) fn is_auto_pair_eligible(dev: &skill_daemon_common::DiscoveredDeviceResponse) -> bool {
+    let n = dev.name.to_lowercase();
+    // NeuroSky serial dongle requires manual pairing in OS Bluetooth first.
+    if n.contains("neurosky") || n.contains("mindwave") {
+        return false;
+    }
+    // BrainVision RDA is a network relay, not a physical device in proximity.
+    if n.contains("brainvision") || dev.id.starts_with("brainvision:") {
+        return false;
+    }
+    true
+}
+
 /// Read the current BLE device cache and return only devices whose names
 /// match a known EEG/neurofeedback headset.  Entries not seen within the
 /// last 60 seconds are suppressed (but kept in the cache for name recall).

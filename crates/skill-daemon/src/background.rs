@@ -47,31 +47,95 @@ fn spawn_auto_connect(state: AppState) {
             .preferred_id
             .or_else(|| settings.paired.first().map(|d| d.id.clone()));
 
-        if let Some(preferred_id) = preferred {
-            info!("[auto-connect] preferred device: {preferred_id}");
+        let preferred_id = match preferred {
+            Some(id) => id,
+            None => {
+                // No paired/preferred device — wait for the scanner to discover one
+                // and auto-pair it.  Prefer BLE EEG devices over other transports.
+                info!("[auto-connect] no paired device found, waiting for discovery…");
+                const MAX_ATTEMPTS: u32 = 30; // ~60 seconds
+                let mut attempts = 0u32;
+                let found = loop {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    attempts += 1;
+                    let candidate = state.devices.lock().ok().and_then(|devs| {
+                        // Prefer a known EEG BLE device; fall back to any eligible device.
+                        let eligible = devs.iter().filter(|d| crate::scanner::is_auto_pair_eligible(d));
+                        eligible
+                            .clone()
+                            .find(|d| crate::scanner::is_known_eeg_ble_name(&d.name))
+                            .or_else(|| eligible.clone().next())
+                            .cloned()
+                    });
+                    if let Some(dev) = candidate {
+                        break dev;
+                    }
+                    if attempts >= MAX_ATTEMPTS {
+                        info!("[auto-connect] no device discovered after {MAX_ATTEMPTS} attempts, giving up");
+                        return;
+                    }
+                };
 
-            // Set preferred in discovered devices list.
-            if let Ok(mut guard) = state.devices.lock() {
-                for d in guard.iter_mut() {
-                    d.is_preferred = d.id == preferred_id;
+                info!(
+                    "[auto-connect] auto-pairing first discovered device: {} ({})",
+                    found.name, found.id
+                );
+
+                // Pair the device.
+                if let Ok(mut guard) = state.devices.lock() {
+                    if let Some(d) = guard.iter_mut().find(|d| d.id == found.id) {
+                        d.is_paired = true;
+                        d.is_preferred = true;
+                    }
                 }
-            }
+                if let Ok(mut status) = state.status.lock() {
+                    if !status.paired_devices.iter().any(|d| d.id == found.id) {
+                        status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
+                            id: found.id.clone(),
+                            name: found.name.clone(),
+                            last_seen: skill_daemon_state::util::now_unix_secs(),
+                        });
+                    }
+                }
+                skill_daemon_state::util::persist_paired_devices(&state);
 
-            // Set target in status so retry-connect knows where to connect.
-            if let Ok(mut status) = state.status.lock() {
-                status.target_id = Some(preferred_id);
-            }
+                // Set as preferred.
+                let mut settings = load_user_settings(&state);
+                settings.preferred_id = Some(found.id.clone());
+                crate::routes::settings_io::save_user_settings(&state, &settings);
 
-            // Enable reconnect.
-            if let Ok(mut rc) = state.reconnect.lock() {
-                rc.pending = true;
-            }
+                info!("[auto-connect] device {} set as preferred", found.id);
 
-            // Trigger connect via the handler.
-            use axum::extract::State;
-            let _ = crate::handlers::control_retry_connect(State(state.clone())).await;
-            info!("[auto-connect] connect triggered");
+                // Notify the UI so the device list updates immediately.
+                state.broadcast("devices-updated", serde_json::json!({ "auto_paired": found.id }));
+
+                found.id
+            }
+        };
+
+        info!("[auto-connect] preferred device: {preferred_id}");
+
+        // Set preferred in discovered devices list.
+        if let Ok(mut guard) = state.devices.lock() {
+            for d in guard.iter_mut() {
+                d.is_preferred = d.id == preferred_id;
+            }
         }
+
+        // Set target in status so retry-connect knows where to connect.
+        if let Ok(mut status) = state.status.lock() {
+            status.target_id = Some(preferred_id);
+        }
+
+        // Enable reconnect.
+        if let Ok(mut rc) = state.reconnect.lock() {
+            rc.pending = true;
+        }
+
+        // Trigger connect via the handler.
+        use axum::extract::State;
+        let _ = crate::handlers::control_retry_connect(State(state.clone())).await;
+        info!("[auto-connect] connect triggered");
     });
 }
 
