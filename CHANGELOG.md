@@ -8,6 +8,17 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.124] — 2026-04-20
+
+### Features
+
+- fixed daemon invoke
+- linter
+- fixed calibration
+- fixed `set default`
+- better connect
+- fixed connectivity
+
 ## [0.0.123] — 2026-04-19
 
 ### Features
