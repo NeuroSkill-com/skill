@@ -140,7 +140,7 @@ export interface PairedInfo {
 function inferTransport(id: string): "ble" | "usb_serial" | "wifi" | undefined {
   if (id.startsWith("ble:")) return "ble";
   if (id.startsWith("usb:")) return "usb_serial";
-  if (id.startsWith("wifi:") || id.includes(":") && id.includes(".")) return "wifi";
+  if (id.startsWith("wifi:") || (id.includes(":") && id.includes("."))) return "wifi";
   return undefined;
 }
 
@@ -149,10 +149,7 @@ function inferTransport(id: string): "ble" | "usb_serial" | "wifi" | undefined {
  * Devices already in `base` are preserved as-is (including is_preferred).
  * Devices in `paired` but missing from `base` are added with is_preferred=false.
  */
-export function mergePairedIntoDevices<T extends DeviceBase>(
-  base: T[],
-  paired: PairedInfo[],
-): T[] {
+export function mergePairedIntoDevices<T extends DeviceBase>(base: T[], paired: PairedInfo[]): T[] {
   const out = [...base];
   const byId = new Set(out.map((d) => d.id));
   for (const p of paired) {

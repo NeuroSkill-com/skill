@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { applyPreferred, mergePairedIntoDevices, type DeviceBase, type PairedInfo } from "$lib/devices-logic";
+import { applyPreferred, type DeviceBase, mergePairedIntoDevices, type PairedInfo } from "$lib/devices-logic";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -115,10 +115,7 @@ describe("mergePairedIntoDevices", () => {
 describe("setPreferred end-to-end flow", () => {
   it("preferred flag survives merge with paired status", () => {
     // Simulate: user clicks "Set default" on Muse
-    const devices = [
-      makeDevice("ble:muse", "Muse"),
-      makeDevice("ble:awear", "AWEAR"),
-    ];
+    const devices = [makeDevice("ble:muse", "Muse"), makeDevice("ble:awear", "AWEAR")];
     const pairedFromStatus: PairedInfo[] = [
       { id: "ble:muse", name: "Muse" },
       { id: "ble:awear", name: "AWEAR" },

@@ -7,7 +7,6 @@ the Free Software Foundation, version 3 only. -->
 <!-- Devices tab — paired/discovered devices, OpenBCI config, device API, scanner backends. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { applyPreferred } from "$lib/devices-logic";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
@@ -31,6 +30,7 @@ import {
   setPreferredDevice,
   setScannerConfig,
 } from "$lib/daemon/client";
+import { applyPreferred } from "$lib/devices-logic";
 import { t } from "$lib/i18n/index.svelte";
 import { getSupportedCompanies, loadSupportedCompanies, type SupportedCompanyId } from "$lib/supported-devices";
 import { colorForRssi } from "$lib/theme";
@@ -717,7 +717,11 @@ onMount(async () => {
   await refreshDeviceLog();
   deviceLogInterval = setInterval(refreshDeviceLog, 3000);
   devicePollInterval = setInterval(async () => {
-    try { devices = await getDevices(); } catch (_) { /* daemon may be unreachable */ }
+    try {
+      devices = await getDevices();
+    } catch (_) {
+      /* daemon may be unreachable */
+    }
   }, 3000);
 
   nowTimer = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);

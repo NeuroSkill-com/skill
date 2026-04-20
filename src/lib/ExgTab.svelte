@@ -77,7 +77,9 @@ async function setExgInferenceDevice(dev: "gpu" | "cpu") {
 onMount(async () => {
   filter = await daemonInvoke<FilterConfig>("get_filter_config");
   overlapSecs = await daemonInvoke<number>("get_embedding_overlap");
-  exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device").then(r => r.value).catch(() => "gpu")) as "gpu" | "cpu";
+  exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device")
+    .then((r) => r.value)
+    .catch(() => "gpu")) as "gpu" | "cpu";
 });
 </script>
 
