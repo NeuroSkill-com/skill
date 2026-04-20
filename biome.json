@@ -52,6 +52,16 @@
       }
     },
     {
+      "includes": ["src/tests/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/**/*.svelte"],
       "linter": {
         "rules": {

@@ -129,7 +129,6 @@ describe("wall-clock runCountdown", () => {
 
     // Must be non-increasing
     for (let i = 1; i < values.length; i++) {
-      // biome-ignore lint/style/noNonNullAssertion: test fixture always has this element
       expect(values[i]).toBeLessThanOrEqual(values[i - 1]!);
     }
     // Last value is 0
@@ -204,7 +203,6 @@ describe("calibration loop TTS ordering", () => {
 
       for (let ai = 0; ai < profile.actions.length; ai++) {
         if (!state.running) break;
-        // biome-ignore lint/style/noNonNullAssertion: test fixture always has this element
         const action = profile.actions[ai]!;
 
         // ACTION phase
@@ -220,7 +218,6 @@ describe("calibration loop TTS ordering", () => {
         // BREAK phase
         const isLast = loop === profile.loop_count && ai === profile.actions.length - 1;
         if (!isLast && state.running) {
-          // biome-ignore lint/style/noNonNullAssertion: test fixture always has this element
           const nextAction = profile.actions[(ai + 1) % profile.actions.length]!;
           phase = { kind: "break", actionIndex: ai, loop };
           phases.push({ ...phase });
@@ -333,7 +330,6 @@ describe("calibration loop TTS ordering", () => {
 
   it("calibration ends with completion announcement", async () => {
     const { calls } = await simulateCalibration(PROFILE);
-    // biome-ignore lint/style/noNonNullAssertion: test fixture always has this element
     const last = calls[calls.length - 1]!;
     expect(last.text).toContain("Calibration complete");
   });
@@ -369,7 +365,6 @@ describe("single-action profile", () => {
 
     for (let loop = 1; loop <= profile.loop_count; loop++) {
       if (!state.running) break;
-      // biome-ignore lint/style/noNonNullAssertion: test fixture always has this element
       const action = profile.actions[0]!;
       await ttsSpeakWait(action.label);
 

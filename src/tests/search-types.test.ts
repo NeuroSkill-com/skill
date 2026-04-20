@@ -120,6 +120,7 @@ describe("computeSearchAnalysis", () => {
       { distance: 0.3, timestamp_unix: 1700007200 },
     ]);
     const a = computeSearchAnalysis(r)!;
+    expect(a).toBeDefined();
     expect(a.totalNeighbors).toBe(3);
     expect(a.distMin).toBeCloseTo(0.1);
     expect(a.distMax).toBeCloseTo(0.3);

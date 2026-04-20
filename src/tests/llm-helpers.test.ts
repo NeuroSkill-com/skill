@@ -274,7 +274,6 @@ describe("buildFamilies", () => {
 
   it("separates mmproj entries from regular entries", () => {
     const families = buildFamilies(multiCatalog().entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const phi = families.find((f) => f.id === "phi-4")!;
     expect(phi.entries).toHaveLength(2); // Q4_K_M + Q6_K
     expect(phi.mmproj).toHaveLength(1);
@@ -283,7 +282,6 @@ describe("buildFamilies", () => {
 
   it("tracks recommended entry", () => {
     const families = buildFamilies(multiCatalog().entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.recommended).toBeDefined();
     expect(qwen.recommended?.filename).toBe("Qwen3-1.7B-Q4_K_M.gguf");
@@ -294,7 +292,6 @@ describe("buildFamilies", () => {
     cat.entries[0].state = "downloaded";
     cat.entries[0].local_path = "/some/path";
     const families = buildFamilies(cat.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(1);
     expect(qwen.downloaded[0].filename).toBe("Qwen3-1.7B-Q4_K_M.gguf");
@@ -302,7 +299,6 @@ describe("buildFamilies", () => {
 
   it("collects tags and vendors", () => {
     const families = buildFamilies(multiCatalog().entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const phi = families.find((f) => f.id === "phi-4")!;
     expect(phi.tags).toContain("reasoning");
     expect(phi.vendors).toContain("Bartowski");
@@ -515,7 +511,6 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // 2. buildFamilies correctly includes the downloading entry
     const families = buildFamilies(catalog.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     const dlEntry = qwen.entries.find((e) => e.state === "downloading");
     expect(dlEntry).toBeDefined();
@@ -553,7 +548,6 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // 4. Family now shows the downloaded count
     const families = buildFamilies(cat.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(1);
   });
@@ -569,7 +563,6 @@ describe("E2E: download-progress survives window reopen", () => {
     expect(hasActiveDownloads(cat)).toBe(false);
 
     const families = buildFamilies(cat.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     const failed = qwen.entries.find((e) => e.state === "failed");
     expect(failed).toBeDefined();
@@ -604,7 +597,6 @@ describe("E2E: download-progress survives window reopen", () => {
 
     // But paused entry is NOT in the downloaded list
     const families = buildFamilies(cat.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(qwen.downloaded).toHaveLength(0);
   });
@@ -646,7 +638,6 @@ describe("E2E: download-progress survives window reopen", () => {
     expect(selected).toBe("phi-4");
 
     // But the Qwen family dropdown label shows ⬇
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
     expect(familyOptionLabel(qwen, cat.active_model)).toMatch(/⬇/);
   });
@@ -665,9 +656,7 @@ describe("E2E: download-progress survives window reopen", () => {
 
     expect(hasActiveDownloads(cat)).toBe(true);
     const families = buildFamilies(cat.entries);
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const qwen = families.find((f) => f.id === "qwen3-1.7b")!;
-    // biome-ignore lint/style/noNonNullAssertion: fixture always contains this test entry
     const dlEntry = qwen.entries.find((e) => e.state === "downloading")!;
     expect(dlEntry.shard_files).toHaveLength(3);
     expect(dlEntry.progress).toBeCloseTo(0.33);
