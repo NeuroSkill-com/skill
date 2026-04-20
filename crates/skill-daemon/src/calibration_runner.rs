@@ -48,17 +48,14 @@ pub fn spawn_session(state: &AppState, profile_id: &str) -> Result<(), String> {
     }
 
     let settings = load_user_settings(state);
-    let profile = match settings
+    let Some(profile) = settings
         .calibration_profiles
         .iter()
         .find(|p| p.id == profile_id)
         .cloned()
-    {
-        Some(p) => p,
-        None => {
-            state.calibration_running.store(false, Ordering::Release);
-            return Err(format!("Profile '{profile_id}' not found"));
-        }
+    else {
+        state.calibration_running.store(false, Ordering::Release);
+        return Err(format!("Profile '{profile_id}' not found"));
     };
 
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
