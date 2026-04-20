@@ -675,14 +675,7 @@ async function setPreferred(id: string) {
   try {
     devices = await setPreferredDevice<DiscoveredDevice>(targetId);
   } catch {
-    // Daemon HTTP may fail (e.g. auth token mismatch after restart).
-    // Fall back to Tauri invoke which has its own daemon call path
-    // and applies the change locally even if the daemon is unreachable.
-    try {
-      devices = await invoke<DiscoveredDevice[]>("set_preferred_device", { id: targetId });
-    } catch {
-      // Both paths failed — optimistic update still visible.
-    }
+    // Daemon HTTP may fail — optimistic update still visible.
   }
 }
 async function forget(id: string) {
