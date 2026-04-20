@@ -74,7 +74,8 @@ function main() {
     const chosen = SUITES.filter((s, i) => s && selected[i])
       .map((s) => s[0])
       .join(" ");
-    process.stdout.write(`\n  \x1b[2mWill run: ${chosen || "(nothing selected)"}\x1b[0m\n`);
+    const display = chosen || (SUITES[cursor] ? SUITES[cursor][0] : "(nothing selected)");
+    process.stdout.write(`\n  \x1b[2mWill run: ${display}\x1b[0m\n`);
   }
 
   function runSelected() {
@@ -110,6 +111,10 @@ function main() {
     if (key === "\r" || key === "\n") {
       process.stdin.setRawMode(false);
       process.stdin.pause();
+      // If nothing was toggled, run the highlighted item
+      if (!selected.some(Boolean) && SUITES[cursor] !== null) {
+        selected[cursor] = true;
+      }
       runSelected();
       return;
     }

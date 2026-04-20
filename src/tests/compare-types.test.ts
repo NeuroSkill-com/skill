@@ -133,25 +133,25 @@ describe("computeInsightDeltas", () => {
     const a = mkMetrics({ relaxation: 50 });
     const b = mkMetrics({ relaxation: 70 });
     const deltas = computeInsightDeltas(a, b);
-    const relax = deltas.find((d) => d.key === "relaxation")!;
-    expect(relax.direction).toBe("improved");
-    expect(relax.delta).toBe(20);
+    const relax = deltas.find((d) => d.key === "relaxation");
+    expect(relax?.direction).toBe("improved");
+    expect(relax?.delta).toBe(20);
   });
 
   it("detects improvement in lower-is-better metrics", () => {
     const a = mkMetrics({ stress_index: 80 });
     const b = mkMetrics({ stress_index: 40 });
     const deltas = computeInsightDeltas(a, b);
-    const stress = deltas.find((d) => d.key === "stress_index")!;
-    expect(stress.direction).toBe("improved");
+    const stress = deltas.find((d) => d.key === "stress_index");
+    expect(stress?.direction).toBe("improved");
   });
 
   it("marks stable when change is small", () => {
     const a = mkMetrics({ relaxation: 50 });
     const b = mkMetrics({ relaxation: 50.5 });
     const deltas = computeInsightDeltas(a, b);
-    const relax = deltas.find((d) => d.key === "relaxation")!;
-    expect(relax.direction).toBe("stable");
+    const relax = deltas.find((d) => d.key === "relaxation");
+    expect(relax?.direction).toBe("stable");
   });
 });
 

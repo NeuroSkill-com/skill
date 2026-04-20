@@ -54,7 +54,6 @@ describe("computeRawScores", () => {
       { rel_alpha: 0.5, rel_beta: 0.5, rel_theta: 0.1 },
       { rel_alpha: 0.5, rel_beta: 0.5, rel_theta: 0.1 },
     ]);
-    // biome-ignore lint/style/noNonNullAssertion: test fixture always produces a result
     expect(one!.focus).toBeCloseTo(two!.focus, 5);
   });
 });
