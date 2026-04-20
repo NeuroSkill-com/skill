@@ -196,6 +196,60 @@ fn daemon_rollback_bin_path() -> Result<PathBuf, String> {
     Ok(p)
 }
 
+/// Path to the file that records the app version of the last daemon launch.
+fn last_app_version_path() -> PathBuf {
+    let mut p = dirs::config_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+    p.push("skill");
+    p.push("daemon");
+    p.push("last_app_version");
+    p
+}
+
+/// The current app version baked in at compile time.
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Returns `true` when the stored version differs from the current app version,
+/// meaning the daemon binary has likely been replaced by a fresh install.
+fn app_version_changed() -> bool {
+    let marker = last_app_version_path();
+    let previous = std::fs::read_to_string(&marker).unwrap_or_default();
+    previous.trim() != APP_VERSION
+}
+
+/// Check whether the running daemon was started by a different app version.
+/// If so, kill the old daemon and unload its service so the caller can spawn
+/// the new one bundled with this app.  Returns `true` if a restart was forced.
+fn upgrade_daemon_if_app_version_changed() -> bool {
+    if !app_version_changed() {
+        return false;
+    }
+
+    let marker = last_app_version_path();
+    let previous = std::fs::read_to_string(&marker).unwrap_or_default();
+    eprintln!(
+        "[daemon] app version changed ({} → {}) — replacing daemon",
+        if previous.trim().is_empty() {
+            "<none>"
+        } else {
+            previous.trim()
+        },
+        APP_VERSION
+    );
+    restart_daemon_process_best_effort();
+    // Give the OS a moment to release the port.
+    std::thread::sleep(Duration::from_millis(500));
+    true
+}
+
+/// Record the current app version so future launches can detect upgrades.
+fn stamp_app_version() {
+    let marker = last_app_version_path();
+    if let Some(parent) = marker.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&marker, APP_VERSION);
+}
+
 fn update_daemon_rollback_snapshot_best_effort() {
     let src = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
     let src_path = PathBuf::from(&src);
@@ -1324,59 +1378,37 @@ fn unload_daemon_service_best_effort() {
 }
 
 pub(crate) fn ensure_daemon_runtime_ready() {
-    ensure_daemon_running();
+    // On fresh install / upgrade, kill the old daemon so we launch the new one.
+    upgrade_daemon_if_app_version_changed();
+
+    // Block until the daemon is reachable (or spawn fails).
+    ensure_daemon_running_blocking();
 
     let mut compatible = false;
+
+    // First attempt: check protocol compatibility.
     match wait_for_protocol_compatibility(Duration::from_secs(5)) {
         Ok(true) => {
             compatible = true;
         }
-        Ok(false) => {
-            eprintln!("[daemon] protocol mismatch detected — attempting recovery restart");
-            restart_daemon_process_best_effort();
-            std::thread::sleep(Duration::from_millis(300));
-            ensure_daemon_running();
-            match wait_for_protocol_compatibility(Duration::from_secs(5)) {
-                Ok(true) => {
-                    compatible = true;
-                    eprintln!("[daemon] protocol compatibility restored after restart");
-                }
-                Ok(false) => {
-                    eprintln!(
-                        "[daemon] protocol still incompatible after restart — attempting rollback binary"
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[daemon] protocol check failed after restart: {e} — attempting rollback binary"
-                    );
-                }
+        not_ok => {
+            match &not_ok {
+                Ok(false) => eprintln!("[daemon] protocol mismatch — attempting restart"),
+                Err(e) => eprintln!("[daemon] protocol check failed: {e} — attempting restart"),
+                _ => unreachable!(),
             }
-        }
-        Err(e) => {
-            eprintln!("[daemon] protocol check unavailable: {e} — attempting recovery restart");
-            // Token file may not exist yet (fresh install over a running old
-            // daemon).  Kill the occupant, spawn the new binary, and re-check.
+            // Kill and respawn the daemon, then re-check.
             restart_daemon_process_best_effort();
             std::thread::sleep(Duration::from_millis(300));
-            ensure_daemon_running();
-            match wait_for_protocol_compatibility(Duration::from_secs(5)) {
-                Ok(true) => {
-                    compatible = true;
-                    eprintln!("[daemon] protocol compatibility restored after error-path restart");
-                }
-                Ok(false) => {
-                    eprintln!(
-                        "[daemon] protocol mismatch after error-path restart — will try rollback"
-                    );
-                }
-                Err(e2) => {
-                    eprintln!("[daemon] protocol still unavailable after restart: {e2} — will try rollback");
-                }
+            ensure_daemon_running_blocking();
+            if let Ok(true) = wait_for_protocol_compatibility(Duration::from_secs(5)) {
+                compatible = true;
+                eprintln!("[daemon] protocol compatibility restored after restart");
             }
         }
     }
 
+    // Rollback: try the last-known-good daemon binary.
     if !compatible {
         if let Ok(rollback_bin) = daemon_rollback_bin_path() {
             if rollback_bin.exists() {
@@ -1389,7 +1421,7 @@ pub(crate) fn ensure_daemon_runtime_ready() {
 
                 let prev = std::env::var("SKILL_DAEMON_BIN").ok();
                 std::env::set_var("SKILL_DAEMON_BIN", rollback_bin.display().to_string());
-                ensure_daemon_running();
+                ensure_daemon_running_blocking();
                 if let Some(v) = prev {
                     std::env::set_var("SKILL_DAEMON_BIN", v);
                 } else {
@@ -1415,6 +1447,7 @@ pub(crate) fn ensure_daemon_runtime_ready() {
 
     if compatible {
         update_daemon_rollback_snapshot_best_effort();
+        stamp_app_version();
     }
 
     ensure_daemon_background_service();
@@ -1452,14 +1485,13 @@ where
     let mut compatible = false;
     match wait() {
         Ok(true) => compatible = true,
-        Ok(false) => {
+        Ok(false) | Err(_) => {
             restart();
             ensure_running();
             if let Ok(true) = wait() {
                 compatible = true;
             }
         }
-        Err(_) => {}
     }
 
     if !compatible && rollback_exists() {
@@ -2524,8 +2556,8 @@ mod tests {
         );
 
         assert!(!compatible);
-        assert_eq!(ensure_count, 1, "no restart when initial wait errors");
-        assert_eq!(restart_count, 0);
+        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
+        assert_eq!(restart_count, 1, "error triggers a restart attempt");
         assert_eq!(rollback_launch_count, 0);
         assert_eq!(snapshot_count, 0, "no snapshot refresh on degraded startup");
         assert_eq!(service_count, 1);
@@ -2700,11 +2732,48 @@ mod tests {
     }
 
     #[test]
-    fn runtime_ready_uses_rollback_when_initial_probe_errors() {
+    fn runtime_ready_recovers_after_initial_probe_error() {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let mut waits = std::collections::VecDeque::from([
             Err("initial probe failed".to_string()),
+            Ok(true), // post-restart probe succeeds
+        ]);
+
+        let mut ensure_count = 0usize;
+        let mut restart_count = 0usize;
+        let mut rollback_launch_count = 0usize;
+        let mut snapshot_count = 0usize;
+        let mut service_count = 0usize;
+
+        let compatible = ensure_daemon_runtime_ready_with_hooks(
+            || ensure_count += 1,
+            || waits.pop_front().unwrap_or(Err("no wait result".into())),
+            || restart_count += 1,
+            || true,
+            || rollback_launch_count += 1,
+            || snapshot_count += 1,
+            || service_count += 1,
+        );
+
+        assert!(compatible);
+        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
+        assert_eq!(restart_count, 1, "error triggers a restart attempt");
+        assert_eq!(
+            rollback_launch_count, 0,
+            "no rollback needed — restart fixed it"
+        );
+        assert_eq!(snapshot_count, 1);
+        assert_eq!(service_count, 1);
+    }
+
+    #[test]
+    fn runtime_ready_uses_rollback_when_restart_fails_after_probe_error() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let mut waits = std::collections::VecDeque::from([
+            Err("initial probe failed".to_string()),
+            Err("restart probe also failed".to_string()),
             Ok(true), // rollback probe succeeds
         ]);
 
@@ -2725,14 +2794,8 @@ mod tests {
         );
 
         assert!(compatible);
-        assert_eq!(
-            ensure_count, 1,
-            "no normal restart ensure pass on probe error"
-        );
-        assert_eq!(
-            restart_count, 1,
-            "rollback branch performs one restart attempt"
-        );
+        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
+        assert_eq!(restart_count, 2, "error-path restart + rollback restart");
         assert_eq!(rollback_launch_count, 1);
         assert_eq!(snapshot_count, 1);
         assert_eq!(service_count, 1);
@@ -4382,5 +4445,119 @@ mod async_contract_tests {
         });
 
         server.join().unwrap();
+    }
+
+    // ── App-version upgrade detection tests ────────────────────────────
+
+    #[test]
+    fn stamp_app_version_creates_marker_file() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let marker = last_app_version_path();
+        assert!(!marker.exists(), "marker should not exist before stamp");
+
+        stamp_app_version();
+
+        assert!(marker.exists(), "marker should exist after stamp");
+        let contents = std::fs::read_to_string(&marker).unwrap();
+        assert_eq!(contents, APP_VERSION);
+    }
+
+    #[test]
+    fn app_version_changed_returns_true_when_no_marker() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        assert!(
+            app_version_changed(),
+            "should detect change when marker file is absent"
+        );
+    }
+
+    #[test]
+    fn app_version_changed_returns_false_after_stamp() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        stamp_app_version();
+        assert!(
+            !app_version_changed(),
+            "should not detect change right after stamping"
+        );
+    }
+
+    #[test]
+    fn app_version_changed_returns_true_when_marker_differs() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let marker = last_app_version_path();
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, "0.0.1-old").unwrap();
+
+        assert!(
+            app_version_changed(),
+            "should detect change when marker contains a different version"
+        );
+    }
+
+    #[test]
+    fn app_version_changed_ignores_trailing_whitespace() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let marker = last_app_version_path();
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, format!("{}\n  ", APP_VERSION)).unwrap();
+
+        assert!(
+            !app_version_changed(),
+            "should treat version with trailing whitespace as matching"
+        );
+    }
+
+    #[test]
+    fn stamp_overwrites_previous_version() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
+        let td = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", td.path());
+        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
+        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+
+        let marker = last_app_version_path();
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, "0.0.1-old").unwrap();
+
+        assert!(app_version_changed());
+
+        stamp_app_version();
+
+        assert!(
+            !app_version_changed(),
+            "stamp should overwrite old version so change is no longer detected"
+        );
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), APP_VERSION);
     }
 }
