@@ -67,6 +67,20 @@
       "params_b": 27.0,
       "max_context_length": 131072
     },
+    "qwen36-27b": {
+      "name": "Qwen3.6 27B",
+      "description": "Alibaba's Qwen3.6 dense 27-billion-parameter model with vision support. Strong reasoning and multimodal capabilities; needs ≥ 16 GB VRAM for Q4.",
+      "repo": "unsloth/Qwen3.6-27B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "vision",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
+    },
     "qwen36-35b-a3b": {
       "name": "Qwen3.6 35B-A3B",
       "description": "Alibaba's Qwen3.6 MoE model (35B total / ~3B active). High quality with low active compute; fits comfortably in 16 GB VRAM at Q4.",
@@ -3692,6 +3706,197 @@
       "size_gb": 2.8,
       "description": "Recommended — only available quant",
       "recommended": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 8.75,
+      "description": "Ultra-small 2-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 10.1,
+      "description": "2-bit; fits 12 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 11.18,
+      "description": "Compact 3-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 11.51,
+      "description": "Small 3-bit; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 12.65,
+      "description": "Medium 3-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 13.47,
+      "description": "2-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 13.48,
+      "description": "3-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 14.38,
+      "description": "Compact 4-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 14.71,
+      "description": "4-bit; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 14.76,
+      "description": "4-bit; fits 16 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 14.97,
+      "description": "4-bit non-linear; good quality/size balance",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 15.65,
+      "description": "Best quality/size balance; needs 16 GB VRAM or 24 GB RAM",
+      "recommended": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 16.07,
+      "description": "4-bit variant; slightly higher quality than Q4_0",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 16.4,
+      "description": "4-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 17.66,
+      "description": "5-bit; needs 24 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 18.17,
+      "description": "Higher quality 5-bit; needs 24 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 18.66,
+      "description": "5-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 20.99,
+      "description": "6-bit; high quality, needs 32 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 23.88,
+      "description": "6-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 26.63,
+      "description": "Near-lossless 8-bit; needs 48 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "Qwen3.6-27B-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 32.89,
+      "description": "8-bit with important layers at higher precision",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 0.87,
+      "description": "Qwen3.6-27B vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 0.86,
+      "description": "Qwen3.6-27B vision projector — FP16"
+    },
+    {
+      "family": "qwen36-27b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 1.72,
+      "description": "Qwen3.6-27B vision projector — FP32",
+      "advanced": true
     },
     {
       "family": "qwen36-35b-a3b",
