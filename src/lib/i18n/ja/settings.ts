@@ -655,6 +655,17 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "チャット",
   "settings.shortcutCompare": "比較",
+
+  "settings.supportedDevices.company.antneuro": "ANT Neuro",
+  "settings.supportedDevices.device.eego8": "eego 8",
+  "settings.supportedDevices.device.eego24": "eego 24",
+  "settings.supportedDevices.device.eego64": "eego 64",
+  "settings.supportedDevices.device.eegoMylab": "eego mylab",
+  "settings.supportedDevices.device.eegoSport": "eego sport",
+  "settings.supportedDevices.device.eegoRt": "eego rt",
+  "settings.supportedDevices.device.eegoHub": "eego hub",
+  "settings.supportedDevices.instruction.antneuro1": "eego アンプを USB で接続してください。",
+  "settings.supportedDevices.instruction.antneuro2": "スキャナーが eego アンプを自動検出します。デバイス一覧から選択して接続してください。必要に応じて Device API 設定でキャップレイアウトを変更できます。",
 };
 
 export default settings;

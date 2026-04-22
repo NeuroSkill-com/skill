@@ -630,6 +630,17 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "聊天",
   "settings.shortcutCompare": "比较",
+
+  "settings.supportedDevices.company.antneuro": "ANT Neuro",
+  "settings.supportedDevices.device.eego8": "eego 8",
+  "settings.supportedDevices.device.eego24": "eego 24",
+  "settings.supportedDevices.device.eego64": "eego 64",
+  "settings.supportedDevices.device.eegoMylab": "eego mylab",
+  "settings.supportedDevices.device.eegoSport": "eego sport",
+  "settings.supportedDevices.device.eegoRt": "eego rt",
+  "settings.supportedDevices.device.eegoHub": "eego hub",
+  "settings.supportedDevices.instruction.antneuro1": "通过 USB 连接您的 eego 放大器。",
+  "settings.supportedDevices.instruction.antneuro2": "扫描器会自动检测 eego 放大器。从设备列表中选择并连接。如需要，可在 Device API 设置中配置电极帽布局。",
 };
 
 export default settings;
