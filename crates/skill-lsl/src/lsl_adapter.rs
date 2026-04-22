@@ -76,6 +76,7 @@ impl LslAdapter {
         let name = info.name().to_string();
         let stream_type = info.type_().to_string();
         let source_id = info.source_id().to_string();
+        let hostname = info.hostname().to_string();
 
         // Read channel labels from the LSL stream's XML description.
         //
@@ -149,12 +150,20 @@ impl LslAdapter {
                     thread_channel_names.join(", "),
                 );
 
+                // Build a descriptive hardware_version from LSL metadata:
+                // "EEG · 32ch · 256 Hz" or "EEG · 32ch · 256 Hz @ hostname"
+                let hw_version = if hostname.is_empty() {
+                    format!("{stream_type} · {channel_count}ch · {sample_rate} Hz")
+                } else {
+                    format!("{stream_type} · {channel_count}ch · {sample_rate} Hz @ {hostname}")
+                };
+
                 let _ = tx.blocking_send(DeviceEvent::Connected(DeviceInfo {
                     name: name.clone(),
                     id: source_id,
                     serial_number: None,
                     firmware_version: None,
-                    hardware_version: Some(stream_type),
+                    hardware_version: Some(hw_version),
                     bootloader_version: None,
                     mac_address: None,
                     headset_preset: None,
