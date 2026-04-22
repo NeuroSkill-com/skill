@@ -196,6 +196,9 @@ pub(crate) async fn run_adapter_session(
 
                     DeviceEvent::Ppg(frame) => {
                         let ts = frame.timestamp_s;
+                        if let Ok(mut s) = state.status.lock() {
+                            s.ppg_sample_count += frame.samples.len() as u64;
+                        }
                         if let Some(ref mut pipe) = pipeline {
                             // Feed samples into the PPG analyzer.
                             pipe.ppg_analyzer.push(frame.channel, &frame.samples);
@@ -533,6 +536,8 @@ mod tests {
     async fn ppg_written_to_ppg_csv() {
         let dir = TempDir::new().unwrap();
         let state = test_state(dir.path());
+        // Subscribe before running so we capture StatusUpdate events.
+        let mut rx = state.events_tx.subscribe();
 
         let mut adapter = MockAdapter::new(DeviceDescriptor {
             kind: "muse",
@@ -551,25 +556,40 @@ mod tests {
             id: "mock:ppg".to_string(),
             ..Default::default()
         }));
-        for i in 0..64_usize {
-            let ts = i as f64 / 64.0;
+        // 512 EEG samples (2 s at 256 Hz) so StatusUpdate fires at least once.
+        for i in 0..512_usize {
+            let ts = i as f64 / 256.0;
             // EEG to open pipeline
             adapter.push(DeviceEvent::Eeg(EegFrame {
                 channels: vec![1.0, 2.0, 3.0, 4.0],
                 timestamp_s: ts,
             }));
-            // PPG on all 3 channels
-            for ch in 0..3 {
-                adapter.push(DeviceEvent::Ppg(PpgFrame {
-                    channel: ch,
-                    samples: vec![50_000.0 + ch as f64 * 1000.0],
-                    timestamp_s: ts,
-                }));
+            // PPG on all 3 channels (at ~64 Hz = every 4th EEG sample)
+            if i % 4 == 0 {
+                for ch in 0..3 {
+                    adapter.push(DeviceEvent::Ppg(PpgFrame {
+                        channel: ch,
+                        samples: vec![50_000.0 + ch as f64 * 1000.0],
+                        timestamp_s: ts,
+                    }));
+                }
             }
         }
         adapter.push(DeviceEvent::Disconnected);
 
         run(state, adapter).await;
+
+        // Verify ppg_sample_count was propagated via StatusUpdate events.
+        // 128 PPG iterations × 3 channels × 1 sample = 384 PPG samples.
+        let mut peak_ppg = 0u64;
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "StatusUpdate" {
+                if let Some(n) = ev.payload.get("ppg_sample_count").and_then(|v| v.as_u64()) {
+                    peak_ppg = peak_ppg.max(n);
+                }
+            }
+        }
+        assert!(peak_ppg > 0, "ppg_sample_count never incremented in StatusUpdate");
 
         let ppg_files: Vec<_> = files_recursive(dir.path())
             .into_iter()
@@ -1637,5 +1657,125 @@ mod tests {
             Duration::from_secs(40)
         };
         assert!(elapsed < max, "32ch@2000Hz stress test took {elapsed:?}, too slow");
+    }
+
+    // ── 26. PPG sample count propagated end-to-end ──────────────────────────
+    //
+    // Verifies the full PPG pipeline: MockAdapter emits PPG frames →
+    // run_adapter_session updates status.ppg_sample_count → StatusUpdate
+    // WS events carry the correct cumulative count → PpgSample WS events
+    // carry correct channel/samples/timestamp → PPG CSV is written.
+
+    #[tokio::test]
+    async fn ppg_sample_count_propagated_e2e() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "muse",
+            caps: DeviceCaps::EEG | DeviceCaps::PPG | DeviceCaps::BATTERY,
+            eeg_channels: 4,
+            eeg_sample_rate: 256.0,
+            channel_names: vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()],
+            pipeline_channels: 4,
+            ppg_channel_names: vec!["Ambient".into(), "Infrared".into(), "Red".into()],
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+        });
+
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-PPG-E2E".to_string(),
+            id: "mock:ppg-e2e".to_string(),
+            ..Default::default()
+        }));
+
+        // 2 seconds of EEG at 256 Hz (512 samples) — enough for two StatusUpdate
+        // broadcasts (one per 256 samples).
+        // PPG at ~64 Hz (every 4th EEG sample), 3 channels, 1 sample per frame.
+        // Expected: 128 PPG iterations × 3 channels × 1 sample = 384 total PPG samples.
+        let expected_ppg_samples: u64 = 128 * 3 * 1;
+        for i in 0..512_usize {
+            let ts = i as f64 / 256.0;
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: ts,
+            }));
+            if i % 4 == 0 {
+                for ch in 0..3_usize {
+                    adapter.push(DeviceEvent::Ppg(PpgFrame {
+                        channel: ch,
+                        samples: vec![50_000.0 + ch as f64 * 1000.0],
+                        timestamp_s: ts,
+                    }));
+                }
+            }
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        // ── Drain broadcast events ──────────────────────────────────────────
+        let mut peak_ppg_count: u64 = 0;
+        let mut ppg_sample_events: u64 = 0;
+        let mut ppg_channels_seen = std::collections::HashSet::new();
+
+        while let Ok(ev) = rx.try_recv() {
+            match ev.r#type.as_str() {
+                "StatusUpdate" => {
+                    if let Some(n) = ev.payload.get("ppg_sample_count").and_then(|v| v.as_u64()) {
+                        peak_ppg_count = peak_ppg_count.max(n);
+                    }
+                }
+                "PpgSample" => {
+                    ppg_sample_events += 1;
+                    if let Some(ch) = ev.payload.get("channel").and_then(|v| v.as_u64()) {
+                        ppg_channels_seen.insert(ch);
+                    }
+                    // Verify payload shape
+                    assert!(ev.payload.get("samples").is_some(), "PpgSample missing samples");
+                    assert!(ev.payload.get("timestamp").is_some(), "PpgSample missing timestamp");
+                }
+                _ => {}
+            }
+        }
+
+        // 1. ppg_sample_count appeared in StatusUpdate and reached expected total.
+        assert_eq!(
+            peak_ppg_count, expected_ppg_samples,
+            "ppg_sample_count in StatusUpdate: expected {expected_ppg_samples}, got {peak_ppg_count}"
+        );
+
+        // 2. PpgSample WS events were broadcast for all 3 channels.
+        assert_eq!(
+            ppg_sample_events, expected_ppg_samples,
+            "expected {expected_ppg_samples} PpgSample events, got {ppg_sample_events}"
+        );
+        assert_eq!(
+            ppg_channels_seen.len(),
+            3,
+            "expected PPG on 3 channels, saw {ppg_channels_seen:?}"
+        );
+        assert!(ppg_channels_seen.contains(&0), "missing ambient channel 0");
+        assert!(ppg_channels_seen.contains(&1), "missing infrared channel 1");
+        assert!(ppg_channels_seen.contains(&2), "missing red channel 2");
+
+        // 3. PPG CSV was written.
+        let ppg_files: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .ends_with("_ppg.csv")
+            })
+            .collect();
+        assert!(!ppg_files.is_empty(), "PPG CSV not created");
+        let csv_rows = std::fs::read_to_string(&ppg_files[0])
+            .unwrap()
+            .lines()
+            .count()
+            .saturating_sub(1); // minus header
+        assert!(csv_rows > 0, "PPG CSV has no data rows");
     }
 }
