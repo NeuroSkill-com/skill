@@ -178,6 +178,9 @@ pub(crate) async fn run_adapter_session(
 
                     DeviceEvent::Imu(frame) => {
                         let ts = unix_secs_f64();
+                        if let Ok(mut s) = state.status.lock() {
+                            s.imu_sample_count += 1;
+                        }
                         if let Some(ref mut pipe) = pipeline {
                             pipe.writer.push_imu(
                                 &pipe.csv_path, ts,
@@ -1777,5 +1780,121 @@ mod tests {
             .count()
             .saturating_sub(1); // minus header
         assert!(csv_rows > 0, "PPG CSV has no data rows");
+    }
+
+    // ── 27. IMU sample count propagated end-to-end ──────────────────────────
+    //
+    // Verifies the full IMU pipeline: MockAdapter emits IMU frames →
+    // run_adapter_session updates status.imu_sample_count → StatusUpdate
+    // WS events carry the correct cumulative count → ImuSample WS events
+    // carry correct sensor/samples/timestamp → IMU CSV is written.
+
+    #[tokio::test]
+    async fn imu_sample_count_propagated_e2e() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "muse",
+            caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY,
+            eeg_channels: 4,
+            eeg_sample_rate: 256.0,
+            channel_names: vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()],
+            pipeline_channels: 4,
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: vec!["AccelX".into(), "AccelY".into(), "AccelZ".into()],
+            fnirs_channel_names: Vec::new(),
+        });
+
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-IMU-E2E".to_string(),
+            id: "mock:imu-e2e".to_string(),
+            ..Default::default()
+        }));
+
+        // 2 seconds of EEG at 256 Hz (512 samples) — enough for StatusUpdate.
+        // IMU at ~52 Hz (every 5th EEG sample), with accel + gyro.
+        // Expected: 103 IMU frames (512 / 5 = 102.4, rounded up by iteration).
+        let mut expected_imu_frames: u64 = 0;
+        for i in 0..512_usize {
+            let ts = i as f64 / 256.0;
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: ts,
+            }));
+            if i % 5 == 0 {
+                adapter.push(DeviceEvent::Imu(ImuFrame {
+                    accel: [0.01 * i as f32, -0.02, 9.81],
+                    gyro: Some([0.1, 0.2, 0.3]),
+                    mag: None,
+                }));
+                expected_imu_frames += 1;
+            }
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        // ── Drain broadcast events ──────────────────────────────────────────
+        let mut peak_imu_count: u64 = 0;
+        let mut imu_accel_events: u64 = 0;
+        let mut imu_gyro_events: u64 = 0;
+
+        while let Ok(ev) = rx.try_recv() {
+            match ev.r#type.as_str() {
+                "StatusUpdate" => {
+                    if let Some(n) = ev.payload.get("imu_sample_count").and_then(|v| v.as_u64()) {
+                        peak_imu_count = peak_imu_count.max(n);
+                    }
+                }
+                "ImuSample" => {
+                    let sensor = ev.payload.get("sensor").and_then(|v| v.as_str()).unwrap_or("");
+                    match sensor {
+                        "accel" => imu_accel_events += 1,
+                        "gyro" => imu_gyro_events += 1,
+                        _ => {}
+                    }
+                    // Verify payload shape
+                    assert!(ev.payload.get("samples").is_some(), "ImuSample missing samples");
+                    assert!(ev.payload.get("timestamp").is_some(), "ImuSample missing timestamp");
+                }
+                _ => {}
+            }
+        }
+
+        // 1. imu_sample_count appeared in StatusUpdate and reached expected total.
+        assert_eq!(
+            peak_imu_count, expected_imu_frames,
+            "imu_sample_count in StatusUpdate: expected {expected_imu_frames}, got {peak_imu_count}"
+        );
+
+        // 2. ImuSample WS events were broadcast for both accel and gyro.
+        assert_eq!(
+            imu_accel_events, expected_imu_frames,
+            "expected {expected_imu_frames} accel ImuSample events, got {imu_accel_events}"
+        );
+        assert_eq!(
+            imu_gyro_events, expected_imu_frames,
+            "expected {expected_imu_frames} gyro ImuSample events, got {imu_gyro_events}"
+        );
+
+        // 3. IMU CSV was written.
+        let imu_files: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .ends_with("_imu.csv")
+            })
+            .collect();
+        assert!(!imu_files.is_empty(), "IMU CSV not created");
+        let csv_rows = std::fs::read_to_string(&imu_files[0])
+            .unwrap()
+            .lines()
+            .count()
+            .saturating_sub(1); // minus header
+        assert_eq!(csv_rows, expected_imu_frames as usize, "IMU CSV row count mismatch");
     }
 }

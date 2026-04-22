@@ -157,6 +157,9 @@ pub struct StatusResponse {
     /// PPG sample count this session.
     #[serde(default)]
     pub ppg_sample_count: u64,
+    /// IMU sample count this session.
+    #[serde(default)]
+    pub imu_sample_count: u64,
 
     /// Phone descriptor metadata for iroh-remote sessions.
     #[serde(default)]
@@ -208,6 +211,7 @@ impl StatusResponse {
         self.sample_count = 0;
         self.battery = 0.0;
         self.ppg_sample_count = 0;
+        self.imu_sample_count = 0;
         self.phone_info = None;
         self.iroh_client_name = None;
         self.iroh_tunnel_online = false;

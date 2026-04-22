@@ -35,6 +35,7 @@ const DISCONNECTED_STATUS = {
   retry_countdown_secs: 0,
   ppg: [0, 0, 0],
   ppg_sample_count: 0,
+  imu_sample_count: 0,
   accel: [0, 0, 0],
   gyro: [0, 0, 0],
   fuel_gauge_mv: 0,

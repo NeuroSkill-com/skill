@@ -184,6 +184,7 @@ pub fn write_session_meta_full(
             obj.insert("battery_pct_end".into(), serde_json::json!(s.battery));
             obj.insert("channel_quality".into(), serde_json::json!(s.channel_quality));
             obj.insert("ppg_total_samples".into(), serde_json::json!(s.ppg_sample_count));
+            obj.insert("imu_total_samples".into(), serde_json::json!(s.imu_sample_count));
             obj.insert("ppg_channel_names".into(), serde_json::json!(s.ppg_channel_names));
             obj.insert("imu_channel_names".into(), serde_json::json!(s.imu_channel_names));
             obj.insert("fnirs_channel_names".into(), serde_json::json!(s.fnirs_channel_names));
