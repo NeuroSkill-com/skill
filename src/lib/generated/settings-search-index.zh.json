@@ -12,12 +12,6 @@
     "desc": "增强边框和文字对比度，提高可见性。"
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "字体大小",
-    "desc": "调整界面文字大小。影响应用中的所有文本。"
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "校准完成",
@@ -78,36 +72,6 @@
     "desc": "根据您的目标、年龄和使用场景选择校准配置。设置仍可在下方调整。"
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "操作标签",
-    "desc": "每个阶段显示的名称，并作为 EEG 标签存储。"
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "迭代次数",
-    "desc": "完整的操作 1 → 休息 → 操作 2 → 休息循环次数。"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "低功耗蓝牙",
-    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "EPOC、Insight、Flex、MN8（通过本地 Launcher）"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USB 串口",
-    "desc": "OpenBCI Cyton / CytonDaisy 适配器"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "嵌入模型"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "重启等待时间（秒）"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "构建质量",
-    "desc": "图构建时的波束宽度。值越高，图质量越好，但插入速度越慢。"
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "连通性",
-    "desc": "每个节点最多保留 2 × M 条边。值越高，召回率越好，但占用更多内存。"
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "GPU精度",
-    "desc": "半精度(f16)更快，全精度(f32)更准确"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "后台嵌入",
-    "desc": "设备空闲时自动嵌入未处理的epoch"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "重新嵌入",
-    "desc": "使用所选模型后端重新编码所有原始 EXG 会话记录并重建 HNSW 索引。"
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "推理设备",
-    "desc": "AI 推理运行的位置。GPU 更快；CPU 适用于任何机器且避免 VRAM 压力。更改后重启 LLM 服务器。"
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "编辑文件",
+    "desc": "允许对现有文件进行精确的查找替换编辑。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "位置",
+    "desc": "允许基于 IP 的大致国家、地区、城市和时区查询。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "每轮最大调用数",
     "desc": "模型在单轮中可调用的工具数量。"
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "最大轮数",
     "desc": "模型在每条消息中可执行的思考→工具→思考跳转次数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "读取文件",
+    "desc": "允许读取文本文件。大文件通过偏移量/限制进行分页。"
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "智能体技能",
+    "desc": "技能提供 LLM 可按需加载的专业指令。切换各项技能以控制聊天中可用的技能。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "启动时同步",
     "desc": "应用启动时始终获取最新技能"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "网页缓存",
     "desc": "将网页搜索和获取结果缓存到磁盘，以避免冗余的网络调用。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "网页获取",
+    "desc": "允许获取公共 HTTP(S) 页面的原始文本内容。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "网页搜索",
+    "desc": "使用配置的搜索提供商搜索网页。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "写入文件",
+    "desc": "允许创建或覆盖文件。父目录会自动创建。"
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "操作标签",
+    "desc": "每个阶段显示的名称，并作为 EEG 标签存储。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "跟踪活动窗口",
     "desc": "记录当前焦点所在的应用和窗口。本地存储在 activity.sqlite 中，从不上传。"
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "字体大小",
+    "desc": "调整界面文字大小。影响应用中的所有文本。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "位置服务",
     "desc": "启用位置服务以为会话和 LLM 工具提供地理上下文。macOS 上使用 CoreLocation (GPS/Wi-Fi) 实现高精度；其他平台使用 IP 地理定位。默认禁用 — 开启以请求权限并测试。"
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "推理设备",
+    "desc": "AI 推理运行的位置。GPU 更快；CPU 适用于任何机器且避免 VRAM 压力。更改后重启 LLM 服务器。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "跟踪键盘和鼠标活动",
     "desc": "按秒记录键盘和鼠标的使用情况。无需特殊操作系统权限。本地存储在 activity.sqlite 中。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "迭代次数",
+    "desc": "完整的操作 1 → 休息 → 操作 2 → 休息循环次数。"
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "低功耗蓝牙",
+    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC、Insight、Flex、MN8（通过本地 Launcher）"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB 串口",
+    "desc": "OpenBCI Cyton / CytonDaisy 适配器"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "绑定地址",
     "desc": "局域网模式会将 API 暴露给网络上的所有设备。需要重启。"
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "默认令牌",
     "desc": "应用使用的内置管理员令牌。不可删除。刷新以生成新令牌 — 应用会自动使用新令牌。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "编辑文件",
-    "desc": "允许对现有文件进行精确的查找替换编辑。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "位置",
-    "desc": "允许基于 IP 的大致国家、地区、城市和时区查询。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "读取文件",
-    "desc": "允许读取文本文件。大文件通过偏移量/限制进行分页。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "智能体技能",
-    "desc": "技能提供 LLM 可按需加载的专业指令。切换各项技能以控制聊天中可用的技能。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "网页获取",
-    "desc": "允许获取公共 HTTP(S) 页面的原始文本内容。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "网页搜索",
-    "desc": "使用配置的搜索提供商搜索网页。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "写入文件",
-    "desc": "允许创建或覆盖文件。父目录会自动创建。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "紧凑的 ONNX 模型，适用于任何 CPU，速度快，仅支持英语。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "基于 GGUF LLM 骨干网络和 NeuCodec 解码器。可克隆任意语音；支持英语、德语、法语、西班牙语。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "启动时预加载引擎",
-    "desc": "应用启动时在后台预热活动引擎"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "需要 PATH 中存在 espeak-ng",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "GPU 冷却",
-    "desc": "训练轮次之间的暂停毫秒数。0 = 最大 GPU 吞吐量。增加以降低 GPU 利用率并为其他任务留出空间。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "负采样率",
-    "desc": "每个正边每轮抽取的随机非相邻对数量。较高 = 更强分离，训练更慢。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "优化轮数",
-    "desc": "梯度下降迭代次数。更多轮数 = 更精细的布局但计算更慢。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k-最近邻",
-    "desc": "构建 KNN 图使用的最近邻数量。较小的值保留更多局部细节；较大的值捕获更多全局结构。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "排斥",
-    "desc": "控制非相邻点之间的排斥力度。较高的值会使会话 A 和 B 之间的聚类分离更明显。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "训练超时",
-    "desc": "UMAP 优化器的最大时间。达到此限制时训练提前停止。"
   },
   {
     "tab": "updates",

@@ -16,7 +16,7 @@ import { t } from "$lib/i18n/index.svelte";
   </p>
   <div class="flex gap-2 mt-2">
     <a href="/"
-       class="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium
+       class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium
               hover:opacity-90 transition-opacity">
       {t("error.goHome")}
     </a>

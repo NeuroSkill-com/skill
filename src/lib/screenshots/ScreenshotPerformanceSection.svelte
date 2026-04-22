@@ -2,6 +2,7 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { Card, CardContent } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { t } from "$lib/i18n/index.svelte";
 
@@ -83,23 +84,21 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
   {@const CW = 280}
   {@const CH = 56}
   <div class="flex items-center gap-2 px-0.5 pt-2">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      {t("screenshots.perfTitle")}
-    </span>
+    <SectionHeader>{t("screenshots.perfTitle")}</SectionHeader>
     <button onclick={onRefresh}
             aria-label="Refresh performance stats"
-            class="text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+            class="text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground transition-colors">
       ↻
     </button>
   </div>
 
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+  <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
     <CardContent class="px-4 py-3.5 flex flex-col gap-4">
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2">
           <span class="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></span>
-          <span class="text-[0.66rem] font-semibold text-foreground">{t("screenshots.perfCapture")}</span>
-          <span class="ml-auto text-[0.54rem] text-muted-foreground tabular-nums">
+          <span class="text-ui-base font-semibold text-foreground">{t("screenshots.perfCapture")}</span>
+          <span class="ml-auto text-ui-xs text-muted-foreground tabular-nums">
             {metrics.captures} {t("screenshots.perfTotal")}
             {#if metrics.capture_errors > 0}
               · <span class="text-red-500">{metrics.capture_errors} {t("screenshots.perfErrors")}</span>
@@ -131,7 +130,7 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
             <div class="bg-emerald-500" style="width:{(captureBreakdown.save / capTotal * 100).toFixed(1)}%"
                  title="{t('screenshots.perfSave')}: {fmtMs(captureBreakdown.save)}"></div>
           </div>
-          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.5rem] text-muted-foreground">
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-ui-2xs text-muted-foreground">
             <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-blue-500 shrink-0"></span>{t("screenshots.perfWindowCapture")} {fmtMs(captureBreakdown.capture)}</span>
             <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-violet-500 shrink-0"></span>{t("screenshots.perfOcr")} {fmtMs(captureBreakdown.ocr)}</span>
             <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-amber-500 shrink-0"></span>{t("screenshots.perfResize")} {fmtMs(captureBreakdown.resize)}</span>
@@ -141,13 +140,13 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
         {/if}
       </div>
 
-      <Separator class="bg-border dark:bg-white/[0.05]" />
+      <Separator class="bg-border dark:bg-white/[0.04]" />
 
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 {metrics.queue_depth > 2 ? 'bg-amber-500' : 'bg-green-500'}"></span>
-          <span class="text-[0.66rem] font-semibold text-foreground">{t("screenshots.perfEmbed")}</span>
-          <span class="ml-auto text-[0.54rem] text-muted-foreground tabular-nums">{metrics.embeds} {t("screenshots.perfTotal")}</span>
+          <span class="text-ui-base font-semibold text-foreground">{t("screenshots.perfEmbed")}</span>
+          <span class="ml-auto text-ui-xs text-muted-foreground tabular-nums">{metrics.embeds} {t("screenshots.perfTotal")}</span>
         </div>
 
         <div class="rounded-lg bg-muted/30 dark:bg-white/[0.02] border border-border/50 dark:border-white/[0.04] overflow-hidden">
@@ -170,7 +169,7 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
             <div class="bg-violet-500" style="width:{(embedBreakdown.text / embTotal * 100).toFixed(1)}%"
                  title="{t('screenshots.perfTextEmbed')}: {fmtMs(embedBreakdown.text)}"></div>
           </div>
-          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.5rem] text-muted-foreground">
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-ui-2xs text-muted-foreground">
             <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-blue-500 shrink-0"></span>{t("screenshots.perfVisionEmbed")} {fmtMs(embedBreakdown.vision)}</span>
             <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-violet-500 shrink-0"></span>{t("screenshots.perfTextEmbed")} {fmtMs(embedBreakdown.text)}</span>
             <span class="font-semibold text-foreground/70">{t("screenshots.perfIterTotal")} {fmtUs(metrics.embed_total_us)}</span>
@@ -178,16 +177,16 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
         {/if}
       </div>
 
-      <Separator class="bg-border dark:bg-white/[0.05]" />
+      <Separator class="bg-border dark:bg-white/[0.04]" />
 
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2">
-          <span class="text-[0.62rem] font-semibold text-foreground">{t("screenshots.perfQueue")}</span>
-          <span class="text-[0.58rem] tabular-nums font-semibold {metrics.queue_depth > 2 ? 'text-amber-500' : 'text-foreground'}">
+          <span class="text-ui-sm font-semibold text-foreground">{t("screenshots.perfQueue")}</span>
+          <span class="text-ui-sm tabular-nums font-semibold {metrics.queue_depth > 2 ? 'text-amber-500' : 'text-foreground'}">
             {metrics.queue_depth}/4
           </span>
-          <span class="text-[0.54rem] text-muted-foreground ml-2">{t("screenshots.perfDrops")}</span>
-          <span class="text-[0.58rem] tabular-nums font-semibold {metrics.drops > 0 ? 'text-red-500' : 'text-foreground'}">
+          <span class="text-ui-xs text-muted-foreground ml-2">{t("screenshots.perfDrops")}</span>
+          <span class="text-ui-sm tabular-nums font-semibold {metrics.drops > 0 ? 'text-red-500' : 'text-foreground'}">
             {metrics.drops}
           </span>
         </div>
@@ -219,7 +218,7 @@ function areaPath(data: number[], w: number, h: number, pad = 2): string {
           </div>
         {/if}
         {#if metrics.drops > 0}
-          <span class="text-[0.5rem] text-red-500/70">{t("screenshots.perfDropsHint")}</span>
+          <span class="text-ui-2xs text-red-500/70">{t("screenshots.perfDropsHint")}</span>
         {/if}
       </div>
     </CardContent>

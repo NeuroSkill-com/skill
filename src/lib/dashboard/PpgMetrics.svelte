@@ -34,14 +34,14 @@ let { hr, rmssd, sdnn, pnn50, lfHf, respRate, spo2, perfIdx, stressIdx }: Props 
       { k:"lfHfRatio",       v:lfHf.toFixed(2),        c:lfHf>2?'#ef4444':lfHf<0.5?'#22c55e':'#6b7280', bar:Math.min(100,lfHf/4*100), bg:'bg-amber-500' },
       { k:"respiratoryRate", v:respRate.toFixed(1)+' bpm', c:'#6b7280', bar:Math.min(100,respRate/30*100), bg:'bg-sky-400' },
       { k:"spo2",            v:spo2.toFixed(1)+'%',    c:spo2>95?'#22c55e':spo2>90?'#f59e0b':'#ef4444', bar:Math.min(100,(spo2-70)/30*100), bg:'bg-green-500' },
-      { k:"perfusionIndex",  v:perfIdx.toFixed(2)+'%', c:perfIdx>1?'#22c55e':perfIdx>0.3?'#f59e0b':'#ef4444', bar:Math.min(100,perfIdx/5*100), bg:'bg-violet-400' },
+      { k:"perfusionIndex",  v:perfIdx.toFixed(2)+'%', c:perfIdx>1?'#22c55e':perfIdx>0.3?'#f59e0b':'#ef4444', bar:Math.min(100,perfIdx/5*100), bg:'bg-violet-500/60' },
       { k:"stressIndex",     v:stressIdx.toFixed(0),   c:stressIdx>200?'#ef4444':stressIdx>100?'#f59e0b':'#22c55e', bar:Math.min(100,stressIdx/300*100), bg:'', grad:'linear-gradient(90deg,#22c55e,#f59e0b,#ef4444)' },
     ] as item}
       <MetricTooltip text={t(`tip.${item.k}`)}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
+            <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
           </div>
           <MetricBar value={item.bar} bg={item.bg ?? ''} gradient={item.grad ?? ''} />
         </div>

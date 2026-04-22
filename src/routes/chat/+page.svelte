@@ -21,15 +21,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount, tick } from "svelte";
-import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
-import ChatContextViewer from "$lib/ChatContextViewer.svelte";
-import ChatHeader from "$lib/ChatHeader.svelte";
-import ChatInputBar from "$lib/ChatInputBar.svelte";
-import ChatMessageList from "$lib/ChatMessageList.svelte";
-import ChatSettingsPanel from "$lib/ChatSettingsPanel.svelte";
-import ChatSidebar from "$lib/ChatSidebar.svelte";
-import ChatToolsPanel from "$lib/ChatToolsPanel.svelte";
-import { buildEegBlock } from "$lib/chat-eeg";
+import ChatContextBreakdown, { type ContextSegment } from "$lib/chat/ChatContextBreakdown.svelte";
+import ChatContextViewer from "$lib/chat/ChatContextViewer.svelte";
+import ChatHeader from "$lib/chat/ChatHeader.svelte";
+import ChatInputBar from "$lib/chat/ChatInputBar.svelte";
+import ChatMessageList from "$lib/chat/ChatMessageList.svelte";
+import ChatSettingsPanel from "$lib/chat/ChatSettingsPanel.svelte";
+import ChatSidebar from "$lib/chat/ChatSidebar.svelte";
+import ChatToolsPanel from "$lib/chat/ChatToolsPanel.svelte";
+import { buildEegBlock } from "$lib/chat/chat-eeg";
 import {
   type Attachment,
   type BandSnapshot,
@@ -51,8 +51,8 @@ import {
   type ToolConfig,
   type ToolUseEvent,
   type UsageInfo,
-} from "$lib/chat-types";
-import { parseAssistantOutput } from "$lib/chat-utils";
+} from "$lib/chat/chat-types";
+import { parseAssistantOutput } from "$lib/chat/chat-utils";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
@@ -1322,7 +1322,7 @@ onDestroy(() => {
   {#if sidebarOpen}
     <aside class="w-52 shrink-0 flex flex-col
                   border-r border-border dark:border-white/[0.06]
-                  bg-slate-50/50 dark:bg-[#0c0c14] overflow-hidden">
+                  bg-slate-50/50 dark:bg-surface-3 overflow-hidden">
       <ChatSidebar
         bind:this={sidebarRef}
         activeId={sessionId}
@@ -1363,7 +1363,7 @@ onDestroy(() => {
     />
 
     {#if startError}
-      <div class="px-3 py-1.5 text-[0.7rem] bg-red-500/10 text-red-600 dark:text-red-400 border-b border-red-500/20 flex items-center gap-2">
+      <div class="px-3 py-1.5 text-ui-md bg-red-500/10 text-red-600 dark:text-red-400 border-b border-red-500/20 flex items-center gap-2">
         <svg viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
           <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
         </svg>
@@ -1401,7 +1401,7 @@ onDestroy(() => {
     <!-- Content area: panels overlay message list + input when open -->
     <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
       {#if showSettings}
-        <div class="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0f0f18]">
+        <div class="absolute inset-0 z-20 flex flex-col bg-surface-3">
           <ChatSettingsPanel
             bind:systemPrompt
             bind:eegContext
@@ -1416,7 +1416,7 @@ onDestroy(() => {
       {/if}
 
       {#if showTools}
-        <div class="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0f0f18]">
+        <div class="absolute inset-0 z-20 flex flex-col bg-surface-3">
           <ChatToolsPanel
             {toolConfig}
             {enabledToolCount}

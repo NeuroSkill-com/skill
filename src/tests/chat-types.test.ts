@@ -10,7 +10,7 @@ import {
   storedToMessage,
   THINKING_LEVELS,
   TOOL_THINKING_LEVELS,
-} from "$lib/chat-types";
+} from "$lib/chat/chat-types";
 
 describe("storedToMessage", () => {
   it("converts basic stored message", () => {

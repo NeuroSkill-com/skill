@@ -48,17 +48,17 @@ function fmtEta(secs: number): string {
         <line x1="12" y1="9" x2="12" y2="13"/>
         <line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="text-[0.72rem] font-semibold text-amber-600 dark:text-amber-400">{t("screenshots.modelChanged")}</span>
+      <span class="text-ui-md font-semibold text-amber-600 dark:text-amber-400">{t("screenshots.modelChanged")}</span>
     </div>
-    <p class="text-[0.62rem] text-amber-600/80 dark:text-amber-400/80 leading-relaxed">{staleCount} {t("screenshots.modelChangedDesc")}</p>
+    <p class="text-ui-sm text-amber-600/80 dark:text-amber-400/80 leading-relaxed">{staleCount} {t("screenshots.modelChangedDesc")}</p>
     {#if estimate}
-      <p class="text-[0.58rem] text-amber-600/60 dark:text-amber-400/60">{t("screenshots.estimate")} ~{fmtEta(estimate.eta_secs)}</p>
+      <p class="text-ui-sm text-amber-600/60 dark:text-amber-400/60">{t("screenshots.estimate")} ~{fmtEta(estimate.eta_secs)}</p>
     {/if}
     <div class="flex gap-2 mt-1">
-      <Button size="sm" onclick={onReembed} disabled={reembedding} class="text-[0.62rem] h-7 px-3">
+      <Button size="sm" onclick={onReembed} disabled={reembedding} class="text-ui-sm h-7 px-3">
         {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedNowBtn")}
       </Button>
-      <Button size="sm" variant="ghost" onclick={onDismissModelChanged} class="text-[0.62rem] h-7 px-3 text-muted-foreground">
+      <Button size="sm" variant="ghost" onclick={onDismissModelChanged} class="text-ui-sm h-7 px-3 text-muted-foreground">
         {t("common.dismiss")}
       </Button>
     </div>
@@ -69,22 +69,22 @@ function fmtEta(secs: number): string {
   <div class="flex items-center justify-between">
     <div class="flex flex-col gap-0.5">
       <div class="flex items-center gap-2">
-        <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.reembed")}</span>
+        <span class="text-ui-md font-semibold text-foreground">{t("screenshots.reembed")}</span>
         {#if estimate && estimate.stale > 0}
-          <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">{estimate.stale} {t("screenshots.stale")}</span>
+          <span class="rounded-full px-1.5 py-0 text-ui-xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">{estimate.stale} {t("screenshots.stale")}</span>
         {/if}
         {#if estimate && estimate.unembedded > 0}
-          <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/25">{estimate.unembedded} {t("screenshots.unembedded")}</span>
+          <span class="rounded-full px-1.5 py-0 text-ui-xs font-semibold bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-primary/25">{estimate.unembedded} {t("screenshots.unembedded")}</span>
         {/if}
       </div>
-      <span class="text-[0.6rem] text-muted-foreground/60">
+      <span class="text-ui-sm text-muted-foreground/60">
         {t("screenshots.reembedDesc")}
         {#if estimate && estimate.eta_secs > 0}
           — {t("screenshots.estimate")} ~{fmtEta(estimate.eta_secs)}
         {/if}
       </span>
     </div>
-    <Button size="sm" variant="outline" onclick={onReembed} disabled={reembedding} class="text-[0.65rem] h-7 px-3 shrink-0">
+    <Button size="sm" variant="outline" onclick={onReembed} disabled={reembedding} class="text-ui-base h-7 px-3 shrink-0">
       {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedBtn")}
     </Button>
   </div>
@@ -95,7 +95,7 @@ function fmtEta(secs: number): string {
       <div class="h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
         <div class="h-full rounded-full bg-violet-500 transition-all duration-300" style="width: {pct}%"></div>
       </div>
-      <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">
+      <span class="text-ui-sm text-muted-foreground/60 tabular-nums">
         {progress.done} / {progress.total} — {pct}%
         {#if progress.eta_secs > 0}
           — ETA {fmtEta(progress.eta_secs)}
@@ -107,8 +107,8 @@ function fmtEta(secs: number): string {
 
 {#if estimate}
   <div class="flex flex-col gap-1 px-0.5">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("screenshots.stats")}</span>
-    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.62rem]">
+    <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("screenshots.stats")}</span>
+    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-ui-sm">
       <span class="text-muted-foreground">{t("screenshots.embeddedCount")}</span>
       <span class="text-foreground tabular-nums">{estimate.total}</span>
       <span class="text-muted-foreground">{t("screenshots.unembeddedCount")}</span>

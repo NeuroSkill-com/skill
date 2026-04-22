@@ -12,8 +12,8 @@ let { title, body, id = undefined }: { title: string; body: string; id?: string 
 
 <div {id}
      class="rounded-xl border border-border dark:border-white/[0.06]
-            bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1
+            bg-surface-1 px-4 py-3 flex flex-col gap-1
             scroll-mt-4">
-  <span class="text-[0.78rem] font-semibold text-foreground">{title}</span>
-  <span class="text-[0.75rem] leading-relaxed text-muted-foreground">{body}</span>
+  <span class="text-ui-lg font-semibold text-foreground">{title}</span>
+  <span class="text-ui-md leading-relaxed text-muted-foreground">{body}</span>
 </div>

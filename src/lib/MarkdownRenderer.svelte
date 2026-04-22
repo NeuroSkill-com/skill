@@ -3,7 +3,7 @@
 <script lang="ts">
 import type { Tokens } from "marked";
 import { marked, Renderer } from "marked";
-import { normalizeMarkdown } from "$lib/markdown-normalize";
+import { normalizeMarkdown } from "$lib/utils/markdown-normalize";
 
 let {
   content = "",

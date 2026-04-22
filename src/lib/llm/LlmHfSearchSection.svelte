@@ -12,6 +12,7 @@ import { marked } from "marked";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { fmtGB } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
@@ -175,9 +176,7 @@ const NOTABLE_TAGS = new Set([
 
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      {t("llm.hfSearch.title")}
-    </span>
+    <SectionHeader>{t("llm.hfSearch.title")}</SectionHeader>
   </div>
 
   <!-- Search input -->
@@ -190,17 +189,17 @@ const NOTABLE_TAGS = new Set([
       oninput={onInput}
       onkeydown={(e) => { if (e.key === "Enter") { clearTimeout(debounceTimer); doSearch(); } }}
       class="w-full rounded-xl border border-border dark:border-white/[0.06]
-             bg-white dark:bg-[#14141e] text-foreground text-[0.78rem]
+             bg-surface-1 text-foreground text-ui-lg
              px-3.5 py-2.5 pr-16 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     />
     {#if searching}
-      <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[0.6rem] text-muted-foreground animate-pulse">
+      <span class="absolute right-3 top-1/2 -translate-y-1/2 text-ui-sm text-muted-foreground animate-pulse">
         {t("llm.hfSearch.searching")}
       </span>
     {:else if query.trim().length >= 2}
       <button
         onclick={doSearch}
-        class="absolute right-2 top-1/2 -translate-y-1/2 text-[0.6rem] text-violet-600 dark:text-violet-400 hover:text-violet-700 cursor-pointer px-1.5 py-0.5 rounded"
+        class="absolute right-2 top-1/2 -translate-y-1/2 text-ui-sm text-violet-600 dark:text-violet-400 hover:text-violet-600 cursor-pointer px-1.5 py-0.5 rounded"
       >
         {t("llm.hfSearch.searchBtn")}
       </button>
@@ -208,7 +207,7 @@ const NOTABLE_TAGS = new Set([
   </div>
 
   {#if searchError}
-    <p class="text-[0.62rem] text-destructive px-1">{searchError}</p>
+    <p class="text-ui-sm text-destructive px-1">{searchError}</p>
   {/if}
 
   <!-- Results -->
@@ -216,28 +215,28 @@ const NOTABLE_TAGS = new Set([
     <div class="flex flex-col gap-1.5">
       {#each results as r (r.repo)}
         {@const isExpanded = expandedRepo === r.repo}
-        <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="py-0 px-0">
             <!-- Repo header -->
             <button
               onclick={() => toggleRepo(r.repo)}
-              class="w-full flex flex-col gap-1 px-4 py-3 text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors"
+              class="w-full flex flex-col gap-1 px-4 py-3 text-left cursor-pointer hover:bg-accent/50 dark:hover:bg-white/[0.02] transition-colors"
             >
               <div class="flex items-center gap-2 min-w-0">
-                <span class="text-[0.72rem] font-semibold text-foreground truncate">{r.repo}</span>
-                <span class="ml-auto text-[0.5rem] text-muted-foreground/40 shrink-0">{isExpanded ? "▲" : "▼"}</span>
+                <span class="text-ui-md font-semibold text-foreground truncate">{r.repo}</span>
+                <span class="ml-auto text-ui-2xs text-muted-foreground/40 shrink-0">{isExpanded ? "▲" : "▼"}</span>
               </div>
-              <div class="flex items-center gap-2 flex-wrap text-[0.56rem] text-muted-foreground/70">
+              <div class="flex items-center gap-2 flex-wrap text-ui-xs text-muted-foreground/70">
                 <span title="Downloads">↓ {fmtDownloads(r.downloads)}</span>
                 <span title="Likes">♥ {r.likes}</span>
                 {#if r.pipeline_tag}
-                  <Badge variant="outline" class="text-[0.48rem] py-0 px-1.5 border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300">{r.pipeline_tag}</Badge>
+                  <Badge variant="outline" class="text-ui-2xs py-0 px-1.5 border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-400">{r.pipeline_tag}</Badge>
                 {/if}
                 {#each r.tags.filter((tag) => NOTABLE_TAGS.has(tag) && tag !== r.pipeline_tag).slice(0, 3) as tag}
-                  <Badge variant="outline" class="text-[0.48rem] py-0 px-1.5 border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300">{tag}</Badge>
+                  <Badge variant="outline" class="text-ui-2xs py-0 px-1.5 border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300">{tag}</Badge>
                 {/each}
                 {#if r.last_modified}
-                  <span class="ml-auto text-[0.52rem] text-muted-foreground/50">{fmtDate(r.last_modified)}</span>
+                  <span class="ml-auto text-ui-xs text-muted-foreground/50">{fmtDate(r.last_modified)}</span>
                 {/if}
               </div>
             </button>
@@ -251,21 +250,21 @@ const NOTABLE_TAGS = new Set([
                     href="https://huggingface.co/{r.repo}"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center gap-1 text-[0.6rem] text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 hover:underline"
+                    class="inline-flex items-center gap-1 text-ui-sm text-violet-600 dark:text-violet-400 hover:text-violet-600 hover:underline"
                   >
                     {t("llm.hfSearch.openInBrowser")} ↗
                   </a>
                   {#if repoReadme}
                     <button
                       onclick={() => (readmeExpanded = !readmeExpanded)}
-                      class="text-[0.58rem] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+                      class="text-ui-sm text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer"
                     >
                       {readmeExpanded ? t("llm.hfSearch.hideReadme") : t("llm.hfSearch.showReadme")}
                     </button>
                   {/if}
                 </div>
                 {#if readmeExpanded && repoReadme}
-                  <div class="hf-readme rounded-lg border border-border/40 dark:border-white/[0.04] bg-slate-50 dark:bg-[#111118] px-3 py-2 max-h-64 overflow-y-auto">
+                  <div class="hf-readme rounded-lg border border-border/40 dark:border-white/[0.04] bg-surface-3 px-3 py-2 max-h-64 overflow-y-auto">
                     {@html renderReadme(repoReadme)}
                   </div>
                 {/if}
@@ -273,39 +272,39 @@ const NOTABLE_TAGS = new Set([
 
               <div class="border-t border-border/40 dark:border-white/[0.04]">
                 {#if loadingFiles}
-                  <div class="px-4 py-3 text-[0.62rem] text-muted-foreground animate-pulse">{t("llm.hfSearch.loadingFiles")}</div>
+                  <div class="px-4 py-3 text-ui-sm text-muted-foreground animate-pulse">{t("llm.hfSearch.loadingFiles")}</div>
                 {:else if filesError}
-                  <div class="px-4 py-3 text-[0.62rem] text-destructive">{filesError}</div>
+                  <div class="px-4 py-3 text-ui-sm text-destructive">{filesError}</div>
                 {:else if repoFiles.length === 0}
-                  <div class="px-4 py-3 text-[0.62rem] text-muted-foreground">{t("llm.hfSearch.noFiles")}</div>
+                  <div class="px-4 py-3 text-ui-sm text-muted-foreground">{t("llm.hfSearch.noFiles")}</div>
                 {:else}
                   <!-- Column headers -->
-                  <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center px-4 py-1.5 bg-slate-50 dark:bg-[#111118]">
-                    <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colQuant")}</span>
-                    <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colSize")}</span>
-                    <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colFile")}</span>
+                  <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center px-4 py-1.5 bg-surface-3">
+                    <span class="text-ui-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colQuant")}</span>
+                    <span class="text-ui-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colSize")}</span>
+                    <span class="text-ui-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colFile")}</span>
                     <span></span>
                   </div>
 
-                  <div class="flex flex-col divide-y divide-border/40 dark:divide-white/[0.04]">
+                  <div class="flex flex-col divide-y divide-border/40 dark:divide-white/[0.05]">
                     {#each repoFiles as file (file.filename)}
                       {@const isAdding = addingFile === file.filename}
                       <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center px-4 py-2 {file.is_mmproj ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}">
-                        <span class="text-[0.72rem] font-bold font-mono text-foreground truncate">{file.quant}</span>
-                        <span class="text-[0.7rem] tabular-nums font-semibold text-muted-foreground">{fmtGB(file.size_gb)}</span>
+                        <span class="text-ui-md font-bold font-mono text-foreground truncate">{file.quant}</span>
+                        <span class="text-ui-md tabular-nums font-semibold text-muted-foreground">{fmtGB(file.size_gb)}</span>
                         <div class="flex items-center gap-1 min-w-0">
-                          <span class="text-[0.6rem] text-muted-foreground/70 truncate font-mono">{file.filename}</span>
+                          <span class="text-ui-sm text-muted-foreground/70 truncate font-mono">{file.filename}</span>
                           {#if file.is_mmproj}
-                            <Badge variant="outline" class="text-[0.48rem] py-0 px-1 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">mmproj</Badge>
+                            <Badge variant="outline" class="text-ui-2xs py-0 px-1 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">mmproj</Badge>
                           {/if}
                         </div>
                         <div class="flex items-center gap-1 shrink-0">
-                          <Button size="sm" variant="outline" class="h-6 text-[0.58rem] px-2"
+                          <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2"
                             disabled={isAdding}
                             onclick={() => addModel(r.repo, file, false)}>
                             {isAdding ? "…" : t("llm.hfSearch.addBtn")}
                           </Button>
-                          <Button size="sm" class="h-6 text-[0.58rem] px-2 bg-violet-600 hover:bg-violet-700 text-white"
+                          <Button size="sm" class="h-6 text-ui-sm px-2 bg-violet-600 hover:bg-violet-700 text-white"
                             disabled={isAdding}
                             onclick={() => addModel(r.repo, file, true)}>
                             {isAdding ? "…" : t("llm.hfSearch.addDownloadBtn")}
@@ -322,7 +321,7 @@ const NOTABLE_TAGS = new Set([
       {/each}
     </div>
   {:else if !searching && query.trim().length >= 2 && !searchError}
-    <p class="text-[0.62rem] text-muted-foreground px-1">{t("llm.hfSearch.noResults")}</p>
+    <p class="text-ui-sm text-muted-foreground px-1">{t("llm.hfSearch.noResults")}</p>
   {/if}
 </section>
 

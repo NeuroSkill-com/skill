@@ -12,13 +12,13 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { fade, fly } from "svelte/transition";
+import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
-import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { openSettings } from "$lib/navigation";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -681,10 +681,10 @@ useWindowTitle("window.title.onboarding");
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="flex items-center gap-2 px-4 pt-3 pb-1.5 shrink-0" data-tauri-drag-region
        ondblclick={toggleMaximizeWindow}>
-    <span class="text-[0.78rem] font-bold tracking-tight flex-1">{t("onboarding.title")}</span>
+    <span class="text-ui-lg font-bold tracking-tight flex-1">{t("onboarding.title")}</span>
     <!-- TTS readiness indicator (shown on calibration step) -->
     {#if step === "calibration" && !ttsReady}
-      <span class="flex items-center gap-1 text-[0.52rem] text-amber-600 dark:text-amber-400
+      <span class="flex items-center gap-1 text-ui-xs text-amber-600 dark:text-amber-400
                    font-medium animate-pulse" title={ttsDlLabel || "Preparing voice engine…"}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -705,7 +705,7 @@ useWindowTitle("window.title.onboarding");
       {#each STEPS as s, i}
         <button
           onclick={() => { if (i <= stepIdx && !calRunning) step = s; }}
-          class="text-[0.48rem] font-medium transition-colors
+          class="text-ui-2xs font-medium transition-colors
                  {i <= stepIdx ? 'text-foreground cursor-pointer' : 'text-muted-foreground/40 cursor-default'}">
           {t(`onboarding.step.${s}`)}
         </button>
@@ -721,17 +721,17 @@ useWindowTitle("window.title.onboarding");
       <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
         <span class="text-4xl">🧠</span>
         <h2 class="text-[1.05rem] font-bold">{t("onboarding.welcomeTitle")}</h2>
-        <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
+        <p class="text-ui-md text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.welcomeBody")}
         </p>
         <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
           {#each ["bluetooth", "fit", "calibration", "models"] as s}
             <div class="flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
-                        bg-muted dark:bg-[#1a1a28] px-3 py-2">
+                        bg-muted dark:bg-surface-2 px-3 py-2">
               <span class="text-base">{s === "bluetooth" ? "📡" : s === "fit" ? "🎧" : s === "calibration" ? "🎯" : "⬇️"}</span>
               <div class="flex flex-col text-left">
-                <span class="text-[0.68rem] font-semibold">{t(`onboarding.step.${s}`)}</span>
-                <span class="text-[0.55rem] text-muted-foreground">{t(`onboarding.${s}Hint`)}</span>
+                <span class="text-ui-base font-semibold">{t(`onboarding.step.${s}`)}</span>
+                <span class="text-ui-xs text-muted-foreground">{t(`onboarding.${s}Hint`)}</span>
               </div>
             </div>
           {/each}
@@ -742,29 +742,29 @@ useWindowTitle("window.title.onboarding");
     {:else if step === "enable_bluetooth"}
       <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
         <span class="text-3xl">{btEnabled ? '✅' : '🔌'}</span>
-        <h2 class="text-[0.95rem] font-bold">{t("onboarding.enableBluetoothTitle")}</h2>
-        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+        <h2 class="text-ui-xl font-bold">{t("onboarding.enableBluetoothTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.enableBluetoothBody")}
         </p>
 
-        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="px-3 py-2.5">
             <div class="flex items-center gap-2.5">
               <div class="flex flex-col gap-0 flex-1 min-w-0">
-                <span class="text-[0.68rem] font-semibold">{t('onboarding.enableBluetoothStatus')}</span>
+                <span class="text-ui-base font-semibold">{t('onboarding.enableBluetoothStatus')}</span>
               </div>
-              <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.55rem] font-semibold
+              <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs font-semibold
                            {btEnabled ? 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'}">
                 <span class="w-1.5 h-1.5 rounded-full {btEnabled ? 'bg-green-500' : 'bg-amber-400'}"></span>
                 {btEnabled ? t('perm.granted') : t('perm.denied')}
               </span>
             </div>
-            <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed mt-2">{t('onboarding.enableBluetoothHint')}</p>
+            <p class="text-ui-sm text-muted-foreground/80 leading-relaxed mt-2">{t('onboarding.enableBluetoothHint')}</p>
             <div class="flex justify-end mt-2 gap-2">
-              <Button size="sm" variant="outline" class="h-7 text-[0.62rem] px-3" onclick={openBt}>
+              <Button size="sm" variant="outline" class="h-7 text-ui-sm px-3" onclick={openBt}>
                 {t('onboarding.enableBluetoothOpen')}
               </Button>
-              <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={checkBt}>
+              <Button size="sm" class="h-7 text-ui-sm px-3" onclick={checkBt}>
                 {t('onboarding.btScan')}
               </Button>
             </div>
@@ -776,28 +776,28 @@ useWindowTitle("window.title.onboarding");
     {:else if step === "bluetooth"}
       <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
         <span class="text-3xl">{isConnected ? "✅" : "📡"}</span>
-        <h2 class="text-[0.95rem] font-bold">{t("onboarding.bluetoothTitle")}</h2>
-        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+        <h2 class="text-ui-xl font-bold">{t("onboarding.bluetoothTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.bluetoothBody")}
         </p>
 
-        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="px-3 py-2.5">
             <div class="flex items-center gap-2.5">
               <div class="w-2.5 h-2.5 rounded-full shrink-0
                           {isConnected ? 'bg-green-500' : isScanning ? 'bg-yellow-500 animate-pulse' : 'bg-slate-400'}"></div>
               <div class="flex flex-col gap-0 flex-1 min-w-0">
-                <span class="text-[0.68rem] font-semibold">
+                <span class="text-ui-base font-semibold">
                   {isConnected
                     ? t("onboarding.btConnected", { name: status.device_name ?? "Muse" })
                     : isScanning ? t("onboarding.btScanning") : t("onboarding.btReady")}
                 </span>
                 {#if isConnected && status.battery > 0}
-                  <span class="text-[0.55rem] text-muted-foreground">{t("dashboard.battery")}: {status.battery.toFixed(0)}%</span>
+                  <span class="text-ui-xs text-muted-foreground">{t("dashboard.battery")}: {status.battery.toFixed(0)}%</span>
                 {/if}
               </div>
               {#if !isConnected}
-                <Button size="sm" class="text-[0.6rem] h-6 px-2.5 shrink-0" onclick={startScan} disabled={isScanning}>
+                <Button size="sm" class="text-ui-sm h-6 px-2.5 shrink-0" onclick={startScan} disabled={isScanning}>
                   {isScanning ? t("onboarding.btScanning") : t("onboarding.btScan")}
                 </Button>
               {/if}
@@ -806,14 +806,14 @@ useWindowTitle("window.title.onboarding");
         </Card>
 
         <div class="w-full max-w-[320px] flex flex-col gap-1.5 text-left">
-          <p class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <p class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground">
             {t("onboarding.btInstructions")}
           </p>
           {#each [1,2,3] as n}
             <div class="flex items-start gap-2">
               <span class="w-4 h-4 rounded-full bg-muted dark:bg-white/[0.06] flex items-center justify-center
-                           text-[0.5rem] font-bold text-muted-foreground shrink-0 mt-0.5">{n}</span>
-              <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t(`onboarding.btStep${n}`)}</p>
+                           text-ui-2xs font-bold text-muted-foreground shrink-0 mt-0.5">{n}</span>
+              <p class="text-ui-sm text-muted-foreground leading-relaxed">{t(`onboarding.btStep${n}`)}</p>
             </div>
           {/each}
         </div>
@@ -821,7 +821,7 @@ useWindowTitle("window.title.onboarding");
         {#if isConnected}
           <div class="flex items-center gap-1.5 text-green-600 dark:text-green-400" in:fade={{ duration: 200 }}>
             <span>✓</span>
-            <span class="text-[0.68rem] font-semibold">{t("onboarding.btSuccess")}</span>
+            <span class="text-ui-base font-semibold">{t("onboarding.btSuccess")}</span>
           </div>
         {/if}
       </div>
@@ -829,21 +829,21 @@ useWindowTitle("window.title.onboarding");
     <!-- ════ FIT CHECK ════════════════════════════════════════════════════════ -->
     {:else if step === "fit"}
       <div class="flex flex-col items-center gap-2 pt-2 text-center" in:fly={{ x: 30, duration: 200 }}>
-        <h2 class="text-[0.95rem] font-bold">{t("onboarding.fitTitle")}</h2>
-        <p class="text-[0.65rem] text-muted-foreground leading-relaxed max-w-[320px]">
+        <h2 class="text-ui-xl font-bold">{t("onboarding.fitTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.fitBody")}
         </p>
 
         <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} deviceName={status.device_name ?? ""} />
 
         {#if !isConnected}
-          <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.fitNeedsBt")}</p>
+          <p class="text-ui-sm text-amber-600 dark:text-amber-400">⚠ {t("onboarding.fitNeedsBt")}</p>
         {/if}
 
         {#if allGoodOrFair && isConnected}
           <div class="flex items-center gap-1.5 text-green-600 dark:text-green-400" in:fade={{ duration: 200 }}>
             <span>✓</span>
-            <span class="text-[0.68rem] font-semibold">{t("onboarding.fitGood")}</span>
+            <span class="text-ui-base font-semibold">{t("onboarding.fitGood")}</span>
           </div>
         {/if}
       </div>
@@ -855,8 +855,8 @@ useWindowTitle("window.title.onboarding");
         {#if calPhase.kind === "idle"}
           <!-- ── Idle / start screen ─────────────────────────────────────── -->
           <span class="text-3xl">🎯</span>
-          <h2 class="text-[0.95rem] font-bold">{t("onboarding.calibrationTitle")}</h2>
-          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          <h2 class="text-ui-xl font-bold">{t("onboarding.calibrationTitle")}</h2>
+          <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[320px]">
             {t("onboarding.calibrationBody")}
           </p>
 
@@ -865,19 +865,19 @@ useWindowTitle("window.title.onboarding");
             <div class="flex flex-wrap gap-1.5 justify-center max-w-[380px]">
               {#each calProfile.actions as action, i}
                 {@const colors = [
-                  "border-primary/30 bg-primary/10 text-primary",
+                  "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
                   "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
                   "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                   "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
                   "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
                   "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
                 ]}
-                <span class="rounded-full border px-2.5 py-0.5 text-[0.62rem] font-medium {colors[i % colors.length]}">
+                <span class="rounded-full border px-2.5 py-0.5 text-ui-sm font-medium {colors[i % colors.length]}">
                   {action.label} · {action.duration_secs}s
                 </span>
               {/each}
               <span class="rounded-full border border-amber-500/30 bg-amber-500/10
-                           text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-[0.62rem] font-medium">
+                           text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-ui-sm font-medium">
                 {t("calibration.break")} · {calProfile.break_duration_secs}s
               </span>
             </div>
@@ -892,10 +892,10 @@ useWindowTitle("window.title.onboarding");
           {/if}
 
           {#if !isConnected}
-            <p class="text-[0.6rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.calibrationNeedsBt")}</p>
+            <p class="text-ui-sm text-amber-600 dark:text-amber-400">⚠ {t("onboarding.calibrationNeedsBt")}</p>
           {/if}
 
-          <p class="text-[0.6rem] text-muted-foreground/50 max-w-[280px] leading-relaxed">
+          <p class="text-ui-sm text-muted-foreground/50 max-w-[280px] leading-relaxed">
             {t("onboarding.calibrationSkip")}
           </p>
 
@@ -903,8 +903,8 @@ useWindowTitle("window.title.onboarding");
           <!-- ── Done screen ──────────────────────────────────────────────── -->
           <div class="flex flex-col items-center gap-3">
             <div class="w-14 h-14 rounded-full bg-emerald-500/10 flex items-center justify-center text-2xl">✅</div>
-            <h2 class="text-[0.95rem] font-bold text-emerald-600 dark:text-emerald-400">{t("calibration.complete")}</h2>
-            <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[300px]">
+            <h2 class="text-ui-xl font-bold text-emerald-600 dark:text-emerald-400">{t("calibration.complete")}</h2>
+            <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[300px]">
               {t("calibration.completeDesc", { n: String(calProfile?.loop_count ?? 1) })}
             </p>
             <div class="flex gap-2.5 mt-1">
@@ -925,11 +925,11 @@ useWindowTitle("window.title.onboarding");
             <!-- Profile name + loop dots -->
             {#if calProfile}
               <div class="flex flex-col items-center gap-1.5">
-                <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                <span class="text-ui-sm font-semibold uppercase tracking-widest text-muted-foreground/60">
                   {calProfile.name}
                 </span>
                 <div class="flex items-center gap-2">
-                  <span class="text-[0.58rem] font-semibold tracking-widest uppercase text-muted-foreground">
+                  <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
                     {t("calibration.iteration")}
                   </span>
                   <div class="flex gap-1">
@@ -940,7 +940,7 @@ useWindowTitle("window.title.onboarding");
                                    'bg-muted dark:bg-white/[0.08]'}"></div>
                     {/each}
                   </div>
-                  <span class="text-[0.62rem] text-muted-foreground tabular-nums">
+                  <span class="text-ui-sm text-muted-foreground tabular-nums">
                     {calPhase.loop}/{calProfile.loop_count}
                   </span>
                 </div>
@@ -969,7 +969,7 @@ useWindowTitle("window.title.onboarding");
               <span class="text-[1.8rem] font-bold tracking-tight {calPhaseColor}">{calPhaseLabel}</span>
               {#if calPhase.kind === "break" && calProfile}
                 {@const nextIdx = (calPhase.actionIndex + 1) % calProfile.actions.length}
-                <span class="text-[0.68rem] text-muted-foreground">
+                <span class="text-ui-base text-muted-foreground">
                   {t("calibration.nextAction", { action: calProfile.actions[nextIdx]?.label ?? "" })}
                 </span>
               {/if}
@@ -978,7 +978,7 @@ useWindowTitle("window.title.onboarding");
             <!-- Countdown -->
             <div class="flex flex-col items-center gap-2 w-full">
               <span class="text-[2.8rem] font-bold tabular-nums leading-none">{calCountdown}</span>
-              <span class="text-[0.58rem] text-muted-foreground/50">{t("calibration.secondsRemaining")}</span>
+              <span class="text-ui-sm text-muted-foreground/50">{t("calibration.secondsRemaining")}</span>
               <div class="w-full"><Progress value={calProgressPct} class="h-2" /></div>
             </div>
 
@@ -993,15 +993,15 @@ useWindowTitle("window.title.onboarding");
     {:else if step === "models"}
       <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
         <span class="text-3xl">⬇️</span>
-        <h2 class="text-[0.95rem] font-bold">{t("onboarding.modelsTitle")}</h2>
-        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[340px]">
+        <h2 class="text-ui-xl font-bold">{t("onboarding.modelsTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[340px]">
           {t("onboarding.modelsBody")}
         </p>
 
-        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="px-3 py-3 flex flex-col gap-3">
             <div class="flex justify-end">
-              <Button size="sm" class="h-7 text-[0.62rem] px-3"
+              <Button size="sm" class="h-7 text-ui-sm px-3"
                       onclick={downloadRecommendedBundle}
                       disabled={bundleBusy || allRecommendedReady || ttsActionBusy}>
                 {allRecommendedReady
@@ -1012,17 +1012,17 @@ useWindowTitle("window.title.onboarding");
               </Button>
             </div>
 
-            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🤖</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.qwenTitle")}</span>
-                <span class="text-[0.56rem] text-emerald-600 dark:text-emerald-400 ml-auto">
+                <span class="text-ui-base font-semibold">{t("onboarding.models.qwenTitle")}</span>
+                <span class="text-ui-xs text-emerald-600 dark:text-emerald-400 ml-auto">
                   {llmTarget ? llmTarget.quant : "Q4"}
                 </span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
               {#if llmTarget?.repo}
-                <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download {llmTarget.repo} {llmTarget.filename}</p>
+                <p class="text-ui-2xs text-muted-foreground/70 font-mono">🤗 hf download {llmTarget.repo} {llmTarget.filename}</p>
               {/if}
               {#if llmIsDownloading}
                 <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -1030,79 +1030,79 @@ useWindowTitle("window.title.onboarding");
                 </div>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadLlm}
+                <Button size="sm" class="h-7 text-ui-sm px-3" onclick={downloadLlm}
                         disabled={llmIsDownloaded || llmIsDownloading || !llmTarget}>
                   {llmIsDownloaded ? t("onboarding.models.downloaded") : llmIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
                 </Button>
               </div>
             </div>
 
-            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🧠</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.zunaTitle")}</span>
+                <span class="text-ui-base font-semibold">{t("onboarding.models.zunaTitle")}</span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.zunaDesc")}</p>
-              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download Zyphra/ZUNA model-00001-of-00001.safetensors</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.zunaDesc")}</p>
+              <p class="text-ui-2xs text-muted-foreground/70 font-mono">🤗 hf download Zyphra/ZUNA model-00001-of-00001.safetensors</p>
               {#if zunaIsDownloading}
                 <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                   <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{zunaProgressPct.toFixed(1)}%"></div>
                 </div>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadZuna}
+                <Button size="sm" class="h-7 text-ui-sm px-3" onclick={downloadZuna}
                         disabled={zunaIsDownloaded || zunaIsDownloading}>
                   {zunaIsDownloaded ? t("onboarding.models.downloaded") : zunaIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
                 </Button>
               </div>
             </div>
 
-            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🗣️</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.neuttsTitle")}</span>
+                <span class="text-ui-base font-semibold">{t("onboarding.models.neuttsTitle")}</span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.neuttsDesc")}</p>
-              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download neuphonic/neutts-nano-q4-gguf --include "*.gguf"</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.neuttsDesc")}</p>
+              <p class="text-ui-2xs text-muted-foreground/70 font-mono">🤗 hf download neuphonic/neutts-nano-q4-gguf --include "*.gguf"</p>
               {#if neuttsDlState === "error" && neuttsDlError}
-                <p class="text-[0.55rem] text-destructive leading-relaxed">{neuttsDlError}</p>
+                <p class="text-ui-xs text-destructive leading-relaxed">{neuttsDlError}</p>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={() => downloadTtsBackend("neutts")}
+                <Button size="sm" class="h-7 text-ui-sm px-3" onclick={() => downloadTtsBackend("neutts")}
                         disabled={ttsActionBusy || neuttsDlState === "ready"}>
                   {neuttsDlState === "ready" ? t("onboarding.models.downloaded") : neuttsDlState === "downloading" ? (ttsDlLabel || t("onboarding.models.downloading")) : t("onboarding.models.download")}
                 </Button>
               </div>
             </div>
 
-            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🐱</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.kittenTitle")}</span>
+                <span class="text-ui-base font-semibold">{t("onboarding.models.kittenTitle")}</span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.kittenDesc")}</p>
-              <p class="text-[0.5rem] text-muted-foreground/70 font-mono">🤗 hf download KittenML/kitten-tts-mini-0.8</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.kittenDesc")}</p>
+              <p class="text-ui-2xs text-muted-foreground/70 font-mono">🤗 hf download KittenML/kitten-tts-mini-0.8</p>
               {#if kittenDlState === "error" && kittenDlError}
-                <p class="text-[0.55rem] text-destructive leading-relaxed">{kittenDlError}</p>
+                <p class="text-ui-xs text-destructive leading-relaxed">{kittenDlError}</p>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={() => downloadTtsBackend("kitten")}
+                <Button size="sm" class="h-7 text-ui-sm px-3" onclick={() => downloadTtsBackend("kitten")}
                         disabled={ttsActionBusy || kittenDlState === "ready"}>
                   {kittenDlState === "ready" ? t("onboarding.models.downloaded") : kittenDlState === "downloading" ? (ttsDlLabel || t("onboarding.models.downloading")) : t("onboarding.models.download")}
                 </Button>
               </div>
             </div>
-            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">📝</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.ocrTitle")}</span>
+                <span class="text-ui-base font-semibold">{t("onboarding.models.ocrTitle")}</span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.ocrDesc")}</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.ocrDesc")}</p>
               {#if ocrDlState === "error" && ocrDlError}
-                <p class="text-[0.55rem] text-destructive leading-relaxed">{ocrDlError}</p>
+                <p class="text-ui-xs text-destructive leading-relaxed">{ocrDlError}</p>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadOcrModels}
+                <Button size="sm" class="h-7 text-ui-sm px-3" onclick={downloadOcrModels}
                         disabled={ocrDlState === "ready" || ocrDlState === "downloading"}>
                   {ocrDlState === "ready" ? t("onboarding.models.downloaded") : ocrDlState === "downloading" ? t("onboarding.models.downloading") : t("onboarding.models.download")}
                 </Button>
@@ -1114,21 +1114,21 @@ useWindowTitle("window.title.onboarding");
 
         <!-- ── Screen Recording permission (macOS) ──────────────────── -->
         {#if isMac}
-          <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
             <CardContent class="px-3 py-3 flex flex-col gap-2">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🖥️</span>
-                <span class="text-[0.66rem] font-semibold">{t("onboarding.screenRecTitle")}</span>
-                <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.55rem] font-semibold
+                <span class="text-ui-base font-semibold">{t("onboarding.screenRecTitle")}</span>
+                <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs font-semibold
                              {screenRecPerm ? 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'}">
                   <span class="w-1.5 h-1.5 rounded-full {screenRecPerm ? 'bg-green-500' : 'bg-amber-400'}"></span>
                   {screenRecPerm ? t("perm.granted") : t("perm.denied")}
                 </span>
               </div>
-              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.screenRecDesc")}</p>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.screenRecDesc")}</p>
               {#if !screenRecPerm}
                 <div class="flex justify-end">
-                  <Button size="sm" variant="outline" class="h-7 text-[0.62rem] px-3"
+                  <Button size="sm" variant="outline" class="h-7 text-ui-sm px-3"
                           onclick={() => invoke("open_screen_recording_settings")}>
                     {t("onboarding.screenRecOpen")}
                   </Button>
@@ -1139,7 +1139,7 @@ useWindowTitle("window.title.onboarding");
         {/if}
 
         {#if modelLoadError}
-          <p class="text-[0.56rem] text-destructive/90 max-w-[340px] leading-relaxed">{modelLoadError}</p>
+          <p class="text-ui-xs text-destructive/90 max-w-[340px] leading-relaxed">{modelLoadError}</p>
         {/if}
       </div>
 
@@ -1152,15 +1152,15 @@ useWindowTitle("window.title.onboarding");
           <span class="relative text-3xl">🖥</span>
         </div>
 
-        <h2 class="text-[0.95rem] font-bold">{t("onboarding.trayTitle")}</h2>
-        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+        <h2 class="text-ui-xl font-bold">{t("onboarding.trayTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.trayBody")}
         </p>
 
         <!-- Icon-state reference card -->
-        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="px-3 py-3">
-            <p class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground mb-2.5">
+            <p class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground mb-2.5">
               {t("onboarding.tray.states")}
             </p>
             <div class="flex flex-col gap-2">
@@ -1172,7 +1172,7 @@ useWindowTitle("window.title.onboarding");
               ] as row}
                 <div class="flex items-center gap-2.5">
                   <div class="w-3 h-3 rounded-full shrink-0 {row.dot}"></div>
-                  <span class="text-[0.65rem] text-left">{row.label}</span>
+                  <span class="text-ui-base text-left">{row.label}</span>
                 </div>
               {/each}
             </div>
@@ -1182,14 +1182,14 @@ useWindowTitle("window.title.onboarding");
         <!-- How-to tips -->
         <div class="w-full max-w-[320px] flex flex-col gap-1.5 text-left">
           <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2">
+                      bg-muted dark:bg-surface-2 px-3 py-2">
             <span class="text-base shrink-0">👆</span>
-            <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t("onboarding.tray.open")}</p>
+            <p class="text-ui-sm text-muted-foreground leading-relaxed">{t("onboarding.tray.open")}</p>
           </div>
           <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2">
+                      bg-muted dark:bg-surface-2 px-3 py-2">
             <span class="text-base shrink-0">🖱</span>
-            <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t("onboarding.tray.menu")}</p>
+            <p class="text-ui-sm text-muted-foreground leading-relaxed">{t("onboarding.tray.menu")}</p>
           </div>
         </div>
       </div>
@@ -1203,14 +1203,14 @@ useWindowTitle("window.title.onboarding");
             <span class="text-5xl text-green-600 dark:text-green-400">✓</span>
           </div>
           <h2 class="text-[1.05rem] font-bold text-green-600 dark:text-green-400">{t("onboarding.downloadsComplete")}</h2>
-          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[340px]">
+          <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[340px]">
             {t("onboarding.downloadsCompleteBody")} <button onclick={openSettings} class="font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{t("onboarding.downloadMoreSettings")}</button>.
           </p>
         {:else}
           <!-- Default Done View -->
           <span class="text-4xl">🎉</span>
           <h2 class="text-[1.05rem] font-bold">{t("onboarding.doneTitle")}</h2>
-          <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          <p class="text-ui-md text-muted-foreground leading-relaxed max-w-[320px]">
             {t("onboarding.doneBody")}
           </p>
         {/if}
@@ -1218,9 +1218,9 @@ useWindowTitle("window.title.onboarding");
         <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
           {#each ["tray", "shortcuts", "help"] as tip}
             <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
-                        bg-muted dark:bg-[#1a1a28] px-3 py-2 text-left">
+                        bg-muted dark:bg-surface-2 px-3 py-2 text-left">
               <span class="text-base shrink-0">{tip === "tray" ? "🖥" : tip === "shortcuts" ? "⌨" : "❓"}</span>
-              <p class="text-[0.6rem] text-muted-foreground leading-relaxed">{t(`onboarding.doneTip.${tip}`)}</p>
+              <p class="text-ui-sm text-muted-foreground leading-relaxed">{t(`onboarding.doneTip.${tip}`)}</p>
             </div>
           {/each}
         </div>
@@ -1230,11 +1230,11 @@ useWindowTitle("window.title.onboarding");
 
   <!-- ── Bottom navigation ─────────────────────────────────────────────────── -->
   <div class="flex items-center justify-between px-4 py-2.5
-              border-t border-border dark:border-white/[0.07] shrink-0">
+              border-t border-border dark:border-white/[0.06] shrink-0">
     {#if step === "welcome" || calRunning}
       <span></span>
     {:else}
-      <Button variant="ghost" size="sm" class="text-[0.65rem] h-7 px-2.5" onclick={prev}>
+      <Button variant="ghost" size="sm" class="text-ui-base h-7 px-2.5" onclick={prev}>
         ← {t("onboarding.back")}
       </Button>
     {/if}
@@ -1247,7 +1247,7 @@ useWindowTitle("window.title.onboarding");
     </div>
 
     {#if step === "done"}
-      <Button size="sm" class="text-[0.65rem] h-7 px-4" onclick={finish}>
+      <Button size="sm" class="text-ui-base h-7 px-4" onclick={finish}>
         {t("onboarding.finish")} →
       </Button>
     {:else if calRunning}
@@ -1257,14 +1257,14 @@ useWindowTitle("window.title.onboarding");
       <!-- "Next" shown inline in the done screen — hide duplicate here -->
       <span></span>
     {:else}
-      <Button size="sm" class="text-[0.65rem] h-7 px-3" onclick={next}>
+      <Button size="sm" class="text-ui-base h-7 px-3" onclick={next}>
         {step === "welcome" ? t("onboarding.getStarted") : t("onboarding.next")} →
       </Button>
     {/if}
   </div>
 
   <div class="px-4 pb-1.5 shrink-0">
-    <p class="text-[0.52rem] text-muted-foreground/75 text-center leading-tight truncate"
+    <p class="text-ui-xs text-muted-foreground/75 text-center leading-tight truncate"
        title={footerModelStatus}>
       {footerModelStatus}
     </p>

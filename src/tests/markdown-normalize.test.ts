@@ -1,7 +1,7 @@
 import { marked } from "marked";
 import { describe, expect, it } from "vitest";
 
-import { normalizeMarkdown } from "$lib/markdown-normalize";
+import { normalizeMarkdown } from "$lib/utils/markdown-normalize";
 
 describe("markdown normalization", () => {
   it("trims space after opening strong delimiter", () => {

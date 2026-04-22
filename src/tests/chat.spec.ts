@@ -7,8 +7,9 @@
  * Run:  npx playwright test src/tests/chat.spec.ts
  */
 import { expect, type Page, test } from "@playwright/test";
+import { buildDaemonMockScript, type CommandMap } from "./helpers/daemon-mock";
 
-// ── Tauri IPC mock ───────────────────────────────────────────────────────────
+// ── Mock data ───────────────────────────────────────────────────────────────
 
 const MOCK_SESSIONS = [
   { id: 1, title: "Hello World", preview: "First conversation", created_at: 1711756800, message_count: 4 },
@@ -56,91 +57,49 @@ const MOCK_MESSAGES = [
   },
 ];
 
-function buildMockScript() {
-  const sessions = JSON.stringify(MOCK_SESSIONS);
-  const messages = JSON.stringify(MOCK_MESSAGES);
+const COMMANDS: CommandMap = {
+  // Chat sessions
+  list_chat_sessions: MOCK_SESSIONS,
+  list_archived_chat_sessions: [],
+  get_last_chat_session: { session_id: 1, messages: MOCK_MESSAGES },
+  load_chat_session: { session_id: 1, messages: MOCK_MESSAGES },
+  new_chat_session: { id: 99 },
+  save_chat_message: 100,
+  save_chat_tool_calls: null,
+  rename_chat_session: null,
+  delete_chat_session: null,
+  archive_chat_session: null,
+  unarchive_chat_session: null,
+  get_session_params: "{}",
 
-  return `
-    window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};
-    window.__TAURI_INTERNALS__.metadata = {
-      currentWindow: { label: "main" },
-      currentWebview: { label: "main", windowLabel: "main" },
-      windows: [{ label: "main" }],
-      webviews: [{ label: "main", windowLabel: "main" }],
-    };
+  // LLM server
+  get_llm_config: {
+    enabled: false,
+    model: null,
+    ctx_size: 4096,
+    gpu_layers: 99,
+    port: 11435,
+  },
+  get_llm_server_status: "stopped",
+  get_llm_catalog: { families: [], models: [] },
+  get_latest_bands: null,
 
-    const SESSIONS = ${sessions};
-    const MESSAGES = ${messages};
-
-    window.__TAURI_INTERNALS__.invoke = function(cmd, args) {
-      switch (cmd) {
-        // ── Chat sessions ────────────────────────────────────────────────
-        case "list_chat_sessions":
-          return Promise.resolve(SESSIONS);
-        case "list_archived_chat_sessions":
-          return Promise.resolve([]);
-        case "get_last_chat_session":
-          return Promise.resolve({ session_id: 1, messages: MESSAGES });
-        case "load_chat_session":
-          return Promise.resolve({ session_id: args?.sessionId ?? 1, messages: MESSAGES });
-        case "new_chat_session":
-          return Promise.resolve({ id: 99 });
-        case "save_chat_message":
-          return Promise.resolve(100);
-        case "save_chat_tool_calls":
-          return Promise.resolve();
-        case "rename_chat_session":
-        case "delete_chat_session":
-        case "archive_chat_session":
-        case "unarchive_chat_session":
-          return Promise.resolve();
-        case "get_session_params":
-          return Promise.resolve("{}");
-
-        // ── LLM server ───────────────────────────────────────────────────
-        case "get_llm_config":
-          return Promise.resolve({
-            enabled: false,
-            model: null,
-            ctx_size: 4096,
-            gpu_layers: 99,
-            port: 11435,
-          });
-        case "get_llm_server_status":
-          return Promise.resolve("stopped");
-        case "get_llm_catalog":
-          return Promise.resolve({ families: [], models: [] });
-        case "get_latest_bands":
-          return Promise.resolve(null);
-
-        // ── Common ───────────────────────────────────────────────────────
-        case "show_main_window":
-        case "show_toast_from_frontend":
-        case "submit_label":
-        case "open_settings_window":
-        case "open_model_tab":
-          return Promise.resolve();
-        case "get_settings":
-          return Promise.resolve({});
-        case "get_app_name":
-          return Promise.resolve("NeuroSkill Test");
-        case "get_ws_port":
-          return Promise.resolve(8375);
-        case "plugin:event|listen":
-          return Promise.resolve(0);
-        case "plugin:event|unlisten":
-          return Promise.resolve();
-        default:
-          return Promise.resolve(null);
-      }
-    };
-  `;
-}
+  // Common
+  show_main_window: null,
+  show_toast_from_frontend: null,
+  submit_label: null,
+  open_settings_window: null,
+  open_model_tab: null,
+  get_settings: {},
+  get_app_name: "NeuroSkill Test",
+  get_ws_port: 8375,
+  get_theme_and_language: ["dark", "en"],
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function openChat(page: Page) {
-  await page.addInitScript({ content: buildMockScript() });
+  await page.addInitScript({ content: buildDaemonMockScript(COMMANDS) });
   await page.goto("http://localhost:1420/chat", { waitUntil: "networkidle" });
   await page.waitForTimeout(1500);
 }

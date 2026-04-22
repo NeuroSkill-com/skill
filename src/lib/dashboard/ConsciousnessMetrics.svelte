@@ -39,7 +39,7 @@ const items = $derived([
 ]);
 </script>
 
-<CollapsibleSection title={t("dashboard.consciousness")} dotColor="text-violet-400">
+<CollapsibleSection title={t("dashboard.consciousness")} dotColor="text-violet-600 dark:text-violet-400">
   <div class="grid grid-cols-3 gap-x-2 gap-y-1.5">
     {#each items as item}
       <MetricTooltip text={t(`tip.consciousness.${item.k}`)}>
@@ -48,7 +48,7 @@ const items = $derived([
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider truncate">
               {t(`dashboard.consciousness.${item.k}`)}
             </span>
-            <span class="text-[0.58rem] font-bold tabular-nums ml-1 shrink-0"
+            <span class="text-ui-sm font-bold tabular-nums ml-1 shrink-0"
                   style="color:{item.c}">
               {item.v.toFixed(0)}
             </span>

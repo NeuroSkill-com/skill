@@ -26,17 +26,17 @@ const sections = $derived(getHelpContent("windows", getLocale()));
           <!-- Search window: overview + nested sub-items for search modes -->
           <div id={item.id}
                class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-3 scroll-mt-4">
+                      bg-surface-1 px-4 py-3 flex flex-col gap-3 scroll-mt-4">
             <div class="flex flex-col gap-1">
-              <span class="text-[0.78rem] font-semibold text-foreground">{item.title}</span>
-              <span class="text-[0.75rem] leading-relaxed text-muted-foreground">{item.body}</span>
+              <span class="text-ui-lg font-semibold text-foreground">{item.title}</span>
+              <span class="text-ui-md leading-relaxed text-muted-foreground">{item.body}</span>
             </div>
             {#if section.items.length > ii + 1}
-              <div class="flex flex-col gap-2 pl-3 border-l-2 border-border dark:border-white/[0.07]">
+              <div class="flex flex-col gap-2 pl-3 border-l-2 border-border dark:border-white/[0.06]">
                 {#each section.items.slice(ii + 1, ii + 4) as sub}
                   <div id={sub.id} class="flex flex-col gap-0.5 scroll-mt-4">
-                    <span class="text-[0.74rem] font-semibold text-foreground/80">{sub.title}</span>
-                    <span class="text-[0.72rem] leading-relaxed text-muted-foreground">{sub.body}</span>
+                    <span class="text-ui-md font-semibold text-foreground/80">{sub.title}</span>
+                    <span class="text-ui-md leading-relaxed text-muted-foreground">{sub.body}</span>
                   </div>
                 {/each}
               </div>

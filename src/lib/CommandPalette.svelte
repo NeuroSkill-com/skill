@@ -15,13 +15,13 @@ import { fade } from "svelte/transition";
 import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
 import { getDeviceStatus } from "$lib/daemon/devices";
 import { daemonPost } from "$lib/daemon/http";
-import { typoMatch } from "$lib/fuzzy-utils";
 import { getLocale, t } from "$lib/i18n/index.svelte";
 import * as nav from "$lib/navigation";
-import { SYNONYMS } from "$lib/settings-search-index";
+import { SYNONYMS } from "$lib/search/settings-search-index";
 import { getRecentIds, recordUsage, usageBoost } from "$lib/stores/cmdk-history.svelte";
 import { getHighContrast, getResolved, setTheme, toggleHighContrast, toggleTheme } from "$lib/stores/theme.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
+import { typoMatch } from "$lib/utils/fuzzy-utils";
 
 // Load all locale indexes at build time via Vite glob import
 const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>("$lib/generated/settings-search-index.*.json", {
@@ -784,7 +784,7 @@ onDestroy(() => {
     class="fixed top-[15%] left-[50%] z-[9999] w-full max-w-[480px]
            translate-x-[-50%]
            rounded-2xl border border-border dark:border-white/[0.1]
-           bg-white dark:bg-[#18181f] shadow-2xl
+           bg-surface-1 shadow-2xl
            flex flex-col overflow-hidden"
     transition:fade={{ duration: 100 }}
     role="dialog"
@@ -805,13 +805,13 @@ onDestroy(() => {
         onkeydown={handleInputKeydown}
         type="text"
         placeholder={t("cmdK.placeholder")}
-        class="flex-1 bg-transparent text-[0.82rem] text-foreground
+        class="flex-1 bg-transparent text-ui-lg text-foreground
                placeholder:text-muted-foreground/50
                focus:outline-none"
         spellcheck="false"
         autocomplete="off"
       />
-      <kbd class="text-[0.55rem] font-mono text-muted-foreground/50 border border-border
+      <kbd class="text-ui-xs font-mono text-muted-foreground/50 border border-border
                   dark:border-white/[0.08] rounded px-1.5 py-0.5 shrink-0">
         Esc
       </kbd>
@@ -820,14 +820,14 @@ onDestroy(() => {
     <!-- Results -->
     <div class="max-h-[50vh] overflow-y-auto py-1.5">
       {#if scored.length === 0}
-        <p class="text-center text-[0.75rem] text-muted-foreground/50 py-6">
+        <p class="text-center text-ui-md text-muted-foreground/50 py-6">
           {t("cmdK.noResults")}
         </p>
       {:else}
         {#each sections as [sectionLabel, cmds], sIdx}
           {#if sectionLabel}
             <div class="px-3 pt-2 pb-1">
-              <p class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground/60 px-1">
+              <p class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground/60 px-1">
                 {sectionLabel}
               </p>
             </div>
@@ -849,14 +849,14 @@ onDestroy(() => {
               aria-selected={fi === active}
               tabindex="-1"
             >
-              <span class="w-5 text-center text-[0.85rem] shrink-0">{cmd.icon}</span>
-              <span class="flex-1 text-[0.78rem] font-medium truncate">
+              <span class="w-5 text-center text-ui-lg shrink-0">{cmd.icon}</span>
+              <span class="flex-1 text-ui-lg font-medium truncate">
                 {#each highlightSegments(cmd.label, cmd.labelPositions) as seg}
                   {#if seg.hi}<span class="text-blue-500 dark:text-blue-400 font-bold">{seg.t}</span>{:else}{seg.t}{/if}
                 {/each}
               </span>
               {#if cmd.toggle}
-                <span class="text-[0.6rem] font-mono shrink-0 px-1.5 py-0.5 rounded
+                <span class="text-ui-sm font-mono shrink-0 px-1.5 py-0.5 rounded
                              {cmd.toggle.get()
                                ? 'bg-blue-500/20 text-blue-500 dark:text-blue-400'
                                : 'bg-muted-foreground/10 text-muted-foreground/50'}">
@@ -864,7 +864,7 @@ onDestroy(() => {
                 </span>
               {/if}
               {#if cmd.shortcut}
-                <kbd class="text-[0.55rem] font-mono text-muted-foreground/50 border border-border
+                <kbd class="text-ui-xs font-mono text-muted-foreground/50 border border-border
                             dark:border-white/[0.08] rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap">
                   {cmd.shortcut}
                 </kbd>
@@ -877,7 +877,7 @@ onDestroy(() => {
 
     <!-- Footer -->
     <div class="flex items-center gap-3 px-4 py-2 border-t border-border dark:border-white/[0.06]
-                text-[0.55rem] text-muted-foreground/50">
+                text-ui-xs text-muted-foreground/50">
       <span>↑↓ {t("cmdK.navigate")}</span>
       <span>↵ {t("cmdK.run")}</span>
       <span>⇥ Toggle</span>

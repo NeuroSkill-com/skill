@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { onMount } from "svelte";
+import Hypnogram from "$lib/charts/Hypnogram.svelte";
 import {
   drawBandDiffHeatmap,
   drawBandHeatmap,
@@ -17,7 +18,7 @@ import {
   drawSpectrum,
   HEATMAP_LABEL_W,
   HEATMAP_ROW_H,
-} from "$lib/compare-canvas";
+} from "$lib/compare/compare-canvas";
 // ── Extracted modules ──────────────────────────────────────────────────────
 import {
   advancedMetrics,
@@ -41,8 +42,10 @@ import {
   scoreDiff,
   scoreKeys,
   sdc,
-} from "$lib/compare-types";
+} from "$lib/compare/compare-types";
 import { Button } from "$lib/components/ui/button";
+import { IconCheck } from "$lib/components/ui/icons";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
@@ -64,14 +67,13 @@ import {
   pad,
   parseDateTimeLocalInput,
 } from "$lib/format";
-import Hypnogram from "$lib/Hypnogram.svelte";
 import { t } from "$lib/i18n/index.svelte";
-import type { JobPollResult, JobTicket } from "$lib/search-types";
-import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+import type { JobPollResult, JobTicket } from "$lib/search/search-types";
+import { analyzeSleep, type SleepAnalysis } from "$lib/settings/sleep-analysis";
 import { getResolved } from "$lib/stores/theme.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { SleepEpoch, SleepStages, SleepSummary, UmapPoint, UmapProgress, UmapResult } from "$lib/types";
-import UmapViewer3D from "$lib/UmapViewer3D.svelte";
+import UmapViewer3D from "$lib/umap/UmapViewer3D.svelte";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let sessions = $state<EmbeddingSession[]>([]);
@@ -990,7 +992,7 @@ useWindowTitle("window.title.compare");
         <svg class="w-6 h-6 text-muted-foreground spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
         </svg>
-        <p class="text-[0.73rem] text-muted-foreground">{t("common.loading")}</p>
+        <p class="text-ui-md text-muted-foreground">{t("common.loading")}</p>
       </div>
 
     {:else if sessions.length === 0}
@@ -1001,8 +1003,8 @@ useWindowTitle("window.title.compare");
           <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
           <line x1="6" y1="20" x2="6" y2="14"/>
         </svg>
-        <p class="text-[0.78rem] text-muted-foreground">{t("compare.needSessions")}</p>
-        <p class="text-[0.65rem] text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
+        <p class="text-ui-lg text-muted-foreground">{t("compare.needSessions")}</p>
+        <p class="text-ui-base text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
           {t("compare.needSessionsHint")}
         </p>
         <button
@@ -1010,8 +1012,8 @@ useWindowTitle("window.title.compare");
           disabled={refreshing}
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                  border border-border dark:border-white/[0.08]
-                 bg-white dark:bg-[#14141e]
-                 text-[0.65rem] text-muted-foreground hover:text-foreground
+                 bg-surface-1
+                 text-ui-base text-muted-foreground hover:text-foreground
                  hover:border-foreground/20 disabled:opacity-40
                  transition-colors">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1050,15 +1052,15 @@ useWindowTitle("window.title.compare");
           <!-- Header row: label · status · day navigation -->
           <div class="flex items-center gap-2">
             <!-- Side badge -->
-            <span class="text-[0.62rem] font-bold tracking-widest uppercase shrink-0" style="color:{accent}">{label}</span>
+            <span class="text-ui-sm font-bold tracking-widest uppercase shrink-0" style="color:{accent}">{label}</span>
 
             <!-- Status -->
             {#if durSecs > 86400}
-              <span class="text-[0.5rem] text-red-500">{t("compare.rangeExceedsLimit")}</span>
+              <span class="text-ui-2xs text-red-500">{t("compare.rangeExceedsLimit")}</span>
             {:else if valid}
               {@const emb = side === "A" ? embCountA : embCountB}
               {@const pct = side === "A" ? embPctA : embPctB}
-              <span class="text-[0.5rem] text-muted-foreground/50 tabular-nums">
+              <span class="text-ui-2xs text-muted-foreground/50 tabular-nums">
                 {sessCount} {sessCount === 1 ? "session" : "sessions"} · {fmtDuration(durSecs)}
                 <span class="text-emerald-500 ml-0.5">✓</span>
               </span>
@@ -1082,7 +1084,7 @@ useWindowTitle("window.title.compare");
                 {/if}
               {/if}
             {:else if anchorUtc !== null && sessCount === 0}
-              <span class="text-[0.5rem] text-amber-500">{t("compare.noSessionsInRange")}</span>
+              <span class="text-ui-2xs text-amber-500">{t("compare.noSessionsInRange")}</span>
             {/if}
 
             <!-- Spacer -->
@@ -1107,7 +1109,7 @@ useWindowTitle("window.title.compare");
                 aria-label="Select day"
                 value={dayStr ?? ""}
                 onchange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) selectDay(side, v); }}
-                class="text-[0.62rem] font-medium text-foreground/80 bg-transparent
+                class="text-ui-sm font-medium text-foreground/80 bg-transparent
                        border-none outline-none cursor-pointer">
                 {#if !dayStr}
                   <option value="" disabled>— pick a day —</option>
@@ -1134,7 +1136,7 @@ useWindowTitle("window.title.compare");
 
           <!-- 48-hour timeline (wheel-scroll navigates days) -->
           <div class="rounded-lg border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] overflow-hidden w-full"
+                      bg-surface-1 overflow-hidden w-full"
                role="application"
                aria-label="48-hour session timeline"
                style="touch-action:none; user-select:none"
@@ -1185,11 +1187,11 @@ useWindowTitle("window.title.compare");
             <div class="relative h-12 cursor-crosshair">
               <!-- Subtle 6h grid lines -->
               {#each [6,12,18,30,36,42] as hOff}
-                <span class="absolute inset-y-0 w-px bg-border/20 dark:bg-white/[0.03] pointer-events-none"
+                <span class="absolute inset-y-0 w-px bg-border/20 dark:bg-white/[0.02] pointer-events-none"
                       style="left:{hOff/48*100}%"></span>
               {/each}
               <!-- Day boundary line at 50% -->
-              <span class="absolute inset-y-0 w-0.5 bg-border/40 dark:bg-white/[0.07] pointer-events-none"
+              <span class="absolute inset-y-0 w-0.5 bg-border/40 dark:bg-white/[0.06] pointer-events-none"
                     style="left:50%"></span>
 
               <!-- Session segments -->
@@ -1236,7 +1238,7 @@ useWindowTitle("window.title.compare");
           <!-- Precision datetime inputs -->
           {#if anchorUtc !== null}
             <div class="flex items-center gap-1.5">
-              <span class="text-[0.5rem] text-muted-foreground/50 shrink-0">{t("compare.timeFrom")}</span>
+              <span class="text-ui-2xs text-muted-foreground/50 shrink-0">{t("compare.timeFrom")}</span>
               <input type="datetime-local"
                 aria-label="Range start time"
                 value={rangeStart !== null ? utcToDateTimeLocal(rangeStart) : utcToDateTimeLocal(anchor)}
@@ -1244,10 +1246,10 @@ useWindowTitle("window.title.compare");
                 max={utcToDateTimeLocal(anchor + 172800)}
                 oninput={(e) => setRangeStart(side, (e.target as HTMLInputElement).value)}
                 class="flex-1 min-w-0 rounded border border-border dark:border-white/[0.08]
-                       bg-background dark:bg-[#14141e] px-1.5 py-0.5
-                       text-[0.6rem] text-foreground focus:outline-none focus:ring-1"
+                       bg-background dark:bg-surface-1 px-1.5 py-0.5
+                       text-ui-sm text-foreground focus:outline-none focus:ring-1"
                 style="--tw-ring-color:{accent}50"/>
-              <span class="text-[0.5rem] text-muted-foreground/50 shrink-0">–</span>
+              <span class="text-ui-2xs text-muted-foreground/50 shrink-0">–</span>
               <input type="datetime-local"
                 aria-label="Range end time"
                 value={rangeEnd !== null ? utcToDateTimeLocal(rangeEnd) : utcToDateTimeLocal(anchor + 86400)}
@@ -1255,8 +1257,8 @@ useWindowTitle("window.title.compare");
                 max={utcToDateTimeLocal(anchor + 172800)}
                 oninput={(e) => setRangeEnd(side, (e.target as HTMLInputElement).value)}
                 class="flex-1 min-w-0 rounded border border-border dark:border-white/[0.08]
-                       bg-background dark:bg-[#14141e] px-1.5 py-0.5
-                       text-[0.6rem] text-foreground focus:outline-none focus:ring-1"
+                       bg-background dark:bg-surface-1 px-1.5 py-0.5
+                       text-ui-sm text-foreground focus:outline-none focus:ring-1"
                 style="--tw-ring-color:{accent}50"/>
             </div>
           {/if}
@@ -1267,7 +1269,7 @@ useWindowTitle("window.title.compare");
       <!-- Single-day notice -->
       {#if aDayStr !== null && bDayStr !== null && aDayStr === bDayStr}
         <div class="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5
-                    px-3 py-2 text-[0.62rem] text-amber-600 dark:text-amber-400">
+                    px-3 py-2 text-ui-sm text-amber-600 dark:text-amber-400">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 shrink-0">
             <circle cx="12" cy="12" r="10"/>
@@ -1286,7 +1288,7 @@ useWindowTitle("window.title.compare");
       <!-- Compare button + status -->
       <div class="flex items-center gap-3">
         <Button size="sm"
-                class="text-[0.7rem] h-8 px-4"
+                class="text-ui-md h-8 px-4"
                 disabled={!canCompare || comparing}
                 onclick={compare}>
           {#if comparing}
@@ -1300,12 +1302,10 @@ useWindowTitle("window.title.compare");
         </Button>
         {#if metricsA && metricsB}
           <Button size="sm" variant="outline"
-                  class="text-[0.65rem] h-8 px-3 gap-1"
+                  class="text-ui-base h-8 px-3 gap-1"
                   onclick={copySummary}>
             {#if copied}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3 text-emerald-500">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              <IconCheck class="w-3 h-3 text-emerald-500" />
               {t("compare.copied")}
             {:else}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3">
@@ -1315,7 +1315,7 @@ useWindowTitle("window.title.compare");
               {t("compare.copySummary")}
             {/if}
           </Button>
-          <span class="text-[0.58rem] text-muted-foreground/50">
+          <span class="text-ui-sm text-muted-foreground/50">
             {t("compare.epochsA", { n: metricsA.n_epochs })} · {t("compare.epochsB", { n: metricsB.n_epochs })}
           </span>
         {/if}
@@ -1338,7 +1338,7 @@ useWindowTitle("window.title.compare");
           <svg class="w-6 h-6 text-muted-foreground spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
           </svg>
-          <p class="text-[0.73rem] text-muted-foreground">{t("compare.comparing")}</p>
+          <p class="text-ui-md text-muted-foreground">{t("compare.comparing")}</p>
         </div>
       {/if}
       {#if metricsA && metricsB}
@@ -1346,7 +1346,7 @@ useWindowTitle("window.title.compare");
 
         <!-- ── Band Spectrum (stacked bars) ────────────────────────────── -->
         <div class="flex flex-col gap-2">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("compare.spectrum")}
           </span>
 
@@ -1355,7 +1355,7 @@ useWindowTitle("window.title.compare");
             {#each bandMeta as band, i}
               <div class="flex items-center gap-1">
                 <span class="w-2 h-2 rounded-full shrink-0" style="background:{band.color}"></span>
-                <span class="text-[0.55rem] text-muted-foreground">{band.sym} {band.name}</span>
+                <span class="text-ui-xs text-muted-foreground">{band.sym} {band.name}</span>
               </div>
             {/each}
           </div>
@@ -1363,37 +1363,37 @@ useWindowTitle("window.title.compare");
           <!-- Spectrum A -->
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
-              <span class="text-[0.55rem] font-bold text-muted-foreground w-4 shrink-0">A</span>
+              <span class="text-ui-xs font-bold text-muted-foreground w-4 shrink-0">A</span>
               <div class="flex-1 h-[34px]">
                 <canvas bind:this={specCanvasA} class="w-full h-full block"></canvas>
               </div>
             </div>
             {#if metricsA.n_epochs === 0}
-              <span class="text-[0.55rem] text-red-400 ml-6">{t("compare.noEpochs")}</span>
+              <span class="text-ui-xs text-red-400 ml-6">{t("compare.noEpochs")}</span>
             {/if}
           </div>
 
           <!-- Spectrum B -->
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
-              <span class="text-[0.55rem] font-bold text-muted-foreground w-4 shrink-0">B</span>
+              <span class="text-ui-xs font-bold text-muted-foreground w-4 shrink-0">B</span>
               <div class="flex-1 h-[34px]">
                 <canvas bind:this={specCanvasB} class="w-full h-full block"></canvas>
               </div>
             </div>
             {#if metricsB.n_epochs === 0}
-              <span class="text-[0.55rem] text-red-400 ml-6">{t("compare.noEpochs")}</span>
+              <span class="text-ui-xs text-red-400 ml-6">{t("compare.noEpochs")}</span>
             {/if}
           </div>
         </div>
 
         <!-- ── Diff Chart (grouped vertical bars) ─────────────────────── -->
         <div class="flex flex-col gap-2">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("compare.bandPowers")}
           </span>
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] overflow-hidden p-2">
+                      bg-surface-1 overflow-hidden p-2">
             <canvas bind:this={diffCanvas}
                     class="w-full block text-muted-foreground"
                     style="height:140px"></canvas>
@@ -1401,30 +1401,30 @@ useWindowTitle("window.title.compare");
 
           <!-- Numeric table -->
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] overflow-hidden">
+                      bg-surface-1 overflow-hidden">
             <!-- Header -->
             <div class="grid grid-cols-[1fr_72px_72px_56px] gap-2 px-3.5 py-2
-                        border-b border-border dark:border-white/[0.05]
+                        border-b border-border dark:border-white/[0.06]
                         bg-muted/30 dark:bg-white/[0.02]">
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("compare.band")}</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
+              <SectionHeader>{t("compare.band")}</SectionHeader>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
             </div>
             {#each bandKeys as key, i}
               {@const a = bv(metricsA, key)}
               {@const b = bv(metricsB, key)}
               <div class="grid grid-cols-[1fr_72px_72px_56px] gap-2 px-3.5 py-1.5
-                          border-b border-border/50 dark:border-white/[0.03] last:border-b-0
+                          border-b border-border/50 dark:border-white/[0.04] last:border-b-0
                           items-center">
                 <div class="flex items-center gap-2">
                   <span class="w-2 h-2 rounded-full shrink-0" style="background:{bandMeta[i].color}"></span>
-                  <span class="text-[0.68rem] font-semibold text-foreground">{bandMeta[i].name}</span>
-                  <span class="text-[0.58rem] text-muted-foreground/40">{bandMeta[i].sym}</span>
+                  <span class="text-ui-base font-semibold text-foreground">{bandMeta[i].name}</span>
+                  <span class="text-ui-sm text-muted-foreground/40">{bandMeta[i].sym}</span>
                 </div>
-                <span class="text-[0.68rem] tabular-nums text-foreground text-right">{pct(a)}%</span>
-                <span class="text-[0.68rem] tabular-nums text-foreground text-right">{pct(b)}%</span>
-                <span class="text-[0.6rem] tabular-nums text-right font-semibold {dc(a, b)}">{diff(a, b)}</span>
+                <span class="text-ui-base tabular-nums text-foreground text-right">{pct(a)}%</span>
+                <span class="text-ui-base tabular-nums text-foreground text-right">{pct(b)}%</span>
+                <span class="text-ui-sm tabular-nums text-right font-semibold {dc(a, b)}">{diff(a, b)}</span>
               </div>
             {/each}
           </div>
@@ -1432,7 +1432,7 @@ useWindowTitle("window.title.compare");
 
         <!-- ── Scores ─────────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("compare.scores")}
           </span>
           <div class="grid grid-cols-3 gap-2">
@@ -1440,30 +1440,30 @@ useWindowTitle("window.title.compare");
               {@const a = metricsA[sk.key]}
               {@const b = metricsB[sk.key]}
               <div class="rounded-xl border border-border dark:border-white/[0.06]
-                          bg-white dark:bg-[#14141e] px-3 py-2.5 flex flex-col gap-2">
-                <span class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground">
+                          bg-surface-1 px-3 py-2.5 flex flex-col gap-2">
+                <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground">
                   {t(sk.label)}
                 </span>
                 <!-- A bar -->
                 <div class="flex items-center gap-1.5">
-                  <span class="text-[0.48rem] text-muted-foreground/50 w-3 shrink-0">A</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 w-3 shrink-0">A</span>
                   <div class="flex-1 h-2.5 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
                     <div class="h-full rounded-full transition-all duration-500"
                          style="width:{Math.min(100, a)}%; background:{sk.color}"></div>
                   </div>
-                  <span class="text-[0.62rem] tabular-nums font-bold w-7 text-right" style="color:{sk.color}">{a.toFixed(0)}</span>
+                  <span class="text-ui-sm tabular-nums font-bold w-7 text-right" style="color:{sk.color}">{a.toFixed(0)}</span>
                 </div>
                 <!-- B bar -->
                 <div class="flex items-center gap-1.5">
-                  <span class="text-[0.48rem] text-muted-foreground/50 w-3 shrink-0">B</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 w-3 shrink-0">B</span>
                   <div class="flex-1 h-2.5 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
                     <div class="h-full rounded-full transition-all duration-500"
                          style="width:{Math.min(100, b)}%; background:{sk.color}; opacity:0.55"></div>
                   </div>
-                  <span class="text-[0.62rem] tabular-nums font-bold w-7 text-right" style="color:{sk.color}; opacity:0.65">{b.toFixed(0)}</span>
+                  <span class="text-ui-sm tabular-nums font-bold w-7 text-right" style="color:{sk.color}; opacity:0.65">{b.toFixed(0)}</span>
                 </div>
                 <!-- Diff -->
-                <span class="text-[0.55rem] tabular-nums font-semibold text-center {sdc(a, b)}">
+                <span class="text-ui-xs tabular-nums font-semibold text-center {sdc(a, b)}">
                   {scoreDiff(a, b)}
                 </span>
               </div>
@@ -1473,15 +1473,15 @@ useWindowTitle("window.title.compare");
 
         <!-- ── Radar Chart ─────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("compare.radarChart")}
           </span>
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] overflow-hidden p-2">
+                      bg-surface-1 overflow-hidden p-2">
             <canvas bind:this={radarCanvas}
                     class="w-full block text-muted-foreground"
                     style="height:220px"></canvas>
-            <div class="flex items-center justify-center gap-4 text-[0.48rem] text-muted-foreground/60 pt-1">
+            <div class="flex items-center justify-center gap-4 text-ui-2xs text-muted-foreground/60 pt-1">
               <div class="flex items-center gap-1">
                 <span class="inline-block w-2.5 h-0.5 rounded bg-blue-500"></span>
                 <span>A</span>
@@ -1497,18 +1497,18 @@ useWindowTitle("window.title.compare");
         <!-- ── Insights Summary ─────────────────────────────────────── -->
         {#if improved.length > 0 || declined.length > 0}
           <div class="flex flex-col gap-2">
-            <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+            <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
               {t("compare.insights")}
             </span>
             <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] px-3.5 py-3 flex flex-col gap-2.5">
+                        bg-surface-1 px-3.5 py-3 flex flex-col gap-2.5">
               {#if improved.length > 0}
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-[0.55rem] font-semibold text-emerald-500 shrink-0">▲ Improved</span>
+                  <span class="text-ui-xs font-semibold text-emerald-500 shrink-0">▲ Improved</span>
                   {#each improved as d}
                     <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md
                                  bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
-                                 text-[0.55rem] font-medium">
+                                 text-ui-xs font-medium">
                       {d.label}
                       <span class="text-[0.45rem] opacity-70">
                         {d.pctChange > 0 ? "+" : ""}{d.pctChange.toFixed(0)}%
@@ -1519,11 +1519,11 @@ useWindowTitle("window.title.compare");
               {/if}
               {#if declined.length > 0}
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-[0.55rem] font-semibold text-red-400 shrink-0">▼ Declined</span>
+                  <span class="text-ui-xs font-semibold text-red-400 shrink-0">▼ Declined</span>
                   {#each declined as d}
                     <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md
                                  bg-red-500/10 text-red-500 dark:text-red-400
-                                 text-[0.55rem] font-medium">
+                                 text-ui-xs font-medium">
                       {d.label}
                       <span class="text-[0.45rem] opacity-70">
                         {d.pctChange > 0 ? "+" : ""}{d.pctChange.toFixed(0)}%
@@ -1541,11 +1541,11 @@ useWindowTitle("window.title.compare");
 
         <!-- ── FAA ────────────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("dashboard.faa")}
           </span>
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] px-3.5 py-3 flex flex-col gap-3">
+                      bg-surface-1 px-3.5 py-3 flex flex-col gap-3">
             <!-- Centre-anchored gauge for each -->
             {#each [
               { label: "A", val: metricsA.faa },
@@ -1553,7 +1553,7 @@ useWindowTitle("window.title.compare");
             ] as item}
               <div class="flex flex-col gap-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[0.5rem] font-bold text-muted-foreground/60 w-3">{item.label}</span>
+                  <span class="text-ui-2xs font-bold text-muted-foreground/60 w-3">{item.label}</span>
                   <div class="flex-1 h-2 rounded-full bg-black/6 dark:bg-white/8 relative overflow-hidden">
                     <!-- Centre line -->
                     <div class="absolute top-0 bottom-0 left-1/2 w-px bg-muted-foreground/20"></div>
@@ -1566,7 +1566,7 @@ useWindowTitle("window.title.compare");
                            style="right:50%; width:{Math.min(50, Math.abs(item.val) * 50)}%"></div>
                     {/if}
                   </div>
-                  <span class="text-[0.68rem] font-bold tabular-nums w-12 text-right"
+                  <span class="text-ui-base font-bold tabular-nums w-12 text-right"
                         style="color:{Math.abs(item.val) > 0.3 ? 'var(--color-violet-500)' : 'inherit'}">
                     {item.val >= 0 ? "+" : ""}{item.val.toFixed(3)}
                   </span>
@@ -1580,7 +1580,7 @@ useWindowTitle("window.title.compare");
                 <span>{t("dashboard.faaFormula")}</span>
                 <span>{t("dashboard.faaApproach")}</span>
               </div>
-              <span class="text-[0.6rem] tabular-nums font-semibold ml-3 w-12 text-right {sdc(metricsA.faa, metricsB.faa)}">
+              <span class="text-ui-sm tabular-nums font-semibold ml-3 w-12 text-right {sdc(metricsA.faa, metricsB.faa)}">
                 {(metricsA.faa - metricsB.faa) >= 0 ? "+" : ""}{(metricsA.faa - metricsB.faa).toFixed(3)}
               </span>
             </div>
@@ -1597,36 +1597,36 @@ useWindowTitle("window.title.compare");
                         transition-transform duration-150 shrink-0 {advExpanded ? 'rotate-90' : ''}">
               <path d="M9 18l6-6-6-6"/>
             </svg>
-            <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground
+            <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground
                          group-hover:text-foreground transition-colors">
               {t("compare.advancedMetrics")}
             </span>
           </button>
           {#if advExpanded}
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] overflow-hidden">
+                      bg-surface-1 overflow-hidden">
             <!-- Header -->
             <div class="grid grid-cols-[1fr_72px_72px_56px] gap-2 px-3.5 py-2
-                        border-b border-border dark:border-white/[0.05]
+                        border-b border-border dark:border-white/[0.06]
                         bg-muted/30 dark:bg-white/[0.02]">
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("compare.metric")}</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
-              <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
+              <SectionHeader>{t("compare.metric")}</SectionHeader>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
             </div>
             {#each advancedMetrics as mr}
               {@const a = Number(metricsA[mr.key]) || 0}
               {@const b = Number(metricsB[mr.key]) || 0}
               {@const d = a - b}
               <div class="grid grid-cols-[1fr_72px_72px_56px] gap-2 px-3.5 py-1.5
-                          border-b border-border/50 dark:border-white/[0.03] last:border-b-0
+                          border-b border-border/50 dark:border-white/[0.04] last:border-b-0
                           items-center">
-                <span class="text-[0.68rem] font-medium">
-                  {t(mr.label)}{#if mr.unit} <span class="text-[0.5rem] text-muted-foreground/50">({mr.unit})</span>{/if}
+                <span class="text-ui-base font-medium">
+                  {t(mr.label)}{#if mr.unit} <span class="text-ui-2xs text-muted-foreground/50">({mr.unit})</span>{/if}
                 </span>
-                <span class="text-[0.68rem] tabular-nums text-foreground text-right">{mr.fmt(a)}</span>
-                <span class="text-[0.68rem] tabular-nums text-foreground text-right">{mr.fmt(b)}</span>
-                <span class="text-[0.6rem] tabular-nums text-right font-semibold {Math.abs(d) < 0.001 ? 'text-muted-foreground/40' : d > 0 ? 'text-emerald-500' : 'text-red-400'}">
+                <span class="text-ui-base tabular-nums text-foreground text-right">{mr.fmt(a)}</span>
+                <span class="text-ui-base tabular-nums text-foreground text-right">{mr.fmt(b)}</span>
+                <span class="text-ui-sm tabular-nums text-right font-semibold {Math.abs(d) < 0.001 ? 'text-muted-foreground/40' : d > 0 ? 'text-emerald-500' : 'text-red-400'}">
                   {Math.abs(d) < 0.001 ? "—" : `${d > 0 ? "+" : ""}${mr.fmt(d)}`}
                 </span>
               </div>
@@ -1639,10 +1639,10 @@ useWindowTitle("window.title.compare");
         {#if tsA.length > 2 || tsB.length > 2}
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
-              <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
                 {t("compare.heatmap")}
               </span>
-              <Button size="sm" variant="ghost" class="text-[0.6rem] h-6 px-2"
+              <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                       onclick={() => showHeatmaps = !showHeatmaps}>
                 {showHeatmaps ? "▲ Hide" : "▼ Show"}
               </Button>
@@ -1653,11 +1653,11 @@ useWindowTitle("window.title.compare");
               {#if tsA.length > 2}
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-[0.48rem] font-bold text-muted-foreground/60 w-4">A</span>
-                    <span class="text-[0.48rem] text-muted-foreground/40">{t("compare.heatmapBands")}</span>
+                    <span class="text-ui-2xs font-bold text-muted-foreground/60 w-4">A</span>
+                    <span class="text-ui-2xs text-muted-foreground/40">{t("compare.heatmapBands")}</span>
                   </div>
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-[#f5f5fa] dark:bg-[#0e0e1a] overflow-hidden">
+                              bg-surface-3 overflow-hidden">
                     <canvas bind:this={hmBandCanvasA}
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
@@ -1672,11 +1672,11 @@ useWindowTitle("window.title.compare");
               {#if tsB.length > 2}
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-[0.48rem] font-bold text-muted-foreground/60 w-4">B</span>
-                    <span class="text-[0.48rem] text-muted-foreground/40">{t("compare.heatmapBands")}</span>
+                    <span class="text-ui-2xs font-bold text-muted-foreground/60 w-4">B</span>
+                    <span class="text-ui-2xs text-muted-foreground/40">{t("compare.heatmapBands")}</span>
                   </div>
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-[#f5f5fa] dark:bg-[#0e0e1a] overflow-hidden">
+                              bg-surface-3 overflow-hidden">
                     <canvas bind:this={hmBandCanvasB}
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
@@ -1690,9 +1690,9 @@ useWindowTitle("window.title.compare");
               <!-- Band Power Diff Heatmap (B − A) -->
               {#if tsA.length > 2 && tsB.length > 2}
                 <div class="flex flex-col gap-1">
-                  <span class="text-[0.48rem] text-muted-foreground/40">{t("compare.heatmapDiff")}</span>
+                  <span class="text-ui-2xs text-muted-foreground/40">{t("compare.heatmapDiff")}</span>
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-[#f5f5fa] dark:bg-[#0e0e1a] overflow-hidden">
+                              bg-surface-3 overflow-hidden">
                     <canvas bind:this={hmBandDiffCanvas}
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5 + 12}px; display:block"></canvas>
@@ -1707,11 +1707,11 @@ useWindowTitle("window.title.compare");
               {#if tsA.length > 2}
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-[0.48rem] font-bold text-muted-foreground/60 w-4">A</span>
-                    <span class="text-[0.48rem] text-muted-foreground/40">{t("compare.heatmapScores")}</span>
+                    <span class="text-ui-2xs font-bold text-muted-foreground/60 w-4">A</span>
+                    <span class="text-ui-2xs text-muted-foreground/40">{t("compare.heatmapScores")}</span>
                   </div>
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-[#f5f5fa] dark:bg-[#0e0e1a] overflow-hidden">
+                              bg-surface-3 overflow-hidden">
                     <canvas bind:this={hmScoreCanvasA}
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
@@ -1723,11 +1723,11 @@ useWindowTitle("window.title.compare");
               {#if tsB.length > 2}
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-[0.48rem] font-bold text-muted-foreground/60 w-4">B</span>
-                    <span class="text-[0.48rem] text-muted-foreground/40">{t("compare.heatmapScores")}</span>
+                    <span class="text-ui-2xs font-bold text-muted-foreground/60 w-4">B</span>
+                    <span class="text-ui-2xs text-muted-foreground/40">{t("compare.heatmapScores")}</span>
                   </div>
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-[#f5f5fa] dark:bg-[#0e0e1a] overflow-hidden">
+                              bg-surface-3 overflow-hidden">
                     <canvas bind:this={hmScoreCanvasB}
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
@@ -1745,10 +1745,10 @@ useWindowTitle("window.title.compare");
         {#if tsA.length > 2 || tsB.length > 2}
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
-              <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
                 {t("compare.timeSeries")}
               </span>
-              <Button size="sm" variant="ghost" class="text-[0.6rem] h-6 px-2"
+              <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                       onclick={() => showCharts = !showCharts}>
                 {showCharts ? "▲ Hide" : "▼ Show"}
               </Button>
@@ -1776,7 +1776,7 @@ useWindowTitle("window.title.compare");
 
               <!-- Band Powers overlay -->
               {#if tsA.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartBands")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartBands")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={1} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesA}
                   series={[
@@ -1788,7 +1788,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartBands")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartBands")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={1} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesB}
                   series={[
@@ -1802,7 +1802,7 @@ useWindowTitle("window.title.compare");
 
               <!-- Brain Scores -->
               {#if tsA.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartScores")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartScores")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={100} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesA}
                   series={[
@@ -1811,7 +1811,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartScores")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartScores")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={100} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesB}
                   series={[
@@ -1822,7 +1822,7 @@ useWindowTitle("window.title.compare");
 
               <!-- Composite Scores -->
               {#if tsA.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartComposite")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartComposite")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={100} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesA}
                   series={[
@@ -1832,7 +1832,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.length > 2}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartComposite")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartComposite")}</span>
                 <TimeSeriesChart height={100} yMin={0} yMax={100} xMin={sharedXMin} xMax={sharedXMax}
                   timestamps={tsTimesB}
                   series={[
@@ -1844,7 +1844,7 @@ useWindowTitle("window.title.compare");
 
               <!-- PPG Vitals (if any non-zero HR data) -->
               {#if tsA.some(r => r.hr > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartPpg")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartPpg")}</span>
                 <TimeSeriesChart height={100} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={ppgYMin} yMax={ppgYMax}
                   timestamps={tsTimesA}
@@ -1854,7 +1854,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.some(r => r.hr > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartPpg")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartPpg")}</span>
                 <TimeSeriesChart height={100} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={ppgYMin} yMax={ppgYMax}
                   timestamps={tsTimesB}
@@ -1866,7 +1866,7 @@ useWindowTitle("window.title.compare");
 
               <!-- Artifacts -->
               {#if tsA.some(r => r.blink_r > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartArtifacts")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartArtifacts")}</span>
                 <TimeSeriesChart height={90} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={0} yMax={artYMax}
                   timestamps={tsTimesA}
@@ -1875,7 +1875,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.some(r => r.blink_r > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartArtifacts")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartArtifacts")}</span>
                 <TimeSeriesChart height={90} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={0} yMax={artYMax}
                   timestamps={tsTimesB}
@@ -1886,7 +1886,7 @@ useWindowTitle("window.title.compare");
 
               <!-- Head Pose -->
               {#if tsA.some(r => r.still > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">A — {t("compare.chartPose")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">A — {t("compare.chartPose")}</span>
                 <TimeSeriesChart height={90} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={poseMin} yMax={poseMax}
                   timestamps={tsTimesA}
@@ -1897,7 +1897,7 @@ useWindowTitle("window.title.compare");
                   ]} />
               {/if}
               {#if tsB.some(r => r.still > 0)}
-                <span class="text-[0.48rem] font-semibold text-muted-foreground/60">B — {t("compare.chartPose")}</span>
+                <span class="text-ui-2xs font-semibold text-muted-foreground/60">B — {t("compare.chartPose")}</span>
                 <TimeSeriesChart height={90} xMin={sharedXMin} xMax={sharedXMax}
                   yMin={poseMin} yMax={poseMax}
                   timestamps={tsTimesB}
@@ -1915,12 +1915,12 @@ useWindowTitle("window.title.compare");
         <!-- The viewer is only shown after the user explicitly requests it. -->
         {#if !umapRequested}
           <div class="flex flex-col gap-2">
-            <span class="flex items-baseline gap-1.5 text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+            <span class="flex items-baseline gap-1.5 text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
               Brain Nebula™
               <span class="text-[0.45rem] font-normal normal-case tracking-normal text-muted-foreground/40">{t("compare.umap")}</span>
             </span>
             <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] px-4 py-5 flex flex-col items-center gap-3">
+                        bg-surface-1 px-4 py-5 flex flex-col items-center gap-3">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
                    class="w-8 h-8 text-muted-foreground/30">
@@ -1931,17 +1931,17 @@ useWindowTitle("window.title.compare");
                 <line x1="14" y1="7" x2="17" y2="15"/>
                 <line x1="17" y1="15" x2="9" y2="17"/>
               </svg>
-              <p class="text-[0.65rem] text-muted-foreground text-center max-w-[240px] leading-relaxed">
+              <p class="text-ui-base text-muted-foreground text-center max-w-[240px] leading-relaxed">
                 {t("compare.umapDesc")}
               </p>
               <Button size="sm"
-                      class="text-[0.7rem] h-8 px-4"
+                      class="text-ui-md h-8 px-4"
                       disabled={umapTotalEpochs > 0 && umapTotalEmb < 5}
                       onclick={calculateUmap}>
                 {t("compare.calculateUmap")}
               </Button>
               {#if umapTotalEpochs > 0 && umapTotalEmb < 5}
-                <p class="text-[0.55rem] text-amber-500/80 text-center max-w-[280px] leading-relaxed">
+                <p class="text-ui-xs text-amber-500/80 text-center max-w-[280px] leading-relaxed">
                   {t("compare.embeddingsNone")}
                 </p>
                 {#if reembedRunning}
@@ -1951,7 +1951,7 @@ useWindowTitle("window.title.compare");
                       <div class="h-full rounded-full bg-blue-500/70 transition-all duration-1000 ease-linear"
                            style="width:{reembedPct}%"></div>
                     </div>
-                    <p class="text-[0.5rem] text-blue-400/70 tabular-nums leading-relaxed text-center">
+                    <p class="text-ui-2xs text-blue-400/70 tabular-nums leading-relaxed text-center">
                       {t("compare.embeddingsProcessing")}
                       {reembedStatus?.done ?? 0}/{reembedStatus?.total ?? 0} ({reembedPct}%)
                       {#if reembedStatus?.day} · {reembedStatus.day}{/if}
@@ -1962,7 +1962,7 @@ useWindowTitle("window.title.compare");
                   </div>
                 {/if}
               {:else if umapTotalEpochs > 0 && umapTotalEmb < umapTotalEpochs * 0.5}
-                <p class="text-[0.55rem] text-amber-500/60 text-center max-w-[280px] leading-relaxed tabular-nums">
+                <p class="text-ui-xs text-amber-500/60 text-center max-w-[280px] leading-relaxed tabular-nums">
                   {umapTotalEmb}/{umapTotalEpochs} {t("compare.embeddingsReady")} ({Math.round(umapTotalEmb / umapTotalEpochs * 100)}%)
                 </p>
                 {#if reembedRunning}
@@ -1987,7 +1987,7 @@ useWindowTitle("window.title.compare");
                style="min-height:calc(100vh - 8rem)">
             <!-- Header -->
             <div class="flex items-center gap-2 px-4 py-3 shrink-0 flex-wrap">
-              <span class="text-[0.7rem] font-semibold">Brain Nebula™</span>
+              <span class="text-ui-md font-semibold">Brain Nebula™</span>
               <span class="text-[0.45rem] text-muted-foreground/40 font-normal">{t("compare.umap")}</span>
               {#if umapLoading}
                 <!-- ── Queued: waiting for other tasks to finish ── -->
@@ -2009,11 +2009,11 @@ useWindowTitle("window.title.compare");
                     </svg>
                     <div class="flex flex-col gap-0 leading-tight">
                       <!-- "X tasks ahead" -->
-                      <span class="text-[0.6rem] font-semibold text-amber-700 dark:text-amber-300 tabular-nums">
+                      <span class="text-ui-sm font-semibold text-amber-700 dark:text-amber-300 tabular-nums">
                         {umapQueuePosition} task{umapQueuePosition === 1 ? "" : "s"} running before yours
                       </span>
                       <!-- Wait + compute breakdown -->
-                      <span class="text-[0.52rem] text-amber-600/70 dark:text-amber-400/60 tabular-nums">
+                      <span class="text-ui-xs text-amber-600/70 dark:text-amber-400/60 tabular-nums">
                         {#if umapWaitSecs !== null && umapWaitSecs > 0}
                           starts in ~{fmtSecs(umapWaitSecs)}
                         {:else}
@@ -2103,7 +2103,7 @@ useWindowTitle("window.title.compare");
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
-                <p class="text-[0.7rem] text-muted-foreground max-w-[360px] leading-relaxed">{umapError}</p>
+                <p class="text-ui-md text-muted-foreground max-w-[360px] leading-relaxed">{umapError}</p>
                 {#if reembedRunning}
                   {@const eta = reembedEta()}
                   <div class="flex flex-col items-center gap-2 w-full max-w-[300px] mt-2">
@@ -2111,7 +2111,7 @@ useWindowTitle("window.title.compare");
                       <div class="h-full rounded-full bg-blue-500/70 transition-all duration-1000 ease-linear"
                            style="width:{reembedPct}%"></div>
                     </div>
-                    <p class="text-[0.6rem] text-blue-400/80 tabular-nums text-center leading-relaxed">
+                    <p class="text-ui-sm text-blue-400/80 tabular-nums text-center leading-relaxed">
                       {t("compare.embeddingsProcessing")}
                       {reembedStatus?.done ?? 0}/{reembedStatus?.total ?? 0} ({reembedPct}%)
                       {#if eta}
@@ -2120,7 +2120,7 @@ useWindowTitle("window.title.compare");
                     </p>
                   </div>
                 {:else}
-                  <Button size="sm" variant="outline" class="text-[0.65rem] h-7 px-3 mt-1" onclick={calculateUmap}>
+                  <Button size="sm" variant="outline" class="text-ui-base h-7 px-3 mt-1" onclick={calculateUmap}>
                     Retry
                   </Button>
                 {/if}
@@ -2163,7 +2163,7 @@ useWindowTitle("window.title.compare");
                           transition-transform duration-150 shrink-0 {sleepExpanded ? 'rotate-90' : ''}">
                 <path d="M9 18l6-6-6-6"/>
               </svg>
-              <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground
+              <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground
                            group-hover:text-foreground transition-colors">
                 {t("sleep.title")}
               </span>
@@ -2179,28 +2179,28 @@ useWindowTitle("window.title.compare");
                 ] as item}
                   {#if item.sa}
                     <div class="rounded-lg border border-border dark:border-white/[0.06]
-                                bg-white dark:bg-[#14141e] px-3 py-2 flex flex-col gap-1">
-                      <span class="text-[0.48rem] font-bold text-muted-foreground/60">{item.label}</span>
+                                bg-surface-1 px-3 py-2 flex flex-col gap-1">
+                      <span class="text-ui-2xs font-bold text-muted-foreground/60">{item.label}</span>
                       <div class="flex items-center gap-3 flex-wrap">
                         <div class="flex flex-col">
                           <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
-                          <span class="text-[0.72rem] font-bold tabular-nums {item.sa.efficiency >= 85 ? 'text-emerald-500' : item.sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
+                          <span class="text-ui-md font-bold tabular-nums {item.sa.efficiency >= 85 ? 'text-emerald-500' : item.sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
                             {item.sa.efficiency.toFixed(0)}%
                           </span>
                         </div>
                         <div class="flex flex-col">
                           <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Onset</span>
-                          <span class="text-[0.72rem] font-bold tabular-nums">{item.sa.onsetLatencyMin.toFixed(0)}m</span>
+                          <span class="text-ui-md font-bold tabular-nums">{item.sa.onsetLatencyMin.toFixed(0)}m</span>
                         </div>
                         {#if item.sa.remLatencyMin >= 0}
                           <div class="flex flex-col">
                             <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
-                            <span class="text-[0.72rem] font-bold tabular-nums">{item.sa.remLatencyMin.toFixed(0)}m</span>
+                            <span class="text-ui-md font-bold tabular-nums">{item.sa.remLatencyMin.toFixed(0)}m</span>
                           </div>
                         {/if}
                         <div class="flex flex-col">
                           <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
-                          <span class="text-[0.72rem] font-bold tabular-nums">{item.sa.awakenings}</span>
+                          <span class="text-ui-md font-bold tabular-nums">{item.sa.awakenings}</span>
                         </div>
                       </div>
                     </div>
@@ -2211,9 +2211,9 @@ useWindowTitle("window.title.compare");
 
             {#if sleepA}
               <div class="flex flex-col gap-1">
-                <span class="text-[0.5rem] font-bold text-muted-foreground/60">A</span>
+                <span class="text-ui-2xs font-bold text-muted-foreground/60">A</span>
                 <div class="rounded-xl border border-border dark:border-white/[0.06]
-                            bg-white dark:bg-[#14141e] p-2">
+                            bg-surface-1 p-2">
                   <Hypnogram epochs={sleepA.epochs} summary={sleepA.summary}
                              xMin={sleepB ? sleepXMin : undefined} xMax={sleepB ? sleepXMax : undefined} />
                 </div>
@@ -2222,9 +2222,9 @@ useWindowTitle("window.title.compare");
 
             {#if sleepB}
               <div class="flex flex-col gap-1">
-                <span class="text-[0.5rem] font-bold text-muted-foreground/60">B</span>
+                <span class="text-ui-2xs font-bold text-muted-foreground/60">B</span>
                 <div class="rounded-xl border border-border dark:border-white/[0.06]
-                            bg-white dark:bg-[#14141e] p-2">
+                            bg-surface-1 p-2">
                   <Hypnogram epochs={sleepB.epochs} summary={sleepB.summary}
                              xMin={sleepA ? sleepXMin : undefined} xMax={sleepA ? sleepXMax : undefined} />
                 </div>
@@ -2241,29 +2241,29 @@ useWindowTitle("window.title.compare");
                 { key: "sleep.n3",   a: sleepA.summary.n3_epochs,   b: sleepB.summary.n3_epochs,   color: "#6366f1" },
               ]}
               <div class="rounded-xl border border-border dark:border-white/[0.06]
-                          bg-white dark:bg-[#14141e] overflow-hidden">
+                          bg-surface-1 overflow-hidden">
                 <div class="grid grid-cols-[1fr_60px_60px_50px] gap-2 px-3.5 py-2
-                            border-b border-border dark:border-white/[0.05]
+                            border-b border-border dark:border-white/[0.06]
                             bg-muted/30 dark:bg-white/[0.02]">
-                  <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("sleep.title")}</span>
-                  <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
-                  <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
-                  <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
+                  <SectionHeader>{t("sleep.title")}</SectionHeader>
+                  <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">A</span>
+                  <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">B</span>
+                  <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-right">{t("compare.diff")}</span>
                 </div>
                 {#each stages as st}
                   {@const aPct = sleepA.summary.total_epochs > 0 ? (st.a / sleepA.summary.total_epochs * 100) : 0}
                   {@const bPct = sleepB.summary.total_epochs > 0 ? (st.b / sleepB.summary.total_epochs * 100) : 0}
                   {@const d = aPct - bPct}
                   <div class="grid grid-cols-[1fr_60px_60px_50px] gap-2 px-3.5 py-1.5
-                              border-b border-border/50 dark:border-white/[0.03] last:border-b-0
+                              border-b border-border/50 dark:border-white/[0.04] last:border-b-0
                               items-center">
                     <div class="flex items-center gap-2">
                       <span class="w-2 h-2 rounded-full shrink-0" style="background:{st.color}"></span>
-                      <span class="text-[0.68rem] font-semibold" style="color:{st.color}">{t(st.key)}</span>
+                      <span class="text-ui-base font-semibold" style="color:{st.color}">{t(st.key)}</span>
                     </div>
-                    <span class="text-[0.68rem] tabular-nums text-foreground text-right">{aPct.toFixed(0)}%</span>
-                    <span class="text-[0.68rem] tabular-nums text-foreground text-right">{bPct.toFixed(0)}%</span>
-                    <span class="text-[0.6rem] tabular-nums text-right font-semibold {Math.abs(d) < 0.5 ? 'text-muted-foreground/40' : d > 0 ? 'text-emerald-500' : 'text-red-400'}">
+                    <span class="text-ui-base tabular-nums text-foreground text-right">{aPct.toFixed(0)}%</span>
+                    <span class="text-ui-base tabular-nums text-foreground text-right">{bPct.toFixed(0)}%</span>
+                    <span class="text-ui-sm tabular-nums text-right font-semibold {Math.abs(d) < 0.5 ? 'text-muted-foreground/40' : d > 0 ? 'text-emerald-500' : 'text-red-400'}">
                       {Math.abs(d) < 0.5 ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(0)}`}
                     </span>
                   </div>

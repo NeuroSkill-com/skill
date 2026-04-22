@@ -25,7 +25,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.pitch")}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums">{pitch >= 0 ? "+" : ""}{pitch.toFixed(1)}°</span>
+            <span class="text-ui-sm font-bold tabular-nums">{pitch >= 0 ? "+" : ""}{pitch.toFixed(1)}°</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden relative">
             <div class="absolute top-0 h-full rounded-full transition-all duration-300 bg-sky-400"
@@ -37,7 +37,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.roll")}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums">{roll >= 0 ? "+" : ""}{roll.toFixed(1)}°</span>
+            <span class="text-ui-sm font-bold tabular-nums">{roll >= 0 ? "+" : ""}{roll.toFixed(1)}°</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden relative">
             <div class="absolute top-0 h-full rounded-full transition-all duration-300 bg-indigo-400"
@@ -49,7 +49,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.stillness")}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums" style="color:{stillness > 80 ? '#22c55e' : stillness > 40 ? '#f59e0b' : '#ef4444'}">{stillness.toFixed(0)}</span>
+            <span class="text-ui-sm font-bold tabular-nums" style="color:{stillness > 80 ? '#22c55e' : stillness > 40 ? '#f59e0b' : '#ef4444'}">{stillness.toFixed(0)}</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
             <div class="h-full rounded-full transition-all duration-500 bg-emerald-400" style="width:{stillness}%"></div>
@@ -60,7 +60,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.nods")}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums">{nodCount}</span>
+            <span class="text-ui-sm font-bold tabular-nums">{nodCount}</span>
           </div>
         </div>
       </MetricTooltip>
@@ -68,7 +68,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.shakes")}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums">{shakeCount}</span>
+            <span class="text-ui-sm font-bold tabular-nums">{shakeCount}</span>
           </div>
         </div>
       </MetricTooltip>

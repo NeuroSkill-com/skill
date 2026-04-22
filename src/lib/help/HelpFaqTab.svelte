@@ -19,10 +19,10 @@ const entries = $derived(getFaqContent(getLocale()));
   <HelpSection title={"Frequently Asked Questions"}>
     <div class="flex flex-col divide-y divide-border dark:divide-white/[0.05]
                 rounded-xl border border-border dark:border-white/[0.06]
-                bg-white dark:bg-[#14141e] overflow-hidden">
+                bg-surface-1 overflow-hidden">
       {#each entries as entry}
         <details id={entry.id} class="group px-4 py-3 cursor-pointer scroll-mt-4">
-          <summary class="flex items-center justify-between gap-3 text-[0.78rem]
+          <summary class="flex items-center justify-between gap-3 text-ui-lg
                           font-semibold text-foreground list-none select-none">
             {entry.question}
             <svg class="w-4 h-4 shrink-0 text-muted-foreground transition-transform
@@ -31,7 +31,7 @@ const entries = $derived(getFaqContent(getLocale()));
               <path d="M6 9l6 6 6-6"/>
             </svg>
           </summary>
-          <p class="mt-2 text-[0.75rem] text-muted-foreground leading-relaxed">
+          <p class="mt-2 text-ui-md text-muted-foreground leading-relaxed">
             {entry.answer}
           </p>
         </details>

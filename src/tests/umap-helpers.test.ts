@@ -16,7 +16,7 @@ import {
   randomPositions,
   turboRaw,
   utcToLocalDate,
-} from "$lib/umap-helpers";
+} from "$lib/umap/umap-helpers";
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 

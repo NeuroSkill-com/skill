@@ -10,9 +10,11 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
+import Hypnogram from "$lib/charts/Hypnogram.svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { ConfirmAction } from "$lib/components/ui/confirm-action";
+import { IconExternalLink } from "$lib/components/ui/icons";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
@@ -30,11 +32,8 @@ import {
   pad,
   setupHiDpiCanvas,
 } from "$lib/format";
-import HistoryCalendar from "$lib/HistoryCalendar.svelte";
-import HistoryStatsBar from "$lib/HistoryStatsBar.svelte";
-import Hypnogram from "$lib/Hypnogram.svelte";
-import type { GpsPoint } from "$lib/history/SessionMap.svelte";
-import SessionMap from "$lib/history/SessionMap.svelte";
+import HistoryCalendar from "$lib/history/HistoryCalendar.svelte";
+import HistoryStatsBar from "$lib/history/HistoryStatsBar.svelte";
 import {
   type CalendarOverlayEvent,
   type GridData,
@@ -43,7 +42,7 @@ import {
   renderDayGrid as renderDayGridCanvas,
   renderSparkline,
   type TsAccessor,
-} from "$lib/history-canvas";
+} from "$lib/history/history-canvas";
 import {
   assignLabelRainbowColors,
   dateKey,
@@ -65,7 +64,9 @@ import {
   type SessionEntry,
   sessionColor,
   totalDurationSecs,
-} from "$lib/history-helpers";
+} from "$lib/history/history-helpers";
+import type { GpsPoint } from "$lib/history/SessionMap.svelte";
+import SessionMap from "$lib/history/SessionMap.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { getResolved } from "$lib/stores/theme.svelte";
 import { type HistoryViewMode, hBar, hCbs } from "$lib/stores/titlebar.svelte";
@@ -1536,27 +1537,27 @@ useWindowTitle("window.title.history");
   <!-- ── Labels browser panel ─────────────────────────────────────────────── -->
   {#if showLabels}
     <div class="shrink-0 border-b border-border dark:border-white/[0.06]
-                bg-muted/30 dark:bg-white/[0.01] px-4 py-3 flex flex-col gap-2">
+                bg-muted/30 dark:bg-white/[0.02] px-4 py-3 flex flex-col gap-2">
       <div class="flex items-center gap-2">
-        <span class="text-[0.62rem] font-semibold text-foreground/80">{t("history.labels")} ({allLabels.length})</span>
+        <span class="text-ui-sm font-semibold text-foreground/80">{t("history.labels")} ({allLabels.length})</span>
         <input
           aria-label="Search labels"
           bind:value={labelSearchQuery}
           placeholder={t("common.search")}
-          class="flex-1 h-6 text-[0.62rem] rounded border border-border dark:border-white/[0.08]
+          class="flex-1 h-6 text-ui-sm rounded border border-border dark:border-white/[0.08]
                  bg-background px-2 outline-none focus:ring-1 focus:ring-ring/50" />
         <button onclick={async () => { await invoke("open_label_window"); }}
-                class="text-[0.58rem] font-medium text-primary hover:text-primary/80 transition-colors">
+                class="text-ui-sm font-medium text-violet-600 dark:text-violet-400 hover:text-violet-600/80 transition-colors">
           + {t("history.addLabel")}
         </button>
         <button onclick={() => showLabels = false}
                 aria-label={t("common.close")}
-                class="text-[0.7rem] text-muted-foreground/60 hover:text-foreground">✕</button>
+                class="text-ui-md text-muted-foreground/60 hover:text-foreground">✕</button>
       </div>
       <div class="max-h-32 overflow-y-auto flex flex-col gap-1 scrollbar-thin">
         {#each filteredLabels as label (label.id)}
-          <div class="flex items-center gap-2 text-[0.6rem] rounded px-2 py-1
-                      hover:bg-muted/60 dark:hover:bg-white/[0.03] group">
+          <div class="flex items-center gap-2 text-ui-sm rounded px-2 py-1
+                      hover:bg-muted/60 dark:hover:bg-white/[0.02] group">
             <span class="text-foreground/80 flex-1 truncate">{label.text}</span>
             <span class="text-muted-foreground/40 tabular-nums shrink-0">{fmtTime(label.eeg_start)}</span>
             <button onclick={() => removeLabel(label.id)}
@@ -1565,7 +1566,7 @@ useWindowTitle("window.title.history");
           </div>
         {/each}
         {#if filteredLabels.length === 0}
-          <span class="text-[0.6rem] text-muted-foreground/40 italic px-2">{t("common.noResults")}</span>
+          <span class="text-ui-sm text-muted-foreground/40 italic px-2">{t("common.noResults")}</span>
         {/if}
       </div>
     </div>
@@ -1614,10 +1615,10 @@ useWindowTitle("window.title.history");
 
           <!-- Date header row -->
           <div class="flex items-center gap-2">
-            <span class="text-[0.62rem] font-semibold tracking-widest uppercase text-muted-foreground/70">
+            <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground/70">
               {dateLabel(currentDayKey)}
             </span>
-            <span class="text-[0.52rem] text-muted-foreground/40">
+            <span class="text-ui-xs text-muted-foreground/40">
               {sessions.length} {sessions.length === 1 ? "session" : "sessions"}
             </span>
             {#if dayLoading}
@@ -1629,12 +1630,12 @@ useWindowTitle("window.title.history");
           {#if dayCalendarEvents.length > 0}
             <div class="rounded-md border border-blue-500/20 bg-blue-500/5 px-2.5 py-2">
               <div class="flex flex-wrap items-center gap-1.5">
-                <span class="text-[0.52rem] uppercase tracking-wider text-blue-700/80 dark:text-blue-300/80">Calendar overlay</span>
-                <span class="text-[0.5rem] text-muted-foreground/70">{dayCalendarEvents.length} event{dayCalendarEvents.length === 1 ? "" : "s"}</span>
+                <span class="text-ui-xs uppercase tracking-wider text-blue-700/80 dark:text-blue-300/80">Calendar overlay</span>
+                <span class="text-ui-2xs text-muted-foreground/70">{dayCalendarEvents.length} event{dayCalendarEvents.length === 1 ? "" : "s"}</span>
               </div>
               <div class="mt-1 flex flex-wrap gap-1.5">
                 {#each dayCalendarEvents.slice(0, 6) as ev (ev.id + ev.start_utc)}
-                  <span class="rounded-full border border-blue-500/20 bg-background/70 px-2 py-0.5 text-[0.53rem] text-foreground/80">
+                  <span class="rounded-full border border-blue-500/20 bg-background/70 px-2 py-0.5 text-ui-xs text-foreground/80">
                     {new Date(ev.start_utc * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} {ev.title}
                   </span>
                 {/each}
@@ -1648,12 +1649,12 @@ useWindowTitle("window.title.history");
             {@const anyTs   = sessions.some(s => { const ts = tsCache[s.csv_path]; return ts && ts !== "loading" && (ts as EpochRow[]).length > 0; })}
 
             <div class="rounded-lg border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] overflow-hidden relative">
+                        bg-surface-1 overflow-hidden relative">
               <!-- Hour labels header -->
               <div class="relative h-5 bg-muted/30 dark:bg-white/[0.02] select-none flex">
                 {#each Array(24) as _, hr}
                   <span class="flex-1 text-center text-[6.5px] leading-[20px] tabular-nums
-                               text-muted-foreground/40 border-r border-border/10 dark:border-white/[0.03] last:border-r-0
+                               text-muted-foreground/40 border-r border-border/10 dark:border-white/[0.04] last:border-r-0
                                {hr % 6 === 0 ? 'font-semibold text-muted-foreground/60' : ''}">
                     {String(hr).padStart(2,"0")}
                   </span>
@@ -1686,7 +1687,7 @@ useWindowTitle("window.title.history");
                 {/if}
               </div>
               <!-- Session color legend -->
-              <div class="flex items-center gap-3 px-2.5 py-1 border-t border-border/20 dark:border-white/[0.03]
+              <div class="flex items-center gap-3 px-2.5 py-1 border-t border-border/20 dark:border-white/[0.04]
                           bg-muted/10 dark:bg-white/[0.005]">
                 {#each sessions as session, idx (session.csv_path)}
                   {#if session.session_start_utc}
@@ -1727,7 +1728,7 @@ useWindowTitle("window.title.history");
             </div>
           {:else if dayLoading}
             <div class="rounded-lg border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] p-4 flex items-center justify-center">
+                        bg-surface-1 p-4 flex items-center justify-center">
               <Spinner size="w-4 h-4" class="text-muted-foreground/30" />
             </div>
           {/if}
@@ -1738,8 +1739,8 @@ useWindowTitle("window.title.history");
             {@const dayAgg = dayAggregateMetrics(sessions)}
             {@const dayLblCount = sessions.reduce((a, s) => a + s.labels.length, 0)}
             <div class="rounded-lg border border-border/50 dark:border-white/[0.06]
-                        bg-muted/20 dark:bg-white/[0.01] px-3 py-2
-                        flex items-center gap-4 text-[0.55rem]">
+                        bg-muted/20 dark:bg-white/[0.02] px-3 py-2
+                        flex items-center gap-4 text-ui-xs">
               <div class="flex items-center gap-1">
                 <span class="text-muted-foreground/50">Total:</span>
                 <span class="font-semibold tabular-nums">{fmtDurCompact(dayTotalDur)}</span>
@@ -1772,7 +1773,7 @@ useWindowTitle("window.title.history");
           {#if currentLocalKey && getHealthData(currentLocalKey)}
             {@const hd = getHealthData(currentLocalKey)!}
             <div class="rounded-lg border border-border/50 dark:border-white/[0.06]
-                        bg-muted/20 dark:bg-white/[0.01] px-3 py-2.5
+                        bg-muted/20 dark:bg-white/[0.02] px-3 py-2.5
                         flex flex-col gap-1.5">
               <div class="flex items-center gap-1.5">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1780,11 +1781,11 @@ useWindowTitle("window.title.history");
                      class="w-3 h-3 text-rose-500/70">
                   <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
                 </svg>
-                <span class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground/60">
+                <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground/60">
                   Health
                 </span>
               </div>
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.55rem]">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui-xs">
                 {#if hd.oura_sleep_score != null}
                   <div class="flex items-center gap-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-indigo-500/70"></span>
@@ -1846,11 +1847,11 @@ useWindowTitle("window.title.history");
           {#if dayLoading && sessions.length === 0}
             <div class="flex items-center gap-2 py-4 text-muted-foreground/50">
               <Spinner size="w-3.5 h-3.5" />
-              <span class="text-[0.65rem]">{t("common.loading")}</span>
+              <span class="text-ui-base">{t("common.loading")}</span>
             </div>
           {:else if sessions.length === 0}
             <div class="py-6 text-center">
-              <span class="text-[0.65rem] text-muted-foreground/40 italic">
+              <span class="text-ui-base text-muted-foreground/40 italic">
                 {t("history.noSessions")}
               </span>
             </div>
@@ -1868,9 +1869,9 @@ useWindowTitle("window.title.history");
                 use:inview={() => { renderedRows = new Set([...renderedRows, session.csv_path]); }}
                 class="rounded-lg border overflow-hidden transition-all duration-150
                        {isExpanded
-                         ? 'border-border dark:border-white/[0.1] bg-white dark:bg-[#14141e]'
+                         ? 'border-border dark:border-white/[0.1] bg-surface-1'
                          : isGridHighlighted
-                           ? 'border-primary/40 dark:border-primary/30 bg-primary/[0.06] dark:bg-primary/[0.04] ring-1 ring-primary/20'
+                           ? 'border-violet-500/40 dark:border-violet-500/30 bg-violet-500/[0.06] dark:bg-violet-500/[0.04] ring-1 ring-primary/20'
                            : isHovered
                              ? 'border-border/60 dark:border-white/[0.06] bg-muted/20 dark:bg-white/[0.015]'
                              : 'border-transparent bg-transparent'}"
@@ -1890,7 +1891,7 @@ useWindowTitle("window.title.history");
                     {@const isSelected = compareSelected.includes(session.csv_path)}
                     {@const atLimit = compareSelected.length >= 2 && !isSelected}
                     <div class="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors
-                                {isSelected ? 'bg-primary' : atLimit ? 'border border-border/50 opacity-40' : 'border border-border dark:border-white/20'}">
+                                {isSelected ? 'bg-violet-500' : atLimit ? 'border border-border/50 opacity-40' : 'border border-border dark:border-white/20'}">
                       {#if isSelected}
                         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
                              stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5">
@@ -1902,12 +1903,12 @@ useWindowTitle("window.title.history");
 
                   <span class="w-2 h-2 rounded-full shrink-0" style="background:{color}"></span>
 
-                  <span class="text-[0.68rem] font-semibold text-foreground tabular-nums">
+                  <span class="text-ui-base font-semibold text-foreground tabular-nums">
                     {fmtTimeShort(session.session_start_utc!)}
                     <span class="text-muted-foreground/40 font-normal">→</span>
                     {fmtTimeShort(session.session_end_utc!)}
                   </span>
-                  <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">{dur}</span>
+                  <span class="text-ui-sm text-muted-foreground/60 tabular-nums">{dur}</span>
 
                   <!-- Sparkline - only mounted after the row enters the viewport -->
                   {#if renderedRows.has(session.csv_path) && getTs(session.csv_path)}
@@ -1919,7 +1920,7 @@ useWindowTitle("window.title.history");
                   {/if}
 
                   {#if session.device_name}
-                    <span class="text-[0.56rem] text-muted-foreground/40 truncate min-w-0">
+                    <span class="text-ui-xs text-muted-foreground/40 truncate min-w-0">
                       {session.device_name}
                     </span>
                   {/if}
@@ -1953,7 +1954,7 @@ useWindowTitle("window.title.history");
                   {/if}
 
                   <span class="flex-1"></span>
-                  <span class="text-[0.5rem] text-muted-foreground/30 tabular-nums shrink-0">
+                  <span class="text-ui-2xs text-muted-foreground/30 tabular-nums shrink-0">
                     {fmtSize(session.file_size_bytes)}
                   </span>
 
@@ -1974,37 +1975,37 @@ useWindowTitle("window.title.history");
                     <!-- Stats grid -->
                     <div class="grid grid-cols-3 gap-x-4 gap-y-2">
                       <div class="flex flex-col gap-0.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.startTime")}</span>
-                        <span class="text-[0.65rem] text-foreground tabular-nums">{fmtTime(session.session_start_utc)}</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.startTime")}</span>
+                        <span class="text-ui-base text-foreground tabular-nums">{fmtTime(session.session_start_utc)}</span>
                       </div>
                       <div class="flex flex-col gap-0.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.endTime")}</span>
-                        <span class="text-[0.65rem] text-foreground tabular-nums">{fmtTime(session.session_end_utc)}</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.endTime")}</span>
+                        <span class="text-ui-base text-foreground tabular-nums">{fmtTime(session.session_end_utc)}</span>
                       </div>
                       <div class="flex flex-col gap-0.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.duration")}</span>
-                        <span class="text-[0.65rem] text-foreground">{dur}</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.duration")}</span>
+                        <span class="text-ui-base text-foreground">{dur}</span>
                       </div>
                       <div class="flex flex-col gap-0.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.samples")}</span>
-                        <span class="text-[0.65rem] text-foreground tabular-nums">{fmtSamples(session.total_samples)}</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.samples")}</span>
+                        <span class="text-ui-base text-foreground tabular-nums">{fmtSamples(session.total_samples)}</span>
                       </div>
                       {#if session.device_name}
                         <div class="flex flex-col gap-0.5">
-                          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.device")}</span>
-                          <span class="text-[0.65rem] text-foreground">{session.device_name}</span>
+                          <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.device")}</span>
+                          <span class="text-ui-base text-foreground">{session.device_name}</span>
                         </div>
                       {/if}
                       {#if session.battery_pct != null}
                         <div class="flex flex-col gap-0.5">
-                          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.battery")}</span>
-                          <span class="text-[0.65rem] text-foreground">{session.battery_pct.toFixed(0)}%</span>
+                          <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.battery")}</span>
+                          <span class="text-ui-base text-foreground">{session.battery_pct.toFixed(0)}%</span>
                         </div>
                       {/if}
                       {#if session.avg_snr_db != null}
                         <div class="flex flex-col gap-0.5">
-                          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.snr")}</span>
-                          <span class="text-[0.65rem] text-foreground {session.avg_snr_db >= 10 ? 'text-emerald-500' : session.avg_snr_db >= 0 ? 'text-amber-500' : 'text-red-400'}">{session.avg_snr_db.toFixed(1)} dB</span>
+                          <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.snr")}</span>
+                          <span class="text-ui-base text-foreground {session.avg_snr_db >= 10 ? 'text-emerald-500' : session.avg_snr_db >= 0 ? 'text-amber-500' : 'text-red-400'}">{session.avg_snr_db.toFixed(1)} dB</span>
                         </div>
                       {/if}
                     </div>
@@ -2019,15 +2020,15 @@ useWindowTitle("window.title.history");
                     {#if locationCache[session.csv_path] === "loading"}
                       <div class="flex items-center gap-2 py-1">
                         <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
-                        <span class="text-[0.55rem] text-muted-foreground/40">Loading location...</span>
+                        <span class="text-ui-xs text-muted-foreground/40">Loading location...</span>
                       </div>
                     {:else if session.csv_path in locationCache}
                       {@const gpsPoints = getLocation(session.csv_path) ?? []}
                       <div class="flex flex-col gap-1">
                         {#if gpsPoints.length > 0}
                           <div class="flex items-center gap-1.5">
-                            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">GPS Track</span>
-                            <span class="text-[0.48rem] text-muted-foreground/40">{gpsPoints.length} fix{gpsPoints.length === 1 ? "" : "es"}</span>
+                            <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">GPS Track</span>
+                            <span class="text-ui-2xs text-muted-foreground/40">{gpsPoints.length} fix{gpsPoints.length === 1 ? "" : "es"}</span>
                           </div>
                         {/if}
                         <SessionMap points={gpsPoints} color={color} height="180px" />
@@ -2037,16 +2038,16 @@ useWindowTitle("window.title.history");
                     <!-- HNSW / SQLite embedding count -->
                     {#if embedCountCache[session.csv_path] !== undefined && embedCountCache[session.csv_path] !== "loading" && (embedCountCache[session.csv_path] as number) > 0}
                       <div class="flex items-center gap-1.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">Embeddings</span>
-                        <span class="text-[0.65rem] font-mono tabular-nums text-foreground">{(embedCountCache[session.csv_path] as number).toLocaleString()}</span>
-                        <span class="text-[0.48rem] text-muted-foreground/40">epochs in HNSW/SQLite</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">Embeddings</span>
+                        <span class="text-ui-base font-mono tabular-nums text-foreground">{(embedCountCache[session.csv_path] as number).toLocaleString()}</span>
+                        <span class="text-ui-2xs text-muted-foreground/40">epochs in HNSW/SQLite</span>
                       </div>
                     {/if}
 
                     <!-- Labels (rainbow circles with hover interaction) -->
                     {#if session.labels.length > 0}
                       <div class="flex flex-col gap-1.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">
                           {t("history.labels")}
                         </span>
                         <div class="flex flex-wrap items-center gap-2">
@@ -2080,20 +2081,20 @@ useWindowTitle("window.title.history");
                     {#if sleepCache[session.csv_path] === "loading"}
                       <div class="flex items-center gap-2 py-2">
                         <Spinner size="w-3.5 h-3.5" class="text-muted-foreground/50" />
-                        <span class="text-[0.6rem] text-muted-foreground/50">{t("sleep.title")}...</span>
+                        <span class="text-ui-sm text-muted-foreground/50">{t("sleep.title")}...</span>
                       </div>
                     {:else if sleepCache[session.csv_path] === "short"}
                       <div class="flex items-center gap-1.5 py-1">
-                        <span class="text-[0.55rem] text-muted-foreground/40 italic">🌙 {t("sleep.tooShort")}</span>
+                        <span class="text-ui-xs text-muted-foreground/40 italic">🌙 {t("sleep.tooShort")}</span>
                       </div>
                     {:else if getSleepData(session.csv_path)}
                       {@const sd = getSleepData(session.csv_path)!}
                       <div class="flex flex-col gap-1.5">
-                        <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">
                           {t("sleep.title")}
                         </span>
                         <div class="rounded-lg border border-border dark:border-white/[0.06]
-                                    bg-muted/30 dark:bg-white/[0.01] p-2">
+                                    bg-muted/30 dark:bg-white/[0.02] p-2">
                           <Hypnogram epochs={sd.epochs} summary={sd.summary} />
                         </div>
                       </div>
@@ -2101,17 +2102,17 @@ useWindowTitle("window.title.history");
 
                     <!-- CSV info -->
                     <div class="flex items-center gap-2 rounded-lg border border-border dark:border-white/[0.06]
-                                bg-muted/30 dark:bg-white/[0.01] px-2.5 py-2">
+                                bg-muted/30 dark:bg-white/[0.02] px-2.5 py-2">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                            class="w-3 h-3 shrink-0 text-muted-foreground/50">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
-                      <span class="text-[0.58rem] font-mono text-muted-foreground/60 truncate min-w-0 flex-1">
+                      <span class="text-ui-sm font-mono text-muted-foreground/60 truncate min-w-0 flex-1">
                         {session.csv_file}
                       </span>
-                      <span class="text-[0.52rem] text-muted-foreground/40 tabular-nums shrink-0">
+                      <span class="text-ui-xs text-muted-foreground/40 tabular-nums shrink-0">
                         {fmtSize(session.file_size_bytes)}
                       </span>
                     </div>
@@ -2127,7 +2128,7 @@ useWindowTitle("window.title.history");
                           oncancel={() => { confirmDelete = null; }}
                         />
                       {:else}
-                        <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
+                        <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_label_window_at", { ts: session.session_start_utc ?? 0 }); }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -2136,18 +2137,13 @@ useWindowTitle("window.title.history");
                           </svg>
                           {t("history.addLabel")}
                         </Button>
-                        <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
+                        <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_session_window", { csvPath: session.csv_path }); }}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                               class="w-3 h-3 mr-1">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                          </svg>
+                          <IconExternalLink class="w-3 h-3 mr-1" />
                           {t("history.popOut")}
                         </Button>
                         <Button size="sm" variant="ghost"
-                                class="text-[0.62rem] h-6 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                class="text-ui-sm h-6 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); confirmDelete = session.csv_path; }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -2175,17 +2171,17 @@ useWindowTitle("window.title.history");
            style="left:{gridTooltip.x + 12}px; top:{gridTooltip.y - 8}px;">
         <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
                     shadow-xl px-2.5 py-1.5 text-popover-foreground min-w-[80px]">
-          <span class="block text-[0.62rem] font-bold tabular-nums">{gridTooltip.time}</span>
+          <span class="block text-ui-sm font-bold tabular-nums">{gridTooltip.time}</span>
           {#if gridTooltip.values.length > 0}
             {#each gridTooltip.values as v}
               <div class="flex items-center gap-1.5 mt-0.5">
                 <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{v.color}"></span>
-                <span class="text-[0.5rem] text-muted-foreground/70">{v.label}:</span>
-                <span class="text-[0.5rem] font-medium truncate max-w-[120px]">{v.val}</span>
+                <span class="text-ui-2xs text-muted-foreground/70">{v.label}:</span>
+                <span class="text-ui-2xs font-medium truncate max-w-[120px]">{v.val}</span>
               </div>
             {/each}
           {:else}
-            <span class="text-[0.48rem] text-muted-foreground/40 italic">no data</span>
+            <span class="text-ui-2xs text-muted-foreground/40 italic">no data</span>
           {/if}
         </div>
       </div>
@@ -2195,14 +2191,14 @@ useWindowTitle("window.title.history");
     {#if screenshotPreview}
       <div class="fixed pointer-events-none z-[110]"
            style="left:{screenshotPreview.x + 16}px; top:{screenshotPreview.y + 16}px;">
-        <div class="rounded-lg overflow-hidden border border-border dark:border-white/[0.12]
+        <div class="rounded-lg overflow-hidden border border-border dark:border-white/[0.10]
                     shadow-2xl bg-popover">
           <img src={screenshotPreview.src}
                alt="screenshot preview"
                class="block max-w-[220px] max-h-[160px] object-contain bg-black/5 dark:bg-white/5" />
           {#if screenshotPreview.title}
             <div class="px-2 py-1 border-t border-border/30 dark:border-white/[0.06]">
-              <span class="text-[0.48rem] text-muted-foreground/70 truncate block max-w-[210px]">
+              <span class="text-ui-2xs text-muted-foreground/70 truncate block max-w-[210px]">
                 {screenshotPreview.title}
               </span>
             </div>
@@ -2217,7 +2213,7 @@ useWindowTitle("window.title.history");
            style="left:{labelTooltip.x}px; top:{labelTooltip.y - 10}px; transform: translate(-50%, -100%);">
         <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
                     shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
-          <span class="block text-[0.6rem] font-medium leading-tight truncate">{labelTooltip.text}</span>
+          <span class="block text-ui-sm font-medium leading-tight truncate">{labelTooltip.text}</span>
           <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
             {labelTooltip.time}{#if labelTooltip.timeEnd} - {labelTooltip.timeEnd}{/if}
           </span>
@@ -2231,12 +2227,12 @@ useWindowTitle("window.title.history");
   </div><!-- end scroll area -->
 
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->
-  <div class="px-4 py-2 border-t border-border dark:border-white/[0.07] shrink-0
+  <div class="px-4 py-2 border-t border-border dark:border-white/[0.06] shrink-0
               flex items-center justify-between">
-    <span class="text-[0.58rem] text-muted-foreground/50">
+    <span class="text-ui-sm text-muted-foreground/50">
       {t("history.totalSessions", { n: historyStats?.total_sessions ?? sessions.length })}
     </span>
-    <span class="text-[0.58rem] text-muted-foreground/50 tabular-nums">
+    <span class="text-ui-sm text-muted-foreground/50 tabular-nums">
       {fmtSize(sessions.reduce((a, s) => a + s.file_size_bytes, 0))} {t("history.totalSize")}
     </span>
   </div>

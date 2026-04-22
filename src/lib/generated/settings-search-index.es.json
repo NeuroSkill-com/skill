@@ -12,12 +12,6 @@
     "desc": "Aumente el contraste del borde y del texto para una mejor visibilidad."
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "Tamaño de fuente",
-    "desc": "Ajuste el tamaño del texto de la interfaz de usuario. Afecta a todo el texto de la aplicación."
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "Calibración completa",
@@ -78,36 +72,6 @@
     "desc": "Seleccione una configuración de calibración según su objetivo, edad y caso de uso. La configuración aún se puede ajustar a continuación."
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "Etiquetas de acción",
-    "desc": "Nombres que se muestran durante cada fase y se almacenan como etiquetas de EEG."
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "Iteraciones",
-    "desc": "Número de ciclos completos de Acción 1 → Descanso → Acción 2 → Descanso."
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse, MW75, Hermes, Ganglión, IDUN, Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "EPOC, Insight, Flex, MN8 a través del iniciador local"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "Serie USB",
-    "desc": "Llave OpenBCI Cyton / CytonDaisy"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Modelo de incrustación"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "Reiniciar después de (segundos)"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "Calidad de construcción",
-    "desc": "Ancho del haz durante la construcción del gráfico. Más alto = mejor gráfico, inserciones más lentas."
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "Conectividad",
-    "desc": "Cada nodo mantiene hasta 2 × M aristas. Mayor = mejor recuperación, más RAM."
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "Precisión GPU",
-    "desc": "Media precisión (f16) es más rápida, precisión completa (f32) es más precisa"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "Embedding en segundo plano",
-    "desc": "Embeber épocas no procesadas automáticamente cuando el dispositivo está inactivo"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "Volver a insertar",
-    "desc": "Vuelva a codificar todas las grabaciones de sesiones EXG sin procesar con el motor del modelo seleccionado y reconstruya los índices HNSW."
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "Dispositivo de inferencia",
-    "desc": "Dónde se ejecuta la inferencia de IA. La GPU es más rápida; la CPU funciona en cualquier máquina sin presionar la VRAM. Reinicia el servidor LLM tras cambiar."
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "Editar archivo",
+    "desc": "Permitir ediciones quirúrgicas de búsqueda y reemplazo de archivos existentes."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "Ubicación",
+    "desc": "Permitir búsquedas aproximadas de países, regiones, ciudades y zonas horarias basadas en IP."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "Llamadas máximas por ronda",
     "desc": "Cuántas herramientas puede invocar el modelo en una sola ronda."
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "Rondas máximas",
     "desc": "Cuántos saltos de pensamiento → herramienta → pensamiento puede realizar el modelo por mensaje."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "leer archivo",
+    "desc": "Permitir la lectura de archivos de texto. Los archivos grandes se paginan con desplazamiento/límite."
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "Habilidades del agente",
+    "desc": "Las habilidades proporcionan instrucciones especializadas que el LLM puede cargar según demanda. Alterna habilidades individuales para controlar cuáles están disponibles en el chat."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "Sincronización al iniciar",
     "desc": "Obtenga siempre las últimas habilidades cuando se inicie la aplicación"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "caché web",
     "desc": "Almacene en caché la búsqueda web y obtenga resultados en el disco para evitar llamadas de red redundantes."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "Búsqueda web",
+    "desc": "Permitir recuperar el cuerpo de texto sin formato de una página HTTP(S) pública."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "búsqueda web",
+    "desc": "Busque en la web utilizando el proveedor de búsqueda configurado."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "Escribir archivo",
+    "desc": "Permitir crear o sobrescribir archivos. Los directorios principales se crean automáticamente."
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "Etiquetas de acción",
+    "desc": "Nombres que se muestran durante cada fase y se almacenan como etiquetas de EEG."
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "Seguimiento de ventana activa",
     "desc": "Registre qué aplicación y ventana están enfocadas. Almacenado localmente en Activity.sqlite, nunca cargado."
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "Tamaño de fuente",
+    "desc": "Ajuste el tamaño del texto de la interfaz de usuario. Afecta a todo el texto de la aplicación."
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "Proveedor de geolocalización",
     "desc": "Elija cómo la app resuelve su ubicación para los metadatos de sesión. «Desactivado» desactiva la geolocalización, «Local» usa el GPS del dispositivo y «Remoto» consulta un servicio externo."
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "Dispositivo de inferencia",
+    "desc": "Dónde se ejecuta la inferencia de IA. La GPU es más rápida; la CPU funciona en cualquier máquina sin presionar la VRAM. Reinicia el servidor LLM tras cambiar."
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "Seguimiento de la actividad del teclado y el mouse",
     "desc": "Registre cuándo se utilizan el teclado y el mouse, por segundo. No se requieren permisos especiales del sistema operativo. Almacenado localmente en Activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "Iteraciones",
+    "desc": "Número de ciclos completos de Acción 1 → Descanso → Acción 2 → Descanso."
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglión, IDUN, Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 a través del iniciador local"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "Serie USB",
+    "desc": "Llave OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "Host de enlace",
     "desc": "El modo LAN expone la API a todos los dispositivos de su red. Se requiere reinicio."
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "Default Token",
     "desc": "Built-in admin token used by the app. Cannot be deleted."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "Editar archivo",
-    "desc": "Permitir ediciones quirúrgicas de búsqueda y reemplazo de archivos existentes."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "Ubicación",
-    "desc": "Permitir búsquedas aproximadas de países, regiones, ciudades y zonas horarias basadas en IP."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "leer archivo",
-    "desc": "Permitir la lectura de archivos de texto. Los archivos grandes se paginan con desplazamiento/límite."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "Habilidades del agente",
-    "desc": "Las habilidades proporcionan instrucciones especializadas que el LLM puede cargar según demanda. Alterna habilidades individuales para controlar cuáles están disponibles en el chat."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "Búsqueda web",
-    "desc": "Permitir recuperar el cuerpo de texto sin formato de una página HTTP(S) pública."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "búsqueda web",
-    "desc": "Busque en la web utilizando el proveedor de búsqueda configurado."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "Escribir archivo",
-    "desc": "Permitir crear o sobrescribir archivos. Los directorios principales se crean automáticamente."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "gatitotts",
-    "desc": "Modelo ONNX compacto, rápido en cualquier CPU, solo en inglés."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "GGUF LLM backbone with NeuCodec decoder. Clone any voice; supports English, German, French, Spanish."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "Precargar el motor al arrancar",
-    "desc": "Calienta el motor activo en segundo plano cuando se inicia la aplicación"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "Requiere hablar en PATH",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "Enfriamiento de la GPU",
-    "desc": "Milisegundos de pausa entre épocas de entrenamiento. 0 = rendimiento máximo de GPU. Aumente para reducir la utilización de GPU y dejar espacio para otras tareas."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "Frecuencia de muestreo negativa",
-    "desc": "Número de pares aleatorios de no vecinos extraídos por borde positivo en cada época. Mayor = separación más fuerte, entrenamiento más lento."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "Épocas de optimización",
-    "desc": "Número de iteraciones de descenso de gradiente. Más épocas = diseño más fino pero cálculo más lento."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k-vecinos más cercanos",
-    "desc": "Número de vecinos más cercanos utilizados para construir el gráfico KNN. Los valores más pequeños preservan más detalles locales; los valores más grandes capturan una estructura más global."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "Repulsión",
-    "desc": "Controla la fuerza con la que se separan los puntos no vecinos. Los valores más altos producen grupos más separados entre las sesiones A y B."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "Tiempo de espera de entrenamiento",
-    "desc": "Tiempo máximo para el optimizador UMAP. El entrenamiento se detiene antes de tiempo si se alcanza este límite."
   },
   {
     "tab": "updates",

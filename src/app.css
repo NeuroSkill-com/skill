@@ -35,6 +35,24 @@
   --color-border:               var(--border);
   --color-input:                var(--input);
   --color-ring:                 var(--ring);
+  --color-success:              var(--color-success);
+  --color-warning:              var(--color-warning);
+  --color-danger:               var(--color-danger);
+  --color-info:                 var(--color-info);
+
+  /* ── Surface layers ── */
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  /* ── UI type scale ── */
+  --text-ui-2xs: 0.5rem;     /* 8px  — micro metadata, axis labels           */
+  --text-ui-xs:  0.56rem;    /* 9px  — section headers, small badges, ON/OFF */
+  --text-ui-sm:  0.62rem;    /* 10px — descriptions, helper text              */
+  --text-ui-base: 0.68rem;   /* 11px — input labels, chip buttons, status     */
+  --text-ui-md:  0.75rem;    /* 12px — primary form labels                    */
+  --text-ui-lg:  0.82rem;    /* 13px — card / section headings                */
+  --text-ui-xl:  0.95rem;    /* 15px — page-level titles                      */
 }
 
 /* ── Light theme (day) ─────────────────────────────────────────────────────── */
@@ -60,12 +78,32 @@
   --input:                oklch(0.922 0 0);
   --ring:                 oklch(0.708 0 0);
 
+  /* ── Semantic status tokens ── */
+  --color-success:  oklch(0.723 0.219 149.6);   /* green-500 */
+  --color-warning:  oklch(0.795 0.184 86.0);     /* yellow-500 */
+  --color-danger:   oklch(0.637 0.237 25.3);     /* red-500 */
+  --color-neutral:  oklch(0.704 0.04 256.8);     /* slate-400 */
+  --color-info:     oklch(0.623 0.214 259.1);    /* blue-500 */
+
   /* ── Canvas chart tokens (read by EegChart via getComputedStyle) ── */
   --chart-bg:       #f8fafc;
   --chart-bg-strip: #f1f5f9;
   --chart-grid:     rgba(0, 0, 0, 0.07);
   --chart-baseline: rgba(0, 0, 0, 0.12);
   --chart-label:    rgba(0, 0, 0, 0.38);
+
+  /* ── Surface layers (light) ── */
+  --surface-1: #ffffff;         /* card / elevated bg       */
+  --surface-2: #f4f4f8;         /* input / muted bg         */
+  --surface-3: #eeeef2;         /* inset / dim bg           */
+
+  /* ── Dark-mode border / overlay tokens ── */
+  --border-subtle:   rgba(255, 255, 255, 0.06);
+  --border-strong:   rgba(255, 255, 255, 0.10);
+  --divide-subtle:   rgba(255, 255, 255, 0.05);
+  --overlay-subtle:  rgba(255, 255, 255, 0.02);
+  --overlay-muted:   rgba(255, 255, 255, 0.04);
+  --overlay-elevated: rgba(255, 255, 255, 0.06);
 
   --scrollbar-thumb:       color-mix(in oklab, var(--foreground) 24%, transparent);
   --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 36%, transparent);
@@ -93,6 +131,18 @@
   --border:               oklch(1 0 0 / 10%);
   --input:                oklch(1 0 0 / 15%);
   --ring:                 oklch(0.556 0 0);
+
+  /* ── Surface layers (dark) ── */
+  --surface-1: #14141e;
+  --surface-2: #1a1a28;
+  --surface-3: #111118;
+
+  /* ── Semantic status tokens ── */
+  --color-success:  oklch(0.723 0.219 149.6);
+  --color-warning:  oklch(0.795 0.184 86.0);
+  --color-danger:   oklch(0.704 0.191 22.2);    /* lighter red for dark mode */
+  --color-neutral:  oklch(0.704 0.04 256.8);
+  --color-info:     oklch(0.623 0.214 259.1);
 
   /* ── Canvas chart tokens ── */
   --chart-bg:       #09090b;
@@ -127,6 +177,16 @@
   --input:                oklch(0 0 0);
   --ring:                 oklch(0.40 0.25 265);
 
+  --color-success:  oklch(0.60 0.25 149.6);
+  --color-warning:  oklch(0.70 0.22 86.0);
+  --color-danger:   oklch(0.50 0.30 25.0);
+  --color-neutral:  oklch(0.50 0.04 256.8);
+  --color-info:     oklch(0.50 0.25 262.9);
+
+  --surface-1: #ffffff;
+  --surface-2: #f0f0f0;
+  --surface-3: #e0e0e0;
+
   --chart-bg:       #ffffff;
   --chart-bg-strip: #f0f0f0;
   --chart-grid:     rgba(0, 0, 0, 0.25);
@@ -158,6 +218,16 @@
   --border:               oklch(1 0 0);
   --input:                oklch(1 0 0);
   --ring:                 oklch(0.70 0.25 265);
+
+  --color-success:  oklch(0.75 0.25 149.6);
+  --color-warning:  oklch(0.80 0.22 86.0);
+  --color-danger:   oklch(0.70 0.30 25.0);
+  --color-neutral:  oklch(0.80 0.04 256.8);
+  --color-info:     oklch(0.70 0.25 262.9);
+
+  --surface-1: #0a0a0a;
+  --surface-2: #141418;
+  --surface-3: #080808;
 
   --chart-bg:       #000000;
   --chart-bg-strip: #0a0a0a;
@@ -283,6 +353,14 @@
   .high-contrast [class*="divide-border"] {
     border-color: var(--border) !important;
   }
+}
+
+/* ── Reusable dark-mode border / divide helpers ────────────────────────────── */
+@layer utilities {
+  .border-subtle   { border-color: var(--border); }
+  .dark .border-subtle   { border-color: var(--border-subtle); }
+  .divide-subtle > :not(:first-child) { border-color: var(--border); }
+  .dark .divide-subtle > :not(:first-child) { border-color: var(--divide-subtle); }
 }
 
 /* ── Increased contrast — respect macOS "Increase contrast" setting ─────────── */

@@ -13,7 +13,7 @@ import {
   simPct,
   simWidth,
   turboColor,
-} from "$lib/search-types";
+} from "$lib/search/search-types";
 
 describe("distColor", () => {
   it("returns green for near-zero distance", () => {

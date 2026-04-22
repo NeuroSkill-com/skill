@@ -65,13 +65,13 @@ const sections = $derived(getHelpContent("settings", getLocale()));
 
     <!-- Platform permission matrix -->
     <div class="rounded-xl border border-border dark:border-white/[0.06]
-                bg-white dark:bg-[#14141e] overflow-hidden">
+                bg-surface-1 overflow-hidden">
       <div class="px-4 pt-3 pb-2">
-        <span class="text-[0.78rem] font-semibold text-foreground">
+        <span class="text-ui-lg font-semibold text-foreground">
           Permission matrix
         </span>
       </div>
-      <table class="w-full text-[0.72rem] border-t border-border dark:border-white/[0.05]">
+      <table class="w-full text-ui-md border-t border-border dark:border-white/[0.06]">
         <thead>
           <tr class="divide-x divide-border dark:divide-white/[0.05]
                      bg-muted/40 dark:bg-white/[0.02]">
@@ -81,13 +81,13 @@ const sections = $derived(getHelpContent("settings", getLocale()));
             <th class="px-3 py-2 text-center font-semibold text-muted-foreground">Windows</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border dark:divide-white/[0.04]">
+        <tbody class="divide-y divide-border dark:divide-white/[0.05]">
           {#each [
             ["Active window (name/path)", "✅ None", "✅ xdotool", "✅ None"],
             ["Window title", "⚠️ May be empty (sandbox)", "✅ xprop", "✅ None"],
             ["Keyboard & mouse timestamps", "🔑 Accessibility", "✅ libxtst", "✅ None"],
           ] as [feat, mac, linux, win]}
-            <tr class="divide-x divide-border dark:divide-white/[0.04]">
+            <tr class="divide-x divide-border dark:divide-white/[0.05]">
               <td class="px-3 py-2 text-foreground/80">{feat}</td>
               <td class="px-3 py-2 text-center text-muted-foreground">{mac}</td>
               <td class="px-3 py-2 text-center text-muted-foreground">{linux}</td>
@@ -96,8 +96,8 @@ const sections = $derived(getHelpContent("settings", getLocale()));
           {/each}
         </tbody>
       </table>
-      <div class="px-4 py-2.5 border-t border-border dark:border-white/[0.05]
-                  text-[0.64rem] text-muted-foreground/60 flex gap-3">
+      <div class="px-4 py-2.5 border-t border-border dark:border-white/[0.06]
+                  text-ui-base text-muted-foreground/60 flex gap-3">
         <span>✅ No permission needed</span>
         <span>⚠️ Best-effort</span>
         <span>🔑 OS permission required — degrades silently if absent</span>

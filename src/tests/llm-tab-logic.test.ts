@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { fitBadgeClass, fitBadgeIcon, fitBadgeLabel } from "$lib/llm-tab-logic";
+import { fitBadgeClass, fitBadgeIcon, fitBadgeLabel } from "$lib/llm/llm-tab-logic";
 
 describe("fitBadgeClass", () => {
   it("returns emerald for perfect", () => {

@@ -12,8 +12,8 @@
 // - buildDisplayGraph with new node fields
 
 import { describe, expect, it } from "vitest";
-import { buildDisplayGraph, serialiseNodesForBackend } from "$lib/search-interactive-logic";
-import type { GraphEdge, GraphNode } from "$lib/search-types";
+import { buildDisplayGraph, serialiseNodesForBackend } from "$lib/search/search-interactive-logic";
+import type { GraphEdge, GraphNode } from "$lib/search/search-types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -286,7 +286,7 @@ useWindowTitle("window.title.labels");
       <div class="relative flex-1 flex items-center">
         <!-- Spinner (semantic) or magnifier icon -->
         {#if semanticSearching}
-          <div class="absolute left-2.5 w-3.5 h-3.5 text-violet-500 pointer-events-none">
+          <div class="absolute left-2.5 w-3.5 h-3.5 text-violet-600 dark:text-violet-400 pointer-events-none">
             <Spinner size="w-3.5 h-3.5" />
           </div>
         {:else}
@@ -313,13 +313,13 @@ useWindowTitle("window.title.labels");
           placeholder={searchMode === "semantic"
             ? t("labels.search.semanticPlaceholder")
             : t("labels.searchPlaceholder")}
-          class="w-full pl-8 pr-7 py-1.5 text-[0.78rem] rounded-lg
+          class="w-full pl-8 pr-7 py-1.5 text-ui-lg rounded-lg
                  border bg-muted/30 dark:bg-white/[0.04]
                  text-foreground placeholder:text-muted-foreground/50
                  focus:outline-none focus:ring-2 transition-all
                  {searchMode === 'semantic'
-                   ? 'border-violet-400/40 dark:border-violet-500/30 focus:ring-violet-500/30'
-                   : 'border-border dark:border-white/[0.09] focus:ring-ring/30'}"
+                   ? 'border-violet-500/40 dark:border-violet-500/30 focus:ring-violet-500/30'
+                   : 'border-border dark:border-white/[0.08] focus:ring-ring/30'}"
         />
         {#if search}
           <button
@@ -339,13 +339,13 @@ useWindowTitle("window.title.labels");
 
       <!-- Mode segmented toggle -->
       <div class="flex rounded-md border border-border dark:border-white/[0.1]
-                  overflow-hidden text-[0.63rem] font-semibold shrink-0">
+                  overflow-hidden text-ui-sm font-semibold shrink-0">
         <button
           onclick={() => { searchMode = "exact"; semanticResults = []; semanticError = ""; }}
           title={t("labels.search.exactTitle")}
           class="px-2.5 py-1 transition-colors leading-none
                  {searchMode === 'exact'
-                   ? 'bg-primary text-primary-foreground'
+                   ? 'bg-violet-600 text-white'
                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
           {t("labels.search.exact")}
         </button>
@@ -372,18 +372,18 @@ useWindowTitle("window.title.labels");
     <!-- Semantic mode: error / hint row -->
     {#if searchMode === "semantic"}
       {#if semanticError}
-        <p class="text-[0.62rem] text-destructive/80 px-0.5">
+        <p class="text-ui-sm text-destructive/80 px-0.5">
           {semanticError.includes("not initialized")
             ? t("labels.search.noIndex")
             : semanticError}
         </p>
       {:else if search.trim() && !semanticSearching && semanticResults.length === 0 && !semanticError}
         <!-- Triggered after a completed search with 0 results -->
-        <p class="text-[0.62rem] text-muted-foreground/50 px-0.5">
+        <p class="text-ui-sm text-muted-foreground/50 px-0.5">
           {t("labels.search.noResults", { q: search.trim() })}
         </p>
       {:else if !search.trim()}
-        <p class="text-[0.58rem] text-muted-foreground/40 px-0.5 select-none">
+        <p class="text-ui-sm text-muted-foreground/40 px-0.5 select-none">
           {t("labels.search.semanticHint")}
         </p>
       {/if}
@@ -400,11 +400,11 @@ useWindowTitle("window.title.labels");
           <line x1="12" y1="9" x2="12" y2="13"/>
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <span class="text-[0.72rem] font-semibold text-amber-600 dark:text-amber-400">
+        <span class="text-ui-md font-semibold text-amber-600 dark:text-amber-400">
           {t("labels.reindex.title")}
         </span>
       </div>
-      <p class="text-[0.62rem] text-amber-600/80 dark:text-amber-400/80 leading-relaxed">
+      <p class="text-ui-sm text-amber-600/80 dark:text-amber-400/80 leading-relaxed">
         {t("labels.reindex.desc", {
           stale: String(embeddingStatus.stale),
           total: String(embeddingStatus.total),
@@ -412,11 +412,11 @@ useWindowTitle("window.title.labels");
       </p>
       {#if Object.keys(embeddingStatus.models).length > 1}
         <div class="flex flex-wrap gap-1.5 items-center">
-          <span class="text-[0.58rem] text-amber-600/60 dark:text-amber-400/60 font-medium">
+          <span class="text-ui-sm text-amber-600/60 dark:text-amber-400/60 font-medium">
             {t("labels.reindex.models")}
           </span>
           {#each Object.entries(embeddingStatus.models) as [model, count]}
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.55rem] font-semibold
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-ui-xs font-semibold
                          {model === embeddingStatus.current_model
                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
                            : 'bg-muted text-muted-foreground/70 border border-border dark:border-white/[0.08]'}">
@@ -426,10 +426,10 @@ useWindowTitle("window.title.labels");
         </div>
       {/if}
       <div class="flex gap-2 mt-1">
-        <Button size="sm" onclick={doReembed} disabled={reembedding} class="text-[0.62rem] h-7 px-3">
+        <Button size="sm" onclick={doReembed} disabled={reembedding} class="text-ui-sm h-7 px-3">
           {reembedding ? t("labels.reindex.running") : t("labels.reindex.btn")}
         </Button>
-        <Button size="sm" variant="ghost" onclick={() => { reembedDismissed = true; }} class="text-[0.62rem] h-7 px-3 text-muted-foreground">
+        <Button size="sm" variant="ghost" onclick={() => { reembedDismissed = true; }} class="text-ui-sm h-7 px-3 text-muted-foreground">
           {t("common.dismiss")}
         </Button>
       </div>
@@ -437,17 +437,17 @@ useWindowTitle("window.title.labels");
   {/if}
 
   {#if reembedDone}
-    <p class="text-[0.68rem] px-4 py-1.5 {reembedDone.includes('failed') ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">{reembedDone}</p>
+    <p class="text-ui-base px-4 py-1.5 {reembedDone.includes('failed') ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">{reembedDone}</p>
   {/if}
 
   {#if errorMsg}
-    <p class="text-[0.7rem] text-destructive px-4 py-1">{errorMsg}</p>
+    <p class="text-ui-md text-destructive px-4 py-1">{errorMsg}</p>
   {/if}
 
   <!-- ── Label list ─────────────────────────────────────────────────────────── -->
   <div class="flex-1 overflow-y-auto min-h-0">
     {#if loading}
-      <div class="flex items-center justify-center gap-2 py-16 text-muted-foreground/60 text-[0.78rem]">
+      <div class="flex items-center justify-center gap-2 py-16 text-muted-foreground/60 text-ui-lg">
         <Spinner size="w-4 h-4" />
         {t("labels.loading")}
       </div>
@@ -463,12 +463,12 @@ useWindowTitle("window.title.labels");
           </svg>
         </div>
         {#if labels.length === 0}
-          <p class="text-[0.8rem] font-medium text-foreground/70">{t("labels.noLabels")}</p>
-          <p class="text-[0.68rem] text-muted-foreground/50 max-w-xs leading-relaxed">
+          <p class="text-ui-lg font-medium text-foreground/70">{t("labels.noLabels")}</p>
+          <p class="text-ui-base text-muted-foreground/50 max-w-xs leading-relaxed">
             {t("labels.noLabelsHint")}
           </p>
         {:else}
-          <p class="text-[0.8rem] font-medium text-foreground/70">
+          <p class="text-ui-lg font-medium text-foreground/70">
             {t("labels.search.noResults", { q: search.trim() })}
           </p>
         {/if}
@@ -490,8 +490,8 @@ useWindowTitle("window.title.labels");
                     if (e.key === "Escape") cancelEdit();
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit(label.id);
                   }}
-                  class="w-full px-2.5 py-1.5 text-[0.78rem] rounded-md
-                        border border-primary/40
+                  class="w-full px-2.5 py-1.5 text-ui-lg rounded-md
+                        border border-violet-500/40
                          bg-background text-foreground
                         focus:outline-none focus:ring-2 focus:ring-ring/30"
                   use:focusOnMount
@@ -504,7 +504,7 @@ useWindowTitle("window.title.labels");
                     if (e.key === "Escape") cancelEdit();
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit(label.id);
                   }}
-                  class="w-full px-2.5 py-1.5 text-[0.72rem] rounded-md
+                  class="w-full px-2.5 py-1.5 text-ui-md rounded-md
                          border border-border dark:border-white/[0.08]
                          bg-background text-foreground placeholder:text-muted-foreground/40
                         focus:outline-none focus:ring-1 focus:ring-ring/30
@@ -512,9 +512,9 @@ useWindowTitle("window.title.labels");
                   style="min-height: 80px"
                 ></textarea>
                 <div class="flex gap-2 justify-end">
-                  <Button variant="ghost" size="sm" class="h-6 text-[0.68rem]"
+                  <Button variant="ghost" size="sm" class="h-6 text-ui-base"
                           onclick={cancelEdit}>{t("common.cancel")}</Button>
-                  <Button size="sm" class="h-6 text-[0.68rem]"
+                  <Button size="sm" class="h-6 text-ui-base"
                           disabled={savingId === label.id || !editText.trim()}
                           onclick={() => saveEdit(label.id)}>
                     {savingId === label.id ? t("common.saving") : t("labels.saveEdit")}
@@ -538,12 +538,12 @@ useWindowTitle("window.title.labels");
               <div class="flex items-start gap-2">
                 <!-- Label text + optional context -->
                 <div class="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <p class="text-[0.8rem] text-foreground leading-snug">{label.text}</p>
+                  <p class="text-ui-lg text-foreground leading-snug">{label.text}</p>
                   {#if label.context}
                     {@const preview = label.context.slice(0, 200)}
                     {@const isTruncated = label.context.length > 200}
                     <details class="group/ctx">
-                      <summary class="list-none cursor-pointer text-[0.68rem]
+                      <summary class="list-none cursor-pointer text-ui-base
                                       text-muted-foreground/55 italic leading-snug
                                       hover:text-muted-foreground/80 transition-colors select-none">
                         {preview}{isTruncated ? "…" : ""}
@@ -555,7 +555,7 @@ useWindowTitle("window.title.labels");
                         {/if}
                       </summary>
                       {#if isTruncated}
-                        <p class="mt-1 text-[0.68rem] text-muted-foreground/55 italic
+                        <p class="mt-1 text-ui-base text-muted-foreground/55 italic
                                   leading-relaxed whitespace-pre-wrap">
                           {label.context}
                         </p>
@@ -601,7 +601,7 @@ useWindowTitle("window.title.labels");
               </div>  <!-- /flex items-start gap-2 -->
 
               <!-- Metadata row -->
-              <div class="flex items-center gap-3 text-[0.65rem] text-muted-foreground/60">
+              <div class="flex items-center gap-3 text-ui-base text-muted-foreground/60">
                 <span>{formatDate(label.created_at)}</span>
                 <span>·</span>
                 <span>{t("labels.duration")}: {formatDuration(label.eeg_start, label.eeg_end)}</span>
@@ -610,7 +610,7 @@ useWindowTitle("window.title.labels");
                 {#if distanceMap.has(label.id)}
                   {@const dist = distanceMap.get(label.id)!}
                   <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full
-                               text-[0.55rem] font-semibold {simColor(dist)}"
+                               text-ui-xs font-semibold {simColor(dist)}"
                         title="{t('labels.search.simTitle')}: {simPct(dist)}% (dist {dist.toFixed(3)})">
                     <!-- Sparkle icon -->
                     <svg viewBox="0 0 10 10" fill="currentColor" class="w-2 h-2 shrink-0 opacity-80">
@@ -624,7 +624,7 @@ useWindowTitle("window.title.labels");
                 <button
                   onclick={() => viewSession(label)}
                   class="text-blue-500/80 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300
-                         underline underline-offset-2 text-[0.65rem] transition-colors"
+                         underline underline-offset-2 text-ui-base transition-colors"
                 >
                   {t("search.viewSession")}
                 </button>
@@ -641,19 +641,19 @@ useWindowTitle("window.title.labels");
           <button
             onclick={() => page = Math.max(0, page - 1)}
             disabled={page === 0}
-            class="px-3 py-1 text-[0.65rem] rounded-md border border-border dark:border-white/[0.08]
+            class="px-3 py-1 text-ui-base rounded-md border border-border dark:border-white/[0.08]
                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
                    disabled:opacity-30 disabled:cursor-not-allowed"
           >← {t("common.prev")}</button>
 
-          <span class="text-[0.65rem] tabular-nums text-muted-foreground">
+          <span class="text-ui-base tabular-nums text-muted-foreground">
             {page + 1} / {totalPages}
           </span>
 
           <button
             onclick={() => page = Math.min(totalPages - 1, page + 1)}
             disabled={page >= totalPages - 1}
-            class="px-3 py-1 text-[0.65rem] rounded-md border border-border dark:border-white/[0.08]
+            class="px-3 py-1 text-ui-base rounded-md border border-border dark:border-white/[0.08]
                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
                    disabled:opacity-30 disabled:cursor-not-allowed"
           >{t("common.next")} →</button>

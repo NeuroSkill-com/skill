@@ -5,8 +5,8 @@
 import { type DaemonEvent, disconnectDaemonWs, onDaemonEvent } from "./ws";
 
 // Re-export the canonical types from chart components
-export type { BandSnapshot } from "$lib/BandChart.svelte";
-export type { ImuPacket } from "$lib/ImuChart.svelte";
+export type { BandSnapshot } from "$lib/charts/BandChart.svelte";
+export type { ImuPacket } from "$lib/charts/ImuChart.svelte";
 
 // ── EEG/PPG packet types (same as old Tauri types) ─────────────────────────
 
@@ -68,17 +68,19 @@ export function subscribeImu(
 }
 
 /** Subscribe to band power snapshots (~4 Hz). Returns unsubscribe function. */
-export function subscribeBands(callback: (snap: import("$lib/BandChart.svelte").BandSnapshot) => void): () => void {
+export function subscribeBands(
+  callback: (snap: import("$lib/charts/BandChart.svelte").BandSnapshot) => void,
+): () => void {
   return onDaemonEvent("EegBands", (ev: DaemonEvent) => {
-    callback(ev.payload as unknown as import("$lib/BandChart.svelte").BandSnapshot);
+    callback(ev.payload as unknown as import("$lib/charts/BandChart.svelte").BandSnapshot);
   });
 }
 
 /** Get the latest band snapshot (one-shot fetch via daemon HTTP). */
-export async function getLatestBands(): Promise<import("$lib/BandChart.svelte").BandSnapshot | null> {
+export async function getLatestBands(): Promise<import("$lib/charts/BandChart.svelte").BandSnapshot | null> {
   try {
     const { daemonGet } = await import("./http");
-    return await daemonGet<import("$lib/BandChart.svelte").BandSnapshot | null>("/v1/activity/latest-bands");
+    return await daemonGet<import("$lib/charts/BandChart.svelte").BandSnapshot | null>("/v1/activity/latest-bands");
   } catch {
     return null;
   }

@@ -148,11 +148,21 @@ async function openInteractive(page: Page) {
   await page.waitForTimeout(1000);
 }
 
+async function openInteractiveAdvanced(page: Page) {
+  await openInteractive(page);
+  // Expand the "Advanced Filters" pipeline section (collapsed by default)
+  const advBtn = page.locator("button", { hasText: /advanced/i }).first();
+  if (await advBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await advBtn.click();
+    await page.waitForTimeout(300);
+  }
+}
+
 test.describe("Interactive search — new features", () => {
   // ── SNR filter toggle ──────────────────────────────────────────────────────
 
   test("SNR filter toggle is visible", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     const toggle = page.locator("#snr-toggle");
     await expect(toggle).toBeVisible();
     // Should be unchecked by default
@@ -160,7 +170,7 @@ test.describe("Interactive search — new features", () => {
   });
 
   test("SNR filter toggle can be checked", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     const toggle = page.locator("#snr-toggle");
     await toggle.check();
     await expect(toggle).toBeChecked();
@@ -169,7 +179,7 @@ test.describe("Interactive search — new features", () => {
   // ── Device filter dropdown ─────────────────────────────────────────────────
 
   test("device filter dropdown shows loaded devices", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     // Wait for devices to load
     await page.waitForTimeout(500);
     const options = page.locator("select[aria-label] option");
@@ -181,7 +191,7 @@ test.describe("Interactive search — new features", () => {
   // ── Date range filter ──────────────────────────────────────────────────────
 
   test("date range filter inputs are visible", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     const dateInputs = page.locator('input[type="datetime-local"]');
     const count = await dateInputs.count();
     expect(count).toBeGreaterThanOrEqual(2);
@@ -190,7 +200,7 @@ test.describe("Interactive search — new features", () => {
   // ── EEG rank-by selector ───────────────────────────────────────────────────
 
   test("rank-by selector has expected options", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     const body = await page.content();
     // Check that the rank-by options exist in the page
     expect(body).toContain("Timestamp");
@@ -265,7 +275,7 @@ test.describe("Interactive search — new features", () => {
   // ── Pipeline step numbers ──────────────────────────────────────────────────
 
   test("pipeline has steps 1-9 including new controls", async ({ page }) => {
-    await openInteractive(page);
+    await openInteractiveAdvanced(page);
     const body = await page.locator("body").innerText();
     // Steps 6 (SNR), 8 (Date range), 9 (Rank by) should exist
     // Check for SNR filter label

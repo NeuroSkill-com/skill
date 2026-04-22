@@ -96,22 +96,21 @@ function renderMenu() {
   const systemLabel = t("appearance.themeSystem");
   const menu = document.createElement("div");
   menu.style.cssText = menuStyle;
-  menu.className =
-    "rounded-lg border border-neutral-200 dark:border-white/10 " + "bg-white dark:bg-[#1a1a28] shadow-xl py-1";
+  menu.className = "rounded-lg border border-neutral-200 dark:border-white/10 " + "bg-surface-2 shadow-xl py-1";
 
   // Prevent closing when clicking/pressing inside menu
   menu.addEventListener("pointerdown", (e) => e.stopPropagation());
 
   const systemBtn = document.createElement("button");
   systemBtn.className =
-    "flex items-center gap-2 w-full px-3 py-1.5 text-[0.72rem] font-medium transition-colors " +
+    "flex items-center gap-2 w-full px-3 py-1.5 text-ui-md font-medium transition-colors " +
     (usingSystem
-      ? "bg-primary/10 text-primary"
+      ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
       : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5");
   systemBtn.innerHTML =
-    `<span class="text-[0.9rem] leading-none">🌐</span>` +
+    `<span class="text-ui-xl leading-none">🌐</span>` +
     `<span>${systemLabel}</span>` +
-    (usingSystem ? `<span class="ml-auto text-[0.6rem] text-primary">✓</span>` : "");
+    (usingSystem ? `<span class="ml-auto text-ui-sm text-violet-600 dark:text-violet-400">✓</span>` : "");
   systemBtn.addEventListener("click", () => void pickSystem());
   menu.appendChild(systemBtn);
 
@@ -124,14 +123,14 @@ function renderMenu() {
     const isActive = !usingSystem && locale === loc.code;
     const localizedName = languageDisplayName(loc.code, loc.name);
     btn.className =
-      "flex items-center gap-2 w-full px-3 py-1.5 text-[0.72rem] font-medium transition-colors " +
+      "flex items-center gap-2 w-full px-3 py-1.5 text-ui-md font-medium transition-colors " +
       (isActive
-        ? "bg-primary/10 text-primary"
+        ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
         : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5");
     btn.innerHTML =
-      `<span class="text-[0.9rem] leading-none">${loc.flag}</span>` +
+      `<span class="text-ui-xl leading-none">${loc.flag}</span>` +
       `<span>${localizedName}</span>` +
-      (isActive ? `<span class="ml-auto text-[0.6rem] text-primary">✓</span>` : "");
+      (isActive ? `<span class="ml-auto text-ui-sm text-violet-600 dark:text-violet-400">✓</span>` : "");
     btn.addEventListener("click", () => void pick(loc.code));
     menu.appendChild(btn);
   }
@@ -164,7 +163,7 @@ const currentFlag = $derived(SUPPORTED_LOCALES.find((l) => l.code === getLocale(
     aria-expanded={open}
     class="flex items-center justify-center w-6 h-6 mx-1 rounded-md
            text-muted-foreground hover:text-foreground hover:bg-accent
-           transition-colors select-none text-[0.95rem] leading-none">
+           transition-colors select-none text-ui-xl leading-none">
     {currentFlag}
   </button>
 </div>

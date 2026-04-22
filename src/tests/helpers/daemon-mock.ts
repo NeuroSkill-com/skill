@@ -99,7 +99,7 @@ export function buildDaemonMockScript(commands: CommandMap): string {
       "/v1/device/serial-ports":             "list_serial_ports",
       "/v1/devices":                         "get_devices",
       "/v1/lsl/virtual-source/running":      "lsl_virtual_source_running",
-      "/v1/lsl/virtual-source/start":        "lsl_virtual_source_start",
+      "/v1/lsl/virtual-source/start":        "lsl_virtual_source_start_configured",
       "/v1/lsl/virtual-source/stop":         "lsl_virtual_source_stop",
     };
 

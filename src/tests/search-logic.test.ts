@@ -8,8 +8,8 @@ import {
   fromInputValue,
   normalizeSearchMode,
   toInputValue,
-} from "$lib/search-logic";
-import type { SearchResult } from "$lib/search-types";
+} from "$lib/search/search-logic";
+import type { SearchResult } from "$lib/search/search-types";
 import type { UmapPoint, UmapResult } from "$lib/types";
 
 describe("normalizeSearchMode", () => {

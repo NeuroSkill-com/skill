@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { relativeAge, tsToUnix } from "$lib/hooks-logic";
+import { relativeAge, tsToUnix } from "$lib/settings/hooks-logic";
 
 describe("tsToUnix", () => {
   it("passes through seconds-range timestamps", () => {

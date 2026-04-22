@@ -770,7 +770,7 @@ onDestroy(() => {
       {#each series as s}
         <div class="flex items-center gap-1">
           <span class="w-2 h-2 rounded-full shrink-0" style="background:{s.color}"></span>
-          <span class="text-[0.48rem] text-muted-foreground">{s.label}</span>
+          <span class="text-ui-2xs text-muted-foreground">{s.label}</span>
         </div>
       {/each}
     </div>

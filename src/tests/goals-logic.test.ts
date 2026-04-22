@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { barColor, fmtMins } from "$lib/goals-logic";
+import { barColor, fmtMins } from "$lib/settings/goals-logic";
 
 describe("barColor", () => {
   it("returns green when goal met", () => {

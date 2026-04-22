@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import type { LlmModelEntry } from "$lib/onboarding-logic";
-import { pickFamilyTarget, pickLlmTarget } from "$lib/onboarding-logic";
+import type { LlmModelEntry } from "$lib/settings/onboarding-logic";
+import { pickFamilyTarget, pickLlmTarget } from "$lib/settings/onboarding-logic";
 
 function mkEntry(overrides: Partial<LlmModelEntry> = {}): LlmModelEntry {
   return {

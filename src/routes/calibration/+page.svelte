@@ -11,6 +11,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
+import { ChipGroup } from "$lib/components/ui/chip-group";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
@@ -397,10 +398,10 @@ useWindowTitle("window.title.calibration");
 
   <!-- ── Title bar ─────────────────────────────────────────────────────────── -->
   <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0">
+              border-b border-border dark:border-white/[0.06] shrink-0">
     {#if running}
       <Badge variant="outline"
-        class="text-[0.52rem] tracking-wide uppercase py-0 px-1.5
+        class="text-ui-xs tracking-wide uppercase py-0 px-1.5
                bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">
         {t("calibration.recording")}
       </Badge>
@@ -408,7 +409,7 @@ useWindowTitle("window.title.calibration");
 
     <!-- TTS engine readiness indicator -->
     {#if !ttsReady}
-      <span class="flex items-center gap-1 text-[0.52rem] text-amber-600 dark:text-amber-400
+      <span class="flex items-center gap-1 text-ui-xs text-amber-600 dark:text-amber-400
                    font-medium animate-pulse" title={ttsDlLabel || "Preparing voice engine…"}>
         <!-- speaker-with-dots icon -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -426,7 +427,7 @@ useWindowTitle("window.title.calibration");
     {/if}
 
     {#if daemonStatus.state !== 'connected'}
-      <span class="flex items-center gap-1 text-[0.52rem] text-red-600 dark:text-red-400
+      <span class="flex items-center gap-1 text-ui-xs text-red-600 dark:text-red-400
                    font-medium" title={daemonStatus.lastError || "Daemon not connected"}>
         <!-- server-off icon -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -442,7 +443,7 @@ useWindowTitle("window.title.calibration");
         Daemon {daemonStatus.state}
       </span>
     {/if}
-    <span class="ml-auto text-[0.62rem] text-muted-foreground/60 tabular-nums">
+    <span class="ml-auto text-ui-sm text-muted-foreground/60 tabular-nums">
       {#if profile?.last_calibration_utc}
         {t("calibration.lastAgo", { ago: timeAgo(profile.last_calibration_utc) })}
       {:else}
@@ -454,19 +455,15 @@ useWindowTitle("window.title.calibration");
   <!-- ── Profile selector (when idle and multiple profiles exist) ───────────── -->
   {#if phase.kind === "idle" && profiles.length > 1}
     <div class="flex items-center gap-2 px-4 pt-3 pb-1 flex-wrap shrink-0">
-      <span class="text-[0.6rem] font-semibold uppercase tracking-wider text-muted-foreground/60 shrink-0">
+      <span class="text-ui-sm font-semibold uppercase tracking-wider text-muted-foreground/60 shrink-0">
         {t("calibration.selectProfile")}
       </span>
-      {#each profiles as p}
-        <button
-          onclick={() => selectProfile(p)}
-          class="rounded-lg border px-2.5 py-1 text-[0.62rem] font-semibold transition-all
-                 {profile?.id === p.id
-                   ? 'border-primary/50 bg-primary/10 text-primary'
-                   : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
-          {p.name}
-        </button>
-      {/each}
+      <ChipGroup
+        items={profiles}
+        selected={profiles.find(p => p.id === profile?.id) ?? profiles[0]}
+        onselect={(p) => selectProfile(p)}
+        labelFn={(p) => p.name}
+      />
     </div>
   {/if}
 
@@ -477,18 +474,18 @@ useWindowTitle("window.title.calibration");
       {#each ELEC_TABS as etab}
         <button
           onclick={() => elecTab = etab.id}
-          class="flex items-center gap-1 rounded-md px-2 py-0.5 text-[0.58rem] font-semibold
+          class="flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-sm font-semibold
                  transition-all border
                  {elecTab === etab.id
                    ? 'bg-foreground text-background border-transparent'
-                   : 'text-muted-foreground border-border dark:border-white/[0.07] hover:text-foreground hover:border-foreground/30'}"
+                   : 'text-muted-foreground border-border dark:border-white/[0.06] hover:text-foreground hover:border-foreground/30'}"
         >
           {etab.label}
           <span class="text-[0.45rem] opacity-60 tabular-nums">{etab.count}</span>
         </button>
       {/each}
       {#if !museConnected}
-        <span class="ml-2 text-[0.52rem] text-amber-600 dark:text-amber-400 opacity-70">⚠ not connected</span>
+        <span class="ml-2 text-ui-xs text-amber-600 dark:text-amber-400 opacity-70">⚠ not connected</span>
       {/if}
     </div>
 
@@ -507,7 +504,7 @@ useWindowTitle("window.title.calibration");
                       style="background:{elecQualityColor(label)}; opacity:0.3"></span>
               {/if}
             </div>
-            <span class="text-[0.62rem] font-bold font-mono"
+            <span class="text-ui-sm font-bold font-mono"
                   style="color:{elecQualityColor(label)}">{name}</span>
             <span class="text-[0.42rem] font-semibold uppercase tracking-wider"
                   style="color:{elecQualityColor(label)}; opacity:0.8">
@@ -519,11 +516,11 @@ useWindowTitle("window.title.calibration");
       </div>
     {:else}
       <!-- Informational grid for 10-20 / 10-10 electrode systems -->
-      <div class="rounded-lg border border-border dark:border-white/[0.07] bg-muted/20 p-2.5">
+      <div class="rounded-lg border border-border dark:border-white/[0.06] bg-muted/20 p-2.5">
         <div class="flex items-start gap-3">
           <!-- Compact Muse quality indicator strip -->
           <div class="flex flex-col gap-1 shrink-0">
-            <span class="text-[0.48rem] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+            <span class="text-ui-2xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
               Muse signal
             </span>
             {#each MUSE_CHANNELS as name, idx}
@@ -531,7 +528,7 @@ useWindowTitle("window.title.calibration");
               <div class="flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full shrink-0"
                       style="background:{elecQualityColor(label)}"></span>
-                <span class="text-[0.52rem] font-mono font-bold"
+                <span class="text-ui-xs font-mono font-bold"
                       style="color:{elecQualityColor(label)}">{name}</span>
                 <span class="text-[0.44rem] text-muted-foreground/60">
                   {elecQualityText(label)}
@@ -541,23 +538,23 @@ useWindowTitle("window.title.calibration");
           </div>
           <!-- System description -->
           <div class="flex-1 min-w-0">
-            <span class="text-[0.48rem] font-semibold text-muted-foreground/60 uppercase tracking-wider block mb-1">
+            <span class="text-ui-2xs font-semibold text-muted-foreground/60 uppercase tracking-wider block mb-1">
               {elecTab} system
             </span>
             {#if elecTab === "10-20"}
-              <p class="text-[0.55rem] text-muted-foreground/70 leading-relaxed">
+              <p class="text-ui-xs text-muted-foreground/70 leading-relaxed">
                 19 electrodes + 2 reference points. Standard clinical system covering all major brain regions:
                 frontal (Fp1/2, F3/4/7/8, Fz), central (C3/4, Cz), temporal (T3–6), parietal (P3/4, Pz), and occipital (O1/2).
               </p>
-              <p class="text-[0.5rem] text-muted-foreground/50 mt-1">
+              <p class="text-ui-2xs text-muted-foreground/50 mt-1">
                 Muse uses TP9, AF7, AF8, TP10 — a subset optimized for frontal asymmetry and temporal reference.
               </p>
             {:else}
-              <p class="text-[0.55rem] text-muted-foreground/70 leading-relaxed">
+              <p class="text-ui-xs text-muted-foreground/70 leading-relaxed">
                 High-density system with ~64 electrodes adding intermediate positions between 10-20 sites.
                 Provides finer spatial resolution for source localization and BCI applications.
               </p>
-              <p class="text-[0.5rem] text-muted-foreground/50 mt-1">
+              <p class="text-ui-2xs text-muted-foreground/50 mt-1">
                 Muse uses 4 of these sites: TP9 (left mastoid), AF7 (left frontal), AF8 (right frontal), TP10 (right mastoid).
               </p>
             {/if}
@@ -578,7 +575,7 @@ useWindowTitle("window.title.calibration");
 
         <h2 class="text-[1rem] font-bold">{profile.name}</h2>
 
-        <p class="text-[0.75rem] text-muted-foreground leading-relaxed">
+        <p class="text-ui-md text-muted-foreground leading-relaxed">
           {@html t("calibration.descriptionN", {
             actions: profile.actions.map(a =>
               `<strong class="text-foreground">${a.label}</strong>`).join(" → "),
@@ -590,24 +587,24 @@ useWindowTitle("window.title.calibration");
         <div class="flex flex-wrap gap-1.5 justify-center">
           {#each profile.actions as action, i}
             {@const colors = [
-              "border-primary/30 bg-primary/10 text-primary",
+              "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
               "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
               "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
               "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
               "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
               "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
             ]}
-            <span class="rounded-full border px-2.5 py-0.5 text-[0.62rem] font-medium {colors[i % colors.length]}">
+            <span class="rounded-full border px-2.5 py-0.5 text-ui-sm font-medium {colors[i % colors.length]}">
               {action.label} · {action.duration_secs}s
             </span>
           {/each}
           <span class="rounded-full border border-amber-500/30 bg-amber-500/10
-                       text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-[0.62rem] font-medium">
+                       text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-ui-sm font-medium">
             {t("calibration.break")} · {profile.break_duration_secs}s
           </span>
         </div>
 
-        <p class="text-[0.63rem] text-muted-foreground/60">
+        <p class="text-ui-sm text-muted-foreground/60">
           {t("calibration.timingDescN", {
             loops: String(profile.loop_count),
             actions: String(profile.actions.length),
@@ -617,14 +614,14 @@ useWindowTitle("window.title.calibration");
 
         {#if profile.last_calibration_utc}
           <div class="flex items-center gap-2 rounded-lg border border-border dark:border-white/[0.06]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2">
-            <span class="text-[0.6rem] font-semibold text-muted-foreground/70">{t("calibration.lastCalibrated")}</span>
-            <span class="text-[0.65rem] font-medium text-foreground/80">{fmtDateTimeLocale(profile.last_calibration_utc)}</span>
-            <span class="text-[0.58rem] text-muted-foreground/50">({timeAgo(profile.last_calibration_utc)})</span>
+                      bg-muted dark:bg-surface-2 px-3 py-2">
+            <span class="text-ui-sm font-semibold text-muted-foreground/70">{t("calibration.lastCalibrated")}</span>
+            <span class="text-ui-base font-medium text-foreground/80">{fmtDateTimeLocale(profile.last_calibration_utc)}</span>
+            <span class="text-ui-sm text-muted-foreground/50">({timeAgo(profile.last_calibration_utc)})</span>
           </div>
         {:else}
           <div class="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-            <span class="text-[0.65rem] text-amber-600 dark:text-amber-400 font-medium">{t("calibration.noPrevious")}</span>
+            <span class="text-ui-base text-amber-600 dark:text-amber-400 font-medium">{t("calibration.noPrevious")}</span>
           </div>
         {/if}
 
@@ -638,7 +635,7 @@ useWindowTitle("window.title.calibration");
       <div class="flex flex-col items-center gap-4 text-center max-w-[360px]">
         <div class="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center text-2xl">✅</div>
         <h2 class="text-[1rem] font-bold text-emerald-600 dark:text-emerald-400">{t("calibration.complete")}</h2>
-        <p class="text-[0.75rem] text-muted-foreground leading-relaxed">
+        <p class="text-ui-md text-muted-foreground leading-relaxed">
           {t("calibration.completeDesc", { n: String(profile.loop_count) })}
         </p>
         <div class="flex gap-3 mt-2">
@@ -655,11 +652,11 @@ useWindowTitle("window.title.calibration");
 
         <!-- Profile name + loop indicator -->
         <div class="flex flex-col items-center gap-1.5">
-          <span class="text-[0.6rem] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          <span class="text-ui-sm font-semibold uppercase tracking-widest text-muted-foreground/60">
             {profile.name}
           </span>
           <div class="flex items-center gap-2">
-            <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+            <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
               {t("calibration.iteration")}
             </span>
             <div class="flex gap-1">
@@ -670,7 +667,7 @@ useWindowTitle("window.title.calibration");
                              'bg-muted dark:bg-white/[0.08]'}"></div>
               {/each}
             </div>
-            <span class="text-[0.65rem] text-muted-foreground tabular-nums">
+            <span class="text-ui-base text-muted-foreground tabular-nums">
               {phase.loop}/{profile.loop_count}
             </span>
           </div>
@@ -698,7 +695,7 @@ useWindowTitle("window.title.calibration");
           <span class="text-[2rem] font-bold tracking-tight {phaseColor}">{phaseLabel}</span>
           {#if phase.kind === "break" && profile}
             {@const nextIdx = (phase.actionIndex + 1) % profile.actions.length}
-            <span class="text-[0.72rem] text-muted-foreground">
+            <span class="text-ui-md text-muted-foreground">
               {t("calibration.nextAction", { action: profile.actions[nextIdx]?.label ?? "" })}
             </span>
           {/if}
@@ -707,7 +704,7 @@ useWindowTitle("window.title.calibration");
         <!-- Countdown -->
         <div class="flex flex-col items-center gap-3 w-full">
           <span class="text-[3rem] font-bold tabular-nums text-foreground leading-none">{countdown}</span>
-          <span class="text-[0.62rem] text-muted-foreground/50">{t("calibration.secondsRemaining")}</span>
+          <span class="text-ui-sm text-muted-foreground/50">{t("calibration.secondsRemaining")}</span>
           <div class="w-full"><Progress value={progressPct} class="h-2" /></div>
         </div>
 
@@ -721,10 +718,10 @@ useWindowTitle("window.title.calibration");
 
   <!-- ── Footer ────────────────────────────────────────────────────────────── -->
   <div class="flex items-center justify-between px-4 pb-3 pt-2
-              border-t border-border dark:border-white/[0.07] shrink-0">
-    <span class="text-[0.6rem] text-muted-foreground/40">{t("calibration.footer")}</span>
+              border-t border-border dark:border-white/[0.06] shrink-0">
+    <span class="text-ui-sm text-muted-foreground/40">{t("calibration.footer")}</span>
     {#if phase.kind === "idle" || phase.kind === "done"}
-      <Button variant="ghost" size="sm" class="text-[0.65rem] h-6 px-2 text-muted-foreground"
+      <Button variant="ghost" size="sm" class="text-ui-base h-6 px-2 text-muted-foreground"
               onclick={closeWindow}>{t("common.close")}</Button>
     {/if}
   </div>

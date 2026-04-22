@@ -177,7 +177,7 @@ export interface CsvMetricsResult {
 {#if loading}
   <div class="flex items-center gap-2 py-2">
     <Spinner size="w-3.5 h-3.5" class="text-muted-foreground/50" />
-    <span class="text-[0.6rem] text-muted-foreground/50">{t("history.metrics")}…</span>
+    <span class="text-ui-sm text-muted-foreground/50">{t("history.metrics")}…</span>
   </div>
 
 {:else if metrics && metrics.n_epochs > 0}
@@ -192,11 +192,11 @@ export interface CsvMetricsResult {
   <div class="flex flex-col gap-0">
     <!-- Title + Toggle All -->
     <div class="flex items-center gap-2 mb-1">
-      <span class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground/60">
+      <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/60">
         {t("history.metrics")} ({m.n_epochs})
       </span>
       {#if !compact}
-        <button class="text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground
+        <button class="text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground
                        transition-colors px-1.5 py-0.5 rounded border border-transparent
                        hover:border-border dark:hover:border-white/[0.08]"
                 onclick={(e: MouseEvent) => { e.stopPropagation(); toggleAll(); }}>
@@ -219,7 +219,7 @@ export interface CsvMetricsResult {
           <div class="flex flex-col gap-0.5">
             <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{item.l}</span>
             <div class="flex items-end gap-0.5">
-              <span class="text-[0.72rem] font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
+              <span class="text-ui-md font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
               <span class="text-[0.42rem] text-muted-foreground/30 pb-0.5">{t("sd.outOf100")}</span>
             </div>
           </div>
@@ -258,7 +258,7 @@ export interface CsvMetricsResult {
             <MetricTooltip text={item.tip}>
               <div class="flex flex-col items-center gap-0">
                 <span class="text-[0.42rem] text-muted-foreground/50">{item.l}</span>
-                <span class="text-[0.62rem] font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
+                <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
               </div>
             </MetricTooltip>
           {/each}
@@ -289,7 +289,7 @@ export interface CsvMetricsResult {
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
-                <span class="text-[0.58rem] font-bold tabular-nums">{item.v}</span>
+                <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
           {/each}
@@ -312,7 +312,7 @@ export interface CsvMetricsResult {
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
-                <span class="text-[0.58rem] font-bold tabular-nums">{item.v}</span>
+                <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
           {/each}
@@ -338,7 +338,7 @@ export interface CsvMetricsResult {
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
                   <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
-                  <span class="text-[0.58rem] font-bold tabular-nums">{item.v}</span>
+                  <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>
             {/each}
@@ -363,7 +363,7 @@ export interface CsvMetricsResult {
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
                   <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
-                  <span class="text-[0.58rem] font-bold tabular-nums">{item.v}</span>
+                  <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>
             {/each}
@@ -531,6 +531,6 @@ export interface CsvMetricsResult {
 
 {:else if !loading}
   <div class="flex items-center gap-1.5 py-1">
-    <span class="text-[0.55rem] text-muted-foreground/40 italic">📊 {t("history.noMetrics")}</span>
+    <span class="text-ui-xs text-muted-foreground/40 italic">📊 {t("history.noMetrics")}</span>
   </div>
 {/if}

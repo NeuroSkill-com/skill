@@ -7,8 +7,8 @@ import {
   collectScreenshotResults,
   serialiseEdgesForBackend,
   serialiseNodesForBackend,
-} from "$lib/search-interactive-logic";
-import type { GraphEdge, GraphNode } from "$lib/search-types";
+} from "$lib/search/search-interactive-logic";
+import type { GraphEdge, GraphNode } from "$lib/search/search-types";
 
 function mkNode(id: string, kind: GraphNode["kind"] = "text_label", text = "test"): GraphNode {
   return { id, kind, text, distance: 0.1 };

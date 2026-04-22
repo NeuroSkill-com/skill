@@ -8,8 +8,9 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { onMount, untrack } from "svelte";
 import { afterNavigate, replaceState } from "$app/navigation";
-import { parseAssistantOutput } from "$lib/chat-utils";
-import { generateUmapPlaceholder } from "$lib/compare-types";
+import InteractiveGraph3D from "$lib/charts/InteractiveGraph3D.svelte";
+import { parseAssistantOutput } from "$lib/chat/chat-utils";
+import { generateUmapPlaceholder } from "$lib/compare/compare-types";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Spinner } from "$lib/components/ui/spinner";
@@ -37,7 +38,6 @@ import {
   pad,
   parseDateTimeLocalInput,
 } from "$lib/format";
-import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
 import {
@@ -67,11 +67,11 @@ import {
   simPct,
   simWidth,
   turboColor,
-} from "$lib/search-types";
+} from "$lib/search/search-types";
 import { getAppName } from "$lib/stores/app-name.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { UmapPoint, UmapResult } from "$lib/types";
-import UmapViewer3D from "$lib/UmapViewer3D.svelte";
+import UmapViewer3D from "$lib/umap/UmapViewer3D.svelte";
 
 // ── Formatting helpers ───────────────────────────────────────────────────
 function toInputValue(d: Date) {
@@ -601,11 +601,11 @@ let ixSessions = $state<
     stddev_engagement: number;
   }>
 >([]);
-let ixSelectedNode = $state<import("$lib/search-types").GraphNode | null>(null); // selected node for detail panel
+let ixSelectedNode = $state<import("$lib/search/search-types").GraphNode | null>(null); // selected node for detail panel
 let ixSortByRelevance = $state(false); // sort displayed nodes by relevance_score
-let ixHiddenKinds = $state<import("$lib/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
+let ixHiddenKinds = $state<import("$lib/search/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
 let ixColorMode = $state<"timestamp" | "engagement" | "snr" | "session">("timestamp");
-let ixCompareNode = $state<import("$lib/search-types").GraphNode | null>(null); // second node for compare mode
+let ixCompareNode = $state<import("$lib/search/search-types").GraphNode | null>(null); // second node for compare mode
 let ixDetailTimeseries = $state<
   Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>
 >([]);
@@ -1371,22 +1371,22 @@ useWindowTitle("window.title.search");
 
   <!-- ── Status strip ─────────────────────────────────────────────────── -->
   <div class="relative flex items-center justify-end px-4 py-1.5 shrink-0
-              border-b border-border dark:border-white/[0.07]">
+              border-b border-border dark:border-white/[0.06]">
     <div class="min-w-0 flex items-center justify-end">
       {#if mode === "eeg" && result}
-        <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums truncate">
+        <span class="text-ui-sm text-muted-foreground/55 select-none tabular-nums truncate">
           {t("search.resultSummary", { queries: result.query_count, k: result.k, days: result.searched_days.length })}
         </span>
       {:else if mode === "text" && textSearched}
-        <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums">
+        <span class="text-ui-sm text-muted-foreground/55 select-none tabular-nums">
           {textFiltered.length} / {textResults.length} {t("search.textResultsCount")}
         </span>
       {:else if mode === "interactive" && ixSearched}
-        <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums">
+        <span class="text-ui-sm text-muted-foreground/55 select-none tabular-nums">
           {t("search.interactiveNodeCount", { n: ixNodes.length, e: ixEdges.length })}
         </span>
       {:else if mode === "images" && imgSearched}
-        <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums">
+        <span class="text-ui-sm text-muted-foreground/55 select-none tabular-nums">
           {imgResults.length} {t("search.imageResultsCount")}
         </span>
       {/if}
@@ -1404,17 +1404,17 @@ useWindowTitle("window.title.search");
   <!-- ── Controls ─────────────────────────────────────────────────────── -->
   <div class="px-4 py-3 flex flex-col gap-2.5 shrink-0
               border-b border-border dark:border-white/[0.06]
-              bg-muted/20 dark:bg-white/[0.01]">
+              bg-muted/20 dark:bg-white/[0.02]">
 
     {#if mode === "eeg"}
       <!-- Row 1: presets + date range -->
       <div class="flex items-center gap-1.5 flex-wrap">
-        <span class="text-[0.58rem] font-semibold tracking-widest uppercase text-muted-foreground/60 shrink-0">
+        <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground/60 shrink-0">
           {t("search.last")}
         </span>
         {#each PRESETS as [label, mins] (mins)}
           <button onclick={() => applyPreset(mins)}
-                  class="px-2 py-0.5 rounded text-[0.62rem] font-semibold border
+                  class="px-2 py-0.5 rounded text-ui-sm font-semibold border
                          border-border dark:border-white/[0.1]
                          bg-background hover:bg-accent transition-colors
                          text-muted-foreground hover:text-foreground select-none">
@@ -1425,13 +1425,13 @@ useWindowTitle("window.title.search");
           <input type="datetime-local" step="1" bind:value={startInput}
                  aria-label="Search start time"
                  class="rounded border border-border dark:border-white/[0.1]
-                        bg-background px-2 py-1 text-[0.7rem]
+                        bg-background px-2 py-1 text-ui-md
                         focus:outline-none focus:ring-1 focus:ring-ring" />
-          <span class="text-muted-foreground/40 text-[0.65rem] select-none">→</span>
+          <span class="text-muted-foreground/40 text-ui-base select-none">→</span>
           <input type="datetime-local" step="1" bind:value={endInput}
                  aria-label="Search end time"
                  class="rounded border border-border dark:border-white/[0.1]
-                        bg-background px-2 py-1 text-[0.7rem]
+                        bg-background px-2 py-1 text-ui-md
                         focus:outline-none focus:ring-1 focus:ring-ring" />
         </div>
       </div>
@@ -1439,26 +1439,26 @@ useWindowTitle("window.title.search");
       <!-- Row 2: k · ef · search button -->
       <div class="flex items-center gap-2.5">
         <div class="flex items-center gap-1.5">
-          <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">k</span>
+          <span class="text-ui-sm text-muted-foreground/60 font-mono select-none">k</span>
           <input type="number" min="1" max="100" bind:value={kVal}
                  aria-label="k nearest neighbors"
                  class="w-14 rounded border border-border dark:border-white/[0.1]
-                        bg-background px-1.5 py-1 text-[0.72rem] text-center
+                        bg-background px-1.5 py-1 text-ui-md text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
         </div>
         <div class="flex items-center gap-1.5">
-          <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">ef</span>
+          <span class="text-ui-sm text-muted-foreground/60 font-mono select-none">ef</span>
           <input type="number" min="10" max="500" bind:value={efVal}
                  aria-label="ef search parameter"
                  class="w-16 rounded border border-border dark:border-white/[0.1]
-                        bg-background px-1.5 py-1 text-[0.72rem] text-center
+                        bg-background px-1.5 py-1 text-ui-md text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
         </div>
         {#if deviceList.length > 0}
           <select bind:value={deviceFilter}
                   aria-label="Filter by device"
                   class="rounded border border-border dark:border-white/[0.1]
-                         bg-background px-1.5 py-1 text-[0.68rem]
+                         bg-background px-1.5 py-1 text-ui-base
                          focus:outline-none focus:ring-1 focus:ring-ring max-w-[10rem] truncate">
             <option value="all">{t("search.allDevices")}</option>
             {#each deviceList as dev}
@@ -1467,7 +1467,7 @@ useWindowTitle("window.title.search");
           </select>
         {/if}
         {#if error}
-          <span class="text-[0.62rem] text-destructive flex-1 truncate" title={error}>{error}</span>
+          <span class="text-ui-sm text-destructive flex-1 truncate" title={error}>{error}</span>
         {:else}
           <span class="flex-1"></span>
         {/if}
@@ -1477,14 +1477,14 @@ useWindowTitle("window.title.search");
             import("$lib/daemon/invoke-proxy").then(m => m.cancelSearch());
           }}
                   variant="outline" size="sm"
-                  class="gap-1 px-3 h-7 text-[0.68rem] text-destructive border-destructive/30 hover:bg-destructive/10">
+                  class="gap-1 px-3 h-7 text-ui-base text-destructive border-destructive/30 hover:bg-destructive/10">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-3 h-3">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
             {t("common.cancel")}
           </Button>
         {/if}
-        <Button onclick={searchEeg} disabled={searching} size="sm" class="gap-1.5 h-7 px-4 text-[0.72rem]">
+        <Button onclick={searchEeg} disabled={searching} size="sm" class="gap-1.5 h-7 px-4 text-ui-md">
           {#if searching}
             <Spinner size="w-3 h-3" /> {t("search.searching")}
           {:else}
@@ -1498,7 +1498,7 @@ useWindowTitle("window.title.search");
 
     {:else if mode === "interactive"}
       <!-- ── Single unified card: query + pipeline + button ──────────────── -->
-      <div class="rounded-lg border border-border dark:border-white/[0.07] overflow-hidden">
+      <div class="rounded-lg border border-border dark:border-white/[0.06] overflow-hidden">
 
         <!-- Card header (always visible) -->
         <button onclick={() => showIxCard = !showIxCard}
@@ -1512,17 +1512,17 @@ useWindowTitle("window.title.search");
                       {showIxCard ? 'rotate-0' : '-rotate-90'}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
-          <span class="text-[0.58rem] font-semibold text-muted-foreground/70 uppercase tracking-wider shrink-0">
+          <span class="text-ui-sm font-semibold text-muted-foreground/70 uppercase tracking-wider shrink-0">
             {t("search.interactiveQueryLabel")}
           </span>
           <!-- Collapsed summary: query preview + key params -->
           {#if !showIxCard}
             {#if ixQuery.trim()}
-              <span class="text-[0.55rem] text-muted-foreground/55 italic truncate min-w-0">
+              <span class="text-ui-xs text-muted-foreground/55 italic truncate min-w-0">
                 "{ixQuery.trim()}"
               </span>
             {/if}
-            <span class="ml-auto text-[0.48rem] text-muted-foreground/35 font-mono shrink-0">
+            <span class="ml-auto text-ui-2xs text-muted-foreground/35 font-mono shrink-0">
               k{ixKText}·{ixKEeg}·{ixKLabels} ±{ixReachMinutes}m
             </span>
           {/if}
@@ -1537,7 +1537,7 @@ useWindowTitle("window.title.search");
                       placeholder={t("search.interactiveQueryPlaceholder")}
                       rows="2"
                       class="w-full rounded-md border border-border dark:border-white/[0.1]
-                             bg-background px-3 py-2 text-[0.8rem] leading-relaxed
+                             bg-background px-3 py-2 text-ui-lg leading-relaxed
                              placeholder:text-muted-foreground/30 resize-none
                          focus:outline-none focus:ring-1 focus:ring-ring/50
                              transition-shadow">
@@ -1560,28 +1560,28 @@ useWindowTitle("window.title.search");
               min: 1, max: 60, val: ixReachMinutes, set: (v: number) => { ixReachMinutes = v; } },
           ] as step}
             <div class="flex items-center gap-2 px-3 py-1.5
-                        border-t border-border dark:border-white/[0.05]
+                        border-t border-border dark:border-white/[0.06]
                         hover:bg-muted/10 transition-colors">
               <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
                            text-[0.42rem] font-bold text-white shrink-0 select-none"
                     style="background:{step.color}">{step.n}</span>
-              <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{step.title}</span>
-              <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{step.hint}</span>
+              <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{step.title}</span>
+              <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{step.hint}</span>
               <div class="flex items-center gap-0.5 shrink-0">
                 <button onclick={() => step.set(Math.max(step.min, step.val - 1))}
                         aria-label="Decrease {step.title}"
-                        class="w-5 h-5 rounded flex items-center justify-center text-[0.7rem] font-bold
+                        class="w-5 h-5 rounded flex items-center justify-center text-ui-md font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">−</button>
                 <input type="number" min={step.min} max={step.max} value={step.val}
                        aria-label="{step.title} value"
                        oninput={(e) => step.set(Number((e.target as HTMLInputElement).value))}
                        class="w-9 rounded border border-border dark:border-white/[0.1]
-                              bg-background px-0.5 py-0.5 text-[0.68rem] text-center font-mono
+                              bg-background px-0.5 py-0.5 text-ui-base text-center font-mono
                               focus:outline-none focus:ring-1 focus:ring-ring" />
                 <button onclick={() => step.set(Math.min(step.max, step.val + 1))}
                         aria-label="Increase {step.title}"
-                        class="w-5 h-5 rounded flex items-center justify-center text-[0.7rem] font-bold
+                        class="w-5 h-5 rounded flex items-center justify-center text-ui-md font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">+</button>
               </div>
@@ -1591,8 +1591,8 @@ useWindowTitle("window.title.search");
           <!-- Advanced filters toggle -->
           <button onclick={() => ixShowAdvanced = !ixShowAdvanced}
                   class="flex items-center gap-1.5 w-full px-3 py-1
-                         border-t border-border dark:border-white/[0.05]
-                         text-[0.5rem] text-muted-foreground/40 hover:text-muted-foreground/70
+                         border-t border-border dark:border-white/[0.06]
+                         text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground/70
                          transition-colors select-none">
             <span>{ixShowAdvanced ? "▾" : "▸"}</span>
             <span class="uppercase tracking-widest font-semibold">{t("search.advancedFilters")}</span>
@@ -1604,13 +1604,13 @@ useWindowTitle("window.title.search");
           {#if ixShowAdvanced}
           <!-- SNR filter toggle -->
           <div class="flex items-center gap-2 px-3 py-1.5
-                      border-t border-border dark:border-white/[0.05]
+                      border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
                          text-[0.42rem] font-bold text-white shrink-0 select-none"
                   style="background:#ef4444">6</span>
-            <label for="snr-toggle" class="text-[0.6rem] font-medium text-foreground/70 shrink-0 cursor-pointer">{t("search.snrFilterLabel")}</label>
-            <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.snrFilterHint")}</span>
+            <label for="snr-toggle" class="text-ui-sm font-medium text-foreground/70 shrink-0 cursor-pointer">{t("search.snrFilterLabel")}</label>
+            <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.snrFilterHint")}</span>
             <input id="snr-toggle" type="checkbox" bind:checked={ixSnrPositiveOnly}
                    class="w-3.5 h-3.5 rounded border-border accent-emerald-600 cursor-pointer shrink-0" />
           </div>
@@ -1618,17 +1618,17 @@ useWindowTitle("window.title.search");
           <!-- Device filter -->
           {#if deviceList.length > 0}
             <div class="flex items-center gap-2 px-3 py-1.5
-                        border-t border-border dark:border-white/[0.05]
+                        border-t border-border dark:border-white/[0.06]
                         hover:bg-muted/10 transition-colors">
               <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
                            text-[0.42rem] font-bold text-white shrink-0 select-none"
                     style="background:#8b5cf6">7</span>
-              <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.deviceFilterLabel")}</span>
-              <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.deviceFilterHint")}</span>
+              <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.deviceFilterLabel")}</span>
+              <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.deviceFilterHint")}</span>
               <select bind:value={deviceFilter}
                       aria-label={t("search.deviceFilterLabel")}
                       class="rounded border border-border dark:border-white/[0.1]
-                             bg-background px-1 py-0.5 text-[0.6rem]
+                             bg-background px-1 py-0.5 text-ui-sm
                              focus:outline-none focus:ring-1 focus:ring-ring max-w-[8rem] truncate shrink-0">
                 <option value="all">{t("search.allDevices")}</option>
                 {#each deviceList as dev}
@@ -1640,25 +1640,25 @@ useWindowTitle("window.title.search");
 
           <!-- Date range filter -->
           <div class="flex items-center gap-2 px-3 py-1.5
-                      border-t border-border dark:border-white/[0.05]
+                      border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
                          text-[0.42rem] font-bold text-white shrink-0 select-none"
                   style="background:#f97316">8</span>
-            <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.dateRangeLabel")}</span>
+            <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.dateRangeLabel")}</span>
             <div class="flex items-center gap-1 flex-1 min-w-0">
               <input type="datetime-local"
                      aria-label="Start date"
                      value={ixFilterStartUtc ? new Date(ixFilterStartUtc * 1000).toISOString().slice(0, 16) : ""}
                      oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterStartUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
-                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
+                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-ui-xs
                             focus:outline-none focus:ring-1 focus:ring-ring flex-1 min-w-0" />
-              <span class="text-[0.5rem] text-muted-foreground/40">→</span>
+              <span class="text-ui-2xs text-muted-foreground/40">→</span>
               <input type="datetime-local"
                      aria-label="End date"
                      value={ixFilterEndUtc ? new Date(ixFilterEndUtc * 1000).toISOString().slice(0, 16) : ""}
                      oninput={(e) => { const v = (e.target as HTMLInputElement).value; ixFilterEndUtc = v ? Math.floor(new Date(v).getTime() / 1000) : undefined; }}
-                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-[0.55rem]
+                     class="rounded border border-border dark:border-white/[0.1] bg-background px-1 py-0.5 text-ui-xs
                             focus:outline-none focus:ring-1 focus:ring-ring flex-1 min-w-0" />
             </div>
             <!-- Quick date presets -->
@@ -1669,13 +1669,13 @@ useWindowTitle("window.title.search");
                 { label: "30d", mins: 43200 },
               ] as p}
                 <button onclick={() => { const now = Math.floor(Date.now() / 1000); ixFilterStartUtc = now - p.mins * 60; ixFilterEndUtc = now; }}
-                        class="px-1.5 py-0.5 rounded text-[0.48rem] border border-border dark:border-white/[0.1]
+                        class="px-1.5 py-0.5 rounded text-ui-2xs border border-border dark:border-white/[0.1]
                                bg-background hover:bg-muted/40 text-muted-foreground/50 hover:text-foreground
                                transition-colors select-none">{p.label}</button>
               {/each}
               {#if ixFilterStartUtc || ixFilterEndUtc}
                 <button onclick={() => { ixFilterStartUtc = undefined; ixFilterEndUtc = undefined; }}
-                        class="px-1 py-0.5 rounded text-[0.48rem] text-muted-foreground/40 hover:text-foreground
+                        class="px-1 py-0.5 rounded text-ui-2xs text-muted-foreground/40 hover:text-foreground
                                transition-colors select-none">✕</button>
               {/if}
             </div>
@@ -1683,17 +1683,17 @@ useWindowTitle("window.title.search");
 
           <!-- EEG rank-by selector -->
           <div class="flex items-center gap-2 px-3 py-1.5
-                      border-t border-border dark:border-white/[0.05]
+                      border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
                          text-[0.42rem] font-bold text-white shrink-0 select-none"
                   style="background:#ec4899">9</span>
-            <span class="text-[0.6rem] font-medium text-foreground/70 shrink-0">{t("search.rankByLabel")}</span>
-            <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.rankByHint")}</span>
+            <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.rankByLabel")}</span>
+            <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.rankByHint")}</span>
             <select bind:value={ixEegRankBy}
                     aria-label={t("search.rankByLabel")}
                     class="rounded border border-border dark:border-white/[0.1]
-                           bg-background px-1 py-0.5 text-[0.6rem]
+                           bg-background px-1 py-0.5 text-ui-sm
                            focus:outline-none focus:ring-1 focus:ring-ring shrink-0">
               <option value="timestamp">{t("search.rankTimestamp")}</option>
               <option value="engagement">{t("search.rankEngagement")}</option>
@@ -1704,8 +1704,8 @@ useWindowTitle("window.title.search");
 
           <!-- Perf stats (shown after search) -->
           {#if ixPerf}
-            <div class="flex items-center gap-3 px-3 py-1 border-t border-border dark:border-white/[0.05]
-                        text-[0.5rem] text-muted-foreground/50 font-mono select-none">
+            <div class="flex items-center gap-3 px-3 py-1 border-t border-border dark:border-white/[0.06]
+                        text-ui-2xs text-muted-foreground/50 font-mono select-none">
               <span>{t("search.perfEmbed")} {ixPerf.embed_ms}ms</span>
               <span>{t("search.perfGraph")} {ixPerf.graph_ms}ms</span>
               <span class="font-semibold">{t("search.perfTotal")} {ixPerf.total_ms}ms</span>
@@ -1720,9 +1720,9 @@ useWindowTitle("window.title.search");
 
           <!-- Sessions summary (shown after search) -->
           {#if ixSessions.length > 0}
-            <div class="px-3 py-1.5 border-t border-border dark:border-white/[0.05]">
+            <div class="px-3 py-1.5 border-t border-border dark:border-white/[0.06]">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[0.55rem] font-semibold text-foreground/60 uppercase tracking-widest select-none">{t("search.sessionsTitle")}</span>
+                <span class="text-ui-xs font-semibold text-foreground/60 uppercase tracking-widest select-none">{t("search.sessionsTitle")}</span>
                 <button onclick={() => {
                   const csv = ["session_id,epoch_count,duration_secs,avg_engagement,avg_snr,avg_relaxation,stddev_engagement,best"]
                     .concat(ixSessions.map(s => `${s.session_id},${s.epoch_count},${s.duration_secs},${s.avg_engagement?.toFixed(4)},${s.avg_snr?.toFixed(4)},${s.avg_relaxation?.toFixed(4)},${s.stddev_engagement?.toFixed(4)},${s.best}`))
@@ -1734,7 +1734,7 @@ useWindowTitle("window.title.search");
                   a.click();
                   URL.revokeObjectURL(a.href);
                 }}
-                        class="text-[0.5rem] text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer select-none">
+                        class="text-ui-2xs text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer select-none">
                   {t("search.exportCsv")}
                 </button>
               </div>
@@ -1755,7 +1755,7 @@ useWindowTitle("window.title.search");
               {#each ixSessions as s}
                 {@const engPct = Math.round(Math.min(1, s.avg_engagement ?? 0) * 100)}
                 {@const snrPct = Math.round(Math.min(1, (s.avg_snr ?? 0) / 20) * 100)}
-                <div class="flex items-center gap-2 py-0.5 text-[0.5rem] font-mono
+                <div class="flex items-center gap-2 py-0.5 text-ui-2xs font-mono
                             {s.best ? 'text-emerald-500 font-semibold' : 'text-muted-foreground/50'}">
                   {#if s.best}<span title={t("search.bestSession")}>★</span>{/if}
                   <span class="w-20 truncate">{s.session_id}</span>
@@ -1780,14 +1780,14 @@ useWindowTitle("window.title.search");
           <div class="flex items-center gap-2 px-3 py-2
                       border-t border-border dark:border-white/[0.06]">
             {#if error}
-              <span class="text-[0.6rem] text-destructive flex-1 truncate" title={error}>{error}</span>
+              <span class="text-ui-sm text-destructive flex-1 truncate" title={error}>{error}</span>
             {:else}
-              <span class="flex-1 text-[0.48rem] text-muted-foreground/25 select-none">
+              <span class="flex-1 text-ui-2xs text-muted-foreground/25 select-none">
                 {t("search.interactiveCmdEnter")}
               </span>
             {/if}
             <Button onclick={searchInteractive} disabled={ixSearching || !ixQuery.trim()} size="sm"
-                    class="gap-1.5 h-7 px-4 text-[0.72rem] bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
+                    class="gap-1.5 h-7 px-4 text-ui-md bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
               {#if ixSearching}
                 <Spinner size="w-3 h-3" />
                 {ixStatus || t("search.interactiveSearching")}
@@ -1808,7 +1808,7 @@ useWindowTitle("window.title.search");
     {:else if mode === "text"}
       <!-- Text mode: query box -->
       <div class="flex flex-col gap-1">
-        <label for="search-text-query" class="text-[0.58rem] text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
+        <label for="search-text-query" class="text-ui-sm text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
           {t("search.textQueryLabel")}
         </label>
         <textarea id="search-text-query" bind:value={textQuery}
@@ -1816,7 +1816,7 @@ useWindowTitle("window.title.search");
                   placeholder={t("search.textQueryPlaceholder")}
                   rows="2"
                   class="w-full rounded-md border border-border dark:border-white/[0.1]
-                         bg-background px-3 py-2 text-[0.8rem] leading-relaxed
+                         bg-background px-3 py-2 text-ui-lg leading-relaxed
                          placeholder:text-muted-foreground/30 resize-none
                          focus:outline-none focus:ring-1 focus:ring-violet-500/50
                          transition-shadow">
@@ -1826,20 +1826,20 @@ useWindowTitle("window.title.search");
       <!-- k + button -->
       <div class="flex items-center gap-2.5">
         <div class="flex items-center gap-1.5">
-          <span class="text-[0.6rem] text-muted-foreground/60 font-mono select-none">k</span>
+          <span class="text-ui-sm text-muted-foreground/60 font-mono select-none">k</span>
           <input type="number" min="1" max="100" bind:value={kVal}
                  aria-label="k nearest neighbors"
                  class="w-14 rounded border border-border dark:border-white/[0.1]
-                        bg-background px-1.5 py-1 text-[0.72rem] text-center
+                        bg-background px-1.5 py-1 text-ui-md text-center
                         focus:outline-none focus:ring-1 focus:ring-ring" />
         </div>
         {#if error}
-          <span class="text-[0.62rem] text-destructive flex-1 truncate" title={error}>{error}</span>
+          <span class="text-ui-sm text-destructive flex-1 truncate" title={error}>{error}</span>
         {:else}
-          <span class="flex-1 text-[0.55rem] text-muted-foreground/30 select-none text-right">{t("search.textCmdEnter")}</span>
+          <span class="flex-1 text-ui-xs text-muted-foreground/30 select-none text-right">{t("search.textCmdEnter")}</span>
         {/if}
         <Button onclick={searchText} disabled={textSearching || !textQuery.trim()} size="sm"
-                class="gap-1.5 h-7 px-4 text-[0.72rem] bg-violet-600 hover:bg-violet-700 text-white">
+                class="gap-1.5 h-7 px-4 text-ui-md bg-violet-600 hover:bg-violet-700 text-white">
           {#if textSearching}
             <Spinner size="w-3 h-3" />
             {t("search.searching")}
@@ -1856,18 +1856,18 @@ useWindowTitle("window.title.search");
       <!-- Images mode: OCR text search -->
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between">
-          <label for="search-img-query" class="text-[0.58rem] text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
+          <label for="search-img-query" class="text-ui-sm text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
             {t("search.imageQueryLabel")}
           </label>
           <div class="flex rounded-lg border border-border dark:border-white/[0.08] overflow-hidden">
             <button onclick={() => { imgSearchMode = "substring"; }}
-                    class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
-                           {imgSearchMode === 'substring' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}">
+                    class="px-2 py-0.5 text-ui-xs font-medium transition-colors
+                           {imgSearchMode === 'substring' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-foreground'}">
               {t("search.imageMatchText")}
             </button>
             <button onclick={() => { imgSearchMode = "semantic"; }}
-                    class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
-                           {imgSearchMode === 'semantic' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}">
+                    class="px-2 py-0.5 text-ui-xs font-medium transition-colors
+                           {imgSearchMode === 'semantic' ? 'bg-violet-600 text-white' : 'text-muted-foreground hover:text-foreground'}">
               {t("search.imageMatchSemantic")}
             </button>
           </div>
@@ -1877,11 +1877,11 @@ useWindowTitle("window.title.search");
                  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') searchImages(); }}
                  placeholder={t("search.imagePlaceholder")}
                  class="flex-1 rounded-md border border-border dark:border-white/[0.1]
-                        bg-background px-3 py-2 text-[0.8rem]
+                        bg-background px-3 py-2 text-ui-lg
                         placeholder:text-muted-foreground/30
                         focus:outline-none focus:ring-1 focus:ring-primary/50" />
           <Button onclick={searchImages} disabled={imgSearching || !imgQuery.trim()} size="sm"
-                  class="gap-1.5 h-9 px-4 text-[0.72rem] shrink-0">
+                  class="gap-1.5 h-9 px-4 text-ui-md shrink-0">
             {#if imgSearching}
               <Spinner size="w-3 h-3" />
               {t("search.searching")}
@@ -1900,7 +1900,7 @@ useWindowTitle("window.title.search");
   <!-- ── Filter bar (mode-specific) ───────────────────────────────────── -->
   {#if mode === "eeg" && result && result.results.length > 0}
     <div class="flex items-center gap-2 px-4 py-1.5 shrink-0
-                border-b border-border dark:border-white/[0.05] bg-muted/10">
+                border-b border-border dark:border-white/[0.06] bg-muted/10">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            class="w-3 h-3 shrink-0 text-muted-foreground/40 pointer-events-none">
         <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
@@ -1909,21 +1909,21 @@ useWindowTitle("window.title.search");
       <input type="text" placeholder={t("search.filterByLabel")} bind:value={labelFilter}
              aria-label="Filter by label"
              oninput={() => { page = 0; }}
-             class="flex-1 bg-transparent text-[0.7rem] focus:outline-none
+             class="flex-1 bg-transparent text-ui-md focus:outline-none
                     placeholder:text-muted-foreground/30" />
       <label class="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
         <input type="checkbox" bind:checked={labelsOnly} onchange={() => page = 0} class="rounded border-border h-3 w-3" />
-        <span class="text-[0.6rem] text-muted-foreground/60">{t("search.labeledOnly")}</span>
+        <span class="text-ui-sm text-muted-foreground/60">{t("search.labeledOnly")}</span>
       </label>
       {#if labelFilter || labelsOnly}
-        <span class="text-[0.55rem] text-muted-foreground/40 tabular-nums shrink-0">
+        <span class="text-ui-xs text-muted-foreground/40 tabular-nums shrink-0">
           {filtered.length} / {result.results.length}
         </span>
       {/if}
     </div>
   {:else if mode === "text" && textSearched && textResults.length > 0}
     <div class="flex items-center gap-2 px-4 py-1.5 shrink-0
-                border-b border-border dark:border-white/[0.05] bg-muted/10">
+                border-b border-border dark:border-white/[0.06] bg-muted/10">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            class="w-3 h-3 shrink-0 text-muted-foreground/40 pointer-events-none">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -1931,20 +1931,20 @@ useWindowTitle("window.title.search");
       <input type="text" placeholder={t("search.textFilterLabel")} bind:value={textFilter}
              aria-label="Filter text results"
              oninput={() => { page = 0; }}
-             class="flex-1 bg-transparent text-[0.7rem] focus:outline-none
+             class="flex-1 bg-transparent text-ui-md focus:outline-none
                     placeholder:text-muted-foreground/30" />
       <!-- Sort toggle -->
       <div class="flex items-center gap-0.5 shrink-0">
-        <span class="text-[0.5rem] text-muted-foreground/40 mr-1 select-none uppercase tracking-widest">Sort</span>
+        <span class="text-ui-2xs text-muted-foreground/40 mr-1 select-none uppercase tracking-widest">Sort</span>
         <button onclick={() => { textSort = "sim"; page = 0; }}
-                class="px-2 py-0.5 rounded text-[0.58rem] font-semibold transition-colors
+                class="px-2 py-0.5 rounded text-ui-sm font-semibold transition-colors
                        {textSort === 'sim'
                           ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
                           : 'text-muted-foreground/50 hover:text-muted-foreground'}">
           {t("search.textSortSim")}
         </button>
         <button onclick={() => { textSort = "date"; page = 0; }}
-                class="px-2 py-0.5 rounded text-[0.58rem] font-semibold transition-colors
+                class="px-2 py-0.5 rounded text-ui-sm font-semibold transition-colors
                        {textSort === 'date'
                           ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
                           : 'text-muted-foreground/50 hover:text-muted-foreground'}">
@@ -1969,11 +1969,11 @@ useWindowTitle("window.title.search");
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
           </div>
-          <p class="text-[0.8rem] text-muted-foreground/50 max-w-[280px] leading-relaxed">
+          <p class="text-ui-lg text-muted-foreground/50 max-w-[280px] leading-relaxed">
             {t("search.emptyState")}
           </p>
           {#if corpusStats}
-            <div class="flex flex-col gap-1 text-[0.6rem] text-muted-foreground/45 tabular-nums max-w-[320px]">
+            <div class="flex flex-col gap-1 text-ui-sm text-muted-foreground/45 tabular-nums max-w-[320px]">
               {#if corpusStats.eeg_days > 0}
                 <div class="flex items-center justify-center gap-3">
                   <span><span class="font-semibold text-foreground/50">{corpusStats.eeg_days}</span> day{corpusStats.eeg_days !== 1 ? "s" : ""} of EEG</span>
@@ -1984,18 +1984,18 @@ useWindowTitle("window.title.search");
                     <span><span class="font-semibold text-foreground/50">{fmtSecs(corpusStats.eeg_total_secs)}</span></span>
                   {/if}
                 </div>
-                <span class="text-[0.5rem] text-muted-foreground/30">{corpusStats.eeg_first_day} – {corpusStats.eeg_last_day}</span>
+                <span class="text-ui-2xs text-muted-foreground/30">{corpusStats.eeg_first_day} – {corpusStats.eeg_last_day}</span>
                 {#if corpusStats.eeg_total_epochs != null && corpusStats.eeg_total_epochs > 0}
                   {@const covPct = corpusStats.eeg_total_epochs > 0 ? Math.round(((corpusStats.eeg_embedded_epochs ?? 0) / corpusStats.eeg_total_epochs) * 100) : 0}
                   <div class="flex items-center justify-center gap-2 mt-0.5">
-                    <span class="text-[0.5rem] {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                    <span class="text-ui-2xs {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
                       {t("search.eegCoverage")}:
                     </span>
                     <div class="h-1 w-12 rounded-full bg-muted/30 overflow-hidden">
                       <div class="h-full rounded-full {covPct >= 95 ? 'bg-emerald-500/60' : covPct >= 50 ? 'bg-amber-500/60' : 'bg-red-500/60'}"
                            style="width:{covPct}%"></div>
                     </div>
-                    <span class="text-[0.5rem] {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
+                    <span class="text-ui-2xs {covPct >= 95 ? 'text-emerald-500/70' : covPct >= 50 ? 'text-amber-500/70' : 'text-red-500/70'}">
                       {t("search.eegCoverageLabel", {
                         embedded: (corpusStats.eeg_embedded_epochs ?? 0).toLocaleString(),
                         total: corpusStats.eeg_total_epochs.toLocaleString(),
@@ -2022,14 +2022,14 @@ useWindowTitle("window.title.search");
         <!-- Loading state -->
         <div class="flex flex-col items-center justify-center h-full gap-3 px-8">
           <Spinner size="w-5 h-5" class="text-blue-500" />
-          <span class="text-[0.78rem] text-muted-foreground">{searchStatus || t("search.searchingIndices")}</span>
+          <span class="text-ui-lg text-muted-foreground">{searchStatus || t("search.searchingIndices")}</span>
           {#if streamTotal > 0}
             <div class="w-full max-w-xs flex flex-col gap-1.5">
               <div class="h-1.5 rounded-full bg-muted/30 overflow-hidden">
                 <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300"
                      style="width:{Math.min(100,(streamDone/streamTotal)*100).toFixed(1)}%"></div>
               </div>
-              <div class="flex justify-between text-[0.58rem] text-muted-foreground/50 tabular-nums">
+              <div class="flex justify-between text-ui-sm text-muted-foreground/50 tabular-nums">
                 <span>{streamDone} / {streamTotal}</span>
                 {#if streamDays.length > 0}
                   <span class="truncate max-w-[180px]">{streamDays.map(fmtUtcDay).join(", ")}</span>
@@ -2037,17 +2037,17 @@ useWindowTitle("window.title.search");
               </div>
             </div>
           {:else if searchElapsed > 0}
-            <span class="text-[0.6rem] text-muted-foreground/40 tabular-nums">{t("search.elapsed", { n: searchElapsed })}</span>
+            <span class="text-ui-sm text-muted-foreground/40 tabular-nums">{t("search.elapsed", { n: searchElapsed })}</span>
           {/if}
         </div>
 
       {:else if result}
         {#if result.results.length === 0}
           <div class="flex flex-col items-center justify-center h-full gap-2 text-center px-8">
-            <p class="text-[0.78rem] text-muted-foreground/60">
+            <p class="text-ui-lg text-muted-foreground/60">
               {t("search.noEmbeddings", { start: fmtDateTime(result.start_utc), end: fmtDateTime(result.end_utc) })}
             </p>
-            <p class="text-[0.65rem] text-muted-foreground/40">
+            <p class="text-ui-base text-muted-foreground/40">
               {t("search.daysSearched", { days: result.searched_days.map(fmtUtcDay).join(", ") || "—" })}
             </p>
           </div>
@@ -2056,23 +2056,23 @@ useWindowTitle("window.title.search");
           {@const maxDist = Math.max(0.0001, ...filtered.flatMap(q => q.neighbors.map(n => n.distance)))}
 
           <!-- Result meta chips -->
-          <div class="flex items-center gap-1.5 px-4 py-2 border-b border-border dark:border-white/[0.05] flex-wrap">
-            <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono">
+          <div class="flex items-center gap-1.5 px-4 py-2 border-b border-border dark:border-white/[0.06] flex-wrap">
+            <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono">
               {filtered.length}{filtered.length !== result.query_count ? `/${result.query_count}` : ""} {t("search.query").toLowerCase()}
             </Badge>
-            <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono">k={result.k}</Badge>
-            <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono">ef={result.ef}</Badge>
+            <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono">k={result.k}</Badge>
+            <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono">ef={result.ef}</Badge>
             {#each result.searched_days as day}
-              <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono">{fmtUtcDay(day)}</Badge>
+              <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono">{fmtUtcDay(day)}</Badge>
             {/each}
-            <span class="ml-auto text-[0.58rem] text-muted-foreground/45 tabular-nums select-none">
+            <span class="ml-auto text-ui-sm text-muted-foreground/45 tabular-nums select-none">
               {fmtDateTime(result.start_utc)} → {fmtDateTime(result.end_utc)}
             </span>
           </div>
           <!-- Corpus context line -->
           {#if corpusStats && corpusStats.eeg_days > 0}
             <div class="flex items-center gap-2.5 px-4 py-1 border-b border-border dark:border-white/[0.04]
-                        text-[0.5rem] text-muted-foreground/40 tabular-nums select-none">
+                        text-ui-2xs text-muted-foreground/40 tabular-nums select-none">
               <span>Searching {result.searched_days.length} of <span class="text-foreground/50">{corpusStats.eeg_days}</span> days</span>
               {#if corpusStats.eeg_total_sessions != null}
                 <span class="text-muted-foreground/15">·</span>
@@ -2093,7 +2093,7 @@ useWindowTitle("window.title.search");
           {#if searchAnalysis}
             {@const sa = searchAnalysis}
             {@const maxH = Math.max(...sa.hourHist, 1)}
-            <div class="border-b border-border dark:border-white/[0.05]">
+            <div class="border-b border-border dark:border-white/[0.06]">
               <button onclick={() => showAnalysis = !showAnalysis}
                       aria-expanded={showAnalysis}
                       aria-label={t("search.analysisLabel")}
@@ -2104,12 +2104,12 @@ useWindowTitle("window.title.search");
                             {showAnalysis ? 'rotate-0' : '-rotate-90'}">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
-                <span class="text-[0.62rem] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+                <span class="text-ui-sm font-semibold text-muted-foreground/70 uppercase tracking-wider">
                   {t("search.analysisPanel")}
                 </span>
                 <!-- Mini stats always visible -->
                 {#each analysisChips(sa) as [chipLabel, chipVal, chipCls]}
-                  <span class="text-[0.55rem] text-muted-foreground/40 tabular-nums">
+                  <span class="text-ui-xs text-muted-foreground/40 tabular-nums">
                     <span class="text-muted-foreground/25">{chipLabel}</span>
                     <span class="ml-0.5 {chipCls || 'text-foreground/60'}">{chipVal}</span>
                   </span>
@@ -2119,7 +2119,7 @@ useWindowTitle("window.title.search");
               {#if showAnalysis}
                 <div class="px-4 pb-3">
                   <div class="rounded-xl border border-border dark:border-white/[0.06]
-                              bg-white dark:bg-[#14141e] overflow-hidden">
+                              bg-surface-1 overflow-hidden">
 
                     <!-- Hour histogram -->
                     <div class="px-3.5 py-2.5">
@@ -2175,7 +2175,7 @@ useWindowTitle("window.title.search");
                         </span>
                         {#each sa.topDays as td}
                           <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
-                                       bg-primary/10 text-primary text-[0.52rem] font-medium">
+                                       bg-violet-500/10 text-violet-600 dark:text-violet-400 text-ui-xs font-medium">
                             {td.day} <span class="opacity-55">({td.count})</span>
                           </span>
                         {/each}
@@ -2189,7 +2189,7 @@ useWindowTitle("window.title.search");
 
           <!-- ── UMAP 3D map (collapsible, always-visible header when data present) ── -->
           {#if (umapPlaceholder || umapResult)}
-            <div class="border-b border-border dark:border-white/[0.05]">
+            <div class="border-b border-border dark:border-white/[0.06]">
               <div class="rounded-xl border border-border bg-card mx-4 my-3 overflow-hidden">
 
                 <!-- Card header — always visible -->
@@ -2208,7 +2208,7 @@ useWindowTitle("window.title.search");
                     <line x1="6"  y1="17" x2="10" y2="13"/>
                     <line x1="18" y1="17" x2="14" y2="13"/>
                   </svg>
-                  <span class="text-[0.62rem] font-semibold select-none">Brain Nebula™</span>
+                  <span class="text-ui-sm font-semibold select-none">Brain Nebula™</span>
                   <span class="text-[0.45rem] text-muted-foreground/40 font-normal select-none">{t("search.umap")}</span>
 
                   <!-- Status / point count -->
@@ -2225,9 +2225,9 @@ useWindowTitle("window.title.search");
 
                   <!-- By-date toggle -->
                   <!-- svelte-ignore a11y_consider_explicit_label -->
-                  <button class="text-[0.5rem] px-1.5 py-0.5 rounded border transition-colors
+                  <button class="text-ui-2xs px-1.5 py-0.5 rounded border transition-colors
                                  {umapColorByDate
-                                    ? 'text-primary border-primary/30 bg-primary/10'
+                                    ? 'text-violet-600 dark:text-violet-400 border-violet-500/30 bg-violet-500/10'
                                     : 'text-muted-foreground/40 hover:text-muted-foreground border-transparent hover:border-border'}"
                           onclick={() => umapColorByDate = !umapColorByDate}>
                     {t("search.byDate")}
@@ -2235,7 +2235,7 @@ useWindowTitle("window.title.search");
 
                   <!-- Collapse / expand toggle -->
                   <!-- svelte-ignore a11y_consider_explicit_label -->
-                  <button class="ml-auto text-[0.5rem] text-muted-foreground/40 hover:text-muted-foreground
+                  <button class="ml-auto text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground
                                  transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-border"
                           onclick={() => showUmap = !showUmap}>
                     {showUmap ? `▲ ${t("search.umapHide")}` : `▼ ${t("search.umapShow")}`}
@@ -2276,21 +2276,21 @@ useWindowTitle("window.title.search");
           {/if}
 
           <!-- ── Query entry list ────────────────────────────────────── -->
-          <div class="divide-y divide-border dark:divide-white/[0.04]">
+          <div class="divide-y divide-border dark:divide-white/[0.05]">
             {#each pageSlice as qentry, qi}
               {@const gi = page * SEARCH_PAGE_SIZE + qi}
               <div class="px-4 py-3">
                 <!-- Query header -->
                 <div class="flex items-center gap-2 mb-2">
                   <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-[0.5rem] font-bold tracking-widest uppercase
+                    <span class="text-ui-2xs font-bold tracking-widest uppercase
                                  text-muted-foreground/40 select-none">{t("search.query")}</span>
-                    <span class="font-mono text-[0.72rem] font-bold text-foreground">
+                    <span class="font-mono text-ui-md font-bold text-foreground">
                       {fmtTime(qentry.timestamp_unix)}
                     </span>
-                    <span class="text-[0.6rem] text-muted-foreground/40">{fmtDate(qentry.timestamp_unix)}</span>
+                    <span class="text-ui-sm text-muted-foreground/40">{fmtDate(qentry.timestamp_unix)}</span>
                   </div>
-                  <span class="ml-auto text-[0.55rem] text-muted-foreground/30 tabular-nums select-none">
+                  <span class="ml-auto text-ui-xs text-muted-foreground/30 tabular-nums select-none">
                     #{gi+1}/{filtered.length}
                   </span>
                 </div>
@@ -2302,7 +2302,7 @@ useWindowTitle("window.title.search");
                     {@const sw = simWidth(nb.distance, maxDist)}
                     {@const color = distColor(nb.distance)}
                     <div class="flex gap-0 rounded-md overflow-hidden bg-muted/20 dark:bg-white/[0.02]
-                                border border-border/60 dark:border-white/[0.05]
+                                border border-border/60 dark:border-white/[0.06]
                                 hover:border-border dark:hover:border-white/[0.1] transition-colors">
                       <!-- Left rank stripe -->
                       <div class="w-[3px] shrink-0 rounded-l-md" style="background:{color}"></div>
@@ -2310,29 +2310,29 @@ useWindowTitle("window.title.search");
                       <div class="flex-1 px-2.5 py-2">
                         <!-- Sim bar row -->
                         <div class="flex items-center gap-2 mb-1.5">
-                          <span class="shrink-0 text-[0.55rem] text-muted-foreground/35 font-mono tabular-nums w-4">
+                          <span class="shrink-0 text-ui-xs text-muted-foreground/35 font-mono tabular-nums w-4">
                             #{ni+1}
                           </span>
-                          <div class="flex-1 h-[5px] rounded-full bg-muted/30 dark:bg-white/[0.05] overflow-hidden">
+                          <div class="flex-1 h-[5px] rounded-full bg-muted/30 dark:bg-white/[0.04] overflow-hidden">
                             <div class="h-full rounded-full" style="width:{(sw*100).toFixed(1)}%;background:{color}"></div>
                           </div>
-                          <span class="shrink-0 text-[0.64rem] font-bold tabular-nums" style="color:{color}">
+                          <span class="shrink-0 text-ui-base font-bold tabular-nums" style="color:{color}">
                             {isSelf ? "100%" : simPct(nb.distance, maxDist)}
                           </span>
-                          <span class="shrink-0 font-mono text-[0.56rem] text-muted-foreground/35 tabular-nums">
+                          <span class="shrink-0 font-mono text-ui-xs text-muted-foreground/35 tabular-nums">
                             {isSelf ? t("search.analysisSelf") : (nb.distance ?? 0).toFixed(4)}
                           </span>
                         </div>
 
                         <!-- Time + device + action -->
                         <div class="flex items-center gap-1.5 flex-wrap">
-                          <span class="font-mono text-[0.68rem] font-semibold">{fmtTime(nb.timestamp_unix)}</span>
-                          <span class="text-[0.58rem] text-muted-foreground/40 font-mono">{fmtDate(nb.timestamp_unix)}</span>
+                          <span class="font-mono text-ui-base font-semibold">{fmtTime(nb.timestamp_unix)}</span>
+                          <span class="text-ui-sm text-muted-foreground/40 font-mono">{fmtDate(nb.timestamp_unix)}</span>
                           {#if nb.device_name}
-                            <span class="text-[0.58rem] text-muted-foreground/55 truncate max-w-[120px]">{nb.device_name}</span>
+                            <span class="text-ui-sm text-muted-foreground/55 truncate max-w-[120px]">{nb.device_name}</span>
                           {/if}
-                          <button class="ml-auto text-[0.55rem] text-primary/60 hover:text-primary font-medium
-                                         transition-colors px-1.5 py-0.5 rounded hover:bg-primary/8"
+                          <button class="ml-auto text-ui-xs text-violet-500/60 hover:text-violet-600 font-medium
+                                         transition-colors px-1.5 py-0.5 rounded hover:bg-violet-500/8"
                                   onclick={(e) => { e.stopPropagation(); openSession(nb); }}>
                             {t("search.viewSession")} ↗
                           </button>
@@ -2342,7 +2342,7 @@ useWindowTitle("window.title.search");
                         {#if nb.metrics}
                           <div class="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
                             {#each metricChips(nb.metrics) as chip}
-                              <span class="inline-flex items-center gap-0.5 text-[0.52rem] tabular-nums">
+                              <span class="inline-flex items-center gap-0.5 text-ui-xs tabular-nums">
                                 <span class="text-muted-foreground/40">{chip.l}</span>
                                 <span class="font-bold" style="color:{chip.c}">{chip.v}</span>
                               </span>
@@ -2356,7 +2356,7 @@ useWindowTitle("window.title.search");
                             {#each nb.labels as lbl}
                               <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
                                            bg-emerald-500/10 border border-emerald-500/20
-                                           text-emerald-700 dark:text-emerald-400 text-[0.58rem] leading-tight"
+                                           text-emerald-700 dark:text-emerald-400 text-ui-sm leading-tight"
                                     title="{lbl.text} ({fmtDateTime(lbl.eeg_start)} → {fmtDateTime(lbl.eeg_end)})">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                      class="w-2.5 h-2.5 shrink-0 pointer-events-none">
@@ -2364,7 +2364,7 @@ useWindowTitle("window.title.search");
                                   <line x1="7" y1="7" x2="7.01" y2="7"/>
                                 </svg>
                                 <span class="truncate max-w-[260px]">{lbl.text}</span>
-                                <span class="shrink-0 opacity-50 font-mono text-[0.5rem]">
+                                <span class="shrink-0 opacity-50 font-mono text-ui-2xs">
                                   {fmtTime(lbl.eeg_start)}–{fmtTime(lbl.eeg_end)}
                                 </span>
                               </span>
@@ -2384,14 +2384,14 @@ useWindowTitle("window.title.search");
             <div class="sticky bottom-0 flex items-center justify-between px-4 py-2
                         border-t border-border dark:border-white/[0.06]
                         bg-background/95 backdrop-blur-sm">
-              <Button variant="outline" size="sm" class="h-7 px-3 text-[0.68rem]"
+              <Button variant="outline" size="sm" class="h-7 px-3 text-ui-base"
                       disabled={page===0} onclick={() => page--}>{t("search.prev")}</Button>
-              <span class="text-[0.62rem] text-muted-foreground/55 tabular-nums">
+              <span class="text-ui-sm text-muted-foreground/55 tabular-nums">
                 {t("search.pageOf", { page: page+1, total: totalPages })}
                 <span class="text-muted-foreground/30 mx-1">·</span>
                 {t("search.queriesRange", { start: page*SEARCH_PAGE_SIZE+1, end: Math.min((page+1)*SEARCH_PAGE_SIZE, filtered.length) })}
               </span>
-              <Button variant="outline" size="sm" class="h-7 px-3 text-[0.68rem]"
+              <Button variant="outline" size="sm" class="h-7 px-3 text-ui-base"
                       disabled={page>=totalPages-1} onclick={() => page++}>{t("search.next")}</Button>
             </div>
           {/if}
@@ -2416,8 +2416,8 @@ useWindowTitle("window.title.search");
             </svg>
           </div>
           <div class="flex flex-col gap-1.5">
-            <p class="text-[0.82rem] font-semibold text-foreground/70">{t("search.modeInteractive")}</p>
-            <p class="text-[0.72rem] text-muted-foreground/50 max-w-[320px] leading-relaxed">
+            <p class="text-ui-lg font-semibold text-foreground/70">{t("search.modeInteractive")}</p>
+            <p class="text-ui-md text-muted-foreground/50 max-w-[320px] leading-relaxed">
               {t("search.interactiveEmptyState")}
             </p>
           </div>
@@ -2436,7 +2436,7 @@ useWindowTitle("window.title.search");
                       style="background:{step.col}">
                   {step.n}
                 </span>
-                <span class="text-[0.65rem] text-muted-foreground/60">{step.label}</span>
+                <span class="text-ui-base text-muted-foreground/60">{step.label}</span>
               </div>
             {/each}
           </div>
@@ -2444,12 +2444,12 @@ useWindowTitle("window.title.search");
           <!-- Recent searches -->
           {#if ixSearchHistory.length > 0}
             <div class="flex flex-col gap-1 mt-3 max-w-[300px]">
-              <span class="text-[0.5rem] text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.recentSearches")}</span>
+              <span class="text-ui-2xs text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.recentSearches")}</span>
               <div class="flex flex-wrap gap-1">
                 {#each ixSearchHistory.slice(0, 6) as q}
                   <button onclick={() => { ixQuery = q; searchInteractive(); }}
                           class="px-2 py-0.5 rounded-full border border-border dark:border-white/[0.08]
-                                 bg-background hover:bg-muted/30 text-[0.55rem] text-muted-foreground/60
+                                 bg-background hover:bg-muted/30 text-ui-xs text-muted-foreground/60
                                  hover:text-foreground transition-colors truncate max-w-[140px]">{q}</button>
                 {/each}
               </div>
@@ -2459,10 +2459,10 @@ useWindowTitle("window.title.search");
           <!-- Saved bookmarks -->
           {#if ixBookmarks.length > 0}
             <div class="flex flex-col gap-1 mt-3 max-w-[300px]">
-              <span class="text-[0.5rem] text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.savedFindings")}</span>
+              <span class="text-ui-2xs text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">{t("search.savedFindings")}</span>
               <div class="flex flex-col gap-0.5">
                 {#each ixBookmarks.slice(0, 5) as bm}
-                  <div class="flex items-center gap-1.5 text-[0.55rem]">
+                  <div class="flex items-center gap-1.5 text-ui-xs">
                     <span class="text-amber-500">★</span>
                     <button onclick={() => { ixQuery = bm.query; searchInteractive(); }}
                             class="text-muted-foreground/60 hover:text-foreground truncate max-w-[200px] transition-colors text-left">
@@ -2503,7 +2503,7 @@ useWindowTitle("window.title.search");
             <!-- Shimmer overlay -->
             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse"></div>
           </div>
-          <span class="text-[0.78rem] text-muted-foreground">
+          <span class="text-ui-lg text-muted-foreground">
             {ixStatus || t("search.interactiveSearching")}
           </span>
           <!-- Pipeline progress -->
@@ -2524,7 +2524,7 @@ useWindowTitle("window.title.search");
                   <div class="h-full rounded-full animate-pulse"
                        style="background:{step.col}; width: 60%; opacity: 0.6;"></div>
                 </div>
-                <span class="text-[0.55rem] text-muted-foreground/50 w-20 text-right shrink-0">
+                <span class="text-ui-xs text-muted-foreground/50 w-20 text-right shrink-0">
                   {step.label}
                 </span>
               </div>
@@ -2534,7 +2534,7 @@ useWindowTitle("window.title.search");
 
       {:else if ixNodes.length === 0}
         <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
-          <p class="text-[0.78rem] text-muted-foreground/60">{t("search.interactiveNoResults")}</p>
+          <p class="text-ui-lg text-muted-foreground/60">{t("search.interactiveNoResults")}</p>
         </div>
 
       {:else}
@@ -2547,31 +2547,31 @@ useWindowTitle("window.title.search");
         {@const flDisp    = dispNodes.filter(n => n.kind === "found_label").length}
         {@const ssCount   = dispNodes.filter(n => n.kind === "screenshot").length}
 
-        <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border dark:border-white/[0.05] shrink-0">
+        <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border dark:border-white/[0.06] shrink-0">
           <!-- Coloured node-kind dots + counts + labels -->
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-violet-500/80 tabular-nums shrink-0" title={t("search.nodeQueryTip")}>
+          <span class="flex items-center gap-0.5 text-ui-xs text-violet-600/80 dark:text-violet-400/80 tabular-nums shrink-0" title={t("search.nodeQueryTip")}>
             <span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>1 <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeQuery")}</span>
           </span>
-          <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-blue-500/80 tabular-nums shrink-0" title={t("search.nodeTextTip")}>
+          <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
+          <span class="flex items-center gap-0.5 text-ui-xs text-blue-500/80 tabular-nums shrink-0" title={t("search.nodeTextTip")}>
             <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>{tlCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeText")}</span>
           </span>
-          <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-amber-500/80 tabular-nums shrink-0" title={t("search.nodeEegTip")}>
+          <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
+          <span class="flex items-center gap-0.5 text-ui-xs text-amber-500/80 tabular-nums shrink-0" title={t("search.nodeEegTip")}>
             <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>{epCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeEeg")}</span>
           </span>
-          <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="flex items-center gap-0.5 text-[0.52rem] text-emerald-500/80 tabular-nums shrink-0" title={t("search.nodeFoundTip")}>
+          <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
+          <span class="flex items-center gap-0.5 text-ui-xs text-emerald-500/80 tabular-nums shrink-0" title={t("search.nodeFoundTip")}>
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeFound")}</span>
           </span>
           {#if ssCount > 0}
-            <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-            <span class="flex items-center gap-0.5 text-[0.52rem] text-cyan-500/80 tabular-nums shrink-0" title={t("search.nodeScreenshotsTip")}>
+            <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
+            <span class="flex items-center gap-0.5 text-ui-xs text-cyan-500/80 tabular-nums shrink-0" title={t("search.nodeScreenshotsTip")}>
               <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeScreenshots")}</span>
             </span>
           {/if}
-          <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
-          <span class="text-[0.48rem] text-muted-foreground/40 tabular-nums shrink-0">
+          <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
+          <span class="text-ui-2xs text-muted-foreground/40 tabular-nums shrink-0">
             {dispEdges.length} edges
           </span>
 
@@ -2579,28 +2579,28 @@ useWindowTitle("window.title.search");
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0 ml-1">
             <input type="checkbox" bind:checked={ixDedupeLabels}
                    class="rounded border-border h-2.5 w-2.5 accent-violet-500" />
-            <span class="text-[0.48rem] text-muted-foreground/50">{t("search.interactiveDedupe")}</span>
+            <span class="text-ui-2xs text-muted-foreground/50">{t("search.interactiveDedupe")}</span>
           </label>
 
           <!-- PCA cluster toggle -->
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
             <input type="checkbox" bind:checked={ixUsePca}
                    class="rounded border-border h-2.5 w-2.5 accent-violet-500" />
-            <span class="text-[0.48rem] text-muted-foreground/50">PCA cluster</span>
+            <span class="text-ui-2xs text-muted-foreground/50">PCA cluster</span>
           </label>
 
           <!-- Screenshots toggle -->
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
             <input type="checkbox" bind:checked={ixShowScreenshots}
                    class="rounded border-border h-2.5 w-2.5 accent-amber-500" />
-            <span class="text-[0.48rem] text-muted-foreground/50">{t("search.interactiveScreenshots")}</span>
+            <span class="text-ui-2xs text-muted-foreground/50">{t("search.interactiveScreenshots")}</span>
           </label>
 
           <!-- Sort by relevance toggle -->
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
             <input type="checkbox" bind:checked={ixSortByRelevance}
                    class="rounded border-border h-2.5 w-2.5 accent-rose-500" />
-            <span class="text-[0.48rem] text-muted-foreground/50">{t("search.sortRelevance")}</span>
+            <span class="text-ui-2xs text-muted-foreground/50">{t("search.sortRelevance")}</span>
           </label>
 
           <!-- Export buttons (DOT + SVG) — shown once a search has been run -->
@@ -2608,7 +2608,7 @@ useWindowTitle("window.title.search");
             <!-- .dot -->
             <button onclick={downloadDot} disabled={dotSaving}
                     title={dotSavedPath ? t("search.exportSavedTitle", { path: dotSavedPath }) : t("search.exportDotTitle")}
-                    class="flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors select-none shrink-0 text-[0.48rem]
+                    class="flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors select-none shrink-0 text-ui-2xs
                            {dotSavedPath ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                          : 'border-border dark:border-white/[0.1] bg-background hover:bg-muted/40 text-muted-foreground/55 hover:text-foreground'}">
               {#if dotSaving}
@@ -2624,7 +2624,7 @@ useWindowTitle("window.title.search");
             <!-- .svg — pure Rust renderer, no external binary -->
             <button onclick={downloadSvg} disabled={svgSaving || !ixSvg}
                     title={svgSavedPath ? t("search.exportSavedTitle", { path: svgSavedPath }) : svgError ? svgError : t("search.exportSvgTitle")}
-                    class="flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors select-none shrink-0 text-[0.48rem]
+                    class="flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors select-none shrink-0 text-ui-2xs
                            {svgSavedPath
                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                              : svgError
@@ -2653,7 +2653,7 @@ useWindowTitle("window.title.search");
           <select bind:value={ixColorMode}
                   aria-label="Graph color mode"
                   class="rounded border border-border dark:border-white/[0.1]
-                         bg-background px-1.5 py-0.5 text-[0.5rem]
+                         bg-background px-1.5 py-0.5 text-ui-2xs
                          focus:outline-none focus:ring-1 focus:ring-ring shrink-0">
             <option value="timestamp">{t("search.colorTimestamp")}</option>
             <option value="engagement">{t("search.colorEngagement")}</option>
@@ -2677,7 +2677,7 @@ useWindowTitle("window.title.search");
           {/each}
 
           <!-- Show/hide graph toggle -->
-          <button class="ml-auto text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground
+          <button class="ml-auto text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground
                          transition-colors px-1.5 py-0.5 rounded border border-transparent
                          hover:border-border select-none shrink-0"
                   onclick={() => showIxGraph = !showIxGraph}>
@@ -2699,7 +2699,7 @@ useWindowTitle("window.title.search");
           {@const lblStale = corpusStats.label_stale ?? 0}
           {@const anyIssue = eegPct < 100 || scrPct < 100 || lblEeg === 0 && lblTotal > 0 && eegDone > 0 || lblStale > 0}
           <div class="flex items-center gap-3 px-4 py-1.5 border-b border-border dark:border-white/[0.04]
-                      bg-muted/10 text-[0.5rem] text-muted-foreground/55 tabular-nums select-none flex-wrap">
+                      bg-muted/10 text-ui-2xs text-muted-foreground/55 tabular-nums select-none flex-wrap">
             {#if corpusStats.eeg_days > 0}
               <span title="EEG recording days">
                 <span class="font-semibold text-foreground/50">{corpusStats.eeg_days}</span> day{corpusStats.eeg_days !== 1 ? "s" : ""}
@@ -2746,11 +2746,11 @@ useWindowTitle("window.title.search");
           <!-- Embedding health banner — shown when any modality needs attention -->
           {#if anyIssue}
             <div class="flex flex-col gap-1.5 px-4 py-2 border-b border-amber-500/15
-                        bg-amber-500/[0.03] text-[0.5rem]">
+                        bg-amber-500/[0.03] text-ui-2xs">
               <!-- EXG epochs -->
               {#if eegTotal > 0 && eegPct < 100}
                 <div class="flex items-center gap-2">
-                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-amber-600/80 uppercase">EXG</span>
+                  <span class="w-10 shrink-0 text-ui-2xs font-semibold text-amber-600/80 uppercase">EXG</span>
                   <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
                     <div class="h-full rounded-full transition-all duration-500
                                 {eegPct >= 80 ? 'bg-emerald-500' : eegPct >= 40 ? 'bg-amber-500' : 'bg-red-400'}"
@@ -2764,7 +2764,7 @@ useWindowTitle("window.title.search");
               <!-- Screenshots -->
               {#if scrTotal > 0 && scrPct < 100}
                 <div class="flex items-center gap-2">
-                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-cyan-600/80 uppercase">IMG</span>
+                  <span class="w-10 shrink-0 text-ui-2xs font-semibold text-cyan-600/80 uppercase">IMG</span>
                   <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
                     <div class="h-full rounded-full bg-cyan-500 transition-all duration-500"
                          style="width:{scrPct}%"></div>
@@ -2777,7 +2777,7 @@ useWindowTitle("window.title.search");
               <!-- Label EEG index -->
               {#if lblTotal > 0 && lblEeg === 0 && eegDone > 0}
                 <div class="flex items-center gap-2">
-                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-violet-600/80 uppercase">LBL</span>
+                  <span class="w-10 shrink-0 text-ui-2xs font-semibold text-violet-600 dark:text-violet-400/80 uppercase">LBL</span>
                   <div class="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
                     <div class="h-full rounded-full bg-red-400" style="width:0%"></div>
                   </div>
@@ -2798,14 +2798,14 @@ useWindowTitle("window.title.search");
                       } catch {}
                       rebuildingLabelIndex = false;
                     }}
-                    class="shrink-0 text-[0.48rem] text-amber-600 hover:text-amber-500
+                    class="shrink-0 text-ui-2xs text-amber-600 hover:text-amber-500
                            underline underline-offset-2 cursor-pointer font-semibold
                            disabled:opacity-50 disabled:cursor-wait"
                   >{rebuildingLabelIndex ? "Rebuilding…" : t("search.rebuildLabelIndex")}</button>
                 </div>
               {:else if lblStale > 0}
                 <div class="flex items-center gap-2">
-                  <span class="w-10 shrink-0 text-[0.48rem] font-semibold text-violet-600/80 uppercase">LBL</span>
+                  <span class="w-10 shrink-0 text-ui-2xs font-semibold text-violet-600 dark:text-violet-400/80 uppercase">LBL</span>
                   <span class="text-amber-500/70">{lblStale} stale label{lblStale !== 1 ? "s" : ""} need re-embedding</span>
                 </div>
               {/if}
@@ -2814,7 +2814,7 @@ useWindowTitle("window.title.search");
         {/if}
 
         <!-- 3D Graph panel -->
-        <div class="border-b border-border dark:border-white/[0.05] shrink-0">
+        <div class="border-b border-border dark:border-white/[0.06] shrink-0">
           <div class="rounded-xl border border-border bg-card mx-4 my-3 overflow-hidden">
             <!-- (header merged into row above) -->
 
@@ -2904,7 +2904,7 @@ useWindowTitle("window.title.search");
                   <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 mt-3">
                     {#each metrics as [key, val]}
                       <div class="rounded-lg bg-muted/15 border border-border/30 px-3 py-2 text-center">
-                        <div class="text-[0.65rem] text-muted-foreground/50 uppercase tracking-wider mb-1">{key}</div>
+                        <div class="text-ui-base text-muted-foreground/50 uppercase tracking-wider mb-1">{key}</div>
                         <div class="text-sm font-mono font-semibold text-foreground/75">{typeof val === "number" ? val.toFixed(3) : val}</div>
                       </div>
                     {/each}
@@ -2944,11 +2944,11 @@ useWindowTitle("window.title.search");
                     {@const pts = ixDetailTimeseries}
                     {@const maxVal = Math.max(0.01, ...pts.map(p => Math.max(p.ra, p.rb, p.rt)))}
                     <div class="rounded-lg border border-border/30 bg-muted/5 p-3">
-                      <div class="flex items-center gap-3 mb-2 text-[0.6rem] text-muted-foreground/50">
+                      <div class="flex items-center gap-3 mb-2 text-ui-sm text-muted-foreground/50">
                         <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-blue-500 inline-block"></span>α</span>
                         <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-amber-500 inline-block"></span>β</span>
                         <span class="flex items-center gap-1"><span class="w-2 h-0.5 rounded bg-emerald-500 inline-block"></span>θ</span>
-                        <span class="ml-auto text-[0.5rem]">{pts.length} epochs · ±60s</span>
+                        <span class="ml-auto text-ui-2xs">{pts.length} epochs · ±60s</span>
                       </div>
                       <svg viewBox="0 0 300 60" class="w-full h-16" preserveAspectRatio="none">
                         {#each [
@@ -2978,7 +2978,7 @@ useWindowTitle("window.title.search");
               {#if sn.kind === "eeg_point" && !ixCompareNode}
                 <button onclick={() => { ixCompareNode = sn; }}
                         class="mt-3 text-xs px-3 py-1.5 rounded-md border border-violet-500/30
-                               bg-violet-500/10 text-violet-600 dark:text-violet-400
+                               bg-violet-500/10 text-primary
                                hover:bg-violet-500/20 transition-colors select-none">
                   {t("search.compareSelect")}
                 </button>
@@ -3031,7 +3031,7 @@ useWindowTitle("window.title.search");
             {@const tRange = tMax - tMin || 1}
             <div class="mx-4 mb-3 rounded-xl border border-border bg-card overflow-hidden shrink-0">
               <div class="flex items-center gap-2 px-4 py-2 border-b border-border dark:border-white/[0.06]">
-                <span class="text-[0.62rem] font-semibold select-none">{t("search.timelineScrubber")}</span>
+                <span class="text-ui-sm font-semibold select-none">{t("search.timelineScrubber")}</span>
                 <span class="text-[0.45rem] text-muted-foreground/45 font-mono">
                   {new Date(tMin * 1000).toLocaleDateString()} → {new Date(tMax * 1000).toLocaleDateString()}
                 </span>
@@ -3069,7 +3069,7 @@ useWindowTitle("window.title.search");
                 <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
               </svg>
               <span class="text-sm font-semibold">{t("search.insightsTitle")}</span>
-              <span class="text-[0.5rem] text-muted-foreground/40">{ixShowInsights ? "▾" : "▸"}</span>
+              <span class="text-ui-2xs text-muted-foreground/40">{ixShowInsights ? "▾" : "▸"}</span>
             </button>
 
             {#if ixShowInsights}
@@ -3457,16 +3457,16 @@ Reference specific metrics and timestamps.`;
                         saveSummaryToChat(acc);
                       }}
                       class="text-xs px-2.5 py-1 rounded-md border border-violet-500/30
-                             bg-violet-500/10 text-violet-600 dark:text-violet-400
+                             bg-violet-500/10 text-primary
                              hover:bg-violet-500/20 transition-colors select-none">
                         {t("search.generateSummary")}
                       </button>
                       <!-- Max tokens slider -->
                       <div class="flex items-center gap-1.5 ml-auto">
-                        <span class="text-[0.5rem] text-muted-foreground/40 select-none">{t("search.maxTokens")}</span>
+                        <span class="text-ui-2xs text-muted-foreground/40 select-none">{t("search.maxTokens")}</span>
                         <input type="range" min="512" max="8192" step="256" bind:value={ixLlmMaxTokens}
                                class="w-16 h-1 accent-violet-500 cursor-pointer" />
-                        <span class="text-[0.5rem] text-muted-foreground/50 font-mono w-8 text-right">{ixLlmMaxTokens}</span>
+                        <span class="text-ui-2xs text-muted-foreground/50 font-mono w-8 text-right">{ixLlmMaxTokens}</span>
                       </div>
                     {/if}
                   </div>
@@ -3522,13 +3522,13 @@ Reference specific metrics and timestamps.`;
                     {#if parsed.thinking}
                       {#each [false] as _, _i}
                         {@const thinkId = `llm-think-${_i}`}
-                        <details class="mb-2 rounded-lg border border-violet-500/15 bg-violet-500/5 overflow-hidden">
-                          <summary class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs text-violet-500/70 hover:text-violet-500 select-none">
+                        <details class="mb-2 rounded-lg border border-primary/15 bg-violet-500/5 overflow-hidden">
+                          <summary class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs text-violet-500/70 hover:text-violet-600 select-none">
                             <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0"><path d="M6 3l5 5-5 5V3z"/></svg>
                             Thought
-                            <span class="ml-auto text-[0.6rem] text-muted-foreground/40">{parsed.thinking.trim().split(/\s+/).length} words</span>
+                            <span class="ml-auto text-ui-sm text-muted-foreground/40">{parsed.thinking.trim().split(/\s+/).length} words</span>
                           </summary>
-                          <div class="px-3 pb-2 pt-1 text-xs text-muted-foreground/60 leading-relaxed border-t border-violet-500/10 whitespace-pre-line">
+                          <div class="px-3 pb-2 pt-1 text-xs text-muted-foreground/60 leading-relaxed border-t border-primary/10 whitespace-pre-line">
                             {parsed.thinking}
                           </div>
                         </details>
@@ -3559,21 +3559,21 @@ Reference specific metrics and timestamps.`;
                             <rect x="2" y="3" width="20" height="14" rx="2"/><circle cx="8" cy="10" r="2"/>
                             <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                           </svg>
-                          <span class="text-[0.65rem] font-semibold text-foreground/60 uppercase tracking-wider">
+                          <span class="text-ui-base font-semibold text-foreground/60 uppercase tracking-wider">
                             {ixLlmScreenshots.length} Screenshot{ixLlmScreenshots.length !== 1 ? "s" : ""} Found
                           </span>
                           {#if ixLlmPhase === "vision-loading"}
                             <div class="flex items-center gap-1.5 ml-1">
                               <div class="w-2 h-2 rounded-full border border-amber-500/40 border-t-amber-500 animate-spin"></div>
-                              <span class="text-[0.6rem] text-amber-500/70">Loading vision model...</span>
+                              <span class="text-ui-sm text-amber-500/70">Loading vision model...</span>
                             </div>
                           {:else if ixLlmPhase === "vision-analyzing"}
                             <div class="flex items-center gap-1.5 ml-1">
                               <div class="w-2 h-2 rounded-full border border-cyan-500/40 border-t-cyan-500 animate-spin"></div>
-                              <span class="text-[0.6rem] text-cyan-500/70">Analyzing...</span>
+                              <span class="text-ui-sm text-cyan-500/70">Analyzing...</span>
                             </div>
                           {:else if ixLlmPhase === "done" || !ixLlmLoading}
-                            <span class="text-[0.5rem] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500/70 font-medium">done</span>
+                            <span class="text-ui-2xs px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500/70 font-medium">done</span>
                           {/if}
                         </div>
                         <div class="flex gap-2 overflow-x-auto pb-1">
@@ -3598,7 +3598,7 @@ Reference specific metrics and timestamps.`;
                                 {/if}
                               </div>
                               {#if ss.label}
-                                <span class="text-[0.5rem] text-muted-foreground/40 truncate max-w-[14rem] leading-tight">
+                                <span class="text-ui-2xs text-muted-foreground/40 truncate max-w-[14rem] leading-tight">
                                   {ss.label}
                                 </span>
                               {/if}
@@ -3617,13 +3617,13 @@ Reference specific metrics and timestamps.`;
                                class="w-3.5 h-3.5 shrink-0 text-cyan-500/70">
                             <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
                           </svg>
-                          <span class="text-[0.65rem] font-semibold text-foreground/60 uppercase tracking-wider">Screenshot Analysis</span>
+                          <span class="text-ui-base font-semibold text-foreground/60 uppercase tracking-wider">Screenshot Analysis</span>
                         </div>
-                        <div class="text-[0.72rem] leading-relaxed text-foreground/80
+                        <div class="text-ui-md leading-relaxed text-foreground/80
                                     prose prose-xs dark:prose-invert max-w-none
                                     prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5
                                     prose-headings:text-foreground/90
-                                    prose-h3:text-[0.7rem] prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1
+                                    prose-h3:text-ui-md prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1
                                     prose-h4:text-xs prose-h4:font-semibold prose-h4:mt-2 prose-h4:mb-1
                                     prose-strong:text-foreground/80
                                     prose-code:text-xs prose-code:bg-muted/30 prose-code:px-1 prose-code:rounded">
@@ -3699,7 +3699,7 @@ Reference specific metrics and timestamps.`;
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
-              <span class="text-[0.62rem] font-semibold select-none">EEG Time Distribution</span>
+              <span class="text-ui-sm font-semibold select-none">EEG Time Distribution</span>
               <span class="text-[0.45rem] text-muted-foreground/45 tabular-nums">
                 {hm.days.length} day{hm.days.length !== 1 ? "s" : ""} ·
                 hours 0–23
@@ -3763,11 +3763,11 @@ Reference specific metrics and timestamps.`;
           <!-- Text labels section -->
           {#if dispNodes.filter(n => n.kind === "text_label").length > 0}
             <div class="px-4 pt-3 pb-1">
-              <span class="text-[0.52rem] font-semibold uppercase tracking-widest text-blue-500/70 select-none">
+              <span class="text-ui-xs font-semibold uppercase tracking-widest text-blue-500/70 select-none">
                 Text Matches
               </span>
             </div>
-            <div class="divide-y divide-border/50 dark:divide-white/[0.03]">
+            <div class="divide-y divide-border/50 dark:divide-white/[0.05]">
               {#each dispNodes.filter(n => n.kind === "text_label") as node}
                 {@const sw = 1 - node.distance / Math.max(...dispNodes.filter(n => n.kind === "text_label").map(n => n.distance), 0.001)}
                 <div class="flex gap-0 hover:bg-muted/10 transition-colors">
@@ -3778,16 +3778,16 @@ Reference specific metrics and timestamps.`;
                         <div class="h-full rounded-full bg-blue-500"
                              style="width:{(sw * 100).toFixed(1)}%"></div>
                       </div>
-                      <span class="shrink-0 text-[0.58rem] font-bold text-blue-500 tabular-nums">
+                      <span class="shrink-0 text-ui-sm font-bold text-blue-500 tabular-nums">
                         {((1 - node.distance) * 100).toFixed(1)}%
                       </span>
-                      <span class="shrink-0 font-mono text-[0.5rem] text-muted-foreground/35">
+                      <span class="shrink-0 font-mono text-ui-2xs text-muted-foreground/35">
                         {node.distance.toFixed(4)}
                       </span>
                     </div>
-                    <p class="text-[0.8rem] font-medium leading-snug text-foreground">{node.text}</p>
+                    <p class="text-ui-lg font-medium leading-snug text-foreground">{node.text}</p>
                     {#if node.timestamp_unix}
-                      <span class="text-[0.58rem] text-muted-foreground/50 font-mono">
+                      <span class="text-ui-sm text-muted-foreground/50 font-mono">
                         {fmtDate(node.timestamp_unix)} · {fmtTime(node.timestamp_unix)}
                       </span>
                     {/if}
@@ -3802,7 +3802,7 @@ Reference specific metrics and timestamps.`;
             {@const flNodes = dispNodes.filter(n => n.kind === "found_label")}
             {@const flHasPca = flNodes.some(n => (n as any).proj_x !== undefined)}
             <div class="px-4 pt-3 pb-1 mt-1 flex items-center gap-2 flex-wrap">
-              <span class="text-[0.52rem] font-semibold uppercase tracking-widest text-emerald-500/70 select-none">
+              <span class="text-ui-xs font-semibold uppercase tracking-widest text-emerald-500/70 select-none">
                 Discovered via EEG
               </span>
               {#if flHasPca}
@@ -3821,7 +3821,7 @@ Reference specific metrics and timestamps.`;
                 </span>
               {/if}
               {#if ixDedupeLabels && flRaw > flDisp}
-                <span class="text-[0.48rem] text-muted-foreground/40 italic select-none">
+                <span class="text-ui-2xs text-muted-foreground/40 italic select-none">
                   {flDisp} unique · {flRaw - flDisp} merged
                 </span>
               {/if}
@@ -3836,7 +3836,7 @@ Reference specific metrics and timestamps.`;
                   return ((a as any).proj_y ?? 0) - ((b as any).proj_y ?? 0);
                 })
               : flNodes}
-            <div class="divide-y divide-border/50 dark:divide-white/[0.03]">
+            <div class="divide-y divide-border/50 dark:divide-white/[0.05]">
               {#each sortedFl as node}
                 {@const projX = (node as any).proj_x as number | undefined}
                 {@const projY = (node as any).proj_y as number | undefined}
@@ -3844,15 +3844,15 @@ Reference specific metrics and timestamps.`;
                   <!-- Left stripe: opacity encodes PCA cluster density (proj_x maps to hue shift) -->
                   <div class="w-[3px] shrink-0" style="background:#10b981; opacity:0.7"></div>
                   <div class="flex-1 px-3.5 py-2.5">
-                    <p class="text-[0.8rem] font-medium leading-snug text-foreground">{node.text}</p>
+                    <p class="text-ui-lg font-medium leading-snug text-foreground">{node.text}</p>
                     <div class="flex items-center gap-2 flex-wrap mt-0.5">
                       {#if node.timestamp_unix}
-                        <span class="text-[0.58rem] text-muted-foreground/50 font-mono">
+                        <span class="text-ui-sm text-muted-foreground/50 font-mono">
                           {fmtDate(node.timestamp_unix)} · {fmtTime(node.timestamp_unix)}
                         </span>
                       {/if}
                       {#if node.distance > 0}
-                        <span class="text-[0.52rem] text-muted-foreground/35">
+                        <span class="text-ui-xs text-muted-foreground/35">
                           ±{(node.distance * 60).toFixed(0)}min from EEG
                         </span>
                       {/if}
@@ -3873,14 +3873,14 @@ Reference specific metrics and timestamps.`;
           <!-- EEG points summary -->
           {#if dispNodes.filter(n => n.kind === "eeg_point").length > 0}
             <div class="px-4 pt-3 pb-2 mt-1">
-              <span class="text-[0.52rem] font-semibold uppercase tracking-widest text-amber-500/70 select-none">
+              <span class="text-ui-xs font-semibold uppercase tracking-widest text-amber-500/70 select-none">
                 EEG Neighbor Timestamps
               </span>
               <div class="flex flex-wrap gap-1.5 mt-1.5">
                 {#each dispNodes.filter(n => n.kind === "eeg_point") as node}
                   <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
                                bg-amber-500/8 border border-amber-500/20
-                               text-amber-600 dark:text-amber-400 text-[0.52rem] font-mono">
+                               text-amber-600 dark:text-amber-400 text-ui-xs font-mono">
                     {#if node.timestamp_unix}
                       {fmtDate(node.timestamp_unix)} {fmtTime(node.timestamp_unix)}
                     {:else}
@@ -3908,8 +3908,8 @@ Reference specific metrics and timestamps.`;
             </svg>
           </div>
           <div class="flex flex-col gap-1.5">
-            <p class="text-[0.82rem] font-semibold text-foreground/70">{t("search.modeText")}</p>
-            <p class="text-[0.72rem] text-muted-foreground/50 max-w-[300px] leading-relaxed">
+            <p class="text-ui-lg font-semibold text-foreground/70">{t("search.modeText")}</p>
+            <p class="text-ui-md text-muted-foreground/50 max-w-[300px] leading-relaxed">
               {t("search.textEmptyState")}
             </p>
           </div>
@@ -3917,39 +3917,39 @@ Reference specific metrics and timestamps.`;
 
       {:else if textSearching}
         <div class="flex flex-col items-center justify-center h-full gap-3">
-          <Spinner size="w-5 h-5" class="text-violet-500" />
-          <span class="text-[0.78rem] text-muted-foreground">{t("search.searching")}</span>
+          <Spinner size="w-5 h-5" class="text-violet-600 dark:text-violet-400" />
+          <span class="text-ui-lg text-muted-foreground">{t("search.searching")}</span>
         </div>
 
       {:else if textFiltered.length === 0}
         <div class="flex flex-col items-center justify-center h-full gap-2 text-center px-8">
-          <p class="text-[0.8rem] text-muted-foreground/60">{t("search.textNoResults")}</p>
-          <p class="text-[0.65rem] text-muted-foreground/40 max-w-[280px] leading-relaxed">
+          <p class="text-ui-lg text-muted-foreground/60">{t("search.textNoResults")}</p>
+          <p class="text-ui-base text-muted-foreground/40 max-w-[280px] leading-relaxed">
             {t("search.textNoResultsHint")}
           </p>
         </div>
 
       {:else}
         <!-- Result summary bar -->
-        <div class="flex items-center gap-1.5 px-4 py-2 border-b border-border dark:border-white/[0.05] flex-wrap">
+        <div class="flex items-center gap-1.5 px-4 py-2 border-b border-border dark:border-white/[0.06] flex-wrap">
           <Badge variant="outline"
-                 class="text-[0.58rem] py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/25">
+                 class="text-ui-sm py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-primary/25">
             {textFiltered.length} {t("search.textResultsCount")}
           </Badge>
-          <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono">k={kVal}</Badge>
+          <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono">k={kVal}</Badge>
           {#if textResults[0]?.embedding_model}
-            <Badge variant="outline" class="text-[0.58rem] py-0 px-1.5 font-mono max-w-[180px] truncate">
+            <Badge variant="outline" class="text-ui-sm py-0 px-1.5 font-mono max-w-[180px] truncate">
               {t("search.textViaModel", { model: textResults[0].embedding_model })}
             </Badge>
           {/if}
-          <span class="text-[0.52rem] text-muted-foreground/30 ml-auto select-none italic">
+          <span class="text-ui-xs text-muted-foreground/30 ml-auto select-none italic">
             {textSort === "sim" ? t("search.textSortSim") : t("search.textSortDate")}
           </span>
         </div>
 
         <!-- ── kNN Similarity 3D Graph ─────────────────────────── -->
         {#if textGraphData}
-          <div class="border-b border-border dark:border-white/[0.05]">
+          <div class="border-b border-border dark:border-white/[0.06]">
             <div class="rounded-xl border border-border bg-card mx-4 my-3 overflow-hidden">
               <!-- Panel header -->
               <div class="flex items-center gap-2 px-4 py-2 border-b border-border dark:border-white/[0.06]">
@@ -3967,13 +3967,13 @@ Reference specific metrics and timestamps.`;
                   <line x1="6"  y1="17" x2="10" y2="13"/>
                   <line x1="18" y1="17" x2="14" y2="13"/>
                 </svg>
-                <span class="text-[0.62rem] font-semibold select-none">{t("search.textKnnGraph")}</span>
+                <span class="text-ui-sm font-semibold select-none">{t("search.textKnnGraph")}</span>
                 <span class="text-[0.45rem] text-muted-foreground/45 tabular-nums">
                   1 + {textGraphData.n_b} pts
                 </span>
                 <!-- Toggle visibility -->
                 <!-- svelte-ignore a11y_consider_explicit_label -->
-                <button class="ml-auto text-[0.5rem] text-muted-foreground/40 hover:text-muted-foreground
+                <button class="ml-auto text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground
                                transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-border"
                         onclick={() => showTextGraph = !showTextGraph}>
                   {showTextGraph ? `▲ ${t("search.textKnnGraphHide")}` : `▼ ${t("search.textKnnGraphShow")}`}
@@ -4022,7 +4022,7 @@ Reference specific metrics and timestamps.`;
         {/if}
 
         <!-- Result cards -->
-        <div class="divide-y divide-border dark:divide-white/[0.04]">
+        <div class="divide-y divide-border dark:divide-white/[0.05]">
           {#each textPageSlice as nb, ni}
             {@const gi = page * SEARCH_PAGE_SIZE + ni}
             {@const sw = simWidth(nb.distance, textMaxDist)}
@@ -4035,45 +4035,45 @@ Reference specific metrics and timestamps.`;
               <div class="flex-1 px-4 py-3.5">
                 <!-- Top row: rank + similarity bar + score + distance -->
                 <div class="flex items-center gap-2 mb-2.5">
-                  <span class="shrink-0 text-[0.58rem] font-bold text-muted-foreground/40
+                  <span class="shrink-0 text-ui-sm font-bold text-muted-foreground/40
                                tabular-nums select-none w-6">#{gi+1}</span>
-                  <div class="flex-1 h-1.5 rounded-full bg-muted/25 dark:bg-white/[0.05] overflow-hidden">
+                  <div class="flex-1 h-1.5 rounded-full bg-muted/25 dark:bg-white/[0.04] overflow-hidden">
                     <div class="h-full rounded-full transition-[width] duration-500"
                          style="width:{(sw*100).toFixed(1)}%;background:{color}"></div>
                   </div>
-                  <span class="shrink-0 text-[0.72rem] font-bold tabular-nums" style="color:{color}">
+                  <span class="shrink-0 text-ui-md font-bold tabular-nums" style="color:{color}">
                     {simPct(nb.distance, textMaxDist)}
                   </span>
-                  <span class="shrink-0 font-mono text-[0.58rem] text-muted-foreground/35 tabular-nums">
+                  <span class="shrink-0 font-mono text-ui-sm text-muted-foreground/35 tabular-nums">
                     {nb.distance.toFixed(4)}
                   </span>
                 </div>
 
                 <!-- Label text (main content) -->
-                <p class="text-[0.86rem] font-semibold text-foreground leading-snug mb-2">{nb.text}</p>
+                <p class="text-ui-lg font-semibold text-foreground leading-snug mb-2">{nb.text}</p>
 
                 <!-- Context (collapsible) -->
                 {#if nb.context && nb.context.trim()}
                   {@const preview = nb.context.trim().slice(0, 140)}
                   {@const hasMore = nb.context.trim().length > 140}
                   <details class="group/ctx mb-2.5">
-                    <summary class="list-none cursor-pointer text-[0.7rem] text-muted-foreground/50
+                    <summary class="list-none cursor-pointer text-ui-md text-muted-foreground/50
                                     italic leading-snug hover:text-muted-foreground/70 transition-colors select-none">
                       {preview}{hasMore ? "…" : ""}
                       {#if hasMore}
-                        <span class="not-italic font-semibold text-violet-500/60 ml-1
+                        <span class="not-italic font-semibold text-violet-600 dark:text-violet-400/60 ml-1
                                      group-open/ctx:hidden">{t("labels.showMore")}</span>
                       {/if}
                     </summary>
                     {#if hasMore}
-                      <p class="mt-1.5 text-[0.7rem] text-muted-foreground/50 italic
+                      <p class="mt-1.5 text-ui-md text-muted-foreground/50 italic
                                 leading-relaxed whitespace-pre-wrap">{nb.context.trim()}</p>
                     {/if}
                   </details>
                 {/if}
 
                 <!-- EEG window time -->
-                <div class="flex items-center gap-1.5 text-[0.62rem] text-muted-foreground/45
+                <div class="flex items-center gap-1.5 text-ui-sm text-muted-foreground/45
                             font-mono mb-2">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                        class="w-3 h-3 shrink-0 text-muted-foreground/30 pointer-events-none">
@@ -4093,7 +4093,7 @@ Reference specific metrics and timestamps.`;
                   {#if nb.eeg_metrics}
                     <div class="flex flex-wrap gap-x-2.5 gap-y-0.5 flex-1">
                       {#each metricChips(nb.eeg_metrics) as chip}
-                        <span class="inline-flex items-center gap-0.5 text-[0.52rem] tabular-nums">
+                        <span class="inline-flex items-center gap-0.5 text-ui-xs tabular-nums">
                           <span class="text-muted-foreground/40">{chip.l}</span>
                           <span class="font-bold" style="color:{chip.c}">{chip.v}</span>
                         </span>
@@ -4103,9 +4103,9 @@ Reference specific metrics and timestamps.`;
                     <span class="flex-1"></span>
                   {/if}
                   <button onclick={() => openSessionForLabel(nb)}
-                          class="shrink-0 text-[0.62rem] font-medium text-primary/60 hover:text-primary
+                          class="shrink-0 text-ui-sm font-medium text-violet-500/60 hover:text-violet-600
                                  transition-colors px-2 py-1 rounded border border-transparent
-                                 hover:border-primary/20 hover:bg-primary/5">
+                                 hover:border-violet-500/20 hover:bg-violet-500/5">
                     {t("search.openSession")} ↗
                   </button>
                 </div>
@@ -4119,12 +4119,12 @@ Reference specific metrics and timestamps.`;
           <div class="sticky bottom-0 flex items-center justify-between px-4 py-2
                       border-t border-border dark:border-white/[0.06]
                       bg-background/95 backdrop-blur-sm">
-            <Button variant="outline" size="sm" class="h-7 px-3 text-[0.68rem]"
+            <Button variant="outline" size="sm" class="h-7 px-3 text-ui-base"
                     disabled={page===0} onclick={() => page--}>{t("search.prev")}</Button>
-            <span class="text-[0.62rem] text-muted-foreground/55 tabular-nums">
+            <span class="text-ui-sm text-muted-foreground/55 tabular-nums">
               {t("search.pageOf", { page: page+1, total: textTotalPages })}
             </span>
-            <Button variant="outline" size="sm" class="h-7 px-3 text-[0.68rem]"
+            <Button variant="outline" size="sm" class="h-7 px-3 text-ui-base"
                     disabled={page>=textTotalPages-1} onclick={() => page++}>{t("search.next")}</Button>
           </div>
         {/if}
@@ -4134,32 +4134,32 @@ Reference specific metrics and timestamps.`;
     {:else if mode === "images"}
       {#if !imgSearched && !imgSearching}
         <div class="flex flex-col items-center justify-center h-full gap-4 text-center px-10">
-          <div class="w-16 h-16 rounded-2xl bg-primary/8 flex items-center justify-center">
+          <div class="w-16 h-16 rounded-2xl bg-violet-500/8 flex items-center justify-center">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                 class="w-8 h-8 text-primary/40">
+                 class="w-8 h-8 text-violet-500/40">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
             </svg>
           </div>
-          <p class="text-[0.8rem] text-muted-foreground/50 max-w-[300px] leading-relaxed">
+          <p class="text-ui-lg text-muted-foreground/50 max-w-[300px] leading-relaxed">
             {t("search.imageEmptyState")}
           </p>
         </div>
       {:else if imgSearching}
         <div class="flex items-center justify-center h-full gap-2">
           <Spinner size="w-4 h-4" />
-          <span class="text-[0.72rem] text-muted-foreground">{t("search.searching")}</span>
+          <span class="text-ui-md text-muted-foreground">{t("search.searching")}</span>
         </div>
       {:else if imgResults.length === 0}
         <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-10">
           <span class="text-3xl opacity-30">🔍</span>
-          <p class="text-[0.78rem] text-muted-foreground/50">{t("search.imageNoResults")}</p>
+          <p class="text-ui-lg text-muted-foreground/50">{t("search.imageNoResults")}</p>
         </div>
       {:else}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
           {#each imgResults as r}
             <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] overflow-hidden shadow-sm
+                        bg-surface-1 overflow-hidden shadow-sm
                         hover:shadow-md transition-shadow">
               <!-- Thumbnail -->
               {#if r.filename}
@@ -4170,26 +4170,26 @@ Reference specific metrics and timestamps.`;
               <!-- Metadata -->
               <div class="px-3 py-2 flex flex-col gap-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[0.66rem] font-semibold text-foreground truncate">
+                  <span class="text-ui-base font-semibold text-foreground truncate">
                     {r.app_name || '—'}
                   </span>
                   {#if r.similarity > 0}
-                    <span class="rounded-full px-1.5 py-0 text-[0.48rem] font-semibold
-                                 bg-primary/15 text-primary border border-primary/25 shrink-0">
+                    <span class="rounded-full px-1.5 py-0 text-ui-2xs font-semibold
+                                 bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-primary/25 shrink-0">
                       {(r.similarity * 100).toFixed(0)}%
                     </span>
                   {/if}
-                  <span class="ml-auto text-[0.5rem] text-muted-foreground/40 tabular-nums shrink-0">
+                  <span class="ml-auto text-ui-2xs text-muted-foreground/40 tabular-nums shrink-0">
                     {fmtDateTimeLocale(r.unix_ts)}
                   </span>
                 </div>
                 {#if r.window_title}
-                  <span class="text-[0.58rem] text-muted-foreground truncate">{r.window_title}</span>
+                  <span class="text-ui-sm text-muted-foreground truncate">{r.window_title}</span>
                 {/if}
                 {#if r.ocr_text}
-                  <p class="text-[0.54rem] text-foreground/60 leading-relaxed
+                  <p class="text-ui-xs text-foreground/60 leading-relaxed
                             whitespace-pre-wrap break-words max-h-24 overflow-y-auto
-                            rounded bg-muted/40 dark:bg-white/[0.03] px-2 py-1.5 mt-0.5
+                            rounded bg-muted/40 dark:bg-white/[0.02] px-2 py-1.5 mt-0.5
                             font-mono">
                     {r.ocr_text.length > 400 ? r.ocr_text.slice(0, 400) + '…' : r.ocr_text}
                   </p>

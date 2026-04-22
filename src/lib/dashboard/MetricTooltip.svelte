@@ -20,9 +20,9 @@ let { text, children }: Props = $props();
     <div role="tooltip"
          class="pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5
                 max-w-52 px-2.5 py-1.5 rounded-lg
-                bg-popover text-popover-foreground dark:bg-[#222238] dark:text-neutral-200
+                bg-popover text-popover-foreground dark:bg-surface-2 dark:text-neutral-200
                 border border-border dark:border-white/10
-                text-[0.55rem] leading-snug text-center shadow-lg
+                text-ui-xs leading-snug text-center shadow-lg
                 opacity-0 scale-95 transition-all duration-150
                 group-hover:opacity-100 group-hover:scale-100">
       {text}

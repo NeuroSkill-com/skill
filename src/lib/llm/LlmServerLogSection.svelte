@@ -2,6 +2,7 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { tick } from "svelte";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { t } from "$lib/i18n/index.svelte";
 
 interface LlmLogEntry {
@@ -56,15 +57,13 @@ function toggleAutoScroll() {
 
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5 flex-wrap">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      Server log
-    </span>
-    <span class="flex items-center gap-1 text-[0.52rem] text-muted-foreground/50">
+    <SectionHeader>Server log</SectionHeader>
+    <span class="flex items-center gap-1 text-ui-xs text-muted-foreground/50">
       <span class="w-1 h-1 rounded-full {logs.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
       {filteredLogs.length}{filteredLogs.length !== logs.length ? `/${logs.length}` : ""}
     </span>
 
-    <div class="flex rounded-md overflow-hidden border border-border/50 text-[0.5rem] font-medium ml-1">
+    <div class="flex rounded-md overflow-hidden border border-border/50 text-ui-2xs font-medium ml-1">
       {#each [
         { key: "all" as const, label: t("chat.logFilter.all"), color: "" },
         { key: "info" as const, label: t("chat.logFilter.info"), color: "text-emerald-500" },
@@ -86,24 +85,24 @@ function toggleAutoScroll() {
       aria-label="Filter server logs"
       bind:value={logSearch}
       placeholder={t("chat.logFilter.search")}
-      class="ml-auto h-5 w-28 text-[0.52rem] px-2 rounded-md border border-border/50
+      class="ml-auto h-5 w-28 text-ui-xs px-2 rounded-md border border-border/50
              bg-transparent text-muted-foreground placeholder:text-muted-foreground/30
              focus:outline-none focus:border-violet-500/50" />
 
     <button onclick={toggleAutoScroll}
-      class="text-[0.52rem] cursor-pointer select-none transition-colors
+      class="text-ui-xs cursor-pointer select-none transition-colors
              {logAutoScroll ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50 hover:text-foreground'}">
       auto-scroll {logAutoScroll ? "on" : "off"}
     </button>
     <button onclick={onClear}
-      class="text-[0.52rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer select-none">
+      class="text-ui-xs text-muted-foreground/50 hover:text-muted-foreground cursor-pointer select-none">
       clear
     </button>
   </div>
 
   <div bind:this={logEl} onscroll={handleLogScroll}
     class="h-[26vh] min-h-[180px] max-h-[340px] overflow-y-auto rounded-xl border
-           border-border dark:border-white/[0.06] bg-black/90 text-[0.62rem]
+           border-border dark:border-white/[0.06] bg-black/90 text-ui-sm
            font-mono leading-relaxed px-3 py-2 space-y-0.5">
 
     {#if filteredLogs.length === 0}

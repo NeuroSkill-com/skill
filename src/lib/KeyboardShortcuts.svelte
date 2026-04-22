@@ -204,7 +204,7 @@ onDestroy(() => {
     class="fixed top-[50%] left-[50%] z-[9999] w-full max-w-[420px]
            translate-x-[-50%] translate-y-[-50%]
            rounded-2xl border border-border dark:border-white/[0.08]
-           bg-white dark:bg-[#16161e] shadow-2xl
+           bg-surface-1 shadow-2xl
            p-5 flex flex-col gap-4"
     transition:fade={{ duration: 150 }}
     role="dialog"
@@ -214,7 +214,7 @@ onDestroy(() => {
   >
     <!-- Header -->
     <div class="flex items-center justify-between">
-      <h2 id="kbd-shortcuts-title" class="text-[0.95rem] font-bold tracking-tight text-foreground">
+      <h2 id="kbd-shortcuts-title" class="text-ui-xl font-bold tracking-tight text-foreground">
         {t("shortcuts.title")}
       </h2>
       <button
@@ -236,15 +236,15 @@ onDestroy(() => {
     <div class="flex flex-col gap-4 max-h-[60vh] overflow-y-auto -mx-1 px-1">
       {#each sections() as [sectionKey, entries]}
         <div class="flex flex-col gap-1.5">
-          <p class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground/70">
+          <p class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground/70">
             {t(sectionKey)}
           </p>
           {#each entries as entry}
             <div class="flex items-center justify-between gap-3 py-1">
-              <span class="text-[0.75rem] text-foreground/80">{t(entry.label)}</span>
+              <span class="text-ui-md text-foreground/80">{t(entry.label)}</span>
               <kbd class="inline-flex items-center gap-0.5 rounded-md border border-border
-                          dark:border-white/[0.1] bg-muted dark:bg-white/[0.05]
-                          px-2 py-0.5 font-mono text-[0.65rem] font-medium
+                          dark:border-white/[0.1] bg-muted dark:bg-white/[0.04]
+                          px-2 py-0.5 font-mono text-ui-base font-medium
                           text-muted-foreground whitespace-nowrap shrink-0">
                 {entry.keys}
               </kbd>
@@ -255,7 +255,7 @@ onDestroy(() => {
     </div>
 
     <!-- Footer hint -->
-    <p class="text-[0.6rem] text-muted-foreground/50 text-center pt-1">
+    <p class="text-ui-sm text-muted-foreground/50 text-center pt-1">
       {t("shortcuts.footer")}
     </p>
   </div>

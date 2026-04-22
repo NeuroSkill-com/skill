@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { areaPath, fmtEta, fmtMs, fmtUs, pushHistory, sparklinePath } from "$lib/screenshots-logic";
+import { areaPath, fmtEta, fmtMs, fmtUs, pushHistory, sparklinePath } from "$lib/screenshots/screenshots-logic";
 
 describe("pushHistory", () => {
   it("appends value", () => {

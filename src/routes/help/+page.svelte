@@ -294,7 +294,7 @@ useWindowTitle("window.title.help");
 
     <!-- Sidebar nav (always visible, dims when searching) -->
     <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`}
-         class="shrink-0 border-r border-border dark:border-white/[0.07]
+         class="shrink-0 border-r border-border dark:border-white/[0.06]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]
                 transition-opacity {searchQuery ? 'opacity-40' : 'opacity-100'}"
@@ -305,7 +305,7 @@ useWindowTitle("window.title.help");
           onclick={() => goToTab(id)}
           title="{helpTabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
-                 rounded-lg text-left transition-colors text-[0.75rem] font-medium
+                 rounded-lg text-left transition-colors text-ui-md font-medium
                  {active
                    ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
@@ -324,7 +324,7 @@ useWindowTitle("window.title.help");
           <span class="flex-1 leading-none whitespace-nowrap">{helpTabLabel(id)}</span>
 
           {#if digitForTab(i)}
-            <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
+            <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
               {modifierForTab(i)}{digitForTab(i)}
             </kbd>
@@ -335,7 +335,7 @@ useWindowTitle("window.title.help");
 
     <button
       type="button"
-      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-primary/40 transition-colors"
+      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-violet-500/40 transition-colors"
       aria-label="Resize sidebar"
       onmousedown={startResize}
     ></button>
@@ -351,13 +351,13 @@ useWindowTitle("window.title.help");
                  stroke="currentColor" stroke-width="1.5">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <p class="text-[0.78rem] text-muted-foreground">
+            <p class="text-ui-lg text-muted-foreground">
               {t("help.searchNoResults").replace("{query}", searchQuery.trim())}
             </p>
           </div>
         {:else}
           <div class="flex flex-col gap-1.5 pb-6">
-            <p class="text-[0.65rem] uppercase tracking-widest font-semibold
+            <p class="text-ui-base uppercase tracking-widest font-semibold
                       text-muted-foreground/60 pl-0.5 pb-1">
               {searchResults.length} {searchResults.length === 1 ? "result" : "results"}
             </p>
@@ -366,17 +366,17 @@ useWindowTitle("window.title.help");
               <button
                 onclick={() => goToItem(item.tab, item.id)}
                 class="group text-left rounded-xl border border-border dark:border-white/[0.06]
-                       bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
+                       bg-surface-1 px-4 py-3 flex flex-col gap-1.5
                        hover:border-foreground/20 dark:hover:border-white/[0.12]
                        transition-colors">
                 <span class="inline-flex items-center rounded-md
-                             bg-violet-50 dark:bg-violet-500/10
-                             px-2 py-0.5 text-[0.6rem] font-semibold
+                             bg-violet-500/5 dark:bg-violet-500/10
+                             px-2 py-0.5 text-ui-sm font-semibold
                              text-violet-600 dark:text-violet-400 w-fit">
                   {tLabel}
                 </span>
-                <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{item.title}</span>
-                <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
+                <span class="text-ui-lg font-semibold text-foreground leading-snug">{item.title}</span>
+                <span class="text-ui-md leading-relaxed text-muted-foreground line-clamp-2">
                   {item.body.length > 160 ? item.body.slice(0, 160) + "…" : item.body}
                 </span>
               </button>
