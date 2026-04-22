@@ -347,6 +347,18 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.title": "Підтримувані пристрої",
   "settings.supportedDevices.search": "Шукати пристрої…",
   "settings.supportedDevices.howToConnect": "Як підключити",
+  "settings.supportedDevices.company.antneuro": "ANT Neuro",
+  "settings.supportedDevices.device.eego8": "eego 8",
+  "settings.supportedDevices.device.eego24": "eego 24",
+  "settings.supportedDevices.device.eego64": "eego 64",
+  "settings.supportedDevices.device.eegoMylab": "eego mylab (32–256 ch)",
+  "settings.supportedDevices.device.eegoSport": "eego sport (8–64 ch)",
+  "settings.supportedDevices.device.eegoRt": "eego rt (8–64 ch)",
+  "settings.supportedDevices.device.eegoHub": "eego hub",
+  "settings.supportedDevices.instruction.antneuro1":
+    "Підключіть підсилювач eego через USB-C. SDK виробника не потрібен — автоматично використовується нативний USB.",
+  "settings.supportedDevices.instruction.antneuro2":
+    "Сканер автоматично виявляє підсилювачі eego. Виберіть зі списку пристроїв і підключіться.",
   "settings.supportedDevices.company.muse": "InteraXon",
   "settings.supportedDevices.company.neurable": "Neurable",
   "settings.supportedDevices.company.openbci": "OpenBCI",

@@ -424,6 +424,30 @@ pub(crate) fn detect_neurofield_devices() -> Vec<DiscoveredDeviceResponse> {
     out
 }
 
+pub(crate) fn detect_antneuro_devices() -> Vec<DiscoveredDeviceResponse> {
+    use antneuro::prelude::*;
+    let config = AntNeuroConfig::default();
+    let Ok(sdk) = AntNeuroSdk::new(&config.library_path) else {
+        return Vec::new();
+    };
+    let amps = sdk.get_amplifiers_info().unwrap_or_default();
+    amps.into_iter()
+        .map(|info| {
+            let name = format!("ANT Neuro eego ({})", info.serial);
+            let id = format!("antneuro:{}", info.id);
+            DiscoveredDeviceResponse {
+                id,
+                name,
+                last_seen: now_unix_secs(),
+                last_rssi: 0,
+                is_paired: false,
+                is_preferred: false,
+                transport: "usb".to_string(),
+            }
+        })
+        .collect()
+}
+
 async fn cortex_probe_headsets(
     client: &skill_devices::emotiv::client::CortexClient,
 ) -> anyhow::Result<Vec<skill_devices::emotiv::types::HeadsetInfo>> {
@@ -727,6 +751,16 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                 };
                 discovered.extend(gtec_discovered);
 
+                // ANT Neuro eego (USB)
+                let antneuro_discovered = if cortex_tick.is_multiple_of(2) {
+                    tokio::task::spawn_blocking(detect_antneuro_devices)
+                        .await
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                discovered.extend(antneuro_discovered);
+
                 // BrainMaster (USB serial)
                 let brainmaster_discovered = tokio::time::timeout(
                     Duration::from_secs(3),
@@ -774,6 +808,7 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                                 && !d.id.starts_with("neurosity:")
                                 && !d.id.starts_with("brainvision:")
                                 && !d.id.starts_with("rda:")
+                                && !d.id.starts_with("antneuro:")
                         })
                         .cloned()
                         .collect();
@@ -809,7 +844,8 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                             && !d.id.starts_with("neurosky")
                             && !d.id.starts_with("neurosity:")
                             && !d.id.starts_with("brainvision:")
-                            && !d.id.starts_with("rda:"))
+                            && !d.id.starts_with("rda:")
+                            && !d.id.starts_with("antneuro:"))
                             || current_ids.contains(&d.id)
                     });
                     *guard = merged;

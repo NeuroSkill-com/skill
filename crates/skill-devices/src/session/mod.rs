@@ -17,6 +17,7 @@
 //!
 //! ## Adapter implementations
 //!
+//! * [`antneuro::AntNeuroAdapter`] — ANT Neuro eego amplifiers (8–256 ch, USB)
 //! * [`awear::AwearAdapter`]  — AWEAR EEG wearable (1 ch @ 256 Hz)
 //! * [`cognionics::CognionicsAdapter`] — CGX Quick-20/20r/32r/8r (8–30 ch @ 500 Hz)
 //! * [`muse::MuseAdapter`]   — Muse 2 / Muse S (4 ch @ 256 Hz, PPG, IMU)
@@ -24,6 +25,7 @@
 //! * [`hermes::HermesAdapter`] — Hermes V1 (8 ch @ 250 Hz, IMU)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 
+pub mod antneuro;
 pub mod awear;
 pub mod cognionics;
 pub mod emotiv;

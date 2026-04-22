@@ -348,6 +348,18 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.title": "Unterstützte Geräte",
   "settings.supportedDevices.search": "Geräte suchen…",
   "settings.supportedDevices.howToConnect": "Verbindungsanleitung",
+  "settings.supportedDevices.company.antneuro": "ANT Neuro",
+  "settings.supportedDevices.device.eego8": "eego 8",
+  "settings.supportedDevices.device.eego24": "eego 24",
+  "settings.supportedDevices.device.eego64": "eego 64",
+  "settings.supportedDevices.device.eegoMylab": "eego mylab (32–256 ch)",
+  "settings.supportedDevices.device.eegoSport": "eego sport (8–64 ch)",
+  "settings.supportedDevices.device.eegoRt": "eego rt (8–64 ch)",
+  "settings.supportedDevices.device.eegoHub": "eego hub",
+  "settings.supportedDevices.instruction.antneuro1":
+    "Schließen Sie Ihren eego-Verstärker über USB-C an. Kein Hersteller-SDK erforderlich — nativer USB wird automatisch verwendet.",
+  "settings.supportedDevices.instruction.antneuro2":
+    "Der Scanner erkennt eego-Verstärker automatisch. Wählen Sie aus der Geräteliste und verbinden Sie sich.",
   "settings.supportedDevices.company.muse": "InteraXon",
   "settings.supportedDevices.company.neurable": "Neurable",
   "settings.supportedDevices.company.openbci": "OpenBCI",

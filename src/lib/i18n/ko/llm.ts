@@ -268,7 +268,7 @@ const llm: Record<string, string> = {
 
   "llm.inference.prefill": "프리필 배치 크기",
   "llm.inference.prefillDesc":
-    "프롬프트 처리 시 디코드 호출당 처리할 토큰 수를 제어합니다. 값이 클수록 프리필이 빨라지지만 피크 메모리 비용이 증가합니다. Auto는 min(n_ctx, 2048)을 사용합니다.",
+    "프롬프트 처리 시 디코드 호출당 처리할 토큰 수를 제어합니다. 값이 클수록 프리필이 빨라지지만 피크 메모리 비용이 증가합니다. Auto는 min(n_ctx, 4096)을 사용합니다.",
   "llm.inference.nBatch": "n_batch (프롬프트)",
   "llm.inference.nUbatch": "n_ubatch (GPU 커널)",
   "llm.inference.flashAttn": "Flash Attention",

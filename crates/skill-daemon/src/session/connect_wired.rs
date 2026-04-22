@@ -871,6 +871,46 @@ impl skill_devices::session::DeviceAdapter for BrainVisionAdapter {
     }
 }
 
+// ── ANT Neuro eego (USB) ────────────────────────────────────────────────────
+
+pub(super) async fn connect_antneuro(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use antneuro::prelude::*;
+    use skill_devices::session::antneuro::AntNeuroAdapter;
+
+    let (cfg_rate, cfg_cap) = {
+        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        let settings = skill_settings::load_settings(&skill_dir);
+        (
+            settings.device_api.antneuro_sample_rate,
+            settings.device_api.antneuro_cap.clone(),
+        )
+    };
+
+    let sampling_rate = if cfg_rate > 0 { cfg_rate } else { 500 };
+
+    // Parse user-selected cap layout to determine initial channel count.
+    let initial_channels: usize = match cfg_cap.to_lowercase().as_str() {
+        "auto" | "" => 32,
+        "10-20" => 21,
+        "10-10" => 64,
+        other => other.parse().unwrap_or(32),
+    };
+
+    info!(%target, %sampling_rate, %initial_channels, cap = %cfg_cap, "connecting to ANT Neuro eego");
+
+    let config = AntNeuroConfig {
+        sampling_rate,
+        ..Default::default()
+    };
+    let client = AntNeuroClient::new(config);
+    let (rx, handle) = client.start().context("ANT Neuro start")?;
+
+    // The adapter updates channel count dynamically from the first EegData block.
+    let adapter: Box<dyn DeviceAdapter> =
+        Box::new(AntNeuroAdapter::new(rx, handle, initial_channels, sampling_rate as f64));
+    Ok(adapter)
+}
+
 // ── Emotiv (Cortex WebSocket API) ────────────────────────────────────────────
 
 pub(super) async fn connect_emotiv(state: &AppState) -> anyhow::Result<Box<dyn DeviceAdapter>> {

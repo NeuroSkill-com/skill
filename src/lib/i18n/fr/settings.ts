@@ -352,6 +352,18 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.title": "Appareils pris en charge",
   "settings.supportedDevices.search": "Rechercher des appareils…",
   "settings.supportedDevices.howToConnect": "Comment connecter",
+  "settings.supportedDevices.company.antneuro": "ANT Neuro",
+  "settings.supportedDevices.device.eego8": "eego 8",
+  "settings.supportedDevices.device.eego24": "eego 24",
+  "settings.supportedDevices.device.eego64": "eego 64",
+  "settings.supportedDevices.device.eegoMylab": "eego mylab (32–256 ch)",
+  "settings.supportedDevices.device.eegoSport": "eego sport (8–64 ch)",
+  "settings.supportedDevices.device.eegoRt": "eego rt (8–64 ch)",
+  "settings.supportedDevices.device.eegoHub": "eego hub",
+  "settings.supportedDevices.instruction.antneuro1":
+    "Connectez votre amplificateur eego via USB-C. Aucun SDK fabricant requis — l'USB natif est utilisé automatiquement.",
+  "settings.supportedDevices.instruction.antneuro2":
+    "Le scanner détecte automatiquement les amplificateurs eego. Sélectionnez dans la liste des appareils et connectez-vous.",
   "settings.supportedDevices.company.muse": "InteraXon",
   "settings.supportedDevices.company.neurable": "Neurable",
   "settings.supportedDevices.company.openbci": "OpenBCI",

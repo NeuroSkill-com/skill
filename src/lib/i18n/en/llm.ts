@@ -282,7 +282,7 @@ const llm: Record<string, string> = {
 
   "llm.inference.prefill": "Prefill batch size",
   "llm.inference.prefillDesc":
-    "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 2048).",
+    "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 4096).",
   "llm.inference.nBatch": "n_batch (prompt)",
   "llm.inference.nUbatch": "n_ubatch (GPU kernel)",
   "llm.inference.flashAttn": "Flash attention",

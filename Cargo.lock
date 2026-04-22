@@ -237,6 +237,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "antneuro"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "255a0f2697ab4a54a6a014bfb84c9113d7fb5c23a4bc50ed033728722f83d6e0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "csv",
+ "env_logger",
+ "log",
+ "rusb",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7149,6 +7165,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libusb1-sys"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da050ade7ac4ff1ba5379af847a10a10a8e284181e060105bf8d86960ce9ce0f"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "libwayshot-xcap"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11246,6 +11274,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusb"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab9f9ff05b63a786553a4c02943b74b34a988448671001e9a27e2f0565cc05a4"
+dependencies = [
+ "libc",
+ "libusb1-sys",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12166,6 +12204,7 @@ version = "0.0.1"
 name = "skill-daemon"
 version = "0.1.0"
 dependencies = [
+ "antneuro",
  "anyhow",
  "async-trait",
  "axum",
@@ -12321,6 +12360,7 @@ dependencies = [
 name = "skill-devices"
 version = "0.0.1"
 dependencies = [
+ "antneuro",
  "async-trait",
  "awear",
  "bitflags 2.11.1",

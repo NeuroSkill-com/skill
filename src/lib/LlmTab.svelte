@@ -173,7 +173,8 @@ async function loadHardwareFit() {
 
 async function loadConfig() {
   try {
-    config = await daemonInvoke<LlmConfig>("get_llm_config");
+    const raw = await daemonInvoke<LlmConfig>("get_llm_config");
+    config = { ...config, ...raw, n_batch: raw.n_batch ?? null, n_ubatch: raw.n_ubatch ?? null };
   } catch (e) {}
   try {
     const [, port] = await daemonInvoke<[string, number]>("get_ws_config");

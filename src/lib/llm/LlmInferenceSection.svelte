@@ -323,7 +323,7 @@ const curlSnippet = $derived(
             <div class="flex flex-col gap-1 flex-1">
               <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nBatch")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
-                {#each [[null, "auto"], [512, "512"], [1024, "1K"], [2048, "2K"], [4096, "4K"]] as [val, label]}
+                {#each [[null, "auto"], [512, "512"], [1024, "1K"], [2048, "2K"], [4096, "4K"], [8192, "8K"]] as [val, label]}
                   <button onclick={() => onSetNBatch(val as number | null)}
                     class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
                          {config.n_batch === val
@@ -337,7 +337,7 @@ const curlSnippet = $derived(
             <div class="flex flex-col gap-1 flex-1">
               <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nUbatch")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
-                {#each [[null, "auto"], [128, "128"], [256, "256"], [512, "512"]] as [val, label]}
+                {#each [[null, "auto"], [128, "128"], [256, "256"], [512, "512"], [1024, "1K"], [2048, "2K"]] as [val, label]}
                   <button onclick={() => onSetNUbatch(val as number | null)}
                     class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
                          {config.n_ubatch === val

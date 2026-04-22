@@ -207,6 +207,18 @@ pub struct DeviceApiConfig {
     /// BrainMaster model tag: atlantis2 | atlantis4 | discovery | freedom.
     #[serde(default = "default_brainmaster_model")]
     pub brainmaster_model: String,
+    /// ANT Neuro eego sampling rate in Hz (e.g. 500, 512, 1000, 2048).
+    /// 0 = auto-detect from amplifier.
+    #[serde(default)]
+    pub antneuro_sample_rate: i32,
+    /// ANT Neuro eego cap layout: "auto", "10-20", "10-10", or channel count (e.g. "32", "64", "128").
+    /// "auto" = detect from amplifier.
+    #[serde(default = "default_antneuro_cap")]
+    pub antneuro_cap: String,
+}
+
+fn default_antneuro_cap() -> String {
+    "auto".to_string()
 }
 
 impl Default for DeviceApiConfig {
@@ -220,6 +232,8 @@ impl Default for DeviceApiConfig {
             neurosity_password: String::new(),
             neurosity_device_id: String::new(),
             brainmaster_model: default_brainmaster_model(),
+            antneuro_sample_rate: 0,
+            antneuro_cap: default_antneuro_cap(),
         }
     }
 }

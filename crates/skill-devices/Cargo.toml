@@ -43,6 +43,9 @@ mendi = { version = "0.0.2", default-features = false }
 # Cognionics / CGX EEG headsets (USB/FTDI serial)
 cognionics = { version = "0.0.1", default-features = false }
 
+# ANT Neuro eego amplifiers (USB, native pure-Rust backend)
+antneuro = { version = "0.0.1", default-features = false, features = ["native"] }
+
 # AWEAR EEG wearable (BLE, LUCA protocol)
 awear = { version = "0.2.0", default-features = false }
 

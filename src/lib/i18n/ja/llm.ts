@@ -273,7 +273,7 @@ const llm: Record<string, string> = {
     "KVキャッシュ書き込み前にQ/K/Vテンソルに適用されるアダマール回転（llama.cpp PR #21038）。量子化KVキャッシュの品質をほぼゼロコストで大幅に向上させます。モデル互換性に問題がない限り有効のままにしてください。",
   "llm.inference.prefill": "プリフィルバッチサイズ",
   "llm.inference.prefillDesc":
-    "プロンプト取り込み中にデコード呼び出しごとに処理されるトークン数を制御します。大きい値ほどプリフィルが速くなりますが、ピークメモリが増加します。自動はmin(n_ctx, 2048)を使用します。",
+    "プロンプト取り込み中にデコード呼び出しごとに処理されるトークン数を制御します。大きい値ほどプリフィルが速くなりますが、ピークメモリが増加します。自動はmin(n_ctx, 4096)を使用します。",
   "llm.inference.nBatch": "n_batch（プロンプト）",
   "llm.inference.nUbatch": "n_ubatch（GPUカーネル）",
   "llm.inference.flashAttn": "Flash Attention",

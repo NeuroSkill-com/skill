@@ -192,6 +192,7 @@ enum ConnectRoute {
     Awear,
     Mendi,
     IrohRemote,
+    AntNeuro,
     Muse,
 }
 
@@ -251,6 +252,9 @@ fn is_mendi(s: &str) -> bool {
 fn is_iroh_remote(s: &str) -> bool {
     s.starts_with("peer:")
 }
+fn is_antneuro(s: &str) -> bool {
+    s.starts_with("antneuro:") || s.contains("antneuro") || s.contains("eego")
+}
 
 const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_openbci, ConnectRoute::OpenBci),
@@ -270,6 +274,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_idun, ConnectRoute::Idun),
     (is_awear, ConnectRoute::Awear),
     (is_mendi, ConnectRoute::Mendi),
+    (is_antneuro, ConnectRoute::AntNeuro),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
 
@@ -316,6 +321,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Idun => connect_ble::connect_idun(state, paired_name_for(state, target)).await,
         ConnectRoute::Awear => connect_ble::connect_awear(paired_name_for(state, target)).await,
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
+        ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Muse => connect_ble::connect_muse(target, paired_name_for(state, target)).await,
     }
@@ -386,6 +392,9 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.contains("mendi") {
         return "mendi";
     }
+    if lower.starts_with("antneuro:") || lower.contains("antneuro") || lower.contains("eego") {
+        return "antneuro";
+    }
     "muse"
 }
 
@@ -437,6 +446,7 @@ mod tests {
             ("neurosky:/dev/ttyUSB0", "neurosky"),
             ("neurosity:device123", "neurosity"),
             ("brainvision:127.0.0.1:51244", "brainvision"),
+            ("antneuro:0", "antneuro"),
         ];
 
         for (target, expected) in cases {
@@ -517,6 +527,7 @@ mod tests {
             ("Idun-Guardian", ConnectRoute::Idun),
             ("AWEAR-E04A8471", ConnectRoute::Awear),
             ("Mendi-XY", ConnectRoute::Mendi),
+            ("antneuro:0", ConnectRoute::AntNeuro),
             ("totally-unknown-device", ConnectRoute::Muse),
         ];
 
@@ -547,6 +558,7 @@ mod tests {
             "Idun-Guardian",
             "AWEAR-E04A8471",
             "Mendi-XY",
+            "antneuro:0",
         ];
 
         for target in targets {

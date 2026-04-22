@@ -37,6 +37,8 @@ pub struct PairedDevice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceKind {
+    /// ANT Neuro eego amplifiers — 8–256 channel research-grade EEG (USB).
+    AntNeuro,
     /// Muse 1 / 2 / S / Monitor — 4-channel frontal + temporal (TP9/AF7/AF8/TP10).
     Muse,
     /// OpenBCI Ganglion — 4-channel BLE.
@@ -127,6 +129,9 @@ impl DeviceKind {
     /// before falling back to `from_name` on the display name.
     pub fn from_id_and_name(device_id: Option<&str>, device_name: Option<&str>) -> Self {
         if let Some(id) = device_id.map(str::to_ascii_lowercase) {
+            if id.starts_with("antneuro:") {
+                return Self::AntNeuro;
+            }
             if id.starts_with("neurofield:") {
                 return Self::NeuroField;
             }
@@ -165,6 +170,9 @@ impl DeviceKind {
         let Some(n) = name else { return Self::Unknown };
         let n = n.to_lowercase();
 
+        if n.contains("antneuro") || n.contains("eego") || n.starts_with("ant neuro") {
+            return Self::AntNeuro;
+        }
         if n.starts_with("muse") {
             return Self::Muse;
         }
@@ -236,6 +244,21 @@ impl DeviceKind {
     /// Return the static [`DeviceCapabilities`] for this device family.
     pub fn capabilities(self) -> DeviceCapabilities {
         match self {
+            Self::AntNeuro => DeviceCapabilities {
+                kind: Self::AntNeuro,
+                channel_count: 32, // varies by model; 32 is a common eego sport config
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: true,
+                has_full_montage: true,
+                sample_rate_hz: 500.0,
+                // Waveguard Original/Touch 32-ch layout
+                electrode_names: sv(&[
+                    "Fp1", "Fp2", "F7", "F3", "Fz", "F4", "F8", "FC5", "FC1", "FC2", "FC6", "T7", "C3", "Cz", "C4",
+                    "T8", "CP5", "CP1", "CP2", "CP6", "P7", "P3", "Pz", "P4", "P8", "PO3", "POz", "PO4", "O1", "Oz",
+                    "O2", "AFz",
+                ]),
+            },
             Self::Muse => DeviceCapabilities {
                 kind: Self::Muse,
                 channel_count: 4,
@@ -460,6 +483,7 @@ impl DeviceKind {
     /// Return the `&'static str` tag used in IPC messages (matches serde rename).
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::AntNeuro => "antneuro",
             Self::Muse => "muse",
             Self::Ganglion => "ganglion",
             Self::OpenBci => "open_bci",
@@ -490,6 +514,7 @@ impl DeviceKind {
     /// any unrecognised string so BLE advertising names still work.
     pub fn from_kind_str(s: &str) -> Self {
         match s {
+            "antneuro" => Self::AntNeuro,
             "muse" => Self::Muse,
             "ganglion" => Self::Ganglion,
             "open_bci" => Self::OpenBci,
@@ -568,6 +593,52 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
     // Sorted alphabetically by company name.
     vec![
         // ── A ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "antneuro".into(),
+            name_key: "settings.supportedDevices.company.antneuro".into(),
+            logo: "/logos/antneuro.jpg".into(),
+            devices: vec![
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eego8".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-8.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eego24".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-24.jpg".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eego64".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-64.webp".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eegoMylab".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-mylab.webp".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eegoSport".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-sport.webp".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eegoRt".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-rt.webp".into(),
+                },
+                SupportedDevice {
+                    name_key: "settings.supportedDevices.device.eegoHub".into(),
+                    ios_only: false,
+                    image: "/devices/antneuro-eego-hub.png".into(),
+                },
+            ],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.antneuro1".into(),
+                "settings.supportedDevices.instruction.antneuro2".into(),
+            ],
+        },
         SupportedCompany {
             id: "attentivu".into(),
             name_key: "settings.supportedDevices.company.attentivu".into(),
@@ -933,6 +1004,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn from_name_antneuro() {
+        assert_eq!(
+            DeviceKind::from_name(Some("ANT Neuro eego (EE225-00042)")),
+            DeviceKind::AntNeuro
+        );
+        assert_eq!(DeviceKind::from_name(Some("eego mylab")), DeviceKind::AntNeuro);
+        assert_eq!(DeviceKind::from_name(Some("antneuro")), DeviceKind::AntNeuro);
+    }
+
+    #[test]
+    fn from_id_and_name_antneuro_prefix() {
+        assert_eq!(
+            DeviceKind::from_id_and_name(Some("antneuro:0"), None),
+            DeviceKind::AntNeuro
+        );
+    }
+
+    #[test]
+    fn from_kind_str_antneuro() {
+        assert_eq!(DeviceKind::from_kind_str("antneuro"), DeviceKind::AntNeuro);
+    }
+
+    #[test]
+    fn capabilities_antneuro() {
+        let caps = DeviceKind::AntNeuro.capabilities();
+        assert_eq!(caps.channel_count, 32);
+        assert!(caps.has_central_electrodes);
+        assert!(caps.has_full_montage);
+        assert_eq!(caps.sample_rate_hz, 500.0);
+    }
+
+    #[test]
     fn from_name_muse() {
         assert_eq!(DeviceKind::from_name(Some("Muse-2-ABCD")), DeviceKind::Muse);
         assert_eq!(DeviceKind::from_name(Some("MuseS-1234")), DeviceKind::Muse);
@@ -1123,6 +1226,7 @@ mod tests {
     #[test]
     fn as_str_roundtrip_all_variants() {
         let kinds = [
+            DeviceKind::AntNeuro,
             DeviceKind::Muse,
             DeviceKind::Ganglion,
             DeviceKind::OpenBci,
@@ -1238,6 +1342,7 @@ mod tests {
     #[test]
     fn capabilities_all_have_kind() {
         let kinds = [
+            DeviceKind::AntNeuro,
             DeviceKind::Muse,
             DeviceKind::Ganglion,
             DeviceKind::OpenBci,

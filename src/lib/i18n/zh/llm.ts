@@ -260,7 +260,7 @@ const llm: Record<string, string> = {
 
   "llm.inference.prefill": "预填充批大小",
   "llm.inference.prefillDesc":
-    "控制提示词摄入期间每次解码调用处理的 token 数量。较大的值加速预填充但增加峰值内存。自动使用 min(n_ctx, 2048)。",
+    "控制提示词摄入期间每次解码调用处理的 token 数量。较大的值加速预填充但增加峰值内存。自动使用 min(n_ctx, 4096)。",
   "llm.inference.nBatch": "n_batch（提示词）",
   "llm.inference.nUbatch": "n_ubatch（GPU 内核）",
   "llm.inference.flashAttn": "Flash attention",

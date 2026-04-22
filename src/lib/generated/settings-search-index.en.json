@@ -358,7 +358,7 @@
     "tab": "llm",
     "key": "llm.inference.prefill",
     "label": "Prefill batch size",
-    "desc": "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 2048)."
+    "desc": "Controls how many tokens are processed per decode call during prompt ingestion. Larger values speed up prefill at the cost of peak memory. Auto uses min(n_ctx, 4096)."
   },
   {
     "tab": "llm",

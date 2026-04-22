@@ -571,6 +571,9 @@ function deviceImage(name: string, hw?: string | null): string | null {
   if (muse) return muse;
 
   const n = name.toLowerCase();
+  if (n.includes("antneuro") || n.includes("eego")) {
+    return "/devices/antneuro-eego-mylab.webp";
+  }
   if (n.includes("awear") || n.includes("luca")) {
     return "/devices/awear-eeg.png";
   }
@@ -937,16 +940,16 @@ onDestroy(() => {
 
             {#if supportedCompanyExpanded === company.id}
               <div class="px-3.5 pb-3 flex flex-col gap-2">
-                <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5">
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
                   {#each company.devices as item (item.name_key)}
                     <div
-                      class="flex flex-col items-stretch gap-0.5 rounded-md border border-border/50
+                      class="flex flex-col items-stretch gap-1 rounded-md border border-border/50
                              dark:border-white/[0.05] bg-background/60 px-1.5 py-1.5"
                     >
-                      <div class="w-full h-10 rounded overflow-hidden">
-                        <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-cover" />
+                      <div class="w-full h-12 rounded overflow-hidden flex items-center justify-center bg-white/50 dark:bg-white/5">
+                        <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-contain" />
                       </div>
-                      <span class="text-[0.52rem] text-center leading-tight text-foreground/75 truncate">{t(item.name_key)}</span>
+                      <span class="text-[0.54rem] text-center leading-snug text-foreground/75 line-clamp-2">{t(item.name_key)}</span>
                       {#if item.ios_only}
                         <span class="text-[0.42rem] text-center leading-tight text-blue-500 dark:text-blue-400 font-semibold">📱 {t("devices.iosOnly")}</span>
                       {/if}
