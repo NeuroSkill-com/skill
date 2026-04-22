@@ -296,9 +296,19 @@ async fn lsl_e2e_32ch_256hz() {
         // spawn_blocking runs on a thread with no active Tokio scheduler.
         let outlet = StreamOutlet::new(&info, 0, 360);
 
-        // Adapter: pass the SAME info so the inlet connects directly (no UDP
-        // discovery round-trip, no risk of missing pre-connection samples).
-        let adapter = skill_lsl::LslAdapter::new(&info);
+        // Give the outlet a moment to advertise on the network.
+        std::thread::sleep(Duration::from_millis(300));
+
+        // Resolve the stream via NETWORK DISCOVERY (not sharing the
+        // outlet's StreamInfo directly).  This exercises the real path
+        // that third-party LSL sources follow: UDP resolve → TCP
+        // fullinfo → inlet connect.  Catches bugs like missing channel
+        // labels that only manifest with network-resolved StreamInfo.
+        let resolved =
+            skill_lsl::resolve_stream_by_name(STREAM_NAME, 5.0).expect("failed to resolve stream by name over network");
+
+        let adapter =
+            skill_lsl::LslAdapter::connect(&resolved).expect("LslAdapter::connect failed after network resolve");
 
         // Send info + adapter to the async side.
         setup_tx.send(Ok((SendStreamInfo(info), adapter))).ok();

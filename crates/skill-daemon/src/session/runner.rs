@@ -1246,6 +1246,116 @@ mod tests {
         assert!(csv_count > 0, "no EXG CSV artifacts after LSL virtual source session");
     }
 
+    // ── 20b. Virtual LSL → daemon discover + connect_lsl + status ─────────
+    //
+    // Exercises the full daemon integration path that the Tauri UI would
+    // hit: start virtual source → discover_streams() finds it →
+    // connect_lsl("lsl:SkillVirtualEEG") routes through daemon connect
+    // logic → run_adapter_session → AppState.status reflects the connected
+    // LSL session with correct metadata (device_kind, channel_names,
+    // sample_rate, sample_count).
+
+    #[tokio::test]
+    async fn lsl_virtual_source_daemon_status_reflects_session() {
+        use skill_lsl::{VirtualLslSource, VirtualSourceConfig, VIRTUAL_STREAM_NAME};
+
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+
+        // 1. Start virtual source (32 ch, 256 Hz — same as UI default).
+        let cfg = VirtualSourceConfig {
+            channels: 32,
+            sample_rate: 256.0,
+            ..Default::default()
+        };
+        let _source = VirtualLslSource::start(cfg).expect("virtual source");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // 2. Discover: daemon handler calls discover_streams().
+        let streams = tokio::task::spawn_blocking(|| skill_lsl::discover_streams(3.0))
+            .await
+            .unwrap();
+
+        // Filter for our 32-ch source (other tests may have a 4-ch source running).
+        let virtual_stream = streams
+            .iter()
+            .find(|s| s.name == VIRTUAL_STREAM_NAME && s.channel_count == 32);
+        assert!(
+            virtual_stream.is_some(),
+            "discover_streams() did not find 32-ch '{VIRTUAL_STREAM_NAME}' — found: [{}]",
+            streams
+                .iter()
+                .map(|s| format!("{}({}ch)", s.name, s.channel_count))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let vs = virtual_stream.unwrap();
+        assert_eq!(vs.channel_count, 32, "discovered channel count");
+        assert!((vs.sample_rate - 256.0).abs() < 0.01, "discovered sample rate");
+        assert_eq!(vs.stream_type, "EEG", "discovered stream type");
+
+        // 3. Connect via the daemon's connect_lsl (same path as start_session handler).
+        let target = format!("lsl:{VIRTUAL_STREAM_NAME}");
+        let adapter = crate::session::connect_wired::connect_lsl(&target)
+            .await
+            .expect("connect_lsl should succeed for virtual source");
+
+        // Verify descriptor before running the session.
+        let desc = adapter.descriptor();
+        assert_eq!(desc.kind, "lsl");
+        assert_eq!(desc.eeg_channels, 32);
+        assert!((desc.eeg_sample_rate - 256.0).abs() < 0.01);
+        assert_eq!(desc.channel_names.len(), 32);
+        assert_eq!(desc.channel_names[0], "Fp1");
+        assert_eq!(desc.channel_names[31], "PO10");
+
+        // 4. Run the adapter through the session pipeline for ~2 s.
+        let state_check = state.clone();
+        // Subscribe to WS events BEFORE running so we capture DeviceConnected.
+        let mut rx = state_check.events_tx.subscribe();
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(2200)).await;
+            let _ = cancel_tx.send(());
+        });
+
+        run_adapter_session(state, cancel_rx, adapter).await;
+
+        // 5. Verify the session ran: drain WS events emitted during the
+        //    session and check that DeviceConnected arrived with correct
+        //    LSL metadata.  Status is cleared on disconnect so we inspect
+        //    the broadcast events instead.
+
+        // Verify EXG artifacts were produced (proves data flowed).
+        let mut csv_count = 0usize;
+        for day in std::fs::read_dir(dir.path()).unwrap().flatten() {
+            if day.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                if let Ok(files) = std::fs::read_dir(day.path()) {
+                    for f in files.flatten() {
+                        let name = f.file_name().to_string_lossy().to_string();
+                        if name.starts_with("exg_") && name.ends_with(".csv") {
+                            csv_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(csv_count > 0, "no EXG CSV artifacts — pipeline did not receive data");
+
+        // Drain WS events to verify DeviceConnected was broadcast with LSL metadata.
+        let mut found_connected = false;
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "DeviceConnected" {
+                let kind = ev.payload.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+                let name = ev.payload.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                assert_eq!(kind, "lsl", "DeviceConnected event kind");
+                assert_eq!(name, VIRTUAL_STREAM_NAME, "DeviceConnected event name");
+                found_connected = true;
+            }
+        }
+        assert!(found_connected, "DeviceConnected event never broadcast");
+    }
+
     // ── 21. Mendi SimulatedDevice → MendiAdapter → pipeline ──────────────────
 
     #[tokio::test]

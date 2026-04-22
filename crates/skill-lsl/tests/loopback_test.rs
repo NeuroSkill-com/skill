@@ -70,6 +70,8 @@ fn loopback_partial_labels_padded() {
             let ch = channels.append_child("channel");
             ch.append_child_value("label", label);
         }
+        // Outlet must exist so the inlet's open_stream() can connect.
+        let _outlet = StreamOutlet::new(&info, 0, 360);
 
         let adapter = skill_lsl::LslAdapter::new(&info);
         let d = adapter.descriptor();

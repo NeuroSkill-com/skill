@@ -198,27 +198,25 @@ mod tests {
 
     #[test]
     fn e2e_lsl_channel_labels_from_xml() {
+        // Run on a raw OS thread: StreamOutlet::new calls block_on internally
+        // and panics if a tokio runtime is already active.
         std::thread::spawn(|| {
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            rt.block_on(async {
-                use rlsl::prelude::*;
-                use rlsl::types::ChannelFormat;
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
 
-                let info = StreamInfo::new("LabelTest", "EEG", 4, 256.0, ChannelFormat::Float32, "test-labels");
-                let desc = info.desc();
-                let channels = desc.append_child("channels");
-                for label in &["TP9", "AF7", "AF8", "TP10"] {
-                    let ch = channels.append_child("channel");
-                    ch.append_child_value("label", label);
-                }
+            let info = StreamInfo::new("LabelTest", "EEG", 4, 256.0, ChannelFormat::Float32, "test-labels");
+            let desc = info.desc();
+            let channels = desc.append_child("channels");
+            for label in &["TP9", "AF7", "AF8", "TP10"] {
+                let ch = channels.append_child("channel");
+                ch.append_child_value("label", label);
+            }
+            // Outlet must exist so the inlet's open_stream() can connect.
+            let _outlet = StreamOutlet::new(&info, 0, 360);
 
-                let adapter = crate::LslAdapter::new(&info);
-                let d = adapter.descriptor();
-                assert_eq!(d.channel_names, vec!["TP9", "AF7", "AF8", "TP10"]);
-            });
+            let adapter = crate::LslAdapter::new(&info);
+            let d = adapter.descriptor();
+            assert_eq!(d.channel_names, vec!["TP9", "AF7", "AF8", "TP10"]);
         })
         .join()
         .unwrap();
@@ -273,23 +271,19 @@ mod tests {
     #[test]
     fn e2e_lsl_missing_labels_fallback() {
         std::thread::spawn(|| {
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            rt.block_on(async {
-                use rlsl::prelude::*;
-                use rlsl::types::ChannelFormat;
+            use rlsl::prelude::*;
+            use rlsl::types::ChannelFormat;
 
-                let info = StreamInfo::new("NoLabels", "EEG", 8, 500.0, ChannelFormat::Float32, "test-nolabels");
-                // Don't add any channel labels in desc
+            let info = StreamInfo::new("NoLabels", "EEG", 8, 500.0, ChannelFormat::Float32, "test-nolabels");
+            // Don't add any channel labels in desc.
+            // Outlet must exist so the inlet's open_stream() can connect.
+            let _outlet = StreamOutlet::new(&info, 0, 360);
 
-                let adapter = crate::LslAdapter::new(&info);
-                let d = adapter.descriptor();
-                assert_eq!(d.channel_names.len(), 8);
-                assert_eq!(d.channel_names[0], "Ch1");
-                assert_eq!(d.channel_names[7], "Ch8");
-            });
+            let adapter = crate::LslAdapter::new(&info);
+            let d = adapter.descriptor();
+            assert_eq!(d.channel_names.len(), 8);
+            assert_eq!(d.channel_names[0], "Ch1");
+            assert_eq!(d.channel_names[7], "Ch8");
         })
         .join()
         .unwrap();

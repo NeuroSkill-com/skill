@@ -67,35 +67,35 @@ pub struct LslAdapter {
 }
 
 impl LslAdapter {
-    pub fn new(info: &StreamInfo) -> Self {
+    /// Connect to an LSL stream and return an adapter that produces
+    /// [`DeviceEvent`]s.  Returns an error if the TCP data connection
+    /// cannot be established (outlet gone, firewall, timeout).
+    pub fn connect(info: &StreamInfo) -> Result<Self, String> {
         let channel_count = info.channel_count() as usize;
         let sample_rate = info.nominal_srate();
         let name = info.name().to_string();
         let stream_type = info.type_().to_string();
         let source_id = info.source_id().to_string();
 
-        // Read channel labels from LSL description XML.
-        // `resolve_query` returns a minimal StreamInfo whose desc() XML is
-        // empty. We must open a temporary StreamInlet and call get_fullinfo()
-        // to obtain the full XML with channel labels.
+        // Read channel labels from the LSL stream's XML description.
+        //
+        // Path 1 (in-process): when the caller passes the outlet's own
+        // StreamInfo (e.g. unit tests), `info.desc()` already contains
+        // the full `<channels>` XML — read labels directly.
+        //
+        // Path 2 (network-resolved): `resolve_query` returns a minimal
+        // StreamInfo whose desc is `<desc></desc>`.  `rlsl` 0.0.4's
+        // `get_fullinfo()` is a no-op stub, so we must fetch the full
+        // XML ourselves via a TCP `LSL:fullinfo` request to the outlet's
+        // data port and parse the `<label>` tags from the response.
         let channel_names: Vec<String> = {
-            let tmp = rlsl::inlet::StreamInlet::new(info, 1, 0, false);
-            let full = tmp.get_fullinfo(2.0);
-            let desc = full.desc();
-            let channels_node = desc.child("channels");
-            let mut names = Vec::with_capacity(channel_count);
-            if !channels_node.is_empty() {
-                let mut ch = channels_node.child("channel");
-                while !ch.is_empty() {
-                    let label = ch.child_value("label");
-                    names.push(if label.is_empty() {
-                        format!("Ch{}", names.len() + 1)
-                    } else {
-                        label
-                    });
-                    ch = ch.next_sibling_named("channel");
-                }
+            let mut names = read_labels_from_desc(info, channel_count);
+
+            if names.is_empty() {
+                // desc was empty (network-resolved) — fetch via TCP.
+                names = fetch_labels_via_fullinfo(info, channel_count);
             }
+
             // Pad / truncate to exact channel count.
             while names.len() < channel_count {
                 names.push(format!("Ch{}", names.len() + 1));
@@ -120,30 +120,27 @@ impl LslAdapter {
         let (tx, rx) = mpsc::channel(256);
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         let info_clone = info.clone();
-        // Clone for the thread so the log can reference names after `desc` takes ownership.
         let thread_channel_names = desc.channel_names.clone();
+        let name_for_timeout = name.clone();
+
+        // Channel for the inlet thread to report open_stream result back.
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
 
         std::thread::Builder::new()
             .name(format!("lsl-inlet-{name}"))
             .spawn(move || {
                 let inlet = rlsl::inlet::StreamInlet::new(&info_clone, 360, 0, true);
-
-                // Enable built-in timestamp postprocessing: clock sync +
-                // dejitter + monotonize.  This replaces manual time_correction()
-                // and also smooths jittery timestamps from network sources.
                 inlet.set_postprocessing(rlsl::types::PROC_ALL);
 
-                // Connect to the outlet's TCP server.  Without this call the
-                // inlet's internal sample channel is never fed and pull_chunk_d
-                // always returns empty regardless of how many samples the
-                // outlet pushes.  Timeout of 10 s covers slow network discovery;
-                // if the outlet vanishes the adapter will disconnect gracefully.
+                // Open the TCP data connection.  Signal the result back so
+                // connect() can return an error to the caller rather than
+                // silently entering a broken session.
                 if let Err(e) = inlet.open_stream(10.0) {
-                    eprintln!("[lsl] open_stream failed for '{name}': {e}");
+                    let _ = ready_tx.send(Err(format!("LSL stream '{name}' found but TCP connection failed: {e}")));
                     return;
                 }
+                let _ = ready_tx.send(Ok(()));
 
-                // Log channel layout for visual inspection and log dump.
                 eprintln!(
                     "[lsl] connected to '{}' — {} ch @ {} Hz | channels: [{}]",
                     name,
@@ -164,8 +161,6 @@ impl LslAdapter {
                 }));
 
                 // Pull samples in batches to reduce per-sample overhead.
-                // At 256 Hz, ~64 samples accumulate in 250 ms; at 1000 Hz
-                // ~250 samples.  Timestamps are already postprocessed by rlsl.
                 loop {
                     if shutdown_rx.try_recv().is_ok() {
                         break;
@@ -178,8 +173,6 @@ impl LslAdapter {
                         continue;
                     }
 
-                    // Send one DeviceEvent per sample (the session runner
-                    // processes them individually through the DSP pipeline).
                     let n_ch = channel_count;
                     for (i, &ts) in timestamps.iter().enumerate() {
                         let offset = i * n_ch;
@@ -198,12 +191,150 @@ impl LslAdapter {
             })
             .expect("failed to spawn LSL inlet thread");
 
-        Self {
+        // Wait for the inlet thread to report open_stream result.
+        // Timeout matches open_stream's 10 s + 2 s grace.
+        match ready_rx.recv_timeout(std::time::Duration::from_secs(12)) {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(_) => return Err(format!("LSL stream '{}' connection timed out", name_for_timeout)),
+        }
+
+        Ok(Self {
             rx,
             desc,
             _shutdown: shutdown_tx,
+        })
+    }
+
+    /// Backwards-compatible constructor that panics on failure.
+    /// Prefer [`connect`] for new code.
+    pub fn new(info: &StreamInfo) -> Self {
+        Self::connect(info).expect("LSL connect failed")
+    }
+}
+
+// ── Channel label helpers ────────────────────────────────────────────────────
+
+/// Read channel labels from `info.desc()` (works when the StreamInfo was
+/// created in this process, e.g. tests sharing the outlet's StreamInfo).
+fn read_labels_from_desc(info: &StreamInfo, channel_count: usize) -> Vec<String> {
+    let desc = info.desc();
+    let channels_node = desc.child("channels");
+    if channels_node.is_empty() {
+        return Vec::new();
+    }
+    let mut names = Vec::with_capacity(channel_count);
+    let mut ch = channels_node.child("channel");
+    while !ch.is_empty() {
+        let label = ch.child_value("label");
+        names.push(if label.is_empty() {
+            format!("Ch{}", names.len() + 1)
+        } else {
+            label
+        });
+        ch = ch.next_sibling_named("channel");
+    }
+    names
+}
+
+/// Fetch channel labels by sending `LSL:fullinfo` over TCP to the outlet's
+/// service port.  `rlsl` 0.0.4's `get_fullinfo()` is a stub, so we must
+/// implement the TCP request ourselves.
+fn fetch_labels_via_fullinfo(info: &StreamInfo, channel_count: usize) -> Vec<String> {
+    use std::io::{BufRead, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    // Determine the outlet's TCP address.  The `LSL:fullinfo` handler runs
+    // on the **data port** (TCP server), not the service port (UDP time sync).
+    let addr = {
+        let v4 = info.v4address();
+        let v4port = info.v4data_port();
+        if !v4.is_empty() && v4port > 0 {
+            format!("{v4}:{v4port}")
+        } else {
+            let v6 = info.v6address();
+            let v6port = info.v6data_port();
+            if !v6.is_empty() && v6port > 0 {
+                format!("[{v6}]:{v6port}")
+            } else {
+                return Vec::new();
+            }
+        }
+    };
+
+    let stream = match TcpStream::connect_timeout(
+        &addr.parse().unwrap_or_else(|_| "127.0.0.1:0".parse().unwrap()),
+        Duration::from_secs(3),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[lsl] fullinfo TCP connect to {addr} failed: {e}");
+            return Vec::new();
+        }
+    };
+    stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
+    stream.set_write_timeout(Some(Duration::from_secs(2))).ok();
+    let mut writer = stream.try_clone().unwrap_or_else(|_| {
+        // Should not happen on any supported platform.
+        panic!("TcpStream::try_clone failed");
+    });
+
+    // Send request.
+    if writer.write_all(b"LSL:fullinfo\r\n").is_err() {
+        return Vec::new();
+    }
+    let _ = writer.flush();
+
+    // Read response (full-info XML, terminated by `</info>`).
+    let reader = std::io::BufReader::new(stream);
+    let mut xml = String::with_capacity(4096);
+    for line in reader.lines() {
+        match line {
+            Ok(l) => {
+                xml.push_str(&l);
+                xml.push('\n');
+                if l.contains("</info>") {
+                    break;
+                }
+            }
+            Err(_) => break,
         }
     }
+
+    if xml.is_empty() {
+        return Vec::new();
+    }
+
+    // Parse `<label>` tags from the XML.
+    parse_labels_from_xml(&xml, channel_count)
+}
+
+/// Extract channel labels from a full-info XML string by simple tag parsing.
+fn parse_labels_from_xml(xml: &str, channel_count: usize) -> Vec<String> {
+    let mut names = Vec::with_capacity(channel_count);
+    // Find all <label>...</label> pairs inside the <channels> section.
+    let channels_start = xml.find("<channels>");
+    let channels_end = xml.find("</channels>");
+    if let (Some(start), Some(end)) = (channels_start, channels_end) {
+        let section = &xml[start..end];
+        let mut pos = 0;
+        while let Some(open) = section[pos..].find("<label>") {
+            let label_start = pos + open + 7; // length of "<label>"
+            if let Some(close) = section[label_start..].find("</label>") {
+                let label = &section[label_start..label_start + close];
+                names.push(if label.is_empty() {
+                    format!("Ch{}", names.len() + 1)
+                } else {
+                    label.to_string()
+                });
+                pos = label_start + close + 8; // length of "</label>"
+            } else {
+                break;
+            }
+        }
+    }
+    names
 }
 
 #[async_trait]

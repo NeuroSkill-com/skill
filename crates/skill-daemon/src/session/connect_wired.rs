@@ -394,7 +394,7 @@ pub(super) async fn connect_lsl(target: &str) -> anyhow::Result<Box<dyn DeviceAd
             rate = info.nominal_srate(),
             "LSL stream resolved"
         );
-        let adapter = skill_lsl::LslAdapter::new(&info);
+        let adapter = skill_lsl::LslAdapter::connect(&info).map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(Box::new(adapter) as Box<dyn DeviceAdapter>)
     })
     .await
