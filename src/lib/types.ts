@@ -58,6 +58,8 @@ export interface DeviceStatus {
   ppg: number[];
   /** Total PPG samples received this session. */
   ppg_sample_count: number;
+  /** Total IMU samples received this session. */
+  imu_sample_count: number;
   /** Latest accelerometer reading [x, y, z] in g. */
   accel: [number, number, number];
   /** Latest gyroscope reading [x, y, z] in °/s. */

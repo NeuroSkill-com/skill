@@ -88,6 +88,7 @@ pub(crate) fn apply_daemon_status(
     local.has_central_electrodes = ds.has_central_electrodes;
     local.has_full_montage = ds.has_full_montage;
     local.ppg_sample_count = ds.ppg_sample_count;
+    local.imu_sample_count = ds.imu_sample_count;
     local.phone_info = ds.phone_info;
     local.iroh_client_name = ds.iroh_client_name;
     local.iroh_tunnel_online = ds.iroh_tunnel_online;

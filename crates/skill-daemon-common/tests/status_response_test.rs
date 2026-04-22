@@ -38,6 +38,7 @@ fn clear_device_resets_all_fields() {
         has_ppg: true,
         has_imu: true,
         ppg_sample_count: 500,
+        imu_sample_count: 250,
         csv_path: Some("/tmp/test.csv".into()),
         ..Default::default()
     };
@@ -60,6 +61,7 @@ fn clear_device_resets_all_fields() {
     assert!(!s.has_ppg);
     assert!(!s.has_imu);
     assert_eq!(s.ppg_sample_count, 0);
+    assert_eq!(s.imu_sample_count, 0);
     assert!(s.csv_path.is_none());
 }
 

@@ -100,6 +100,7 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
       retry_countdown_secs: 0,
       ppg: [1200, 3400, 2800],
       ppg_sample_count: 12800,
+      imu_sample_count: 6400,
       accel: [0.02, -0.01, 1.0],
       gyro: [0.5, -0.3, 0.1],
       fuel_gauge_mv: 3850,
