@@ -250,8 +250,9 @@ fn mock_eeg_status() -> serde_json::Value {
             "firmware_version": "1.2.3",
             "hardware_version": "4.0",
             "battery":      78,
-            "sample_count":  153600,
-            "ppg_sample_count": 38400,
+            "eeg_samples":  153600,
+            "ppg_samples": 38400,
+            "imu_samples": 19200,
         },
         "session": {
             "start_utc":     now - 1800,

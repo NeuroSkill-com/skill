@@ -308,7 +308,7 @@ fn status_text_connected_with_scores() {
         "device": {
             "state": "connected", "connected": true, "streaming": true,
             "name": "Muse 2", "battery": 85.0,
-            "sample_count": 12345, "ppg_sample_count": 500,
+            "eeg_samples": 12345, "ppg_samples": 500, "imu_samples": 250,
         },
         "session": { "duration_secs": 125 },
         "embeddings": { "today": 5, "total": 100, "recording_days": 10, "encoder_loaded": true },
@@ -341,7 +341,9 @@ fn status_text_connected_with_scores() {
     assert!(text.contains("Muse 2"));
     assert!(text.contains("Streaming: yes"));
     assert!(text.contains("Battery: 85%"));
+    assert!(text.contains("EEG samples: 12345"));
     assert!(text.contains("PPG samples: 500"));
+    assert!(text.contains("IMU samples: 250"));
     assert!(text.contains("Duration: 2m 5s"));
     assert!(text.contains("Recent: focus, relax"));
     assert!(text.contains("Top labels (all time): focus (8x), relax (5x)"));

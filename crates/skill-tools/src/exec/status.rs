@@ -27,10 +27,14 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
         if let Some(b) = dev["battery"].as_f64() {
             out.push_str(&format!("Battery: {:.0}%\n", b));
         }
-        out.push_str(&format!("EEG samples: {}", dev["sample_count"].as_u64().unwrap_or(0)));
-        let ppg = dev["ppg_sample_count"].as_u64().unwrap_or(0);
+        out.push_str(&format!("EEG samples: {}", dev["eeg_samples"].as_u64().unwrap_or(0)));
+        let ppg = dev["ppg_samples"].as_u64().unwrap_or(0);
         if ppg > 0 {
             out.push_str(&format!(" | PPG samples: {}", ppg));
+        }
+        let imu = dev["imu_samples"].as_u64().unwrap_or(0);
+        if imu > 0 {
+            out.push_str(&format!(" | IMU samples: {}", imu));
         }
         out.push('\n');
     } else {
