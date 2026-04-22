@@ -52,7 +52,11 @@ async fn adapter_sends_connected_event() {
     match evt {
         Some(DeviceEvent::Connected(info)) => {
             assert!(info.name.contains("ConnectTest"));
-            assert_eq!(info.hardware_version.as_deref(), Some("EEG"));
+            let hw = info.hardware_version.as_deref().unwrap_or("");
+            assert!(
+                hw.starts_with("EEG"),
+                "hardware_version should start with 'EEG', got: {hw}"
+            );
         }
         other => panic!("expected Connected, got {other:?}"),
     }

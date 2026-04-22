@@ -640,7 +640,8 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.eegoRt": "eego rt",
   "settings.supportedDevices.device.eegoHub": "eego hub",
   "settings.supportedDevices.instruction.antneuro1": "通过 USB 连接您的 eego 放大器。",
-  "settings.supportedDevices.instruction.antneuro2": "扫描器会自动检测 eego 放大器。从设备列表中选择并连接。如需要，可在 Device API 设置中配置电极帽布局。",
+  "settings.supportedDevices.instruction.antneuro2":
+    "扫描器会自动检测 eego 放大器。从设备列表中选择并连接。如需要，可在 Device API 设置中配置电极帽布局。",
 };
 
 export default settings;

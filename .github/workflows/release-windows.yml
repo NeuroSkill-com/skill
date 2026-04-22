@@ -489,9 +489,7 @@ jobs:
 
           @(
             "LIBCLANG_PATH=$bin",
-            "LLVM_CONFIG=$bin\llvm-config.exe",
-            "CC=$bin\clang.exe",
-            "CXX=$bin\clang++.exe"
+            "LLVM_CONFIG=$bin\llvm-config.exe"
           ) | ForEach-Object {
             $_ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             Write-Host "[ok] $_"

@@ -651,7 +651,8 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.eegoRt": "eego rt",
   "settings.supportedDevices.device.eegoHub": "eego hub",
   "settings.supportedDevices.instruction.antneuro1": "eego 앰프를 USB로 연결하세요.",
-  "settings.supportedDevices.instruction.antneuro2": "스캐너가 eego 앰프를 자동으로 감지합니다. 장치 목록에서 선택하여 연결하세요. 필요한 경우 Device API 설정에서 캡 레이아웃을 구성할 수 있습니다.",
+  "settings.supportedDevices.instruction.antneuro2":
+    "스캐너가 eego 앰프를 자동으로 감지합니다. 장치 목록에서 선택하여 연결하세요. 필요한 경우 Device API 설정에서 캡 레이아웃을 구성할 수 있습니다.",
 };
 
 export default settings;

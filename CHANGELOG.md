@@ -8,6 +8,29 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.127] — 2026-04-22
+
+### Features
+
+- Add ANT Neuro eego amplifier family support via the `antneuro` crate (native USB backend, no vendor SDK required)
+- Supported models: eego 8, eego 24, eego 64, eego mylab, eego sport, eego rt, eego hub
+- Auto-detect channel count and sample rate from the amplifier on first data block
+- Configurable cap layout via Device API settings (`antneuro_cap`: auto, 10-20, 10-10, or explicit channel count)
+- Configurable sample rate via Device API settings (`antneuro_sample_rate`: 500, 512, 1000, 2048, etc.)
+- Waveguard electrode name mappings for 8, 21, 24, 25, 32, and 64-channel cap configurations
+- USB scanner auto-detects connected eego amplifiers every other tick
+- Device images and company logo for all 7 amplifier models in the Supported Devices catalog
+
+### Bugfixes
+
+- Fix PPG and IMU sample counts not being tracked in daemon status (ppg_sample_count/imu_sample_count always stayed at 0)
+- Fix `cmd_status` device block missing `firmware`, `ppg_samples`, and `imu_samples` fields (neuroskill CLI showed nulls)
+- Fix `format_status_as_text` reading stale key names (`sample_count` instead of `eeg_samples`)
+
+### UI
+
+- Improved supported devices card grid: wider columns, taller images with `object-contain`, text wraps instead of truncating
+
 ## [0.0.126] — 2026-04-20
 
 ### Features
