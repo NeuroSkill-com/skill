@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { fmtTime } from "$lib/format";
@@ -269,30 +270,30 @@ useWindowTitle("window.title.api");
       aria-label={t("apiStatus.title")}>
 
   <!-- ── Server info (compact 2-row grid) ──────────────────────────────────── -->
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden shrink-0">
+  <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden shrink-0">
     <CardContent class="px-4 py-2.5 flex flex-col gap-1.5">
       <div class="flex items-center gap-2 flex-wrap">
         <div class="w-2 h-2 rounded-full {daemon?.reachable ? 'bg-green-500' : 'bg-amber-500'} shrink-0"></div>
-        <span class="text-[0.72rem] font-semibold text-foreground">{daemonState}</span>
-        <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
+        <span class="text-ui-md font-semibold text-foreground">{daemonState}</span>
+        <Badge variant="outline" class="text-ui-xs py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
           WebSocket
         </Badge>
-        <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
+        <Badge variant="outline" class="text-ui-xs py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
           Daemon
         </Badge>
         {#if daemon?.daemon_required}
-          <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+          <Badge variant="outline" class="text-ui-xs py-0 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
             Strict
           </Badge>
         {/if}
-        <span class="ml-auto text-[0.6rem] text-muted-foreground">{t("apiStatus.port")}</span>
-        <kbd class="font-mono text-[0.65rem] font-bold text-foreground bg-muted dark:bg-white/[0.06]
+        <span class="ml-auto text-ui-sm text-muted-foreground">{t("apiStatus.port")}</span>
+        <kbd class="font-mono text-ui-base font-bold text-foreground bg-muted dark:bg-white/[0.06]
                     border border-border dark:border-white/[0.1] rounded px-1.5 py-0.5">
           {port}
         </kbd>
       </div>
       {#if daemon?.version}
-        <div class="flex items-center gap-2 text-[0.54rem] text-muted-foreground/60">
+        <div class="flex items-center gap-2 text-ui-xs text-muted-foreground/60">
           <span>v{daemon.version.daemon_version}</span>
           <span>·</span>
           <span>{t("daemon.protocol")} {daemon.version.protocol_version}</span>
@@ -301,7 +302,7 @@ useWindowTitle("window.title.api");
         </div>
       {/if}
       {#if daemon && !daemon.reachable}
-        <div class="flex items-center gap-2 text-[0.6rem] text-amber-600 dark:text-amber-400">
+        <div class="flex items-center gap-2 text-ui-sm text-amber-600 dark:text-amber-400">
           <span>Daemon unavailable{daemon.error ? `: ${daemon.error}` : ""}</span>
           <button
             class="rounded border border-border dark:border-white/[0.08] px-1.5 py-0.5 hover:bg-muted/40"
@@ -319,24 +320,24 @@ useWindowTitle("window.title.api");
         <button
           onclick={() => copyText(wsUrl, "ws")}
           class="group flex items-center gap-1.5 rounded-md border border-border dark:border-white/[0.08]
-                 bg-muted dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.06]
+                 bg-muted dark:bg-white/[0.04] hover:bg-accent dark:hover:bg-white/[0.04]
                  px-2 py-1 transition-colors cursor-pointer"
           title={t("apiStatus.clickToCopy")}
         >
-          <code class="font-mono text-[0.62rem] text-foreground select-all">{wsUrl}</code>
-          <span class="text-[0.55rem] text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+          <code class="font-mono text-ui-sm text-foreground select-all">{wsUrl}</code>
+          <span class="text-ui-xs text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
             {copied === "ws" ? "✓" : "⎘"}
           </span>
         </button>
         <button
           onclick={() => copyText(`dns-sd -B _skill._tcp`, "mdns")}
           class="group flex items-center gap-1.5 rounded-md border border-border dark:border-white/[0.08]
-                 bg-muted dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.06]
+                 bg-muted dark:bg-white/[0.04] hover:bg-accent dark:hover:bg-white/[0.04]
                  px-2 py-1 transition-colors cursor-pointer"
           title={t("apiStatus.clickToCopy")}
         >
-          <code class="font-mono text-[0.62rem] text-foreground select-all">dns-sd -B _skill._tcp</code>
-          <span class="text-[0.55rem] text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+          <code class="font-mono text-ui-sm text-foreground select-all">dns-sd -B _skill._tcp</code>
+          <span class="text-ui-xs text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
             {copied === "mdns" ? "✓" : "⎘"}
           </span>
         </button>
@@ -347,20 +348,18 @@ useWindowTitle("window.title.api");
   <!-- ── CLI Documentation ────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-1.5 shrink-0">
     <div class="flex items-center gap-2 px-0.5">
-      <span class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground">
-        CLI &amp; Code Examples
-      </span>
+      <SectionHeader>CLI &amp; Code Examples</SectionHeader>
     </div>
 
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
       <!-- Tab row -->
       <div class="flex border-b border-border dark:border-white/[0.06] overflow-x-auto">
         {#each ([["overview","Overview"],["cli_tool","neuroskill"],["websocket","WebSocket"],["python","Python"],["node","Node.js"]] as const) as [key, label]}
           <button
             onclick={() => activeTab = key}
-            class="flex-1 py-1.5 text-[0.6rem] font-semibold transition-colors
+            class="flex-1 py-1.5 text-ui-sm font-semibold transition-colors
                    {activeTab === key
-                     ? 'bg-primary/10 text-primary border-b-2 border-primary'
+                     ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-b-2 border-violet-500'
                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'}"
           >
             {label}
@@ -370,12 +369,12 @@ useWindowTitle("window.title.api");
 
       <!-- Code block -->
       <div class="relative">
-        <pre class="px-3 py-3 text-[0.6rem] font-mono text-foreground/80
+        <pre class="px-3 py-3 text-ui-sm font-mono text-foreground/80
                     leading-relaxed overflow-x-auto max-h-52 select-text
                     scrollbar-thin">{cliCode(activeTab)}</pre>
         <button
           onclick={() => copyCode(activeTab)}
-          class="absolute top-2 right-2 text-[0.52rem] px-1.5 py-0.5
+          class="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5
                  rounded border border-border dark:border-white/[0.08]
                  bg-background/80 text-muted-foreground
                  hover:text-foreground hover:bg-accent transition-colors"
@@ -390,21 +389,19 @@ useWindowTitle("window.title.api");
   <!-- ── Connected Clients ─────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-1.5 shrink-0">
     <div class="flex items-center gap-2 px-0.5">
-      <span class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground">
-        {t("apiStatus.connectedClients")}
-      </span>
-      <Badge variant="outline" class="text-[0.5rem] py-0 px-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+      <SectionHeader>{t("apiStatus.connectedClients")}</SectionHeader>
+      <Badge variant="outline" class="text-ui-2xs py-0 px-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
         {clients.length}
       </Badge>
     </div>
 
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
       {#if clients.length === 0}
         <CardContent class="flex items-center gap-3 py-4 px-4">
           <span class="text-xl">🔌</span>
           <div class="flex flex-col gap-0.5">
-            <p class="text-[0.72rem] text-muted-foreground">{t("apiStatus.noClients")}</p>
-            <p class="text-[0.6rem] text-muted-foreground/50 leading-relaxed">
+            <p class="text-ui-md text-muted-foreground">{t("apiStatus.noClients")}</p>
+            <p class="text-ui-sm text-muted-foreground/50 leading-relaxed">
               {t("apiStatus.noClientsHint", { port })}
             </p>
           </div>
@@ -415,9 +412,9 @@ useWindowTitle("window.title.api");
             {#each clients as client}
               <div class="flex items-center gap-2 px-4 py-2">
                 <div class="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></div>
-                <span class="font-mono text-[0.68rem] font-semibold text-foreground truncate">{shortPeer(client.peer)}</span>
-                <span class="font-mono text-[0.55rem] text-muted-foreground/40 truncate hidden sm:inline">{client.peer}</span>
-                <span class="ml-auto text-[0.55rem] text-muted-foreground whitespace-nowrap shrink-0">
+                <span class="font-mono text-ui-base font-semibold text-foreground truncate">{shortPeer(client.peer)}</span>
+                <span class="font-mono text-ui-xs text-muted-foreground/40 truncate hidden sm:inline">{client.peer}</span>
+                <span class="ml-auto text-ui-xs text-muted-foreground whitespace-nowrap shrink-0">
                   {fmtTime(client.connected_at)}
                   <span class="text-muted-foreground/40">({fmtAgo(client.connected_at)})</span>
                 </span>
@@ -432,24 +429,22 @@ useWindowTitle("window.title.api");
   <!-- ── Request Log ───────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-1.5 min-h-0 flex-1">
     <div class="flex items-center gap-2 px-0.5 shrink-0">
-      <span class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground">
-        {t("apiStatus.requestLog")}
-      </span>
-      <Badge variant="outline" class="text-[0.5rem] py-0 px-1">
+      <SectionHeader>{t("apiStatus.requestLog")}</SectionHeader>
+      <Badge variant="outline" class="text-ui-2xs py-0 px-1">
         {requests.length}
       </Badge>
     </div>
 
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden flex-1 min-h-0 flex flex-col">
+    <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden flex-1 min-h-0 flex flex-col">
       {#if requests.length === 0}
         <CardContent class="flex items-center gap-3 py-4 px-4">
           <span class="text-xl">📋</span>
-          <p class="text-[0.72rem] text-muted-foreground">{t("apiStatus.noRequests")}</p>
+          <p class="text-ui-md text-muted-foreground">{t("apiStatus.noRequests")}</p>
         </CardContent>
       {:else}
         <!-- Header row -->
         <div class="grid grid-cols-[64px_1fr_80px_40px] gap-1 px-3 py-1.5 shrink-0
-                    bg-slate-50 dark:bg-[#111118] text-[0.5rem] font-semibold
+                    bg-surface-3 text-ui-2xs font-semibold
                     tracking-widest uppercase text-muted-foreground/50 border-b border-border dark:border-white/[0.04]">
           <span>{t("apiStatus.time")}</span>
           <span>{t("apiStatus.client")}</span>
@@ -460,22 +455,22 @@ useWindowTitle("window.title.api");
         <div class="overflow-y-auto flex-1 min-h-0">
           {#each requests as req}
             <div class="grid grid-cols-[64px_1fr_80px_40px] gap-1 px-3 py-1 items-center
-                        hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors
-                        border-b border-border/30 dark:border-white/[0.02] last:border-0">
-              <span class="font-mono text-[0.58rem] text-muted-foreground tabular-nums truncate">
+                        hover:bg-accent/50 dark:hover:bg-white/[0.02] transition-colors
+                        border-b border-border/30 dark:border-white/[0.04] last:border-0">
+              <span class="font-mono text-ui-sm text-muted-foreground tabular-nums truncate">
                 {fmtTime(req.timestamp)}
               </span>
-              <span class="font-mono text-[0.58rem] text-foreground/60 truncate">
+              <span class="font-mono text-ui-sm text-foreground/60 truncate">
                 {shortPeer(req.peer)}
               </span>
-              <span class="font-mono text-[0.6rem] font-semibold text-foreground truncate">
+              <span class="font-mono text-ui-sm font-semibold text-foreground truncate">
                 {req.command}
               </span>
               <span class="text-right">
                 {#if req.ok}
-                  <span class="text-[0.5rem] font-bold text-green-600 dark:text-green-400">OK</span>
+                  <span class="text-ui-2xs font-bold text-green-600 dark:text-green-400">OK</span>
                 {:else}
-                  <span class="text-[0.5rem] font-bold text-red-500 dark:text-red-400">ERR</span>
+                  <span class="text-ui-2xs font-bold text-red-500 dark:text-red-400">ERR</span>
                 {/if}
               </span>
             </div>

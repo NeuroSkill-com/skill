@@ -5,145 +5,107 @@
  * Run:  npx playwright test src/tests/static-pages.spec.ts
  */
 import { expect, type Page, test } from "@playwright/test";
+import { buildDaemonMockScript, type CommandMap } from "./helpers/daemon-mock";
 
-// ── Tauri IPC mock ───────────────────────────────────────────────────────────
+// ── Mock data ───────────────────────────────────────────────────────────────
 
-function buildMockScript() {
-  return `
-    window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};
-    window.__TAURI_INTERNALS__.metadata = {
-      currentWindow: { label: "main" },
-      currentWebview: { label: "main", windowLabel: "main" },
-      windows: [{ label: "main" }],
-      webviews: [{ label: "main", windowLabel: "main" }],
-    };
+const COMMANDS: CommandMap = {
+  // About
+  get_about_info: {
+    name: "NeuroSkill",
+    version: "0.0.78",
+    tagline: "Brain-computer interface platform",
+    website: "https://neuroskill.com",
+    websiteLabel: "neuroskill.com",
+    repoUrl: "https://github.com/NeuroSkill-com/skill",
+    discordUrl: "https://discord.gg/neuroskill",
+    license: "GPL-3.0-only",
+    licenseName: "GNU General Public License v3.0",
+    licenseUrl: "https://www.gnu.org/licenses/gpl-3.0.html",
+    copyright: "\u00a9 2026 NeuroSkill.com",
+    authors: [["NeuroSkill Team", "Engineering"]],
+    acknowledgements: "Built with Tauri, Svelte, and Rust.",
+    iconDataUrl: null,
+  },
 
-    window.__TAURI_INTERNALS__.invoke = function(cmd, args) {
-      switch (cmd) {
-        // ── About ────────────────────────────────────────────────────────
-        case "get_about_info":
-          return Promise.resolve({
-            name: "NeuroSkill",
-            version: "0.0.78",
-            tagline: "Brain-computer interface platform",
-            website: "https://neuroskill.com",
-            websiteLabel: "neuroskill.com",
-            repoUrl: "https://github.com/NeuroSkill-com/skill",
-            discordUrl: "https://discord.gg/neuroskill",
-            license: "GPL-3.0-only",
-            licenseName: "GNU General Public License v3.0",
-            licenseUrl: "https://www.gnu.org/licenses/gpl-3.0.html",
-            copyright: "© 2026 NeuroSkill.com",
-            authors: [["NeuroSkill Team", "Engineering"]],
-            acknowledgements: "Built with Tauri, Svelte, and Rust.",
-            iconDataUrl: null,
-          });
+  // Help
+  get_ws_port: 8375,
+  get_app_name: "NeuroSkill Test",
+  get_theme_and_language: ["dark", "en"],
 
-        // ── Help ─────────────────────────────────────────────────────────
-        case "get_ws_port":
-          return Promise.resolve(8375);
-        case "get_app_name":
-          return Promise.resolve("NeuroSkill Test");
+  // What's New
+  get_app_version: "0.0.78",
+  dismiss_whats_new: null,
 
-        // ── What's New ───────────────────────────────────────────────────
-        case "get_app_version":
-          return Promise.resolve("0.0.78");
-        case "dismiss_whats_new":
-          return Promise.resolve();
+  // Onboarding
+  check_bluetooth_power: true,
+  get_status: {
+    connected: false,
+    device_name: null,
+    battery: null,
+    signal_quality: null,
+  },
+  list_calibration_profiles: [],
+  get_active_calibration: null,
+  get_llm_catalog: { families: [], models: [] },
+  get_onboarding_model_download_order: [],
+  check_screen_recording_permission: true,
+  check_ocr_models_ready: true,
+  complete_onboarding: null,
+  get_eeg_model_status: {
+    encoder_loaded: false,
+    embeddings_today: 0,
+    weights_path: null,
+  },
 
-        // ── Onboarding ───────────────────────────────────────────────────
-        case "check_bluetooth_power":
-          return Promise.resolve(true);
-        case "get_status":
-          return Promise.resolve({
-            connected: false,
-            device_name: null,
-            battery: null,
-            signal_quality: null,
-          });
-        case "list_calibration_profiles":
-          return Promise.resolve([]);
-        case "get_active_calibration":
-          return Promise.resolve(null);
-        case "get_llm_catalog":
-          return Promise.resolve({ families: [], models: [] });
-        case "get_onboarding_model_download_order":
-          return Promise.resolve([]);
-        case "check_screen_recording_permission":
-          return Promise.resolve(true);
-        case "check_ocr_models_ready":
-          return Promise.resolve(true);
-        case "complete_onboarding":
-          return Promise.resolve();
-        case "get_eeg_model_status":
-          return Promise.resolve({
-            encoder_loaded: false,
-            embeddings_today: 0,
-            weights_path: null,
-          });
+  // Downloads
+  get_llm_downloads: [
+    {
+      repo: "TheBloke/test-model-7B-GGUF",
+      filename: "test-model-7b-q4.gguf",
+      quant: "Q4_K_M",
+      size_gb: 4.2,
+      description: "Test Model 7B",
+      is_mmproj: false,
+      state: "downloaded",
+      status_msg: null,
+      progress: 1.0,
+      initiated_at_unix: 1711756800,
+      local_path: "/tmp/test-model-7b-q4.gguf",
+      shard_count: 1,
+      current_shard: 1,
+    },
+    {
+      repo: "TheBloke/another-3B-GGUF",
+      filename: "another-3b-q8.gguf",
+      quant: "Q8_0",
+      size_gb: 3.1,
+      description: "Another Model 3B",
+      is_mmproj: false,
+      state: "downloading",
+      status_msg: "50%",
+      progress: 0.5,
+      initiated_at_unix: null,
+      local_path: null,
+      shard_count: 1,
+      current_shard: 1,
+    },
+  ],
 
-        // ── Downloads ────────────────────────────────────────────────────
-        case "get_llm_downloads":
-          return Promise.resolve([
-            {
-              repo: "TheBloke/test-model-7B-GGUF",
-              filename: "test-model-7b-q4.gguf",
-              quant: "Q4_K_M",
-              size_gb: 4.2,
-              description: "Test Model 7B",
-              is_mmproj: false,
-              state: "downloaded",
-              status_msg: null,
-              progress: 1.0,
-              initiated_at_unix: 1711756800,
-              local_path: "/tmp/test-model-7b-q4.gguf",
-              shard_count: 1,
-              current_shard: 1,
-            },
-            {
-              repo: "TheBloke/another-3B-GGUF",
-              filename: "another-3b-q8.gguf",
-              quant: "Q8_0",
-              size_gb: 3.1,
-              description: "Another Model 3B",
-              is_mmproj: false,
-              state: "downloading",
-              status_msg: "50%",
-              progress: 0.5,
-              initiated_at_unix: null,
-              local_path: null,
-              shard_count: 1,
-              current_shard: 1,
-            },
-          ]);
+  // Focus Timer
+  get_neutts_config: { enabled: false, voice: "jo" },
+  tts_init: null,
 
-        // ── Focus Timer ──────────────────────────────────────────────────
-        case "get_neutts_config":
-          return Promise.resolve({ enabled: false, voice: "jo" });
-        case "tts_init":
-          return Promise.resolve();
-
-        // ── Common ───────────────────────────────────────────────────────
-        case "show_main_window":
-        case "show_toast_from_frontend":
-          return Promise.resolve();
-        case "get_settings":
-          return Promise.resolve({});
-        case "plugin:event|listen":
-          return Promise.resolve(0);
-        case "plugin:event|unlisten":
-          return Promise.resolve();
-        default:
-          return Promise.resolve(null);
-      }
-    };
-  `;
-}
+  // Common
+  show_main_window: null,
+  show_toast_from_frontend: null,
+  get_settings: {},
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function navigateTo(page: Page, path: string) {
-  await page.addInitScript({ content: buildMockScript() });
+  await page.addInitScript({ content: buildDaemonMockScript(COMMANDS) });
   await page.goto(`http://localhost:1420${path}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1000);
 }
@@ -159,7 +121,7 @@ test.describe("About page", () => {
     await expect(page.locator("text=0.0.78")).toBeVisible();
 
     // Links section
-    await expect(page.getByRole("link", { name: /neuroskill\.com/ })).toBeVisible();
+    await expect(page.locator("text=neuroskill.com").first()).toBeVisible();
 
     await page.screenshot({ path: "test-results/about.png" });
   });

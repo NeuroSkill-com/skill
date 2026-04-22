@@ -185,32 +185,32 @@ function pickSample(s: string) {
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
     </svg>
-    <span class="text-[0.75rem] font-semibold text-indigo-700 dark:text-indigo-300">
+    <span class="text-ui-md font-semibold text-indigo-700 dark:text-indigo-300">
       TTS Test
     </span>
 
     <!-- Engine badge -->
-    <span class="rounded-full border px-2 py-0.5 text-[0.52rem] font-semibold uppercase tracking-wider
+    <span class="rounded-full border px-2 py-0.5 text-ui-xs font-semibold uppercase tracking-wider
                  {isNeutts
-                   ? 'border-violet-400/40 bg-violet-100/40 dark:bg-violet-900/20 text-violet-600 dark:text-violet-300'
+                   ? 'border-violet-500/40 bg-violet-500/15 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400'
                    : 'border-indigo-400/40 bg-indigo-100/40 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'}">
       {isNeutts ? "NeuTTS" : "KittenTTS"}
     </span>
 
     <!-- Status badge -->
     {#if ready}
-      <span class="ml-auto flex items-center gap-1 text-[0.58rem] font-semibold
+      <span class="ml-auto flex items-center gap-1 text-ui-sm font-semibold
                    text-emerald-600 dark:text-emerald-400">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
         Ready
       </span>
     {:else if dlStep > 0}
-      <span class="ml-auto text-[0.58rem] font-semibold uppercase tracking-wider
+      <span class="ml-auto text-ui-sm font-semibold uppercase tracking-wider
                    text-amber-600 dark:text-amber-400 animate-pulse">
         Loading…
       </span>
     {:else}
-      <span class="ml-auto text-[0.56rem] text-muted-foreground/50">
+      <span class="ml-auto text-ui-xs text-muted-foreground/50">
         Speak to auto-load
       </span>
     {/if}
@@ -220,11 +220,11 @@ function pickSample(s: string) {
   {#if dlStep > 0 && !ready}
     <div class="flex flex-col gap-1">
       <div class="flex items-center justify-between">
-        <span class="text-[0.58rem] text-muted-foreground truncate max-w-[80%]" title={dlLabel}>
+        <span class="text-ui-sm text-muted-foreground truncate max-w-[80%]" title={dlLabel}>
           {dlLabel || "Connecting…"}
         </span>
         {#if dlTotal > 0}
-          <span class="text-[0.56rem] tabular-nums text-muted-foreground/60 shrink-0 ml-2">
+          <span class="text-ui-xs tabular-nums text-muted-foreground/60 shrink-0 ml-2">
             {dlStep}/{dlTotal}
           </span>
         {/if}
@@ -240,7 +240,7 @@ function pickSample(s: string) {
   {#if isNeutts && neuttsVoices.length > 0}
     <!-- NeuTTS: preset voice cards -->
     <div class="flex flex-wrap items-center gap-1.5">
-      <span class="text-[0.54rem] font-semibold uppercase tracking-wider
+      <span class="text-ui-xs font-semibold uppercase tracking-wider
                    text-muted-foreground/60 self-center shrink-0 mr-0.5">
         Voice:
       </span>
@@ -248,13 +248,13 @@ function pickSample(s: string) {
         <button
           onclick={() => pickVoice(pv.id)}
           class="flex items-center gap-1 rounded-full border px-2.5 py-0.5
-                 text-[0.6rem] font-semibold transition-colors
+                 text-ui-sm font-semibold transition-colors
                  {selectedVoice === pv.id
-                   ? 'border-violet-500 bg-violet-500 text-white'
-                   : 'border-border dark:border-white/[0.07] bg-white dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:border-violet-500/40'}">
-          <span class="text-[0.7rem] leading-none">{pv.flag}</span>
+                   ? 'border-violet-500 bg-violet-600 text-white'
+                   : 'border-border dark:border-white/[0.06] bg-surface-2 text-muted-foreground hover:text-foreground hover:border-violet-500/40'}">
+          <span class="text-ui-md leading-none">{pv.flag}</span>
           {pv.id}
-          <span class="text-[0.52rem] opacity-60">{pv.gender}</span>
+          <span class="text-ui-xs opacity-60">{pv.gender}</span>
         </button>
       {/each}
     </div>
@@ -262,17 +262,17 @@ function pickSample(s: string) {
   {:else if !isNeutts && kittenVoices.length > 1}
     <!-- KittenTTS: voice name chips -->
     <div class="flex flex-wrap items-center gap-1.5">
-      <span class="text-[0.54rem] font-semibold uppercase tracking-wider
+      <span class="text-ui-xs font-semibold uppercase tracking-wider
                    text-muted-foreground/60 self-center shrink-0 mr-0.5">
         Voice:
       </span>
       {#each kittenVoices as v}
         <button
           onclick={() => pickVoice(v)}
-          class="rounded-full border px-2.5 py-0.5 text-[0.6rem] font-semibold transition-colors
+          class="rounded-full border px-2.5 py-0.5 text-ui-sm font-semibold transition-colors
                  {selectedVoice === v
                    ? 'border-indigo-500 bg-indigo-500 text-white'
-                   : 'border-border dark:border-white/[0.07] bg-white dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:border-indigo-500/40'}">
+                   : 'border-border dark:border-white/[0.06] bg-surface-2 text-muted-foreground hover:text-foreground hover:border-indigo-500/40'}">
           {v}
         </button>
       {/each}
@@ -288,7 +288,7 @@ function pickSample(s: string) {
       placeholder="Type anything to speak…"
       disabled={speaking}
       class="flex-1 rounded-lg border border-border dark:border-white/[0.08]
-             bg-white dark:bg-[#1a1a28] px-3 py-2 text-[0.72rem] text-foreground
+             bg-surface-2 px-3 py-2 text-ui-md text-foreground
              placeholder:text-muted-foreground/50
              focus:outline-none focus:ring-1 focus:ring-indigo-500/50
              disabled:opacity-50 disabled:cursor-not-allowed"
@@ -297,7 +297,7 @@ function pickSample(s: string) {
       onclick={speak}
       disabled={speaking || !inputText.trim()}
       class="flex items-center gap-1.5 rounded-lg px-3 py-2
-             text-[0.68rem] font-semibold transition-all shrink-0
+             text-ui-base font-semibold transition-all shrink-0
              disabled:cursor-not-allowed
              {speaking
                ? 'bg-muted dark:bg-white/[0.06] text-muted-foreground/50'
@@ -324,7 +324,7 @@ function pickSample(s: string) {
 
   <!-- ── Quick-sample chips ────────────────────────────────────────────────── -->
   <div class="flex flex-wrap gap-1.5">
-    <span class="text-[0.54rem] font-semibold uppercase tracking-wider
+    <span class="text-ui-xs font-semibold uppercase tracking-wider
                  text-muted-foreground/60 self-center shrink-0 mr-0.5">
       Try:
     </span>
@@ -332,9 +332,9 @@ function pickSample(s: string) {
       <button
         onclick={() => pickSample(s)}
         disabled={speaking}
-        class="rounded-full border border-border dark:border-white/[0.07]
-               bg-white dark:bg-[#1a1a28]
-               px-2 py-0.5 text-[0.58rem] text-muted-foreground
+        class="rounded-full border border-border dark:border-white/[0.06]
+               bg-surface-2
+               px-2 py-0.5 text-ui-sm text-muted-foreground
                hover:text-foreground hover:border-indigo-500/40
                disabled:opacity-40 disabled:cursor-not-allowed
                transition-colors truncate max-w-[14rem]"
@@ -345,9 +345,9 @@ function pickSample(s: string) {
 
   <!-- ── Error / hint ──────────────────────────────────────────────────────── -->
   {#if errorMsg}
-    <p class="text-[0.62rem] text-red-500 dark:text-red-400 leading-relaxed">⚠ {errorMsg}</p>
+    <p class="text-ui-sm text-red-500 dark:text-red-400 leading-relaxed">⚠ {errorMsg}</p>
   {:else if dlStep === 0 && !ready}
-    <p class="text-[0.6rem] text-muted-foreground/50 leading-relaxed">
+    <p class="text-ui-sm text-muted-foreground/50 leading-relaxed">
       {#if isNeutts}
         First run downloads the NeuTTS backbone model and caches it locally.
         Requires <code class="font-mono bg-muted px-1 rounded">espeak-ng</code> on PATH.

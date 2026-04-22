@@ -12,12 +12,6 @@
     "desc": "視認性向上のために境界線とテキストのコントラストを高めます。"
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "フォントサイズ",
-    "desc": "UIテキストサイズを調整します。アプリ内のすべてのテキストに影響します。"
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "キャリブレーション完了",
@@ -78,36 +72,6 @@
     "desc": "目的、年齢、用途に基づいたキャリブレーション設定を選択してください。下記で設定を調整できます。"
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "アクションラベル",
-    "desc": "各フェーズで表示され、EEGラベルとして保存される名前。"
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "反復回数",
-    "desc": "アクション1→休憩→アクション2→休憩の完全サイクル数。"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "ローカルランチャー経由のEPOC、Insight、Flex、MN8"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USBシリアル",
-    "desc": "OpenBCI Cyton / CytonDaisyドングル"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "埋め込みモデル"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "再起動までの時間（秒）"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "ビルド品質",
-    "desc": "グラフ構築時のビーム幅。高いほどグラフが良くなりますが、挿入が遅くなります。"
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "接続性",
-    "desc": "各ノードは最大2×Mのエッジを保持します。高いほど再現率が向上しますが、RAM使用量が増えます。"
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "GPU精度",
-    "desc": "半精度(f16)は高速、全精度(f32)は高精度"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "バックグラウンド埋め込み",
-    "desc": "デバイスがアイドル時に未処理のエポックを自動的に埋め込む"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "再埋め込み",
-    "desc": "選択したモデルバックエンドですべての生EXGセッション記録を再エンコードし、HNSWインデックスを再構築します。"
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "推論デバイス",
-    "desc": "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。"
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "ファイル編集",
+    "desc": "既存ファイルへの検索・置換編集を許可します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "位置情報",
+    "desc": "IPベースの概算の国、地域、市区町村、タイムゾーン検索を許可します。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "ラウンドあたりの最大呼び出し数",
     "desc": "1ラウンドでモデルが呼び出せるツールの数。"
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "最大ラウンド数",
     "desc": "1メッセージあたりにモデルが実行できる思考→ツール→思考のホップ数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "ファイル読み取り",
+    "desc": "テキストファイルの読み取りを許可します。大きなファイルはオフセット/リミットでページネーションされます。"
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "エージェントスキル",
+    "desc": "スキルはLLMがオンデマンドで読み込める専門的な指示を提供します。個別のスキルを切り替えてチャットで利用可能なものを制御します。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "起動時に同期",
     "desc": "アプリ起動時に常に最新のスキルを取得します"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "Webキャッシュ",
     "desc": "冗長なネットワーク呼び出しを避けるためにWeb検索とフェッチの結果をディスクにキャッシュします。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "Webフェッチ",
+    "desc": "公開HTTP(S)ページのテキストボディの取得を許可します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "Web検索",
+    "desc": "設定された検索プロバイダーを使用してWebを検索します。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "ファイル書き込み",
+    "desc": "ファイルの作成や上書きを許可します。親ディレクトリは自動的に作成されます。"
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "アクションラベル",
+    "desc": "各フェーズで表示され、EEGラベルとして保存される名前。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "アクティブウィンドウを追跡",
     "desc": "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。"
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "フォントサイズ",
+    "desc": "UIテキストサイズを調整します。アプリ内のすべてのテキストに影響します。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "位置情報サービス",
     "desc": "セッションとLLMツールに地理的コンテキストを提供するために位置情報サービスを有効にします。macOSではCoreLocation（GPS/Wi-Fi）を使用して高精度、他のプラットフォームではIPジオロケーションを使用します。デフォルトは無効 — オンに切り替えて権限を要求してテストします。"
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "推論デバイス",
+    "desc": "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "キーボード＆マウスの活動を追跡",
     "desc": "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "反復回数",
+    "desc": "アクション1→休憩→アクション2→休憩の完全サイクル数。"
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse、MW75、Hermes、Ganglion、IDUN、Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "ローカルランチャー経由のEPOC、Insight、Flex、MN8"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USBシリアル",
+    "desc": "OpenBCI Cyton / CytonDaisyドングル"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "バインドアドレス",
     "desc": "LANモードはネットワーク上のすべてのデバイスにAPIを公開します。再起動が必要です。"
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "デフォルトトークン",
     "desc": "アプリが使用する組み込み管理者トークン。削除できません。新しいトークンを生成するには更新してください — アプリが自動的に取得します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "ファイル編集",
-    "desc": "既存ファイルへの検索・置換編集を許可します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "位置情報",
-    "desc": "IPベースの概算の国、地域、市区町村、タイムゾーン検索を許可します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "ファイル読み取り",
-    "desc": "テキストファイルの読み取りを許可します。大きなファイルはオフセット/リミットでページネーションされます。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "エージェントスキル",
-    "desc": "スキルはLLMがオンデマンドで読み込める専門的な指示を提供します。個別のスキルを切り替えてチャットで利用可能なものを制御します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "Webフェッチ",
-    "desc": "公開HTTP(S)ページのテキストボディの取得を許可します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "Web検索",
-    "desc": "設定された検索プロバイダーを使用してWebを検索します。"
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "ファイル書き込み",
-    "desc": "ファイルの作成や上書きを許可します。親ディレクトリは自動的に作成されます。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "コンパクトなONNXモデル。あらゆるCPUで高速。英語のみ。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "GGUFのLLMバックボーンとNeuCodecデコーダー。任意の声をクローン可能。英語、ドイツ語、フランス語、スペイン語対応。"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "起動時にエンジンをプリロード",
-    "desc": "アプリ起動時にアクティブなエンジンをバックグラウンドでウォームアップします"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "PATHにespeak-ngが必要です",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "GPUクールダウン",
-    "desc": "学習エポック間の一時停止（ミリ秒）。0 = 最大GPUスループット。他のタスクのために余裕を持たせるには増加。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "ネガティブサンプルレート",
-    "desc": "各エポックで正のエッジあたりに抽出されるランダムな非近傍ペアの数。高いほど分離が強く、学習が遅い。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "最適化エポック",
-    "desc": "勾配降下の反復回数。エポックが多いほどレイアウトが細かくなるが計算が遅い。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k最近傍",
-    "desc": "KNNグラフの構築に使用される最近傍の数。小さい値ほどローカル詳細を保持、大きい値ほどグローバル構造をキャプチャ。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "反発",
-    "desc": "非近傍ポイントがどれだけ強く押し離されるかを制御します。高い値ほどセッションAとBの間のクラスター分離が大きくなります。"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "学習タイムアウト",
-    "desc": "UMAPオプティマイザーの最大時間。この制限に達すると学習が早期停止します。"
   },
   {
     "tab": "updates",

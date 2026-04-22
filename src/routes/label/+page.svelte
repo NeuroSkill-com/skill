@@ -202,9 +202,9 @@ useWindowTitle("window.title.label");
       oninput={onLabelInput}
       placeholder={t("label.placeholder")}
       maxlength={MAX_CHARS}
-      class="resize-none border-border dark:border-white/[0.09]
-             bg-slate-50 dark:bg-[#111118]
-             text-[0.82rem] leading-relaxed shrink-0"
+      class="resize-none border-border dark:border-white/[0.08]
+             bg-surface-3
+             text-ui-lg leading-relaxed shrink-0"
       style="height: 80px"
     />
 
@@ -212,8 +212,8 @@ useWindowTitle("window.title.label");
     <div class="flex items-center gap-2 shrink-0">
       <button
         type="button"
-        class="flex items-center gap-1.5 text-[0.58rem] cursor-pointer transition-colors
-               {useCustomTime ? 'text-primary font-semibold' : 'text-muted-foreground/50 hover:text-muted-foreground'}"
+        class="flex items-center gap-1.5 text-ui-sm cursor-pointer transition-colors
+               {useCustomTime ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-muted-foreground/50 hover:text-muted-foreground'}"
         onclick={() => {
           useCustomTime = !useCustomTime;
           if (useCustomTime && !customDatetime) {
@@ -233,12 +233,12 @@ useWindowTitle("window.title.label");
           type="datetime-local"
           aria-label="Custom label time"
           bind:value={customDatetime}
-          class="h-6 rounded-md border border-border bg-background px-2 text-[0.62rem]
+          class="h-6 rounded-md border border-border bg-background px-2 text-ui-sm
                  font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <button
           type="button"
-          class="text-[0.52rem] text-muted-foreground/40 hover:text-foreground cursor-pointer"
+          class="text-ui-xs text-muted-foreground/40 hover:text-foreground cursor-pointer"
           onclick={() => { useCustomTime = false; customDatetime = ""; }}
         >
           {t("label.resetToNow")}
@@ -249,10 +249,10 @@ useWindowTitle("window.title.label");
     {#if recentLabels.length > 0}
       <div class="flex flex-col gap-1.5 shrink-0">
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[0.58rem] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span class="text-ui-sm font-semibold uppercase tracking-wider text-muted-foreground/60">
             {t("label.previousLabels")}
           </span>
-          <span class="text-[0.56rem] text-muted-foreground/45 select-none">
+          <span class="text-ui-xs text-muted-foreground/45 select-none">
             {t("label.previousHint")}
           </span>
         </div>
@@ -261,7 +261,7 @@ useWindowTitle("window.title.label");
             <button
               type="button"
               class="max-w-full rounded-md border border-border dark:border-white/[0.1]
-                     bg-muted/35 hover:bg-muted/60 px-2 py-0.5 text-[0.66rem]
+                     bg-muted/35 hover:bg-muted/60 px-2 py-0.5 text-ui-base
                      text-foreground/85 truncate"
               onclick={() => applyRecentLabel(idx)}
               title={recentLabel}
@@ -275,7 +275,7 @@ useWindowTitle("window.title.label");
 
     <!-- Context block (takes all remaining vertical space) -->
     <div class="flex flex-col gap-1 min-h-0 flex-1">
-      <label for="label-context" class="text-[0.58rem] font-semibold uppercase tracking-wider
+      <label for="label-context" class="text-ui-sm font-semibold uppercase tracking-wider
                     text-muted-foreground/60 shrink-0">
         {t("label.contextLabel")}
         <span class="font-normal normal-case tracking-normal text-muted-foreground/40 ml-1">
@@ -288,9 +288,9 @@ useWindowTitle("window.title.label");
         bind:value={context}
         placeholder={t("label.contextPlaceholder")}
         maxlength={MAX_CONTEXT_CHARS}
-        class="flex-1 min-h-0 rounded-md border border-border dark:border-white/[0.09]
-               bg-slate-50 dark:bg-[#111118]
-               px-3 py-1.5 text-[0.78rem] text-foreground leading-relaxed
+        class="flex-1 min-h-0 rounded-md border border-border dark:border-white/[0.08]
+               bg-surface-3
+               px-3 py-1.5 text-ui-lg text-foreground leading-relaxed
                placeholder:text-muted-foreground/40
            focus:outline-none focus:ring-1 focus:ring-ring/50
                resize-none"
@@ -302,29 +302,29 @@ useWindowTitle("window.title.label");
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->
   <div class="flex items-center gap-3 px-4 pb-4 shrink-0">
 
-    <span class="text-[0.62rem] tabular-nums shrink-0
+    <span class="text-ui-sm tabular-nums shrink-0
                  {overLimit ? 'text-destructive font-semibold'
                  : nearLimit ? 'text-amber-500 dark:text-amber-400'
                  : 'text-muted-foreground/50'}">
       {text.length}/{MAX_CHARS}
     </span>
 
-    <span class="text-[0.6rem] text-muted-foreground/35 select-none">
+    <span class="text-ui-sm text-muted-foreground/35 select-none">
       {t("label.saveHint", { key: isMac ? "⌘" : "Ctrl" })}
     </span>
 
     {#if error}
-      <span class="text-[0.65rem] text-destructive truncate flex-1 text-right">{error}</span>
+      <span class="text-ui-base text-destructive truncate flex-1 text-right">{error}</span>
     {:else}
       <span class="flex-1"></span>
     {/if}
 
     <div class="flex gap-2 shrink-0">
-          <Button variant="outline" size="sm" class="text-[0.72rem] h-7 px-3"
+          <Button variant="outline" size="sm" class="text-ui-md h-7 px-3"
             disabled={text.length === 0} onclick={clearLabelText}>{t("common.clear")}</Button>
-      <Button variant="outline" size="sm" class="text-[0.72rem] h-7 px-3"
+      <Button variant="outline" size="sm" class="text-ui-md h-7 px-3"
               onclick={closeWindow}>{t("common.cancel")}</Button>
-      <Button size="sm" class="text-[0.72rem] h-7 px-3"
+      <Button size="sm" class="text-ui-md h-7 px-3"
               disabled={!canSubmit} onclick={submit}>
         {saving ? t("common.saving") : t("label.saveLabel")}
       </Button>

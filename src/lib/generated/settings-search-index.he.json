@@ -12,12 +12,6 @@
     "desc": "הגביר את הניגודיות של גבולות וטקסט לצורך תצוגה טובה יותר."
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "גודל גופן",
-    "desc": "התאם את גודל הטקסט של ממשק המשתמש. משפיע על כל הטקסט באפליקציה."
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "הכיול הושלם",
@@ -78,36 +72,6 @@
     "desc": "בחר תצורת כיול לפי המטרה, הגיל ומקרה השימוש שלך."
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "תוויות פעולה",
-    "desc": "שמות המוצגים בכל שלב ונשמרים כתוויות EEG."
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "חזרות",
-    "desc": "מספר מחזורים: פעולה 1 → הפסקה → פעולה 2 → הפסקה."
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "EPOC, Insight, Flex, MN8 דרך Launcher מקומי"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USB טורי",
-    "desc": "דונגל OpenBCI Cyton / CytonDaisy"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "מודל הטמעה"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "הפעלה מחדש לאחר (שניות)"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "איכות בנייה",
-    "desc": "רוחב חיפוש בזמן בנייה. גבוה יותר = גרף טוב יותר, הכנסות איטיות יותר."
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "קישוריות",
-    "desc": "כל צומת שומר עד 2 × M קשתות. גבוה יותר = ריקול טוב יותר, יותר RAM."
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "דיוק GPU",
-    "desc": "חצי דיוק (f16) מהיר יותר, דיוק מלא (f32) מדויק יותר"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "הטמעה ברקע",
-    "desc": "להטמיע אוטומטית אפוקות שלא עובדו כשהמכשיר לא פעיל"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "Embedding מחדש",
-    "desc": "קידוד מחדש של כל הקלטות EXG הגולמיות עם מודל הבקנד הנבחר ובנייה מחדש של אינדקסי HNSW."
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "מכשיר הסקה",
-    "desc": "היכן מופעלת ההסקה. ה-GPU מהיר יותר; ה-CPU עובד על כל מכשיר בלי לחוץ על VRAM. הפעל מחדש את שרת ה-LLM לאחר השינוי."
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "עריכת קובץ",
+    "desc": "הרשה עריכות חיפוש-והחלפה מדויקות בקבצים קיימים."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "מיקום",
+    "desc": "הרשה חיפוש משוער של מדינה, אזור, עיר ואזור זמן לפי IP."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "מקסימום קריאות לסיבוב",
     "desc": "כמה כלים המודל יכול להפעיל בסיבוב אחד."
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "מקסימום סיבובים",
     "desc": "כמה מחזורי חשיבה→כלי→חשיבה מותרים לכל הודעה."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "קריאת קובץ",
+    "desc": "הרשה קריאת קבצי טקסט. קבצים גדולים מחולקים לעמודים עם offset/limit."
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "יכולות הסוכן",
+    "desc": "Skills מספקים הנחיות מתמחות שה-LLM יכול לטעון לפי דרישה. הפעל או השבת skills בודדים."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "סנכרון בהפעלה",
     "desc": "תמיד הורד את הכישורים העדכניים כשהאפליקציה נפתחת"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "מטמון רשת",
     "desc": "שמירת תוצאות חיפוש ואחזור רשת על הדיסק."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "שליפת דף אינטרנט",
+    "desc": "הרשה שליפת גוף הטקסט הגולמי של דף HTTP(S) ציבורי."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "חיפוש באינטרנט",
+    "desc": "חיפוש באינטרנט באמצעות ספק החיפוש המוגדר."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "כתיבת קובץ",
+    "desc": "הרשה יצירה או דריסה של קבצים. תיקיות אב נוצרות אוטומטית."
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "תוויות פעולה",
+    "desc": "שמות המוצגים בכל שלב ונשמרים כתוויות EEG."
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "עקוב אחר החלון הפעיל",
     "desc": "תיעוד איזו אפליקציה וחלון נמצאים בחזית. מאוחסן מקומית ב-activity.sqlite בלבד, לא מועלה."
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "גודל גופן",
+    "desc": "התאם את גודל הטקסט של ממשק המשתמש. משפיע על כל הטקסט באפליקציה."
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "ספק מיקום גאוגרפי",
     "desc": "בחרו כיצד האפליקציה מזהה את מיקומכם עבור מטא-נתוני הפגישה. «כבוי» משבית מיקום לחלוטין, «מקומי» משתמש ב-GPS של המכשיר ו-«מרוחק» פונה לשירות חיצוני."
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "מכשיר הסקה",
+    "desc": "היכן מופעלת ההסקה. ה-GPU מהיר יותר; ה-CPU עובד על כל מכשיר בלי לחוץ על VRAM. הפעל מחדש את שרת ה-LLM לאחר השינוי."
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "עקוב אחר פעילות מקלדת ועכבר",
     "desc": "תיעוד פעילות מקלדת ועכבר ברמת שניות. לא נדרשות הרשאות מיוחדות. מאוחסן ב-activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "חזרות",
+    "desc": "מספר מחזורים: פעולה 1 → הפסקה → פעולה 2 → הפסקה."
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 דרך Launcher מקומי"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB טורי",
+    "desc": "דונגל OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "כתובת האזנה",
     "desc": "מצב רשת מקומית חושף את ה-API לכל המכשירים ברשת. נדרשת הפעלה מחדש."
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "Default Token",
     "desc": "Built-in admin token used by the app. Cannot be deleted."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "עריכת קובץ",
-    "desc": "הרשה עריכות חיפוש-והחלפה מדויקות בקבצים קיימים."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "מיקום",
-    "desc": "הרשה חיפוש משוער של מדינה, אזור, עיר ואזור זמן לפי IP."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "קריאת קובץ",
-    "desc": "הרשה קריאת קבצי טקסט. קבצים גדולים מחולקים לעמודים עם offset/limit."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "יכולות הסוכן",
-    "desc": "Skills מספקים הנחיות מתמחות שה-LLM יכול לטעון לפי דרישה. הפעל או השבת skills בודדים."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "שליפת דף אינטרנט",
-    "desc": "הרשה שליפת גוף הטקסט הגולמי של דף HTTP(S) ציבורי."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "חיפוש באינטרנט",
-    "desc": "חיפוש באינטרנט באמצעות ספק החיפוש המוגדר."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "כתיבת קובץ",
-    "desc": "הרשה יצירה או דריסה של קבצים. תיקיות אב נוצרות אוטומטית."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "מודל ONNX קומפקטי, מהיר בכל CPU, אנגלית בלבד."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "GGUF LLM backbone עם מפענח NeuCodec. משכפל כל קול; תומך באנגלית, גרמנית, צרפתית, ספרדית."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "טעינה מוקדמת של המנוע בהפעלה",
-    "desc": "מחמם את המנוע הפעיל ברקע בעת הפעלת האפליקציה"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "דורש espeak-ng ב-PATH",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "קירור GPU",
-    "desc": "מילישניות להשהות בין אפוקות אימון. 0 = תפוקה מרבית של GPU. הגדלה מפחיתה עומס GPU."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "שיעור דגימה שלילי",
-    "desc": "זוגות אקראיים של לא-שכנים לכל קצה חיובי בכל אפוק. גבוה יותר = הפרדה חזקה יותר, אימון איטי יותר."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "אפוקות אופטימיזציה",
-    "desc": "מספר איטרציות ירידת הגרדיאנט. יותר אפוקות = פריסה עדינה יותר, חישוב איטי יותר."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k שכנים קרובים ביותר",
-    "desc": "מספר שכנים לבניית גרף KNN. ערכים קטנים שומרים פרטים מקומיים; ערכים גדולים לוכדים מבנה גלובלי."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "דחייה",
-    "desc": "שולט עד כמה נקודות שאינן שכנות נדחות. ערכים גבוהים יותר מייצרים אשכולות מופרדים יותר בין הפגישות A ו-B."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "פסק זמן אימון",
-    "desc": "זמן מקסימלי עבור אופטימיזר UMAP. האימון נעצר מוקדם אם מגיעים להגבלה."
   },
   {
     "tab": "updates",

@@ -2,6 +2,8 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { Card, CardContent } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
+import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { t } from "$lib/i18n/index.svelte";
 
 interface LlmConfigView {
@@ -104,31 +106,31 @@ const curlSnippet = $derived(
 <section class="flex flex-col gap-2">
   <button onclick={() => (showAdvanced = !showAdvanced)}
     class="flex items-center gap-2 px-0.5 cursor-pointer select-none group">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground group-hover:text-foreground transition-colors">
+    <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground group-hover:text-foreground transition-colors">
       {t("llm.section.inference")}
     </span>
     <svg viewBox="0 0 16 16" fill="currentColor"
          class="w-2.5 h-2.5 text-muted-foreground/50 transition-transform {showAdvanced ? 'rotate-180' : ''}">
       <path d="M3 6l5 5 5-5H3z"/>
     </svg>
-    {#if configSaving}<span class="text-[0.56rem] text-muted-foreground">saving…</span>{/if}
+    {#if configSaving}<span class="text-ui-xs text-muted-foreground">saving…</span>{/if}
   </button>
 
   {#if showAdvanced}
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
       <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>
-            <span class="text-[0.68rem] text-muted-foreground tabular-nums">
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>
+            <span class="text-ui-base text-muted-foreground tabular-nums">
               {config.n_gpu_layers === 0 ? "CPU only" : config.n_gpu_layers >= 999 ? "All layers" : config.n_gpu_layers}
             </span>
           </div>
-          <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.gpuLayersDesc")}</p>
+          <p class="text-ui-base text-muted-foreground -mt-1">{t("llm.inference.gpuLayersDesc")}</p>
           <div class="flex items-center gap-1.5 flex-wrap">
             {#each [[0, "CPU"], [8, "8"], [16, "16"], [32, "32"], [4294967295, "All"]] as [val, label]}
               <button onclick={() => onSetGpuLayers(val as number)}
-                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
+                class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
                      {((val as number) >= 999 ? config.n_gpu_layers >= 999 : config.n_gpu_layers === val)
                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                        : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -140,14 +142,14 @@ const curlSnippet = $derived(
 
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.ctxSize")}</span>
-            <span class="text-[0.68rem] text-muted-foreground tabular-nums">{config.ctx_size != null ? config.ctx_size + " tokens" : "auto"}</span>
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.ctxSize")}</span>
+            <span class="text-ui-base text-muted-foreground tabular-nums">{config.ctx_size != null ? config.ctx_size + " tokens" : "auto"}</span>
           </div>
-          <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.ctxSizeDesc")}</p>
+          <p class="text-ui-base text-muted-foreground -mt-1">{t("llm.inference.ctxSizeDesc")}</p>
           <div class="flex items-center gap-1.5 flex-wrap">
             {#each ctxOptions as [val, label]}
               <button onclick={() => onSetCtxSize(val as number | null)}
-                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
+                class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
                      {(config.ctx_size ?? null) === val
                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                        : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -159,13 +161,13 @@ const curlSnippet = $derived(
 
         <div class="flex items-center justify-between gap-4 px-4 py-3.5">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.parallel")}</span>
-            <span class="text-[0.65rem] text-muted-foreground">{t("llm.inference.parallelDesc")}</span>
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.parallel")}</span>
+            <span class="text-ui-base text-muted-foreground">{t("llm.inference.parallelDesc")}</span>
           </div>
           <div class="flex items-center gap-1.5">
             {#each [1, 2, 4] as val}
               <button onclick={() => onSetParallel(val)}
-                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer
+                class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
                      {config.parallel === val
                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                        : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -176,67 +178,60 @@ const curlSnippet = $derived(
         </div>
 
         <div class="flex flex-col gap-2 px-4 py-3.5">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.apiKey")}</span>
-          <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.apiKeyDesc")}</p>
+          <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.apiKey")}</span>
+          <p class="text-ui-base text-muted-foreground -mt-1">{t("llm.inference.apiKeyDesc")}</p>
           <div class="flex items-center gap-2">
             <input type={apiKeyVisible ? "text" : "password"}
               aria-label="API key"
               placeholder={t("llm.inference.apiKeyPlaceholder")}
               value={config.api_key ?? ""}
               oninput={(e: Event) => onSetApiKey((e.target as HTMLInputElement).value || null)}
-              class="flex-1 min-w-0 text-[0.73rem] font-mono px-2 py-1 rounded-md
+              class="flex-1 min-w-0 text-ui-md font-mono px-2 py-1 rounded-md
                    border border-border bg-background text-foreground placeholder:text-muted-foreground/40" />
             <button onclick={() => (apiKeyVisible = !apiKeyVisible)}
-              class="shrink-0 text-[0.62rem] text-muted-foreground hover:text-foreground cursor-pointer">
+              class="shrink-0 text-ui-sm text-muted-foreground hover:text-foreground cursor-pointer">
               {apiKeyVisible ? "hide" : "show"}
             </button>
             {#if config.api_key}
               <button onclick={() => onSetApiKey(null)}
-                class="shrink-0 text-[0.62rem] text-muted-foreground hover:text-red-500 cursor-pointer">clear</button>
+                class="shrink-0 text-ui-sm text-muted-foreground hover:text-red-500 cursor-pointer">clear</button>
             {/if}
           </div>
         </div>
 
         {#if hasAnyMmproj}
-          <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-            <div class="flex flex-col gap-0.5">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.autoload")}</span>
-              <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.autoloadDesc")}</span>
-            </div>
-            <button role="switch" aria-checked={config.autoload_mmproj} aria-label={t("llm.mmproj.autoload")}
-              onclick={onToggleAutoloadMmproj}
-              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.autoload_mmproj ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-              <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.autoload_mmproj ? 'translate-x-4' : 'translate-x-0'}"></span>
-            </button>
-          </div>
+          <ToggleRow
+            checked={config.autoload_mmproj}
+            label={t("llm.mmproj.autoload")}
+            description={t("llm.mmproj.autoloadDesc")}
+            ontoggle={onToggleAutoloadMmproj}
+            showBadge={false}
+            class="border-t border-border/40 dark:border-white/[0.04]"
+          />
 
           {#if hasDownloadedMmproj}
-            <div class="flex items-center justify-between gap-4 px-4 py-3.5">
-              <div class="flex flex-col gap-0.5">
-                <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.noGpu")}</span>
-                <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.noGpuDesc")}</span>
-              </div>
-              <button role="switch" aria-checked={config.no_mmproj_gpu} aria-label={t("llm.mmproj.noGpu")}
-                onclick={onToggleNoMmprojGpu}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.no_mmproj_gpu ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-                <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.no_mmproj_gpu ? 'translate-x-4' : 'translate-x-0'}"></span>
-              </button>
-            </div>
+            <ToggleRow
+              checked={config.no_mmproj_gpu}
+              label={t("llm.mmproj.noGpu")}
+              description={t("llm.mmproj.noGpuDesc")}
+              ontoggle={onToggleNoMmprojGpu}
+              showBadge={false}
+            />
           {/if}
         {/if}
 
         <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuMemThreshold")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.gpuMemThresholdDesc")}</span>
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.gpuMemThreshold")}</span>
+            <span class="text-ui-base text-muted-foreground leading-relaxed">{t("llm.inference.gpuMemThresholdDesc")}</span>
           </div>
           <div class="flex items-center gap-3">
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemDecode")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.gpuMemDecode")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each [0, 0.25, 0.5, 0.75, 1.0] as val}
                   <button onclick={() => onSetGpuMemoryThreshold(val)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.gpu_memory_threshold === val
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -246,11 +241,11 @@ const curlSnippet = $derived(
               </div>
             </div>
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemGen")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.gpuMemGen")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each [0, 0.15, 0.3, 0.5, 0.75] as val}
                   <button onclick={() => onSetGpuMemoryGenThreshold(val)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.gpu_memory_gen_threshold === val
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -265,16 +260,16 @@ const curlSnippet = $derived(
         <!-- TurboQuant KV-cache types ──────────────────────────────────────── -->
         <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.kvCacheType")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.kvCacheTypeDesc")}</span>
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.kvCacheType")}</span>
+            <span class="text-ui-base text-muted-foreground leading-relaxed">{t("llm.inference.kvCacheTypeDesc")}</span>
           </div>
           <div class="flex items-start gap-4">
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.kvCacheK")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.kvCacheK")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each KV_TYPES as { tag, label }}
                   <button onclick={() => onSetCacheTypeK(tag)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.cache_type_k === tag
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -284,11 +279,11 @@ const curlSnippet = $derived(
               </div>
             </div>
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.kvCacheV")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.kvCacheV")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each KV_TYPES as { tag, label }}
                   <button onclick={() => onSetCacheTypeV(tag)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.cache_type_v === tag
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -301,31 +296,28 @@ const curlSnippet = $derived(
         </div>
 
         <!-- TurboQuant attention rotation toggle ────────────────────────────── -->
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.attnRot")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.attnRotDesc")}</span>
-          </div>
-          <button role="switch" aria-checked={!config.attn_rot_disabled} aria-label={t("llm.inference.attnRot")}
-            onclick={onToggleAttnRotDisabled}
-            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {!config.attn_rot_disabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {!config.attn_rot_disabled ? 'translate-x-4' : 'translate-x-0'}"></span>
-          </button>
-        </div>
+        <ToggleRow
+          checked={!config.attn_rot_disabled}
+          label={t("llm.inference.attnRot")}
+          description={t("llm.inference.attnRotDesc")}
+          ontoggle={onToggleAttnRotDisabled}
+          showBadge={false}
+          class="border-t border-border/40 dark:border-white/[0.04]"
+        />
 
         <!-- Prefill batch sizes ─────────────────────────────────────── -->
         <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.prefill")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.prefillDesc")}</span>
+            <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.prefill")}</span>
+            <span class="text-ui-base text-muted-foreground leading-relaxed">{t("llm.inference.prefillDesc")}</span>
           </div>
           <div class="flex items-start gap-4">
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nBatch")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.nBatch")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each [[null, "auto"], [512, "512"], [1024, "1K"], [2048, "2K"], [4096, "4K"], [8192, "8K"]] as [val, label]}
                   <button onclick={() => onSetNBatch(val as number | null)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.n_batch === val
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -335,11 +327,11 @@ const curlSnippet = $derived(
               </div>
             </div>
             <div class="flex flex-col gap-1 flex-1">
-              <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.nUbatch")}</span>
+              <span class="text-ui-sm text-muted-foreground">{t("llm.inference.nUbatch")}</span>
               <div class="flex items-center gap-1.5 flex-wrap">
                 {#each [[null, "auto"], [128, "128"], [256, "256"], [512, "512"], [1024, "1K"], [2048, "2K"]] as [val, label]}
                   <button onclick={() => onSetNUbatch(val as number | null)}
-                    class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                    class="rounded-lg border px-2 py-1 text-ui-sm font-semibold transition-all cursor-pointer
                          {config.n_ubatch === val
                            ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
                            : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
@@ -352,33 +344,27 @@ const curlSnippet = $derived(
         </div>
 
         <!-- Flash attention + Offload KQV ──────────────────────────────── -->
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.flashAttn")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.flashAttnDesc")}</span>
-          </div>
-          <button role="switch" aria-checked={config.flash_attention} aria-label={t("llm.inference.flashAttn")}
-            onclick={onToggleFlashAttention}
-            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.flash_attention ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.flash_attention ? 'translate-x-4' : 'translate-x-0'}"></span>
-          </button>
-        </div>
+        <ToggleRow
+          checked={config.flash_attention}
+          label={t("llm.inference.flashAttn")}
+          description={t("llm.inference.flashAttnDesc")}
+          ontoggle={onToggleFlashAttention}
+          showBadge={false}
+          class="border-t border-border/40 dark:border-white/[0.04]"
+        />
 
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.offloadKqv")}</span>
-            <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.offloadKqvDesc")}</span>
-          </div>
-          <button role="switch" aria-checked={config.offload_kqv} aria-label={t("llm.inference.offloadKqv")}
-            onclick={onToggleOffloadKqv}
-            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 {config.offload_kqv ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 {config.offload_kqv ? 'translate-x-4' : 'translate-x-0'}"></span>
-          </button>
-        </div>
+        <ToggleRow
+          checked={config.offload_kqv}
+          label={t("llm.inference.offloadKqv")}
+          description={t("llm.inference.offloadKqvDesc")}
+          ontoggle={onToggleOffloadKqv}
+          showBadge={false}
+          class="border-t border-border/40 dark:border-white/[0.04]"
+        />
 
-        <div class="flex flex-col gap-1.5 px-4 py-3 bg-slate-50 dark:bg-[#111118]">
+        <div class="flex flex-col gap-1.5 px-4 py-3 bg-surface-3">
           <div class="flex items-center justify-between">
-            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Quick test</span>
+            <SectionHeader>Quick test</SectionHeader>
             <button
               onclick={async (e) => {
                 await navigator.clipboard.writeText(curlSnippet);
@@ -389,11 +375,11 @@ const curlSnippet = $derived(
                   btn.textContent = prev ?? "Copy";
                 }, 1500);
               }}
-              class="text-[0.54rem] text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer select-none">
+              class="text-ui-xs text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer select-none">
               Copy
             </button>
           </div>
-          <pre class="text-[0.58rem] font-mono text-muted-foreground/80 whitespace-pre-wrap break-all leading-relaxed select-text cursor-text">{curlSnippet}</pre>
+          <pre class="text-ui-sm font-mono text-muted-foreground/80 whitespace-pre-wrap break-all leading-relaxed select-text cursor-text">{curlSnippet}</pre>
         </div>
       </CardContent>
     </Card>

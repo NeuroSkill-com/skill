@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { analyzeSleep } from "$lib/sleep-analysis";
+import { analyzeSleep } from "$lib/settings/sleep-analysis";
 import type { SleepStages } from "$lib/types";
 
 function mkStages(stages: number[], epochSecs = 30): SleepStages {

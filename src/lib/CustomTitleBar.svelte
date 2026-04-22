@@ -10,7 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
-import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
+import type { LlmCatalog, LlmModelEntry } from "$lib/llm/llm-helpers";
 import { openHelp, openHistory, openLabel } from "$lib/navigation";
 import { isBtOff } from "$lib/stores/bt-status.svelte";
 import { chatTitlebarState, hBar, hCbs, helpTitlebarState, labelTitlebarState } from "$lib/stores/titlebar.svelte";
@@ -369,7 +369,7 @@ onDestroy(() => {
       )}
       {#if hBar.compareMode && hBar.compareCount >= 2}
         <button type="button" title={t("common.openComparison")} onclick={hCbs.openCompare}
-          class="flex items-center justify-center h-6 px-1.5 rounded-md text-[0.58rem] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+          class="flex items-center justify-center h-6 px-1.5 rounded-md text-ui-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
           {hBar.compareCount}/2
         </button>
       {/if}

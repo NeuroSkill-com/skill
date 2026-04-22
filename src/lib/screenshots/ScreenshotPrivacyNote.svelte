@@ -11,7 +11,7 @@ import { t } from "$lib/i18n/index.svelte";
     <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
   <div class="flex flex-col gap-0.5">
-    <p class="text-[0.62rem] text-violet-600 dark:text-violet-400 leading-relaxed">{t("screenshots.privacyNote")}</p>
-    <p class="text-[0.54rem] text-violet-600/60 dark:text-violet-400/60 font-mono">{t("screenshots.storagePath")}</p>
+    <p class="text-ui-sm text-violet-600 dark:text-violet-400 leading-relaxed">{t("screenshots.privacyNote")}</p>
+    <p class="text-ui-xs text-violet-500/60 dark:text-violet-500/60 font-mono">{t("screenshots.storagePath")}</p>
   </div>
 </div>

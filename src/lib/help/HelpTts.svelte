@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Voice (TTS) — how it works, requirements, API, logging -->
 
 <script lang="ts">
+import { IconExternalLink } from "$lib/components/ui/icons";
 import { Separator } from "$lib/components/ui/separator";
 import { getLocale, t } from "$lib/i18n/index.svelte";
 import HelpItem from "./HelpItem.svelte";
@@ -23,7 +24,7 @@ const stackBadges: { label: string; url: string; cls: string }[] = [
   {
     label: "espeak-ng",
     url: "https://github.com/espeak-ng/espeak-ng",
-    cls: "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:border-violet-500/60",
+    cls: "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:border-primary/60",
   },
   {
     label: "rodio",
@@ -44,7 +45,7 @@ const pipelineSteps: { label: string; bg: string }[] = [
   { label: "→", bg: "" },
   { label: "Chunk", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300" },
   { label: "→", bg: "" },
-  { label: "espeak-ng IPA", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-300" },
+  { label: "espeak-ng IPA", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
   { label: "→", bg: "" },
   { label: "Tokenise", bg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300" },
   { label: "→", bg: "" },
@@ -98,13 +99,9 @@ const ttsSection = $derived(sections[0]);
     {#each stackBadges as badge}
       <a href={badge.url} target="_blank" rel="noopener noreferrer"
          class="flex items-center gap-1.5 rounded-full border px-2.5 py-1
-                text-[0.6rem] font-semibold transition-colors {badge.cls}">
+                text-ui-sm font-semibold transition-colors {badge.cls}">
         <span>{badge.label}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" class="w-3 h-3 opacity-60">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-          <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-        </svg>
+        <IconExternalLink class="w-3 h-3 opacity-60" />
       </a>
     {/each}
   </div>
@@ -123,8 +120,8 @@ const ttsSection = $derived(sections[0]);
   <!-- ── Pipeline diagram ──────────────────────────────────────────────────── -->
   <HelpSection title="Pipeline">
     <div class="rounded-xl border border-border dark:border-white/[0.06]
-                bg-muted/50 dark:bg-[#0f0f18] px-4 py-3">
-      <div class="flex flex-wrap items-center gap-1.5 text-[0.66rem] font-mono">
+                bg-muted/50 dark:bg-surface-3 px-4 py-3">
+      <div class="flex flex-wrap items-center gap-1.5 text-ui-base font-mono">
         {#each pipelineSteps as step}
           {#if step.bg}
             <span class="rounded-md px-2 py-0.5 font-semibold {step.bg}">{step.label}</span>
@@ -141,14 +138,14 @@ const ttsSection = $derived(sections[0]);
   <!-- ── API examples ──────────────────────────────────────────────────────── -->
   <HelpSection title="API Examples">
     <div class="rounded-xl border border-border dark:border-white/[0.06]
-                bg-muted/50 dark:bg-[#0f0f18] flex flex-col divide-y
+                bg-muted/50 dark:bg-surface-3 flex flex-col divide-y
                 divide-border dark:divide-white/[0.05] overflow-hidden">
       {#each apiExamples as ex}
         <div class="px-4 py-3 flex flex-col gap-1.5">
-          <span class="text-[0.56rem] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span class="text-ui-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
             {ex.lang}
           </span>
-          <pre class="text-[0.68rem] font-mono text-foreground/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">{ex.code}</pre>
+          <pre class="text-ui-base font-mono text-foreground/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">{ex.code}</pre>
         </div>
       {/each}
     </div>

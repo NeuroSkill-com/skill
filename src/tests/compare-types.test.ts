@@ -14,7 +14,7 @@ import {
   pct,
   scoreDiff,
   sdc,
-} from "$lib/compare-types";
+} from "$lib/compare/compare-types";
 import type { SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import type { UmapPoint, UmapResult } from "$lib/types";
 

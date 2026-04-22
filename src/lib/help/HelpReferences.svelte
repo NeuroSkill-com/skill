@@ -638,14 +638,14 @@ const refs: {
               bg-amber-50 dark:bg-amber-950/20 px-4 py-3.5 flex flex-col gap-2">
     <div class="flex items-center gap-2">
       <span class="text-base">⚠️</span>
-      <span class="text-[0.78rem] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">
+      <span class="text-ui-lg font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">
         {t("disclaimer.title")}
       </span>
     </div>
-    <p class="text-[0.72rem] text-amber-900/80 dark:text-amber-200/70 leading-relaxed">
+    <p class="text-ui-md text-amber-900/80 dark:text-amber-200/70 leading-relaxed">
       {t("disclaimer.body")}
     </p>
-    <p class="text-[0.65rem] font-semibold text-amber-700/70 dark:text-amber-400/50 uppercase tracking-wider">
+    <p class="text-ui-base font-semibold text-amber-700/70 dark:text-amber-400/50 uppercase tracking-wider">
       {t("disclaimer.nonCommercial")}
     </p>
   </div>
@@ -654,24 +654,24 @@ const refs: {
   <HelpSection title={t("helpRef.sectionTitle")} description={t("helpRef.sectionDesc")}>
     <div class="flex flex-col divide-y divide-border dark:divide-white/[0.05]
                 rounded-xl border border-border dark:border-white/[0.06]
-                bg-white dark:bg-[#14141e] overflow-hidden">
+                bg-surface-1 overflow-hidden">
       {#each refs as ref, i}
         <div class="px-4 py-3 flex gap-3">
           <!-- Number -->
-          <span class="text-[0.72rem] font-bold text-muted-foreground/50 tabular-nums leading-snug shrink-0 w-6 text-right">
+          <span class="text-ui-md font-bold text-muted-foreground/50 tabular-nums leading-snug shrink-0 w-6 text-right">
             [{i + 1}]
           </span>
 
           <div class="flex flex-col gap-1 min-w-0">
             <!-- Title -->
-            <p class="text-[0.78rem] font-semibold text-foreground leading-snug">{t(ref.titleKey)}</p>
+            <p class="text-ui-lg font-semibold text-foreground leading-snug">{t(ref.titleKey)}</p>
             <!-- Authors -->
-            <p class="text-[0.72rem] text-muted-foreground leading-relaxed">{t(ref.authorsKey)}</p>
+            <p class="text-ui-md text-muted-foreground leading-relaxed">{t(ref.authorsKey)}</p>
             <!-- Journal + year -->
-            <p class="text-[0.72rem] text-muted-foreground/70 italic">{t(ref.journalKey)}, {ref.year}</p>
+            <p class="text-ui-md text-muted-foreground/70 italic">{t(ref.journalKey)}, {ref.year}</p>
             <!-- Metrics tag -->
             <span class="inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-500/10
-                         px-2 py-0.5 text-[0.62rem] font-semibold text-blue-600 dark:text-blue-400
+                         px-2 py-0.5 text-ui-sm font-semibold text-blue-600 dark:text-blue-400
                          w-fit mt-0.5">
               ↳ {t(ref.metricsKey)}
             </span>
@@ -679,13 +679,13 @@ const refs: {
             {#if ref.doi}
               <a href="https://doi.org/{ref.doi}"
                  target="_blank" rel="noopener noreferrer"
-                 class="text-[0.65rem] text-blue-500 dark:text-blue-400 hover:underline w-fit font-mono">
+                 class="text-ui-base text-blue-500 dark:text-blue-400 hover:underline w-fit font-mono">
                 doi:{ref.doi}
               </a>
             {:else if ref.arxiv}
               <a href="https://arxiv.org/abs/{ref.arxiv}"
                  target="_blank" rel="noopener noreferrer"
-                 class="text-[0.65rem] text-blue-500 dark:text-blue-400 hover:underline w-fit font-mono">
+                 class="text-ui-base text-blue-500 dark:text-blue-400 hover:underline w-fit font-mono">
                 arXiv:{ref.arxiv}
               </a>
             {/if}
@@ -699,7 +699,7 @@ const refs: {
   <HelpSection title={t("helpRef.ossTitle")} description={t("helpRef.ossDesc")}>
     <div class="flex flex-col divide-y divide-border dark:divide-white/[0.05]
                 rounded-xl border border-border dark:border-white/[0.06]
-                bg-white dark:bg-[#14141e] overflow-hidden">
+                bg-surface-1 overflow-hidden">
       {#each repos as repo}
         <div class="px-4 py-3 flex gap-3 items-start">
           <!-- GitHub or crates.io icon -->
@@ -720,21 +720,21 @@ const refs: {
             <div class="flex items-center gap-2">
               <a href={repo.url}
                  target="_blank" rel="noopener noreferrer"
-                 class="text-[0.82rem] font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                 class="text-ui-lg font-bold text-blue-600 dark:text-blue-400 hover:underline">
                 {repo.name}
               </a>
               <span class="inline-flex items-center rounded-md
                            bg-neutral-100 dark:bg-white/[0.06]
-                           px-1.5 py-0.5 text-[0.58rem] font-semibold
+                           px-1.5 py-0.5 text-ui-sm font-semibold
                            text-muted-foreground">
                 {repo.lang}
               </span>
             </div>
             <!-- Description -->
-            <p class="text-[0.72rem] text-muted-foreground leading-relaxed">{repo.desc}</p>
+            <p class="text-ui-md text-muted-foreground leading-relaxed">{repo.desc}</p>
             <!-- Role in Skill -->
-            <span class="inline-flex items-center rounded-md bg-violet-50 dark:bg-violet-500/10
-                         px-2 py-0.5 text-[0.62rem] font-semibold text-violet-600 dark:text-violet-400
+            <span class="inline-flex items-center rounded-md bg-violet-500/5 dark:bg-violet-500/10
+                         px-2 py-0.5 text-ui-sm font-semibold text-violet-600 dark:text-violet-400
                          w-fit mt-0.5">
               ↳ {repo.role}
             </span>

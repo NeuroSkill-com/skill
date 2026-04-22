@@ -43,12 +43,12 @@ const items = $derived([
   <div class="grid grid-cols-2 gap-1.5 min-w-0">
     {#each items as m}
       <MetricTooltip text={t(`tip.${m.key}`)}>
-        <div class="rounded-lg border border-border/60 dark:border-white/[0.03]
+        <div class="rounded-lg border border-border/60 dark:border-white/[0.04]
                     bg-background/40 dark:bg-white/[0.02] px-2 py-1.5 flex flex-col gap-1"
              role="meter" aria-label={t(`dashboard.${m.key}`)}
              aria-valuenow={Math.round(m.score)} aria-valuemin={0} aria-valuemax={100}>
           <div class="flex items-center gap-1">
-            <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">
+            <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground truncate">
               {t(`dashboard.${m.key}`)}
             </span>
             <span class="text-[0.45rem] {m.blink} live-blink shrink-0" aria-hidden="true">●</span>
@@ -58,7 +58,7 @@ const items = $derived([
                   style="color:{m.score > 60 ? m.color : m.score > 35 ? '#6b7280' : '#94a3b8'}">
               {Math.round(m.score)}
             </span>
-            <span class="text-[0.48rem] text-muted-foreground/40 pb-0.5">/100</span>
+            <span class="text-ui-2xs text-muted-foreground/40 pb-0.5">/100</span>
           </div>
           <MetricBar value={Math.min(100, Math.max(0, m.score))} gradient="linear-gradient(90deg, {m.gradFrom}, {m.gradTo})" />
         </div>

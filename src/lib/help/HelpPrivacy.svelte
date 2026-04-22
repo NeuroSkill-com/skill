@@ -30,8 +30,8 @@ const rightsEmojis = ["🗂", "🗑", "📦", "🔒"];
       <!-- ── Your rights ──────────────────────────────────────────────────── -->
       <HelpSection title={section.title}>
         <div class="rounded-xl border border-border dark:border-white/[0.06]
-                    bg-white dark:bg-[#14141e] divide-y divide-border dark:divide-white/[0.05]
-                    overflow-hidden text-[0.78rem]">
+                    bg-surface-1 divide-y divide-border dark:divide-white/[0.05]
+                    overflow-hidden text-ui-lg">
           {#each section.items as item, ii}
             <div class="flex items-start gap-3 px-4 py-3">
               <span class="text-base shrink-0 mt-0.5">{rightsEmojis[ii] ?? ""}</span>
@@ -48,8 +48,8 @@ const rightsEmojis = ["🗂", "🗑", "📦", "🔒"];
       <!-- ── Summary ──────────────────────────────────────────────────────── -->
       <HelpSection title={section.title}>
         <div class="rounded-xl border border-border dark:border-white/[0.06]
-                    bg-muted/50 dark:bg-[#0f0f18] px-4 py-4 flex flex-col gap-2
-                    text-[0.78rem] text-muted-foreground leading-relaxed">
+                    bg-muted/50 dark:bg-surface-3 px-4 py-4 flex flex-col gap-2
+                    text-ui-lg text-muted-foreground leading-relaxed">
           {#each section.items as item}
             <p><strong class="text-foreground">{item.title}</strong></p>
           {/each}

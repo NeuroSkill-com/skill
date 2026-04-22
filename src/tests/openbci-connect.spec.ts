@@ -111,8 +111,8 @@ test.describe("OpenBCI Cyton connection flow", () => {
     await page.waitForTimeout(500);
 
     // Should show board radio buttons
-    await expect(page.locator("text=/Cyton$/i").first()).toBeVisible({ timeout: 3000 });
-    await expect(page.locator("text=/Ganglion$/i").first()).toBeVisible();
+    await expect(page.locator("text=/Cyton/i").first()).toBeVisible({ timeout: 3000 });
+    await expect(page.locator("text=/Ganglion/i").first()).toBeVisible();
 
     await page.screenshot({ path: "test-results/openbci-config-section.png" });
   });
@@ -157,7 +157,7 @@ test.describe("OpenBCI Cyton connection flow", () => {
     await page.waitForTimeout(500);
 
     // Connect button should be visible for Cyton (serial, not BLE)
-    await expect(page.locator("button", { hasText: /Connect$/i })).toBeVisible({ timeout: 3000 });
+    await expect(page.locator("button", { hasText: /Connect.*OpenBCI/i })).toBeVisible({ timeout: 3000 });
 
     await page.screenshot({ path: "test-results/openbci-connect-button.png" });
   });

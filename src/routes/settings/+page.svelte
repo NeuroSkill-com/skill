@@ -8,28 +8,28 @@ the Free Software Foundation, version 3 only. -->
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
-import AppearanceTab from "$lib/AppearanceTab.svelte";
-import CalibrationTab from "$lib/CalibrationTab.svelte";
-import ClientsTab from "$lib/ClientsTab.svelte";
-import DevicesTab from "$lib/DevicesTab.svelte";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import EmbeddingsTab from "$lib/EmbeddingsTab.svelte";
-import ExgTab from "$lib/ExgTab.svelte";
-import GoalsTab from "$lib/GoalsTab.svelte";
-import HooksTab from "$lib/HooksTab.svelte";
 import { t } from "$lib/i18n/index.svelte";
-import LlmTab from "$lib/LlmTab.svelte";
-import LslTab from "$lib/LslTab.svelte";
-import PermissionsTab from "$lib/PermissionsTab.svelte";
-import ScreenshotsTab from "$lib/ScreenshotsTab.svelte";
-import SettingsTab from "$lib/SettingsTab.svelte";
-import ShortcutsTab from "$lib/ShortcutsTab.svelte";
-import SleepTab from "$lib/SleepTab.svelte";
-import TokensTab from "$lib/TokensTab.svelte";
-import ToolsTab from "$lib/ToolsTab.svelte";
-import TtsTab from "$lib/TtsTab.svelte";
-import UmapTab from "$lib/UmapTab.svelte";
-import UpdatesTab from "$lib/UpdatesTab.svelte";
+import AppearanceTab from "$lib/settings/AppearanceTab.svelte";
+import CalibrationTab from "$lib/settings/CalibrationTab.svelte";
+import ClientsTab from "$lib/settings/ClientsTab.svelte";
+import DevicesTab from "$lib/settings/DevicesTab.svelte";
+import EmbeddingsTab from "$lib/settings/EmbeddingsTab.svelte";
+import ExgTab from "$lib/settings/ExgTab.svelte";
+import GoalsTab from "$lib/settings/GoalsTab.svelte";
+import HooksTab from "$lib/settings/HooksTab.svelte";
+import LlmTab from "$lib/settings/LlmTab.svelte";
+import LslTab from "$lib/settings/LslTab.svelte";
+import PermissionsTab from "$lib/settings/PermissionsTab.svelte";
+import ScreenshotsTab from "$lib/settings/ScreenshotsTab.svelte";
+import SettingsTab from "$lib/settings/SettingsTab.svelte";
+import ShortcutsTab from "$lib/settings/ShortcutsTab.svelte";
+import SleepTab from "$lib/settings/SleepTab.svelte";
+import TokensTab from "$lib/settings/TokensTab.svelte";
+import ToolsTab from "$lib/settings/ToolsTab.svelte";
+import TtsTab from "$lib/settings/TtsTab.svelte";
+import UmapTab from "$lib/settings/UmapTab.svelte";
+import UpdatesTab from "$lib/settings/UpdatesTab.svelte";
 
 type Tab =
   | "goals"
@@ -355,7 +355,7 @@ $effect(() => {
   <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
     <!-- Sidebar nav -->
-    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`} class="shrink-0 border-r border-border dark:border-white/[0.07]
+    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`} class="shrink-0 border-r border-border dark:border-white/[0.06]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
@@ -368,7 +368,7 @@ $effect(() => {
           aria-controls="tab-panel-{id}"
           title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
           class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
-                 rounded-lg text-left transition-colors text-[0.75rem] font-medium
+                 rounded-lg text-left transition-colors text-ui-md font-medium
                  {active
                    ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
@@ -391,7 +391,7 @@ $effect(() => {
 
           <!-- Kbd hint -->
           {#if digitForTab(i)}
-            <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
+            <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
               {modifierForTab(i)}{digitForTab(i)}
             </kbd>
@@ -402,7 +402,7 @@ $effect(() => {
 
     <button
       type="button"
-      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-primary/40 transition-colors"
+      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-violet-500/40 transition-colors"
       aria-label={t("settingsTabs.settings")}
       onmousedown={startResize}
     ></button>

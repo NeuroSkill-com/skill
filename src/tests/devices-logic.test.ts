@@ -8,7 +8,7 @@ import {
   museImage,
   openbciChannelLabel,
   sortDevicesRealFirst,
-} from "$lib/devices-logic";
+} from "$lib/settings/devices-logic";
 
 describe("fuzzyMatch", () => {
   it("matches empty needle", () => {

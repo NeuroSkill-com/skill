@@ -15,7 +15,7 @@ import {
   labelsForDay,
   type SessionEntry,
   totalDurationSecs,
-} from "$lib/history-helpers";
+} from "$lib/history/history-helpers";
 import type { LabelRow } from "$lib/types";
 
 // ── Helper factory ────────────────────────────────────────────────────────────

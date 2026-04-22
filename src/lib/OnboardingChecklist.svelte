@@ -23,10 +23,10 @@ const progress = $derived(steps.length > 0 ? (doneCount / steps.length) * 100 : 
 <div class="rounded-xl border border-amber-400/20 bg-amber-50/60 dark:bg-amber-950/20 px-3.5 py-3 flex flex-col gap-2">
   <div class="flex items-center gap-1.5">
     <span class="text-base pointer-events-none">🚀</span>
-    <span class="text-[0.72rem] font-semibold text-amber-800 dark:text-amber-300">
+    <span class="text-ui-md font-semibold text-amber-800 dark:text-amber-300">
       {t("dashboard.gettingStarted")}
     </span>
-    <span class="ml-auto text-[0.58rem] text-muted-foreground/60">
+    <span class="ml-auto text-ui-sm text-muted-foreground/60">
       {doneCount}/{steps.length}
     </span>
   </div>
@@ -48,14 +48,14 @@ const progress = $derived(steps.length > 0 ? (doneCount / steps.length) * 100 : 
             </svg>
           {/if}
         </div>
-        <span class="text-[0.65rem] {step.done ? 'text-muted-foreground/60 line-through' : 'text-foreground/80'}">
+        <span class="text-ui-base {step.done ? 'text-muted-foreground/60 line-through' : 'text-foreground/80'}">
           {step.label}
         </span>
       </div>
     {/each}
   </div>
   <button onclick={onDismiss}
-          class="text-[0.55rem] text-muted-foreground/40 hover:text-muted-foreground/70 mt-0.5 self-end underline underline-offset-2">
+          class="text-ui-xs text-muted-foreground/40 hover:text-muted-foreground/70 mt-0.5 self-end underline underline-offset-2">
     {t("common.dismiss")}
   </button>
 </div>

@@ -90,8 +90,8 @@ onDestroy(() => {
 </script>
 
 <main class="h-full min-h-0 flex flex-col overflow-hidden bg-background">
-  <div class="shrink-0 px-3 py-2 border-b border-border dark:border-white/[0.07] bg-card">
-    <div class="flex items-center justify-between text-[0.72rem]">
+  <div class="shrink-0 px-3 py-2 border-b border-border dark:border-white/[0.06] bg-card">
+    <div class="flex items-center justify-between text-ui-md">
       <span class="font-semibold text-foreground/90">
         Total download size · {items.length} {items.length === 1 ? "item" : "items"}
       </span>
@@ -103,43 +103,43 @@ onDestroy(() => {
 
   <section class="min-h-0 flex-1 overflow-y-auto p-3">
     {#if loading}
-      <p class="text-[0.72rem] text-muted-foreground">{t("downloads.loading")}</p>
+      <p class="text-ui-md text-muted-foreground">{t("downloads.loading")}</p>
     {:else if items.length === 0}
-      <p class="text-[0.72rem] text-muted-foreground">{t("downloads.empty")}</p>
+      <p class="text-ui-md text-muted-foreground">{t("downloads.empty")}</p>
     {:else}
       <div class="flex flex-col gap-2">
         {#each items as item (item.filename)}
           <article class="rounded-xl border border-border dark:border-white/[0.08] bg-card px-3 py-2.5">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <p class="text-[0.72rem] font-semibold text-foreground truncate">{item.filename}</p>
-                <p class="text-[0.62rem] text-muted-foreground truncate">{item.description}</p>
-                <p class="text-[0.58rem] text-muted-foreground/80 mt-0.5">
+                <p class="text-ui-md font-semibold text-foreground truncate">{item.filename}</p>
+                <p class="text-ui-sm text-muted-foreground truncate">{item.description}</p>
+                <p class="text-ui-sm text-muted-foreground/80 mt-0.5">
                   {item.quant} · {fmtSize(item.size_gb)}{item.shard_count > 1 ? ` (${item.shard_count} parts)` : ""} · {statusLabel(item.state)}{item.shard_count > 1 && item.current_shard > 0 ? ` — part ${item.current_shard}/${item.shard_count}` : ""}
                 </p>
-                <p class="text-[0.58rem] text-muted-foreground/80">{t("downloads.initiatedAt")}: {fmtInitiated(item.initiated_at_unix)}</p>
+                <p class="text-ui-sm text-muted-foreground/80">{t("downloads.initiatedAt")}: {fmtInitiated(item.initiated_at_unix)}</p>
                 {#if item.status_msg}
-                  <p class="text-[0.58rem] text-muted-foreground mt-0.5 truncate">{item.status_msg}</p>
+                  <p class="text-ui-sm text-muted-foreground mt-0.5 truncate">{item.status_msg}</p>
                 {/if}
               </div>
 
               <div class="shrink-0 flex items-center gap-1">
                 {#if item.state === "downloading"}
-                  <Button size="sm" variant="outline" class="h-6 text-[0.6rem] px-2" onclick={() => pauseItem(item.filename)}>
+                  <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2" onclick={() => pauseItem(item.filename)}>
                     {t("downloads.pause")}
                   </Button>
-                  <Button size="sm" variant="outline" class="h-6 text-[0.6rem] px-2 text-red-500 border-red-500/30" onclick={() => cancelItem(item.filename)}>
+                  <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2 text-red-500 border-red-500/30" onclick={() => cancelItem(item.filename)}>
                     {t("downloads.cancel")}
                   </Button>
                 {:else if item.state === "paused"}
-                  <Button size="sm" class="h-6 text-[0.6rem] px-2 bg-violet-600 hover:bg-violet-700 text-white" onclick={() => resumeItem(item.filename)}>
+                  <Button size="sm" class="h-6 text-ui-sm px-2 bg-violet-600 hover:bg-violet-700 text-white" onclick={() => resumeItem(item.filename)}>
                     {t("downloads.resume")}
                   </Button>
-                  <Button size="sm" variant="outline" class="h-6 text-[0.6rem] px-2 text-red-500 border-red-500/30" onclick={() => cancelItem(item.filename)}>
+                  <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2 text-red-500 border-red-500/30" onclick={() => cancelItem(item.filename)}>
                     {t("downloads.cancel")}
                   </Button>
                 {:else}
-                  <Button size="sm" variant="ghost" class="h-6 text-[0.6rem] px-2 text-red-500" onclick={() => deleteItem(item.filename)}>
+                  <Button size="sm" variant="ghost" class="h-6 text-ui-sm px-2 text-red-500" onclick={() => deleteItem(item.filename)}>
                     {t("downloads.delete")}
                   </Button>
                 {/if}

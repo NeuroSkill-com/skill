@@ -15,11 +15,11 @@ let open = $state(false);
 <div class="mt-2 px-2 pb-1.5 text-center">
   <button
     onclick={() => open = true}
-    class="text-[0.56rem] text-muted-foreground/50 hover:text-muted-foreground/80
+    class="text-ui-xs text-muted-foreground/50 hover:text-muted-foreground/80
            transition-colors cursor-pointer leading-relaxed select-none">
     {t("disclaimer.footer")}
   </button>
-  <p class="mt-1 text-[0.5rem] text-muted-foreground/35 select-none">
+  <p class="mt-1 text-ui-2xs text-muted-foreground/35 select-none">
     {t("disclaimer.copyright", { year: new Date().getFullYear() })}
   </p>
 </div>
@@ -31,24 +31,24 @@ let open = $state(false);
     role="presentation"
     onclick={(e) => { if (e.target === e.currentTarget) open = false; }}
     onkeydown={(e) => { if (e.key === "Escape") open = false; }}>
-    <div class="bg-white dark:bg-[#14141e] border border-border dark:border-white/[0.08]
+    <div class="bg-surface-1 border border-border dark:border-white/[0.08]
                 rounded-2xl shadow-2xl max-w-md w-full p-5 flex flex-col gap-3 animate-in">
       <div class="flex items-center gap-2">
         <span class="text-lg">⚠️</span>
-        <span class="text-[0.82rem] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">
+        <span class="text-ui-lg font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">
           {t("disclaimer.title")}
         </span>
       </div>
-      <p class="text-[0.78rem] text-foreground/80 leading-relaxed">
+      <p class="text-ui-lg text-foreground/80 leading-relaxed">
         {t("disclaimer.body")}
       </p>
-      <p class="text-[0.72rem] font-semibold text-amber-700/70 dark:text-amber-400/50 uppercase tracking-wider">
+      <p class="text-ui-md font-semibold text-amber-700/70 dark:text-amber-400/50 uppercase tracking-wider">
         {t("disclaimer.nonCommercial")}
       </p>
       <button
         onclick={() => open = false}
         class="mt-1 self-end rounded-lg border border-border dark:border-white/[0.08]
-               px-4 py-1.5 text-[0.72rem] font-semibold text-muted-foreground
+               px-4 py-1.5 text-ui-md font-semibold text-muted-foreground
                hover:bg-muted dark:hover:bg-white/[0.04] transition-colors cursor-pointer">
         {t("common.close")}
       </button>

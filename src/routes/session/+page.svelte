@@ -7,15 +7,15 @@ the Free Software Foundation, version 3 only. -->
 <!-- Standalone Session Detail view — opened from search results or history. -->
 <script lang="ts">
 import { onMount } from "svelte";
+import Hypnogram from "$lib/charts/Hypnogram.svelte";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { SessionDetail } from "$lib/dashboard";
 import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import { fmtDateIso as fmtDate, fmtDuration, fmtTime } from "$lib/format";
-import Hypnogram from "$lib/Hypnogram.svelte";
 import { t } from "$lib/i18n/index.svelte";
-import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+import { analyzeSleep, type SleepAnalysis } from "$lib/settings/sleep-analysis";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { SleepStages } from "$lib/types";
 
@@ -98,29 +98,29 @@ useWindowTitle("window.title.session");
   <div class="flex-1 overflow-y-auto min-h-0 p-4">
     {#if error}
       <div class="flex items-center justify-center h-full">
-        <p class="text-[0.78rem] text-destructive">{error}</p>
+        <p class="text-ui-lg text-destructive">{error}</p>
       </div>
     {:else if loading}
       <div class="flex items-center justify-center h-full gap-2 text-muted-foreground">
         <Spinner size="w-4 h-4" />
-        <span class="text-[0.78rem]">{t("session.loading")}</span>
+        <span class="text-ui-lg">{t("session.loading")}</span>
       </div>
     {:else}
       <!-- Session metadata header -->
       {#if sessionMeta}
         <div class="mb-4 rounded-xl border border-border dark:border-white/[0.06]
-                    bg-white dark:bg-[#14141e] p-3">
+                    bg-surface-1 p-3">
           <div class="flex flex-wrap gap-x-6 gap-y-1.5">
             {#if sessionMeta.device_name}
               <div class="flex flex-col gap-0.5">
                 <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.device")}</span>
-                <span class="text-[0.65rem] font-medium">{sessionMeta.device_name}</span>
+                <span class="text-ui-base font-medium">{sessionMeta.device_name}</span>
               </div>
             {/if}
             {#if sessionMeta.session_start_utc}
               <div class="flex flex-col gap-0.5">
                 <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.startTime")}</span>
-                <span class="text-[0.65rem] font-medium tabular-nums">
+                <span class="text-ui-base font-medium tabular-nums">
                   {fmtDate(sessionMeta.session_start_utc)} {fmtTime(sessionMeta.session_start_utc)}
                 </span>
               </div>
@@ -128,19 +128,19 @@ useWindowTitle("window.title.session");
             {#if sessionMeta.session_duration_s}
               <div class="flex flex-col gap-0.5">
                 <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.duration")}</span>
-                <span class="text-[0.65rem] font-medium">{fmtDuration(sessionMeta.session_duration_s)}</span>
+                <span class="text-ui-base font-medium">{fmtDuration(sessionMeta.session_duration_s)}</span>
               </div>
             {/if}
             {#if sessionMeta.firmware_version}
               <div class="flex flex-col gap-0.5">
                 <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">Firmware</span>
-                <span class="text-[0.65rem] font-medium">{sessionMeta.firmware_version}</span>
+                <span class="text-ui-base font-medium">{sessionMeta.firmware_version}</span>
               </div>
             {/if}
             {#if sessionMeta.total_samples}
               <div class="flex flex-col gap-0.5">
                 <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.samples")}</span>
-                <span class="text-[0.65rem] font-medium tabular-nums">{sessionMeta.total_samples.toLocaleString()}</span>
+                <span class="text-ui-base font-medium tabular-nums">{sessionMeta.total_samples.toLocaleString()}</span>
               </div>
             {/if}
           </div>
@@ -156,37 +156,37 @@ useWindowTitle("window.title.session");
       {#if sleepData && sleepAnalysisResult}
         {@const sa = sleepAnalysisResult}
         <div class="mt-4 flex flex-col gap-3">
-          <span class="text-[0.6rem] font-semibold tracking-widest uppercase text-muted-foreground">
+          <span class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
             {t("sleep.title")}
           </span>
 
           <!-- Stats row -->
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] px-3.5 py-3">
+                      bg-surface-1 px-3.5 py-3">
             <div class="flex items-center gap-4 flex-wrap">
               <div class="flex flex-col">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
-                <span class="text-[0.82rem] font-bold tabular-nums {sa.efficiency >= 85 ? 'text-emerald-500' : sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
+                <span class="text-ui-lg font-bold tabular-nums {sa.efficiency >= 85 ? 'text-emerald-500' : sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
                   {sa.efficiency.toFixed(0)}%
                 </span>
               </div>
               <div class="flex flex-col">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Onset</span>
-                <span class="text-[0.82rem] font-bold tabular-nums">{sa.onsetLatencyMin.toFixed(0)}m</span>
+                <span class="text-ui-lg font-bold tabular-nums">{sa.onsetLatencyMin.toFixed(0)}m</span>
               </div>
               {#if sa.remLatencyMin >= 0}
                 <div class="flex flex-col">
                   <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
-                  <span class="text-[0.82rem] font-bold tabular-nums">{sa.remLatencyMin.toFixed(0)}m</span>
+                  <span class="text-ui-lg font-bold tabular-nums">{sa.remLatencyMin.toFixed(0)}m</span>
                 </div>
               {/if}
               <div class="flex flex-col">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Duration</span>
-                <span class="text-[0.82rem] font-bold tabular-nums">{sa.totalMin.toFixed(0)}m</span>
+                <span class="text-ui-lg font-bold tabular-nums">{sa.totalMin.toFixed(0)}m</span>
               </div>
               <div class="flex flex-col">
                 <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
-                <span class="text-[0.82rem] font-bold tabular-nums">{sa.awakenings}</span>
+                <span class="text-ui-lg font-bold tabular-nums">{sa.awakenings}</span>
               </div>
             </div>
             <!-- Stage minutes -->
@@ -200,8 +200,8 @@ useWindowTitle("window.title.session");
               ] as stage}
                 <div class="flex items-center gap-1">
                   <span class="w-2 h-2 rounded-full shrink-0" style="background:{stage.color}"></span>
-                  <span class="text-[0.55rem] font-medium" style="color:{stage.color}">{stage.label}</span>
-                  <span class="text-[0.55rem] tabular-nums text-muted-foreground">{stage.min.toFixed(0)}m</span>
+                  <span class="text-ui-xs font-medium" style="color:{stage.color}">{stage.label}</span>
+                  <span class="text-ui-xs tabular-nums text-muted-foreground">{stage.min.toFixed(0)}m</span>
                 </div>
               {/each}
             </div>
@@ -209,7 +209,7 @@ useWindowTitle("window.title.session");
 
           <!-- Hypnogram -->
           <div class="rounded-xl border border-border dark:border-white/[0.06]
-                      bg-white dark:bg-[#14141e] p-2">
+                      bg-surface-1 p-2">
             <Hypnogram epochs={sleepData.epochs} summary={sleepData.summary} />
           </div>
         </div>

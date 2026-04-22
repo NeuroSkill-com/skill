@@ -12,12 +12,6 @@
     "desc": "Збільшуйте контраст рамок і тексту для кращої видимості."
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "Розмір шрифту",
-    "desc": "Налаштуйте розмір тексту інтерфейсу користувача. Впливає на весь текст у застосунку."
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "Калібрування завершено",
@@ -78,36 +72,6 @@
     "desc": "Виберіть конфігурацію калібрування відповідно до вашої мети, віку та сфери використання."
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "Назви дій",
-    "desc": "Назви, що відображаються під час кожної фази та зберігаються як мітки ЕЕГ."
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "Ітерації",
-    "desc": "Кількість повних циклів: Дія 1 → Перерва → Дія 2 → Перерва."
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "EPOC, Insight, Flex, MN8 через локальний Launcher"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USB послідовний",
-    "desc": "Донгл OpenBCI Cyton / CytonDaisy"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Модель вбудовування"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "Перезапуск через (секунди)"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "Якість побудови",
-    "desc": "Ширина пошуку під час побудови. Вище = кращий граф, повільніші вставки."
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "Зв'язність",
-    "desc": "Кожен вузол зберігає до 2 × M ребер. Вище = кращий recall, більше RAM."
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "Точність GPU",
-    "desc": "Половинна точність (f16) швидша, повна точність (f32) точніша"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "Фонове вбудовування",
-    "desc": "Автоматично вбудовувати необроблені епохи, коли пристрій неактивний"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "Повторний embedding",
-    "desc": "Перекодувати всі сирі EXG сесії обраною моделлю та перебудувати HNSW індекси."
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "Пристрій виведення",
-    "desc": "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни."
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "Редагування файлу",
+    "desc": "Дозволити точкові зміни пошук-і-заміна в існуючих файлах."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "Місцезнаходження",
+    "desc": "Дозволяє приблизний пошук країни, регіону, міста та часового поясу за IP."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "Макс. викликів на раунд",
     "desc": "Скільки інструментів модель може викликати за один раунд."
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "Макс. раундів",
     "desc": "Скільки циклів мислення→інструмент→мислення дозволено на повідомлення."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "Читання файлу",
+    "desc": "Дозволити читання текстових файлів. Великі файли розбиваються на сторінки з offset/limit."
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "Навички агента",
+    "desc": "Навички надають спеціалізовані інструкції, які LLM може завантажувати на вимогу. Увімкніть або вимкніть окремі навички."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "Синхронізувати при запуску",
     "desc": "Завжди завантажувати найновіші навички при запуску додатку"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "Веб-кеш",
     "desc": "Кешування результатів пошуку та завантаження на диск."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "Завантаження сторінки",
+    "desc": "Дозволяє завантажувати текстовий вміст публічної HTTP(S) сторінки."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "Вебпошук",
+    "desc": "Веб-пошук через налаштованого постачальника пошуку."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "Запис файлу",
+    "desc": "Дозволити створення або перезапис файлів. Батьківські каталоги створюються автоматично."
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "Назви дій",
+    "desc": "Назви, що відображаються під час кожної фази та зберігаються як мітки ЕЕГ."
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "Відстежувати активне вікно",
     "desc": "Записувати, яка програма та вікно на передньому плані. Зберігається локально в activity.sqlite, не передається."
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "Розмір шрифту",
+    "desc": "Налаштуйте розмір тексту інтерфейсу користувача. Впливає на весь текст у застосунку."
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "Постачальник геолокації",
     "desc": "Оберіть, як застосунок визначає ваше місцезнаходження для метаданих сеансу. «Вимкнено» вимикає геолокацію, «Локально» використовує GPS пристрою, а «Віддалено» звертається до зовнішнього сервісу."
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "Пристрій виведення",
+    "desc": "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни."
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "Відстежувати клавіатуру та мишу",
     "desc": "Посекундний запис активності клавіатури та миші. Не потребує спеціальних дозволів. Зберігається в activity.sqlite."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "Ітерації",
+    "desc": "Кількість повних циклів: Дія 1 → Перерва → Дія 2 → Перерва."
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 через локальний Launcher"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB послідовний",
+    "desc": "Донгл OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "Адреса прослуховування",
     "desc": "Режим LAN відкриває API для всіх пристроїв у мережі. Потрібен перезапуск."
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "Default Token",
     "desc": "Built-in admin token used by the app. Cannot be deleted."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "Редагування файлу",
-    "desc": "Дозволити точкові зміни пошук-і-заміна в існуючих файлах."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "Місцезнаходження",
-    "desc": "Дозволяє приблизний пошук країни, регіону, міста та часового поясу за IP."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "Читання файлу",
-    "desc": "Дозволити читання текстових файлів. Великі файли розбиваються на сторінки з offset/limit."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "Навички агента",
-    "desc": "Навички надають спеціалізовані інструкції, які LLM може завантажувати на вимогу. Увімкніть або вимкніть окремі навички."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "Завантаження сторінки",
-    "desc": "Дозволяє завантажувати текстовий вміст публічної HTTP(S) сторінки."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "Вебпошук",
-    "desc": "Веб-пошук через налаштованого постачальника пошуку."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "Запис файлу",
-    "desc": "Дозволити створення або перезапис файлів. Батьківські каталоги створюються автоматично."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "Компактна ONNX-модель, швидка на будь-якому CPU, лише англійська."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "GGUF LLM-бекбон з декодером NeuCodec. Клонує будь-який голос; підтримує англійську, німецьку, французьку, іспанську."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "Попереднє завантаження рушія при запуску",
-    "desc": "Прогріває активний рушій у фоні при запуску програми"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "Потрібний espeak-ng у PATH",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "Охолодження GPU",
-    "desc": "Пауза в мілісекундах між епохами навчання. 0 = максимальна пропускна здатність GPU. Збільшення знижує навантаження на GPU."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "Частота негативної вибірки",
-    "desc": "Випадкові пари не-сусідів на позитивне ребро за епоху. Вище = сильніше розділення, повільніше навчання."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "Епохи оптимізації",
-    "desc": "Кількість ітерацій градієнтного спуску. Більше епох = тонше розташування, повільніший розрахунок."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k найближчих сусідів",
-    "desc": "Кількість сусідів для побудови KNN-графу. Менші значення зберігають локальні деталі; більші — глобальну структуру."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "Відштовхування",
-    "desc": "Керує тим, наскільки сильно точки-не-сусіди відштовхуються. Вищі значення дають більш розділені кластери між сесіями A і B."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "Тайм-аут навчання",
-    "desc": "Максимальний час для оптимізатора UMAP. Навчання зупиняється, якщо досягнуто ліміту."
   },
   {
     "tab": "updates",

@@ -21,12 +21,12 @@ let {
 </script>
 
 <section class="flex flex-col gap-3">
-  <h2 class="text-[0.82rem] font-bold tracking-[0.04em] uppercase
+  <h2 class="text-ui-lg font-bold tracking-[0.04em] uppercase
              text-muted-foreground pl-0.5">
     {title}
   </h2>
   {#if description}
-    <p class="text-[0.78rem] leading-relaxed text-foreground/75 px-0.5">
+    <p class="text-ui-lg leading-relaxed text-foreground/75 px-0.5">
       {description}
     </p>
   {/if}

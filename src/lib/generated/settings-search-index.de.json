@@ -12,12 +12,6 @@
     "desc": "Erhöht die Kontraste von Rahmen und Text für bessere Sichtbarkeit."
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "Schriftgröße",
-    "desc": "Passen Sie die Textgröße der Benutzeroberfläche an. Beeinflusst allen Text in der App."
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "Kalibrierung abgeschlossen",
@@ -78,36 +72,6 @@
     "desc": "Wählen Sie eine Kalibrierungskonfiguration basierend auf Ihrem Ziel, Alter und Anwendungsfall."
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "Aktionsbezeichnungen",
-    "desc": "Namen, die während jeder Phase angezeigt und als EEG-Labels gespeichert werden."
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "Iterationen",
-    "desc": "Anzahl vollständiger Zyklen: Aktion 1 → Pause → Aktion 2 → Pause."
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "EPOC, Insight, Flex, MN8 über lokalen Launcher"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USB Seriell",
-    "desc": "OpenBCI Cyton / CytonDaisy Dongle"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Einbettungsmodell"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "Neustart nach (Sekunden)"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "Bauqualität",
-    "desc": "Suchbreite während des Aufbaus. Höher = besserer Graph, langsamere Einfügungen."
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "Konnektivität",
-    "desc": "Jeder Knoten behält bis zu 2 × M Kanten. Höher = besserer Recall, mehr RAM."
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "GPU-Präzision",
-    "desc": "Halbpräzision (f16) ist schneller, volle Präzision (f32) ist genauer"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "Hintergrund-Einbettung",
-    "desc": "Nicht verarbeitete Epochen automatisch einbetten, wenn das Gerät inaktiv ist"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "Neu einbetten",
-    "desc": "Alle EXG-Rohaufnahmen mit dem ausgewählten Modell neu einbetten und HNSW-Indizes neu aufbauen."
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "Inferenzgerät",
-    "desc": "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten."
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "Datei bearbeiten",
+    "desc": "Gezielte Suchen-und-Ersetzen-Bearbeitungen in vorhandenen Dateien."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "Standort",
+    "desc": "Erlaubt eine ungefähre IP-basierte Abfrage von Land, Region, Stadt und Zeitzone."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "Max. Aufrufe pro Runde",
     "desc": "Wie viele Tools das Modell in einer Runde aufrufen darf."
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "Max. Runden",
     "desc": "Wie viele Denken→Tool→Denken-Zyklen pro Nachricht erlaubt sind."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "Datei lesen",
+    "desc": "Textdateien lesen. Große Dateien werden mit Offset/Limit paginiert."
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "Agenten-Fähigkeiten",
+    "desc": "Skills liefern spezialisierte Anweisungen, die das LLM bei Bedarf laden kann. Einzelne Skills ein-/ausschalten."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "Beim Start synchronisieren",
     "desc": "Beim App-Start immer die neuesten Skills abrufen"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "Web-Cache",
     "desc": "Web-Such- und Abrufergebnisse auf der Festplatte zwischenspeichern."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "Web-Abruf",
+    "desc": "Erlaubt das Abrufen des Rohtexts einer öffentlichen HTTP(S)-Seite."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "Websuche",
+    "desc": "Websuche mit dem konfigurierten Suchanbieter."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "Datei schreiben",
+    "desc": "Dateien erstellen oder überschreiben. Übergeordnete Verzeichnisse werden automatisch erstellt."
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "Aktionsbezeichnungen",
+    "desc": "Namen, die während jeder Phase angezeigt und als EEG-Labels gespeichert werden."
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "Aktives Fenster verfolgen",
     "desc": "Aufzeichnen, welche App und welches Fenster im Vordergrund ist. Lokal in activity.sqlite gespeichert, nie hochgeladen."
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "Schriftgröße",
+    "desc": "Passen Sie die Textgröße der Benutzeroberfläche an. Beeinflusst allen Text in der App."
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "Geolokalisierungsanbieter",
     "desc": "Enable location services to provide geographic context for sessions and LLM tools. On macOS this uses CoreLocation (GPS/Wi-Fi) for high accuracy; on other platforms it uses IP geolocation. Disabled by default — toggle on to request permission and test."
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "Inferenzgerät",
+    "desc": "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten."
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "Tastatur- & Mausaktivität verfolgen",
     "desc": "Sekundengenaue Aufzeichnung der Tastatur- und Mausaktivität. Keine Sonderberechtigung erforderlich. Lokal in activity.sqlite gespeichert."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "Iterationen",
+    "desc": "Anzahl vollständiger Zyklen: Aktion 1 → Pause → Aktion 2 → Pause."
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "EPOC, Insight, Flex, MN8 über lokalen Launcher"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB Seriell",
+    "desc": "OpenBCI Cyton / CytonDaisy Dongle"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "Bind-Adresse",
     "desc": "LAN-Modus macht die API für alle Geräte im Netzwerk zugänglich. Neustart erforderlich."
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "Default Token",
     "desc": "Built-in admin token used by the app. Cannot be deleted."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "Datei bearbeiten",
-    "desc": "Gezielte Suchen-und-Ersetzen-Bearbeitungen in vorhandenen Dateien."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "Standort",
-    "desc": "Erlaubt eine ungefähre IP-basierte Abfrage von Land, Region, Stadt und Zeitzone."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "Datei lesen",
-    "desc": "Textdateien lesen. Große Dateien werden mit Offset/Limit paginiert."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "Agenten-Fähigkeiten",
-    "desc": "Skills liefern spezialisierte Anweisungen, die das LLM bei Bedarf laden kann. Einzelne Skills ein-/ausschalten."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "Web-Abruf",
-    "desc": "Erlaubt das Abrufen des Rohtexts einer öffentlichen HTTP(S)-Seite."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "Websuche",
-    "desc": "Websuche mit dem konfigurierten Suchanbieter."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "Datei schreiben",
-    "desc": "Dateien erstellen oder überschreiben. Übergeordnete Verzeichnisse werden automatisch erstellt."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "Kompaktes ONNX-Modell, schnell auf jeder CPU, nur Englisch."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "GGUF-LLM-Backbone mit NeuCodec-Decoder. Klont jede Stimme; unterstützt Englisch, Deutsch, Französisch, Spanisch."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "Engine beim Start vorladen",
-    "desc": "Lädt die aktive Engine beim App-Start im Hintergrund vor"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "Benötigt espeak-ng im PATH",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "GPU-Abkühlzeit",
-    "desc": "Millisekunden Pause zwischen Trainingsepochen. 0 = maximaler GPU-Durchsatz. Erhöhen, um GPU-Auslastung zu reduzieren."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "Negativproberate",
-    "desc": "Zufällige Nicht-Nachbarpaare pro positiver Kante je Epoche. Höher = stärkere Trennung, langsameres Training."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "Optimierungsepochen",
-    "desc": "Anzahl der Gradientenabstiegs-Iterationen. Mehr Epochen = feineres Layout, langsamere Berechnung."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k-nächste Nachbarn",
-    "desc": "Anzahl der nächsten Nachbarn für den KNN-Graph. Kleinere Werte erhalten lokale Details; größere erfassen globale Struktur."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "Abstoßung",
-    "desc": "Steuert, wie stark Nicht-Nachbarpunkte auseinandergedrückt werden. Höhere Werte erzeugen stärker getrennte Cluster."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "Training-Timeout",
-    "desc": "Maximale Zeit für den UMAP-Optimierer. Training stoppt frühzeitig, wenn Limit erreicht."
   },
   {
     "tab": "updates",

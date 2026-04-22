@@ -9,6 +9,7 @@ the Free Software Foundation, version 3 only. -->
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
@@ -17,6 +18,7 @@ import {
   lslStopVirtualSource,
   lslVirtualSourceRunning,
 } from "$lib/daemon/lsl";
+import type { DaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -186,6 +188,75 @@ function selectCustom() {
   selectedPresetId = "custom";
 }
 
+// ── Cross-window event emission ───────────────────────────────────────────
+//
+// Emit a virtual-device-status Tauri event so the dashboard (which may be
+// in a separate window) picks up the device state change immediately.
+
+function emitVirtualStatus(cfg: VirtualEegConfig, connected: boolean) {
+  const labels = getChannelLabels(cfg.channels);
+  const payload = connected
+    ? {
+        state: "connected",
+        device_name: "Virtual EEG",
+        device_id: "virtual-eeg",
+        device_kind: "lsl",
+        serial_number: null,
+        mac_address: null,
+        csv_path: null,
+        sample_count: 0,
+        battery: 0,
+        eeg: new Array(cfg.channels).fill(0),
+        paired_devices: [],
+        device_error: null,
+        target_name: null,
+        filter_config: {
+          sample_rate: cfg.sampleRate,
+          low_pass_hz: null,
+          high_pass_hz: null,
+          notch: null,
+          notch_bandwidth_hz: 1,
+        },
+        channel_quality: new Array(cfg.channels).fill("good"),
+        retry_attempt: 0,
+        retry_countdown_secs: 0,
+        ppg: [],
+        ppg_sample_count: 0,
+        imu_sample_count: 0,
+        accel: [0, 0, 0],
+        gyro: [0, 0, 0],
+        fuel_gauge_mv: 0,
+        temperature_raw: 0,
+        hardware_version: null,
+        has_ppg: false,
+        has_imu: false,
+        has_central_electrodes: cfg.channels >= 8,
+        has_full_montage: cfg.channels >= 32,
+        channel_names: labels,
+        eeg_channel_count: cfg.channels,
+        eeg_sample_rate_hz: cfg.sampleRate,
+      }
+    : {
+        state: "disconnected",
+        device_name: null,
+        device_id: null,
+        device_kind: "",
+        channel_names: [],
+        eeg_channel_count: 0,
+        eeg_sample_rate_hz: 0,
+      };
+  import("$lib/daemon/ws")
+    .then(({ injectDaemonEvent }) => {
+      injectDaemonEvent({
+        type: "VirtualDeviceStatus",
+        ts_unix_ms: Date.now(),
+        payload: payload as unknown as Record<string, unknown>,
+      } satisfies DaemonEvent);
+    })
+    .catch(() => {});
+  import("@tauri-apps/api/event").then(({ emit }) => emit("virtual-device-status", payload)).catch(() => {});
+}
+
 // ── Daemon actions ────────────────────────────────────────────────────────
 //
 // Architecture: Virtual Devices window → daemon (HTTP) → virtual LSL source
@@ -201,6 +272,9 @@ async function start() {
     //    requested channels, rate, template, quality, noise, etc.
     await lslStartVirtualSourceConfigured(toSourceConfig(config));
     lslRunning = true;
+
+    // Notify the dashboard (cross-window) that a virtual device is connected.
+    emitVirtualStatus(config, true);
 
     // 2. Give the LSL source a moment to announce itself.
     await new Promise<void>((r) => setTimeout(r, 600));
@@ -228,6 +302,7 @@ async function stop() {
     await lslStopVirtualSource();
     lslRunning = false;
     sessionState = "disconnected";
+    emitVirtualStatus(config, false);
   } catch (e: unknown) {
     addToast("error", t("vdev.lslSourceTitle"), String(e));
   } finally {
@@ -350,12 +425,12 @@ onDestroy(() => {
 
   <!-- Page header -->
   <div class="flex flex-col gap-1 shrink-0">
-    <h1 class="text-[0.82rem] font-bold tracking-tight text-foreground">{t("vdev.title")}</h1>
-    <p class="text-[0.6rem] text-muted-foreground leading-relaxed max-w-[520px]">{t("vdev.desc")}</p>
+    <h1 class="text-ui-lg font-bold tracking-tight text-foreground">{t("vdev.title")}</h1>
+    <p class="text-ui-sm text-muted-foreground leading-relaxed max-w-[520px]">{t("vdev.desc")}</p>
   </div>
 
   <!-- ── Status bar ──────────────────────────────────────────────────────── -->
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden shrink-0
+  <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden shrink-0
               {lslRunning ? 'ring-1 ring-green-500/30' : ''}">
     <CardContent class="flex items-center gap-3 py-3 px-4">
 
@@ -373,7 +448,7 @@ onDestroy(() => {
       <div class="flex flex-col gap-0.5 flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <!-- Source pill -->
-          <span class="inline-flex items-center gap-1 text-[0.52rem] font-bold tracking-widest uppercase
+          <span class="inline-flex items-center gap-1 text-ui-xs font-bold tracking-widest uppercase
                        px-1.5 py-0.5 rounded-full
                        {lslRunning
                          ? 'bg-green-500/15 text-green-600 dark:text-green-400'
@@ -383,7 +458,7 @@ onDestroy(() => {
 
           <!-- Session pill — reflects actual daemon session state -->
           {#if lslRunning}
-            <span class="inline-flex items-center gap-1 text-[0.52rem] font-bold tracking-widest uppercase
+            <span class="inline-flex items-center gap-1 text-ui-xs font-bold tracking-widest uppercase
                          px-1.5 py-0.5 rounded-full
                          {sessionState === 'connected'
                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
@@ -399,13 +474,13 @@ onDestroy(() => {
         </div>
 
         {#if lslRunning}
-          <span class="text-[0.5rem] text-muted-foreground/50 tabular-nums font-mono">
+          <span class="text-ui-2xs text-muted-foreground/50 tabular-nums font-mono">
             {config.channels}ch · {config.sampleRate} Hz · {t(`veeg.quality${config.quality.charAt(0).toUpperCase()}${config.quality.slice(1)}`)}
           </span>
         {:else if selectedPresetId && selectedPresetId !== "custom"}
           {@const p = PRESETS.find((x) => x.id === selectedPresetId)}
           {#if p}
-            <span class="text-[0.5rem] text-muted-foreground/40">
+            <span class="text-ui-2xs text-muted-foreground/40">
               {t("vdev.selected")}: {p.name} · {p.tags.join(" · ")}
             </span>
           {/if}
@@ -416,7 +491,7 @@ onDestroy(() => {
       <Button
         variant={lslRunning ? "destructive" : "default"}
         size="sm"
-        class="h-7 text-[0.62rem] px-4 shrink-0"
+        class="h-7 text-ui-sm px-4 shrink-0"
         disabled={busy}
         onclick={lslRunning ? stop : start}
       >
@@ -435,9 +510,7 @@ onDestroy(() => {
 
   <!-- ── Preset grid ─────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2 shrink-0">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-      {t("vdev.presets")}
-    </span>
+    <SectionHeader>{t("vdev.presets")}</SectionHeader>
 
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
       {#each PRESETS as preset}
@@ -445,20 +518,20 @@ onDestroy(() => {
         <button
           class="flex flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition-all cursor-pointer
                  {isSelected
-                   ? 'border-primary/40 bg-primary/8 ring-1 ring-primary/20'
-                   : 'border-border dark:border-white/[0.07] bg-white dark:bg-[#14141e] hover:border-primary/20 hover:bg-muted/30'}
+                   ? 'border-violet-500/40 bg-violet-500/8 ring-1 ring-primary/20'
+                   : 'border-border dark:border-white/[0.06] bg-surface-1 hover:border-violet-500/20 hover:bg-muted/30'}
                  {lslRunning ? 'opacity-40 pointer-events-none' : ''}"
           onclick={() => selectPreset(preset)}
           disabled={lslRunning}
           aria-pressed={isSelected}
         >
           <span class="text-[1.1rem] leading-none">{preset.icon}</span>
-          <span class="text-[0.66rem] font-semibold text-foreground leading-tight">{preset.name}</span>
-          <span class="text-[0.52rem] text-muted-foreground leading-relaxed line-clamp-2">{preset.desc}</span>
+          <span class="text-ui-base font-semibold text-foreground leading-tight">{preset.name}</span>
+          <span class="text-ui-xs text-muted-foreground leading-relaxed line-clamp-2">{preset.desc}</span>
           <div class="flex flex-wrap gap-1 mt-auto pt-1">
             {#each preset.tags as tag}
               <span class="inline-block rounded-full px-1.5 py-0.5 text-[0.44rem] font-semibold tracking-wide
-                           {isSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}">
+                           {isSelected ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400' : 'bg-muted text-muted-foreground'}">
                 {tag}
               </span>
             {/each}
@@ -470,19 +543,19 @@ onDestroy(() => {
       <button
         class="flex flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition-all cursor-pointer
                {isCustomSelected
-                 ? 'border-primary/40 bg-primary/8 ring-1 ring-primary/20'
-                 : 'border-dashed border-border dark:border-white/[0.07] bg-white dark:bg-[#14141e] hover:border-primary/20 hover:bg-muted/30'}
+                 ? 'border-violet-500/40 bg-violet-500/8 ring-1 ring-primary/20'
+                 : 'border-dashed border-border dark:border-white/[0.06] bg-surface-1 hover:border-violet-500/20 hover:bg-muted/30'}
                {lslRunning ? 'opacity-40 pointer-events-none' : ''}"
         onclick={selectCustom}
         disabled={lslRunning}
         aria-pressed={isCustomSelected}
       >
         <span class="text-[1.1rem] leading-none">⚙️</span>
-        <span class="text-[0.66rem] font-semibold text-foreground leading-tight">{t("vdev.presetCustom")}</span>
-        <span class="text-[0.52rem] text-muted-foreground leading-relaxed">{t("vdev.presetCustomDesc")}</span>
+        <span class="text-ui-base font-semibold text-foreground leading-tight">{t("vdev.presetCustom")}</span>
+        <span class="text-ui-xs text-muted-foreground leading-relaxed">{t("vdev.presetCustomDesc")}</span>
         <div class="flex flex-wrap gap-1 mt-auto pt-1">
           <span class="inline-block rounded-full px-1.5 py-0.5 text-[0.44rem] font-semibold tracking-wide
-                       {isCustomSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}">
+                       {isCustomSelected ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400' : 'bg-muted text-muted-foreground'}">
             {t("vdev.configure")}
           </span>
         </div>
@@ -493,32 +566,30 @@ onDestroy(() => {
   <!-- ── Custom configurator ─────────────────────────────────────────────── -->
   {#if showCustom}
     <section class="flex flex-col gap-4 shrink-0">
-      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-        {t("vdev.customConfig")}
-      </span>
+      <SectionHeader>{t("vdev.customConfig")}</SectionHeader>
 
       <!-- Template -->
       <div class="flex flex-col gap-1.5">
-        <span class="text-[0.54rem] font-medium text-muted-foreground px-0.5">{t("vdev.cfgTemplate")}</span>
-        <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <span class="text-ui-xs font-medium text-muted-foreground px-0.5">{t("vdev.cfgTemplate")}</span>
+        <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="flex flex-col gap-0 py-0 px-0">
             {#each TEMPLATES as tmpl, i}
               <button
                 class="flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer
-                       {config.template === tmpl.key ? 'bg-primary/8' : 'hover:bg-muted/30'}
-                       {i < TEMPLATES.length - 1 ? 'border-b border-border dark:border-white/[0.05]' : ''}"
+                       {config.template === tmpl.key ? 'bg-violet-500/8' : 'hover:bg-muted/30'}
+                       {i < TEMPLATES.length - 1 ? 'border-b border-border dark:border-white/[0.06]' : ''}"
                 onclick={() => { config.template = tmpl.key; }}
                 disabled={lslRunning}
               >
                 <span class="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border
-                             {config.template === tmpl.key ? 'border-primary bg-primary' : 'border-muted-foreground/30'}">
+                             {config.template === tmpl.key ? 'border-violet-500 bg-violet-600' : 'border-muted-foreground/30'}">
                   {#if config.template === tmpl.key}
                     <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
                   {/if}
                 </span>
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.64rem] font-medium text-foreground">{t(tmpl.label)}</span>
-                  <span class="text-[0.54rem] text-muted-foreground leading-relaxed">{t(tmpl.desc)}</span>
+                  <span class="text-ui-base font-medium text-foreground">{t(tmpl.label)}</span>
+                  <span class="text-ui-xs text-muted-foreground leading-relaxed">{t(tmpl.desc)}</span>
                 </div>
               </button>
             {/each}
@@ -527,26 +598,26 @@ onDestroy(() => {
       </div>
 
       <!-- Channels + Sample rate -->
-      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
         <CardContent class="flex flex-col gap-4 py-4 px-4">
           <!-- Channels -->
           <div class="flex flex-col gap-2">
             <div class="flex flex-col gap-0.5">
-              <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgChannels")}</span>
-              <span class="text-[0.54rem] text-muted-foreground">{t("vdev.cfgChannelsDesc")}</span>
+              <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgChannels")}</span>
+              <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgChannelsDesc")}</span>
             </div>
             <div class="flex gap-1.5 flex-wrap">
               {#each CHANNEL_OPTIONS as n}
                 <button
-                  class="h-7 px-2.5 rounded-md text-[0.58rem] font-medium transition-colors cursor-pointer
-                         {config.channels === n ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
+                  class="h-7 px-2.5 rounded-md text-ui-sm font-medium transition-colors cursor-pointer
+                         {config.channels === n ? 'bg-violet-600 text-white' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
                   onclick={() => { config.channels = n; }}
                   disabled={lslRunning}
                 >{n}ch</button>
               {/each}
             </div>
             {#if channelLabels.length > 0}
-              <span class="text-[0.48rem] text-muted-foreground/40 font-mono leading-relaxed">
+              <span class="text-ui-2xs text-muted-foreground/40 font-mono leading-relaxed">
                 {channelLabels.join(", ")}
               </span>
             {/if}
@@ -557,14 +628,14 @@ onDestroy(() => {
           <!-- Sample rate -->
           <div class="flex flex-col gap-2">
             <div class="flex flex-col gap-0.5">
-              <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgRate")}</span>
-              <span class="text-[0.54rem] text-muted-foreground">{t("vdev.cfgRateDesc")}</span>
+              <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgRate")}</span>
+              <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgRateDesc")}</span>
             </div>
             <div class="flex gap-1.5 flex-wrap">
               {#each RATE_OPTIONS as hz}
                 <button
-                  class="h-7 px-2.5 rounded-md text-[0.58rem] font-medium transition-colors cursor-pointer
-                         {config.sampleRate === hz ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
+                  class="h-7 px-2.5 rounded-md text-ui-sm font-medium transition-colors cursor-pointer
+                         {config.sampleRate === hz ? 'bg-violet-600 text-white' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
                   onclick={() => { config.sampleRate = hz; }}
                   disabled={lslRunning}
                 >{hz} Hz</button>
@@ -575,17 +646,17 @@ onDestroy(() => {
       </Card>
 
       <!-- Signal quality -->
-      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
         <CardContent class="flex flex-col gap-3 py-4 px-4">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgQuality")}</span>
-            <span class="text-[0.54rem] text-muted-foreground">{t("vdev.cfgQualityDesc")}</span>
+            <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgQuality")}</span>
+            <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgQualityDesc")}</span>
           </div>
           <div class="flex gap-1.5">
             {#each QUALITY_OPTIONS as q}
               <button
-                class="flex-1 h-7 rounded-md text-[0.58rem] font-medium transition-colors cursor-pointer
-                       {config.quality === q.key ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
+                class="flex-1 h-7 rounded-md text-ui-sm font-medium transition-colors cursor-pointer
+                       {config.quality === q.key ? 'bg-violet-600 text-white' : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
                 onclick={() => { config.quality = q.key; }}
                 disabled={lslRunning}
               >{t(q.label)}</button>
@@ -597,7 +668,7 @@ onDestroy(() => {
       <!-- Advanced (collapsible) -->
       <div class="flex flex-col gap-2">
         <button
-          class="flex items-center gap-1.5 text-[0.56rem] font-semibold tracking-widest uppercase
+          class="flex items-center gap-1.5 text-ui-xs font-semibold tracking-widest uppercase
                  text-muted-foreground px-0.5 cursor-pointer w-fit"
           onclick={() => { showAdvanced = !showAdvanced; }}
         >
@@ -610,54 +681,54 @@ onDestroy(() => {
         </button>
 
         {#if showAdvanced}
-          <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
             <CardContent class="flex flex-col gap-0 py-0 px-0">
 
               <!-- Amplitude -->
               <div class="flex items-center justify-between gap-4 px-4 py-3
-                          border-b border-border dark:border-white/[0.05]">
+                          border-b border-border dark:border-white/[0.06]">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgAmplitude")}</span>
-                  <span class="text-[0.52rem] text-muted-foreground">{t("vdev.cfgAmplitudeDesc")}</span>
+                  <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgAmplitude")}</span>
+                  <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgAmplitudeDesc")}</span>
                 </div>
                 <input type="number" min="1" max="500" step="5"
                   aria-label="Amplitude in microvolts"
                   bind:value={config.amplitudeUv}
                   disabled={lslRunning}
-                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem]
+                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-ui-sm
                          text-right font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring
                          disabled:opacity-40" />
               </div>
 
               <!-- Noise -->
               <div class="flex items-center justify-between gap-4 px-4 py-3
-                          border-b border-border dark:border-white/[0.05]">
+                          border-b border-border dark:border-white/[0.06]">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgNoise")}</span>
-                  <span class="text-[0.52rem] text-muted-foreground">{t("vdev.cfgNoiseDesc")}</span>
+                  <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgNoise")}</span>
+                  <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgNoiseDesc")}</span>
                 </div>
                 <input type="number" min="0" max="100" step="1"
                   aria-label="Noise in microvolts"
                   bind:value={config.noiseUv}
                   disabled={lslRunning}
-                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem]
+                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-ui-sm
                          text-right font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring
                          disabled:opacity-40" />
               </div>
 
               <!-- Line noise -->
               <div class="flex items-center justify-between gap-4 px-4 py-3
-                          border-b border-border dark:border-white/[0.05]">
+                          border-b border-border dark:border-white/[0.06]">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgLineNoise")}</span>
-                  <span class="text-[0.52rem] text-muted-foreground">{t("vdev.cfgLineNoiseDesc")}</span>
+                  <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgLineNoise")}</span>
+                  <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgLineNoiseDesc")}</span>
                 </div>
                 <div class="flex gap-1 shrink-0">
                   {#each LINE_NOISE_OPTIONS as opt}
                     <button
-                      class="h-7 px-2.5 rounded-md text-[0.56rem] font-medium cursor-pointer transition-colors
+                      class="h-7 px-2.5 rounded-md text-ui-xs font-medium cursor-pointer transition-colors
                              {config.lineNoise === opt.key
-                               ? 'bg-primary text-primary-foreground'
+                               ? 'bg-violet-600 text-white'
                                : 'bg-muted/40 text-muted-foreground hover:bg-muted'}"
                       onclick={() => { config.lineNoise = opt.key; }}
                       disabled={lslRunning}
@@ -669,14 +740,14 @@ onDestroy(() => {
               <!-- Dropout -->
               <div class="flex items-center justify-between gap-4 px-4 py-3">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.64rem] font-semibold text-foreground">{t("vdev.cfgDropout")}</span>
-                  <span class="text-[0.52rem] text-muted-foreground">{t("vdev.cfgDropoutDesc")}</span>
+                  <span class="text-ui-base font-semibold text-foreground">{t("vdev.cfgDropout")}</span>
+                  <span class="text-ui-xs text-muted-foreground">{t("vdev.cfgDropoutDesc")}</span>
                 </div>
                 <input type="number" min="0" max="1" step="0.05"
                   aria-label="Dropout probability"
                   bind:value={config.dropoutProb}
                   disabled={lslRunning}
-                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-[0.62rem]
+                  class="w-20 h-7 rounded-md border border-border bg-background px-2 text-ui-sm
                          text-right font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring
                          disabled:opacity-40" />
               </div>
@@ -692,14 +763,12 @@ onDestroy(() => {
   <!-- ── Signal preview (offline) ───────────────────────────────────────── -->
   <section class="flex flex-col gap-2 shrink-0">
     <div class="flex items-center gap-2 px-0.5">
-      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-        {t("vdev.previewOffline")}
-      </span>
+      <SectionHeader>{t("vdev.previewOffline")}</SectionHeader>
       <span class="text-[0.46rem] text-muted-foreground/35 ml-auto font-mono">
         {config.channels}ch · {config.sampleRate} Hz
       </span>
     </div>
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
       <CardContent class="py-2 px-3">
         <canvas
           bind:this={previewCanvas}

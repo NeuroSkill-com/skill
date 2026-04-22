@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
+import { ChipGroup } from "$lib/components/ui/chip-group";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { dateToCompactKey, fmtCountdown, fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
@@ -380,7 +381,7 @@ useWindowTitle("window.title.focusTimer");
   <div class="min-h-0 flex-1 flex flex-col items-center justify-start overflow-y-auto px-5 py-4 gap-5">
 
     <!-- Phase label -->
-    <div class="text-[0.68rem] font-semibold tracking-widest uppercase
+    <div class="text-ui-base font-semibold tracking-widest uppercase
                 text-muted-foreground/70 mt-1">
       {phaseLabel}
     </div>
@@ -447,21 +448,21 @@ useWindowTitle("window.title.focusTimer");
     <!-- Control buttons -->
     <div class="flex items-center gap-3">
       {#if phase === "idle"}
-        <Button onclick={handleStart} class="px-8 h-9 text-[0.82rem]">
+        <Button onclick={handleStart} class="px-8 h-9 text-ui-lg">
           {t("focusTimer.start")}
         </Button>
       {:else}
-        <Button variant="outline" onclick={handleStop} class="h-8 px-4 text-[0.75rem]">
+        <Button variant="outline" onclick={handleStop} class="h-8 px-4 text-ui-md">
           {t("focusTimer.stop")}
         </Button>
         <Button
           onclick={handlePause}
-          class="h-8 px-5 text-[0.78rem]"
+          class="h-8 px-5 text-ui-lg"
           style="background-color:{paused ? ringColor : 'transparent'}; border:1px solid {ringColor}; color:{paused ? '#fff' : ringColor}"
         >
           {paused ? t("focusTimer.resume") : t("focusTimer.pause")}
         </Button>
-        <Button variant="ghost" onclick={skipPhase} class="h-8 px-3 text-[0.72rem] text-muted-foreground">
+        <Button variant="ghost" onclick={skipPhase} class="h-8 px-3 text-ui-md text-muted-foreground">
           Skip →
         </Button>
       {/if}
@@ -472,7 +473,7 @@ useWindowTitle("window.title.focusTimer");
       onclick={openLabel}
       class="flex items-center gap-1.5 rounded-lg border border-border
              dark:border-white/[0.08] bg-muted/20 hover:bg-muted/40
-             px-3.5 py-1.5 text-[0.72rem] font-medium text-muted-foreground
+             px-3.5 py-1.5 text-ui-md font-medium text-muted-foreground
              hover:text-foreground transition-colors"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -498,40 +499,31 @@ useWindowTitle("window.title.focusTimer");
 
     <!-- Presets -->
     <div class="w-full flex flex-col gap-2">
-      <p class="text-[0.62rem] font-semibold tracking-widest uppercase text-muted-foreground/60">
+      <p class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground/60">
         Presets
       </p>
-      <div class="grid grid-cols-3 gap-2">
-        {#each (["pomodoro", "deepWork", "shortFocus"] as const) as p}
-          <button
-            onclick={() => applyPreset(p)}
-            disabled={phase !== "idle"}
-            class="rounded-lg border px-2.5 py-2 text-[0.68rem] font-medium text-center
-                   transition-colors focus:outline-none
-                   {selectedPreset === p
-                     ? 'border-primary/50 bg-primary/10 text-primary'
-                     : 'border-border bg-muted/20 text-muted-foreground hover:bg-muted/40'}
-                   disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {t(`focusTimer.preset.${p}`)}
-          </button>
-        {/each}
-      </div>
+      <ChipGroup
+        items={["pomodoro", "deepWork", "shortFocus"] as const}
+        selected={(["pomodoro", "deepWork", "shortFocus"] as const).find(p => p === selectedPreset) ?? "pomodoro"}
+        onselect={(p) => applyPreset(p)}
+        labelFn={(p) => t(`focusTimer.preset.${p}`)}
+        class={phase !== "idle" ? "opacity-40 pointer-events-none" : ""}
+      />
     </div>
 
     <!-- Manual config -->
     <div class="w-full flex flex-col gap-2">
-      <p class="text-[0.62rem] font-semibold tracking-widest uppercase text-muted-foreground/60">
+      <p class="text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground/60">
         {t("focusTimer.preset.custom")}
       </p>
       <div class="grid grid-cols-2 gap-3">
         <!-- Work -->
         <div class="flex flex-col gap-1">
-          <label for="ft-work-mins" class="text-[0.65rem] text-muted-foreground/70">{t("focusTimer.workMins")}</label>
+          <label for="ft-work-mins" class="text-ui-base text-muted-foreground/70">{t("focusTimer.workMins")}</label>
           <input id="ft-work-mins" type="number" min="1" max="120" bind:value={workMins}
                  disabled={phase !== "idle"}
                  oninput={() => selectedPreset = "custom"}
-                 class="w-full px-2 py-1 text-[0.78rem] rounded-md
+                 class="w-full px-2 py-1 text-ui-lg rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
                      focus:outline-none focus:ring-1 focus:ring-ring/40
@@ -539,11 +531,11 @@ useWindowTitle("window.title.focusTimer");
         </div>
         <!-- Break -->
         <div class="flex flex-col gap-1">
-          <label for="ft-break-mins" class="text-[0.65rem] text-muted-foreground/70">{t("focusTimer.breakMins")}</label>
+          <label for="ft-break-mins" class="text-ui-base text-muted-foreground/70">{t("focusTimer.breakMins")}</label>
           <input id="ft-break-mins" type="number" min="1" max="60" bind:value={breakMins}
                  disabled={phase !== "idle"}
                  oninput={() => selectedPreset = "custom"}
-                 class="w-full px-2 py-1 text-[0.78rem] rounded-md
+                 class="w-full px-2 py-1 text-ui-lg rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
                      focus:outline-none focus:ring-1 focus:ring-ring/40
@@ -551,11 +543,11 @@ useWindowTitle("window.title.focusTimer");
         </div>
         <!-- Long break -->
         <div class="flex flex-col gap-1">
-          <label for="ft-long-break-mins" class="text-[0.65rem] text-muted-foreground/70">{t("focusTimer.longBreakMins")}</label>
+          <label for="ft-long-break-mins" class="text-ui-base text-muted-foreground/70">{t("focusTimer.longBreakMins")}</label>
           <input id="ft-long-break-mins" type="number" min="1" max="120" bind:value={longBreakMins}
                  disabled={phase !== "idle"}
                  oninput={() => selectedPreset = "custom"}
-                 class="w-full px-2 py-1 text-[0.78rem] rounded-md
+                 class="w-full px-2 py-1 text-ui-lg rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
                      focus:outline-none focus:ring-1 focus:ring-ring/40
@@ -563,13 +555,13 @@ useWindowTitle("window.title.focusTimer");
         </div>
         <!-- Long break every -->
         <div class="flex flex-col gap-1">
-          <label for="ft-long-break-every" class="text-[0.65rem] text-muted-foreground/70">
+          <label for="ft-long-break-every" class="text-ui-base text-muted-foreground/70">
             {t("focusTimer.longBreakEvery")}
           </label>
           <input id="ft-long-break-every" type="number" min="1" max="10" bind:value={longBreakEvery}
                  disabled={phase !== "idle"}
                  oninput={() => selectedPreset = "custom"}
-                 class="w-full px-2 py-1 text-[0.78rem] rounded-md
+                 class="w-full px-2 py-1 text-ui-lg rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
                      focus:outline-none focus:ring-1 focus:ring-ring/40
@@ -580,7 +572,7 @@ useWindowTitle("window.title.focusTimer");
 
     <!-- Auto-label toggle -->
     <div class="w-full flex items-start gap-3 rounded-xl border border-border
-                dark:border-white/[0.07] bg-muted/20 px-3 py-2.5">
+                dark:border-white/[0.06] bg-muted/20 px-3 py-2.5">
       <input
         type="checkbox"
         id="auto-label"
@@ -588,10 +580,10 @@ useWindowTitle("window.title.focusTimer");
         class="mt-0.5 w-3.5 h-3.5 rounded accent-violet-500"
       />
       <div class="flex flex-col gap-0.5">
-        <label for="auto-label" class="text-[0.75rem] font-medium cursor-pointer">
+        <label for="auto-label" class="text-ui-md font-medium cursor-pointer">
           {t("focusTimer.autoLabel")}
         </label>
-        <p class="text-[0.62rem] text-muted-foreground/60 leading-snug">
+        <p class="text-ui-sm text-muted-foreground/60 leading-snug">
           {t("focusTimer.autoLabelDesc")}
         </p>
       </div>
@@ -599,7 +591,7 @@ useWindowTitle("window.title.focusTimer");
 
     <!-- TTS toggle -->
     <div class="w-full flex items-start gap-3 rounded-xl border border-border
-                dark:border-white/[0.07] bg-muted/20 px-3 py-2.5">
+                dark:border-white/[0.06] bg-muted/20 px-3 py-2.5">
       <input
         type="checkbox"
         id="ft-tts"
@@ -607,10 +599,10 @@ useWindowTitle("window.title.focusTimer");
         class="mt-0.5 w-3.5 h-3.5 rounded accent-violet-500"
       />
       <div class="flex flex-col gap-0.5">
-        <label for="ft-tts" class="text-[0.75rem] font-medium cursor-pointer">
+        <label for="ft-tts" class="text-ui-md font-medium cursor-pointer">
           {t("focusTimer.tts")}
         </label>
-        <p class="text-[0.62rem] text-muted-foreground/60 leading-snug">
+        <p class="text-ui-sm text-muted-foreground/60 leading-snug">
           {t("focusTimer.ttsDesc")}
         </p>
       </div>
@@ -620,7 +612,7 @@ useWindowTitle("window.title.focusTimer");
     {#if sessionsDone > 0 && phase === "idle"}
       <button
         onclick={handleReset}
-        class="text-[0.62rem] text-muted-foreground/40 hover:text-muted-foreground/70
+        class="text-ui-sm text-muted-foreground/40 hover:text-muted-foreground/70
                underline underline-offset-2 transition-colors"
       >
         {t("focusTimer.reset")} (reset counter)
@@ -628,7 +620,7 @@ useWindowTitle("window.title.focusTimer");
     {/if}
 
     <!-- ── Session Log ──────────────────────────────────────────────────── -->
-    <div class="w-full rounded-xl border border-border dark:border-white/[0.07]
+    <div class="w-full rounded-xl border border-border dark:border-white/[0.06]
                 bg-muted/10 overflow-hidden">
 
       <!-- Collapsible header -->
@@ -645,12 +637,12 @@ useWindowTitle("window.title.focusTimer");
             <rect x="1" y="3" width="14" height="12" rx="1.5"/>
             <path d="M1 7h14M5 1v4M11 1v4"/>
           </svg>
-          <span class="text-[0.68rem] font-semibold tracking-wide text-foreground/80">
+          <span class="text-ui-base font-semibold tracking-wide text-foreground/80">
             {t("focusTimer.log.title")}
           </span>
           {#if cyclesDone > 0}
-            <span class="text-[0.58rem] font-medium px-1.5 py-0.5 rounded-full
-                         bg-primary/12 text-primary">
+            <span class="text-ui-sm font-medium px-1.5 py-0.5 rounded-full
+                         bg-violet-500/12 text-violet-600 dark:text-violet-400">
               {cyclesDone === 1
                 ? t("focusTimer.log.cycles",      { n: cyclesDone })
                 : t("focusTimer.log.cyclesPlural", { n: cyclesDone })}
@@ -669,35 +661,35 @@ useWindowTitle("window.title.focusTimer");
       {#if logOpen}
         <!-- Summary stats strip -->
         {#if cyclesDone > 0 || sessionLog.length > 0}
-          <div class="grid grid-cols-3 divide-x divide-border dark:divide-white/[0.06]
-                      border-t border-border dark:border-white/[0.07]">
+          <div class="grid grid-cols-3 divide-x divide-border dark:divide-white/[0.05]
+                      border-t border-border dark:border-white/[0.06]">
             <!-- Focus total -->
             <div class="flex flex-col items-center py-2.5 gap-0.5">
-              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
-                           text-primary/70">
+              <span class="text-ui-2xs font-semibold uppercase tracking-widest
+                           text-violet-500/70">
                 {t("focusTimer.log.focusTime")}
               </span>
-              <span class="text-[0.82rem] font-bold tabular-nums text-primary">
+              <span class="text-ui-lg font-bold tabular-nums text-violet-600 dark:text-violet-400">
                 {fmtDuration(focusSecs)}
               </span>
             </div>
             <!-- Break total -->
             <div class="flex flex-col items-center py-2.5 gap-0.5">
-              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
+              <span class="text-ui-2xs font-semibold uppercase tracking-widest
                            text-green-500/70">
                 {t("focusTimer.log.breakTime")}
               </span>
-              <span class="text-[0.82rem] font-bold tabular-nums text-green-600 dark:text-green-400">
+              <span class="text-ui-lg font-bold tabular-nums text-green-600 dark:text-green-400">
                 {fmtDuration(breakSecs)}
               </span>
             </div>
             <!-- Combined total -->
             <div class="flex flex-col items-center py-2.5 gap-0.5">
-              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
+              <span class="text-ui-2xs font-semibold uppercase tracking-widest
                            text-muted-foreground/50">
                 {t("focusTimer.log.totalTime")}
               </span>
-              <span class="text-[0.82rem] font-bold tabular-nums text-foreground/70">
+              <span class="text-ui-lg font-bold tabular-nums text-foreground/70">
                 {fmtDuration(logTotalSecs)}
               </span>
             </div>
@@ -708,7 +700,7 @@ useWindowTitle("window.title.focusTimer");
         <div class="border-t border-border dark:border-white/[0.06]
                     max-h-52 overflow-y-auto flex flex-col">
           {#if sessionLog.length === 0}
-            <p class="text-center text-[0.62rem] text-muted-foreground/40
+            <p class="text-center text-ui-sm text-muted-foreground/40
                       italic py-4 px-3">
               {t("focusTimer.log.empty")}
             </p>
@@ -728,9 +720,9 @@ useWindowTitle("window.title.focusTimer");
                              :               'bg-green-500'}">
                 </span>
                 <!-- Phase name -->
-                <span class="text-[0.65rem] font-medium flex-1
+                <span class="text-ui-base font-medium flex-1
                              {isWork      ? 'text-blue-700 dark:text-blue-300'
-                             : isLongBreak ? 'text-violet-700 dark:text-violet-300'
+                             : isLongBreak ? 'text-violet-600 dark:text-violet-400'
                              :               'text-green-700 dark:text-green-300'}">
                   {isWork
                     ? t("focusTimer.log.work")
@@ -739,12 +731,12 @@ useWindowTitle("window.title.focusTimer");
                       : t("focusTimer.log.break")}
                 </span>
                 <!-- Duration -->
-                <span class="text-[0.6rem] tabular-nums font-semibold
+                <span class="text-ui-sm tabular-nums font-semibold
                              text-foreground/60">
                   {fmtDuration(entry.durationSecs)}
                 </span>
                 <!-- Time range: start → end -->
-                <span class="text-[0.56rem] tabular-nums text-muted-foreground/40
+                <span class="text-ui-xs tabular-nums text-muted-foreground/40
                              whitespace-nowrap">
                   {fmtTime(entry.startUtc)} → {fmtTime(entry.completedAt)}
                 </span>
@@ -759,7 +751,7 @@ useWindowTitle("window.title.focusTimer");
                       flex justify-end">
             <button
               onclick={clearLog}
-              class="text-[0.58rem] text-muted-foreground/40
+              class="text-ui-sm text-muted-foreground/40
                      hover:text-red-500/70 transition-colors underline
                      underline-offset-2 cursor-pointer">
               {t("focusTimer.log.clearDay")}

@@ -11,8 +11,8 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
+import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
 import { getDeviceStatus } from "$lib/daemon/client";
-import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import type { DeviceStatus } from "$lib/types";
 
@@ -40,7 +40,7 @@ onDestroy(() => unsubs.forEach((u) => u()));
 <div class="flex flex-col gap-3 py-2">
   {#if !connected}
     <div class="flex items-center gap-2 rounded-lg border border-amber-300/30 bg-amber-50 dark:bg-amber-950/20
-                px-3 py-2 text-[0.65rem] text-amber-700 dark:text-amber-400">
+                px-3 py-2 text-ui-base text-amber-700 dark:text-amber-400">
       <span>⚠</span>
       <span>{t("electrode.notConnected")}</span>
     </div>

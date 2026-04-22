@@ -15,11 +15,11 @@ interface Props {
 let { faa }: Props = $props();
 </script>
 
-<CollapsibleSection title={t("dashboard.faa")} dotColor="text-violet-500"
+<CollapsibleSection title={t("dashboard.faa")} dotColor="text-violet-600 dark:text-violet-400"
                     rootAttrs={{ role: "meter", "aria-label": t("dashboard.faa"),
                                  "aria-valuenow": Math.round(faa * 1000) / 1000, "aria-valuemin": -1, "aria-valuemax": 1 }}>
     <div class="flex items-center justify-end -mt-1 mb-0.5">
-      <span class="text-[0.65rem] font-bold tabular-nums shrink-0"
+      <span class="text-ui-base font-bold tabular-nums shrink-0"
             style="color:{Math.abs(faa) > 0.3 ? 'var(--color-violet-500)' : '#6b7280'}">
         {faa >= 0 ? "+" : ""}{faa.toFixed(3)}
       </span>

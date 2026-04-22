@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { applyPreferred, type DeviceBase, mergePairedIntoDevices, type PairedInfo } from "$lib/devices-logic";
+import { applyPreferred, type DeviceBase, mergePairedIntoDevices, type PairedInfo } from "$lib/settings/devices-logic";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

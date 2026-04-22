@@ -10,8 +10,8 @@ import {
   sortedSessionDays,
   timeStrToUtc,
   utcToTimeStr,
-} from "$lib/compare-logic";
-import type { EmbeddingSession } from "$lib/compare-types";
+} from "$lib/compare/compare-logic";
+import type { EmbeddingSession } from "$lib/compare/compare-types";
 
 const sess = (start: number, end: number, n = 10): EmbeddingSession => ({
   start_utc: start,

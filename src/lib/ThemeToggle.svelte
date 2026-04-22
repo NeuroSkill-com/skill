@@ -38,7 +38,7 @@ function onEnter() {
     tipEl = document.createElement("div");
     tipEl.className =
       "pointer-events-none rounded-md border border-neutral-200 dark:border-white/10 " +
-      "bg-white dark:bg-[#1a1a28] text-neutral-700 dark:text-neutral-200 shadow-md " +
+      "bg-surface-2 text-neutral-700 dark:text-neutral-200 shadow-md " +
       "px-2.5 py-1.5 text-center font-medium";
     tipEl.style.cssText = `position:fixed; top:${r.bottom + 6}px; left:${left}px; width:${tipW}px; z-index:2147483647; font-size:0.65rem;`;
     tipEl.textContent = label;

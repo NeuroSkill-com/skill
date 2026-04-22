@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { add3, fibSphere, length3, normalize3, scale3, turbo, turboCss, turboHex } from "$lib/graph3d-logic";
+import { add3, fibSphere, length3, normalize3, scale3, turbo, turboCss, turboHex } from "$lib/charts/graph3d-logic";
 
 describe("add3", () => {
   it("adds vectors", () => {

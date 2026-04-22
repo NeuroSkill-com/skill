@@ -10,7 +10,7 @@ import {
   isMuseDevice,
   redact,
   sigmoid100,
-} from "$lib/dashboard-logic";
+} from "$lib/dashboard/dashboard-logic";
 
 describe("sigmoid100", () => {
   it("returns ~50 at x=1 (midpoint)", () => {

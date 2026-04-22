@@ -35,7 +35,7 @@ let {
 
 <div
   class="rounded-xl border border-border dark:border-white/[0.04]
-         bg-muted dark:bg-[#1a1a28] px-3 py-2 flex flex-col gap-1.5"
+         bg-muted dark:bg-surface-2 px-3 py-2 flex flex-col gap-1.5"
   {...rootAttrs}
 >
   <button class="flex items-center gap-1.5 w-full group" onclick={() => (expanded = !expanded)} aria-expanded={expanded}>
@@ -45,7 +45,7 @@ let {
                 transition-transform duration-150 shrink-0 {expanded ? 'rotate-90' : ''}">
       <path d="M9 18l6-6-6-6"/>
     </svg>
-    <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground
+    <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground
                  group-hover:text-foreground transition-colors">{title}</span>
     <span class="text-[0.45rem] {dotColor} live-blink shrink-0" aria-hidden="true">●</span>
   </button>

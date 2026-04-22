@@ -111,10 +111,10 @@ async function dismiss() {
           </svg>
         </div>
         <div class="flex flex-col gap-0.5">
-          <span class="text-[0.9rem] font-bold leading-tight text-foreground">
+          <span class="text-ui-xl font-bold leading-tight text-foreground">
             {t("whatsNew.title")}
           </span>
-          <span class="text-[0.6rem] font-semibold text-muted-foreground/60 tracking-wide uppercase">
+          <span class="text-ui-sm font-semibold text-muted-foreground/60 tracking-wide uppercase">
             {current.version === "Unreleased"
               ? t("whatsNew.unreleased")
               : t("whatsNew.version", { version: current.version })}
@@ -135,7 +135,7 @@ async function dismiss() {
           onclick={goNewer}
           disabled={currentIdx === 0}
           aria-label={t("whatsNew.newer")}
-          class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[0.7rem]
+          class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-ui-md
                  font-medium text-muted-foreground
                  hover:text-foreground hover:bg-muted/60
                  disabled:opacity-30 disabled:cursor-not-allowed
@@ -152,8 +152,8 @@ async function dismiss() {
           <select
             aria-label="Select version"
             bind:value={currentIdx}
-            class="w-full appearance-none text-center text-[0.7rem] font-medium
-                   text-foreground bg-background dark:bg-[#14141e]
+            class="w-full appearance-none text-center text-ui-md font-medium
+                   text-foreground bg-background dark:bg-surface-1
                    border border-border/60 dark:border-white/[0.10]
                    rounded pl-2 pr-6 py-0.5 cursor-pointer
                    focus:outline-none focus:ring-1 focus:ring-violet-500/40">
@@ -177,7 +177,7 @@ async function dismiss() {
           onclick={goOlder}
           disabled={currentIdx === allVersions.length - 1}
           aria-label={t("whatsNew.older")}
-          class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[0.7rem]
+          class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-ui-md
                  font-medium text-muted-foreground
                  hover:text-foreground hover:bg-muted/60
                  disabled:opacity-30 disabled:cursor-not-allowed
@@ -194,19 +194,19 @@ async function dismiss() {
 
     <!-- ── Scrollable changelog body ──────────────────────────────────────── -->
     <div bind:this={scrollEl}
-         class="wn-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 text-[0.78rem]">
+         class="wn-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 text-ui-lg">
       <MarkdownRenderer content={current.body} />
     </div>
 
     <!-- ── Footer ─────────────────────────────────────────────────────────── -->
     <div class="px-6 py-4 border-t border-border dark:border-white/[0.06]
                 flex items-center justify-between shrink-0">
-      <span class="text-[0.68rem] text-muted-foreground/40 tabular-nums select-none">
+      <span class="text-ui-base text-muted-foreground/40 tabular-nums select-none">
         {currentIdx + 1}&thinsp;/&thinsp;{allVersions.length}
       </span>
       <button
         onclick={dismiss}
-        class="px-6 h-9 rounded-lg text-[0.78rem] font-semibold text-white
+        class="px-6 h-9 rounded-lg text-ui-lg font-semibold text-white
                bg-gradient-to-r from-violet-500 to-blue-600
                hover:from-violet-600 hover:to-blue-700
                shadow shadow-violet-500/20 dark:shadow-violet-500/30

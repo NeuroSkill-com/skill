@@ -44,15 +44,15 @@ const ICON_CLASSES: Record<ToastLevel, string> = {
       >
         <!-- Icon -->
         <div class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
-                    text-[0.7rem] font-bold {ICON_CLASSES[toast.level]}">
+                    text-ui-md font-bold {ICON_CLASSES[toast.level]}">
           {ICONS[toast.level]}
         </div>
 
         <!-- Content -->
         <div class="flex-1 min-w-0 pt-0.5">
-          <p class="text-[0.75rem] font-semibold leading-tight">{toast.title}</p>
+          <p class="text-ui-md font-semibold leading-tight">{toast.title}</p>
           {#if toast.message}
-            <p class="text-[0.67rem] opacity-80 leading-snug mt-0.5">{toast.message}</p>
+            <p class="text-ui-base opacity-80 leading-snug mt-0.5">{toast.message}</p>
           {/if}
         </div>
 
@@ -60,7 +60,7 @@ const ICON_CLASSES: Record<ToastLevel, string> = {
         <button
           onclick={() => dismissToast(toast.id)}
           class="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center
-                 opacity-50 hover:opacity-100 transition-opacity text-[0.65rem]"
+                 opacity-50 hover:opacity-100 transition-opacity text-ui-base"
           aria-label="Dismiss"
         >
           ✕

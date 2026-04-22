@@ -10,7 +10,7 @@
 // - Color mode logic
 
 import { describe, expect, it } from "vitest";
-import type { GraphNode } from "$lib/search-types";
+import type { GraphNode } from "$lib/search/search-types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

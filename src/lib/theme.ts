@@ -16,6 +16,12 @@
 
 // ── Base palette ──────────────────────────────────────────────────────────────
 
+// These hex constants are the canonical values used in inline `style=`
+// attributes where CSS variables can't be used (e.g. <canvas> drawing).
+//
+// For Tailwind utility classes, prefer the semantic tokens defined in
+// app.css: `text-success`, `bg-warning`, `border-danger`, etc.
+
 /** green-500  — success / connected / good signal / low load */
 export const C_GOOD = "#22c55e";
 /** yellow-500 — warning / scanning / fair signal / mid load */

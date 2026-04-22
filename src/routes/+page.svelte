@@ -10,11 +10,18 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import BandChart, { type BandSnapshot } from "$lib/BandChart.svelte";
+import BandChart, { type BandSnapshot } from "$lib/charts/BandChart.svelte";
+import EegChart, { type EventMarker, type SpectrogramColumn } from "$lib/charts/EegChart.svelte";
+import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
+import FnirsChart from "$lib/charts/FnirsChart.svelte";
+import GpuChart from "$lib/charts/GpuChart.svelte";
+import ImuChart, { type ImuPacket } from "$lib/charts/ImuChart.svelte";
+import PpgChart, { type PpgPacket } from "$lib/charts/PpgChart.svelte";
 // Device capabilities are now pushed as part of DeviceStatus from Rust.
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
+import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import {
@@ -47,15 +54,9 @@ import {
   HeadPoseCard,
   PpgMetrics,
 } from "$lib/dashboard";
-import EegChart, { type EventMarker, type SpectrogramColumn } from "$lib/EegChart.svelte";
-import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
-import FnirsChart from "$lib/FnirsChart.svelte";
-import GpuChart from "$lib/GpuChart.svelte";
-import ImuChart, { type ImuPacket } from "$lib/ImuChart.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { openBtSettings, openHistory, openLabel, openSettings, openUpdates } from "$lib/navigation";
 import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
-import PpgChart, { type PpgPacket } from "$lib/PpgChart.svelte";
 import { setBtOff } from "$lib/stores/bt-status.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -1031,7 +1032,7 @@ let onboardSteps = $derived([
 const knownUnpairedIds = new Set<string>();
 let dashboardDiscovered = $state<DiscoveredDevice[]>([]);
 const dashboardUnpaired = $derived(
-  dashboardDiscovered.filter(
+  (dashboardDiscovered ?? []).filter(
     (d) => !d.is_paired && d.last_rssi !== 0 && d.id !== "neurosky" && d.id !== "brainvision:127.0.0.1:51244",
   ),
 );
@@ -1592,7 +1593,7 @@ useWindowTitle("window.title.main");
 
         <div class="flex flex-col gap-0 flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="text-[0.7rem] font-semibold text-indigo-800 dark:text-indigo-300 truncate">
+            <span class="text-ui-md font-semibold text-indigo-800 dark:text-indigo-300 truncate">
               {status.device_name ?? status.iroh_client_name ?? "Remote device"}
             </span>
             <span class="relative flex h-1.5 w-1.5 shrink-0">
@@ -1600,7 +1601,7 @@ useWindowTitle("window.title.main");
               <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
             </span>
           </div>
-          <span class="text-[0.54rem] text-indigo-600/60 dark:text-indigo-400/50 truncate">
+          <span class="text-ui-xs text-indigo-600/60 dark:text-indigo-400/50 truncate">
             streamed from {pi?.phone_marketing_name ?? pi?.phone_name ?? status.iroh_client_name ?? "remote client"}
             {#if pi?.os} · {pi.os}{#if pi?.os_version} {pi.os_version}{/if}{/if}
             {#if pi?.app_version} · v{pi.app_version}{/if}
@@ -1610,8 +1611,8 @@ useWindowTitle("window.title.main");
 
         {#if pi?.battery_level != null && (pi?.battery_level ?? 0) > 0}
           <div class="flex items-center gap-1 shrink-0">
-            <span class="text-[0.54rem] text-indigo-600/50 dark:text-indigo-400/40">📱</span>
-            <span class="text-[0.58rem] font-semibold tabular-nums text-indigo-700/70 dark:text-indigo-300/60">
+            <span class="text-ui-xs text-indigo-600/50 dark:text-indigo-400/40">📱</span>
+            <span class="text-ui-sm font-semibold tabular-nums text-indigo-700/70 dark:text-indigo-300/60">
               {Math.round((pi?.battery_level ?? 0) * 100)}%
             </span>
           </div>
@@ -1630,18 +1631,18 @@ useWindowTitle("window.title.main");
                     px-3 py-2.5">
           <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
           <div class="flex flex-col gap-0 flex-1 min-w-0">
-            <span class="text-[0.68rem] font-semibold text-blue-700 dark:text-blue-300 leading-tight">
+            <span class="text-ui-base font-semibold text-blue-700 dark:text-blue-300 leading-tight">
               {t("model.downloading")}
             </span>
             {#if modelDl.download_status_msg}
-              <span class="text-[0.58rem] text-blue-600/70 dark:text-blue-400/70 truncate">
+              <span class="text-ui-sm text-blue-600/70 dark:text-blue-400/70 truncate">
                 {modelDl.download_status_msg}
               </span>
             {/if}
           </div>
           <button onclick={() => invoke("open_model_tab")}
                   aria-label={t("settingsTabs.eegModel")}
-                  class="shrink-0 text-[0.6rem] font-semibold text-blue-600 dark:text-blue-400
+                  class="shrink-0 text-ui-sm font-semibold text-blue-600 dark:text-blue-400
                          hover:text-blue-800 dark:hover:text-blue-200 transition-colors">
             {t("settingsTabs.eegModel")} ↗
           </button>
@@ -1653,21 +1654,21 @@ useWindowTitle("window.title.main");
                     px-3 py-2.5">
           <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
           <div class="flex flex-col gap-0 flex-1 min-w-0">
-            <span class="text-[0.68rem] font-semibold text-amber-700 dark:text-amber-300 leading-tight">
+            <span class="text-ui-base font-semibold text-amber-700 dark:text-amber-300 leading-tight">
               {t("model.autoRetryIn", { secs: String(modelDl.download_retry_in_secs) })}
               <span class="font-normal opacity-70">
                 · {t("model.autoRetryAttempt", { n: String(modelDl.download_retry_attempt + 1) })}
               </span>
             </span>
             {#if modelDl.download_status_msg && modelDl.download_status_msg !== "Download cancelled."}
-              <span class="text-[0.58rem] text-amber-600/70 dark:text-amber-400/70 truncate">
+              <span class="text-ui-sm text-amber-600/70 dark:text-amber-400/70 truncate">
                 {modelDl.download_status_msg}
               </span>
             {/if}
           </div>
           <button onclick={() => invoke("open_model_tab")}
                   aria-label={t("settingsTabs.eegModel")}
-                  class="shrink-0 text-[0.6rem] font-semibold text-amber-600 dark:text-amber-400
+                  class="shrink-0 text-ui-sm font-semibold text-amber-600 dark:text-amber-400
                          hover:text-amber-800 dark:hover:text-amber-200 transition-colors">
             {t("settingsTabs.eegModel")} ↗
           </button>
@@ -1678,7 +1679,7 @@ useWindowTitle("window.title.main");
 
   <Card class="w-full max-w-[1200px] gap-0 py-0
                border-border dark:border-white/[0.06]
-               bg-white dark:bg-[#14141e]">
+               bg-surface-1">
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
     <CardHeader class="relative overflow-hidden px-4 transition-[padding] duration-300
@@ -1695,7 +1696,7 @@ useWindowTitle("window.title.main");
 
           <Badge
             variant="outline"
-            class="text-[0.55rem] font-semibold tracking-widest uppercase px-2 py-0 rounded-full shrink-0"
+            class="text-ui-xs font-semibold tracking-widest uppercase px-2 py-0 rounded-full shrink-0"
             style="background:{sc.badge}; color:{sc.text}; border-color:{sc.border}"
           >
             {#if status.state === "scanning"}{t("dashboard.scanning")}
@@ -1714,20 +1715,20 @@ useWindowTitle("window.title.main");
           {/if}
           {#if status.device_name && status.state === "connected"}
             <div class="min-w-0 flex-1 leading-tight">
-              <div class="text-[0.65rem] text-muted-foreground truncate">
+              <div class="text-ui-base text-muted-foreground truncate">
                 {status.device_name}
                 {#if sourceLabel}
-                  <span class="ml-1 text-[0.48rem] font-bold tracking-widest uppercase px-1 py-0.5
+                  <span class="ml-1 text-ui-2xs font-bold tracking-widest uppercase px-1 py-0.5
                                rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
                 {/if}
                 {#if hasSecondary}
                   <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
                                rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
-                  <span class="text-[0.48rem] text-violet-500/60">+{secondarySessions.length}</span>
+                  <span class="text-ui-2xs text-violet-500/60">+{secondarySessions.length}</span>
                 {/if}
               </div>
               {#if connectedDeviceId}
-                <div class="font-mono text-[0.5rem] text-muted-foreground/55 truncate">{connectedDeviceId}</div>
+                <div class="font-mono text-ui-2xs text-muted-foreground/55 truncate">{connectedDeviceId}</div>
               {/if}
             </div>
           {:else}
@@ -1767,7 +1768,7 @@ useWindowTitle("window.title.main");
           <!-- Label and history buttons moved to titlebar -->
 
           <!-- Status ring -->
-          <div class="status-ring bg-slate-100 dark:bg-[#1a1a28]" style="--rc:{sc.ring}">
+          <div class="status-ring bg-slate-100 dark:bg-surface-2" style="--rc:{sc.ring}">
             <div class="status-dot" style="background:{sc.ring}"></div>
           </div>
 
@@ -1775,7 +1776,7 @@ useWindowTitle("window.title.main");
 
           <Badge
             variant="outline"
-            class="text-[0.65rem] font-semibold tracking-widest uppercase px-3 py-0.5 rounded-full transition-all"
+            class="text-ui-base font-semibold tracking-widest uppercase px-3 py-0.5 rounded-full transition-all"
             style="background:{sc.badge}; color:{sc.text}; border-color:{sc.border}"
           >
             {#if status.state === "scanning" || status.state === "connecting"}
@@ -1800,10 +1801,10 @@ useWindowTitle("window.title.main");
 
           {#if status.device_name && status.state === "connected"}
             <div class="-mt-1 text-center">
-              <p class="text-[0.73rem] text-muted-foreground font-medium">
+              <p class="text-ui-md text-muted-foreground font-medium">
                 {status.device_name}
                 {#if sourceLabel}
-                  <span class="ml-1.5 text-[0.5rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                  <span class="ml-1.5 text-ui-2xs font-bold tracking-widest uppercase px-1.5 py-0.5
                                rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
                 {/if}
                 {#if hasSecondary}
@@ -1812,7 +1813,7 @@ useWindowTitle("window.title.main");
                 {/if}
               </p>
               {#if connectedDeviceId}
-                <p class="font-mono text-[0.58rem] text-muted-foreground/60">{connectedDeviceId}</p>
+                <p class="font-mono text-ui-sm text-muted-foreground/60">{connectedDeviceId}</p>
               {/if}
             </div>
             {#if status.serial_number || status.mac_address || status.firmware_version}
@@ -1821,7 +1822,7 @@ useWindowTitle("window.title.main");
                   <button
                     onclick={() => revealSN = !revealSN}
                     title={revealSN ? t("common.clickToHide") : t("common.clickToReveal")}
-                    class="font-mono text-[0.6rem] text-muted-foreground/70 hover:text-muted-foreground
+                    class="font-mono text-ui-sm text-muted-foreground/70 hover:text-muted-foreground
                            cursor-pointer select-none transition-colors">
                     SN&nbsp;{revealSN ? status.serial_number : redact(status.serial_number)}
                   </button>
@@ -1830,13 +1831,13 @@ useWindowTitle("window.title.main");
                   <button
                     onclick={() => revealMAC = !revealMAC}
                     title={revealMAC ? t("common.clickToHide") : t("common.clickToReveal")}
-                    class="font-mono text-[0.6rem] text-muted-foreground/70 hover:text-muted-foreground
+                    class="font-mono text-ui-sm text-muted-foreground/70 hover:text-muted-foreground
                            cursor-pointer select-none transition-colors">
                     {revealMAC ? status.mac_address : redact(status.mac_address)}
                   </button>
                 {/if}
                 {#if status.firmware_version}
-                  <span class="font-mono text-[0.6rem] text-muted-foreground/70">
+                  <span class="font-mono text-ui-sm text-muted-foreground/70">
                     fw&nbsp;{status.firmware_version}
                   </span>
                 {/if}
@@ -1852,19 +1853,19 @@ useWindowTitle("window.title.main");
                       onclick={() => { showDeviceSwitcher = false; connectDevice(dev.id); }}
                       class="flex items-center justify-between gap-2 rounded-lg
                              border border-border dark:border-white/[0.06]
-                             bg-muted/60 dark:bg-[#1a1a28] px-3 py-1.5
-                             hover:border-primary/40 hover:bg-primary/5
+                             bg-muted/60 dark:bg-surface-2 px-3 py-1.5
+                             hover:border-violet-500/40 hover:bg-violet-500/5
                              transition-colors group">
-                      <span class="text-[0.65rem] font-medium text-foreground/70 group-hover:text-foreground truncate">
+                      <span class="text-ui-base font-medium text-foreground/70 group-hover:text-foreground truncate">
                         {dev.name}
                       </span>
-                      <span class="text-[0.52rem] font-semibold text-primary/70 group-hover:text-primary shrink-0">
+                      <span class="text-ui-xs font-semibold text-violet-600 dark:text-violet-400/70 group-hover:text-violet-600 shrink-0">
                         {t("dashboard.switchTo")}
                       </span>
                     </button>
                   {/each}
                   <button onclick={() => showDeviceSwitcher = false}
-                          class="text-[0.5rem] text-muted-foreground/40 hover:text-muted-foreground/70
+                          class="text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground/70
                                  transition-colors self-center mt-0.5">
                     {t("common.cancel")}
                   </button>
@@ -1872,7 +1873,7 @@ useWindowTitle("window.title.main");
               {:else}
                 <button
                   onclick={() => showDeviceSwitcher = true}
-                  class="text-[0.55rem] text-muted-foreground/50 hover:text-primary/80
+                  class="text-ui-xs text-muted-foreground/50 hover:text-violet-600/80
                          transition-colors mt-0.5 flex items-center gap-1">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -1888,7 +1889,7 @@ useWindowTitle("window.title.main");
             <!-- Disconnect button -->
             <button
               onclick={cancelRetry}
-              class="text-[0.55rem] text-muted-foreground/50 hover:text-destructive
+              class="text-ui-xs text-muted-foreground/50 hover:text-destructive
                      transition-colors mt-0.5 flex items-center gap-1">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -1909,7 +1910,7 @@ useWindowTitle("window.title.main");
 
       {#if status.iroh_tunnel_online && status.state !== "connected"}
         <div class="rounded-lg border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-1.5">
-          <p class="text-[0.58rem] text-indigo-700 dark:text-indigo-300">
+          <p class="text-ui-sm text-indigo-700 dark:text-indigo-300">
             iroh online ({status.iroh_connected_peers ?? 1} peer{(status.iroh_connected_peers ?? 1) !== 1 ? "s" : ""})
             {#if status.iroh_remote_device_connected} · iOS BLE connected{:else} · waiting for iOS BLE{/if}
             {#if status.iroh_eeg_streaming_active} · EEG live{:else if status.iroh_streaming_active} · link live{:else} · idle{/if}
@@ -1942,10 +1943,10 @@ useWindowTitle("window.title.main");
           </div>
 
           <div class="flex flex-col items-center gap-1 text-center">
-            <p class="text-[0.85rem] font-semibold text-red-700 dark:text-red-400">
+            <p class="text-ui-lg font-semibold text-red-700 dark:text-red-400">
               {t("dashboard.bluetoothIsOff")}
             </p>
-            <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[220px]">
+            <p class="text-ui-md text-muted-foreground leading-relaxed max-w-[220px]">
               {t("dashboard.turnOnBluetooth")}
             </p>
           </div>
@@ -1962,10 +1963,10 @@ useWindowTitle("window.title.main");
       {:else if status.device_error && status.state === "disconnected"}
         {#if status.device_error === "NO_MUSE_NEARBY"}
           <div class="rounded-xl border border-amber-400/30 bg-amber-50 dark:bg-amber-950/20 p-3.5 flex flex-col gap-3">
-            <p class="text-[0.8rem] font-semibold text-amber-800 dark:text-amber-300">
+            <p class="text-ui-lg font-semibold text-amber-800 dark:text-amber-300">
               {t("dashboard.noMuseNearbyTitle")}
             </p>
-            <ul class="flex flex-col gap-1 text-[0.7rem] text-muted-foreground leading-relaxed pl-1">
+            <ul class="flex flex-col gap-1 text-ui-md text-muted-foreground leading-relaxed pl-1">
               <li>• {t("dashboard.noMuseNearbyHint1")}</li>
               <li>• {t("dashboard.noMuseNearbyHint2")}</li>
               <li>• {t("dashboard.noMuseNearbyHint3")}</li>
@@ -1976,11 +1977,11 @@ useWindowTitle("window.title.main");
             </div>
           </div>
         {:else if status.device_error.includes("EEG stream not available") || status.device_error.includes("-32230")}
-          <div class="rounded-xl border border-violet-400/30 bg-violet-50 dark:bg-violet-950/20 p-3.5 flex flex-col gap-3">
-            <p class="text-[0.8rem] font-semibold text-violet-800 dark:text-violet-300">
+          <div class="rounded-xl border border-violet-500/30 bg-violet-500/5 dark:bg-violet-500/20 p-3.5 flex flex-col gap-3">
+            <p class="text-ui-lg font-semibold text-violet-600 dark:text-violet-400">
               EEG Access Not Available
             </p>
-            <p class="text-[0.7rem] text-muted-foreground leading-relaxed">
+            <p class="text-ui-md text-muted-foreground leading-relaxed">
               Your Emotiv Cortex App does not have raw EEG data access enabled for this headset.
               To stream EEG, enable the <strong>Raw EEG</strong> data stream in your Cortex App settings.
             </p>
@@ -1993,7 +1994,7 @@ useWindowTitle("window.title.main");
           </div>
         {:else}
           <div class="rounded-xl border border-red-400/30 bg-red-50 dark:bg-[#1a0a0a] p-3.5 flex flex-col gap-3">
-            <pre class="font-mono text-[0.67rem] text-red-600 dark:text-red-400 leading-relaxed whitespace-pre-wrap">{status.device_error}</pre>
+            <pre class="font-mono text-ui-base text-red-600 dark:text-red-400 leading-relaxed whitespace-pre-wrap">{status.device_error}</pre>
             <div class="flex gap-2">
               <Button size="sm" onclick={retryConnect}>{t("common.retry")}</Button>
               <Button size="sm" variant="outline" onclick={openBtSettings}>{t("dashboard.openSettings")}</Button>
@@ -2022,11 +2023,11 @@ useWindowTitle("window.title.main");
                 {status.retry_countdown_secs}
               </span>
             </div>
-            <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
+            <p class="text-ui-md text-muted-foreground text-center leading-relaxed">
               {t("dashboard.retryCountdown", { secs: String(status.retry_countdown_secs) })}
             </p>
             {#if status.retry_attempt > 0}
-              <p class="text-[0.55rem] text-muted-foreground/50 text-center">
+              <p class="text-ui-xs text-muted-foreground/50 text-center">
                 {t("dashboard.retryAttempt", { n: String(status.retry_attempt) })}
               </p>
             {/if}
@@ -2039,14 +2040,14 @@ useWindowTitle("window.title.main");
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
             {#if connectingTarget}
               <div class="text-center leading-relaxed">
-                <p class="text-[0.73rem] text-muted-foreground max-w-full break-words">
+                <p class="text-ui-md text-muted-foreground max-w-full break-words">
                   {t("dashboard.connectingTo", { name: connectingTarget.name })}
                 </p>
                 {#if connectingTarget.id}
-                  <p class="font-mono text-[0.58rem] text-muted-foreground/60 max-w-full break-all">{connectingTarget.id}</p>
+                  <p class="font-mono text-ui-sm text-muted-foreground/60 max-w-full break-all">{connectingTarget.id}</p>
                 {/if}
                 {#if (status.target_id?.startsWith("peer:") || status.target_name?.startsWith("peer:") || status.iroh_tunnel_online) && !status.device_name}
-                  <p class="text-[0.56rem] text-indigo-600/70 dark:text-indigo-300/70 mt-1">
+                  <p class="text-ui-xs text-indigo-600/70 dark:text-indigo-300/70 mt-1">
                     {#if status.iroh_tunnel_online}
                       iroh tunnel online{#if status.iroh_client_name} ({status.iroh_client_name}){/if}
                     {:else}
@@ -2068,7 +2069,7 @@ useWindowTitle("window.title.main");
                 {/if}
               </div>
             {:else}
-              <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
+              <p class="text-ui-md text-muted-foreground text-center leading-relaxed">
                 {isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : t("dashboard.lookingForMuse")}
               </p>
             {/if}
@@ -2077,7 +2078,7 @@ useWindowTitle("window.title.main");
             <!-- Switch to a different paired device while scanning -->
             {#if status.paired_devices.length > 1 || (status.paired_devices.length > 0 && !status.target_id)}
               <div class="w-full mt-1">
-                <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground mb-1.5 text-center">
+                <p class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground mb-1.5 text-center">
                   {t("dashboard.connectDifferent")}
                 </p>
                 <div class="flex flex-col gap-1">
@@ -2086,13 +2087,13 @@ useWindowTitle("window.title.main");
                       onclick={() => connectDevice(dev.id)}
                       class="flex items-center justify-between gap-2 rounded-lg
                              border border-border dark:border-white/[0.06]
-                             bg-muted dark:bg-[#1a1a28] px-3 py-1.5
-                             hover:border-primary/40 hover:bg-primary/5
+                             bg-muted dark:bg-surface-2 px-3 py-1.5
+                             hover:border-violet-500/40 hover:bg-violet-500/5
                              transition-colors group">
-                      <span class="text-[0.68rem] font-medium text-foreground/70 group-hover:text-foreground truncate">
+                      <span class="text-ui-base font-medium text-foreground/70 group-hover:text-foreground truncate">
                         {dev.name}
                       </span>
-                      <span class="text-[0.52rem] font-semibold text-primary/70 group-hover:text-primary shrink-0">
+                      <span class="text-ui-xs font-semibold text-violet-600 dark:text-violet-400/70 group-hover:text-violet-600 shrink-0">
                         {t("common.connect")}
                       </span>
                     </button>
@@ -2112,12 +2113,12 @@ useWindowTitle("window.title.main");
         {#if hasBattery}
         <div class="flex items-center gap-2.5" role="meter" aria-label={t("dashboard.battery")}
              aria-valuenow={status.battery ?? 0} aria-valuemin={0} aria-valuemax={100}>
-          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.battery")}</span>
+          <SectionHeader>{t("dashboard.battery")}</SectionHeader>
           <div class="flex-1 h-1.5 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden" aria-hidden="true">
             <div class="h-full rounded-full transition-all duration-500"
               style="width:{status.battery}%; background:{battColor(status.battery)}"></div>
           </div>
-          <span class="text-[0.56rem] font-semibold text-muted-foreground tabular-nums w-8 text-right">
+          <span class="text-ui-xs font-semibold text-muted-foreground tabular-nums w-8 text-right">
             {(status.battery ?? 0).toFixed(0)}%
           </span>
           {#if status.temperature_raw > 0}
@@ -2133,7 +2134,7 @@ useWindowTitle("window.title.main");
           {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : null}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-emerald-500/10 border border-emerald-500/20 w-fit">
-            <span class="text-[0.55rem] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide">
+            <span class="text-ui-xs font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide">
               {chLabels.length}ch{#if sr} · {sr} Hz{/if}{#if sourceLabel} · {sourceLabel}{/if}
             </span>
           </div>
@@ -2147,18 +2148,16 @@ useWindowTitle("window.title.main");
           {@const qPoor = visibleQ.filter(q => q === 'poor').length}
           {@const qNone = chLabels.length - qGood - qFair - qPoor}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2.5"
+                      bg-muted dark:bg-surface-2 px-3 py-2.5"
               role="group" aria-label={t("dashboard.signal")}>
             <button class="flex items-center gap-2 w-full" onclick={() => signalExpanded = !signalExpanded}>
-              <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-                {t("dashboard.signal")}
-              </span>
+              <SectionHeader>{t("dashboard.signal")}</SectionHeader>
               <!-- Compact summary dots -->
               <div class="flex items-center gap-1 flex-1 min-w-0">
-                {#if qGood > 0}<span class="text-[0.48rem] font-bold text-emerald-500">{qGood}✓</span>{/if}
-                {#if qFair > 0}<span class="text-[0.48rem] font-bold text-amber-500">{qFair}~</span>{/if}
-                {#if qPoor > 0}<span class="text-[0.48rem] font-bold text-red-500">{qPoor}✗</span>{/if}
-                {#if qNone > 0}<span class="text-[0.48rem] font-bold text-muted-foreground/40">{qNone}—</span>{/if}
+                {#if qGood > 0}<span class="text-ui-2xs font-bold text-emerald-500">{qGood}✓</span>{/if}
+                {#if qFair > 0}<span class="text-ui-2xs font-bold text-amber-500">{qFair}~</span>{/if}
+                {#if qPoor > 0}<span class="text-ui-2xs font-bold text-red-500">{qPoor}✗</span>{/if}
+                {#if qNone > 0}<span class="text-ui-2xs font-bold text-muted-foreground/40">{qNone}—</span>{/if}
               </div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                    stroke-linecap="round" stroke-linejoin="round"
@@ -2179,8 +2178,8 @@ useWindowTitle("window.title.main");
                         {/if}
                       </circle>
                     </svg>
-                    <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
-                    <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
+                    <span class="text-ui-sm font-semibold text-muted-foreground">{ch}</span>
+                    <span class="text-ui-xs text-muted-foreground/60 leading-none"
                           style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
                   </div>
                 {/each}
@@ -2191,7 +2190,7 @@ useWindowTitle("window.title.main");
           <!-- Electrode placement toggle -->
           <button
             onclick={() => showElectrodes = !showElectrodes}
-            class="flex items-center gap-1.5 text-[0.52rem] font-medium text-muted-foreground/60
+            class="flex items-center gap-1.5 text-ui-xs font-medium text-muted-foreground/60
                   hover:text-muted-foreground transition-colors -mt-0.5"
             aria-expanded={showElectrodes}
             aria-controls="electrode-guide">
@@ -2210,49 +2209,49 @@ useWindowTitle("window.title.main");
           <div class="rounded-lg border border-blue-500/20 dark:border-blue-400/15
                       bg-blue-50/60 dark:bg-blue-500/[0.07]
                       px-3 py-2 flex gap-2 items-start xl:col-span-2">
-            <span class="text-blue-500 dark:text-blue-400 shrink-0 text-[0.7rem] leading-none mt-px">ℹ</span>
-            <p class="text-[0.58rem] leading-relaxed text-blue-900/70 dark:text-blue-200/55">
+            <span class="text-blue-500 dark:text-blue-400 shrink-0 text-ui-md leading-none mt-px">ℹ</span>
+            <p class="text-ui-sm leading-relaxed text-blue-900/70 dark:text-blue-200/55">
               {t("disclaimer.exgPlacement")}
             </p>
           </div>
         {:else}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5 xl:col-span-2">
-            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Modalities</span>
+                      bg-muted dark:bg-surface-2 px-3 py-2.5 flex flex-col gap-1.5 xl:col-span-2">
+            <SectionHeader>Modalities</SectionHeader>
             {#if hasFnirs && fnirsLabels.length > 0}
-              <div class="text-[0.58rem] text-muted-foreground">fNIRS: {fnirsLabels.join(" · ")}</div>
+              <div class="text-ui-sm text-muted-foreground">fNIRS: {fnirsLabels.join(" · ")}</div>
               <div class="grid grid-cols-3 gap-1.5 mt-1">
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Oxy</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_oxygenation_pct ?? 0).toFixed(1)}%</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_oxygenation_pct ?? 0).toFixed(1)}%</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Workload</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_workload ?? 0).toFixed(1)}</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_workload ?? 0).toFixed(1)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Lat</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_lateralization ?? 0).toFixed(1)}</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_lateralization ?? 0).toFixed(1)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbO</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{((((status.fnirs_hbo_left ?? 0) + (status.fnirs_hbo_right ?? 0)) / 2)).toFixed(3)}</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{((((status.fnirs_hbo_left ?? 0) + (status.fnirs_hbo_right ?? 0)) / 2)).toFixed(3)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbR</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{((((status.fnirs_hbr_left ?? 0) + (status.fnirs_hbr_right ?? 0)) / 2)).toFixed(3)}</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{((((status.fnirs_hbr_left ?? 0) + (status.fnirs_hbr_right ?? 0)) / 2)).toFixed(3)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
                   <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Conn</div>
-                  <div class="text-[0.62rem] font-semibold text-foreground">{(status.fnirs_connectivity ?? 0).toFixed(3)}</div>
+                  <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_connectivity ?? 0).toFixed(3)}</div>
                 </div>
               </div>
             {/if}
             {#if ppgLabels.length > 0}
-              <div class="text-[0.58rem] text-muted-foreground">PPG: {ppgLabels.join(" · ")}</div>
+              <div class="text-ui-sm text-muted-foreground">PPG: {ppgLabels.join(" · ")}</div>
             {/if}
             {#if imuLabels.length > 0}
-              <div class="text-[0.58rem] text-muted-foreground">IMU: {imuLabels.join(" · ")}</div>
+              <div class="text-ui-sm text-muted-foreground">IMU: {imuLabels.join(" · ")}</div>
             {/if}
           </div>
           {#if hasFnirs}
@@ -2307,7 +2306,7 @@ useWindowTitle("window.title.main");
         <!-- PPG Optical (single tile, 3 channels — devices with PPG) -->
         {#if hasPpg && (status.ppg_sample_count > 0 || status.state === "connected")}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5">
+                      bg-muted dark:bg-surface-2 px-3 py-2.5 flex flex-col gap-1.5">
             <button class="flex items-center gap-1.5 w-full group"
                     onclick={() => (ppgOpticalExpanded = !ppgOpticalExpanded)}
                     aria-expanded={ppgOpticalExpanded}>
@@ -2318,14 +2317,14 @@ useWindowTitle("window.title.main");
                           {ppgOpticalExpanded ? 'rotate-90' : ''}">
                 <path d="M9 18l6-6-6-6"/>
               </svg>
-              <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground
+              <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground
                            group-hover:text-foreground transition-colors">
                 {t("dashboard.ppg")}
               </span>
               {#if status.ppg_sample_count > 0}
-                <span class="text-[0.5rem] text-red-500 live-blink" aria-hidden="true">●</span>
+                <span class="text-ui-2xs text-red-500 live-blink" aria-hidden="true">●</span>
               {/if}
-              <span class="ml-auto text-[0.48rem] text-muted-foreground/40 tabular-nums">
+              <span class="ml-auto text-ui-2xs text-muted-foreground/40 tabular-nums">
                 {status.ppg_sample_count.toLocaleString()} {t("dashboard.ppgSamples")}
               </span>
             </button>
@@ -2339,7 +2338,7 @@ useWindowTitle("window.title.main");
         {#if hasImuCap}
         {@const hasImuData = status.accel.some(v => v !== 0) || status.gyro.some(v => v !== 0)}
         <div class="rounded-xl border border-border dark:border-white/[0.04]
-                    bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5">
+                    bg-muted dark:bg-surface-2 px-3 py-2.5 flex flex-col gap-1.5">
           <button class="flex items-center gap-1.5 w-full group"
                   onclick={() => (imuExpanded = !imuExpanded)}
                   aria-expanded={imuExpanded}>
@@ -2350,7 +2349,7 @@ useWindowTitle("window.title.main");
                         {imuExpanded ? 'rotate-90' : ''}">
               <path d="M9 18l6-6-6-6"/>
             </svg>
-            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground
+            <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground
                          group-hover:text-foreground transition-colors">
               {t("dashboard.imu")}
             </span>
@@ -2367,7 +2366,7 @@ useWindowTitle("window.title.main");
         {#if hasEeg}
           <!-- EEG channel grid -->
           <div class="rounded-xl border border-border dark:border-white/[0.04]
-                      bg-muted dark:bg-[#1a1a28] px-3 py-2 flex flex-col gap-1.5">
+                      bg-muted dark:bg-surface-2 px-3 py-2 flex flex-col gap-1.5">
             <button class="flex items-center gap-1.5 w-full group"
                     onclick={() => (eegChExpanded = !eegChExpanded)}
                     aria-expanded={eegChExpanded}>
@@ -2378,7 +2377,7 @@ useWindowTitle("window.title.main");
                           {eegChExpanded ? 'rotate-90' : ''}">
                 <path d="M9 18l6-6-6-6"/>
               </svg>
-              <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground
+              <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground
                            group-hover:text-foreground transition-colors">
                 {t("dashboard.eegChannels")}
               </span>
@@ -2388,10 +2387,10 @@ useWindowTitle("window.title.main");
               <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
                 {#each chLabels as ch, i}
                   <div class="min-w-0 rounded-lg border border-border dark:border-white/[0.04]
-                              bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5"
+                              bg-muted dark:bg-surface-2 px-2 py-1.5 flex flex-col gap-0.5"
                     style="border-left-color:{chColors[i]}; border-left-width:2px">
-                    <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{ch}</span>
-                    <span class="font-mono text-[0.72rem] font-semibold truncate" style="color:{chColors[i]}">{fmtEeg(status.eeg[i])}</span>
+                    <span class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground truncate">{ch}</span>
+                    <span class="font-mono text-ui-md font-semibold truncate" style="color:{chColors[i]}">{fmtEeg(status.eeg[i])}</span>
                   </div>
                 {/each}
               </div>
@@ -2401,15 +2400,15 @@ useWindowTitle("window.title.main");
 
         <!-- Daily goal progress -->
         <div class="rounded-lg border border-border dark:border-white/[0.06]
-                    bg-muted dark:bg-[#1a1a28] px-3 py-2 flex items-center gap-2.5">
-          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
+                    bg-muted dark:bg-surface-2 px-3 py-2 flex items-center gap-2.5">
+          <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
             {t("dashboard.dailyGoal")}
           </span>
           <div class="flex-1 h-2 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
             <div class="h-full rounded-full transition-all duration-700"
                  style="width:{goalPct}%; background:{goalReached ? '#22c55e' : '#3b82f6'}"></div>
           </div>
-          <span class="text-[0.58rem] font-bold tabular-nums shrink-0
+          <span class="text-ui-sm font-bold tabular-nums shrink-0
                        {goalReached ? 'text-emerald-500' : 'text-muted-foreground'}">
             {Math.floor(todayTotalSecs / 60)}m / {dailyGoalMin}m
           </span>
@@ -2426,9 +2425,9 @@ useWindowTitle("window.title.main");
             [t("dashboard.todayTotal"), fmtUptime(todayTotalSecs)],
           ] as [label, val]}
             <div class="flex-1 min-w-0 rounded-lg border border-border dark:border-white/[0.06]
-                        bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5">
+                        bg-muted dark:bg-surface-2 px-2 py-1.5 flex flex-col gap-0.5">
               <span class="text-[0.42rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{label}</span>
-              <span class="font-mono text-[0.6rem] text-muted-foreground truncate">{val}</span>
+              <span class="font-mono text-ui-sm text-muted-foreground truncate">{val}</span>
             </div>
           {/each}
         </div>
@@ -2437,9 +2436,9 @@ useWindowTitle("window.title.main");
         {#if status.csv_path}
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
-                        bg-muted dark:bg-[#0f0f1a] px-3 py-2">
-              <span class="text-[0.57rem] font-bold text-red-500 shrink-0">{t("dashboard.rec")}</span>
-              <span class="font-mono text-[0.6rem] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap">
+                        bg-muted dark:bg-surface-3 px-3 py-2">
+              <span class="text-ui-xs font-bold text-red-500 shrink-0">{t("dashboard.rec")}</span>
+              <span class="font-mono text-ui-sm text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap">
                 {csvName(status.csv_path)}
               </span>
             </div>
@@ -2447,14 +2446,14 @@ useWindowTitle("window.title.main");
             <!-- Recent label badge -->
             {#if recentLabel}
               <div class="flex items-center gap-1.5 px-2.5 py-1
-                          rounded-md border border-violet-500/25 bg-violet-500/8 dark:bg-violet-500/10">
+                          rounded-md border border-primary/25 bg-violet-500/8 dark:bg-violet-500/10">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                     class="w-2.5 h-2.5 shrink-0 text-violet-400">
+                     class="w-2.5 h-2.5 shrink-0 text-violet-600 dark:text-violet-400">
                   <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
                   <line x1="7" y1="7" x2="7.01" y2="7"/>
                 </svg>
-                <span class="text-[0.58rem] text-violet-600 dark:text-violet-300 truncate flex-1">
+                <span class="text-ui-sm text-violet-600 dark:text-violet-400 truncate flex-1">
                   {recentLabel}
                 </span>
                 <button onclick={() => recentLabel = null}
@@ -2472,7 +2471,7 @@ useWindowTitle("window.title.main");
                 onclick={openLabel}
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-md
                        border border-dashed border-border dark:border-white/[0.08]
-                       text-[0.58rem] text-muted-foreground/50
+                       text-ui-sm text-muted-foreground/50
                        hover:text-muted-foreground hover:border-muted-foreground/40
                        transition-colors w-full"
               >
@@ -2502,24 +2501,24 @@ useWindowTitle("window.title.main");
       <!-- ════ DISCONNECTED ══════════════════════════════════════════════════ -->
       {:else}
         {#if status.paired_devices.length > 0}
-          <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.pairedDevices")}</p>
+          <SectionHeader>{t("dashboard.pairedDevices")}</SectionHeader>
           <div class="flex flex-col gap-1.5">
             {#each status.paired_devices as dev (dev.id)}
               <div class="flex items-center justify-between gap-2 rounded-xl
                           border border-border dark:border-white/[0.06]
-                          bg-muted dark:bg-[#1a1a28] px-3 py-2">
+                          bg-muted dark:bg-surface-2 px-3 py-2">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-[0.77rem] font-semibold text-foreground/80 dark:text-slate-400 truncate">{dev.name}</span>
-                  <span class="font-mono text-[0.57rem] text-muted-foreground/60 truncate">{dev.id}</span>
+                  <span class="text-ui-md font-semibold text-foreground/80 dark:text-slate-400 truncate">{dev.name}</span>
+                  <span class="font-mono text-ui-xs text-muted-foreground/60 truncate">{dev.id}</span>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   <Button size="sm" variant="outline"
-                    class="h-5 px-2 text-[0.56rem]"
+                    class="h-5 px-2 text-ui-xs"
                     onclick={() => setDefaultDevice(dev.id)}>
                     {t("settings.setDefault")}
                   </Button>
                   <Button size="sm"
-                    class="h-5 px-2 text-[0.56rem]"
+                    class="h-5 px-2 text-ui-xs"
                     onclick={() => connectDevice(dev.id)}>
                     {t("common.connect")}
                   </Button>
@@ -2532,16 +2531,14 @@ useWindowTitle("window.title.main");
           </div>
           {#if dashboardUnpaired.length > 0}
             <div class="mt-1 flex flex-col gap-1.5">
-              <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground">
-                {t("devices.discoveredDevices")}
-              </p>
+              <SectionHeader>{t("devices.discoveredDevices")}</SectionHeader>
               {#each dashboardUnpaired.slice(0, 4) as dev (dev.id)}
-                <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-[#1a1a28] px-3 py-1.5">
+                <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-surface-2 px-3 py-1.5">
                   <div class="min-w-0 flex flex-col">
-                    <span class="text-[0.68rem] font-semibold text-foreground/80 truncate">{dev.name}</span>
-                    <span class="font-mono text-[0.52rem] text-muted-foreground/60 truncate">{dev.id}</span>
+                    <span class="text-ui-base font-semibold text-foreground/80 truncate">{dev.name}</span>
+                    <span class="font-mono text-ui-xs text-muted-foreground/60 truncate">{dev.id}</span>
                   </div>
-                  <Button size="sm" variant="outline" class="h-5 px-2 text-[0.56rem]" onclick={() => pairFromDashboard(dev.id)}>
+                  <Button size="sm" variant="outline" class="h-5 px-2 text-ui-xs" onclick={() => pairFromDashboard(dev.id)}>
                     {t("settings.pair")}
                   </Button>
                 </div>
@@ -2549,31 +2546,31 @@ useWindowTitle("window.title.main");
             </div>
           {/if}
           <div class="flex gap-2">
-            <Button size="sm" variant="outline" class="flex-1 text-[0.65rem]" onclick={retryConnect}>
+            <Button size="sm" variant="outline" class="flex-1 text-ui-base" onclick={retryConnect}>
               {t("dashboard.scanForNew")}
             </Button>
-            <Button size="sm" variant="outline" class="text-[0.65rem]" onclick={() => invoke('open_settings_window')}>
+            <Button size="sm" variant="outline" class="text-ui-base" onclick={() => invoke('open_settings_window')}>
               {t("settingsTabs.settings")}
             </Button>
           </div>
         {:else}
           <div class="flex flex-col items-center gap-3 py-4">
-            <p class="text-[0.72rem] text-muted-foreground text-center leading-relaxed">
+            <p class="text-ui-md text-muted-foreground text-center leading-relaxed">
               {t("dashboard.noDevicesPaired")}
             </p>
 
             {#if dashboardUnpaired.length > 0}
               <div class="w-full flex flex-col gap-1.5">
-                <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground text-center">
+                <p class="text-ui-xs font-semibold tracking-widest uppercase text-muted-foreground text-center">
                   {t("devices.discoveredDevices")}
                 </p>
                 {#each dashboardUnpaired.slice(0, 5) as dev (dev.id)}
-                  <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-[#1a1a28] px-3 py-1.5">
+                  <div class="flex items-center justify-between gap-2 rounded-lg border border-border dark:border-white/[0.06] bg-muted dark:bg-surface-2 px-3 py-1.5">
                     <div class="min-w-0 flex flex-col">
-                      <span class="text-[0.68rem] font-semibold text-foreground/80 truncate">{dev.name}</span>
-                      <span class="font-mono text-[0.52rem] text-muted-foreground/60 truncate">{dev.id}</span>
+                      <span class="text-ui-base font-semibold text-foreground/80 truncate">{dev.name}</span>
+                      <span class="font-mono text-ui-xs text-muted-foreground/60 truncate">{dev.id}</span>
                     </div>
-                    <Button size="sm" variant="outline" class="h-5 px-2 text-[0.56rem]" onclick={() => pairFromDashboard(dev.id)}>
+                    <Button size="sm" variant="outline" class="h-5 px-2 text-ui-xs" onclick={() => pairFromDashboard(dev.id)}>
                       {t("settings.pair")}
                     </Button>
                   </div>
@@ -2597,10 +2594,8 @@ useWindowTitle("window.title.main");
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-1.5">
-          <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-            {t("dashboard.bandPowers")}
-          </p>
-          <span class="text-[0.5rem] text-green-500 live-blink">●</span>
+          <SectionHeader>{t("dashboard.bandPowers")}</SectionHeader>
+          <span class="text-ui-2xs text-green-500 live-blink">●</span>
         </div>
         <div class="{chLabels.length > 8 ? 'max-h-[400px] overflow-y-auto rounded-lg' : ''}">
           <BandChart bind:this={bandChartEl} chNames={chLabels} chColors={chColors} />
@@ -2611,8 +2606,8 @@ useWindowTitle("window.title.main");
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-1.5">
-          <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.eegWaveforms")}</p>
-          <span class="text-[0.5rem] text-red-500 live-blink">●</span>
+          <SectionHeader>{t("dashboard.eegWaveforms")}</SectionHeader>
+          <span class="text-ui-2xs text-red-500 live-blink">●</span>
         </div>
         <EegChart bind:this={chartEl} numChannels={chLabels.length} chLabels={chLabels} chColors={chColors} sampleRate={status.filter_config?.sample_rate ?? 256} />
       </div>
@@ -2624,9 +2619,9 @@ useWindowTitle("window.title.main");
     <Separator class="bg-border dark:bg-white/[0.06]" />
     <!-- ── Secondary Sessions Strip ──────────────────────────────────── -->
     {#if hasSecondary}
-      <div class="border-t border-border dark:border-white/[0.05]">
+      <div class="border-t border-border dark:border-white/[0.06]">
         <div class="px-4 pt-2.5 pb-1">
-          <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+          <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">
             {t("dashboard.backgroundRecordings")}
           </span>
         </div>
@@ -2634,13 +2629,13 @@ useWindowTitle("window.title.main");
           <div class="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/30 dark:hover:bg-white/[0.02] transition-colors">
             <!-- Pulsing dot -->
             <span class="relative flex h-2 w-2 shrink-0">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60"></span>
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500/60 opacity-60"></span>
               <span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
             </span>
 
             <!-- Name + meta -->
             <div class="flex items-center gap-1.5 flex-1 min-w-0">
-              <span class="text-[0.62rem] font-medium text-foreground truncate">
+              <span class="text-ui-sm font-medium text-foreground truncate">
                 {sess.device_name}
               </span>
               <span class="text-[0.46rem] font-bold tracking-widest uppercase px-1 py-0.5 rounded
@@ -2650,16 +2645,16 @@ useWindowTitle("window.title.main");
             </div>
 
             <!-- Stats -->
-            <span class="text-[0.54rem] text-muted-foreground/60 tabular-nums shrink-0">
+            <span class="text-ui-xs text-muted-foreground/60 tabular-nums shrink-0">
               {sess.channels}ch · {sess.sample_rate % 1 === 0 ? sess.sample_rate : sess.sample_rate.toFixed(1)} Hz
             </span>
-            <span class="text-[0.56rem] text-muted-foreground tabular-nums shrink-0">
+            <span class="text-ui-xs text-muted-foreground tabular-nums shrink-0">
               {sess.sample_count.toLocaleString()}
             </span>
 
             <!-- Stop -->
             <button
-              class="text-muted-foreground/30 hover:text-red-500 transition-colors cursor-pointer text-[0.65rem] shrink-0"
+              class="text-muted-foreground/30 hover:text-red-500 transition-colors cursor-pointer text-ui-base shrink-0"
               onclick={() => daemonInvoke("lsl_cancel_secondary", { sessionId: sess.id })}
               title={t("dashboard.stopSecondary")}
             >
@@ -2671,7 +2666,7 @@ useWindowTitle("window.title.main");
     {/if}
 
     <CardFooter class="px-5 py-3 flex items-center justify-between gap-2">
-      <p class="text-[0.63rem] text-muted-foreground leading-relaxed truncate">
+      <p class="text-ui-sm text-muted-foreground leading-relaxed truncate">
         {#if status.state === "connected"}
           {t("dashboard.streamingCsv")}
         {:else if status.state === "scanning"}
@@ -2684,10 +2679,10 @@ useWindowTitle("window.title.main");
             <span class="inline-block h-1.5 w-1.5 rounded-full {engineDotClass}"></span>
             {#if daemonStatus.state === "error" || daemonStatus.state === "disconnected"}
               {#if daemonLaunching}
-                <span class="text-[0.48rem] text-muted-foreground/50 tabular-nums">{t("daemon.starting")}</span>
+                <span class="text-ui-2xs text-muted-foreground/50 tabular-nums">{t("daemon.starting")}</span>
               {:else if daemonCountdown > 0}
                 <button
-                  class="text-[0.48rem] text-muted-foreground/50 hover:text-muted-foreground cursor-pointer tabular-nums"
+                  class="text-ui-2xs text-muted-foreground/50 hover:text-muted-foreground cursor-pointer tabular-nums"
                   title={t("daemon.launchNow")}
                   onclick={(e) => { e.stopPropagation(); clearDaemonCountdown(); launchDaemon(); }}
                 >
@@ -2695,7 +2690,7 @@ useWindowTitle("window.title.main");
                 </button>
               {:else}
                 <button
-                  class="text-[0.48rem] text-red-400 hover:text-red-300 cursor-pointer font-medium"
+                  class="text-ui-2xs text-red-400 hover:text-red-300 cursor-pointer font-medium"
                   title={t("daemon.restartTitle")}
                   onclick={(e) => { e.stopPropagation(); restartDaemon(); }}
                 >
@@ -2703,7 +2698,7 @@ useWindowTitle("window.title.main");
                 </button>
               {/if}
             {:else}
-              <span class="text-[0.48rem] text-muted-foreground/30 tabular-nums">
+              <span class="text-ui-2xs text-muted-foreground/30 tabular-nums">
                 {engineState === "streaming" ? t("daemon.streaming") : engineState === "idle" ? t("daemon.idle") : t("daemon.stateConnecting")}
                 {#if daemonStatus.latencyMs != null}
                   <span class="text-muted-foreground/20 ml-0.5">{daemonStatus.latencyMs}ms</span>
@@ -2713,8 +2708,8 @@ useWindowTitle("window.title.main");
 
             <!-- Engine details popover -->
             {#if enginePopoverOpen}
-              <div class="engine-popover absolute bottom-full right-0 mb-2 w-48 rounded-md border border-border bg-popover p-2.5 shadow-lg text-[0.6rem] text-popover-foreground z-50" transition:fade={{ duration: 120 }}>
-                <div class="font-medium text-[0.65rem] mb-1.5">{t("daemon.popoverTitle")}</div>
+              <div class="engine-popover absolute bottom-full right-0 mb-2 w-48 rounded-md border border-border bg-popover p-2.5 shadow-lg text-ui-sm text-popover-foreground z-50" transition:fade={{ duration: 120 }}>
+                <div class="font-medium text-ui-base mb-1.5">{t("daemon.popoverTitle")}</div>
                 <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
                   <span class="text-muted-foreground">{t("daemon.uptime")}</span>
                   <span class="text-right tabular-nums">{engineUptime()}</span>
@@ -2730,7 +2725,7 @@ useWindowTitle("window.title.main");
               </div>
             {/if}
           </span>
-        <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>
+        <span class="text-ui-xs text-muted-foreground/40 tabular-nums">v{appVersion}</span>
       </div>
     </CardFooter>
 

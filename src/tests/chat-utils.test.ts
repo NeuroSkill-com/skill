@@ -7,7 +7,7 @@ import {
   detectToolDanger,
   parseAssistantOutput,
   stripToolCallFences,
-} from "$lib/chat-utils";
+} from "$lib/chat/chat-utils";
 
 // ── stripToolCallFences ─────────────────────────────────────────────────────
 

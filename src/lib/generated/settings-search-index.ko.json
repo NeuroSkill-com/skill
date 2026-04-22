@@ -12,12 +12,6 @@
     "desc": "가시성 향상을 위해 테두리와 텍스트 대비를 높입니다."
   },
   {
-    "tab": "appearance",
-    "key": "settings.fontSize",
-    "label": "글꼴 크기",
-    "desc": "UI 텍스트 크기를 조정합니다. 앱의 모든 텍스트에 영향을 줍니다."
-  },
-  {
     "tab": "calibration",
     "key": "calibration.complete",
     "label": "캘리브레이션 완료",
@@ -78,36 +72,6 @@
     "desc": "목적, 연령, 사용 사례에 맞는 캘리브레이션 구성을 선택하세요. 아래에서 설정을 추가로 조정할 수 있습니다."
   },
   {
-    "tab": "calibration",
-    "key": "settings.actionLabels",
-    "label": "동작 라벨",
-    "desc": "각 단계에 표시되고 EEG 라벨로 저장되는 이름."
-  },
-  {
-    "tab": "calibration",
-    "key": "settings.iterations",
-    "label": "반복 횟수",
-    "desc": "동작 1 → 휴식 → 동작 2 → 휴식의 전체 사이클 수."
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.ble",
-    "label": "Bluetooth LE",
-    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.cortex",
-    "label": "Emotiv Cortex",
-    "desc": "로컬 런처를 통한 EPOC, Insight, Flex, MN8"
-  },
-  {
-    "tab": "devices",
-    "key": "settings.scanner.usbSerial",
-    "label": "USB 시리얼",
-    "desc": "OpenBCI Cyton / CytonDaisy 동글"
-  },
-  {
     "tab": "embeddings",
     "key": "embeddings.model",
     "label": "임베딩 모델"
@@ -127,42 +91,6 @@
     "tab": "embeddings",
     "key": "embeddings.watchdog.timeout",
     "label": "재시작 대기 시간 (초)"
-  },
-  {
-    "tab": "exg",
-    "key": "model.buildQuality",
-    "label": "빌드 품질",
-    "desc": "그래프 구축 시 빔 너비. 높을수록 좋은 그래프이나 삽입이 느려집니다."
-  },
-  {
-    "tab": "exg",
-    "key": "model.connectivity",
-    "label": "연결성",
-    "desc": "각 노드는 최대 2 × M개의 엣지를 유지합니다. 높을수록 리콜은 좋지만 RAM을 더 사용합니다."
-  },
-  {
-    "tab": "exg",
-    "key": "model.gpuPrecision",
-    "label": "GPU 정밀도",
-    "desc": "반정밀도(f16)가 더 빠르고, 전체 정밀도(f32)가 더 정확"
-  },
-  {
-    "tab": "exg",
-    "key": "model.idleReembed",
-    "label": "백그라운드 임베딩",
-    "desc": "기기 유휴 시 미처리 에포크 자동 임베딩"
-  },
-  {
-    "tab": "exg",
-    "key": "model.reembed",
-    "label": "재임베딩",
-    "desc": "선택한 모델 백엔드로 모든 원시 EXG 세션 녹화를 다시 인코딩하고 HNSW 인덱스를 재구축합니다."
-  },
-  {
-    "tab": "exg",
-    "key": "settings.inferenceDevice",
-    "label": "추론 기기",
-    "desc": "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요."
   },
   {
     "tab": "exg",
@@ -391,6 +319,18 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.editFile",
+    "label": "파일 편집",
+    "desc": "기존 파일에 대해 찾기-바꾸기 편집을 허용합니다."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.location",
+    "label": "위치",
+    "desc": "IP 기반 대략적 국가, 지역, 도시, 시간대 조회를 허용합니다."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.maxCallsPerRound",
     "label": "라운드당 최대 호출",
     "desc": "한 라운드에서 모델이 호출할 수 있는 도구 수."
@@ -400,6 +340,12 @@
     "key": "llm.tools.maxRounds",
     "label": "최대 라운드",
     "desc": "메시지당 모델이 수행할 수 있는 생각→도구→생각 단계 수."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.readFile",
+    "label": "파일 읽기",
+    "desc": "텍스트 파일을 읽을 수 있도록 허용합니다. 큰 파일은 offset/limit으로 페이지네이션됩니다."
   },
   {
     "tab": "llm",
@@ -445,6 +391,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.skillsSection",
+    "label": "에이전트 스킬",
+    "desc": "스킬은 LLM이 필요에 따라 로드할 수 있는 전문 지침을 제공합니다. 개별 스킬을 토글하여 채팅에서 사용 가능 여부를 제어하세요."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillsSyncOnLaunch",
     "label": "시작 시 동기화",
     "desc": "앱 시작 시 항상 최신 스킬을 가져옵니다"
@@ -460,6 +412,24 @@
     "key": "llm.tools.webCache",
     "label": "웹 캐시",
     "desc": "중복 네트워크 호출을 방지하기 위해 웹 검색 및 가져오기 결과를 디스크에 캐시합니다."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webFetch",
+    "label": "웹 가져오기",
+    "desc": "공개 HTTP(S) 페이지의 원본 텍스트를 가져올 수 있도록 허용합니다."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.webSearch",
+    "label": "웹 검색",
+    "desc": "설정된 검색 제공자를 사용하여 웹을 검색합니다."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.tools.writeFile",
+    "label": "파일 쓰기",
+    "desc": "파일을 생성하거나 덮어쓸 수 있도록 허용합니다. 상위 디렉토리가 자동 생성됩니다."
   },
   {
     "tab": "llm",
@@ -613,6 +583,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.actionLabels",
+    "label": "동작 라벨",
+    "desc": "각 단계에 표시되고 EEG 라벨로 저장되는 이름."
+  },
+  {
+    "tab": "settings",
     "key": "settings.activeWindowToggle",
     "label": "활성 창 추적",
     "desc": "어떤 앱과 창이 포커스에 있는지 기록합니다. activity.sqlite에 로컬로 저장되며 업로드되지 않습니다."
@@ -643,6 +619,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fontSize",
+    "label": "글꼴 크기",
+    "desc": "UI 텍스트 크기를 조정합니다. 앱의 모든 텍스트에 영향을 줍니다."
+  },
+  {
+    "tab": "settings",
     "key": "settings.geoProvider",
     "label": "위치 서비스",
     "desc": "세션 및 LLM 도구에 지리적 컨텍스트를 제공하기 위해 위치 서비스를 활성화합니다. macOS에서는 CoreLocation(GPS/Wi-Fi)을 사용하여 고정밀; 다른 플랫폼에서는 IP 지오로케이션을 사용합니다. 기본적으로 비활성화 — 토글하여 권한을 요청하고 테스트하세요."
@@ -655,9 +637,21 @@
   },
   {
     "tab": "settings",
+    "key": "settings.inferenceDevice",
+    "label": "추론 기기",
+    "desc": "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요."
+  },
+  {
+    "tab": "settings",
     "key": "settings.inputActivityToggle",
     "label": "키보드 & 마우스 활동 추적",
     "desc": "키보드와 마우스가 사용된 시간을 초 단위로 기록합니다. 특별한 OS 권한이 필요하지 않습니다. activity.sqlite에 로컬로 저장됩니다."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.iterations",
+    "label": "반복 횟수",
+    "desc": "동작 1 → 휴식 → 동작 2 → 휴식의 전체 사이클 수."
   },
   {
     "tab": "settings",
@@ -739,6 +733,24 @@
   },
   {
     "tab": "settings",
+    "key": "settings.scanner.ble",
+    "label": "Bluetooth LE",
+    "desc": "Muse, MW75, Hermes, Ganglion, IDUN, Mendi"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.cortex",
+    "label": "Emotiv Cortex",
+    "desc": "로컬 런처를 통한 EPOC, Insight, Flex, MN8"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.scanner.usbSerial",
+    "label": "USB 시리얼",
+    "desc": "OpenBCI Cyton / CytonDaisy 동글"
+  },
+  {
+    "tab": "settings",
     "key": "settings.wsHost",
     "label": "바인드 주소",
     "desc": "LAN 모드는 네트워크의 모든 기기에 API를 노출합니다. 재시작 필요."
@@ -796,108 +808,6 @@
     "key": "tokens.defaultToken",
     "label": "기본 토큰",
     "desc": "앱에서 사용하는 내장 관리자 토큰. 삭제할 수 없습니다. 새 것을 생성하려면 새로고침하세요 — 앱이 자동으로 인식합니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.editFile",
-    "label": "파일 편집",
-    "desc": "기존 파일에 대해 찾기-바꾸기 편집을 허용합니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.location",
-    "label": "위치",
-    "desc": "IP 기반 대략적 국가, 지역, 도시, 시간대 조회를 허용합니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.readFile",
-    "label": "파일 읽기",
-    "desc": "텍스트 파일을 읽을 수 있도록 허용합니다. 큰 파일은 offset/limit으로 페이지네이션됩니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.skillsSection",
-    "label": "에이전트 스킬",
-    "desc": "스킬은 LLM이 필요에 따라 로드할 수 있는 전문 지침을 제공합니다. 개별 스킬을 토글하여 채팅에서 사용 가능 여부를 제어하세요."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webFetch",
-    "label": "웹 가져오기",
-    "desc": "공개 HTTP(S) 페이지의 원본 텍스트를 가져올 수 있도록 허용합니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.webSearch",
-    "label": "웹 검색",
-    "desc": "설정된 검색 제공자를 사용하여 웹을 검색합니다."
-  },
-  {
-    "tab": "tools",
-    "key": "llm.tools.writeFile",
-    "label": "파일 쓰기",
-    "desc": "파일을 생성하거나 덮어쓸 수 있도록 허용합니다. 상위 디렉토리가 자동 생성됩니다."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendKitten",
-    "label": "KittenTTS",
-    "desc": "컴팩트 ONNX 모델, 모든 CPU에서 빠르게 작동, 영어 전용."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.backendNeutts",
-    "label": "NeuTTS",
-    "desc": "NeuCodec 디코더가 포함된 GGUF LLM 백본. 모든 음성을 복제할 수 있으며, 영어, 독일어, 프랑스어, 스페인어를 지원합니다."
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.preloadOnStartup",
-    "label": "시작 시 엔진 프리로드",
-    "desc": "앱 실행 시 백그라운드에서 활성 엔진을 워밍업합니다"
-  },
-  {
-    "tab": "tts",
-    "key": "ttsTab.requirements",
-    "label": "PATH에 espeak-ng 필요",
-    "desc": "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng"
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.cooldownMs",
-    "label": "GPU 쿨다운",
-    "desc": "학습 에폭 사이 일시 정지 시간(밀리초). 0 = 최대 GPU 처리량. 증가시키면 GPU 사용률이 줄고 다른 작업을 위한 여유가 생깁니다."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.negSampleRate",
-    "label": "음성 샘플 비율",
-    "desc": "에폭당 양성 엣지당 추출되는 무작위 비이웃 쌍 수. 높을수록 분리가 강하지만 학습이 느려집니다."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nEpochs",
-    "label": "최적화 에폭",
-    "desc": "경사 하강 반복 횟수. 에폭이 많을수록 레이아웃이 정밀하지만 계산이 느려집니다."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.nNeighbors",
-    "label": "k-최근접 이웃",
-    "desc": "KNN 그래프 구축에 사용되는 최근접 이웃 수. 작은 값은 로컬 디테일을, 큰 값은 전역 구조를 더 보존합니다."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.repulsion",
-    "label": "반발",
-    "desc": "비이웃 포인트가 서로 밀어내는 강도를 제어합니다. 높은 값은 세션 A와 B 간에 더 분리된 클러스터를 생성합니다."
-  },
-  {
-    "tab": "umap",
-    "key": "umapSettings.timeout",
-    "label": "학습 타임아웃",
-    "desc": "UMAP 옵티마이저의 최대 시간. 이 제한에 도달하면 조기 중지됩니다."
   },
   {
     "tab": "updates",

@@ -18,7 +18,7 @@ interface Props {
 let { meditation, cognitiveLoad, drowsiness }: Props = $props();
 </script>
 
-<CollapsibleSection title={t("dashboard.compositeScores")} dotColor="text-violet-500">
+<CollapsibleSection title={t("dashboard.compositeScores")} dotColor="text-violet-600 dark:text-violet-400">
   <div class="grid grid-cols-3 gap-x-2 gap-y-1.5">
     {#each [
       { k: "meditation",    v: meditation,    c: meditation>60?'#22c55e':meditation>30?'#f59e0b':'#6b7280', grad: 'linear-gradient(90deg,var(--color-violet-400),var(--color-violet-500))' },
@@ -29,7 +29,7 @@ let { meditation, cognitiveLoad, drowsiness }: Props = $props();
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
             <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
-            <span class="text-[0.58rem] font-bold tabular-nums" style="color:{item.c}">{item.v.toFixed(0)}</span>
+            <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v.toFixed(0)}</span>
           </div>
           <MetricBar value={item.v} gradient={item.grad} height="h-1.5" />
         </div>
