@@ -1,19 +1,19 @@
+use clap::Parser;
 use serde::Deserialize;
 use std::str::FromStr;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct Opt {
     /// Path to JSON payload or literal JSON string containing endpoint_id, relay_url, and otpauth_url or secret_base32
-    #[structopt(long)]
+    #[arg(long)]
     payload: String,
 
     /// Optional client display name
-    #[structopt(long)]
+    #[arg(long)]
     name: Option<String>,
 
     /// Scope: read or full
-    #[structopt(long, default_value = "read")]
+    #[arg(long, default_value = "read")]
     scope: String,
 }
 
@@ -31,7 +31,7 @@ const IROH_ALPN: &[u8] = b"skill/http-ws/1";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     let payload_json = if std::path::Path::new(&opt.payload).exists() {
         std::fs::read_to_string(&opt.payload)?
