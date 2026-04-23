@@ -8,6 +8,20 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.128] — 2026-04-23
+
+### Features
+
+- llmfit
+- glib
+- notify
+- linter
+- updTed settings and engine
+- muda
+- fixed glib with a patch
+- refactored UI
+- Added unsloth/Qwen3.6-27B-GGUF
+
 ## [0.0.127] — 2026-04-22
 
 ### Features
