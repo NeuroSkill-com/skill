@@ -96,6 +96,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "Seuil SNR de désactivation",
   "dnd.snrExitThresholdDesc":
     "Si le rapport signal/bruit reste en dessous de ce seuil pendant 1 minute, le mode Focus est désactivé de force. Des valeurs plus basses tolèrent des signaux plus bruités.",
+  "dnd.grayscale": "Affichage en niveaux de gris",
+  "dnd.grayscaleDesc":
+    "Passe l'écran en niveaux de gris lorsque le mode Focus s'active et restaure les couleurs à la désactivation. Réduit les distractions visuelles pendant le travail en profondeur. macOS uniquement.",
   "dnd.untilActivation": "avant l'activation",
   "dnd.activating": "Activation du mode Focus...",
   "dnd.buildingScore": "Engagement {score} / {threshold}",

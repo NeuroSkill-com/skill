@@ -288,6 +288,8 @@ pub struct DndConfig {
     pub focus_mode_identifier: String,
     /// SNR threshold (dB) below which focus mode is forcibly deactivated.
     pub snr_exit_db: f32,
+    /// Toggle system-wide grayscale display with DND (macOS only).
+    pub grayscale: bool,
 }
 
 /// Mutable state tracked across ticks by the DND engine.
@@ -337,8 +339,8 @@ pub struct DndDecision {
     pub below_ticks: u32,
     pub exit_held: bool,
     pub os_active: Option<bool>,
-    /// `Some((enable, mode_id))` → caller should invoke the OS DND toggle.
-    pub set_dnd_to: Option<(bool, String)>,
+    /// `Some((enable, mode_id, grayscale))` → caller should invoke the OS DND toggle.
+    pub set_dnd_to: Option<(bool, String, bool)>,
     /// Whether to send a native exit notification after the OS call.
     pub send_exit_notification: bool,
     /// Human-readable exit reason for the notification body.
@@ -379,7 +381,7 @@ pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_
     let mut emit_active = state.active;
     let mut below_ticks = state.below_ticks;
     let mut exit_held = false;
-    let mut set_dnd_to: Option<(bool, String)> = None;
+    let mut set_dnd_to: Option<(bool, String, bool)> = None;
     let mut send_exit_notification = false;
     let mut exit_body: &'static str = "";
 
@@ -387,7 +389,7 @@ pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_
         state.below_ticks = exit_window as u32;
         below_ticks = exit_window as u32;
         emit_active = false;
-        set_dnd_to = Some((false, String::new()));
+        set_dnd_to = Some((false, String::new(), config.grayscale));
         send_exit_notification = config.exit_notification;
         exit_body = "Signal quality (SNR) dropped below threshold for 1 minute. Focus mode deactivated.";
     } else if config.enabled {
@@ -395,7 +397,7 @@ pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_
             state.below_ticks = 0;
             below_ticks = 0;
             if !state.active && snr_db >= snr_threshold && sample_count >= window {
-                set_dnd_to = Some((true, config.focus_mode_identifier.clone()));
+                set_dnd_to = Some((true, config.focus_mode_identifier.clone(), config.grayscale));
             }
         } else if state.active {
             let recent_had_focus = state.score_history.iter().any(|&v| v >= config.focus_threshold);
@@ -409,7 +411,7 @@ pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_
                 if state.below_ticks as usize >= exit_window {
                     state.below_ticks = exit_window as u32;
                     emit_active = false;
-                    set_dnd_to = Some((false, String::new()));
+                    set_dnd_to = Some((false, String::new(), config.grayscale));
                     send_exit_notification = config.exit_notification;
                     exit_body = "Your focus score dropped. Focus mode has been deactivated.";
                 }
@@ -422,7 +424,7 @@ pub fn dnd_tick(config: &DndConfig, state: &mut DndState, focus_score: f64, snr_
         state.below_ticks = 0;
         below_ticks = 0;
         emit_active = false;
-        set_dnd_to = Some((false, String::new()));
+        set_dnd_to = Some((false, String::new(), config.grayscale));
         send_exit_notification = config.exit_notification;
         exit_body = "Do Not Disturb automation was disabled. Focus mode deactivated.";
     }
@@ -607,6 +609,7 @@ mod tests {
             exit_notification: false,
             focus_mode_identifier: "test".into(),
             snr_exit_db: 5.0,
+            grayscale: false,
         };
         let mut st = DndState::new();
         // Fill the window (2s × 4Hz = 8 samples).
@@ -629,6 +632,7 @@ mod tests {
             exit_notification: false,
             focus_mode_identifier: "test".into(),
             snr_exit_db: 5.0,
+            grayscale: false,
         };
         let mut st = DndState::new();
         for _ in 0..10 {

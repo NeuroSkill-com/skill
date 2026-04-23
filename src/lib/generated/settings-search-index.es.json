@@ -196,6 +196,12 @@
   },
   {
     "tab": "goals",
+    "key": "dnd.grayscale",
+    "label": "Pantalla en escala de grises",
+    "desc": "Cambia la pantalla a escala de grises cuando se activa el modo de enfoque y restaura el color cuando se desactiva. Reduce la distracción visual durante el trabajo profundo. Solo macOS."
+  },
+  {
+    "tab": "goals",
     "key": "dnd.snrExitThreshold",
     "label": "Umbral de salida SNR",
     "desc": "Si la relación señal-ruido permanece por debajo de este nivel durante 1 minuto, el modo de enfoque se desactiva a la fuerza. Los valores más bajos toleran señales más ruidosas."

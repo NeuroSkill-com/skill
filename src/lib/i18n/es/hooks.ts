@@ -52,6 +52,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "Umbral de salida SNR",
   "dnd.snrExitThresholdDesc":
     "Si la relación señal-ruido permanece por debajo de este nivel durante 1 minuto, el modo de enfoque se desactiva a la fuerza. Los valores más bajos toleran señales más ruidosas.",
+  "dnd.grayscale": "Pantalla en escala de grises",
+  "dnd.grayscaleDesc":
+    "Cambia la pantalla a escala de grises cuando se activa el modo de enfoque y restaura el color cuando se desactiva. Reduce la distracción visual durante el trabajo profundo. Solo macOS.",
   "dnd.untilActivation": "hasta la activación",
   "dnd.activating": "Activando el modo de enfoque…",
   "dnd.buildingScore": "Compromiso {score} / {threshold}",

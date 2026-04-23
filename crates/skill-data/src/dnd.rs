@@ -166,8 +166,19 @@ pub fn query_os_active() -> Option<bool> {
 /// `mode_identifier` is only used when `enabled` is `true`; the `disable`
 /// path clears whatever mode is active regardless of the identifier.
 ///
+/// When `grayscale` is `true`, system-wide grayscale display mode is
+/// toggled in sync with DND (macOS only).
+///
 /// Returns `true` on success (or on non-macOS where it is a no-op).
-pub fn set_dnd(enabled: bool, mode_identifier: &str) -> bool {
+pub fn set_dnd(enabled: bool, mode_identifier: &str, grayscale: bool) -> bool {
+    let ok = set_dnd_inner(enabled, mode_identifier);
+    if ok && grayscale {
+        set_grayscale(enabled);
+    }
+    ok
+}
+
+fn set_dnd_inner(enabled: bool, mode_identifier: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
         use macos_focus::{FocusError, FocusManager, FocusMode};
@@ -647,4 +658,26 @@ fn builtin_modes() -> Vec<FocusModeOption> {
         name: m.display_name().to_owned(),
     })
     .collect()
+}
+
+// ── Grayscale display mode (macOS only) ──────────────────────────────────────
+
+/// Enable or disable system-wide grayscale display mode.
+///
+/// This is a macOS-only feature that uses the `grayscale` crate to call the
+/// private UniversalAccess framework. On non-macOS platforms this is a no-op.
+pub fn set_grayscale(enabled: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        if enabled {
+            grayscale::enable();
+        } else {
+            grayscale::disable();
+        }
+        eprintln!("[dnd] grayscale {} OK", if enabled { "enable" } else { "disable" });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = enabled;
+    }
 }

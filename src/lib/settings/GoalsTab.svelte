@@ -31,6 +31,7 @@ interface DndConfig {
   focus_mode_identifier: string; // modeIdentifier string, e.g. "com.apple.donotdisturb.mode.default"
   exit_notification: boolean; // whether to send a notification when focus mode exits
   snr_exit_db: number; // SNR threshold (dB) below which DND is forcibly deactivated (default 0)
+  grayscale: boolean; // enable system-wide grayscale display with DND (macOS only)
 }
 
 interface FocusModeOption {
@@ -76,6 +77,7 @@ let dndConfig = $state<DndConfig>({
   focus_mode_identifier: DND_DEFAULT_MODE,
   exit_notification: true,
   snr_exit_db: 0,
+  grayscale: false,
 });
 let dndActive = $state(false);
 let dndOsActive = $state<boolean | null>(null); // real system-level state
@@ -152,6 +154,11 @@ async function setFocusMode(identifier: string) {
 
 async function toggleExitNotification() {
   dndConfig = { ...dndConfig, exit_notification: !dndConfig.exit_notification };
+  await saveDnd();
+}
+
+async function toggleGrayscale() {
+  dndConfig = { ...dndConfig, grayscale: !dndConfig.grayscale };
   await saveDnd();
 }
 
@@ -688,7 +695,16 @@ const streak = $derived.by(() => {
             label={t("dnd.exitNotification")}
             description={t("dnd.exitNotificationDesc")}
             ontoggle={toggleExitNotification}
-           
+
+          />
+
+          <!-- ── Grayscale display toggle (macOS only) ────────────────── -->
+          <ToggleRow
+            checked={dndConfig.grayscale}
+            label={t("dnd.grayscale")}
+            description={t("dnd.grayscaleDesc")}
+            ontoggle={toggleGrayscale}
+
           />
 
           <!-- ── SNR exit threshold ──────────────────────────────────────── -->

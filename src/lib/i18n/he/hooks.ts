@@ -89,6 +89,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "סף SNR להשבתה",
   "dnd.snrExitThresholdDesc":
     "אם יחס האות/רעש נשאר מתחת לרמה זו במשך דקה אחת, מצב הפוקוס מושבת בכפייה. ערכים נמוכים יותר סובלים אותות רועשיות יותר.",
+  "dnd.grayscale": "תצוגה בגווני אפור",
+  "dnd.grayscaleDesc":
+    "מעביר את המסך לגווני אפור כאשר מצב הפוקוס מופעל ומשחזר את הצבעים בעת השבתתו. מפחית הסחות חזותיות בזמן עבודה מרוכזת. macOS בלבד.",
   "dnd.untilActivation": "עד להפעלה",
   "dnd.activating": "מפעיל מצב פוקוס…",
   "dnd.buildingScore": "מעורבות {score} / {threshold}",

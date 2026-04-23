@@ -52,6 +52,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "SNR exit threshold",
   "dnd.snrExitThresholdDesc":
     "If signal-to-noise ratio stays below this level for 1 minute, focus mode is forcibly deactivated. Lower values tolerate noisier signals.",
+  "dnd.grayscale": "Grayscale display",
+  "dnd.grayscaleDesc":
+    "Switch the screen to grayscale when focus mode activates and restore color when it deactivates. Reduces visual distraction during deep work. macOS only.",
   "dnd.untilActivation": "until activation",
   "dnd.activating": "Activating focus mode…",
   "dnd.buildingScore": "Engagement {score} / {threshold}",

@@ -376,7 +376,7 @@ pub(crate) async fn test_dnd(Json(req): Json<DndTestRequest>) -> Json<serde_json
     if req.enabled {
         return Json(serde_json::json!({"ok": false, "value": false}));
     }
-    let ok = skill_data::dnd::set_dnd(false, "");
+    let ok = skill_data::dnd::set_dnd(false, "", false);
     Json(serde_json::json!({"ok": ok, "value": ok}))
 }
 

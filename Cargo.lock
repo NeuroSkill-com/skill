@@ -5379,6 +5379,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "grayscale"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "042686e9bd899e5fc60e43899a8c1ac312a1114c693c836e6b1e895f42083969"
+
+[[package]]
 name = "gtec"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12294,6 +12300,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "csv",
+ "grayscale",
  "libc",
  "llmfit-core",
  "macos-focus",

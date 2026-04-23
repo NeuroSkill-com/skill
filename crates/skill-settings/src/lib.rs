@@ -1157,6 +1157,10 @@ pub struct DoNotDisturbConfig {
     /// Default: 0.0 dB.
     #[serde(default = "default_dnd_snr_exit_db")]
     pub snr_exit_db: f32,
+    /// Enable system-wide grayscale display when DND activates (macOS only).
+    /// Default: `false` — the default focus action is Do Not Disturb only.
+    #[serde(default)]
+    pub grayscale: bool,
 }
 
 impl Default for DoNotDisturbConfig {
@@ -1170,6 +1174,7 @@ impl Default for DoNotDisturbConfig {
             focus_mode_identifier: default_dnd_mode_identifier(),
             exit_notification: default_dnd_exit_notification(),
             snr_exit_db: default_dnd_snr_exit_db(),
+            grayscale: false,
         }
     }
 }

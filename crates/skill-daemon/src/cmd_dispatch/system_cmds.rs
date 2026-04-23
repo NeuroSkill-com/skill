@@ -296,7 +296,8 @@ pub(super) async fn cmd_dnd_set(msg: &Value) -> Result<Value, String> {
         .get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("com.apple.donotdisturb.mode.default");
-    let ok = skill_data::dnd::set_dnd(enabled, mode);
+    let grayscale = msg.get("grayscale").and_then(|v| v.as_bool()).unwrap_or(false);
+    let ok = skill_data::dnd::set_dnd(enabled, mode, grayscale);
     Ok(json!({ "enabled": enabled, "applied": ok }))
 }
 

@@ -51,6 +51,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "SNR 해제 임계값",
   "dnd.snrExitThresholdDesc":
     "신호 대 잡음비가 이 수준 이하로 1분간 유지되면 집중 모드가 강제 비활성화됩니다. 낮은 값은 더 노이즈가 많은 신호를 허용합니다.",
+  "dnd.grayscale": "그레이스케일 디스플레이",
+  "dnd.grayscaleDesc":
+    "집중 모드가 활성화되면 화면을 그레이스케일로 전환하고 비활성화되면 컬러를 복원합니다. 깊은 작업 중 시각적 방해를 줄여줍니다. macOS 전용.",
   "dnd.untilActivation": "활성화까지",
   "dnd.activating": "집중 모드 활성화 중…",
   "dnd.buildingScore": "몰입도 {score} / {threshold}",

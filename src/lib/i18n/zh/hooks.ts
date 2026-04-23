@@ -46,6 +46,9 @@ const hooks: Record<string, string> = {
   "dnd.exitNotificationDesc": "当专注模式被自动停用时发送通知（分数下降、信号质量低或功能被关闭）。",
   "dnd.snrExitThreshold": "SNR 退出阈值",
   "dnd.snrExitThresholdDesc": "如果信噪比 (SNR) 持续低于此水平 1 分钟，专注模式将被强制停用。较低的值容许更多噪声。",
+  "dnd.grayscale": "灰度显示",
+  "dnd.grayscaleDesc":
+    "专注模式激活时将屏幕切换为灰度显示，停用时恢复彩色。减少深度工作时的视觉干扰。仅限 macOS。",
   "dnd.untilActivation": "距激活",
   "dnd.activating": "正在激活专注模式…",
   "dnd.buildingScore": "专注度 {score} / {threshold}",

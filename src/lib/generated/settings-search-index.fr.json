@@ -196,6 +196,12 @@
   },
   {
     "tab": "goals",
+    "key": "dnd.grayscale",
+    "label": "Affichage en niveaux de gris",
+    "desc": "Passe l'écran en niveaux de gris lorsque le mode Focus s'active et restaure les couleurs à la désactivation. Réduit les distractions visuelles pendant le travail en profondeur. macOS uniquement."
+  },
+  {
+    "tab": "goals",
     "key": "dnd.snrExitThreshold",
     "label": "Seuil SNR de désactivation",
     "desc": "Si le rapport signal/bruit reste en dessous de ce seuil pendant 1 minute, le mode Focus est désactivé de force. Des valeurs plus basses tolèrent des signaux plus bruités."

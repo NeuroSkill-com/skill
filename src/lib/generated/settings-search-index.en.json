@@ -196,6 +196,12 @@
   },
   {
     "tab": "goals",
+    "key": "dnd.grayscale",
+    "label": "Grayscale display",
+    "desc": "Switch the screen to grayscale when focus mode activates and restore color when it deactivates. Reduces visual distraction during deep work. macOS only."
+  },
+  {
+    "tab": "goals",
     "key": "dnd.snrExitThreshold",
     "label": "SNR exit threshold",
     "desc": "If signal-to-noise ratio stays below this level for 1 minute, focus mode is forcibly deactivated. Lower values tolerate noisier signals."

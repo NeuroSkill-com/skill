@@ -93,7 +93,8 @@ async fn api_dnd_set(Json(req): Json<serde_json::Value>) -> Json<serde_json::Val
         .get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("com.apple.donotdisturb.mode.default");
-    let ok = skill_data::dnd::set_dnd(enabled, mode);
+    let grayscale = req.get("grayscale").and_then(|v| v.as_bool()).unwrap_or(false);
+    let ok = skill_data::dnd::set_dnd(enabled, mode, grayscale);
     Json(serde_json::json!({
         "command": "dnd_set",
         "ok": true,

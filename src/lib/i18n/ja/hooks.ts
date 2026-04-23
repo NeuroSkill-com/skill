@@ -51,6 +51,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "SNR解除閾値",
   "dnd.snrExitThresholdDesc":
     "信号対雑音比がこのレベルを1分間下回ると、集中モードが強制解除されます。低い値ほどノイズの多い信号を許容します。",
+  "dnd.grayscale": "グレースケール表示",
+  "dnd.grayscaleDesc":
+    "集中モードの有効化時に画面をグレースケールに切り替え、無効化時にカラーを復元します。深い作業中の視覚的な気が散るのを減らします。macOSのみ。",
   "dnd.untilActivation": "有効化まで",
   "dnd.activating": "集中モードを有効化中…",
   "dnd.buildingScore": "エンゲージメント {score} / {threshold}",

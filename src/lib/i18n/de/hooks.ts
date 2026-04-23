@@ -95,6 +95,9 @@ const hooks: Record<string, string> = {
   "dnd.snrExitThreshold": "SNR-Abschaltschwelle",
   "dnd.snrExitThresholdDesc":
     "Wenn das Signal-Rausch-Verhältnis 1 Minute lang unter diesem Wert bleibt, wird der Fokusmodus zwangsweise deaktiviert. Niedrigere Werte tolerieren verrauschtere Signale.",
+  "dnd.grayscale": "Graustufen-Anzeige",
+  "dnd.grayscaleDesc":
+    "Schaltet den Bildschirm auf Graustufen um, wenn der Fokusmodus aktiviert wird, und stellt die Farben wieder her, wenn er deaktiviert wird. Reduziert visuelle Ablenkung bei konzentrierter Arbeit. Nur macOS.",
   "dnd.untilActivation": "bis zur Aktivierung",
   "dnd.activating": "Fokusmodus wird aktiviert…",
   "dnd.buildingScore": "Aufmerksamkeit {score} / {threshold}",
