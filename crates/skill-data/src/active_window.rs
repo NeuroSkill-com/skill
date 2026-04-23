@@ -14,6 +14,10 @@ pub struct ActiveWindowInfo {
     pub app_path: String,
     /// Title of the focused window / document (empty if unavailable).
     pub window_title: String,
+    /// OS-reported path of the frontmost document, when the application
+    /// exposes it (e.g. via macOS AppleScript).  `None` when unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_path: Option<String>,
     /// Unix-second timestamp at which this window became active.
     pub activated_at: u64,
 }

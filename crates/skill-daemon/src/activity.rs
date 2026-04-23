@@ -6,7 +6,9 @@ use std::{
     time::Duration,
 };
 
+use regex::Regex;
 use skill_data::{active_window::ActiveWindowInfo, activity_store::ActivityStore};
+use skill_settings::FilePatternRule;
 
 use crate::state::AppState;
 
@@ -29,11 +31,20 @@ pub fn start_workers(state: AppState) {
     }
 
     {
-        let s = state;
+        let s = state.clone();
+        let st2 = store.clone();
         std::thread::Builder::new()
             .name("daemon-input-monitor".into())
-            .spawn(move || run_input_monitor(s, store))
+            .spawn(move || run_input_monitor(s, st2))
             .expect("failed to spawn daemon input monitor");
+    }
+
+    {
+        let s = state;
+        std::thread::Builder::new()
+            .name("daemon-file-watcher".into())
+            .spawn(move || run_file_watcher(s, store))
+            .expect("failed to spawn daemon file watcher");
     }
 }
 
@@ -53,8 +64,29 @@ tell application "System Events"
     on error
         set winTitle to ""
     end try
-    return appName & "|||" & appPath & "|||" & winTitle
-end tell"#;
+end tell
+
+-- Try to get the document path from the frontmost application.
+-- Many Scriptable apps (Preview, TextEdit, Pages, Xcode, etc.) expose
+-- `path of front document` or `file of front document`.
+set docPath to ""
+try
+    tell application appName
+        try
+            set docPath to POSIX path of (file of front document as alias)
+        on error
+            try
+                set docPath to POSIX path of (path of front document)
+            on error
+                set docPath to ""
+            end try
+        end try
+    end tell
+on error
+    set docPath to ""
+end try
+
+return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
 
     let out = std::process::Command::new("osascript")
         .args(["-e", script])
@@ -66,10 +98,11 @@ end tell"#;
 
     let raw = String::from_utf8_lossy(&out.stdout);
     let raw = raw.trim();
-    let mut parts = raw.splitn(3, "|||");
+    let mut parts = raw.splitn(4, "|||");
     let app_name = parts.next().unwrap_or("").trim().to_string();
     let app_path = parts.next().unwrap_or("").trim().to_string();
     let window_title = parts.next().unwrap_or("").trim().to_string();
+    let document_path = parts.next().unwrap_or("").trim().to_string();
     if app_name.is_empty() {
         return None;
     }
@@ -78,6 +111,11 @@ end tell"#;
         app_name,
         app_path,
         window_title,
+        document_path: if document_path.is_empty() {
+            None
+        } else {
+            Some(document_path)
+        },
         activated_at: unix_secs(),
     })
 }
@@ -133,12 +171,48 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
 
+    // Try to find an open document file via /proc/PID/fd.
+    let document_path = pid_prop
+        .split('=')
+        .nth(1)
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .and_then(|pid| linux_proc_document(pid));
+
     Some(ActiveWindowInfo {
         app_name,
         app_path,
         window_title,
+        document_path,
         activated_at: unix_secs(),
     })
+}
+
+/// On Linux, scan /proc/PID/fd for a recently-opened regular file in a
+/// user directory.  Returns the first match (heuristic, not perfect).
+#[cfg(target_os = "linux")]
+fn linux_proc_document(pid: u32) -> Option<String> {
+    let fd_dir = format!("/proc/{pid}/fd");
+    let entries = std::fs::read_dir(&fd_dir).ok()?;
+    for entry in entries.flatten() {
+        let link = std::fs::read_link(entry.path()).ok()?;
+        let path = link.to_string_lossy();
+        // Skip non-regular or system paths.
+        if path.starts_with("/dev")
+            || path.starts_with("/proc")
+            || path.starts_with("/sys")
+            || path.starts_with("/tmp")
+            || path.contains("/lib/")
+            || path.contains("/lib64/")
+            || path.contains(".so")
+            || path.ends_with(".cache")
+        {
+            continue;
+        }
+        if link.is_file() && looks_like_file(&path) {
+            return Some(path.to_string());
+        }
+    }
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -217,6 +291,7 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
             app_name,
             app_path,
             window_title,
+            document_path: None,
             activated_at: unix_secs(),
         })
     }
@@ -291,15 +366,258 @@ fn poll_input_activity() -> (bool, bool) {
     }
 }
 
+/// Tracks the live state of a focused file, producing 5-second edit chunks.
+struct FileSnapshot {
+    row_id: i64,
+    path: String,
+    category: String,
+    start_ts: u64,
+    initial_size: u64,
+    initial_word_count: u64,
+    /// Rolling state — updated after each chunk diff.
+    prev_mtime: u64,
+    prev_size: u64,
+    prev_hashes: Vec<u64>,
+    last_chunk_ts: u64,
+    total_lines_added: u64,
+    total_lines_removed: u64,
+    was_modified: bool,
+}
+
+const CHUNK_INTERVAL_SECS: u64 = 5;
+
+impl FileSnapshot {
+    fn capture(path: &str, category: &str, row_id: i64, now: u64) -> Self {
+        let (mtime, size) = file_mtime_and_size(path);
+        let is_text = is_text_category(category);
+        let hashes = if is_text { hash_lines(path) } else { vec![] };
+        let word_count = if matches!(category, "document" | "spreadsheet") {
+            count_words(path)
+        } else {
+            0
+        };
+        Self {
+            row_id,
+            path: path.to_string(),
+            category: category.to_string(),
+            start_ts: now,
+            initial_size: size,
+            initial_word_count: word_count,
+            prev_mtime: mtime,
+            prev_size: size,
+            prev_hashes: hashes,
+            last_chunk_ts: now,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+            was_modified: false,
+        }
+    }
+
+    fn maybe_emit_chunk(&mut self, store: &ActivityStore) {
+        let now = unix_secs();
+        if now < self.last_chunk_ts + CHUNK_INTERVAL_SECS {
+            return;
+        }
+        self.last_chunk_ts = now;
+
+        let (cur_mtime, cur_size) = file_mtime_and_size(&self.path);
+        if cur_mtime == self.prev_mtime {
+            return;
+        }
+        self.was_modified = true;
+
+        let is_text = is_text_category(&self.category);
+        if is_text {
+            let new_hashes = hash_lines(&self.path);
+            let (added, removed) = diff_line_hashes(&self.prev_hashes, &new_hashes);
+            let size_delta = cur_size as i64 - self.prev_size as i64;
+            if added > 0 || removed > 0 {
+                store.insert_edit_chunk(self.row_id, now, added, removed, size_delta);
+                self.total_lines_added += added;
+                self.total_lines_removed += removed;
+            }
+            self.prev_hashes = new_hashes;
+        } else {
+            // Binary files — record size change only.
+            let size_delta = cur_size as i64 - self.prev_size as i64;
+            if size_delta != 0 {
+                store.insert_edit_chunk(self.row_id, now, 0, 0, size_delta);
+            }
+        }
+
+        self.prev_mtime = cur_mtime;
+        self.prev_size = cur_size;
+    }
+
+    fn finalize(mut self, store: &ActivityStore) {
+        let (cur_mtime, cur_size) = file_mtime_and_size(&self.path);
+        if cur_mtime != self.prev_mtime {
+            self.was_modified = true;
+            let is_text = is_text_category(&self.category);
+            if is_text {
+                let new_hashes = hash_lines(&self.path);
+                let (added, removed) = diff_line_hashes(&self.prev_hashes, &new_hashes);
+                let size_delta = cur_size as i64 - self.prev_size as i64;
+                if added > 0 || removed > 0 {
+                    store.insert_edit_chunk(self.row_id, unix_secs(), added, removed, size_delta);
+                    self.total_lines_added += added;
+                    self.total_lines_removed += removed;
+                }
+            }
+        }
+
+        let elapsed = unix_secs().saturating_sub(self.start_ts);
+        let total_size_delta = cur_size as i64 - self.initial_size as i64;
+        let words_delta = if self.was_modified && matches!(self.category.as_str(), "document" | "spreadsheet") {
+            count_words(&self.path) as i64 - self.initial_word_count as i64
+        } else {
+            0
+        };
+
+        store.finalize_file_interaction(
+            self.row_id,
+            elapsed,
+            self.was_modified,
+            total_size_delta,
+            self.total_lines_added,
+            self.total_lines_removed,
+            words_delta,
+        );
+    }
+}
+
+/// Return (mtime_unix_secs, size_bytes) for a file, or (0, 0) on error.
+fn file_mtime_and_size(path: &str) -> (u64, u64) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return (0, 0);
+    };
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    (mtime, meta.len())
+}
+
+/// Whether this category contains text files suitable for line-level diffing.
+fn is_text_category(category: &str) -> bool {
+    matches!(category, "code" | "document" | "data" | "config" | "other" | "")
+}
+
+/// Count whitespace-separated words in a text file.
+/// For .txt, .md, .rtf, etc.  Capped at 10 MB.  Returns 0 for binary files.
+fn count_words(path: &str) -> u64 {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else { return 0 };
+    let mut buf = String::new();
+    if Read::take(&mut f, 10 * 1024 * 1024).read_to_string(&mut buf).is_err() {
+        return 0;
+    }
+    buf.split_whitespace().count() as u64
+}
+
+/// Hash each line of a file into a `Vec<u64>`.  Returns an empty vec for
+/// binary or unreadable files.  Reads at most 10 MB.
+fn hash_lines(path: &str) -> Vec<u64> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::io::{BufRead, BufReader, Read};
+
+    let Ok(f) = std::fs::File::open(path) else {
+        return vec![];
+    };
+    let reader = BufReader::new(Read::take(f, 10 * 1024 * 1024));
+    let mut hashes = Vec::new();
+    for line in reader.lines() {
+        let Ok(line) = line else {
+            return vec![]; // binary file
+        };
+        let mut h = DefaultHasher::new();
+        line.hash(&mut h);
+        hashes.push(h.finish());
+    }
+    hashes
+}
+
+/// Compute (lines_added, lines_removed) by diffing two sequences of line
+/// hashes.  Uses multiset comparison: counts how many lines (by content)
+/// appeared or disappeared, regardless of position.  This means moving a
+/// line registers as 0 changes, and replacing a line registers as 1 added +
+/// 1 removed — which matches what the user typically cares about.
+fn diff_line_hashes(old: &[u64], new: &[u64]) -> (u64, u64) {
+    use std::collections::HashMap;
+
+    // Build frequency map for old lines.
+    let mut old_counts: HashMap<u64, i64> = HashMap::new();
+    for &h in old {
+        *old_counts.entry(h).or_default() += 1;
+    }
+
+    // Subtract new lines from the old counts.
+    for &h in new {
+        *old_counts.entry(h).or_default() -= 1;
+    }
+
+    // Positive remainder = lines that were removed (present in old, not in new).
+    // Negative remainder = lines that were added (present in new, not in old).
+    let mut added = 0u64;
+    let mut removed = 0u64;
+    for &diff in old_counts.values() {
+        if diff > 0 {
+            removed += diff as u64;
+        } else if diff < 0 {
+            added += (-diff) as u64;
+        }
+    }
+    (added, removed)
+}
+
 fn run_poller(state: AppState, store: Arc<ActivityStore>) {
     let mut last: Option<ActiveWindowInfo> = None;
+    let mut last_file: Option<String> = None;
+    let mut snapshot: Option<FileSnapshot> = None;
+    let mut last_prune: u64 = 0;
+
+    // Load settings for file tracking.
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let settings = skill_settings::load_settings(&skill_dir);
+
+    let rules = if settings.file_patterns.is_empty() {
+        skill_settings::default_file_patterns()
+    } else {
+        settings.file_patterns
+    };
+    let mut engine = FilePatternEngine::compile(&rules);
+    let mut excludes = compile_excludes(&settings.file_exclude_patterns);
+    let mut retention_days = settings.file_retention_days;
+    let mut settings_gen = state.settings_generation.load(Ordering::Relaxed);
 
     loop {
         std::thread::sleep(Duration::from_secs(1));
 
         if !state.track_active_window.load(Ordering::Relaxed) {
+            if let Some(snap) = snapshot.take() {
+                snap.finalize(&store);
+            }
             last = None;
+            last_file = None;
             continue;
+        }
+
+        // ── Hot-reload patterns on settings change ───────────────────
+        let gen = state.settings_generation.load(Ordering::Relaxed);
+        if gen != settings_gen {
+            settings_gen = gen;
+            let s = skill_settings::load_settings(&skill_dir);
+            let new_rules = if s.file_patterns.is_empty() {
+                skill_settings::default_file_patterns()
+            } else {
+                s.file_patterns
+            };
+            engine = FilePatternEngine::compile(&new_rules);
+            excludes = compile_excludes(&s.file_exclude_patterns);
+            retention_days = s.file_retention_days;
         }
 
         let current = poll_active_window();
@@ -314,9 +632,612 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
             if let Some(info) = &current {
                 store.insert_active_window(info);
             }
-            last = current;
+            last.clone_from(&current);
+        }
+
+        // ── File interaction tracking ────────────────────────────────
+        if state.track_file_activity.load(Ordering::Relaxed) {
+            if let Some(info) = &current {
+                // Prefer OS-reported document path; fall back to pattern engine.
+                let file = info
+                    .document_path
+                    .clone()
+                    .filter(|p| !p.is_empty() && file_exists(p))
+                    .or_else(|| {
+                        engine
+                            .extract(&info.app_name, &info.window_title)
+                            .filter(|p| file_exists(p))
+                    })
+                    .filter(|p| !is_excluded(p, &excludes));
+
+                let file_changed = file != last_file;
+                if file_changed {
+                    let now = unix_secs();
+                    // Finalize the previous file interaction.
+                    if let Some(snap) = snapshot.take() {
+                        snap.finalize(&store);
+                    }
+
+                    if let Some(ref path) = file {
+                        let project = detect_project(path);
+                        let (language, category) = detect_language(path);
+                        let git_branch = detect_git_branch(path);
+                        let (eeg_focus, eeg_mood) = read_eeg_snapshot(&state);
+                        if let Some(row_id) = store.insert_file_interaction(
+                            path,
+                            &info.app_name,
+                            &project,
+                            &language,
+                            &category,
+                            &git_branch,
+                            now,
+                            eeg_focus,
+                            eeg_mood,
+                        ) {
+                            snapshot = Some(FileSnapshot::capture(path, &category, row_id, now));
+                        }
+                    }
+                    last_file = file;
+                } else if let Some(ref mut snap) = snapshot {
+                    // Same file still focused — check for edits every 5s.
+                    snap.maybe_emit_chunk(&store);
+                }
+            } else {
+                if let Some(snap) = snapshot.take() {
+                    snap.finalize(&store);
+                }
+                last_file = None;
+            }
+        }
+
+        // ── Build/test detection from terminal titles ───────────────
+        if let Some(info) = &current {
+            if let Some((cmd, outcome)) = detect_build_event(&info.app_name, &info.window_title) {
+                let project = last_file.as_deref().map(|p| detect_project(p)).unwrap_or_default();
+                store.insert_build_event(&cmd, &outcome, &project, unix_secs());
+            }
+        }
+
+        // ── Periodic maintenance (once per hour) ──────────────────
+        let now = unix_secs();
+        if now >= last_prune + 3600 {
+            last_prune = now;
+            // Retention pruning.
+            if retention_days > 0 {
+                let cutoff = now.saturating_sub(retention_days as u64 * 86400);
+                let deleted = store.prune_file_interactions(cutoff);
+                if deleted > 0 {
+                    tracing::info!("[activity] pruned {deleted} file_interactions older than {retention_days}d");
+                }
+            }
+            // Build focus sessions from recent interactions.
+            build_focus_sessions(&store, now.saturating_sub(7200));
         }
     }
+}
+
+/// Extract the language name and broad category from the file extension.
+fn detect_language(file_path: &str) -> (String, String) {
+    let ext = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let (lang, cat) = match ext.as_str() {
+        // Code
+        "rs" => ("rust", "code"),
+        "py" => ("python", "code"),
+        "js" => ("javascript", "code"),
+        "ts" => ("typescript", "code"),
+        "tsx" => ("typescript", "code"),
+        "jsx" => ("javascript", "code"),
+        "go" => ("go", "code"),
+        "rb" => ("ruby", "code"),
+        "java" => ("java", "code"),
+        "kt" => ("kotlin", "code"),
+        "swift" => ("swift", "code"),
+        "c" => ("c", "code"),
+        "cpp" | "cc" | "cxx" => ("cpp", "code"),
+        "h" | "hpp" => ("cpp", "code"),
+        "cs" => ("csharp", "code"),
+        "php" => ("php", "code"),
+        "r" => ("r", "code"),
+        "scala" => ("scala", "code"),
+        "ex" | "exs" => ("elixir", "code"),
+        "erl" => ("erlang", "code"),
+        "hs" => ("haskell", "code"),
+        "ml" | "mli" => ("ocaml", "code"),
+        "lua" => ("lua", "code"),
+        "dart" => ("dart", "code"),
+        "zig" => ("zig", "code"),
+        "nim" => ("nim", "code"),
+        "v" => ("v", "code"),
+        "sh" | "bash" | "zsh" => ("shell", "code"),
+        "ps1" => ("powershell", "code"),
+        "sql" => ("sql", "code"),
+        "proto" => ("protobuf", "code"),
+        // Web
+        "html" | "htm" => ("html", "code"),
+        "css" | "scss" | "sass" | "less" => ("css", "code"),
+        "svelte" => ("svelte", "code"),
+        "vue" => ("vue", "code"),
+        "astro" => ("astro", "code"),
+        // Documents
+        "docx" | "doc" => ("word", "document"),
+        "rtf" => ("rtf", "document"),
+        "odt" => ("odt", "document"),
+        "pages" => ("pages", "document"),
+        "txt" => ("text", "document"),
+        "md" | "markdown" => ("markdown", "document"),
+        "tex" | "latex" => ("latex", "document"),
+        "pdf" => ("pdf", "document"),
+        // Spreadsheets
+        "xlsx" | "xls" => ("excel", "spreadsheet"),
+        "csv" => ("csv", "spreadsheet"),
+        "numbers" => ("numbers", "spreadsheet"),
+        "ods" => ("ods", "spreadsheet"),
+        "tsv" => ("tsv", "spreadsheet"),
+        // Presentations
+        "pptx" | "ppt" => ("powerpoint", "presentation"),
+        "key" | "keynote" => ("keynote", "presentation"),
+        "odp" => ("odp", "presentation"),
+        // Images
+        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "bmp" | "tiff" | "ico" | "heic" => ("image", "image"),
+        "raw" | "cr2" | "nef" | "dng" => ("raw", "image"),
+        // Design
+        "psd" => ("photoshop", "design"),
+        "ai" => ("illustrator", "design"),
+        "fig" => ("figma", "design"),
+        "sketch" => ("sketch", "design"),
+        "xd" => ("xd", "design"),
+        "indd" => ("indesign", "design"),
+        // Media
+        "mp4" | "mov" | "avi" | "mkv" | "wmv" | "webm" => ("video", "media"),
+        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" => ("audio", "media"),
+        // Data
+        "json" => ("json", "data"),
+        "yaml" | "yml" => ("yaml", "data"),
+        "toml" => ("toml", "data"),
+        "xml" => ("xml", "data"),
+        "sqlite" | "db" => ("database", "data"),
+        "parquet" => ("parquet", "data"),
+        // Config
+        "dockerfile" => ("docker", "config"),
+        "tf" | "hcl" => ("terraform", "config"),
+        "ini" | "cfg" | "conf" => ("config", "config"),
+        "env" => ("env", "config"),
+        "lock" => ("lockfile", "config"),
+        _ if ext.is_empty() => ("", ""),
+        _ => (&ext as &str, "other"),
+    };
+    (lang.to_string(), cat.to_string())
+}
+
+/// Get the current git branch for a file's repository.
+/// Only runs `git` if the file is inside a git repo (avoids spawning a
+/// process for every document/image interaction).
+fn detect_git_branch(file_path: &str) -> String {
+    let path = std::path::Path::new(file_path);
+    // Quick check: walk up looking for .git before shelling out.
+    let mut dir = path.parent();
+    let mut in_repo = false;
+    while let Some(d) = dir {
+        if d.join(".git").exists() {
+            in_repo = true;
+            break;
+        }
+        dir = d.parent();
+    }
+    if !in_repo {
+        return String::new();
+    }
+    let dir = path.parent().unwrap_or(std::path::Path::new("."));
+    std::process::Command::new("git")
+        .args(["branch", "--show-current"])
+        .current_dir(dir)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+/// Read the current EEG focus (beta/alpha ratio) and mood from daemon state.
+fn read_eeg_snapshot(state: &AppState) -> (Option<f32>, Option<f32>) {
+    let bands = state.latest_bands.lock().ok().and_then(|g| g.clone());
+    match bands {
+        Some(v) => {
+            let focus = v.get("bar").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let mood = v.get("mood").and_then(|v| v.as_f64()).map(|v| v as f32);
+            (focus, mood)
+        }
+        None => (None, None),
+    }
+}
+
+/// Detect the project or folder context for a file path.
+/// For developer files: walks up looking for `.git`, `Cargo.toml`, etc.
+/// For non-dev files: falls back to the immediate parent folder name
+/// (e.g. "Invoices", "Photos", "School Work").
+fn detect_project(file_path: &str) -> String {
+    let markers = [
+        ".git",
+        "Cargo.toml",
+        "package.json",
+        "go.mod",
+        "pyproject.toml",
+        "setup.py",
+        "pom.xml",
+        "build.gradle",
+        "*.xcodeproj",
+        "*.sln",
+        "Makefile",
+        "CMakeLists.txt",
+        "pubspec.yaml",
+        "mix.exs",
+    ];
+    let path = std::path::Path::new(file_path);
+    let mut dir = path.parent();
+    while let Some(d) = dir {
+        for marker in &markers {
+            if marker.starts_with('*') {
+                let suffix = &marker[1..];
+                if let Ok(entries) = std::fs::read_dir(d) {
+                    for entry in entries.flatten() {
+                        if entry.file_name().to_string_lossy().ends_with(suffix) {
+                            return d.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        }
+                    }
+                }
+            } else if d.join(marker).exists() {
+                return d.file_name().unwrap_or_default().to_string_lossy().to_string();
+            }
+        }
+        dir = d.parent();
+    }
+    // No dev markers found — use the immediate parent folder as context.
+    path.parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// Compile glob-style exclude patterns into regexes.
+fn compile_excludes(patterns: &[String]) -> Vec<glob::Pattern> {
+    patterns
+        .iter()
+        .filter_map(|p| {
+            let expanded = if p.starts_with("~/") {
+                normalise_tilde(p)
+            } else {
+                p.clone()
+            };
+            glob::Pattern::new(&expanded)
+                .map_err(|e| tracing::warn!("bad exclude glob {p:?}: {e}"))
+                .ok()
+        })
+        .collect()
+}
+
+/// Cluster recent file interactions into focus sessions.
+/// A session boundary is a gap of >5 minutes between interactions.
+fn build_focus_sessions(store: &ActivityStore, since: u64) {
+    const GAP_THRESHOLD: u64 = 300; // 5 minutes
+
+    let interactions = store.get_recent_files(1000, Some(since));
+    if interactions.is_empty() {
+        return;
+    }
+
+    // Interactions are newest-first; reverse for chronological order.
+    let mut sorted: Vec<_> = interactions.into_iter().collect();
+    sorted.sort_by_key(|r| r.seen_at);
+
+    let mut session_start = sorted[0].seen_at;
+    let mut session_end = sorted[0].seen_at + sorted[0].duration_secs.unwrap_or(0);
+    let mut files: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut projects: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut edit_count = 0u64;
+    let mut lines_added = 0u64;
+    let mut lines_removed = 0u64;
+    let mut focus_sum = 0f64;
+    let mut mood_sum = 0f64;
+    let mut eeg_count = 0u64;
+
+    let flush = |store: &ActivityStore,
+                 start: u64,
+                 end: u64,
+                 files: &std::collections::HashSet<String>,
+                 projects: &std::collections::HashMap<String, u64>,
+                 edits: u64,
+                 la: u64,
+                 lr: u64,
+                 fs: f64,
+                 ms: f64,
+                 ec: u64| {
+        if end <= start {
+            return;
+        }
+        let main_project = projects
+            .iter()
+            .max_by_key(|(_, &v)| v)
+            .map(|(k, _)| k.as_str())
+            .unwrap_or("");
+        let avg_focus = if ec > 0 { Some(fs as f32 / ec as f32) } else { None };
+        let avg_mood = if ec > 0 { Some(ms as f32 / ec as f32) } else { None };
+        store.insert_focus_session(
+            start,
+            end,
+            main_project,
+            files.len() as u64,
+            edits,
+            la,
+            lr,
+            avg_focus,
+            avg_mood,
+        );
+    };
+
+    for row in &sorted {
+        let gap = row.seen_at.saturating_sub(session_end);
+        if gap > GAP_THRESHOLD {
+            // Flush previous session.
+            flush(
+                store,
+                session_start,
+                session_end,
+                &files,
+                &projects,
+                edit_count,
+                lines_added,
+                lines_removed,
+                focus_sum,
+                mood_sum,
+                eeg_count,
+            );
+            // Start new session.
+            session_start = row.seen_at;
+            files.clear();
+            projects.clear();
+            edit_count = 0;
+            lines_added = 0;
+            lines_removed = 0;
+            focus_sum = 0.0;
+            mood_sum = 0.0;
+            eeg_count = 0;
+        }
+        session_end = row.seen_at + row.duration_secs.unwrap_or(0);
+        files.insert(row.file_path.clone());
+        if !row.project.is_empty() {
+            *projects.entry(row.project.clone()).or_default() += 1;
+        }
+        if row.was_modified {
+            edit_count += 1;
+        }
+        lines_added += row.lines_added;
+        lines_removed += row.lines_removed;
+        if let Some(f) = row.eeg_focus {
+            focus_sum += f as f64;
+            eeg_count += 1;
+        }
+        if let Some(m) = row.eeg_mood {
+            mood_sum += m as f64;
+        }
+    }
+    // Flush final session.
+    flush(
+        store,
+        session_start,
+        session_end,
+        &files,
+        &projects,
+        edit_count,
+        lines_added,
+        lines_removed,
+        focus_sum,
+        mood_sum,
+        eeg_count,
+    );
+}
+
+/// Detect build/test commands and outcomes in terminal window titles.
+/// Returns `Some((command, outcome))` if a build event is detected.
+fn detect_build_event(app_name: &str, title: &str) -> Option<(String, String)> {
+    let lower_app = app_name.to_lowercase();
+    let is_terminal = lower_app.contains("terminal")
+        || lower_app.contains("iterm")
+        || lower_app.contains("alacritty")
+        || lower_app.contains("kitty")
+        || lower_app.contains("wezterm")
+        || lower_app.contains("warp")
+        || lower_app.contains("ghostty");
+    if !is_terminal {
+        return None;
+    }
+    let lower = title.to_lowercase();
+    // Detect common build/test commands and their outcomes.
+    let build_cmds = [
+        "cargo build",
+        "cargo test",
+        "cargo check",
+        "cargo clippy",
+        "npm run",
+        "npm test",
+        "yarn build",
+        "yarn test",
+        "pnpm build",
+        "make",
+        "cmake",
+        "go build",
+        "go test",
+        "pytest",
+        "python -m pytest",
+        "jest",
+        "vitest",
+        "gradle build",
+        "mvn",
+        "swift build",
+        "xcodebuild",
+    ];
+    for cmd in &build_cmds {
+        if lower.contains(cmd) {
+            let outcome = if lower.contains("error") || lower.contains("failed") || lower.contains("fail") {
+                "fail"
+            } else if lower.contains("passed")
+                || lower.contains("success")
+                || lower.contains("ok")
+                || lower.contains("finished")
+            {
+                "pass"
+            } else {
+                "running"
+            };
+            return Some((cmd.to_string(), outcome.to_string()));
+        }
+    }
+    None
+}
+
+/// Check if a file path matches any exclude pattern.
+fn is_excluded(path: &str, excludes: &[glob::Pattern]) -> bool {
+    excludes.iter().any(|p| p.matches(path))
+}
+
+// ── Configurable file-pattern engine ─────────────────────────────────────────
+
+/// A single compiled rule: pre-compiled regexes for app name and title.
+struct CompiledRule {
+    app_re: Regex,
+    title_re: Regex,
+}
+
+/// Pre-compiled pattern engine built from [`FilePatternRule`] configs.
+/// Evaluated in order; first match wins.
+pub(crate) struct FilePatternEngine {
+    rules: Vec<CompiledRule>,
+}
+
+impl FilePatternEngine {
+    /// Compile a list of [`FilePatternRule`]s into a ready-to-use engine.
+    /// Invalid regexes are logged and skipped.
+    pub(crate) fn compile(rules: &[FilePatternRule]) -> Self {
+        let compiled = rules
+            .iter()
+            .filter_map(|r| {
+                let app_re = match Regex::new(&r.app) {
+                    Ok(re) => re,
+                    Err(e) => {
+                        tracing::warn!("file_patterns: bad app regex {:?}: {e}", r.app);
+                        return None;
+                    }
+                };
+                let title_re = match Regex::new(&r.title) {
+                    Ok(re) => re,
+                    Err(e) => {
+                        tracing::warn!("file_patterns: bad title regex {:?}: {e}", r.title);
+                        return None;
+                    }
+                };
+                Some(CompiledRule { app_re, title_re })
+            })
+            .collect();
+        Self { rules: compiled }
+    }
+
+    /// Try to extract a file path from the given app name and window title.
+    /// Returns `None` when no rule matches.
+    pub(crate) fn extract(&self, app_name: &str, title: &str) -> Option<String> {
+        if title.is_empty() {
+            return None;
+        }
+        for rule in &self.rules {
+            if !rule.app_re.is_match(app_name) {
+                continue;
+            }
+            let Some(caps) = rule.title_re.captures(title) else {
+                continue;
+            };
+            let file = match caps.name("file") {
+                Some(m) => m.as_str().trim(),
+                None => continue,
+            };
+            // Clean common decorations.
+            let file = file
+                .trim_start_matches('●')
+                .trim_end_matches("[+]")
+                .trim_end_matches("[modified]")
+                .trim_end_matches("[Read-Only]")
+                .trim_end_matches("[Compatibility Mode]")
+                .trim_end_matches("[Protected View]")
+                .trim();
+            if file.is_empty() || file == "Welcome" || file == "Get Started" {
+                continue;
+            }
+            // Check that it looks like a file (has an extension).
+            if !looks_like_file(file) {
+                continue;
+            }
+            let file = normalise_tilde(file);
+
+            // If a `dir` capture group is present, join dir/file.
+            if let Some(dir_m) = caps.name("dir") {
+                let dir = dir_m.as_str().trim();
+                if !dir.is_empty() {
+                    let dir = normalise_tilde(dir);
+                    // If the file is already absolute, skip dir.
+                    if file.starts_with('/') {
+                        return Some(file);
+                    }
+                    return Some(format!("{dir}/{file}"));
+                }
+            }
+            return Some(file);
+        }
+        None
+    }
+}
+
+/// Quick heuristic: does this string look like a filename (has a dot-extension)?
+fn looks_like_file(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    // Take just the last path component.
+    let name = s.rsplit('/').next().unwrap_or(s);
+    // Must have a dot-extension with at least 1 char after the dot.
+    if let Some(dot) = name.rfind('.') {
+        let ext = &name[dot + 1..];
+        !ext.is_empty() && ext.len() <= 12 && ext.chars().all(|c| c.is_ascii_alphanumeric())
+    } else {
+        false
+    }
+}
+
+/// Check whether a path points to an existing regular file (not a directory).
+/// Silently returns `false` for any I/O error.
+fn file_exists(path: &str) -> bool {
+    let p = std::path::Path::new(path);
+    p.is_file()
+}
+
+/// Expand a leading `~` to the user's home directory.
+fn normalise_tilde(s: &str) -> String {
+    if let Some(rest) = s.strip_prefix("~/") {
+        if let Some(home) = std::env::var("HOME").ok().or_else(|| dirs_next_home()) {
+            return format!("{home}/{rest}");
+        }
+    }
+    s.to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn dirs_next_home() -> Option<String> {
+    std::env::var("HOME").ok()
+}
+
+#[cfg(target_os = "windows")]
+fn dirs_next_home() -> Option<String> {
+    std::env::var("USERPROFILE").ok()
 }
 
 fn run_input_monitor(state: AppState, store: Arc<ActivityStore>) {
@@ -375,6 +1296,102 @@ fn run_input_monitor(state: AppState, store: Arc<ActivityStore>) {
     }
 }
 
+/// Background filesystem watcher.  Watches common user directories for file
+/// modifications and records them as file interactions.  Complements the
+/// window-title-based approach by catching saves that happen outside the
+/// focused window (e.g. auto-save, `git checkout`, build output).
+fn run_file_watcher(state: AppState, store: Arc<ActivityStore>) {
+    use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+    use std::sync::mpsc;
+
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+
+    // Directories to watch — common user content locations.
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    if home.is_empty() {
+        tracing::warn!("[file-watcher] HOME not set; file watcher disabled");
+        return;
+    }
+    let watch_dirs: Vec<std::path::PathBuf> = [
+        "Documents",
+        "Desktop",
+        "Downloads",
+        "Projects",
+        "Developer",
+        "code",
+        "src",
+    ]
+    .iter()
+    .map(|d| std::path::PathBuf::from(&home).join(d))
+    .filter(|p| p.is_dir())
+    .collect();
+
+    if watch_dirs.is_empty() {
+        tracing::info!("[file-watcher] no user directories found to watch");
+        return;
+    }
+
+    let (tx, rx) = mpsc::channel();
+
+    let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::warn!("[file-watcher] failed to create watcher: {e}");
+            return;
+        }
+    };
+
+    for dir in &watch_dirs {
+        if let Err(e) = watcher.watch(dir, RecursiveMode::Recursive) {
+            tracing::warn!("[file-watcher] failed to watch {}: {e}", dir.display());
+        }
+    }
+
+    tracing::info!("[file-watcher] watching {} directories", watch_dirs.len());
+
+    let settings = skill_settings::load_settings(&skill_dir);
+    let excludes = compile_excludes(&settings.file_exclude_patterns);
+
+    for event in rx {
+        if !state.track_file_activity.load(Ordering::Relaxed) {
+            continue;
+        }
+        let Ok(event) = event else { continue };
+        // Only track content modifications, not metadata changes.
+        let is_modify = matches!(
+            event.kind,
+            EventKind::Modify(notify::event::ModifyKind::Data(_)) | EventKind::Create(notify::event::CreateKind::File)
+        );
+        if !is_modify {
+            continue;
+        }
+        for path in &event.paths {
+            let path_str = path.to_string_lossy();
+            if !looks_like_file(&path_str) {
+                continue;
+            }
+            if is_excluded(&path_str, &excludes) {
+                continue;
+            }
+            let project = detect_project(&path_str);
+            let (language, category) = detect_language(&path_str);
+            store.insert_file_interaction(
+                &path_str,
+                "filesystem",
+                &project,
+                &language,
+                &category,
+                "",
+                unix_secs(),
+                None,
+                None,
+            );
+        }
+    }
+}
+
 fn unix_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -386,6 +1403,16 @@ fn unix_secs() -> u64 {
 mod tests {
     use super::*;
 
+    /// Build an engine from the built-in default patterns.
+    fn default_engine() -> FilePatternEngine {
+        FilePatternEngine::compile(&skill_settings::default_file_patterns())
+    }
+
+    /// Shorthand: extract a file path using the default rule set.
+    fn extract(app: &str, title: &str) -> Option<String> {
+        default_engine().extract(app, title)
+    }
+
     #[test]
     fn unix_secs_is_nonzero_and_monotonic() {
         let a = unix_secs();
@@ -393,5 +1420,317 @@ mod tests {
         let b = unix_secs();
         assert!(a > 0);
         assert!(b >= a);
+    }
+
+    // ── Pattern engine tests ─────────────────────────────────────────────
+
+    #[test]
+    fn vscode_title_with_project() {
+        let f = extract("Code", "main.rs — skill — Visual Studio Code");
+        assert_eq!(f.as_deref(), Some("skill/main.rs"));
+    }
+
+    #[test]
+    fn vscode_modified_indicator() {
+        let f = extract("Code", "● lib.rs — myproj — Visual Studio Code");
+        assert_eq!(f.as_deref(), Some("myproj/lib.rs"));
+    }
+
+    #[test]
+    fn vscode_welcome_ignored() {
+        assert!(extract("Code", "Welcome — Visual Studio Code").is_none());
+    }
+
+    #[test]
+    fn cursor_title() {
+        let f = extract("Cursor", "app.tsx — frontend — Cursor");
+        assert_eq!(f.as_deref(), Some("frontend/app.tsx"));
+    }
+
+    #[test]
+    fn jetbrains_with_bracket_path() {
+        let f = extract("PyCharm", "main.py – myproject [~/Projects/myproject]");
+        assert!(f.is_some());
+        let p = f.unwrap();
+        assert!(p.ends_with("/Projects/myproject/main.py"), "got: {p}");
+    }
+
+    #[test]
+    fn xcode_title() {
+        let f = extract("Xcode", "ViewController.swift — MyApp — Xcode");
+        assert_eq!(f.as_deref(), Some("ViewController.swift"));
+    }
+
+    #[test]
+    fn sublime_with_dir() {
+        let f = extract("Sublime Text", "main.rs (~/code/proj) - Sublime Text");
+        assert!(f.is_some());
+        let p = f.unwrap();
+        assert!(p.ends_with("/code/proj/main.rs"), "got: {p}");
+    }
+
+    #[test]
+    fn terminal_vim_command() {
+        let f = extract("iTerm2", "vim src/main.rs");
+        assert_eq!(f.as_deref(), Some("src/main.rs"));
+    }
+
+    #[test]
+    fn generic_absolute_path() {
+        let f = extract("SomeApp", "Editing /Users/me/doc.txt");
+        assert_eq!(f.as_deref(), Some("/Users/me/doc.txt"));
+    }
+
+    #[test]
+    fn no_path_in_title() {
+        assert!(extract("Safari", "Google - Safari").is_none());
+    }
+
+    #[test]
+    fn empty_title() {
+        assert!(extract("Finder", "").is_none());
+    }
+
+    #[test]
+    fn looks_like_file_basic() {
+        assert!(looks_like_file("main.rs"));
+        assert!(looks_like_file("path/to/file.txt"));
+        assert!(!looks_like_file("NoExtension"));
+        assert!(!looks_like_file(""));
+    }
+
+    // ── Editor / app tests ───────────────────────────────────────────────
+
+    #[test]
+    fn zed_title() {
+        let f = extract("Zed", "lib.rs — myproject — Zed");
+        assert_eq!(f.as_deref(), Some("myproject/lib.rs"));
+    }
+
+    #[test]
+    fn android_studio_title() {
+        let f = extract(
+            "Android Studio",
+            "MainActivity.kt – myapp [~/AndroidStudioProjects/myapp]",
+        );
+        assert!(f.is_some());
+        let p = f.unwrap();
+        assert!(p.ends_with("/AndroidStudioProjects/myapp/MainActivity.kt"), "got: {p}");
+    }
+
+    #[test]
+    fn emacs_title() {
+        let f = extract("Emacs", "init.el  (Emacs@localhost)");
+        assert_eq!(f.as_deref(), Some("init.el"));
+    }
+
+    #[test]
+    fn helix_title() {
+        let f = extract("Helix", "main.rs [+] — hx");
+        assert_eq!(f.as_deref(), Some("main.rs"));
+    }
+
+    #[test]
+    fn helix_title_reversed() {
+        let f = extract("hx", "hx — src/lib.rs");
+        assert_eq!(f.as_deref(), Some("src/lib.rs"));
+    }
+
+    #[test]
+    fn office_word_title() {
+        let f = extract("Microsoft Word", "Report.docx - Word");
+        assert_eq!(f.as_deref(), Some("Report.docx"));
+    }
+
+    #[test]
+    fn office_excel_readonly() {
+        let f = extract("Microsoft Excel", "Budget.xlsx [Read-Only] - Excel");
+        assert_eq!(f.as_deref(), Some("Budget.xlsx"));
+    }
+
+    #[test]
+    fn adobe_photoshop() {
+        let f = extract("Adobe Photoshop", "banner.psd @ 100% (RGB/8)");
+        assert_eq!(f.as_deref(), Some("banner.psd"));
+    }
+
+    #[test]
+    fn figma_title() {
+        let f = extract("Figma", "Design System.fig — Figma");
+        assert_eq!(f.as_deref(), Some("Design System.fig"));
+    }
+
+    #[test]
+    fn obsidian_note_with_extension() {
+        let f = extract("Obsidian", "todo.md - vault - Obsidian");
+        assert_eq!(f.as_deref(), Some("todo.md"));
+    }
+
+    #[test]
+    fn preview_title() {
+        let f = extract("Preview", "screenshot.png");
+        assert_eq!(f.as_deref(), Some("screenshot.png"));
+    }
+
+    #[test]
+    fn textedit_title() {
+        let f = extract("TextEdit", "notes.txt");
+        assert_eq!(f.as_deref(), Some("notes.txt"));
+    }
+
+    #[test]
+    fn pdf_reader_title() {
+        let f = extract("Skim", "paper.pdf - Skim");
+        assert_eq!(f.as_deref(), Some("paper.pdf"));
+    }
+
+    #[test]
+    fn nova_title() {
+        let f = extract("Nova", "index.html — mysite — Nova");
+        assert_eq!(f.as_deref(), Some("mysite/index.html"));
+    }
+
+    #[test]
+    fn terminal_nano_command() {
+        let f = extract("Terminal", "nano config.yaml");
+        assert_eq!(f.as_deref(), Some("config.yaml"));
+    }
+
+    #[test]
+    fn terminal_hx_command() {
+        let f = extract("Alacritty", "hx src/main.rs");
+        assert_eq!(f.as_deref(), Some("src/main.rs"));
+    }
+
+    #[test]
+    fn ghostty_terminal() {
+        let f = extract("Ghostty", "nvim app.tsx");
+        assert_eq!(f.as_deref(), Some("app.tsx"));
+    }
+
+    #[test]
+    fn windsurf_title() {
+        let f = extract("Windsurf", "server.ts — backend — Windsurf");
+        assert_eq!(f.as_deref(), Some("backend/server.ts"));
+    }
+
+    #[test]
+    fn sketch_title() {
+        let f = extract("Sketch", "mockup.sketch — Page 1");
+        assert_eq!(f.as_deref(), Some("mockup.sketch"));
+    }
+
+    #[test]
+    fn iwork_pages() {
+        let f = extract("Pages", "letter.pages — Pages");
+        assert_eq!(f.as_deref(), Some("letter.pages"));
+    }
+
+    // ── Custom pattern test ──────────────────────────────────────────────
+
+    #[test]
+    fn custom_user_pattern() {
+        let rules = vec![FilePatternRule {
+            app: r"(?i)myeditor".into(),
+            title: r"FILE=(?P<file>[^\s]+)".into(),
+            comment: "Custom editor with FILE= prefix".into(),
+        }];
+        let engine = FilePatternEngine::compile(&rules);
+        let f = engine.extract("MyEditor", "FILE=/home/user/notes.txt something");
+        assert_eq!(f.as_deref(), Some("/home/user/notes.txt"));
+    }
+
+    #[test]
+    fn custom_pattern_with_dir() {
+        let rules = vec![FilePatternRule {
+            app: r".*".into(),
+            title: r"\[(?P<dir>[^\]]+)\]\s*(?P<file>\S+\.\w+)".into(),
+            comment: "[dir] file pattern".into(),
+        }];
+        let engine = FilePatternEngine::compile(&rules);
+        let f = engine.extract("AnyApp", "[/home/user] notes.txt");
+        assert_eq!(f.as_deref(), Some("/home/user/notes.txt"));
+    }
+
+    #[test]
+    fn bad_regex_skipped() {
+        let rules = vec![
+            FilePatternRule {
+                app: r"[invalid".into(),
+                title: r"(?P<file>.+)".into(),
+                comment: "bad app regex".into(),
+            },
+            FilePatternRule {
+                app: r".*".into(),
+                title: r"^(?P<file>.+\.\w+)$".into(),
+                comment: "fallback".into(),
+            },
+        ];
+        let engine = FilePatternEngine::compile(&rules);
+        // Bad regex is skipped, fallback works.
+        let f = engine.extract("Any", "notes.txt");
+        assert_eq!(f.as_deref(), Some("notes.txt"));
+    }
+
+    // ── Diff tests ───────────────────────────────────────────────────────
+
+    #[test]
+    fn diff_no_changes() {
+        let old = vec![1, 2, 3];
+        let (a, r) = diff_line_hashes(&old, &old);
+        assert_eq!(a, 0);
+        assert_eq!(r, 0);
+    }
+
+    #[test]
+    fn diff_pure_additions() {
+        let old = vec![1, 2];
+        let new = vec![1, 2, 3, 4];
+        let (a, r) = diff_line_hashes(&old, &new);
+        assert_eq!(a, 2);
+        assert_eq!(r, 0);
+    }
+
+    #[test]
+    fn diff_pure_deletions() {
+        let old = vec![1, 2, 3, 4];
+        let new = vec![1, 2];
+        let (a, r) = diff_line_hashes(&old, &new);
+        assert_eq!(a, 0);
+        assert_eq!(r, 2);
+    }
+
+    #[test]
+    fn diff_replacements() {
+        // Replace lines 2,3 with 5,6 — should show 2 added, 2 removed
+        let old = vec![1, 2, 3, 4];
+        let new = vec![1, 5, 6, 4];
+        let (a, r) = diff_line_hashes(&old, &new);
+        assert_eq!(a, 2);
+        assert_eq!(r, 2);
+    }
+
+    #[test]
+    fn diff_reorder_no_churn() {
+        // Moving lines around doesn't count as changes
+        let old = vec![1, 2, 3];
+        let new = vec![3, 1, 2];
+        let (a, r) = diff_line_hashes(&old, &new);
+        assert_eq!(a, 0);
+        assert_eq!(r, 0);
+    }
+
+    #[test]
+    fn diff_empty_to_content() {
+        let (a, r) = diff_line_hashes(&[], &[1, 2, 3]);
+        assert_eq!(a, 3);
+        assert_eq!(r, 0);
+    }
+
+    #[test]
+    fn diff_content_to_empty() {
+        let (a, r) = diff_line_hashes(&[1, 2, 3], &[]);
+        assert_eq!(a, 0);
+        assert_eq!(r, 3);
     }
 }

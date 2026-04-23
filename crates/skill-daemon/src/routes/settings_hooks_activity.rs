@@ -2,11 +2,16 @@
 //! Hook and activity route handlers extracted from settings.
 
 use axum::{extract::State, Json};
-use skill_data::activity_store::{ActiveWindowRow, ActivityStore, InputActivityRow, InputBucketRow};
+use skill_data::activity_store::{
+    ActiveWindowRow, ActivityStore, BuildEventRow, CoEditRow, DailySummaryRow, EditChunkRow, FileInteractionRow,
+    FileUsageRow, FocusSessionRow, HourlyEditRow, InputActivityRow, InputBucketRow, LanguageBreakdownRow,
+    ProjectUsageRow,
+};
 
 use crate::{
     routes::settings::{
-        ActivityBucketsRequest, ActivityRecentRequest, HookDistanceRequest, HookKeywordsRequest, HookLogRequest,
+        ActivityBucketsRequest, ActivityFilesRequest, ActivityRecentRequest, CoEditRequest, DaySummaryRequest,
+        EditChunksRequest, HookDistanceRequest, HookKeywordsRequest, HookLogRequest,
     },
     state::AppState,
 };
@@ -241,6 +246,234 @@ pub(crate) async fn activity_input_buckets_impl(
     let rows = tokio::task::spawn_blocking(move || {
         ActivityStore::open(&skill_dir)
             .map(|store| store.get_input_buckets(start, end))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_recent_files_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<FileInteractionRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let limit = req.limit.unwrap_or(50).min(500);
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|store| store.get_recent_files(limit, since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_top_files_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<FileUsageRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let limit = req.limit.unwrap_or(20).min(200);
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|store| store.top_files(limit, since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_top_projects_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<ProjectUsageRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let limit = req.limit.unwrap_or(20).min(200);
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|store| store.top_projects(limit, since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_edit_chunks_impl(
+    State(state): State<AppState>,
+    Json(req): Json<EditChunksRequest>,
+) -> Json<Vec<EditChunkRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let rows = tokio::task::spawn_blocking(move || {
+        let Some(store) = ActivityStore::open(&skill_dir) else {
+            return vec![];
+        };
+        if let Some(id) = req.interaction_id {
+            store.get_edit_chunks(id)
+        } else {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let end = req.to_ts.unwrap_or(now);
+            let start = req.from_ts.unwrap_or_else(|| end.saturating_sub(3600));
+            store.get_edit_chunks_range(start, end)
+        }
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_language_breakdown_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<LanguageBreakdownRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.language_breakdown(since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_context_switch_rate_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityBucketsRequest>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let end = req.to_ts.unwrap_or(now);
+    let start = req.from_ts.unwrap_or_else(|| end.saturating_sub(3600));
+    let rate = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.context_switch_rate(start, end))
+            .unwrap_or(0.0)
+    })
+    .await
+    .unwrap_or(0.0);
+    Json(serde_json::json!({"switches_per_minute": rate}))
+}
+
+pub(crate) async fn activity_coedited_files_impl(
+    State(state): State<AppState>,
+    Json(req): Json<CoEditRequest>,
+) -> Json<Vec<CoEditRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let window = req.window_secs.unwrap_or(600);
+    let limit = req.limit.unwrap_or(20).min(100);
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.coedited_files(window, limit, since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_daily_summary_impl(
+    State(state): State<AppState>,
+    Json(req): Json<DaySummaryRequest>,
+) -> Json<DailySummaryRow> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let day = req.day_start;
+    let row = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.daily_summary(day))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(row)
+}
+
+pub(crate) async fn activity_hourly_heatmap_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<HourlyEditRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.hourly_edit_heatmap(since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_focus_sessions_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<FocusSessionRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let limit = req.limit.unwrap_or(20).min(100);
+    let since = req.since;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.get_focus_sessions(limit, since))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_forgotten_files_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<String>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let since = req.since.unwrap_or_else(|| now.saturating_sub(86400));
+    let files = tokio::task::spawn_blocking(move || {
+        let Some(store) = ActivityStore::open(&skill_dir) else {
+            return vec![];
+        };
+        let modified = store.modified_files_since(since);
+        modified
+            .into_iter()
+            .filter(|f| {
+                let dir = std::path::Path::new(f).parent().unwrap_or(std::path::Path::new("."));
+                std::process::Command::new("git")
+                    .args(["diff", "--name-only", "HEAD", "--", f])
+                    .current_dir(dir)
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .map(|o| !o.stdout.is_empty())
+                    .unwrap_or(false)
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default();
+    Json(files)
+}
+
+pub(crate) async fn activity_recent_builds_impl(State(state): State<AppState>) -> Json<Vec<BuildEventRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.get_recent_builds(50))
             .unwrap_or_default()
     })
     .await

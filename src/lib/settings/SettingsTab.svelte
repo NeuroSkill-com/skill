@@ -114,6 +114,7 @@ interface ActiveWindowInfo {
   app_name: string;
   app_path: string;
   window_title: string;
+  document_path?: string | null;
   activated_at: number;
 }
 let trackActiveWindow = $state(true);

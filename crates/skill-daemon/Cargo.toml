@@ -44,6 +44,8 @@ btleplug = "0.11"
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
 rand = "0.10"
+regex = "1"
+notify = { version = "7", default-features = false, features = ["macos_fsevent"] }
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }

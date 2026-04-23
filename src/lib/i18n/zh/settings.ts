@@ -527,6 +527,7 @@ const settings: Record<string, string> = {
   "daemon.version": "版本",
   "daemon.latency": "延迟",
   "daemon.wsClients": "WS 客户端",
+  "daemon.forceRestart": "强制重启",
   "daemon.streaming": "传输中",
   "daemon.idle": "空闲",
   "settingsTabs.lsl": "LSL",

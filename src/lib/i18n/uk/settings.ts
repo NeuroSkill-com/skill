@@ -679,6 +679,7 @@ const settings: Record<string, string> = {
   "daemon.version": "Версія",
   "daemon.latency": "Затримка",
   "daemon.wsClients": "WS-клієнти",
+  "daemon.forceRestart": "Примусовий перезапуск",
   "daemon.streaming": "трансляція",
   "daemon.idle": "неактивний",
 

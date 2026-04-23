@@ -457,6 +457,14 @@ fn ensure_daemon_running_blocking() {
 }
 
 #[tauri::command]
+pub fn force_restart_daemon() -> Result<(), String> {
+    restart_daemon_process_best_effort();
+    // Give the OS a moment to release the port.
+    std::thread::sleep(Duration::from_millis(500));
+    start_daemon_dev()
+}
+
+#[tauri::command]
 pub fn start_daemon_dev() -> Result<(), String> {
     let bin = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| {
         if cfg!(target_os = "windows") {

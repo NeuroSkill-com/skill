@@ -652,6 +652,7 @@ const settings: Record<string, string> = {
   "daemon.version": "גרסה",
   "daemon.latency": "השהיה",
   "daemon.wsClients": "לקוחות WS",
+  "daemon.forceRestart": "אילוץ הפעלה מחדש",
   "daemon.streaming": "משדר",
   "daemon.idle": "לא פעיל",
 

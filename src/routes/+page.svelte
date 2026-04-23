@@ -240,6 +240,20 @@ async function restartDaemon() {
   }
 }
 
+async function forceRestartDaemon() {
+  enginePopoverOpen = false;
+  daemonLaunching = true;
+  try {
+    await invoke("force_restart_daemon");
+  } catch (e) {
+    addToast("error", t("daemon.connection"), `${e}`, 6000);
+  } finally {
+    setTimeout(() => {
+      daemonLaunching = false;
+    }, 5000);
+  }
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 interface EegPacket {
   electrode: number;
@@ -2722,6 +2736,10 @@ useWindowTitle("window.title.main");
                   <span class="text-muted-foreground">{t("daemon.wsClients")}</span>
                   <span class="text-right tabular-nums">{engineWsClients}</span>
                 </div>
+                <button
+                  class="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-ui-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  onclick={forceRestartDaemon}
+                >{t("daemon.forceRestart")}</button>
               </div>
             {/if}
           </span>
