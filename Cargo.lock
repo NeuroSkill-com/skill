@@ -6902,9 +6902,9 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kittentts"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4daa563b33b6e7d9bb377f2f0cf43d90f8aa2737b622388730ba12f8386235b9"
+checksum = "2d3e54eb4cfb8b8831ee53ae391905293ce85ff47f7fdc50c302ce62b96a5c50"
 dependencies = [
  "anyhow",
  "espeak-ng",

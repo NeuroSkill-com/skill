@@ -19,7 +19,7 @@ tokio      = { version = "1", features = ["sync"] }
 hf-hub     = "0.5"
 dirs       = "6"
 
-kittentts  = { version = "0.3.0", features = ["espeak"], optional = true }
+kittentts  = { version = "0.4.0", features = ["espeak"], optional = true }
 rodio      = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
 sha2       = { version = "0.10", optional = true }
 hound      = { version = "3", optional = true }
