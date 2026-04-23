@@ -506,6 +506,7 @@ export type TranslationKey =
   | "daemon.unreachable"
   | "daemon.uptime"
   | "daemon.version"
+  | "daemon.forceRestart"
   | "daemon.wsClients"
   | "daemon.wsError"
   | "dashboard.accel"

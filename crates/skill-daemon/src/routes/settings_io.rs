@@ -14,4 +14,8 @@ pub(crate) fn save_user_settings(state: &AppState, settings: &skill_settings::Us
     if let Ok(json) = serde_json::to_string_pretty(settings) {
         let _ = std::fs::write(path, json);
     }
+    // Bump the generation counter so background threads can detect the change.
+    state
+        .settings_generation
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }

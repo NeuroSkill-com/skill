@@ -538,6 +538,7 @@ const settings: Record<string, string> = {
   "daemon.version": "버전",
   "daemon.latency": "지연 시간",
   "daemon.wsClients": "WS 클라이언트",
+  "daemon.forceRestart": "강제 재시작",
   "daemon.streaming": "스트리밍 중",
   "daemon.idle": "대기 중",
   "settingsTabs.lsl": "LSL",

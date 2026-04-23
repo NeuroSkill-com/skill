@@ -691,6 +691,7 @@ const settings: Record<string, string> = {
   "daemon.version": "Versión",
   "daemon.latency": "Latencia",
   "daemon.wsClients": "Clientes WS",
+  "daemon.forceRestart": "Forzar reinicio",
   "daemon.streaming": "transmitiendo",
   "daemon.idle": "inactivo",
 

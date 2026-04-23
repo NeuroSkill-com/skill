@@ -91,6 +91,10 @@ pub struct AppState {
     pub lsl_virtual_source: Arc<Mutex<Option<skill_lsl::VirtualLslSource>>>,
     pub track_active_window: Arc<AtomicBool>,
     pub track_input_activity: Arc<AtomicBool>,
+    pub track_file_activity: Arc<AtomicBool>,
+    /// Monotonically increasing counter bumped whenever settings are saved.
+    /// Used by background threads to detect hot-reload.
+    pub settings_generation: Arc<std::sync::atomic::AtomicU64>,
     /// Latest EEG band power snapshot (~4 Hz update from session runner).
     pub latest_bands: Arc<Mutex<Option<serde_json::Value>>>,
     /// Multi-token auth store.
@@ -230,6 +234,8 @@ impl AppState {
             lsl_virtual_source: Arc::new(Mutex::new(None)),
             track_active_window: Arc::new(AtomicBool::new(settings.track_active_window)),
             track_input_activity: Arc::new(AtomicBool::new(settings.track_input_activity)),
+            track_file_activity: Arc::new(AtomicBool::new(settings.track_file_activity)),
+            settings_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             latest_bands: Arc::new(Mutex::new(None)),
             token_store: Arc::new(Mutex::new(token_store)),
             llm_status: Arc::new(Mutex::new("stopped".to_string())),

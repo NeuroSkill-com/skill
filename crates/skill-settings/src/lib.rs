@@ -612,6 +612,150 @@ impl Default for HookRule {
     }
 }
 
+// ── File interaction pattern rules ────────────────────────────────────────────
+
+/// A single pattern rule for extracting file paths from window titles.
+///
+/// The engine tries rules in order; first match wins.  Each rule has:
+///
+/// * `app` — a regex matched **case-insensitively** against the application
+///   name.  Use `".*"` to match any app.
+/// * `title` — a regex matched against the window title.  Must contain a named
+///   capture group `(?P<file>…)`.  An optional `(?P<dir>…)` group provides a
+///   directory prefix that is joined with the file.
+/// * `comment` — an optional human-readable note (ignored by the engine).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilePatternRule {
+    /// Regex matched against the application name (case-insensitive).
+    pub app: String,
+    /// Regex matched against the window title.
+    /// Must contain `(?P<file>…)` and optionally `(?P<dir>…)`.
+    pub title: String,
+    /// Optional human-readable description of this rule.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub comment: String,
+}
+
+/// Built-in default file pattern rules.
+/// These replicate the previously hardcoded extraction heuristics and are
+/// returned when the user has not configured any custom rules.
+pub fn default_file_patterns() -> Vec<FilePatternRule> {
+    vec![
+        // ── Code editors & IDEs ──────────────────────────────────────
+        FilePatternRule {
+            app: r"(?i)xcode".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*(?:—|$)".into(),
+            comment: "Xcode: first segment before em-dash".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)code|cursor|codium|windsurf|zed|nova|textmate|bbedit".into(),
+            title: r"^●?\s*(?P<file>.+?\.\w+)\s*—\s*(?P<dir>.+?)\s*—".into(),
+            comment: "VS Code-style: file — project — IDE (3 segments)".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)code|cursor|codium|windsurf|zed|nova|textmate|bbedit".into(),
+            title: r"^●?\s*(?P<file>.+?\.\w+)\s*—".into(),
+            comment: "VS Code-style: file — project (2 segments)".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)idea|pycharm|webstorm|clion|goland|rider|rustrover|phpstorm|datagrip|android.studio|fleet"
+                .into(),
+            title: r"^(?P<file>.+?\.\w+)\s*–\s*.+?\[(?P<dir>[^\]]+)\]".into(),
+            comment: "JetBrains: file – project [~/path]".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)idea|pycharm|webstorm|clion|goland|rider|rustrover|phpstorm|datagrip|android.studio|fleet"
+                .into(),
+            title: r"^(?P<file>.+?\.\w+)\s*–".into(),
+            comment: "JetBrains: file – project (no bracket path)".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)sublime".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*\((?P<dir>[^)]+)\)".into(),
+            comment: "Sublime Text: file (~/dir)".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)sublime".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*[•\-]".into(),
+            comment: "Sublime Text: file • or file -".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)emacs".into(),
+            title: r"^(?P<file>\S+\.\w+)".into(),
+            comment: "Emacs: first token with extension".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)^(n?vim|neovim|nvim)$".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*\((?P<dir>[^)]+)\)".into(),
+            comment: "Vim/Neovim: file (dir)".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)^(n?vim|neovim|nvim)$".into(),
+            title: r"^(?P<file>\S+\.\w+)".into(),
+            comment: "Vim/Neovim: first token with extension".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)helix|^hx$".into(),
+            title: r"(?P<file>\S+\.\w+)".into(),
+            comment: "Helix: any token with extension".into(),
+        },
+        // ── Document / design apps ───────────────────────────────────
+        FilePatternRule {
+            app: r"(?i)word|excel|powerpoint|onenote".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*(?:\[.*?\])?\s*-".into(),
+            comment: "Microsoft Office: file [flags] - App".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)pages|keynote|numbers".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*—".into(),
+            comment: "Apple iWork: file — App".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)photoshop|illustrator|indesign|premiere|after.effects|lightroom".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*@".into(),
+            comment: "Adobe: file @ zoom%".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)photoshop|illustrator|indesign|premiere|after.effects|lightroom".into(),
+            title: r"(?P<file>\S+\.\w+)".into(),
+            comment: "Adobe fallback: any token with extension".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)figma|sketch".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*—".into(),
+            comment: "Figma/Sketch: file — context".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)obsidian".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*-".into(),
+            comment: "Obsidian: file.md - vault".into(),
+        },
+        // ── Viewers / utilities ──────────────────────────────────────
+        FilePatternRule {
+            app: r"(?i)preview|textedit".into(),
+            title: r"^(?P<file>.+\.\w+)$".into(),
+            comment: "Preview/TextEdit: title is just the filename".into(),
+        },
+        FilePatternRule {
+            app: r"(?i)acrobat|pdf|skim".into(),
+            title: r"^(?P<file>.+?\.\w+)\s*-".into(),
+            comment: "PDF readers: file - App".into(),
+        },
+        // ── Terminal emulators ───────────────────────────────────────
+        FilePatternRule {
+            app: r"(?i)terminal|iterm|alacritty|kitty|wezterm|hyper|warp|ghostty|rio|tabby|contour".into(),
+            title: r"(?i)(?:vim|nvim|nano|emacs|hx|micro|code|subl|mate|bbedit)\s+(?P<file>\S+\.\w+)".into(),
+            comment: "Terminal: editor command followed by file path".into(),
+        },
+        // ── Generic fallback ─────────────────────────────────────────
+        FilePatternRule {
+            app: r".*".into(),
+            title: r"(?P<file>(?:/|~/)[\w./ \-]+\.\w+)".into(),
+            comment: "Fallback: absolute or ~/ path anywhere in title".into(),
+        },
+    ]
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HookLastTrigger {
@@ -740,6 +884,24 @@ pub struct UserSettings {
     /// Track the last keyboard and mouse input timestamps.
     #[serde(default = "default_track_input_activity")]
     pub track_input_activity: bool,
+    /// Track which files the user interacts with (extracted from window titles).
+    #[serde(default = "default_track_file_activity")]
+    pub track_file_activity: bool,
+    /// Configurable rules for extracting file paths from window titles.
+    /// Each rule has an `app` regex (matched against the app name) and a
+    /// `title` regex with a named capture group `file` (and optional `dir`).
+    /// Rules are evaluated in order; first match wins.
+    /// An empty list falls back to the built-in defaults.
+    #[serde(default)]
+    pub file_patterns: Vec<FilePatternRule>,
+    /// Glob patterns for file paths that should **not** be tracked.
+    /// E.g. `["~/.ssh/*", "*/node_modules/*", "*.env"]`.
+    #[serde(default)]
+    pub file_exclude_patterns: Vec<String>,
+    /// Number of days to keep file interaction records.
+    /// Rows older than this are periodically pruned.  0 = keep forever.
+    #[serde(default = "default_file_retention_days")]
+    pub file_retention_days: u32,
     /// Auto-fit the main dashboard window height to content.
     #[serde(default = "default_main_window_auto_fit")]
     pub main_window_auto_fit: bool,
@@ -931,6 +1093,12 @@ pub fn default_track_active_window() -> bool {
 pub fn default_track_input_activity() -> bool {
     true
 }
+pub fn default_track_file_activity() -> bool {
+    true
+}
+pub fn default_file_retention_days() -> u32 {
+    90
+}
 
 pub fn default_main_window_auto_fit() -> bool {
     true
@@ -1046,6 +1214,10 @@ impl Default for UserSettings {
             tts_preload: default_tts_preload(),
             track_active_window: default_track_active_window(),
             track_input_activity: default_track_input_activity(),
+            track_file_activity: default_track_file_activity(),
+            file_patterns: Vec::new(),
+            file_exclude_patterns: Vec::new(),
+            file_retention_days: default_file_retention_days(),
             main_window_auto_fit: default_main_window_auto_fit(),
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),

@@ -9,7 +9,11 @@ use axum::{
 use serde::Deserialize;
 use skill_data::{
     active_window::ActiveWindowInfo,
-    activity_store::{ActiveWindowRow, ActivityStore, InputActivityRow, InputBucketRow},
+    activity_store::{
+        ActiveWindowRow, ActivityStore, BuildEventRow, CoEditRow, DailySummaryRow, EditChunkRow, FileInteractionRow,
+        FileUsageRow, FocusSessionRow, HourlyEditRow, InputActivityRow, InputBucketRow, LanguageBreakdownRow,
+        ProjectUsageRow,
+    },
 };
 use skill_eeg::eeg_model_config::{EegModelStatus, ExgModelConfig};
 
@@ -59,6 +63,36 @@ pub(crate) struct ActivityRecentRequest {
 pub(crate) struct ActivityBucketsRequest {
     pub(crate) from_ts: Option<u64>,
     pub(crate) to_ts: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ActivityFilesRequest {
+    pub(crate) limit: Option<u32>,
+    pub(crate) since: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EditChunksRequest {
+    /// If set, return chunks for this specific interaction.
+    pub(crate) interaction_id: Option<i64>,
+    /// If set (with to_ts), return chunks in a time range.
+    pub(crate) from_ts: Option<u64>,
+    pub(crate) to_ts: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CoEditRequest {
+    pub(crate) window_secs: Option<u64>,
+    pub(crate) limit: Option<u32>,
+    pub(crate) since: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DaySummaryRequest {
+    pub(crate) day_start: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -187,6 +221,22 @@ pub fn router() -> Router<AppState> {
         .route("/activity/recent-windows", post(activity_recent_windows))
         .route("/activity/recent-input", post(activity_recent_input))
         .route("/activity/input-buckets", post(activity_input_buckets))
+        .route("/activity/recent-files", post(activity_recent_files))
+        .route("/activity/top-files", post(activity_top_files))
+        .route("/activity/top-projects", post(activity_top_projects))
+        .route("/activity/edit-chunks", post(activity_edit_chunks))
+        .route("/activity/language-breakdown", post(activity_language_breakdown))
+        .route("/activity/context-switch-rate", post(activity_context_switch_rate))
+        .route("/activity/coedited-files", post(activity_coedited_files))
+        .route("/activity/daily-summary", post(activity_daily_summary))
+        .route("/activity/hourly-heatmap", post(activity_hourly_heatmap))
+        .route("/activity/focus-sessions", post(activity_focus_sessions))
+        .route("/activity/forgotten-files", post(activity_forgotten_files))
+        .route("/activity/recent-builds", get(activity_recent_builds))
+        .route(
+            "/activity/file-patterns",
+            get(get_file_patterns).post(set_file_patterns),
+        )
         .route(
             "/activity/tracking/active-window",
             get(get_active_window_tracking).post(set_active_window_tracking),
@@ -194,6 +244,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/activity/tracking/input",
             get(get_input_activity_tracking).post(set_input_activity_tracking),
+        )
+        .route(
+            "/activity/tracking/files",
+            get(get_file_activity_tracking).post(set_file_activity_tracking),
         )
         .route("/activity/current-window", get(get_current_active_window))
         .route("/activity/last-input", get(get_last_input_activity))
@@ -763,6 +817,108 @@ async fn activity_input_buckets(
     settings_hooks_activity::activity_input_buckets_impl(state, req).await
 }
 
+async fn activity_recent_files(
+    state: State<AppState>,
+    req: Json<ActivityFilesRequest>,
+) -> Json<Vec<FileInteractionRow>> {
+    settings_hooks_activity::activity_recent_files_impl(state, req).await
+}
+
+async fn activity_top_files(state: State<AppState>, req: Json<ActivityFilesRequest>) -> Json<Vec<FileUsageRow>> {
+    settings_hooks_activity::activity_top_files_impl(state, req).await
+}
+
+async fn activity_top_projects(state: State<AppState>, req: Json<ActivityFilesRequest>) -> Json<Vec<ProjectUsageRow>> {
+    settings_hooks_activity::activity_top_projects_impl(state, req).await
+}
+
+async fn activity_edit_chunks(state: State<AppState>, req: Json<EditChunksRequest>) -> Json<Vec<EditChunkRow>> {
+    settings_hooks_activity::activity_edit_chunks_impl(state, req).await
+}
+
+async fn activity_language_breakdown(
+    state: State<AppState>,
+    req: Json<ActivityFilesRequest>,
+) -> Json<Vec<LanguageBreakdownRow>> {
+    settings_hooks_activity::activity_language_breakdown_impl(state, req).await
+}
+
+async fn activity_context_switch_rate(
+    state: State<AppState>,
+    req: Json<ActivityBucketsRequest>,
+) -> Json<serde_json::Value> {
+    settings_hooks_activity::activity_context_switch_rate_impl(state, req).await
+}
+
+async fn activity_coedited_files(state: State<AppState>, req: Json<CoEditRequest>) -> Json<Vec<CoEditRow>> {
+    settings_hooks_activity::activity_coedited_files_impl(state, req).await
+}
+
+async fn activity_daily_summary(state: State<AppState>, req: Json<DaySummaryRequest>) -> Json<DailySummaryRow> {
+    settings_hooks_activity::activity_daily_summary_impl(state, req).await
+}
+
+async fn activity_hourly_heatmap(state: State<AppState>, req: Json<ActivityFilesRequest>) -> Json<Vec<HourlyEditRow>> {
+    settings_hooks_activity::activity_hourly_heatmap_impl(state, req).await
+}
+
+async fn activity_focus_sessions(
+    state: State<AppState>,
+    req: Json<ActivityFilesRequest>,
+) -> Json<Vec<FocusSessionRow>> {
+    settings_hooks_activity::activity_focus_sessions_impl(state, req).await
+}
+
+async fn activity_forgotten_files(state: State<AppState>, req: Json<ActivityFilesRequest>) -> Json<Vec<String>> {
+    settings_hooks_activity::activity_forgotten_files_impl(state, req).await
+}
+
+async fn activity_recent_builds(state: State<AppState>) -> Json<Vec<BuildEventRow>> {
+    settings_hooks_activity::activity_recent_builds_impl(state).await
+}
+
+async fn get_file_patterns(State(state): State<AppState>) -> Json<Vec<skill_settings::FilePatternRule>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let settings = skill_settings::load_settings(&skill_dir);
+    let patterns = if settings.file_patterns.is_empty() {
+        skill_settings::default_file_patterns()
+    } else {
+        settings.file_patterns
+    };
+    Json(patterns)
+}
+
+async fn set_file_patterns(
+    State(state): State<AppState>,
+    Json(patterns): Json<Vec<skill_settings::FilePatternRule>>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.file_patterns = patterns;
+    save_user_settings(&state, &settings);
+    Json(serde_json::json!({"ok": true}))
+}
+
+async fn get_file_activity_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "value": state
+            .track_file_activity
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }))
+}
+
+async fn set_file_activity_tracking(
+    State(state): State<AppState>,
+    Json(req): Json<BoolValueRequest>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.track_file_activity = req.value;
+    save_user_settings(&state, &settings);
+    state
+        .track_file_activity
+        .store(req.value, std::sync::atomic::Ordering::Relaxed);
+    Json(serde_json::json!({"value": req.value}))
+}
+
 async fn get_active_window_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "value": state
@@ -814,6 +970,7 @@ async fn get_current_active_window(State(state): State<AppState>) -> Json<Option
                 app_name: row.app_name,
                 app_path: row.app_path,
                 window_title: row.window_title,
+                document_path: None,
                 activated_at: row.activated_at,
             })
     })
