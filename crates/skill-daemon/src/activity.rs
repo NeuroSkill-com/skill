@@ -880,8 +880,7 @@ fn detect_project(file_path: &str) -> String {
     let mut dir = path.parent();
     while let Some(d) = dir {
         for marker in &markers {
-            if marker.starts_with('*') {
-                let suffix = &marker[1..];
+            if let Some(suffix) = marker.strip_prefix('*') {
                 if let Ok(entries) = std::fs::read_dir(d) {
                     for entry in entries.flatten() {
                         if entry.file_name().to_string_lossy().ends_with(suffix) {

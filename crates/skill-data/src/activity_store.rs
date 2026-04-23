@@ -321,6 +321,7 @@ impl ActivityStore {
 
     /// Record that the user interacted with `file_path` via `app_name`.
     /// Returns the row id of the newly inserted row.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_file_interaction(
         &self,
         file_path: &str,
@@ -359,6 +360,7 @@ impl ActivityStore {
     }
 
     /// Back-fill duration and modification stats for a previously inserted row.
+    #[allow(clippy::too_many_arguments)]
     pub fn finalize_file_interaction(
         &self,
         row_id: i64,
@@ -569,6 +571,7 @@ impl ActivityStore {
     // ── Focus sessions ───────────────────────────────────────────────────────
 
     /// Insert a detected focus session.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_focus_session(
         &self,
         start_at: u64,

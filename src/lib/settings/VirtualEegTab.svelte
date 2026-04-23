@@ -8,11 +8,7 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { SettingsCard } from "$lib/components/ui/settings-card";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import {
-  lslConnect,
-  lslStartVirtualSourceConfigured,
-  lslStopVirtualSource,
-} from "$lib/daemon/lsl";
+import { lslConnect, lslStartVirtualSourceConfigured, lslStopVirtualSource } from "$lib/daemon/lsl";
 import { t } from "$lib/i18n/index.svelte";
 import {
   DEFAULT_CONFIG,
