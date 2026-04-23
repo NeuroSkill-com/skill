@@ -71,7 +71,13 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 # Fix muda ZeroWidth panic in to_png() on macOS (upstream bug in 0.17.2)
 muda            = { path = "patches/muda-0.17.2" }
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
+# All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
+glib-sys        = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
+gobject-sys     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
+gio             = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
+gio-sys         = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
+glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 # emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
 # zuna-rs: using crates.io 0.1.3 (no patch needed — restore path dep when developing locally)
 
