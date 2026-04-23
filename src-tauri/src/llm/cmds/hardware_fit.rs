@@ -150,6 +150,10 @@ fn catalog_entry_to_llm_model(
         num_hidden_layers: None,
         head_dim: None,
         attention_layout: None,
+        hidden_size: None,
+        moe_intermediate_size: None,
+        vocab_size: None,
+        shared_expert_intermediate_size: None,
     }
 }
 
