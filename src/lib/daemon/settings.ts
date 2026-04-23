@@ -203,48 +203,34 @@ export async function setFileActivityTracking(enabled: boolean): Promise<void> {
   await daemonPost("/v1/activity/tracking/files", { value: enabled });
 }
 
-export function getRecentFiles(
-  limit?: number,
-  since?: number,
-): Promise<FileInteractionRow[]> {
+export function getRecentFiles(limit?: number, since?: number): Promise<FileInteractionRow[]> {
   return daemonPost<FileInteractionRow[]>("/v1/activity/recent-files", {
     limit,
     since,
   });
 }
 
-export function getTopFiles(
-  limit?: number,
-  since?: number,
-): Promise<FileUsageRow[]> {
+export function getTopFiles(limit?: number, since?: number): Promise<FileUsageRow[]> {
   return daemonPost<FileUsageRow[]>("/v1/activity/top-files", {
     limit,
     since,
   });
 }
 
-export function getTopProjects(
-  limit?: number,
-  since?: number,
-): Promise<ProjectUsageRow[]> {
+export function getTopProjects(limit?: number, since?: number): Promise<ProjectUsageRow[]> {
   return daemonPost<ProjectUsageRow[]>("/v1/activity/top-projects", {
     limit,
     since,
   });
 }
 
-export function getEditChunks(
-  interactionId: number,
-): Promise<EditChunkRow[]> {
+export function getEditChunks(interactionId: number): Promise<EditChunkRow[]> {
   return daemonPost<EditChunkRow[]>("/v1/activity/edit-chunks", {
     interactionId,
   });
 }
 
-export function getEditChunksRange(
-  fromTs: number,
-  toTs: number,
-): Promise<EditChunkRow[]> {
+export function getEditChunksRange(fromTs: number, toTs: number): Promise<EditChunkRow[]> {
   return daemonPost<EditChunkRow[]>("/v1/activity/edit-chunks", {
     fromTs,
     toTs,
@@ -288,9 +274,7 @@ export function getFilePatterns(): Promise<FilePatternRule[]> {
   return daemonGet<FilePatternRule[]>("/v1/activity/file-patterns");
 }
 
-export async function setFilePatterns(
-  patterns: FilePatternRule[],
-): Promise<void> {
+export async function setFilePatterns(patterns: FilePatternRule[]): Promise<void> {
   await daemonPost("/v1/activity/file-patterns", patterns);
 }
 
