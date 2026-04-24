@@ -1,16 +1,44 @@
 ### Features
 
-- **VS Code extension**: separate repo (`NeuroSkill-com/vscode-neuroskill`) as git submodule at `extensions/vscode/`. 45 tracked event types across editing, navigation, debugging, git, AI, terminal, clipboard, and more.
-- **Brain status bar in VS Code**: polls daemon every 30s showing flow state, fatigue, streak, task type, and struggle score. Notifications for fatigue and struggle.
-- **Auto EEG labeling**: every significant VS Code event auto-inserts a searchable label into EEG recordings with smart categorization (editing, debugging, git commits, AI assistance, meetings, errors, navigation).
+- **VS Code extension**: separate repo (`NeuroSkill-com/vscode-neuroskill`) as git submodule at `extensions/vscode/`. 50+ tracked event types across editing, navigation, debugging, git, AI, terminal, clipboard, and more.
+- **Sidebar webview (Svelte 5)**: full brain dashboard in the VS Code activity bar with circular flow gauge, metrics strip, daily report, energy, struggle, optimal hours, workspace activity, environment, terminal impact, context cost, and dev loops.
+- **Activity bar icon**: neural network SVG icon in the VS Code sidebar; NeuroSkill logo (PNG) in the webview header.
+- **Brain status bar in VS Code**: polls daemon every 30s showing flow state, fatigue, streak, task type, and struggle score. Shows "offline" when daemon unreachable. Notifications for fatigue and struggle.
+- **Dual-speed sidebar updates**: local data (files, terminals, layout) refreshes every 5s when sidebar is visible; brain endpoints every 30s. Pauses when hidden.
+- **Event caching**: offline-resilient `pendingEvents` array (10K cap) persisted to disk via `globalStorageUri`. Auto-flushes on reconnect. Survives VS Code restarts. Cache count shown in status bar tooltip.
+- **Workspace activity tracking**: per-file edits, lines added/removed, focus time, active file indicator. Grouped by workspace folder (project), sorted by activity. Top 10 files per project.
+- **Terminal command tracking**: full command text, exit code, cwd, output streaming (via `execution.read()`), shell type detection (zsh/bash/fish/powershell/cmd/node/python), focus time per terminal, PID. Expandable command output in sidebar.
+- **Terminal shell integration**: captures commands via `onDidStartTerminalShellExecution` / `onDidEndTerminalShellExecution` (VS Code 1.93+). CWD tracked via `onDidChangeTerminalShellIntegration`.
+- **Zone tracking**: editor/terminal/panel time split with stacked color bar (blue/green/yellow). Layout chips showing tab count, editor groups, terminal count.
+- **Auto EEG labeling**: every significant VS Code event auto-inserts a searchable label into EEG recordings with smart categorization (editing, debugging, git commits, AI assistance, meetings, errors, navigation, terminal commands, zone switches).
 - **Inline label embedding**: auto-labels embedded immediately via fastembed for instant searchability (no idle reembed wait).
 - **Command execution tracking**: 40+ VS Code commands tracked (go-to-definition, rename, find, format, fold, git, AI, debug, layout) with semantic categorization.
 - **IntelliSense acceptance detection**: multi-char single-line insertions heuristically identified as autocomplete acceptances.
 - **Clipboard tracking**: clipboard content changes polled every 5s with debounce.
-- **Terminal activity**: terminal create/close/focus events.
+- **Layout snapshots**: periodic (60s) capture of editor groups, visible editors, open tabs, terminal count sent to daemon.
+- **Zone switch events**: editor/terminal/panel transitions sent to daemon with EEG focus snapshot.
 - **File system watcher**: selective watching of package.json, Cargo.toml, go.mod, .git/HEAD for external change detection.
 - **Environment context**: one-time capture of appHost, remoteName, shell, uiKind, language.
-- **AI events table**: new `ai_events` SQLite table tracking suggestion shown/accepted/rejected and chat sessions with source attribution.
+- **Info toggles**: every sidebar card has a `?` button explaining how metrics are calculated (flow score formula, struggle signals, energy bar, optimal hours, dev loops, terminal impact, context cost).
+- **Open NeuroSkill button**: launches native app from sidebar (cross-platform: `open -a` macOS, `start` Windows, `xdg-open` Linux). Also in command palette.
+- **Command palette → sidebar**: `Show Brain Status`, `Today's Report`, `Am I Stuck?`, `Best Time to Code` now open sidebar and scroll to relevant section instead of showing toast notifications.
+
+### Daemon
+
+- **`terminal_commands` table**: shell command text, cwd, exit code, duration, auto-categorized (50+ patterns: build/test/run/git/docker/deploy/install/navigate/debug/network/other), EEG focus at start and end for delta calculation.
+- **`dev_loops` table**: edit→build/test cycle tracking with iteration count, pass/fail rate, avg cycle time, focus trend (rising/falling/stable).
+- **`zone_switches` table**: editor/terminal/panel transitions with EEG focus snapshot at moment of switch.
+- **`layout_snapshots` table**: periodic tab/group/terminal counts from VS Code.
+- **Event handler**: new match arms for `terminal_command_start`, `terminal_command_end`, `zone_switch`, `layout_snapshot` in `activity_vscode_events_impl()`.
+- **Command categorizer**: `categorize_command()` with 50+ patterns across build, test, run, git, docker, deploy, install, navigate, debug, network.
+- **`POST /v1/brain/terminal-impact`**: avg EEG focus delta by command category — shows how builds, tests, git, docker affect brain state.
+- **`POST /v1/brain/context-cost`**: focus level at each zone transition type with switch counts.
+- **`POST /v1/brain/dev-loops`**: edit-build-test cycle detection with iterations, pass rate, cycle time, focus trend.
+- **`POST /v1/brain/terminal-commands`**: recent commands with exit codes, durations, categories, EEG correlation.
+- **Enhanced `predict_struggle()`**: terminal failures (+8/fail, max +40) and re-running same failing command 3+ times (+15/rerun, max +30) boost struggle score. New suggestions: "You're re-running the same failing command", "Multiple failures — read the error messages".
+- **Enhanced `detect_task_type()`**: terminal command categories override heuristics with higher confidence — docker/kubectl→infrastructure (0.8), deploy→deploying (0.85), git dominating→git_management (0.7), test→testing (0.85), debug→debugging (0.9).
+- **Terminal EEG auto-labels**: `"running: cargo test"` on start, `"cargo test passed"` / `"cargo test failed (exit 1)"` on end, `"switched to terminal"` on zone changes.
+- **AI events table**: `ai_events` SQLite table tracking suggestion shown/accepted/rejected and chat sessions with source attribution.
 - **`neuroskill vscode` CLI**: auto-install extension to VS Code, VSCodium, or Cursor on macOS, Linux, and Windows.
 - **Meeting nodes in search graph**: meetings appear as amber nodes in the interactive 3D search graph linked by `meeting_prox` edges.
 
