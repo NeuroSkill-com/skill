@@ -270,15 +270,13 @@ onDestroy(() => {
 {#snippet centerContent()}
   {#if isSearchWindow}
     <div class="search-window-head">
-      <div class="search-mode-switch" role="tablist" aria-label={t("search.title")}>
-        {#each (["eeg","text","images","interactive"] as const) as mode}
-          <button type="button" role="tab" aria-selected={searchMode === mode}
-                  class="search-mode-button {searchMode === mode ? 'active' : ''}"
-                  onclick={() => emitSearchModeSwitch(mode)}>
-            {t(`search.mode${mode[0].toUpperCase()}${mode.slice(1)}`)}
-          </button>
+      <select class="search-mode-select" value={searchMode}
+              aria-label={t("search.title")}
+              onchange={(e) => emitSearchModeSwitch((e.currentTarget as HTMLSelectElement).value)}>
+        {#each (["interactive","eeg","text","images","code","meetings","brain"] as const) as m}
+          <option value={m}>{t(`search.mode${m[0].toUpperCase()}${m.slice(1)}`)}</option>
         {/each}
-      </div>
+      </select>
     </div>
   {:else if isDownloadsWindow}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -711,6 +709,27 @@ onDestroy(() => {
     color: var(--color-text);
     font-weight: 700;
     box-shadow: inset 0 -2px 0 var(--color-accent-foreground);
+  }
+
+  .search-mode-select {
+    height: 22px; padding: 0 8px; border-radius: 6px;
+    border: 1px solid var(--color-border);
+    background: transparent; color: var(--color-text);
+    font-size: 0.62rem; font-weight: 600;
+    cursor: pointer; outline: none;
+    min-width: 100px; max-width: 160px;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 5 5-5' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    padding-right: 20px;
+  }
+  .search-mode-select:focus {
+    border-color: var(--color-accent-foreground);
+    box-shadow: 0 0 0 1px var(--color-accent-foreground);
+  }
+  .search-mode-select option {
+    background: var(--color-bg); color: var(--color-text);
   }
 
   /* ── Downloads window ────────────────────────────────────────────────── */

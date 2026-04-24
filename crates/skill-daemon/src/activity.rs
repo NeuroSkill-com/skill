@@ -80,24 +80,28 @@ tell application "System Events"
 end tell
 
 -- Try to get the document path from the frontmost application.
--- Many Scriptable apps (Preview, TextEdit, Pages, Xcode, etc.) expose
--- `path of front document` or `file of front document`.
+-- Only attempt for apps known to be scriptable to avoid the
+-- "Choose Application" dialog that macOS shows when osascript
+-- cannot resolve a dynamic application name.
+set scriptableApps to {"Preview", "TextEdit", "Pages", "Numbers", "Keynote", "Xcode", "Script Editor", "Finder"}
 set docPath to ""
-try
-    tell application appName
-        try
-            set docPath to POSIX path of (file of front document as alias)
-        on error
+if scriptableApps contains appName then
+    try
+        tell application appName
             try
-                set docPath to POSIX path of (path of front document)
+                set docPath to POSIX path of (file of front document as alias)
             on error
-                set docPath to ""
+                try
+                    set docPath to POSIX path of (path of front document)
+                on error
+                    set docPath to ""
+                end try
             end try
-        end try
-    end tell
-on error
-    set docPath to ""
-end try
+        end tell
+    on error
+        set docPath to ""
+    end try
+end if
 
 return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
 

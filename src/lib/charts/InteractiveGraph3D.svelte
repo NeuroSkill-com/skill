@@ -538,7 +538,13 @@ function buildGraph() {
     }
     const emissive = BASE_EMISSIVE[node.kind];
 
-    const geo = new THREE.SphereGeometry(radius, 24, 16);
+    // EEG nodes = diamond (octahedron), meetings = pyramid (tetrahedron), rest = sphere
+    const geo =
+      node.kind === "eeg_point"
+        ? new THREE.OctahedronGeometry(radius)
+        : node.kind === "meeting"
+          ? new THREE.TetrahedronGeometry(radius)
+          : new THREE.SphereGeometry(radius, 24, 16);
     const mat = new THREE.MeshPhongMaterial({
       color,
       shininess: 90,
