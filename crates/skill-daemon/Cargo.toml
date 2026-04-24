@@ -14,6 +14,7 @@ llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
 embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+embed-exg-mlx = ["embed-exg", "skill-router/mlx"]
 cpu-only = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 # GPU-accelerated ZUNA encoder (Metal on macOS, Vulkan on Linux)

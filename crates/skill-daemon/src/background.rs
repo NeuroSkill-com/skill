@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use chrono::{Datelike, Timelike};
 use tracing::info;
 
 use crate::routes::settings_io::load_user_settings;
@@ -17,7 +18,8 @@ pub fn spawn_all(state: AppState) {
     spawn_auto_scanner(state.clone());
     spawn_auto_connect(state.clone());
     spawn_calibration_auto_start(state.clone());
-    spawn_screenshot_worker(state);
+    spawn_screenshot_worker(state.clone());
+    spawn_weekly_digest(state);
 }
 
 fn spawn_calibration_auto_start(state: AppState) {
@@ -245,4 +247,75 @@ fn spawn_screenshot_worker(state: AppState) {
             panic!("screenshot worker spawn failed");
         });
     info!("[screenshot] worker spawned");
+}
+
+/// Weekly digest notification — fires once per week (Monday 9am local).
+/// Sends a summary of the past week's activity as an OS notification.
+fn spawn_weekly_digest(state: AppState) {
+    tokio::spawn(async move {
+        // Wait 30 seconds after startup to avoid competing with other init work.
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        let mut last_digest_week: i32 = -1; // ISO week number of last sent digest
+        loop {
+            // Check once per hour if it's time to send the digest.
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+
+            let now = chrono::Local::now();
+            // Fire on Monday between 9:00-9:59 AM.
+            if now.weekday() != chrono::Weekday::Mon || now.hour() != 9 {
+                continue;
+            }
+            // Dedup: only fire once per ISO week (prevents re-fire on daemon restart).
+            let iso_week = now.iso_week().week() as i32;
+            if iso_week == last_digest_week {
+                continue;
+            }
+            last_digest_week = iso_week;
+
+            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+            let week_start = {
+                let today = now.date_naive();
+                let monday = today - chrono::Duration::days(7);
+                monday
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_local_timezone(chrono::Local)
+                    .earliest()
+                    .map(|t| t.timestamp() as u64)
+                    .unwrap_or(0)
+            };
+
+            let digest = tokio::task::spawn_blocking(move || {
+                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.weekly_digest(week_start))
+            })
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(d) = digest {
+                if d.total_edits == 0 {
+                    continue; // No activity — skip.
+                }
+                let hours = d.total_secs / 3600;
+                let body = format!(
+                    "{}h coding, {} edits, {} files, {} meetings. Peak: {}:00.",
+                    hours, d.total_edits, d.total_interactions, d.meeting_count, d.peak_hour
+                );
+                state.broadcast(
+                    "weekly-digest",
+                    serde_json::json!({
+                        "title": "Weekly Activity Digest",
+                        "body": body,
+                        "week_start": week_start,
+                    }),
+                );
+                // Also send as OS notification if the app supports it.
+                if let Err(e) = skill_data::dnd::send_notification("Weekly Activity Digest", &body) {
+                    eprintln!("[weekly-digest] notification failed: {e}");
+                }
+            }
+
+            // Dedup handled by ISO week check above — no extra sleep needed.
+        }
+    });
 }

@@ -24,6 +24,7 @@ interface UmapConfig {
   n_epochs: number;
   n_neighbors: number;
   cooldown_ms: number;
+  backend: string;
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -34,7 +35,9 @@ let cfg = $state<UmapConfig>({
   n_epochs: 500,
   n_neighbors: 15,
   cooldown_ms: 0,
+  backend: "auto",
 });
+let availableBackends = $state<string[]>([]);
 let saving = $state(false);
 let dirty = $state(false);
 let loaded = $state(false);
@@ -62,6 +65,7 @@ async function resetDefaults() {
     n_epochs: 500,
     n_neighbors: 15,
     cooldown_ms: 0,
+    backend: "auto",
   };
   dirty = true;
   await save();
@@ -69,7 +73,12 @@ async function resetDefaults() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 onMount(async () => {
-  cfg = await daemonInvoke<UmapConfig>("get_umap_config");
+  const [config, backends] = await Promise.all([
+    daemonInvoke<UmapConfig>("get_umap_config"),
+    daemonInvoke<{ available: string[] }>("get_umap_backends"),
+  ]);
+  cfg = config;
+  availableBackends = backends.available;
   loaded = true;
 });
 
@@ -122,6 +131,44 @@ const TIMEOUT_PRESETS: [string, number][] = [
     <span class="text-ui-md text-muted-foreground">{t("common.loading")}</span>
   </div>
 {:else}
+
+<!-- ── Compute Backend ─────────────────────────────────────────────────────── -->
+{#if availableBackends.length > 0}
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <SectionHeader>{t("umapSettings.backend")}</SectionHeader>
+    {#if saving}
+      <span class="text-ui-xs text-muted-foreground">{t("common.saving")}</span>
+    {/if}
+    {#if dirty}
+      <Button size="sm" variant="default" class="ml-auto text-ui-sm h-6 px-3" onclick={save}>
+        {t("umapSettings.apply")}
+      </Button>
+    {/if}
+  </div>
+
+  <SettingsCard>
+    <CardContent class="flex flex-col gap-2.5 px-4 py-3.5">
+      <p class="text-ui-base text-muted-foreground leading-relaxed">
+        {t("umapSettings.backendDesc")}
+      </p>
+      <ChipGroup
+        items={[
+          ["Auto", "auto"] as [string, string],
+          ...availableBackends.map(b => [b.toUpperCase(), b] as [string, string]),
+        ]}
+        selected={
+          [["Auto", "auto"] as [string, string],
+           ...availableBackends.map(b => [b.toUpperCase(), b] as [string, string]),
+          ].find(p => p[1] === cfg.backend) ?? ["Auto", "auto"]
+        }
+        onselect={(p) => { cfg.backend = p[1]; markDirty(); }}
+        labelFn={(p) => p[0]}
+      />
+    </CardContent>
+  </SettingsCard>
+</section>
+{/if}
 
 <!-- ── Repulsion Strength ──────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
@@ -296,7 +343,11 @@ const TIMEOUT_PRESETS: [string, number][] = [
           class="text-ui-xs py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
           {cfg.cooldown_ms}ms cooldown
         </Badge>
-        <span class="ml-auto text-ui-xs text-muted-foreground/60 shrink-0">fast-umap 1.2.2 · wgpu</span>
+        <Badge variant="outline"
+          class="text-ui-xs py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
+          {cfg.backend === "auto" ? "auto" : cfg.backend.toUpperCase()}
+        </Badge>
+        <span class="ml-auto text-ui-xs text-muted-foreground/60 shrink-0">fast-umap 1.6.0</span>
       </div>
     </CardContent>
   </SettingsCard>

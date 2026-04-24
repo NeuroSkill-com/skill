@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "Zwischenablage-Aktivität verfolgen",
+    "desc": "Zwischenablage-Änderungen aufzeichnen (nur Metadaten — Inhalte werden nie gespeichert). Verfolgt welche App kopiert hat, Inhaltstyp und Größe. Nur macOS."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Tagesziel",
     "desc": "Legen Sie Ihr tägliches Aufzeichnungsziel fest. Der Fortschritt wird auf dem Dashboard angezeigt."

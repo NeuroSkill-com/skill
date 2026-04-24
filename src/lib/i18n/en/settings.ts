@@ -460,6 +460,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "Path",
   "settings.activeWindowTitle": "Window Title",
   "settings.activeWindowSince": "Active since",
+  "settings.browserTitle": "Page",
   "settings.activeWindowNone": "No active window detected",
   "settings.inputActivityToggle": "Track Keyboard & Mouse Activity",
   "settings.inputActivityToggleDesc":
@@ -501,6 +502,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "ongoing",
   "activity.staleFiles": "Stale Files",
   "activity.staleAgo": "ago",
+  "activity.replayLoading": "Loading session details...",
+  "activity.eegOverlay": "EEG Focus",
+  "activity.noFilesInSession": "No file activity recorded during this session.",
+  "activity.weeklyReport": "Weekly Report",
+  "activity.exportCsv": "Export CSV",
+  "activity.loadWeeklyReport": "Load Weekly Report",
+  "activity.weeklyAvgFocus": "Avg focus",
+  "activity.peakHour": "Peak hour",
+
+  "umapSettings.backend": "Compute Backend",
+  "umapSettings.backendDesc":
+    "Select the compute backend for UMAP projection. Auto picks MLX on Apple Silicon, GPU (wgpu) elsewhere.",
 
   "umapSettings.repulsion": "Repulsion",
   "umapSettings.repulsionStrength": "Repulsion Strength",

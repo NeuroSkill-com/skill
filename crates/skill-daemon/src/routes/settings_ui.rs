@@ -270,6 +270,12 @@ pub(crate) async fn set_umap_config(
     Json(serde_json::json!({"ok": true}))
 }
 
+pub(crate) async fn get_umap_backends() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "available": skill_router::available_backends(),
+    }))
+}
+
 pub(crate) async fn get_gpu_stats() -> Json<serde_json::Value> {
     Json(serde_json::to_value(skill_data::gpu_stats::read()).unwrap_or(serde_json::Value::Null))
 }

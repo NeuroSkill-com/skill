@@ -344,6 +344,7 @@ pub fn router() -> Router<AppState> {
             get(settings_ui::get_umap_config).post(settings_ui::set_umap_config),
         )
         .route("/settings/gpu-stats", get(settings_ui::get_gpu_stats))
+        .route("/settings/umap-backends", get(settings_ui::get_umap_backends))
         .route("/settings/web-cache/stats", get(settings_ui::web_cache_stats))
         .route("/settings/web-cache/list", get(settings_ui::web_cache_list))
         .route("/settings/web-cache/clear", post(settings_ui::web_cache_clear))
@@ -1037,6 +1038,7 @@ async fn get_current_active_window(State(state): State<AppState>) -> Json<Option
                 document_path: None,
                 activated_at: row.activated_at,
                 browser_title: row.browser_title,
+                monitor_id: row.monitor_id,
             })
     })
     .await

@@ -117,6 +117,8 @@ interface ActiveWindowInfo {
   window_title: string;
   document_path?: string | null;
   activated_at: number;
+  browser_title?: string | null;
+  monitor_id?: number | null;
 }
 let trackActiveWindow = $state(true);
 let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
@@ -552,6 +554,7 @@ onDestroy(() => {
               {#each ([
                 [t("settings.activeWindowApp"),   currentActiveWindow.app_name,     "font-semibold text-foreground"],
                 [t("settings.activeWindowTitle"),  currentActiveWindow.window_title, "text-foreground/80"],
+                ...(currentActiveWindow.browser_title ? [[t("settings.browserTitle"), currentActiveWindow.browser_title, "text-violet-500/80"]] : []),
                 [t("settings.activeWindowPath"),   currentActiveWindow.app_path,     "font-mono text-muted-foreground"],
                 [t("settings.activeWindowSince"),  fmtLastSeen(currentActiveWindow.activated_at), "text-muted-foreground"],
               ] as [string, string, string][]).filter(([, v]) => v) as [label, value, cls]}

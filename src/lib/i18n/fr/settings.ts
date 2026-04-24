@@ -231,6 +231,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "Chemin",
   "settings.activeWindowTitle": "Titre de la fenêtre",
   "settings.activeWindowSince": "Active depuis",
+  "settings.browserTitle": "Page",
   "settings.activeWindowNone": "Aucune fenêtre active détectée",
   "settings.inputActivityToggle": "Suivre l'activité clavier et souris",
   "settings.inputActivityToggleDesc":
@@ -271,6 +272,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "en cours",
   "activity.staleFiles": "Fichiers inactifs",
   "activity.staleAgo": "passé",
+  "activity.replayLoading": "Chargement des détails de la session...",
+  "activity.eegOverlay": "Focus EEG",
+  "activity.noFilesInSession": "Aucune activité fichier enregistrée pendant cette session.",
+  "activity.weeklyReport": "Rapport hebdomadaire",
+  "activity.exportCsv": "Exporter CSV",
+  "activity.loadWeeklyReport": "Charger le rapport hebdomadaire",
+  "activity.weeklyAvgFocus": "Focus moyen",
+  "activity.peakHour": "Heure de pointe",
+
+  "umapSettings.backend": "Backend de calcul",
+  "umapSettings.backendDesc":
+    "Sélectionner le backend de calcul pour la projection UMAP. Auto choisit MLX sur Apple Silicon, GPU (wgpu) ailleurs.",
 
   "umapSettings.repulsion": "Répulsion",
   "umapSettings.repulsionStrength": "Force de répulsion",

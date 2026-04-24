@@ -426,6 +426,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "路径",
   "settings.activeWindowTitle": "窗口标题",
   "settings.activeWindowSince": "活动开始于",
+  "settings.browserTitle": "页面",
   "settings.activeWindowNone": "未检测到活动窗口",
   "settings.inputActivityToggle": "跟踪键盘和鼠标活动",
   "settings.inputActivityToggleDesc":
@@ -465,6 +466,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "进行中",
   "activity.staleFiles": "不活跃文件",
   "activity.staleAgo": "前",
+  "activity.replayLoading": "正在加载会话详情...",
+  "activity.eegOverlay": "EEG 专注度",
+  "activity.noFilesInSession": "此会话期间没有记录文件活动。",
+  "activity.weeklyReport": "周报",
+  "activity.exportCsv": "导出 CSV",
+  "activity.loadWeeklyReport": "加载周报",
+  "activity.weeklyAvgFocus": "平均专注度",
+  "activity.peakHour": "高峰时段",
+
+  "umapSettings.backend": "计算后端",
+  "umapSettings.backendDesc":
+    "选择 UMAP 投影的计算后端。自动模式在 Apple Silicon 上选择 MLX，其他平台选择 GPU (wgpu)。",
 
   "umapSettings.repulsion": "排斥",
   "umapSettings.repulsionStrength": "排斥强度",

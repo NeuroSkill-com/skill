@@ -229,6 +229,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "Шлях",
   "settings.activeWindowTitle": "Заголовок вікна",
   "settings.activeWindowSince": "Активне з",
+  "settings.browserTitle": "Сторінка",
   "settings.activeWindowNone": "Активне вікно не виявлено",
   "settings.inputActivityToggle": "Відстежувати клавіатуру та мишу",
   "settings.inputActivityToggleDesc":
@@ -270,6 +271,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "триває",
   "activity.staleFiles": "Неактивні файли",
   "activity.staleAgo": "тому",
+  "activity.replayLoading": "Завантаження деталей сесії...",
+  "activity.eegOverlay": "EEG фокус",
+  "activity.noFilesInSession": "Активність файлів під час цієї сесії не зафіксовано.",
+  "activity.weeklyReport": "Тижневий звіт",
+  "activity.exportCsv": "Експорт CSV",
+  "activity.loadWeeklyReport": "Завантажити тижневий звіт",
+  "activity.weeklyAvgFocus": "Середній фокус",
+  "activity.peakHour": "Пікова година",
+
+  "umapSettings.backend": "Обчислювальний бекенд",
+  "umapSettings.backendDesc":
+    "Оберіть обчислювальний бекенд для проекції UMAP. Авто обирає MLX на Apple Silicon, GPU (wgpu) в інших випадках.",
 
   "umapSettings.repulsion": "Відштовхування",
   "umapSettings.repulsionStrength": "Сила відштовхування",

@@ -261,6 +261,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "get_sleep_stages",
   "get_stale_label_count",
   "get_tts_preload",
+  "get_umap_backends",
   "get_umap_config",
   "get_ws_clients",
   "get_ws_request_log",

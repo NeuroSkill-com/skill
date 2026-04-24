@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "Rastrear actividad del portapapeles",
+    "desc": "Registrar cambios del portapapeles (solo metadatos — el contenido nunca se almacena). Rastrea qué app copió, tipo de contenido y tamaño. Solo macOS."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Objetivo diario",
     "desc": "Establece tu objetivo de grabación diario. El progreso se muestra en el tablero."

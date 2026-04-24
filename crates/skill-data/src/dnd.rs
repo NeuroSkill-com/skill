@@ -681,3 +681,45 @@ pub fn set_grayscale(enabled: bool) {
         let _ = enabled;
     }
 }
+
+/// Send an OS notification with the given title and body.
+/// Best-effort — does not fail if the notification cannot be delivered.
+pub fn send_notification(title: &str, body: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            r#"display notification "{}" with title "{}""#,
+            body.replace('"', "\\\""),
+            title.replace('"', "\\\"")
+        );
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("notify-send")
+            .args([title, body])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // PowerShell toast notification.
+        let ps = format!(
+            r#"[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null; $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(1); $xml.GetElementsByTagName('text')[0].InnerText = '{}'; $xml.GetElementsByTagName('text')[1].InnerText = '{}'; [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('NeuroSkill').Show([Windows.UI.Notifications.ToastNotification]::new($xml))"#,
+            title.replace('\'', "''"),
+            body.replace('\'', "''")
+        );
+        std::process::Command::new("powershell")
+            .args(["-Command", &ps])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (title, body);
+    }
+    Ok(())
+}

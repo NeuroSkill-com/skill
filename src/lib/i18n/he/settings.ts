@@ -266,6 +266,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "נתיב",
   "settings.activeWindowTitle": "כותרת החלון",
   "settings.activeWindowSince": "פעיל מאז",
+  "settings.browserTitle": "עמוד",
   "settings.activeWindowNone": "לא זוהה חלון פעיל",
   "settings.inputActivityToggle": "עקוב אחר פעילות מקלדת ועכבר",
   "settings.inputActivityToggleDesc":
@@ -305,6 +306,17 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "מתקיימת",
   "activity.staleFiles": "קבצים לא פעילים",
   "activity.staleAgo": "לפני",
+  "activity.replayLoading": "טוען פרטי סשן...",
+  "activity.eegOverlay": "מיקוד EEG",
+  "activity.noFilesInSession": "לא נרשמה פעילות קבצים בסשן זה.",
+  "activity.weeklyReport": "דוח שבועי",
+  "activity.exportCsv": "ייצוא CSV",
+  "activity.loadWeeklyReport": "טען דוח שבועי",
+  "activity.weeklyAvgFocus": "מיקוד ממוצע",
+  "activity.peakHour": "שעת שיא",
+
+  "umapSettings.backend": "מנוע חישוב",
+  "umapSettings.backendDesc": "בחר מנוע חישוב להטלת UMAP. אוטומטי בוחר MLX ב-Apple Silicon, GPU (wgpu) במקומות אחרים.",
 
   "umapSettings.repulsion": "דחייה",
   "umapSettings.repulsionStrength": "עוצמת דחייה",

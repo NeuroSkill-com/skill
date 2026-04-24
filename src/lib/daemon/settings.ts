@@ -37,6 +37,7 @@ export interface FileInteractionRow {
   words_delta: number;
   eeg_focus: number | null;
   eeg_mood: number | null;
+  undo_count: number;
 }
 
 export interface FileUsageRow {
@@ -61,6 +62,7 @@ export interface EditChunkRow {
   lines_added: number;
   lines_removed: number;
   size_delta: number;
+  undo_estimate: number;
 }
 
 export interface LanguageBreakdownRow {

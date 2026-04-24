@@ -7,7 +7,10 @@ use std::{
 };
 
 use regex::Regex;
-use skill_data::{active_window::ActiveWindowInfo, activity_store::ActivityStore};
+use skill_data::{
+    active_window::{ActiveWindowInfo, SecondaryWindowInfo},
+    activity_store::ActivityStore,
+};
 use skill_settings::FilePatternRule;
 
 use crate::state::AppState;
@@ -128,7 +131,251 @@ return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
         },
         activated_at: unix_secs(),
         browser_title: None, // Enriched later in run_poller.
+        monitor_id: None,    // Enriched later if multi-monitor detection succeeds.
     })
+}
+
+/// Poll all visible windows on non-primary monitors (macOS only).
+/// Returns a list of windows that are on secondary screens.
+#[cfg(target_os = "macos")]
+fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
+    // Use AppleScript to get all visible windows with their positions,
+    // then compare against screen bounds to determine which monitor.
+    let script = r#"
+set result to ""
+tell application "System Events"
+    set frontName to name of first application process whose frontmost is true
+    repeat with proc in (application processes whose visible is true)
+        set procName to name of proc
+        if procName is not frontName then
+            try
+                repeat with w in windows of proc
+                    try
+                        set winTitle to name of w
+                        set winPos to position of w
+                        set xPos to item 1 of winPos
+                        -- Use x position to infer monitor (primary is typically x >= 0 and < primary width)
+                        set result to result & procName & "|||" & winTitle & "|||" & xPos & linefeed
+                    end try
+                end repeat
+            end try
+        end if
+    end repeat
+end tell
+return result"#;
+
+    let out = match std::process::Command::new("osascript").args(["-e", script]).output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return vec![],
+    };
+
+    // Parse: each line is "appName|||windowTitle|||xPosition"
+    // Query actual primary screen width to avoid hardcoded values.
+    let primary_width: i64 = std::process::Command::new("osascript")
+        .args(["-e", "tell application \"Finder\" to get bounds of window of desktop"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            // Output: "0, 0, 1920, 1080" — third value is width.
+            let s = String::from_utf8_lossy(&o.stdout);
+            s.split(',').nth(2)?.trim().parse::<i64>().ok()
+        })
+        .unwrap_or(2000);
+
+    out.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return None;
+            }
+            let mut parts = line.splitn(3, "|||");
+            let app_name = parts.next()?.trim().to_string();
+            let window_title = parts.next()?.trim().to_string();
+            let x_pos: i64 = parts.next()?.trim().parse().ok()?;
+            if app_name.is_empty() || window_title.is_empty() {
+                return None;
+            }
+            // If window is outside primary monitor bounds, it's on a secondary monitor.
+            if x_pos < 0 || x_pos >= primary_width {
+                Some(SecondaryWindowInfo {
+                    app_name,
+                    window_title,
+                    monitor_id: if x_pos < 0 { 2 } else { 1 },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Poll visible windows on non-primary monitors (Linux).
+/// Uses `wmctrl -lG` which lists all windows with geometry (x, y, w, h).
+#[cfg(target_os = "linux")]
+fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
+    let out = match std::process::Command::new("wmctrl").args(["-lG"]).output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return vec![],
+    };
+
+    // Get the active window ID to exclude it.
+    let active_id = std::process::Command::new("xdotool")
+        .arg("getactivewindow")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+
+    // Query primary monitor width from xrandr.
+    let primary_width: i64 = std::process::Command::new("xrandr")
+        .arg("--current")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            // Find line with " primary " and parse resolution like "1920x1080+0+0".
+            let s = String::from_utf8_lossy(&o.stdout);
+            s.lines().find(|l| l.contains(" primary ")).and_then(|l| {
+                l.split_whitespace()
+                    .find(|w| w.contains('x') && w.contains('+'))
+                    .and_then(|res| res.split('x').next()?.parse::<i64>().ok())
+            })
+        })
+        .unwrap_or(2000);
+
+    out.lines()
+        .filter_map(|line| {
+            // wmctrl -lG format: 0x04000007  0 100 200 800 600 hostname Window Title
+            let parts: Vec<&str> = line.splitn(8, char::is_whitespace).collect();
+            if parts.len() < 8 {
+                return None;
+            }
+            let win_id = parts[0].trim();
+            // Skip the active window.
+            if !active_id.is_empty() {
+                // xdotool returns decimal, wmctrl returns hex — compare carefully.
+                if let Ok(active_dec) = active_id.parse::<u64>() {
+                    if let Ok(this_hex) = u64::from_str_radix(win_id.trim_start_matches("0x"), 16) {
+                        if active_dec == this_hex {
+                            return None;
+                        }
+                    }
+                }
+            }
+            let x: i64 = parts[2].trim().parse().ok()?;
+            let title = parts[7].trim().to_string();
+            if title.is_empty() {
+                return None;
+            }
+            // Infer monitor from x position.
+            if x < 0 || x >= primary_width {
+                // Get app name from WM_CLASS via xprop.
+                let app_name = std::process::Command::new("xprop")
+                    .args(["-id", win_id, "WM_CLASS"])
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .and_then(|s| s.split('"').nth(3).map(|n| n.to_string()))
+                    .unwrap_or_else(|| title.clone());
+                Some(SecondaryWindowInfo {
+                    app_name,
+                    window_title: title,
+                    monitor_id: if x < 0 { 2 } else { 1 },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Poll visible windows on non-primary monitors (Windows).
+/// Uses EnumWindows to list all visible windows and GetWindowRect for positions.
+#[cfg(target_os = "windows")]
+fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
+    type Hwnd = *mut core::ffi::c_void;
+    type Bool = i32;
+    type Lparam = isize;
+    type Wchar = u16;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn EnumWindows(callback: extern "system" fn(Hwnd, Lparam) -> Bool, lparam: Lparam) -> Bool;
+        fn IsWindowVisible(hwnd: Hwnd) -> Bool;
+        fn GetWindowTextW(hwnd: Hwnd, lp_string: *mut Wchar, n_max_count: i32) -> i32;
+        fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
+        fn GetWindowRect(hwnd: Hwnd, lp_rect: *mut Rect) -> Bool;
+        fn GetForegroundWindow() -> Hwnd;
+    }
+
+    let mut results: Vec<SecondaryWindowInfo> = Vec::new();
+    // Query primary monitor width via GetSystemMetrics(SM_CXSCREEN).
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetSystemMetrics(n_index: i32) -> i32;
+    }
+    const SM_CXSCREEN: i32 = 0;
+    let primary_width: i32 = unsafe { GetSystemMetrics(SM_CXSCREEN) }.max(1920);
+
+    unsafe {
+        let fg = GetForegroundWindow();
+
+        extern "system" fn enum_callback(hwnd: Hwnd, lparam: Lparam) -> Bool {
+            unsafe {
+                let data = &mut *(lparam as *mut (Vec<SecondaryWindowInfo>, Hwnd, i32));
+                if hwnd == data.1 {
+                    return 1; // skip foreground
+                }
+                if IsWindowVisible(hwnd) == 0 {
+                    return 1;
+                }
+                let title_len = GetWindowTextLengthW(hwnd);
+                if title_len <= 0 {
+                    return 1;
+                }
+                let mut buf = vec![0u16; (title_len + 1) as usize];
+                let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+                if len <= 0 {
+                    return 1;
+                }
+                let title = String::from_utf16_lossy(&buf[..len as usize]);
+
+                let mut rect = Rect::default();
+                if GetWindowRect(hwnd, &mut rect) != 0 && (rect.left < 0 || rect.left >= data.2) {
+                    data.0.push(SecondaryWindowInfo {
+                        app_name: title.clone(),
+                        window_title: title,
+                        monitor_id: if rect.left < 0 { 2 } else { 1 },
+                    });
+                }
+            }
+            1
+        }
+
+        let mut data = (results, fg, primary_width);
+        EnumWindows(enum_callback, &mut data as *mut _ as Lparam);
+        results = data.0;
+    }
+
+    results
+}
+
+/// Stub for unsupported platforms.
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
+    vec![]
 }
 
 #[cfg(target_os = "linux")]
@@ -196,6 +443,7 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
         document_path,
         activated_at: unix_secs(),
         browser_title: None,
+        monitor_id: None,
     })
 }
 
@@ -394,6 +642,7 @@ struct FileSnapshot {
     last_chunk_ts: u64,
     total_lines_added: u64,
     total_lines_removed: u64,
+    total_undo_estimate: u64,
     was_modified: bool,
 }
 
@@ -422,6 +671,7 @@ impl FileSnapshot {
             last_chunk_ts: now,
             total_lines_added: 0,
             total_lines_removed: 0,
+            total_undo_estimate: 0,
             was_modified: false,
         }
     }
@@ -444,17 +694,26 @@ impl FileSnapshot {
             let new_hashes = hash_lines(&self.path);
             let (added, removed) = diff_line_hashes(&self.prev_hashes, &new_hashes);
             let size_delta = cur_size as i64 - self.prev_size as i64;
+            // Undo heuristic: when lines are both added and removed in the same
+            // 5-second window and the file size barely changed, it suggests
+            // undo/redo activity.  min(added, removed) = reversal count.
+            let undo_est = if added > 0 && removed > 0 && size_delta.unsigned_abs() <= 10 {
+                added.min(removed)
+            } else {
+                0
+            };
             if added > 0 || removed > 0 {
-                store.insert_edit_chunk(self.row_id, now, added, removed, size_delta);
+                store.insert_edit_chunk(self.row_id, now, added, removed, size_delta, undo_est);
                 self.total_lines_added += added;
                 self.total_lines_removed += removed;
+                self.total_undo_estimate += undo_est;
             }
             self.prev_hashes = new_hashes;
         } else {
             // Binary files — record size change only.
             let size_delta = cur_size as i64 - self.prev_size as i64;
             if size_delta != 0 {
-                store.insert_edit_chunk(self.row_id, now, 0, 0, size_delta);
+                store.insert_edit_chunk(self.row_id, now, 0, 0, size_delta, 0);
             }
         }
 
@@ -471,10 +730,16 @@ impl FileSnapshot {
                 let new_hashes = hash_lines(&self.path);
                 let (added, removed) = diff_line_hashes(&self.prev_hashes, &new_hashes);
                 let size_delta = cur_size as i64 - self.prev_size as i64;
+                let undo_est = if added > 0 && removed > 0 && size_delta.unsigned_abs() <= 10 {
+                    added.min(removed)
+                } else {
+                    0
+                };
                 if added > 0 || removed > 0 {
-                    store.insert_edit_chunk(self.row_id, unix_secs(), added, removed, size_delta);
+                    store.insert_edit_chunk(self.row_id, unix_secs(), added, removed, size_delta, undo_est);
                     self.total_lines_added += added;
                     self.total_lines_removed += removed;
+                    self.total_undo_estimate += undo_est;
                 }
             }
         }
@@ -495,6 +760,7 @@ impl FileSnapshot {
             self.total_lines_added,
             self.total_lines_removed,
             words_delta,
+            self.total_undo_estimate,
         );
     }
 }
@@ -647,7 +913,13 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
             if let Some(info) = &mut current {
                 // Enrich with browser page title.
                 info.browser_title = extract_browser_title(&info.app_name, &info.window_title);
-                store.insert_active_window(info);
+                if let Some(primary_id) = store.insert_active_window(info) {
+                    // Poll secondary monitor windows on window change.
+                    let secondary = poll_secondary_windows();
+                    if !secondary.is_empty() {
+                        store.insert_secondary_windows(primary_id, &secondary);
+                    }
+                }
             }
             last.clone_from(&current);
         }
@@ -756,6 +1028,9 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
             if retention_days > 0 {
                 let cutoff = now.saturating_sub(retention_days as u64 * 86400);
                 let deleted = store.prune_file_interactions(cutoff);
+                store.prune_meetings(cutoff);
+                store.prune_clipboard(cutoff);
+                store.prune_secondary_windows(cutoff);
                 if deleted > 0 {
                     tracing::info!("[activity] pruned {deleted} file_interactions older than {retention_days}d");
                 }

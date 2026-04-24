@@ -41,9 +41,20 @@ CREATE TABLE IF NOT EXISTS active_windows (
     app_path      TEXT    NOT NULL DEFAULT '',
     window_title  TEXT    NOT NULL DEFAULT '',
     activated_at  INTEGER NOT NULL,
-    browser_title TEXT
+    browser_title TEXT,
+    monitor_id    INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_aw_activated ON active_windows (activated_at DESC);
+
+-- Windows visible on secondary monitors at the time the primary window changed.
+CREATE TABLE IF NOT EXISTS secondary_windows (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    primary_id    INTEGER NOT NULL,
+    app_name      TEXT    NOT NULL,
+    window_title  TEXT    NOT NULL DEFAULT '',
+    monitor_id    INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (primary_id) REFERENCES active_windows(id)
+);
 
 CREATE TABLE IF NOT EXISTS input_activity (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,7 +95,8 @@ CREATE TABLE IF NOT EXISTS file_interactions (
     lines_removed INTEGER NOT NULL DEFAULT 0,
     words_delta   INTEGER NOT NULL DEFAULT 0,
     eeg_focus     REAL,
-    eeg_mood      REAL
+    eeg_mood      REAL,
+    undo_count    INTEGER NOT NULL DEFAULT 0
 );
 
 -- Focus sessions — contiguous file-interaction clusters split by idle gaps.
@@ -125,7 +137,8 @@ CREATE TABLE IF NOT EXISTS file_edit_chunks (
     chunk_at       INTEGER NOT NULL,
     lines_added    INTEGER NOT NULL DEFAULT 0,
     lines_removed  INTEGER NOT NULL DEFAULT 0,
-    size_delta     INTEGER NOT NULL DEFAULT 0
+    size_delta     INTEGER NOT NULL DEFAULT 0,
+    undo_estimate  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_fec_interaction ON file_edit_chunks (interaction_id);
 CREATE INDEX IF NOT EXISTS idx_fec_chunk ON file_edit_chunks (chunk_at DESC);
@@ -175,26 +188,57 @@ impl ActivityStore {
             eprintln!("[activity] DDL: {e}");
             return None;
         }
+        // Schema migrations for columns added after initial release.
+        // Each ALTER TABLE is idempotent — "duplicate column" errors are silently ignored.
+        for alter in [
+            "ALTER TABLE active_windows ADD COLUMN browser_title TEXT",
+            "ALTER TABLE active_windows ADD COLUMN monitor_id INTEGER",
+            "ALTER TABLE file_interactions ADD COLUMN undo_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_edit_chunks ADD COLUMN undo_estimate INTEGER NOT NULL DEFAULT 0",
+        ] {
+            let _ = conn.execute_batch(alter); // ignore "duplicate column name" errors
+        }
         Some(Self { conn: Mutex::new(conn) })
     }
 
     // ── Writers ───────────────────────────────────────────────────────────────
 
     /// Record that the frontmost window changed to `info`.
-    pub fn insert_active_window(&self, info: &ActiveWindowInfo) {
+    /// Returns the row id of the newly inserted row.
+    pub fn insert_active_window(&self, info: &ActiveWindowInfo) -> Option<i64> {
         let c = self.conn.lock_or_recover();
-        if let Err(e) = c.execute(
-            "INSERT INTO active_windows (app_name, app_path, window_title, activated_at, browser_title)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+        match c.execute(
+            "INSERT INTO active_windows (app_name, app_path, window_title, activated_at, browser_title, monitor_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 &info.app_name,
                 &info.app_path,
                 &info.window_title,
                 info.activated_at as i64,
                 &info.browser_title,
+                info.monitor_id.map(|m| m as i64),
             ],
         ) {
-            eprintln!("[activity] insert_active_window: {e}");
+            Ok(_) => Some(c.last_insert_rowid()),
+            Err(e) => {
+                eprintln!("[activity] insert_active_window: {e}");
+                None
+            }
+        }
+    }
+
+    /// Record windows visible on secondary monitors at the time of a window change.
+    pub fn insert_secondary_windows(&self, primary_id: i64, windows: &[crate::active_window::SecondaryWindowInfo]) {
+        if windows.is_empty() {
+            return;
+        }
+        let c = self.conn.lock_or_recover();
+        for w in windows {
+            let _ = c.execute(
+                "INSERT INTO secondary_windows (primary_id, app_name, window_title, monitor_id)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![primary_id, &w.app_name, &w.window_title, w.monitor_id as i64],
+            );
         }
     }
 
@@ -241,7 +285,7 @@ impl ActivityStore {
     pub fn get_recent_windows(&self, limit: u32) -> Vec<ActiveWindowRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, app_name, app_path, window_title, activated_at, browser_title
+            "SELECT id, app_name, app_path, window_title, activated_at, browser_title, monitor_id
              FROM active_windows ORDER BY activated_at DESC LIMIT ?1",
         ) {
             Ok(s) => s,
@@ -258,6 +302,7 @@ impl ActivityStore {
                 window_title: row.get(3)?,
                 activated_at: row.get::<_, i64>(4)? as u64,
                 browser_title: row.get(5)?,
+                monitor_id: row.get::<_, Option<i64>>(6)?.map(|m| m as u32),
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -394,13 +439,15 @@ impl ActivityStore {
         lines_added: u64,
         lines_removed: u64,
         words_delta: i64,
+        undo_count: u64,
     ) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
             "UPDATE file_interactions
              SET duration_secs = ?1, was_modified = ?2, size_delta = ?3,
-                 lines_added = ?4, lines_removed = ?5, words_delta = ?6
-             WHERE id = ?7",
+                 lines_added = ?4, lines_removed = ?5, words_delta = ?6,
+                 undo_count = ?7
+             WHERE id = ?8",
             params![
                 duration_secs as i64,
                 was_modified as i64,
@@ -408,6 +455,7 @@ impl ActivityStore {
                 lines_added as i64,
                 lines_removed as i64,
                 words_delta,
+                undo_count as i64,
                 row_id,
             ],
         ) {
@@ -970,7 +1018,7 @@ impl ActivityStore {
         let mut stmt = match c.prepare_cached(
             "SELECT id, file_path, app_name, project, language, category, git_branch,
                     seen_at, duration_secs, was_modified, size_delta,
-                    lines_added, lines_removed, words_delta, eeg_focus, eeg_mood
+                    lines_added, lines_removed, words_delta, eeg_focus, eeg_mood, undo_count
              FROM file_interactions
              WHERE seen_at >= ?1 AND seen_at <= ?2
              ORDER BY seen_at ASC LIMIT ?3",
@@ -999,6 +1047,7 @@ impl ActivityStore {
                 words_delta: row.get(13)?,
                 eeg_focus: row.get(14)?,
                 eeg_mood: row.get(15)?,
+                undo_count: row.get::<_, i64>(16)? as u64,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1049,17 +1098,19 @@ impl ActivityStore {
         lines_added: u64,
         lines_removed: u64,
         size_delta: i64,
+        undo_estimate: u64,
     ) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
-            "INSERT INTO file_edit_chunks (interaction_id, chunk_at, lines_added, lines_removed, size_delta)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO file_edit_chunks (interaction_id, chunk_at, lines_added, lines_removed, size_delta, undo_estimate)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 interaction_id,
                 chunk_at as i64,
                 lines_added as i64,
                 lines_removed as i64,
                 size_delta,
+                undo_estimate as i64,
             ],
         ) {
             eprintln!("[activity] insert_edit_chunk: {e}");
@@ -1070,7 +1121,7 @@ impl ActivityStore {
     pub fn get_edit_chunks(&self, interaction_id: i64) -> Vec<EditChunkRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, interaction_id, chunk_at, lines_added, lines_removed, size_delta
+            "SELECT id, interaction_id, chunk_at, lines_added, lines_removed, size_delta, undo_estimate
              FROM file_edit_chunks WHERE interaction_id = ?1
              ORDER BY chunk_at ASC",
         ) {
@@ -1088,6 +1139,7 @@ impl ActivityStore {
                 lines_added: row.get::<_, i64>(3)? as u64,
                 lines_removed: row.get::<_, i64>(4)? as u64,
                 size_delta: row.get::<_, i64>(5)?,
+                undo_estimate: row.get::<_, i64>(6)? as u64,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1098,7 +1150,7 @@ impl ActivityStore {
     pub fn get_edit_chunks_range(&self, from_ts: u64, to_ts: u64) -> Vec<EditChunkRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, interaction_id, chunk_at, lines_added, lines_removed, size_delta
+            "SELECT id, interaction_id, chunk_at, lines_added, lines_removed, size_delta, undo_estimate
              FROM file_edit_chunks WHERE chunk_at >= ?1 AND chunk_at <= ?2
              ORDER BY chunk_at ASC",
         ) {
@@ -1116,6 +1168,7 @@ impl ActivityStore {
                 lines_added: row.get::<_, i64>(3)? as u64,
                 lines_removed: row.get::<_, i64>(4)? as u64,
                 size_delta: row.get::<_, i64>(5)?,
+                undo_estimate: row.get::<_, i64>(6)? as u64,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1143,6 +1196,60 @@ impl ActivityStore {
         }
     }
 
+    /// Delete meeting events older than `cutoff`.
+    pub fn prune_meetings(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute("DELETE FROM meeting_events WHERE start_at < ?1", params![cutoff as i64])
+            .unwrap_or(0) as u64
+    }
+
+    /// Delete clipboard events older than `cutoff`.
+    pub fn prune_clipboard(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "DELETE FROM clipboard_events WHERE copied_at < ?1",
+            params![cutoff as i64],
+        )
+        .unwrap_or(0) as u64
+    }
+
+    /// Delete secondary window records whose primary window is older than `cutoff`.
+    pub fn prune_secondary_windows(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "DELETE FROM secondary_windows WHERE primary_id IN
+             (SELECT id FROM active_windows WHERE activated_at < ?1)",
+            params![cutoff as i64],
+        )
+        .unwrap_or(0) as u64
+    }
+
+    /// Return secondary windows associated with a primary window ID.
+    pub fn get_secondary_windows(&self, primary_id: i64) -> Vec<SecondaryWindowRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, primary_id, app_name, window_title, monitor_id
+             FROM secondary_windows WHERE primary_id = ?1",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_secondary_windows: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map([primary_id], |row| {
+            Ok(SecondaryWindowRow {
+                id: row.get(0)?,
+                primary_id: row.get(1)?,
+                app_name: row.get(2)?,
+                window_title: row.get(3)?,
+                monitor_id: row.get::<_, i64>(4)? as u32,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
     /// Return the `limit` most recent file interaction records, newest first.
     pub fn get_recent_files(&self, limit: u32, since: Option<u64>) -> Vec<FileInteractionRow> {
         let c = self.conn.lock_or_recover();
@@ -1151,7 +1258,7 @@ impl ActivityStore {
                 "SELECT id, file_path, app_name, project, language, category,
                         git_branch, seen_at, duration_secs, was_modified,
                         size_delta, lines_added, lines_removed, words_delta,
-                        eeg_focus, eeg_mood
+                        eeg_focus, eeg_mood, undo_count
                  FROM file_interactions WHERE seen_at >= ?1
                  ORDER BY seen_at DESC LIMIT ?2",
                 vec![ts as i64, limit as i64],
@@ -1160,7 +1267,7 @@ impl ActivityStore {
                 "SELECT id, file_path, app_name, project, language, category,
                         git_branch, seen_at, duration_secs, was_modified,
                         size_delta, lines_added, lines_removed, words_delta,
-                        eeg_focus, eeg_mood
+                        eeg_focus, eeg_mood, undo_count
                  FROM file_interactions ORDER BY seen_at DESC LIMIT ?1",
                 vec![limit as i64],
             ),
@@ -1191,6 +1298,7 @@ impl ActivityStore {
                 words_delta: row.get::<_, i64>(13).unwrap_or(0),
                 eeg_focus: row.get::<_, Option<f64>>(14).ok().flatten().map(|v| v as f32),
                 eeg_mood: row.get::<_, Option<f64>>(15).ok().flatten().map(|v| v as f32),
+                undo_count: row.get::<_, i64>(16).unwrap_or(0) as u64,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1321,6 +1429,7 @@ pub struct ActiveWindowRow {
     pub window_title: String,
     pub activated_at: u64,
     pub browser_title: Option<String>,
+    pub monitor_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1364,6 +1473,7 @@ pub struct FileInteractionRow {
     pub words_delta: i64,
     pub eeg_focus: Option<f32>,
     pub eeg_mood: Option<f32>,
+    pub undo_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1458,6 +1568,8 @@ pub struct EditChunkRow {
     pub lines_added: u64,
     pub lines_removed: u64,
     pub size_delta: i64,
+    /// Estimated undo events detected via diff reversal heuristic.
+    pub undo_estimate: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1520,6 +1632,15 @@ pub struct StaleFileRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecondaryWindowRow {
+    pub id: i64,
+    pub primary_id: i64,
+    pub app_name: String,
+    pub window_title: String,
+    pub monitor_id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeetingEventRow {
     pub id: i64,
     pub platform: String,
@@ -1543,6 +1664,7 @@ pub struct ClipboardEventRow {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::active_window::SecondaryWindowInfo;
     use tempfile::tempdir;
 
     fn open_temp() -> ActivityStore {
@@ -1563,6 +1685,7 @@ mod tests {
             document_path: None,
             activated_at: ts,
             browser_title: None,
+            monitor_id: None,
         }
     }
 
@@ -1664,6 +1787,7 @@ mod tests {
                 document_path: None,
                 activated_at: 100,
                 browser_title: None,
+                monitor_id: None,
             });
         }
         for _ in 0..3 {
@@ -1674,6 +1798,7 @@ mod tests {
                 document_path: None,
                 activated_at: 200,
                 browser_title: None,
+                monitor_id: None,
             });
         }
         store.insert_active_window(&ActiveWindowInfo {
@@ -1683,6 +1808,7 @@ mod tests {
             document_path: None,
             activated_at: 300,
             browser_title: None,
+            monitor_id: None,
         });
         let top = store.top_apps(10, None);
         assert_eq!(top.len(), 3);
@@ -1704,6 +1830,7 @@ mod tests {
                 document_path: None,
                 activated_at: 100,
                 browser_title: None,
+                monitor_id: None,
             });
         }
         for _ in 0..2 {
@@ -1714,6 +1841,7 @@ mod tests {
                 document_path: None,
                 activated_at: 500,
                 browser_title: None,
+                monitor_id: None,
             });
         }
         let top = store.top_apps(10, Some(400));
@@ -1733,6 +1861,7 @@ mod tests {
                 document_path: None,
                 activated_at: i,
                 browser_title: None,
+                monitor_id: None,
             });
         }
         assert_eq!(store.top_apps(3, None).len(), 3);
@@ -1794,7 +1923,7 @@ mod tests {
     fn finalize_backfill() {
         let store = open_temp();
         let id = ins(&store, "/a.rs", "code", "", 1_000).unwrap();
-        store.finalize_file_interaction(id, 120, true, 42, 8, 3, 15);
+        store.finalize_file_interaction(id, 120, true, 42, 8, 3, 15, 0);
         let rows = store.get_recent_files(1, None);
         assert_eq!(rows[0].duration_secs, Some(120));
         assert!(rows[0].was_modified);
@@ -1808,9 +1937,9 @@ mod tests {
     fn top_files_sums_duration_and_edits() {
         let store = open_temp();
         let id1 = ins(&store, "/a.rs", "code", "", 100).unwrap();
-        store.finalize_file_interaction(id1, 60, true, 10, 5, 2, 8);
+        store.finalize_file_interaction(id1, 60, true, 10, 5, 2, 8, 0);
         let id2 = ins(&store, "/a.rs", "code", "", 200).unwrap();
-        store.finalize_file_interaction(id2, 30, false, 0, 0, 0, 0);
+        store.finalize_file_interaction(id2, 30, false, 0, 0, 0, 0, 0);
         let top = store.top_files(10, None);
         assert_eq!(top[0].total_secs, 90);
         assert_eq!(top[0].edits, 1);
@@ -1832,8 +1961,8 @@ mod tests {
     fn edit_chunks_per_interaction() {
         let store = open_temp();
         let id = ins(&store, "/a.rs", "code", "", 1_000).unwrap();
-        store.insert_edit_chunk(id, 1_005, 3, 1, 20);
-        store.insert_edit_chunk(id, 1_010, 2, 0, 15);
+        store.insert_edit_chunk(id, 1_005, 3, 1, 20, 0);
+        store.insert_edit_chunk(id, 1_010, 2, 0, 15, 0);
         let chunks = store.get_edit_chunks(id);
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].lines_added, 3);
@@ -1846,9 +1975,9 @@ mod tests {
     fn edit_chunks_range_query() {
         let store = open_temp();
         let id = ins(&store, "/a.rs", "code", "", 1_000).unwrap();
-        store.insert_edit_chunk(id, 1_000, 1, 0, 5);
-        store.insert_edit_chunk(id, 1_005, 2, 1, 10);
-        store.insert_edit_chunk(id, 1_010, 3, 0, 15);
+        store.insert_edit_chunk(id, 1_000, 1, 0, 5, 0);
+        store.insert_edit_chunk(id, 1_005, 2, 1, 10, 1);
+        store.insert_edit_chunk(id, 1_010, 3, 0, 15, 0);
         let chunks = store.get_edit_chunks_range(1_004, 1_006);
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].chunk_at, 1_005);
@@ -1990,7 +2119,7 @@ mod tests {
             );
         }
         // Finalize some with edits.
-        store.finalize_file_interaction(1, 300, true, 100, 50, 10, 20);
+        store.finalize_file_interaction(1, 300, true, 100, 50, 10, 20, 3);
         let score = store.productivity_score(day);
         assert!(score.score > 0.0);
     }
@@ -2016,14 +2145,80 @@ mod tests {
         // File edited 30 days ago.
         let old_ts = now - 30 * 86400;
         let id = ins(&store, "/stale.rs", "code", "proj", old_ts).unwrap();
-        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0);
+        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 0);
         // File edited today.
         let new_id = ins(&store, "/fresh.rs", "code", "proj", now).unwrap();
-        store.finalize_file_interaction(new_id, 60, true, 0, 10, 5, 0);
+        store.finalize_file_interaction(new_id, 60, true, 0, 10, 5, 0, 0);
 
         let stale = store.stale_files(7, old_ts - 86400);
         // Only the old file should be stale.
         assert!(stale.iter().any(|s| s.file_path == "/stale.rs"));
         assert!(!stale.iter().any(|s| s.file_path == "/fresh.rs"));
+    }
+
+    // ── Pruning tests ───────────────────────────────────────────────────────
+
+    #[test]
+    fn prune_meetings_removes_old() {
+        let store = open_temp();
+        store.insert_meeting_start("zoom", "Old", "zoom", 100);
+        store.insert_meeting_start("teams", "New", "teams", 500);
+        let pruned = store.prune_meetings(400);
+        assert_eq!(pruned, 1);
+        let remaining = store.get_meetings_in_range(0, 1000);
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].platform, "teams");
+    }
+
+    #[test]
+    fn prune_clipboard_removes_old() {
+        let store = open_temp();
+        store.insert_clipboard_event("App", "text", 10, 100);
+        store.insert_clipboard_event("App", "text", 10, 500);
+        let pruned = store.prune_clipboard(400);
+        assert_eq!(pruned, 1);
+        assert_eq!(store.get_recent_clipboard(10).len(), 1);
+    }
+
+    #[test]
+    fn insert_and_get_secondary_windows() {
+        let store = open_temp();
+        let primary_id = store.insert_active_window(&dummy_window(1000)).unwrap();
+        store.insert_secondary_windows(
+            primary_id,
+            &[
+                SecondaryWindowInfo {
+                    app_name: "Safari".into(),
+                    window_title: "Docs".into(),
+                    monitor_id: 1,
+                },
+                SecondaryWindowInfo {
+                    app_name: "Slack".into(),
+                    window_title: "#general".into(),
+                    monitor_id: 2,
+                },
+            ],
+        );
+        let sec = store.get_secondary_windows(primary_id);
+        assert_eq!(sec.len(), 2);
+        assert_eq!(sec[0].app_name, "Safari");
+        assert_eq!(sec[1].monitor_id, 2);
+    }
+
+    #[test]
+    fn schema_migration_idempotent() {
+        // Opening the store twice should not fail — ALTER TABLE is idempotent.
+        let dir = tempdir().unwrap();
+        let _s1 = ActivityStore::open(dir.path()).unwrap();
+        let _s2 = ActivityStore::open(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn finalize_writes_undo_count() {
+        let store = open_temp();
+        let id = ins(&store, "/undo.rs", "code", "proj", 1000).unwrap();
+        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 7);
+        let files = store.get_recent_files(1, None);
+        assert_eq!(files[0].undo_count, 7);
     }
 }

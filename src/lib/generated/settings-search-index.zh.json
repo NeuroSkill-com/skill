@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "跟踪剪贴板活动",
+    "desc": "记录剪贴板更改（仅元数据 — 内容永远不会被存储）。跟踪哪个应用进行了复制、内容类型和大小。仅限 macOS。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "每日目标",
     "desc": "设置您的每日录制目标。进度显示在仪表板上。"

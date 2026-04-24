@@ -24,4 +24,17 @@ pub struct ActiveWindowInfo {
     /// `None` when the active app is not a browser or title extraction fails.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_title: Option<String>,
+    /// Display index of the monitor this window is on (0 = primary).
+    /// `None` when the OS doesn't provide monitor info.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_id: Option<u32>,
+}
+
+/// A window visible on a secondary monitor (not the frontmost window).
+/// Tracked alongside the primary window to capture multi-monitor context.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SecondaryWindowInfo {
+    pub app_name: String,
+    pub window_title: String,
+    pub monitor_id: u32,
 }

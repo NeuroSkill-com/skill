@@ -432,6 +432,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "경로",
   "settings.activeWindowTitle": "창 제목",
   "settings.activeWindowSince": "활성 시작",
+  "settings.browserTitle": "페이지",
   "settings.activeWindowNone": "활성 창이 감지되지 않음",
   "settings.inputActivityToggle": "키보드 & 마우스 활동 추적",
   "settings.inputActivityToggleDesc":
@@ -472,6 +473,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "진행 중",
   "activity.staleFiles": "비활성 파일",
   "activity.staleAgo": "전",
+  "activity.replayLoading": "세션 세부 정보 로딩 중...",
+  "activity.eegOverlay": "EEG 집중도",
+  "activity.noFilesInSession": "이 세션 동안 파일 활동이 기록되지 않았습니다.",
+  "activity.weeklyReport": "주간 보고서",
+  "activity.exportCsv": "CSV 내보내기",
+  "activity.loadWeeklyReport": "주간 보고서 로드",
+  "activity.weeklyAvgFocus": "평균 집중도",
+  "activity.peakHour": "피크 시간",
+
+  "umapSettings.backend": "컴퓨트 백엔드",
+  "umapSettings.backendDesc":
+    "UMAP 프로젝션의 컴퓨트 백엔드를 선택합니다. Auto는 Apple Silicon에서 MLX, 그 외에는 GPU (wgpu)를 선택합니다.",
 
   "umapSettings.repulsion": "반발",
   "umapSettings.repulsionStrength": "반발 강도",

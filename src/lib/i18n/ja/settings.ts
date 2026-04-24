@@ -444,6 +444,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowPath": "パス",
   "settings.activeWindowTitle": "ウィンドウタイトル",
   "settings.activeWindowSince": "アクティブ開始",
+  "settings.browserTitle": "ページ",
   "settings.activeWindowNone": "アクティブウィンドウが検出されません",
   "settings.inputActivityToggle": "キーボード＆マウスの活動を追跡",
   "settings.inputActivityToggleDesc":
@@ -484,6 +485,18 @@ const settings: Record<string, string> = {
   "activity.meetingOngoing": "進行中",
   "activity.staleFiles": "非アクティブなファイル",
   "activity.staleAgo": "前",
+  "activity.replayLoading": "セッション詳細を読み込み中...",
+  "activity.eegOverlay": "EEG集中度",
+  "activity.noFilesInSession": "このセッション中のファイルアクティビティは記録されていません。",
+  "activity.weeklyReport": "週次レポート",
+  "activity.exportCsv": "CSVエクスポート",
+  "activity.loadWeeklyReport": "週次レポートを読み込む",
+  "activity.weeklyAvgFocus": "平均集中度",
+  "activity.peakHour": "ピーク時間",
+
+  "umapSettings.backend": "計算バックエンド",
+  "umapSettings.backendDesc":
+    "UMAP投影の計算バックエンドを選択します。AutoはApple SiliconではMLX、それ以外ではGPU (wgpu) を選択します。",
 
   "umapSettings.repulsion": "反発",
   "umapSettings.repulsionStrength": "反発強度",

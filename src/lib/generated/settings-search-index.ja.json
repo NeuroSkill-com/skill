@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "クリップボードアクティビティを追跡",
+    "desc": "クリップボードの変更を記録（メタデータのみ — コンテンツは保存されません）。どのアプリがコピーしたか、コンテンツの種類とサイズを追跡します。macOSのみ。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "デイリー目標",
     "desc": "デイリー記録目標を設定します。進捗はダッシュボードに表示されます。"

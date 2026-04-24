@@ -212,6 +212,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   set_tts_preload: [P, "/v1/settings/tts-preload"],
   get_umap_config: [G, "/v1/settings/umap-config"],
   set_umap_config: [P, "/v1/settings/umap-config"],
+  get_umap_backends: [G, "/v1/settings/umap-backends"],
 
   // Auth tokens
   list_auth_tokens: [G, "/v1/auth/tokens"],

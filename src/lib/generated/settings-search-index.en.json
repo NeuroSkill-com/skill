@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "Track Clipboard Activity",
+    "desc": "Record clipboard changes (metadata only — content is never stored). Tracks which app copied, content type and size. macOS only."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Daily Goal",
     "desc": "Set your daily recording goal. Progress is shown on the dashboard."

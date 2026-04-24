@@ -613,6 +613,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.clipboardToggle",
+    "label": "Suivre l'activité du presse-papiers",
+    "desc": "Enregistrer les changements du presse-papiers (métadonnées uniquement — le contenu n'est jamais stocké). Suit quelle app a copié, le type et la taille du contenu. macOS uniquement."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Objectif quotidien",
     "desc": "Définissez votre objectif d'enregistrement quotidien. Le progrès est affiché sur le tableau de bord."

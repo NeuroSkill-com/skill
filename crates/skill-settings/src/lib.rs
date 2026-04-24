@@ -320,6 +320,9 @@ pub struct UmapUserConfig {
     pub n_neighbors: usize,
     /// Milliseconds to sleep between training epochs (0 = max throughput).
     pub cooldown_ms: u64,
+    /// Compute backend: "auto", "mlx", or "gpu".
+    /// "auto" selects MLX on macOS when available, GPU otherwise.
+    pub backend: String,
 }
 
 impl Default for UmapUserConfig {
@@ -331,6 +334,7 @@ impl Default for UmapUserConfig {
             n_epochs: 500,
             n_neighbors: 15,
             cooldown_ms: 0,
+            backend: "auto".to_string(),
         }
     }
 }
