@@ -8,6 +8,28 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.129] — 2026-04-24
+
+### Features
+
+- **Grayscale display mode**: optional system-wide grayscale display that activates and deactivates in sync with Do Not Disturb. Reduces visual distraction during deep work. macOS only, default off — the default focus action remains Do Not Disturb only.
+
+### i18n
+
+- **Grayscale translations**: added `dnd.grayscale` and `dnd.grayscaleDesc` keys to all 9 locales (en, de, es, fr, he, ja, ko, uk, zh).
+
+### Dependencies
+
+- **Fix rand 0.7.3 vulnerability**: vendored `phf_generator 0.8.0` locally with `rand` bumped from 0.7 to 0.8, eliminating the vulnerable `rand 0.7.3` transitive dependency pulled in by `selectors 0.24 → phf_codegen 0.8`.
+- **Remove atty**: migrated `iroh_test_client` from `structopt` (clap v2) to `clap v4` derive, dropping the unmaintained `atty` crate.
+- **Dismiss stale Dependabot alerts**: dismissed alerts for `crossbeam-deque`, `crossbeam-utils`, `crossbeam-queue`, `memoffset`, and `glib` — all already at patched versions or fixed in fork.
+
+- **Update kittentts to 0.4.0**: bumped `kittentts` from 0.3.0 to 0.4.0 in both `skill-tts` and `src-tauri`.
+
+- **Update llama-cpp-4 to 0.2.50**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.47 to 0.2.50, picking up upstream llama.cpp fixes including `common_*` symbol renames and `llama-common-base` static library linking.
+
+- **Add grayscale crate**: added `grayscale 0.0.1` as a macOS-only dependency in `skill-data`.
+
 ## [0.0.128] — 2026-04-23
 
 ### Features
