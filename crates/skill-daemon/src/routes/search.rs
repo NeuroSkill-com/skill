@@ -1022,6 +1022,30 @@ fn interactive_search_impl(
                     });
                 }
             }
+
+            // Step 2d: Find meetings near this label's timestamp.
+            if let Some(ref store) = activity_store {
+                let nearby_meetings = store.get_meetings_in_range(ts.saturating_sub(reach_secs), ts + reach_secs);
+                for (m, mtg) in nearby_meetings.iter().take(3).enumerate() {
+                    let mtg_id = format!("mtg{i}_{m}");
+                    let mut mtg_node = InteractiveGraphNode {
+                        id: mtg_id.clone(),
+                        kind: "meeting".into(),
+                        text: Some(format!("{} ({})", mtg.platform, mtg.title)),
+                        timestamp_unix: Some(mtg.start_at),
+                        parent_id: Some(node_id.clone()),
+                        ..Default::default()
+                    };
+                    mtg_node.session_id = Some(session_id_from_ts(mtg.start_at));
+                    nodes.push(mtg_node);
+                    edges.push(InteractiveGraphEdge {
+                        from_id: node_id.clone(),
+                        to_id: mtg_id,
+                        distance: 0.0,
+                        kind: "meeting_prox".into(),
+                    });
+                }
+            }
         }
     }
 

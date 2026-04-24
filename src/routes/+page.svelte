@@ -46,6 +46,7 @@ import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonStatus, setDaemonLatency } from "$lib/daemon/status.svelte";
 import {
   ArtifactEvents,
+  BrainCard,
   BrainStateScores,
   CompositeScores,
   ConsciousnessMetrics,
@@ -2276,6 +2277,9 @@ useWindowTitle("window.title.main");
         {/if}
 
         {#if hasEeg}
+          <!-- Brain activity state (flow, fatigue, streak) -->
+          <BrainCard />
+
           <!-- Focus / Relaxation / Engagement scores -->
           <BrainStateScores relaxation={relaxScore} engagement={engagementScore} />
 

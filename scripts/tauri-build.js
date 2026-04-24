@@ -1002,9 +1002,61 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
+// ── macOS: build WidgetKit extension ──────────────────────────────────────────
+if (isMac && (subcommand === "dev" || subcommand === "build")) {
+  const widgetScript = resolve(root, "extensions", "widgets", "build-widgets.sh");
+  if (existsSync(widgetScript)) {
+    const isRelease = subcommand === "build" && !rawSubArgs.includes("--debug");
+    const widgetArgs = isRelease ? ["--release"] : [];
+    console.log(`\n🧩 Building WidgetKit widgets (${isRelease ? "release" : "debug"})…`);
+    try {
+      execFileSync("bash", [widgetScript, ...widgetArgs], {
+        cwd: root,
+        stdio: "inherit",
+        env: process.env,
+      });
+    } catch (e) {
+      console.warn(`⚠ Widget build failed: ${e.message} — continuing without widgets`);
+    }
+  }
+}
+
 if (!tuiDaemonPane) {
   try {
     runTauriWithArgs(finalArgs);
+
+    // ── macOS: embed widgets into the built .app bundle ────────────────────
+    if (isMac && subcommand === "build") {
+      const isDebugBuild = rawSubArgs.includes("--debug");
+      const profile = isDebugBuild ? "debug" : "release";
+      const triple = explicitTarget || "";
+      const appCandidates = [
+        resolve(root, "src-tauri", "target", triple, profile, "bundle", "macos", "NeuroSkill.app"),
+        resolve(root, "src-tauri", "target", profile, "bundle", "macos", "NeuroSkill.app"),
+      ];
+      const appBundle = appCandidates.find((c) => existsSync(c));
+      const appexDir = resolve(
+        root,
+        "extensions",
+        "widgets",
+        ".build",
+        "Build",
+        "Products",
+        isDebugBuild ? "Debug" : "Release",
+      );
+      const appex = resolve(appexDir, "SkillWidgets.appex");
+
+      if (appBundle && existsSync(appex)) {
+        const pluginsDir = resolve(appBundle, "Contents", "PlugIns");
+        const { mkdirSync, cpSync, rmSync } = await import("node:fs");
+        mkdirSync(pluginsDir, { recursive: true });
+        rmSync(resolve(pluginsDir, "SkillWidgets.appex"), { recursive: true, force: true });
+        cpSync(appex, resolve(pluginsDir, "SkillWidgets.appex"), { recursive: true });
+        console.log(`\n🧩 Embedded widgets → ${pluginsDir}/SkillWidgets.appex`);
+      } else if (appBundle) {
+        console.warn("⚠ Widget .appex not found — run extensions/widgets/build-widgets.sh first");
+      }
+    }
   } catch (error) {
     // 0xc000013a = STATUS_CONTROL_C_EXIT — Windows Ctrl+C graceful exit
     const isWindowsCtrlC = Number(error?.status) === 3221225786;

@@ -203,9 +203,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "Пристрій виведення",
   "settings.inferenceDeviceDesc":
     "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни.",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "MLX на Apple Silicon, GPU в інших випадках.",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Нативне для Apple Silicon — найшвидше на Mac.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "Використовує GPU / Metal / CUDA для швидкого виведення (рекомендовано).",
+  "settings.inferenceDeviceGpuDesc": "Використовує wgpu (Metal / Vulkan) для виведення.",
   "settings.inferenceDeviceCpuDesc": "Працює повністю на CPU — повільніше, але без GPU.",
   "settings.inferenceDeviceRestartHint": "Перезапустіть LLM-сервер для застосування.",
   "settings.inferenceDeviceExgRestartHint": "Перепідкнайте гарнітуру, щоб застосувати.",
@@ -279,10 +283,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "Завантажити тижневий звіт",
   "activity.weeklyAvgFocus": "Середній фокус",
   "activity.peakHour": "Пікова година",
+  "activity.noFlow": "Не у потоці",
+  "activity.fatiguedTitle": "Фокус знижується",
+  "activity.streakDays": "днів поспіль",
+  "activity.todayLabel": "сьогодні",
+  "activity.timeline": "Хронологія",
+  "activity.codeBrain": "Кореляція код-мозок",
+  "activity.brainByLanguage": "Фокус за мовою",
+  "activity.bestFiles": "Найкращий фокус",
+  "activity.worstFiles": "Найнижчий фокус",
 
   "umapSettings.backend": "Обчислювальний бекенд",
   "umapSettings.backendDesc":
     "Оберіть обчислювальний бекенд для проекції UMAP. Авто обирає MLX на Apple Silicon, GPU (wgpu) в інших випадках.",
+  "umapSettings.precision": "Точність",
+  "umapSettings.precisionDesc":
+    "Точність з плаваючою комою. F16 (половинна) швидша і використовує менше пам'яті; F32 (повна) точніша.",
 
   "umapSettings.repulsion": "Відштовхування",
   "umapSettings.repulsionStrength": "Сила відштовхування",

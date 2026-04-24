@@ -14,6 +14,11 @@ fn main() {
     let t_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if t_os == "macos" {
         println!("cargo:rustc-link-arg-bins=-Wl,-stack_size,0x2000000");
+        // Weak-link WidgetKit so widget_reload::reload_all_widgets() can call
+        // WGWidgetCenter at runtime.  Weak linking avoids crashes on macOS < 14
+        // where the framework doesn't exist — the class lookup returns nil instead.
+        println!("cargo:rustc-link-lib=framework=WidgetKit");
+        println!("cargo:rustc-link-arg-bins=-Wl,-weak_framework,WidgetKit");
     } else if t_os == "linux" {
         println!("cargo:rustc-link-arg-bins=-Wl,-z,stacksize=33554432");
     }

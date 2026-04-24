@@ -609,3 +609,252 @@ pub(crate) async fn activity_stale_files_impl(
     .unwrap_or_default();
     Json(rows)
 }
+
+/// Process a batch of VS Code extension events.
+pub(crate) async fn activity_vscode_events_impl(
+    State(state): State<AppState>,
+    events: Vec<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let embedder = state.text_embedder.clone();
+    let label_index = state.label_index.clone();
+    let processed = tokio::task::spawn_blocking(move || {
+        let Some(store) = ActivityStore::open(&skill_dir) else {
+            return 0u64;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        // Open labels DB for auto-labeling EEG recordings.
+        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
+        let labels_conn = rusqlite::Connection::open(&labels_db).ok();
+
+        let mut count = 0u64;
+        for event in &events {
+            let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let path = event.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            let language = event.get("language").and_then(|v| v.as_str()).unwrap_or("");
+            let command = event.get("command").and_then(|v| v.as_str()).unwrap_or("");
+            let basename = path.rsplit('/').next().unwrap_or(path);
+
+            // ── Data storage (activity tables) ───────────────────────────
+            match event_type {
+                "file_focus" if !path.is_empty() => {
+                    store.insert_file_interaction(path, "Visual Studio Code", "", language, "", "", now, None, None);
+                }
+                "edit" => {
+                    let added = event.get("lines_added").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let removed = event.get("lines_removed").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let is_undo = event.get("undo").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if !path.is_empty() && (added > 0 || removed > 0) {
+                        let recent = store.get_recent_files(1, None);
+                        if let Some(fi) = recent.first().filter(|f| f.file_path == path) {
+                            let undo_est = if is_undo { added.max(removed) } else { 0 };
+                            store.insert_edit_chunk(fi.id, now, added, removed, 0, undo_est);
+                        }
+                    }
+                }
+                "debug_start" | "debug_stop" | "task_start" | "task_end" => {
+                    let exit_code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let outcome = match exit_code {
+                        Some(0) => "pass",
+                        Some(_) => "fail",
+                        _ => "running",
+                    };
+                    let cmd = if command.is_empty() { event_type } else { command };
+                    store.insert_build_event(cmd, outcome, "", now);
+                }
+                "ai_suggestion_shown"
+                | "ai_suggestion_accepted"
+                | "ai_suggestion_rejected"
+                | "ai_chat_start"
+                | "ai_chat_end" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    store.insert_ai_event(event_type, source, path, language, now);
+                }
+                _ => {}
+            }
+
+            // ── EEG auto-labeling (smart categorization) ─────────────────
+            // Label text: short, searchable phrase (what happened)
+            // Context: details (file, language, counts, etc.)
+            let (label, ctx) = match event_type {
+                // === Editing — only label significant events, not every keystroke ===
+                "file_focus" if !path.is_empty() => (format!("editing {language}"), basename.to_string()),
+                "save" if !path.is_empty() => ("file saved".to_string(), format!("{basename} ({language})")),
+
+                // === Debugging ===
+                "debug_start" => ("debugging started".to_string(), language.to_string()),
+                "debug_stop" => ("debugging ended".to_string(), String::new()),
+                "breakpoint_change" => {
+                    let n = event.get("breakpoint_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                    ("breakpoint changed".to_string(), format!("{n} breakpoints"))
+                }
+
+                // === Build / test ===
+                "task_start" => (format!("task: {command}"), String::new()),
+                "task_end" => {
+                    let code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let status = match code {
+                        Some(0) => "passed",
+                        Some(_) => "failed",
+                        None => "ended",
+                    };
+                    (format!("task {status}"), command.to_string())
+                }
+
+                // === Git operations ===
+                "git_commit" => ("git commit".to_string(), command.to_string()),
+                "git_push" => ("git push".to_string(), String::new()),
+                "git_pull" => ("git pull".to_string(), String::new()),
+                "git_checkout" => ("git branch switch".to_string(), String::new()),
+
+                // === Navigation — code comprehension ===
+                "code_jump" => {
+                    let line = event.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
+                    ("code navigation".to_string(), format!("{basename}:{line}"))
+                }
+
+                // === AI assistance ===
+                "ai_suggestion_accepted" => ("AI suggestion accepted".to_string(), format!("{basename} ({language})")),
+                "ai_suggestion_rejected" => ("AI suggestion rejected".to_string(), basename.to_string()),
+                "ai_chat_start" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("copilot");
+                    (format!("AI chat: {source}"), basename.to_string())
+                }
+                "ai_inline_chat" => ("AI inline assist".to_string(), format!("{basename} ({language})")),
+
+                // === Collaboration ===
+                "liveshare_start" => ("pair programming started".to_string(), String::new()),
+                "liveshare_end" => ("pair programming ended".to_string(), String::new()),
+
+                // === Focus management ===
+                "zen_mode" => ("zen mode toggled".to_string(), String::new()),
+                "visible_editors" => {
+                    let n = event.get("selections").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if n > 2 {
+                        (format!("{n} editors open"), String::new())
+                    } else {
+                        continue;
+                    }
+                }
+
+                // === Diagnostics (only label when errors appear/disappear) ===
+                "diagnostics" => {
+                    let errors = event.get("errors").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if errors > 0 {
+                        (format!("{errors} errors"), format!("{basename} ({language})"))
+                    } else {
+                        continue;
+                    }
+                }
+
+                // === Workspace context ===
+                "workspace_add" => ("project opened".to_string(), basename.to_string()),
+                "workspace_remove" => ("project closed".to_string(), basename.to_string()),
+
+                // === Multi-cursor (power user pattern) ===
+                "multi_cursor" => {
+                    let n = event.get("selections").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if n >= 3 {
+                        (format!("multi-cursor ({n})"), basename.to_string())
+                    } else {
+                        continue;
+                    }
+                }
+
+                // === Command execution (navigation, refactoring, search) ===
+                "command" => {
+                    let cmd_name = command.rsplit('.').next().unwrap_or(command);
+                    let category =
+                        if command.contains("find") || command.contains("search") || command.contains("quickOpen") {
+                            "searching"
+                        } else if command.contains("rename")
+                            || command.contains("refactor")
+                            || command.contains("organizeImports")
+                        {
+                            "refactoring"
+                        } else if command.contains("Definition")
+                            || command.contains("References")
+                            || command.contains("Implementation")
+                        {
+                            "navigating"
+                        } else if command.contains("format") {
+                            "formatting"
+                        } else if command.contains("fold") {
+                            "folding"
+                        } else if command.contains("Zen") || command.contains("split") || command.contains("toggle") {
+                            "focus management"
+                        } else if command.contains("copilot") || command.contains("inlineChat") {
+                            "AI assist"
+                        } else if command.contains("debug") {
+                            "debugging"
+                        } else {
+                            cmd_name
+                        };
+                    (category.to_string(), format!("{cmd_name} in {basename}"))
+                }
+
+                // === IntelliSense completion accepted ===
+                "completion_accepted" => ("autocomplete accepted".to_string(), format!("{basename} ({language})")),
+
+                // === Clipboard activity ===
+                "clipboard_change" => {
+                    let lines = event.get("lines_added").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if lines > 3 {
+                        (
+                            "clipboard: large paste".to_string(),
+                            format!("{lines} lines in {basename}"),
+                        )
+                    } else {
+                        continue; // small clipboard changes are noise
+                    }
+                }
+
+                // === Terminal activity ===
+                "terminal_focus" => ("terminal focused".to_string(), command.to_string()),
+                "terminal_created" => ("terminal opened".to_string(), String::new()),
+
+                // === Project file changes (external) ===
+                "project_file_changed" => ("project config changed".to_string(), basename.to_string()),
+
+                // === Environment context (one-time, no label needed) ===
+                "env_context" => {
+                    count += 1;
+                    continue;
+                }
+
+                // === Low-signal events — count but don't label ===
+                _ => {
+                    count += 1;
+                    continue;
+                }
+            };
+
+            // Insert the auto-label with inline embeddings for immediate searchability.
+            if let Some(ref conn) = labels_conn {
+                let text_emb = embedder.embed(&label);
+                let ctx_emb = if !ctx.is_empty() { embedder.embed(&ctx) } else { None };
+                let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
+                let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
+                let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
+                let label_id = conn.execute(
+                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, context_embedding, embedding_model)
+                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
+                ).ok().map(|_| conn.last_insert_rowid());
+                // Incrementally insert into HNSW index for immediate searchability.
+                if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
+                    let ce = ctx_emb.as_deref().unwrap_or(&[]);
+                    skill_label_index::insert_label(&skill_dir, id, te, ce, now, now, &label_index);
+                }
+            }
+            count += 1;
+        }
+        count
+    })
+    .await
+    .unwrap_or(0);
+    Json(serde_json::json!({"ok": true, "processed": processed}))
+}

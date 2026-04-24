@@ -323,6 +323,8 @@ pub struct UmapUserConfig {
     /// Compute backend: "auto", "mlx", or "gpu".
     /// "auto" selects MLX on macOS when available, GPU otherwise.
     pub backend: String,
+    /// Floating-point precision: "f32" or "f16".
+    pub precision: String,
 }
 
 impl Default for UmapUserConfig {
@@ -335,6 +337,7 @@ impl Default for UmapUserConfig {
             n_neighbors: 15,
             cooldown_ms: 0,
             backend: "auto".to_string(),
+            precision: "f32".to_string(),
         }
     }
 }
@@ -972,12 +975,12 @@ pub struct UserSettings {
     #[serde(default = "default_llm_gpu_layers_saved")]
     pub llm_gpu_layers_saved: u32,
 
-    /// High-level inference device preference for EXG embeddings: `"gpu"`
-    /// (default) or `"cpu"`.
+    /// Inference backend for EXG embeddings: `"auto"`, `"mlx"`, `"gpu"`, or `"cpu"`.
     ///
-    /// When set to `"gpu"`, the wgpu backend is used for all model inference
-    /// (faster, recommended).  When set to `"cpu"`, burn's NdArray backend
-    /// is used instead (no GPU required, slower).
+    /// `"auto"` selects MLX on macOS when available, GPU (wgpu) otherwise.
+    /// `"mlx"` uses Apple Silicon native acceleration via burn-mlx.
+    /// `"gpu"` uses the wgpu backend (Metal on macOS, Vulkan on Linux).
+    /// `"cpu"` uses burn's NdArray backend (no GPU required, slower).
     #[serde(default = "default_exg_inference_device")]
     pub exg_inference_device: String,
 
@@ -1090,7 +1093,7 @@ pub fn default_inference_device() -> String {
     "gpu".into()
 }
 pub fn default_exg_inference_device() -> String {
-    "gpu".into()
+    "auto".into()
 }
 pub fn default_llm_gpu_layers_saved() -> u32 {
     u32::MAX

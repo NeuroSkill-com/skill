@@ -558,12 +558,15 @@ pub(crate) fn forget_device(id: String) -> Result<Vec<DiscoveredDeviceResponse>,
 pub(crate) fn retry_connect() -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
-    post_json_with_auth_response(
+    let result = post_json_with_auth_response(
         &base_url,
         &token,
         "/v1/control/retry-connect",
         &serde_json::json!({}),
-    )
+    );
+    #[cfg(target_os = "macos")]
+    crate::widget_reload::reload_all_widgets();
+    result
 }
 
 pub(crate) fn cancel_retry() -> Result<StatusResponse, String> {
@@ -603,12 +606,15 @@ pub(crate) fn disable_reconnect() -> Result<(), String> {
 pub(crate) fn cancel_session_sync() -> Result<StatusResponse, String> {
     let base_url = daemon_base_url();
     let token = load_daemon_token()?;
-    post_json_with_auth_response(
+    let result = post_json_with_auth_response(
         &base_url,
         &token,
         "/v1/control/cancel-session",
         &serde_json::json!({}),
-    )
+    );
+    #[cfg(target_os = "macos")]
+    crate::widget_reload::reload_all_widgets();
+    result
 }
 
 /// Blocking version for internal callers (lifecycle, session_connect).
@@ -625,9 +631,12 @@ pub(crate) fn start_session_sync(target: Option<String>) -> Result<StatusRespons
 
 #[tauri::command]
 pub async fn start_session(target: Option<String>) -> Result<StatusResponse, String> {
-    tokio::task::spawn_blocking(move || start_session_sync(target))
+    let result = tokio::task::spawn_blocking(move || start_session_sync(target))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::widget_reload::reload_all_widgets();
+    result
 }
 
 #[allow(dead_code)]

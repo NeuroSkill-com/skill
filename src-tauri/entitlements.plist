@@ -32,6 +32,13 @@
   <key>com.apple.security.personal-information.location</key>
   <true/>
 
+  <!-- ── App Group (shared data with WidgetKit extension) ──────────────── -->
+
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>group.com.neuroskill.skill</string>
+  </array>
+
   <!-- ── Hardened runtime ────────────────────────────────────────────────── -->
 
   <!-- Allow JIT compilation — required by wgpu/Metal shader compilation -->

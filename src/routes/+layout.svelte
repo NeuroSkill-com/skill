@@ -25,6 +25,7 @@ import "$lib/stores/chart-colors.svelte";
 import "$lib/stores/app-name.svelte";
 import CommandPalette from "$lib/CommandPalette.svelte";
 import CustomTitleBar from "$lib/CustomTitleBar.svelte";
+import BrainStatusBar from "$lib/components/BrainStatusBar.svelte";
 import { ToastContainer } from "$lib/components/ui/toast";
 import { ensureDaemonCompatible } from "$lib/daemon/http";
 import KeyboardShortcuts from "$lib/KeyboardShortcuts.svelte";
@@ -93,6 +94,9 @@ onDestroy(() => unlisteners.forEach((u) => u()));
 <KeyboardShortcuts />
 <CommandPalette />
 <WhatsNew />
-<div id="main-content">
-  {@render children()}
+<div id="main-content" class="flex flex-col flex-1 min-h-0">
+  <div class="flex-1 min-h-0 overflow-auto">
+    {@render children()}
+  </div>
+  <BrainStatusBar />
 </div>

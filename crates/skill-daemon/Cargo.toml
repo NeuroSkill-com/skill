@@ -13,14 +13,16 @@ llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
-embed-exg-mlx = ["embed-exg", "skill-router/mlx"]
+embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "skill-eeg/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
+embed-exg-mlx = ["embed-exg", "skill-router/mlx", "skill-eeg/mlx", "embed-zuna-mlx"]
 cpu-only = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 # GPU-accelerated ZUNA encoder (Metal on macOS, Vulkan on Linux)
 embed-zuna-gpu = ["embed-zuna", "zuna-rs/wgpu", "burn/wgpu"]
 # GPU f16 half-precision — faster than f32 on Apple Silicon and modern GPUs
 embed-zuna-gpu-f16 = ["embed-zuna", "zuna-rs/wgpu-f16", "burn/wgpu", "dep:half"]
+# MLX-accelerated ZUNA encoder (Apple Silicon native)
+embed-zuna-mlx = ["embed-zuna", "zuna-rs/mlx", "dep:burn-mlx"]
 embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
 embed-osf  = ["dep:osf-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
@@ -94,7 +96,8 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-zuna-rs             = { version = "0.1.3", default-features = false, features = ["ndarray"], optional = true }
+zuna-rs             = { version = "0.1.4", default-features = false, features = ["ndarray"], optional = true }
+burn-mlx            = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20", optional = true }
 luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
 reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
 osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }

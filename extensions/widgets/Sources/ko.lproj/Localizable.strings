@@ -1,0 +1,131 @@
+/* Korean */
+
+"widget.focus.name" = "집중 점수";
+"widget.focus.desc" = "실시간 집중 수준과 몰입 상태.";
+"widget.streak.name" = "딥워크 연속 기록";
+"widget.streak.desc" = "일일 딥워크 연속 기록을 추적하세요.";
+"widget.dash.name" = "브레인 대시보드";
+"widget.dash.desc" = "집중, 몰입, 피로, 연속 기록을 한눈에.";
+"widget.hours.name" = "최적 시간대";
+"widget.hours.desc" = "가장 집중이 잘 되는 시간과 안 되는 시간.";
+"widget.break.name" = "휴식 타이머";
+"widget.break.desc" = "다음 권장 휴식까지 카운트다운.";
+"widget.session.name" = "세션 상태";
+"widget.session.desc" = "녹화, 신호 품질, 배터리.";
+"widget.daily.name" = "일일 보고서";
+"widget.daily.desc" = "오늘의 집중, 생산성, 시간대별 분석.";
+"widget.weekly.name" = "주간 트렌드";
+"widget.weekly.desc" = "7일 집중 트렌드와 일별 평균.";
+"widget.hr.name" = "심박수";
+"widget.hr.desc" = "실시간 심박수, HRV, 스트레스 지수.";
+"widget.cog.name" = "인지 부하";
+"widget.cog.desc" = "현재 인지 부하와 어려운 영역.";
+
+"focus.label" = "집중";
+"focus.inFlow" = "몰입 중";
+"focus.notInFlow" = "비몰입";
+
+"streak.label" = "연속";
+"streak.day" = "일";
+"streak.days" = "일";
+"streak.today" = "오늘";
+
+"dash.monitoring" = "모니터링";
+"dash.fresh" = "상쾌";
+"dash.fatigued" = "피로";
+"dash.deepWork" = "딥워크";
+
+"hours.title" = "피크 시간";
+"hours.peak" = "피크";
+
+"break.title" = "휴식";
+"break.minsLeft" = "분 남음";
+"break.overdue" = "초과";
+"break.working" = "작업 중";
+
+"session.title" = "세션";
+"session.signal" = "신호";
+"session.noDevice" = "연결된 기기 없음";
+"session.connectHint" = "NeuroSkill을 열어 연결하세요";
+
+"daily.today" = "오늘";
+"daily.avgFocus" = "평균 집중";
+"daily.best" = "최고";
+"daily.morning" = "오전";
+"daily.afternoon" = "오후";
+"daily.evening" = "저녁";
+
+"weekly.subtitle" = "7일 트렌드";
+"weekly.avgFocus" = "평균 집중";
+"weekly.day" = "일";
+
+"hr.title" = "심박수";
+"hr.stress" = "스트레스";
+"hr.low" = "낮음";
+"hr.moderate" = "보통";
+"hr.high" = "높음";
+"hr.unknown" = "—";
+"hr.resp" = "호흡";
+"hr.noPpg" = "PPG 데이터 없음\nPPG 기기를 연결하세요";
+
+"cog.title" = "인지 부하";
+"cog.light" = "가벼움";
+"cog.moderate" = "보통";
+"cog.heavy" = "무거움";
+
+"status.daemonOffline" = "데몬 오프라인";
+"status.noDevice" = "기기 없음";
+"status.connected" = "연결됨";
+"status.scanning" = "검색 중";
+"status.idle" = "대기 중";
+"status.recording" = "녹화 중";
+"status.battery" = "배터리";
+
+/* Calendar Mind State */
+"widget.cal.name" = "캘린더 두뇌 상태";
+"widget.cal.desc" = "오늘 일정에 매핑된 두뇌 상태.";
+"cal.subtitle" = "마인드 + 캘린더";
+"cal.deepWork" = "딥워크";
+"cal.noEvents" = "오늘 일정 없음";
+"cal.freeDay" = "빈 캘린더 — 딥워크에 최적";
+"cal.slowRecovery" = "회의 후 평균 %d분 회복";
+"cal.avoidHour" = "%@에 딥워크 피하기";
+
+/* EEG Band Power */
+"widget.eeg.name" = "EEG 대역 파워";
+"widget.eeg.desc" = "실시간 Alpha, Beta, Theta, Gamma 대역 파워.";
+"widget.eeg.medName" = "EEG 스펙트럼";
+"widget.eeg.medDesc" = "이완 및 집중 포함 전체 대역 파워 스펙트럼.";
+"eeg.title" = "EEG 대역";
+"eeg.spectrum" = "스펙트럼";
+"eeg.relax" = "이완";
+"eeg.engage" = "집중";
+"eeg.dominant" = "우세";
+
+/* Sleep Quality */
+"widget.sleep.name" = "수면 품질";
+"widget.sleep.desc" = "어젯밤 수면 시간, 단계 및 품질 점수.";
+"widget.sleep.medName" = "수면 분석";
+"widget.sleep.medDesc" = "품질 점수 포함 상세 수면 단계 분석.";
+"sleep.title" = "수면";
+"sleep.lastNight" = "어젯밤";
+"sleep.quality" = "품질";
+"sleep.deep" = "깊은";
+"sleep.light" = "얕은";
+"sleep.rem" = "REM";
+"sleep.wake" = "각성";
+
+/* Error states */
+"error.daemonOffline" = "데몬 오프라인";
+"error.tokenMissing" = "토큰 누락";
+"error.apiError" = "API 오류";
+"error.startApp" = "NeuroSkill을 열어 시작하세요";
+"error.reinstall" = "재설치하거나 앱을 실행하세요";
+
+/* Accessibility */
+"a11y.good" = "좋음";
+"a11y.moderate" = "보통";
+"a11y.low" = "낮음";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

@@ -203,9 +203,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "Inferenzgerät",
   "settings.inferenceDeviceDesc":
     "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten.",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "MLX auf Apple Silicon, GPU anderswo.",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Nativ für Apple Silicon — am schnellsten auf Mac.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "Nutzt GPU / Metal / CUDA für schnelle Inferenz (empfohlen).",
+  "settings.inferenceDeviceGpuDesc": "Nutzt wgpu (Metal / Vulkan) für Inferenz.",
   "settings.inferenceDeviceCpuDesc": "Läuft vollständig auf der CPU — langsamer, aber ohne GPU nutzbar.",
   "settings.inferenceDeviceRestartHint": "LLM-Server neu starten, um die Änderung anzuwenden.",
   "settings.inferenceDeviceExgRestartHint": "Headset erneut verbinden, um die Änderung anzuwenden.",
@@ -279,10 +283,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "Wochenbericht laden",
   "activity.weeklyAvgFocus": "Durchschn. Fokus",
   "activity.peakHour": "Spitzenstunde",
+  "activity.noFlow": "Kein Flow",
+  "activity.fatiguedTitle": "Fokus sinkt",
+  "activity.streakDays": "Tage-Streak",
+  "activity.todayLabel": "heute",
+  "activity.timeline": "Aktivitäts-Timeline",
+  "activity.codeBrain": "Code-Gehirn-Korrelation",
+  "activity.brainByLanguage": "Fokus nach Sprache",
+  "activity.bestFiles": "Bester Fokus",
+  "activity.worstFiles": "Niedrigster Fokus",
 
   "umapSettings.backend": "Rechen-Backend",
   "umapSettings.backendDesc":
     "Rechen-Backend für UMAP-Projektion wählen. Auto wählt MLX auf Apple Silicon, GPU (wgpu) anderswo.",
+  "umapSettings.precision": "Genauigkeit",
+  "umapSettings.precisionDesc":
+    "Gleitkomma-Genauigkeit. F16 (halb) ist schneller und benötigt weniger Speicher; F32 (voll) ist genauer.",
 
   "umapSettings.repulsion": "Abstoßung",
   "umapSettings.repulsionStrength": "Abstoßungsstärke",

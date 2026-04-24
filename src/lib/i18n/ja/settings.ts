@@ -418,9 +418,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "推論デバイス",
   "settings.inferenceDeviceDesc":
     "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "Apple SiliconではMLX、その他ではGPU。",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Apple Siliconネイティブ — Macで最速。",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "GPU / Metal / CUDAを使用した高速推論（推奨）。",
+  "settings.inferenceDeviceGpuDesc": "wgpu (Metal / Vulkan) で推論。",
   "settings.inferenceDeviceCpuDesc": "完全にCPUで実行 — 遅いがGPUなしで動作。",
   "settings.inferenceDeviceRestartHint": "適用するにはLLMサーバーを再起動してください。",
   "settings.inferenceDeviceExgRestartHint": "適用するにはヘッドセットを再接続してください。",
@@ -493,10 +497,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "週次レポートを読み込む",
   "activity.weeklyAvgFocus": "平均集中度",
   "activity.peakHour": "ピーク時間",
+  "activity.noFlow": "フロー状態ではない",
+  "activity.fatiguedTitle": "集中力低下",
+  "activity.streakDays": "日連続",
+  "activity.todayLabel": "今日",
+  "activity.timeline": "タイムライン",
+  "activity.codeBrain": "コードと脳の相関",
+  "activity.brainByLanguage": "言語別集中度",
+  "activity.bestFiles": "最高集中度",
+  "activity.worstFiles": "最低集中度",
 
   "umapSettings.backend": "計算バックエンド",
   "umapSettings.backendDesc":
     "UMAP投影の計算バックエンドを選択します。AutoはApple SiliconではMLX、それ以外ではGPU (wgpu) を選択します。",
+  "umapSettings.precision": "精度",
+  "umapSettings.precisionDesc":
+    "浮動小数点精度。F16（半精度）はより高速でメモリ消費が少なく、F32（単精度）はより正確です。",
 
   "umapSettings.repulsion": "反発",
   "umapSettings.repulsionStrength": "反発強度",

@@ -28,7 +28,7 @@ interface FilterConfig {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let exgInferenceDevice = $state<"gpu" | "cpu">("gpu");
+let exgInferenceDevice = $state<"auto" | "mlx" | "gpu" | "cpu">("auto");
 let exgInferenceDeviceSaving = $state(false);
 let filter = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
 let filterSaving = $state(false);
@@ -69,7 +69,7 @@ async function setOverlap(secs: number) {
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
-async function setExgInferenceDevice(dev: "gpu" | "cpu") {
+async function setExgInferenceDevice(dev: "auto" | "mlx" | "gpu" | "cpu") {
   if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
   exgInferenceDeviceSaving = true;
   exgInferenceDevice = dev;
@@ -82,7 +82,7 @@ onMount(async () => {
   overlapSecs = await daemonInvoke<number>("get_embedding_overlap");
   exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device")
     .then((r) => r.value)
-    .catch(() => "gpu")) as "gpu" | "cpu";
+    .catch(() => "auto")) as "auto" | "mlx" | "gpu" | "cpu";
 });
 </script>
 
@@ -97,8 +97,16 @@ onMount(async () => {
           {t("settings.inferenceDeviceDesc")}
         </p>
         <div class="flex items-stretch divide-x divide-border dark:divide-white/[0.05]">
-          {#each (["gpu", "cpu"] as ("gpu" | "cpu")[]) as dev}
+          {#each (["auto", "mlx", "gpu", "cpu"] as ("auto" | "mlx" | "gpu" | "cpu")[]) as dev}
             {@const isActive = exgInferenceDevice === dev}
+            {@const label = dev === "auto" ? t("settings.inferenceDeviceAuto")
+                          : dev === "mlx"  ? t("settings.inferenceDeviceMlx")
+                          : dev === "gpu"  ? t("settings.inferenceDeviceGpu")
+                          :                  t("settings.inferenceDeviceCpu")}
+            {@const desc = dev === "auto" ? t("settings.inferenceDeviceAutoDesc")
+                         : dev === "mlx"  ? t("settings.inferenceDeviceMlxDesc")
+                         : dev === "gpu"  ? t("settings.inferenceDeviceGpuDesc")
+                         :                  t("settings.inferenceDeviceCpuDesc")}
             <button
               onclick={() => setExgInferenceDevice(dev)}
               class="flex-1 flex flex-col gap-0.5 items-start px-4 py-3 text-left transition-colors cursor-pointer
@@ -109,7 +117,7 @@ onMount(async () => {
                 <span
                   class="text-ui-md font-semibold
                          {isActive ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
-                  {dev === "gpu" ? t("settings.inferenceDeviceGpu") : t("settings.inferenceDeviceCpu")}
+                  {label}
                 </span>
                 {#if isActive}
                   <span class="text-ui-xs font-bold tracking-widest uppercase text-violet-500">Active</span>
@@ -119,7 +127,7 @@ onMount(async () => {
                 {/if}
               </div>
               <span class="text-ui-sm text-muted-foreground leading-snug">
-                {dev === "gpu" ? t("settings.inferenceDeviceGpuDesc") : t("settings.inferenceDeviceCpuDesc")}
+                {desc}
               </span>
             </button>
           {/each}

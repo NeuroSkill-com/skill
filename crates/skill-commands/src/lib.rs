@@ -893,7 +893,7 @@ pub fn find_session_for_timestamp_in(skill_dir: &Path, timestamp_unix: u64, date
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
     pub id: String,
-    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity"
+    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity" | "meeting"
     pub kind: String,
     /// Human-readable label text (query string / label annotation).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -974,7 +974,7 @@ pub struct InteractiveGraphEdge {
     pub to_id: String,
     /// Strength of connection — same scale as the corresponding distance.
     pub distance: f32,
-    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim" | "file_activity_prox"
+    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim" | "file_activity_prox" | "meeting_prox"
     pub kind: String,
 }
 

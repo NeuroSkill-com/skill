@@ -18,10 +18,10 @@ pub mod constants {
     pub use skill_constants::*;
 }
 
-/// CPU-based FFT fallback (rustfft) used when the `gpu` feature is disabled.
-#[cfg(not(feature = "gpu"))]
+/// CPU-based FFT fallback (rustfft) used when neither `gpu` nor `mlx` is enabled.
+#[cfg(not(any(feature = "gpu", feature = "mlx")))]
 pub mod cpu_fft;
-#[cfg(all(test, not(feature = "gpu")))]
+#[cfg(all(test, not(any(feature = "gpu", feature = "mlx"))))]
 mod proptest_tests;
 
 pub mod artifact_detection;

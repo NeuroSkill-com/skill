@@ -34,6 +34,8 @@ for arg in "$@"; do
       echo "  daemon    Daemon packaging test"
       echo "  daemon-e2e Daemon service installer E2E (optional)"
       echo "  e2e       LLM end-to-end test"
+      echo "  mlx-e2e   MLX backend E2E (UMAP + FFT, macOS only)"
+      echo "  widgets   WidgetKit extension build + tests (macOS only)"
       echo "  a11y      Accessibility audit"
       echo "  i18n      i18n key validation"
       echo "  changelog Changelog fragment check"
@@ -47,7 +49,7 @@ for arg in "$@"; do
       exit 0
       ;;
     fast)  SUITES+=(fmt lint clippy vitest rust ci types) ;;
-    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types a11y i18n changelog smoke daemon e2e) ;;
+    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types widgets a11y i18n changelog smoke daemon e2e mlx-e2e) ;;
     hooks) SUITES+=(pre-commit pre-push) ;;
     *)     SUITES+=("$arg") ;;
   esac
@@ -179,6 +181,21 @@ for suite in "${SUITES[@]}"; do
         run_suite "LLM E2E" cargo test -p skill-llm --features llm --test llm_e2e -- --nocapture || { $STOP_ON_FAIL && break; }
       else
         skip_suite "LLM E2E" "no daemon binary (build first)"
+      fi
+      ;;
+    mlx-e2e)
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 || { $STOP_ON_FAIL && break; }
+        run_suite "FFT MLX E2E" cargo test -p skill-eeg --features mlx -- fft_e2e --nocapture || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "MLX E2E" "requires macOS with Apple Silicon"
+      fi
+      ;;
+    widgets)
+      if [[ "$(uname -s)" == "Darwin" ]] && command -v xcodebuild >/dev/null 2>&1; then
+        run_suite "widget build + test" bash extensions/widgets/build-widgets.sh --test || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "widget tests" "requires macOS with Xcode"
       fi
       ;;
     a11y)

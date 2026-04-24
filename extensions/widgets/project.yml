@@ -1,0 +1,72 @@
+name: SkillWidgets
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  bundleIdPrefix: com.neuroskill.skill
+  defaultConfig: Release
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  SkillWidgetsExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes:
+          - "**/*.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neuroskill.skill.widgets
+        PRODUCT_NAME: SkillWidgets
+        MARKETING_VERSION: "0.0.129"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_EMIT_LOC_STRINGS: true
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+        SKIP_INSTALL: true
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Sources/SkillWidgets.debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/SkillWidgets.entitlements
+
+  SkillWidgetsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - path: Sources
+        excludes:
+          - "**/*.entitlements"
+          - "**/Info.plist"
+          - "SkillWidgetBundle.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neuroskill.skill.widgets.tests
+        PRODUCT_NAME: SkillWidgetsTests
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: true
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+
+schemes:
+  SkillWidgetsTests:
+    build:
+      targets:
+        SkillWidgetsTests: [test]
+    test:
+      targets:
+        - SkillWidgetsTests
