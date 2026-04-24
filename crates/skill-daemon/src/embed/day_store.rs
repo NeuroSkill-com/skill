@@ -96,6 +96,7 @@ impl DayStore {
         }
 
         let conn = rusqlite::Connection::open(&db_path).ok()?;
+        skill_data::util::init_wal_pragmas(&conn);
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS embeddings (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -162,6 +162,7 @@ export const EXEMPT_KEY_PREFIXES = [
   "settings.currentVersion", // "{app} v{version}" template
   "whatsNew.version", // "Version {version}" template
   "cmdK.section", // command palette section labels
+  "cmdK.kw.", // command palette search keywords — intentionally English for fuzzy match
   "onboarding.step.bluetooth", // technology name in step label
   "compare.meditation",
   "compare.heatmap", // loanwords

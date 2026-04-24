@@ -247,6 +247,10 @@ let labelCloudBase: { dc: number; rr: number; rg: number; rb: number }[] = [];
 let highlightEdgesGroup: THREE_NS.Group | null = null;
 let _onCmdDown: ((e: KeyboardEvent) => void) | null = null;
 let _onCmdUp: ((e: KeyboardEvent) => void) | null = null;
+let _onPointerMove: ((e: PointerEvent) => void) | null = null;
+let _onPointerLeave: (() => void) | null = null;
+let _onPointerDown: ((e: PointerEvent) => void) | null = null;
+let _onPointerUp: ((e: PointerEvent) => void) | null = null;
 
 let fromPos: Float32Array | null = null;
 let toPos: Float32Array | null = null;
@@ -1290,7 +1294,7 @@ onMount(async () => {
     mouse = new THREE.Vector2();
 
     // ── Hover ────────────────────────────────────────────────────────
-    canvas.addEventListener("pointermove", (e: PointerEvent) => {
+    _onPointerMove = (e: PointerEvent) => {
       if (!curPoints.length) {
         tooltip = null;
         return;
@@ -1331,16 +1335,19 @@ onMount(async () => {
       } else {
         tooltip = null;
       }
-    });
-    canvas.addEventListener("pointerleave", () => {
+    };
+    canvas.addEventListener("pointermove", _onPointerMove);
+    _onPointerLeave = () => {
       tooltip = null;
-    });
+    };
+    canvas.addEventListener("pointerleave", _onPointerLeave);
 
     // ── Click ────────────────────────────────────────────────────────
-    canvas.addEventListener("pointerdown", (e: PointerEvent) => {
+    _onPointerDown = (e: PointerEvent) => {
       downPos = { x: e.clientX, y: e.clientY };
-    });
-    canvas.addEventListener("pointerup", (e: PointerEvent) => {
+    };
+    canvas.addEventListener("pointerdown", _onPointerDown);
+    _onPointerUp = (e: PointerEvent) => {
       if ((e.clientX - downPos.x) ** 2 + (e.clientY - downPos.y) ** 2 > 25) return;
       const r = canvas.getBoundingClientRect();
       mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -1363,7 +1370,8 @@ onMount(async () => {
       if (label) {
         toggleLinks(label);
       }
-    });
+    };
+    canvas.addEventListener("pointerup", _onPointerUp);
 
     // ── Resize ───────────────────────────────────────────────────────
     resizeObs = new ResizeObserver(() => {
@@ -1454,6 +1462,13 @@ onDestroy(() => {
   if (exportFlashTimer) clearTimeout(exportFlashTimer);
   if (_onCmdDown) window.removeEventListener("keydown", _onCmdDown);
   if (_onCmdUp) window.removeEventListener("keyup", _onCmdUp);
+  const cvs = renderer?.domElement;
+  if (cvs) {
+    if (_onPointerMove) cvs.removeEventListener("pointermove", _onPointerMove);
+    if (_onPointerLeave) cvs.removeEventListener("pointerleave", _onPointerLeave);
+    if (_onPointerDown) cvs.removeEventListener("pointerdown", _onPointerDown);
+    if (_onPointerUp) cvs.removeEventListener("pointerup", _onPointerUp);
+  }
   if (animId) cancelAnimationFrame(animId);
   resizeObs?.disconnect();
   controls?.dispose();

@@ -91,6 +91,7 @@ const SETTINGS_TAB_ICONS: Record<string, string> = {
   updates: "⬆",
   permissions: "🔒",
   tokens: "🔑",
+  activity: ">_",
 };
 
 function settingsTabCommands(): Command[] {
@@ -246,6 +247,40 @@ function commands(): Command[] {
         await lslIrohStop();
         addToast("info", "iroh Sink", "Stopped.");
       },
+    },
+
+    // ── Terminal ───────────────────────────────────────────────────────
+    {
+      id: "terminal-commands",
+      icon: ">_",
+      section: t("cmdK.sectionTerminal"),
+      label: t("cmdK.terminalCommands"),
+      keywords: t("cmdK.kw.terminal"),
+      action: () => nav.openSettingsTab("activity", "terminal-commands"),
+    },
+    {
+      id: "terminal-impact",
+      icon: "📊",
+      section: t("cmdK.sectionTerminal"),
+      label: t("cmdK.terminalImpact"),
+      keywords: t("cmdK.kw.terminal"),
+      action: () => nav.openSettingsTab("activity", "terminal-impact"),
+    },
+    {
+      id: "context-cost",
+      icon: "🔀",
+      section: t("cmdK.sectionTerminal"),
+      label: t("cmdK.contextCost"),
+      keywords: t("cmdK.kw.contextCost"),
+      action: () => nav.openSettingsTab("activity", "context-cost"),
+    },
+    {
+      id: "dev-loops",
+      icon: "🔁",
+      section: t("cmdK.sectionTerminal"),
+      label: t("cmdK.devLoops"),
+      keywords: t("cmdK.kw.devLoops"),
+      action: () => nav.openSettingsTab("activity", "dev-loops"),
     },
 
     // ── Calibration ────────────────────────────────────────────────────

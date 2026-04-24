@@ -39,11 +39,19 @@
 - **Enhanced `detect_task_type()`**: terminal command categories override heuristics with higher confidence — docker/kubectl→infrastructure (0.8), deploy→deploying (0.85), git dominating→git_management (0.7), test→testing (0.85), debug→debugging (0.9).
 - **Terminal EEG auto-labels**: `"running: cargo test"` on start, `"cargo test passed"` / `"cargo test failed (exit 1)"` on end, `"switched to terminal"` on zone changes.
 - **AI events table**: `ai_events` SQLite table tracking suggestion shown/accepted/rejected and chat sessions with source attribution.
+- **OS-wide shell hooks**: `scripts/shell-hooks/` with preexec/precmd hooks for zsh, bash, fish, PowerShell. Sends every command to daemon via background curl. No delay to prompt.
+- **Shell hook daemon endpoints**: `GET /v1/activity/shell-hook?shell=zsh` returns hook script, `POST /v1/activity/install-shell-hook` writes to `~/.skill/shell-hooks/` and appends to rc file, `POST /v1/activity/uninstall-shell-hook` removes cleanly, `POST /v1/activity/shell-hook-status` health check.
+- **`neuroskill terminal` CLI**: `status` (hook health per shell), `install [shell]`, `uninstall [shell]`, `commands` (recent tracked), `impact` (focus delta by category), `loops` (dev loop detection).
+- **`neuroskill brain` new subactions**: `terminal-impact`, `context-cost`, `dev-loops`.
+- **`neuroskill activity` new subaction**: `terminal-commands`.
+- **Tauri Terminal settings tab**: per-shell install/uninstall/repair buttons, health indicators (green/yellow/red), recent commands preview, "How it works" documentation.
 - **`neuroskill vscode` CLI**: auto-install extension to VS Code, VSCodium, or Cursor on macOS, Linux, and Windows.
 - **Meeting nodes in search graph**: meetings appear as amber nodes in the interactive 3D search graph linked by `meeting_prox` edges.
 
 ### Docs
 
 - VS Code extension design plan at `docs/vscode-extension.md`.
-- `neuroskill-activity` skill documentation with 18 activity + 14 brain subcommands.
+- `neuroskill-activity` skill documentation with 18 activity + 17 brain subcommands, terminal integration, shell hook reference, command categorization table.
 - Updated `neuroskill-dnd` skill with grayscale mode.
+- Updated `neuroskill/README.md` with terminal, brain awareness, and VS Code extension features.
+- Updated `skills/SKILL.md` index with terminal tracking skill reference.

@@ -56,6 +56,40 @@ fn spawn_resilient(
         .unwrap_or_else(|_| panic!("failed to spawn {name}"));
 }
 
+/// Run osascript with a 3-second timeout. Returns stdout on success, None on
+/// timeout or failure. Prevents a hung app from blocking the caller indefinitely.
+#[cfg(target_os = "macos")]
+fn run_osascript(script: &str) -> Option<String> {
+    let mut child = std::process::Command::new("osascript")
+        .args(["-e", script])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                break;
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => return None,
+        }
+    }
+    let out = child.wait_with_output().ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn poll_active_window() -> Option<ActiveWindowInfo> {
     let script = r#"
@@ -100,15 +134,7 @@ end if
 
 return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
 
-    let out = std::process::Command::new("osascript")
-        .args(["-e", script])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-
-    let raw = String::from_utf8_lossy(&out.stdout);
+    let raw = run_osascript(script)?;
     let raw = raw.trim();
     let mut parts = raw.splitn(4, "|||");
     let app_name = parts.next().unwrap_or("").trim().to_string();
@@ -163,23 +189,15 @@ tell application "System Events"
 end tell
 return result"#;
 
-    let out = match std::process::Command::new("osascript").args(["-e", script]).output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-        _ => return vec![],
+    let out = match run_osascript(script) {
+        Some(s) => s,
+        None => return vec![],
     };
 
     // Parse: each line is "appName|||windowTitle|||xPosition"
     // Query actual primary screen width to avoid hardcoded values.
-    let primary_width: i64 = std::process::Command::new("osascript")
-        .args(["-e", "tell application \"Finder\" to get bounds of window of desktop"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| {
-            // Output: "0, 0, 1920, 1080" — third value is width.
-            let s = String::from_utf8_lossy(&o.stdout);
-            s.split(',').nth(2)?.trim().parse::<i64>().ok()
-        })
+    let primary_width: i64 = run_osascript("tell application \"Finder\" to get bounds of window of desktop")
+        .and_then(|s| s.split(',').nth(2)?.trim().parse::<i64>().ok())
         .unwrap_or(2000);
 
     out.lines()
@@ -2273,13 +2291,10 @@ fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
 
         // Query macOS pasteboard change count via osascript.
         // If Automation permission is not granted, this will fail.
-        let out = match std::process::Command::new("osascript")
-            .args(["-e", "the clipboard info"])
-            .output()
-        {
-            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-            _ => {
-                // Permission denied or osascript failed — back off for 60s.
+        let out = match run_osascript("the clipboard info") {
+            Some(s) => s,
+            None => {
+                // Permission denied or osascript failed/timed out — back off for 60s.
                 permission_denied_until = now + 60;
                 continue;
             }

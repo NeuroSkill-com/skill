@@ -187,6 +187,14 @@ const ui: Record<string, string> = {
   "cmdK.kw.shortcuts": "键盘 热键 按键绑定 按键 命令",
   "cmdK.kw.highContrast": "无障碍 可见性 对比度 边框 文本",
   "cmdK.kw.updates": "版本 升级 下载 安装 补丁",
+  "cmdK.sectionTerminal": "终端",
+  "cmdK.terminalCommands": "最近的终端命令",
+  "cmdK.terminalImpact": "终端焦点影响",
+  "cmdK.contextCost": "上下文切换成本",
+  "cmdK.devLoops": "开发循环",
+  "cmdK.kw.terminal": "shell bash zsh commands history exit code build test run",
+  "cmdK.kw.contextCost": "zone switch editor terminal focus cost distraction",
+  "cmdK.kw.devLoops": "build test run cycle iteration loop compile feedback",
 
   // ── LSL 命令 ─────────────────────────────────────────────────────
   "cmdK.sectionLsl": "LSL",

@@ -1027,6 +1027,60 @@ pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<
     .unwrap_or_default()
 }
 
+/// Batch fetch labels near any of the given timestamps within `window_secs`.
+/// Returns deduplicated labels sorted by distance to the nearest query timestamp.
+/// Much more efficient than calling `get_labels_near` per-epoch when you have
+/// multiple epochs to check (avoids N separate DB connection opens).
+pub fn get_labels_near_batch(labels_db: &Path, timestamps: &[u64], window_secs: u64) -> Vec<LabelEntry> {
+    if timestamps.is_empty() {
+        return vec![];
+    }
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+        return vec![];
+    };
+    let lo = timestamps
+        .iter()
+        .copied()
+        .min()
+        .unwrap_or(0)
+        .saturating_sub(window_secs) as i64;
+    let hi = (timestamps
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(0)
+        .saturating_add(window_secs)) as i64;
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT id, eeg_start, eeg_end, label_start, label_end, text
+         FROM labels
+         WHERE eeg_start BETWEEN ?1 AND ?2
+            OR (eeg_start <= ?2 AND eeg_end >= ?1)
+         ORDER BY eeg_start",
+    ) else {
+        return vec![];
+    };
+
+    let mut labels: Vec<LabelEntry> = stmt
+        .query_map(params![lo, hi], |row| {
+            Ok(LabelEntry {
+                id: row.get(0)?,
+                eeg_start: row.get::<_, i64>(1)? as u64,
+                eeg_end: row.get::<_, i64>(2)? as u64,
+                label_start: row.get::<_, i64>(3)? as u64,
+                label_end: row.get::<_, i64>(4)? as u64,
+                text: row.get(5)?,
+            })
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default();
+
+    // Deduplicate by id.
+    labels.sort_by_key(|l| l.id);
+    labels.dedup_by_key(|l| l.id);
+    labels
+}
+
 // ── PCA helpers ────────────────────────────────────────────────────────────
 
 /// Fetch the `text_embedding` BLOB for one label (read-only, no metrics).

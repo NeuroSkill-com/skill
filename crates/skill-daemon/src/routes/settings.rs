@@ -237,6 +237,11 @@ pub fn router() -> Router<AppState> {
         .route("/activity/weekly-digest", post(activity_weekly_digest))
         .route("/activity/stale-files", post(activity_stale_files))
         .route("/activity/vscode-events", post(activity_vscode_events))
+        .route("/activity/shell-command", post(activity_shell_command))
+        .route("/activity/shell-hook", get(get_shell_hook))
+        .route("/activity/install-shell-hook", post(install_shell_hook))
+        .route("/activity/uninstall-shell-hook", post(uninstall_shell_hook))
+        .route("/activity/shell-hook-status", post(shell_hook_status))
         .route("/activity/files-in-range", post(activity_files_in_range))
         .route("/activity/meetings-in-range", post(activity_meetings_in_range))
         .route("/activity/recent-clipboard", post(activity_recent_clipboard))
@@ -915,6 +920,432 @@ async fn activity_vscode_events(
     Json(events): Json<Vec<serde_json::Value>>,
 ) -> Json<serde_json::Value> {
     settings_hooks_activity::activity_vscode_events_impl(state, events).await
+}
+
+/// Receive a single shell command from the OS-wide shell hook (preexec).
+/// Expects JSON: {"command":"...", "cwd":"...", "shell":"zsh", "exit_code": null}
+async fn activity_shell_command(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let embedder = state.text_embedder.clone();
+    let label_index = state.label_index.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let Some(store) = ActivityStore::open(&skill_dir) else { return 0u64; };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let command = body.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        let cwd = body.get("cwd").and_then(|v| v.as_str()).unwrap_or("");
+        let shell = body.get("shell").and_then(|v| v.as_str()).unwrap_or("shell");
+        let exit_code = body.get("exit_code").and_then(|v| v.as_i64());
+        if command.is_empty() { return 0; }
+
+        if exit_code.is_none() {
+            // Command start
+            store.insert_terminal_command_start(shell, command, cwd, now, None, None);
+        } else {
+            // Command end (with exit code)
+            store.update_terminal_command_end(command, shell, exit_code, now, None);
+        }
+
+        // Auto-label for EEG
+        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
+        if let Ok(conn) = rusqlite::Connection::open(&labels_db) {
+            skill_data::util::init_wal_pragmas(&conn);
+            let label = if exit_code.is_none() {
+                let short = if command.len() > 40 { &command[..40] } else { command };
+                format!("running: {short}")
+            } else {
+                let status = match exit_code {
+                    Some(0) => "passed".to_string(),
+                    Some(c) => format!("failed (exit {c})"),
+                    None => "ended".to_string(),
+                };
+                let short = if command.len() > 30 { &command[..30] } else { command };
+                format!("{short} {status}")
+            };
+            let text_emb = embedder.embed(&label);
+            let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
+            let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
+            let label_id = conn.execute(
+                "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, embedding_model)
+                 VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5)",
+                rusqlite::params![label, cwd, now as i64, text_blob, model_name],
+            ).ok().map(|_| conn.last_insert_rowid());
+            if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
+                skill_label_index::insert_label(&skill_dir, id, te, &[], now, now, &label_index);
+            }
+        }
+        1u64
+    })
+    .await
+    .unwrap_or(0);
+    Json(serde_json::json!({"ok": true, "processed": result}))
+}
+
+/// Return the shell hook script for the requested shell.
+/// GET /v1/activity/shell-hook?shell=zsh
+async fn get_shell_hook(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    State(state): State<AppState>,
+) -> axum::response::Response {
+    let shell = params.get("shell").map(|s| s.as_str()).unwrap_or("zsh");
+    let hook = generate_shell_hook(shell);
+    axum::response::Response::builder()
+        .header("Content-Type", "text/plain; charset=utf-8")
+        .body(axum::body::Body::from(hook))
+        .unwrap_or_default()
+}
+
+/// Install the shell hook into the user's shell rc file.
+/// POST /v1/activity/install-shell-hook  {"shell": "zsh"}
+async fn install_shell_hook(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let shell: String = body.get("shell").and_then(|v| v.as_str()).unwrap_or("zsh").to_string();
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || {
+        let shell = shell.as_str();
+        let hook_dir = skill_dir.join("shell-hooks");
+        std::fs::create_dir_all(&hook_dir).ok();
+
+        // Determine file extension and rc file path
+        let (ext, rc_paths) = match shell {
+            "zsh" => ("zsh", vec![dirs::home_dir().map(|h| h.join(".zshrc"))]),
+            "bash" => (
+                "bash",
+                vec![
+                    dirs::home_dir().map(|h| h.join(".bashrc")),
+                    dirs::home_dir().map(|h| h.join(".bash_profile")),
+                ],
+            ),
+            "fish" => (
+                "fish",
+                vec![dirs::config_dir().map(|c| c.join("fish").join("config.fish"))],
+            ),
+            "powershell" | "pwsh" => ("psm1", vec![]), // PowerShell uses Import-Module
+            _ => return serde_json::json!({"ok": false, "error": format!("unsupported shell: {shell}")}),
+        };
+
+        // Write hook script to skill config dir
+        let hook_content = generate_shell_hook(shell);
+        let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
+        if let Err(e) = std::fs::write(&hook_file, &hook_content) {
+            return serde_json::json!({"ok": false, "error": format!("failed to write hook: {e}")});
+        }
+
+        // For PowerShell, write the module and return instructions
+        if shell == "powershell" || shell == "pwsh" {
+            let profile_hint = if cfg!(windows) {
+                "$PROFILE (e.g. Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1)"
+            } else {
+                "$PROFILE (e.g. ~/.config/powershell/Microsoft.PowerShell_profile.ps1)"
+            };
+            return serde_json::json!({
+                "ok": true,
+                "hook_path": hook_file.to_string_lossy(),
+                "instructions": format!("Add to {profile_hint}:\n  Import-Module '{}'", hook_file.to_string_lossy()),
+            });
+        }
+
+        // For POSIX shells, add source line to rc file
+        let hook_path_str = hook_file.to_string_lossy().to_string();
+        let source_line = if shell == "fish" {
+            format!("source '{hook_path_str}'")
+        } else {
+            format!("[ -f '{hook_path_str}' ] && source '{hook_path_str}'")
+        };
+        let marker = "# neuroskill shell hook";
+
+        for rc_opt in &rc_paths {
+            let Some(rc) = rc_opt else { continue };
+            // Check if already installed
+            if let Ok(content) = std::fs::read_to_string(rc) {
+                if content.contains("neuroskill") {
+                    return serde_json::json!({
+                        "ok": true,
+                        "already_installed": true,
+                        "rc_file": rc.to_string_lossy(),
+                        "hook_path": hook_path_str,
+                    });
+                }
+            }
+            // Append to rc file
+            let line = format!("\n{marker}\n{source_line}\n");
+            if let Err(e) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(rc)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()))
+            {
+                return serde_json::json!({"ok": false, "error": format!("failed to update {}: {e}", rc.display())});
+            }
+            return serde_json::json!({
+                "ok": true,
+                "installed": true,
+                "rc_file": rc.to_string_lossy(),
+                "hook_path": hook_path_str,
+                "note": "Open a new terminal for the hook to take effect.",
+            });
+        }
+
+        serde_json::json!({"ok": false, "error": "could not find rc file to install into"})
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({"ok": false, "error": format!("{e}")}));
+
+    Json(result)
+}
+
+/// Check the installation status of a shell hook.
+async fn shell_hook_status(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let shell: String = body.get("shell").and_then(|v| v.as_str()).unwrap_or("zsh").to_string();
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || {
+        let shell = shell.as_str();
+        let hook_dir = skill_dir.join("shell-hooks");
+        let (ext, rc_path) = shell_rc_info(shell);
+        let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
+
+        let hook_exists = hook_file.exists();
+        let rc_has_line = rc_path.as_ref().map_or(false, |p| {
+            std::fs::read_to_string(p).map_or(false, |c| c.contains("neuroskill"))
+        });
+        let available = match shell {
+            "zsh" | "bash" => true,
+            "fish" => dirs::config_dir().map_or(false, |_| true),
+            "powershell" | "pwsh" => true,
+            _ => false,
+        };
+
+        serde_json::json!({
+            "shell": shell,
+            "installed": hook_exists && rc_has_line,
+            "hook_exists": hook_exists,
+            "rc_has_line": rc_has_line,
+            "hook_path": hook_file.to_string_lossy(),
+            "rc_file": rc_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+            "available": available,
+        })
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()}));
+    Json(result)
+}
+
+/// Remove the shell hook from the user's rc file and delete the hook script.
+async fn uninstall_shell_hook(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let shell: String = body.get("shell").and_then(|v| v.as_str()).unwrap_or("zsh").to_string();
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || {
+        let shell = shell.as_str();
+        let hook_dir = skill_dir.join("shell-hooks");
+        let (ext, rc_path) = shell_rc_info(shell);
+        let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
+
+        // Delete the hook script
+        let _ = std::fs::remove_file(&hook_file);
+
+        // Remove the source line from the rc file
+        if let Some(ref rc) = rc_path {
+            if let Ok(content) = std::fs::read_to_string(rc) {
+                let cleaned: String = content
+                    .lines()
+                    .filter(|line| !line.contains("neuroskill"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                // Preserve trailing newline
+                let cleaned = if content.ends_with('\n') && !cleaned.ends_with('\n') {
+                    cleaned + "\n"
+                } else {
+                    cleaned
+                };
+                if let Err(e) = std::fs::write(rc, &cleaned) {
+                    return serde_json::json!({"ok": false, "error": format!("failed to update {}: {e}", rc.display())});
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": true,
+            "removed": true,
+            "rc_file": rc_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+        })
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({"ok": false, "error": e.to_string()}));
+    Json(result)
+}
+
+/// Get the rc file path for a given shell.
+fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
+    match shell {
+        "zsh" => ("zsh", dirs::home_dir().map(|h| h.join(".zshrc"))),
+        "bash" => ("bash", dirs::home_dir().map(|h| h.join(".bashrc"))),
+        "fish" => ("fish", dirs::config_dir().map(|c| c.join("fish").join("config.fish"))),
+        "powershell" | "pwsh" => ("psm1", None),
+        _ => ("sh", None),
+    }
+}
+
+/// Generate the hook script content for a given shell. Self-contained — no external file deps.
+fn generate_shell_hook(shell: &str) -> String {
+    let port = 18444;
+    match shell {
+        "zsh" => format!(
+            r#"# NeuroSkill terminal tracking hook (zsh)
+_NEUROSKILL_PORT="${{NEUROSKILL_DAEMON_PORT:-{port}}}"
+_NEUROSKILL_HOST="${{NEUROSKILL_DAEMON_HOST:-127.0.0.1}}"
+_neuroskill_read_token() {{
+  local f
+  case "$(uname -s)" in
+    Darwin) f="$HOME/Library/Application Support/skill/daemon/auth.token" ;;
+    *)      f="${{XDG_CONFIG_HOME:-$HOME/.config}}/skill/daemon/auth.token" ;;
+  esac
+  [[ -f "$f" ]] && cat "$f" 2>/dev/null
+}}
+_NEUROSKILL_TOKEN="$(_neuroskill_read_token)"
+_neuroskill_escape() {{ local s="$1"; s="${{s//\\/\\\\}}"; s="${{s//\"/\\\"}}"; s="${{s//$'\n'/\\n}}"; printf '%s' "$s"; }}
+_neuroskill_post() {{
+  local auth=(); [[ -n "$_NEUROSKILL_TOKEN" ]] && auth=(-H "Authorization: Bearer $_NEUROSKILL_TOKEN")
+  curl -sf -X POST "http://${{_NEUROSKILL_HOST}}:${{_NEUROSKILL_PORT}}/v1/activity/shell-command" \
+    -H "Content-Type: application/json" "${{auth[@]}}" -d "$1" --connect-timeout 1 -m 2 >/dev/null 2>&1 &!
+}}
+_neuroskill_preexec() {{
+  _NEUROSKILL_LAST_CMD="$1"
+  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$1")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\"}}"
+}}
+_neuroskill_precmd() {{
+  local ec=$?
+  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\",\"exit_code\":$ec}}"
+  _NEUROSKILL_LAST_CMD=""
+}}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _neuroskill_preexec
+add-zsh-hook precmd _neuroskill_precmd
+"#
+        ),
+
+        "bash" => format!(
+            r#"# NeuroSkill terminal tracking hook (bash)
+_NEUROSKILL_PORT="${{NEUROSKILL_DAEMON_PORT:-{port}}}"
+_NEUROSKILL_HOST="${{NEUROSKILL_DAEMON_HOST:-127.0.0.1}}"
+_neuroskill_read_token() {{
+  local f
+  case "$(uname -s)" in
+    Darwin) f="$HOME/Library/Application Support/skill/daemon/auth.token" ;;
+    MINGW*|MSYS*|CYGWIN*) f="$APPDATA/skill/daemon/auth.token" ;;
+    *)      f="${{XDG_CONFIG_HOME:-$HOME/.config}}/skill/daemon/auth.token" ;;
+  esac
+  [[ -f "$f" ]] && cat "$f" 2>/dev/null
+}}
+_NEUROSKILL_TOKEN="$(_neuroskill_read_token)"
+_NEUROSKILL_LAST_CMD=""
+_neuroskill_escape() {{ local s="$1"; s="${{s//\\/\\\\}}"; s="${{s//\"/\\\"}}"; s="${{s//$'\n'/\\n}}"; printf '%s' "$s"; }}
+_neuroskill_post() {{
+  local auth_header=""
+  [[ -n "$_NEUROSKILL_TOKEN" ]] && auth_header="-H 'Authorization: Bearer $_NEUROSKILL_TOKEN'"
+  eval curl -sf -X POST "http://${{_NEUROSKILL_HOST}}:${{_NEUROSKILL_PORT}}/v1/activity/shell-command" \
+    -H "'Content-Type: application/json'" $auth_header -d "'$1'" --connect-timeout 1 -m 2 '>/dev/null' '2>&1' '&'
+}}
+_neuroskill_debug_trap() {{
+  [[ -n "$COMP_LINE" ]] && return
+  [[ "$BASH_COMMAND" == "$PROMPT_COMMAND" ]] && return
+  [[ "$BASH_COMMAND" == _neuroskill_* ]] && return
+  _NEUROSKILL_LAST_CMD="$BASH_COMMAND"
+  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$BASH_COMMAND")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\"}}"
+}}
+_neuroskill_prompt_cmd() {{
+  local ec=$?
+  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\",\"exit_code\":$ec}}"
+  _NEUROSKILL_LAST_CMD=""
+}}
+trap '_neuroskill_debug_trap' DEBUG
+PROMPT_COMMAND="_neuroskill_prompt_cmd${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+"#
+        ),
+
+        "fish" => format!(
+            r#"# NeuroSkill terminal tracking hook (fish)
+set -gx _NEUROSKILL_PORT (test -n "$NEUROSKILL_DAEMON_PORT"; and echo $NEUROSKILL_DAEMON_PORT; or echo {port})
+set -gx _NEUROSKILL_HOST (test -n "$NEUROSKILL_DAEMON_HOST"; and echo $NEUROSKILL_DAEMON_HOST; or echo 127.0.0.1)
+function _neuroskill_read_token
+  switch (uname -s)
+    case Darwin; set -l f "$HOME/Library/Application Support/skill/daemon/auth.token"
+    case '*';    set -l f (test -n "$XDG_CONFIG_HOME"; and echo "$XDG_CONFIG_HOME"; or echo "$HOME/.config")"/skill/daemon/auth.token"
+  end
+  test -f "$f"; and cat "$f" 2>/dev/null
+end
+set -g _NEUROSKILL_TOKEN (_neuroskill_read_token)
+function _neuroskill_escape; string replace -a '\\' '\\\\' -- $argv[1] | string replace -a '"' '\\"' | string replace -a \n '\\n'; end
+function _neuroskill_post
+  set -l auth; test -n "$_NEUROSKILL_TOKEN"; and set auth -H "Authorization: Bearer $_NEUROSKILL_TOKEN"
+  curl -sf -X POST "http://$_NEUROSKILL_HOST:$_NEUROSKILL_PORT/v1/activity/shell-command" \
+    -H "Content-Type: application/json" $auth -d "$argv[1]" --connect-timeout 1 -m 2 >/dev/null 2>&1 &; disown 2>/dev/null
+end
+function _neuroskill_preexec --on-event fish_preexec
+  set -g _NEUROSKILL_LAST_CMD $argv[1]
+  _neuroskill_post '{{"command":"'(_neuroskill_escape "$argv[1]")'","cwd":"'(_neuroskill_escape "$PWD")'","shell":"fish"}}'
+end
+function _neuroskill_postexec --on-event fish_postexec
+  set -l ec $status
+  if test -n "$_NEUROSKILL_LAST_CMD"
+    _neuroskill_post '{{"command":"'(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")'","cwd":"'(_neuroskill_escape "$PWD")'","shell":"fish","exit_code":'$ec'}}'
+    set -e _NEUROSKILL_LAST_CMD
+  end
+end
+"#
+        ),
+
+        "powershell" | "pwsh" => format!(
+            r#"# NeuroSkill terminal tracking hook (PowerShell)
+$script:NsPort = if ($env:NEUROSKILL_DAEMON_PORT) {{ $env:NEUROSKILL_DAEMON_PORT }} else {{ "{port}" }}
+$script:NsHost = if ($env:NEUROSKILL_DAEMON_HOST) {{ $env:NEUROSKILL_DAEMON_HOST }} else {{ "127.0.0.1" }}
+$script:NsUrl = "http://$($script:NsHost):$($script:NsPort)/v1/activity/shell-command"
+$script:NsLastCmd = ""
+function Get-NsToken {{
+  $f = if ($IsWindows -or $env:OS -match "Windows") {{ Join-Path $env:APPDATA "skill\daemon\auth.token" }}
+       elseif ($IsMacOS) {{ Join-Path $HOME "Library/Application Support/skill/daemon/auth.token" }}
+       else {{ $xdg = if ($env:XDG_CONFIG_HOME) {{ $env:XDG_CONFIG_HOME }} else {{ Join-Path $HOME ".config" }}; Join-Path $xdg "skill/daemon/auth.token" }}
+  if (Test-Path $f) {{ (Get-Content $f -Raw).Trim() }} else {{ $null }}
+}}
+$script:NsToken = Get-NsToken
+function Send-NsCommand {{ param([string]$Command,[string]$Cwd,[object]$ExitCode=$null)
+  if (-not $Command) {{ return }}
+  $body = @{{ command=$Command; cwd=$Cwd; shell="powershell"; exit_code=$ExitCode }} | ConvertTo-Json -Compress
+  $headers = @{{ "Content-Type"="application/json" }}
+  if ($script:NsToken) {{ $headers["Authorization"] = "Bearer $($script:NsToken)" }}
+  try {{ $null = Start-Job -ScriptBlock {{ param($u,$b,$h); try {{ Invoke-RestMethod -Uri $u -Method Post -Body $b -Headers $h -TimeoutSec 2 -EA SilentlyContinue | Out-Null }} catch {{}} }} -ArgumentList $script:NsUrl,$body,$headers }} catch {{}}
+}}
+$script:OriginalPrompt = $function:prompt
+function prompt {{
+  $lastEc = $LASTEXITCODE; $ok = $?
+  $hist = Get-History -Count 1 -EA SilentlyContinue
+  if ($hist -and $hist.CommandLine -ne $script:NsLastCmd) {{
+    $cmd = $hist.CommandLine; $cwd = (Get-Location).Path
+    Send-NsCommand -Command $cmd -Cwd $cwd
+    $ec = if ($ok) {{ 0 }} else {{ if ($lastEc) {{ $lastEc }} else {{ 1 }} }}
+    Send-NsCommand -Command $cmd -Cwd $cwd -ExitCode $ec
+    $script:NsLastCmd = $cmd
+  }}
+  if ($script:OriginalPrompt) {{ & $script:OriginalPrompt }} else {{ "PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) " }}
+}}
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {{ Get-Job | Where-Object {{ $_.State -eq 'Completed' }} | Remove-Job -Force -EA SilentlyContinue }} | Out-Null
+"#
+        ),
+
+        _ => format!("# Unsupported shell: {shell}\n# Supported: zsh, bash, fish, powershell\n"),
+    }
 }
 
 async fn activity_files_in_range(state: State<AppState>, req: Json<ActivityBucketsRequest>) -> Json<serde_json::Value> {

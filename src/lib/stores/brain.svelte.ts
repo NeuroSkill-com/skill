@@ -61,7 +61,10 @@ async function poll(): Promise<void> {
   }
 }
 
+let refCount = 0;
+
 export function startBrainPolling(): void {
+  refCount++;
   if (polling) return;
   polling = true;
   poll(); // immediate first poll
@@ -69,6 +72,8 @@ export function startBrainPolling(): void {
 }
 
 export function stopBrainPolling(): void {
+  refCount = Math.max(0, refCount - 1);
+  if (refCount > 0) return; // other consumers still need it
   polling = false;
   if (timer) {
     clearInterval(timer);

@@ -534,8 +534,15 @@ fn load_day_csv_data(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
         }
         let mut channels: Vec<Vec<f32>> = vec![Vec::new(); file_ch];
         let mut first_ts: Option<f64> = None;
+        // Cap rows to prevent OOM on very large CSV files (~4M samples at
+        // 256 Hz ≈ 4.3 hours, well beyond a single session).
+        const MAX_ROWS: usize = 4_000_000;
+        let mut row_count = 0usize;
 
         for line in lines.map_while(Result::ok) {
+            if row_count >= MAX_ROWS {
+                break;
+            }
             let fields: Vec<&str> = line.split(',').collect();
             if fields.len() < file_ch + 1 {
                 continue;
@@ -560,6 +567,7 @@ fn load_day_csv_data(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
                 for (ch, v) in row_vals.into_iter().enumerate() {
                     channels[ch].push(v);
                 }
+                row_count += 1;
             }
         }
 

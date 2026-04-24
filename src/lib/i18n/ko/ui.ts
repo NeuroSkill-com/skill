@@ -187,6 +187,14 @@ const ui: Record<string, string> = {
   "cmdK.kw.shortcuts": "키보드 핫키 키바인딩 키 명령",
   "cmdK.kw.highContrast": "접근성 가시성 대비 테두리 텍스트",
   "cmdK.kw.updates": "버전 업그레이드 다운로드 설치 패치",
+  "cmdK.sectionTerminal": "터미널",
+  "cmdK.terminalCommands": "최근 터미널 명령",
+  "cmdK.terminalImpact": "터미널 포커스 영향",
+  "cmdK.contextCost": "컨텍스트 전환 비용",
+  "cmdK.devLoops": "개발 루프",
+  "cmdK.kw.terminal": "shell bash zsh commands history exit code build test run",
+  "cmdK.kw.contextCost": "zone switch editor terminal focus cost distraction",
+  "cmdK.kw.devLoops": "build test run cycle iteration loop compile feedback",
 
   // ── LSL commands ─────────────────────────────────────────────────────
   "cmdK.sectionLsl": "LSL",

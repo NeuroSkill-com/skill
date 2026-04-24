@@ -632,6 +632,9 @@ pub(crate) async fn activity_vscode_events_impl(
         // Open labels DB for auto-labeling EEG recordings.
         let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
         let labels_conn = rusqlite::Connection::open(&labels_db).ok();
+        if let Some(ref c) = labels_conn {
+            skill_data::util::init_wal_pragmas(c);
+        }
 
         let mut count = 0u64;
         for event in &events {

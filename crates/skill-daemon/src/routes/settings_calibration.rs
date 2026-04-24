@@ -9,7 +9,7 @@ use serde::Deserialize;
 use skill_settings::CalibrationProfile;
 
 use crate::{
-    routes::settings_io::{load_user_settings, save_user_settings},
+    routes::settings_io::{load_user_settings, modify_settings_blocking},
     state::AppState,
 };
 
@@ -36,9 +36,10 @@ pub(crate) async fn set_active_profile(
     State(state): State<AppState>,
     Json(req): Json<SetActiveRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.active_calibration_id = req.id;
-    save_user_settings(&state, &settings);
+    modify_settings_blocking(&state, |s| {
+        s.active_calibration_id = req.id;
+    })
+    .await;
     state.broadcast("calibration-changed", serde_json::json!({"action": "set-active"}));
     Json(serde_json::json!({"ok": true}))
 }
@@ -51,9 +52,10 @@ pub(crate) async fn create_profile(
     profile.last_calibration_utc = None;
     let ret = profile.clone();
 
-    let mut settings = load_user_settings(&state);
-    settings.calibration_profiles.push(profile);
-    save_user_settings(&state, &settings);
+    modify_settings_blocking(&state, move |s| {
+        s.calibration_profiles.push(profile);
+    })
+    .await;
     state.broadcast("calibration-changed", serde_json::json!({"action": "created"}));
     Json(ret)
 }
@@ -62,10 +64,16 @@ pub(crate) async fn update_profile(
     State(state): State<AppState>,
     Json(profile): Json<CalibrationProfile>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    if let Some(entry) = settings.calibration_profiles.iter_mut().find(|p| p.id == profile.id) {
-        *entry = profile;
-        save_user_settings(&state, &settings);
+    let found = modify_settings_blocking(&state, move |s| -> bool {
+        if let Some(entry) = s.calibration_profiles.iter_mut().find(|p| p.id == profile.id) {
+            *entry = profile.clone();
+            true
+        } else {
+            false
+        }
+    })
+    .await;
+    if found {
         state.broadcast("calibration-changed", serde_json::json!({"action": "updated"}));
         Json(serde_json::json!({"ok": true}))
     } else {
@@ -95,21 +103,23 @@ pub(crate) async fn delete_profile(
     State(state): State<AppState>,
     Json(req): Json<DeleteProfileRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    if settings.calibration_profiles.len() <= 1 {
-        return Json(serde_json::json!({"ok": false, "error": "Cannot delete the last calibration profile"}));
+    let ok = modify_settings_blocking(&state, move |s| -> bool {
+        if s.calibration_profiles.len() <= 1 {
+            return false;
+        }
+        s.calibration_profiles.retain(|p| p.id != req.id);
+        if s.active_calibration_id == req.id {
+            s.active_calibration_id = s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default();
+        }
+        true
+    })
+    .await;
+    if ok {
+        state.broadcast("calibration-changed", serde_json::json!({"action": "deleted"}));
+        Json(serde_json::json!({"ok": true}))
+    } else {
+        Json(serde_json::json!({"ok": false, "error": "Cannot delete the last calibration profile"}))
     }
-    settings.calibration_profiles.retain(|p| p.id != req.id);
-    if settings.active_calibration_id == req.id {
-        settings.active_calibration_id = settings
-            .calibration_profiles
-            .first()
-            .map(|p| p.id.clone())
-            .unwrap_or_default();
-    }
-    save_user_settings(&state, &settings);
-    state.broadcast("calibration-changed", serde_json::json!({"action": "deleted"}));
-    Json(serde_json::json!({"ok": true}))
 }
 
 // ── Session control routes ────────────────────────────────────────────────────
@@ -148,15 +158,24 @@ pub(crate) async fn record_completed(
     State(state): State<AppState>,
     Json(req): Json<RecordCompletedRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    let target_id = req.profile_id.unwrap_or_else(|| settings.active_calibration_id.clone());
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    if let Some(p) = settings.calibration_profiles.iter_mut().find(|p| p.id == target_id) {
-        p.last_calibration_utc = Some(now);
-        save_user_settings(&state, &settings);
+    let found = modify_settings_blocking(&state, move |s| -> bool {
+        let target_id = req
+            .profile_id
+            .clone()
+            .unwrap_or_else(|| s.active_calibration_id.clone());
+        if let Some(p) = s.calibration_profiles.iter_mut().find(|p| p.id == target_id) {
+            p.last_calibration_utc = Some(now);
+            true
+        } else {
+            false
+        }
+    })
+    .await;
+    if found {
         state.broadcast("calibration-changed", serde_json::json!({"action": "completed"}));
         Json(serde_json::json!({"ok": true}))
     } else {

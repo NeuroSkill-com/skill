@@ -821,6 +821,16 @@ fn interactive_search_impl(
                 _ => {} // keep timestamp order
             }
 
+            // Pre-fetch all labels near these epochs in one batch (avoids N
+            // separate DB opens inside the loop).
+            let epoch_timestamps: Vec<u64> = valid_epochs
+                .iter()
+                .take(k_eeg)
+                .map(|ep| ep.t as u64)
+                .filter(|t| !seen_eeg_ts.contains(t))
+                .collect();
+            let batch_labels = skill_commands::get_labels_near_batch(&labels_db, &epoch_timestamps, reach_secs);
+
             for (j, ep) in valid_epochs.iter().take(k_eeg).enumerate() {
                 let ep_ts = ep.t as u64;
 
@@ -925,8 +935,16 @@ fn interactive_search_impl(
                     kind: "eeg_bridge".into(),
                 });
 
-                // Step 3: Find labels near each EEG epoch.
-                let nearby_labels = skill_commands::get_labels_near(&labels_db, ep_ts, reach_secs);
+                // Step 3: Find labels near this EEG epoch (from pre-fetched batch).
+                let nearby_labels: Vec<&skill_commands::LabelEntry> = batch_labels
+                    .iter()
+                    .filter(|lbl| {
+                        let start = lbl.eeg_start as i64;
+                        let end = lbl.eeg_end as i64;
+                        let t = ep_ts as i64;
+                        (start <= t && end >= t) || (start - t).unsigned_abs() <= reach_secs
+                    })
+                    .collect();
                 for (l, lbl) in nearby_labels.iter().enumerate().take(k_labels) {
                     let fl_id = format!("fl{i}_{j}_{l}");
                     nodes.push(InteractiveGraphNode {

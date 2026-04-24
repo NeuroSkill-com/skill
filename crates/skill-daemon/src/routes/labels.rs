@@ -95,6 +95,7 @@ fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<rusqlite::Conne
         std::fs::create_dir_all(parent).context("create labels DB directory")?;
     }
     let conn = rusqlite::Connection::open(&db_path).context("open labels DB")?;
+    skill_data::util::init_wal_pragmas(&conn);
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS labels (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,

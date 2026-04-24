@@ -700,6 +700,7 @@ pub fn run_screenshot_worker(
         let webp_name = format!("{date_str}/{ts_str}.webp");
         let webp_path = screenshots_dir.join(&webp_name);
         let Some(file_size) = encode_webp(&resized_img, config.quality, &webp_path) else {
+            metrics.capture_errors.fetch_add(1, Ordering::Relaxed);
             continue;
         };
 

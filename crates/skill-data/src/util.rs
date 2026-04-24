@@ -18,10 +18,12 @@ pub use skill_constants::MutexExt;
 /// Consolidates the repeated `Connection::open_with_flags(…, READ_ONLY | NO_MUTEX)`
 /// pattern used across many crates.
 pub fn open_readonly(path: &Path) -> Result<rusqlite::Connection, rusqlite::Error> {
-    rusqlite::Connection::open_with_flags(
+    let conn = rusqlite::Connection::open_with_flags(
         path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
+    )?;
+    init_wal_pragmas(&conn);
+    Ok(conn)
 }
 
 // ── JSON config load / save ────────────────────────────────────────────────────

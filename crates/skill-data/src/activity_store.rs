@@ -2280,6 +2280,76 @@ impl ActivityStore {
         .unwrap_or_default()
     }
 
+    /// Correlate terminal commands with input activity.
+    /// For each terminal command that was running during a time range, sum up
+    /// the keystrokes and mouse events from input_buckets that occurred while
+    /// that command's window was in the foreground.
+    pub fn terminal_input_activity(&self, since: u64) -> Vec<TerminalInputRow> {
+        let c = self.conn.lock_or_recover();
+        // Get terminal commands in the window
+        let mut cmd_stmt = match c.prepare_cached(
+            "SELECT id, command, category, started_at,
+                    COALESCE(ended_at, ?2) as end_at,
+                    terminal_name
+             FROM terminal_commands
+             WHERE started_at >= ?1
+             ORDER BY started_at DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        let now = now_secs();
+        let cmds: Vec<(i64, String, String, u64, u64, String)> = cmd_stmt
+            .query_map(params![since as i64, now as i64], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)? as u64,
+                    row.get::<_, i64>(4)? as u64,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+
+        let mut results = Vec::new();
+        for (id, command, category, start, end, _terminal) in &cmds {
+            // Round to minute boundaries for input_buckets join
+            let start_min = start - (start % 60);
+            let end_min = end - (end % 60) + 60;
+            let duration_secs = end.saturating_sub(*start);
+
+            // Sum keystrokes and mouse events during this command's runtime
+            let (keys, mouse): (i64, i64) = c
+                .query_row(
+                    "SELECT COALESCE(SUM(key_count), 0), COALESCE(SUM(mouse_count), 0)
+                     FROM input_buckets
+                     WHERE minute_ts >= ?1 AND minute_ts < ?2",
+                    params![start_min as i64, end_min as i64],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap_or((0, 0));
+
+            if keys > 0 || mouse > 0 || duration_secs > 60 {
+                results.push(TerminalInputRow {
+                    command: command.clone(),
+                    category: category.clone(),
+                    started_at: *start,
+                    duration_secs,
+                    keystrokes: keys as u64,
+                    mouse_events: mouse as u64,
+                    keys_per_min: if duration_secs > 0 {
+                        keys as f64 / (duration_secs as f64 / 60.0)
+                    } else {
+                        0.0
+                    },
+                });
+            }
+        }
+        results
+    }
+
     pub fn get_recent_builds(&self, limit: u32) -> Vec<BuildEventRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
@@ -3334,6 +3404,17 @@ pub struct DevLoopRow {
     pub avg_cycle_secs: f64,
     pub avg_focus: Option<f64>,
     pub focus_trend: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TerminalInputRow {
+    pub command: String,
+    pub category: String,
+    pub started_at: u64,
+    pub duration_secs: u64,
+    pub keystrokes: u64,
+    pub mouse_events: u64,
+    pub keys_per_min: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

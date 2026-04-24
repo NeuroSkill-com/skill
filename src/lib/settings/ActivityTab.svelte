@@ -6,7 +6,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Activity dashboard — daily stats, top files/projects, focus sessions, meetings. -->
 <script lang="ts">
-import { onMount } from "svelte";
+import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
@@ -42,6 +42,7 @@ import {
   getFlow as brainFlow,
   getStreak as brainStreak,
   startBrainPolling,
+  stopBrainPolling,
 } from "$lib/stores/brain.svelte";
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -188,6 +189,10 @@ onMount(async () => {
     if (results[11].status === "fulfilled") timeline = (results[11].value as typeof timeline) ?? [];
   } catch {}
   loading = false;
+});
+
+onDestroy(() => {
+  stopBrainPolling();
 });
 
 // Max value in heatmap for scaling.
