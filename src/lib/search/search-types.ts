@@ -87,7 +87,7 @@ export interface SearchAnalysis {
 
 export interface GraphNode {
   id: string;
-  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity";
+  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity" | "meeting";
   text?: string;
   timestamp_unix?: number;
   distance: number;
@@ -127,7 +127,14 @@ export interface GraphEdge {
   from_id: string;
   to_id: string;
   distance: number;
-  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link" | "file_activity_prox";
+  kind:
+    | "text_sim"
+    | "eeg_bridge"
+    | "eeg_sim"
+    | "label_prox"
+    | "screenshot_link"
+    | "file_activity_prox"
+    | "meeting_prox";
 }
 
 export interface JobTicket {

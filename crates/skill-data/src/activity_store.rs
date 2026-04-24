@@ -32,6 +32,13 @@ use std::sync::Mutex;
 use crate::active_window::ActiveWindowInfo;
 use crate::util::MutexExt;
 
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
 const DDL: &str = "
@@ -163,6 +170,19 @@ CREATE TABLE IF NOT EXISTS clipboard_events (
     copied_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ce_copied ON clipboard_events (copied_at DESC);
+
+-- AI code suggestion and chat events.
+CREATE TABLE IF NOT EXISTS ai_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type   TEXT    NOT NULL,
+    source       TEXT    NOT NULL DEFAULT '',
+    file_path    TEXT    NOT NULL DEFAULT '',
+    language     TEXT    NOT NULL DEFAULT '',
+    at           INTEGER NOT NULL,
+    eeg_focus    REAL,
+    eeg_mood     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_at ON ai_events (at DESC);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -184,19 +204,37 @@ impl ActivityStore {
             }
         };
         crate::util::init_wal_pragmas(&conn);
+        // Schema migrations BEFORE DDL — add columns that may be missing from
+        // older databases so the DDL (which uses CREATE TABLE IF NOT EXISTS)
+        // succeeds. Each ALTER is idempotent: "duplicate column" errors ignored.
+        for alter in [
+            // active_windows
+            "ALTER TABLE active_windows ADD COLUMN browser_title TEXT",
+            "ALTER TABLE active_windows ADD COLUMN monitor_id INTEGER",
+            // file_interactions — columns added across multiple releases
+            "ALTER TABLE file_interactions ADD COLUMN project TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE file_interactions ADD COLUMN language TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE file_interactions ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE file_interactions ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE file_interactions ADD COLUMN duration_secs INTEGER",
+            "ALTER TABLE file_interactions ADD COLUMN was_modified INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_interactions ADD COLUMN size_delta INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_interactions ADD COLUMN lines_added INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_interactions ADD COLUMN lines_removed INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_interactions ADD COLUMN words_delta INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE file_interactions ADD COLUMN eeg_focus REAL",
+            "ALTER TABLE file_interactions ADD COLUMN eeg_mood REAL",
+            "ALTER TABLE file_interactions ADD COLUMN undo_count INTEGER NOT NULL DEFAULT 0",
+            // file_edit_chunks
+            "ALTER TABLE file_edit_chunks ADD COLUMN undo_estimate INTEGER NOT NULL DEFAULT 0",
+            // focus_sessions
+            "ALTER TABLE focus_sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''",
+        ] {
+            let _ = conn.execute_batch(alter);
+        }
         if let Err(e) = conn.execute_batch(DDL) {
             eprintln!("[activity] DDL: {e}");
             return None;
-        }
-        // Schema migrations for columns added after initial release.
-        // Each ALTER TABLE is idempotent — "duplicate column" errors are silently ignored.
-        for alter in [
-            "ALTER TABLE active_windows ADD COLUMN browser_title TEXT",
-            "ALTER TABLE active_windows ADD COLUMN monitor_id INTEGER",
-            "ALTER TABLE file_interactions ADD COLUMN undo_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_edit_chunks ADD COLUMN undo_estimate INTEGER NOT NULL DEFAULT 0",
-        ] {
-            let _ = conn.execute_batch(alter); // ignore "duplicate column name" errors
         }
         Some(Self { conn: Mutex::new(conn) })
     }
@@ -796,6 +834,801 @@ impl ActivityStore {
                     .as_secs()
                     - row.get::<_, i64>(1)? as u64)
                     / 86400) as u32,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Brain awareness ──────────────────────────────────────────────────────
+
+    /// Real-time flow state check: is the user currently in deep focus?
+    #[allow(clippy::manual_let_else)]
+    pub fn flow_state_now(&self, window_secs: u64) -> FlowStateResult {
+        let c = self.conn.lock_or_recover();
+        let now = now_secs();
+        let since = now.saturating_sub(window_secs);
+        let row = c.query_row(
+            "SELECT COUNT(DISTINCT file_path) AS switches, COUNT(*) AS interactions,
+                    COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
+                    AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus,
+                    MIN(seen_at) AS first_ts, MAX(seen_at) AS last_ts
+             FROM file_interactions WHERE seen_at >= ?1",
+            params![since as i64],
+            |row| {
+                let switches: u64 = row.get::<_, i64>(0)? as u64;
+                let _interactions: u64 = row.get::<_, i64>(1)? as u64;
+                let churn: u64 = row.get::<_, i64>(2)? as u64;
+                let avg_focus: Option<f32> = row.get::<_, Option<f64>>(3)?.map(|v| v as f32);
+                let first_ts: u64 = row.get::<_, Option<i64>>(4)?.unwrap_or(0) as u64;
+                let last_ts: u64 = row.get::<_, Option<i64>>(5)?.unwrap_or(0) as u64;
+                let duration = last_ts.saturating_sub(first_ts);
+                let focus = avg_focus.unwrap_or(0.0);
+                let in_flow = focus > 60.0 && switches <= 3 && churn > 0 && duration > 120;
+                let velocity = if duration > 0 {
+                    churn as f32 / (duration as f32 / 60.0)
+                } else {
+                    0.0
+                };
+                let score = (focus * 0.5 + (100.0 - switches.min(10) as f32 * 10.0) * 0.3 + velocity.min(50.0) * 0.4)
+                    .clamp(0.0, 100.0);
+                Ok(FlowStateResult {
+                    in_flow,
+                    score,
+                    duration_secs: duration,
+                    avg_focus,
+                    file_switches: switches as u32,
+                    edit_velocity: velocity,
+                })
+            },
+        );
+        row.unwrap_or(FlowStateResult {
+            in_flow: false,
+            score: 0.0,
+            duration_secs: 0,
+            avg_focus: None,
+            file_switches: 0,
+            edit_velocity: 0.0,
+        })
+    }
+
+    /// Cognitive load aggregated by file or language.
+    pub fn cognitive_load_by(&self, since: u64, by_language: bool) -> Vec<CognitiveLoadRow> {
+        let c = self.conn.lock_or_recover();
+        let group_col = if by_language { "language" } else { "file_path" };
+        let sql = format!(
+            "SELECT {g}, AVG(eeg_focus) AS avg_focus, AVG(undo_count) AS avg_undos,
+                    COUNT(*) AS interactions, COALESCE(SUM(duration_secs), 0) AS total_secs
+             FROM file_interactions WHERE seen_at >= ?1 AND {g} != '' AND eeg_focus IS NOT NULL
+             GROUP BY {g} ORDER BY avg_focus ASC LIMIT 30",
+            g = group_col
+        );
+        let mut stmt = match c.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([since as i64], |row| {
+            let avg_focus: f32 = row.get::<_, f64>(1).unwrap_or(50.0) as f32;
+            let avg_undos: f32 = row.get::<_, f64>(2).unwrap_or(0.0) as f32;
+            Ok(CognitiveLoadRow {
+                key: row.get(0)?,
+                avg_focus: Some(avg_focus),
+                avg_undos,
+                interactions: row.get::<_, i64>(3)? as u64,
+                total_secs: row.get::<_, i64>(4)? as u64,
+                load_score: ((100.0 - avg_focus) + avg_undos * 5.0).clamp(0.0, 100.0),
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Measure focus recovery time after each meeting.
+    pub fn meeting_recovery_times(&self, since: u64, limit: u32) -> MeetingRecoveryResult {
+        let meetings = self.get_meetings_in_range(since, now_secs());
+        let c = self.conn.lock_or_recover();
+        let mut rows = Vec::new();
+        let mut total_recovery = 0u64;
+        let mut count = 0u32;
+        for mtg in meetings.iter().take(limit as usize) {
+            let end = match mtg.end_at {
+                Some(e) => e,
+                None => continue,
+            };
+            let recovery: Option<u64> = c
+                .query_row(
+                    "SELECT MIN(seen_at) FROM file_interactions WHERE seen_at > ?1 AND eeg_focus > 50",
+                    params![end as i64],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .ok()
+                .flatten()
+                .map(|ts| (ts as u64).saturating_sub(end));
+            if let Some(r) = recovery {
+                total_recovery += r;
+                count += 1;
+            }
+            rows.push(MeetingRecoveryRow {
+                meeting_id: mtg.id,
+                title: mtg.title.clone(),
+                platform: mtg.platform.clone(),
+                meeting_duration_secs: end.saturating_sub(mtg.start_at),
+                recovery_secs: recovery,
+            });
+        }
+        let avg = if count > 0 { total_recovery / count as u64 } else { 0 };
+        MeetingRecoveryResult {
+            meetings: rows,
+            avg_recovery_secs: avg,
+        }
+    }
+
+    /// Score each hour of the day by productivity.
+    pub fn optimal_hours(&self, since: u64, top_n: usize) -> OptimalHoursResult {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT (seen_at % 86400) / 3600 AS hour,
+                    COUNT(*) AS interactions,
+                    COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
+                    AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus
+             FROM file_interactions WHERE seen_at >= ?1 AND was_modified = 1
+             GROUP BY hour ORDER BY hour",
+        ) {
+            Ok(s) => s,
+            Err(_) => {
+                return OptimalHoursResult {
+                    hours: vec![],
+                    best_hours: vec![],
+                    worst_hours: vec![],
+                }
+            }
+        };
+        let mut hours: Vec<HourScore> = stmt
+            .query_map([since as i64], |row| {
+                Ok(HourScore {
+                    hour: row.get::<_, i64>(0)? as u8,
+                    interactions: row.get::<_, i64>(1)? as u64,
+                    total_churn: row.get::<_, i64>(2)? as u64,
+                    avg_focus: row.get::<_, Option<f64>>(3)?.map(|v| v as f32),
+                    score: 0.0,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+        let max_churn = hours.iter().map(|h| h.total_churn).max().unwrap_or(1).max(1) as f32;
+        for h in &mut hours {
+            let focus = h.avg_focus.unwrap_or(50.0);
+            h.score = focus * 0.6 + (h.total_churn as f32 / max_churn) * 40.0;
+        }
+        let mut sorted: Vec<(u8, f32)> = hours.iter().map(|h| (h.hour, h.score)).collect();
+        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let best: Vec<u8> = sorted.iter().take(top_n).map(|s| s.0).collect();
+        let worst: Vec<u8> = sorted.iter().rev().take(top_n).map(|s| s.0).collect();
+        OptimalHoursResult {
+            hours,
+            best_hours: best,
+            worst_hours: worst,
+        }
+    }
+
+    /// Check for declining focus trend (fatigue).
+    pub fn fatigue_check(&self) -> FatigueAlert {
+        let c = self.conn.lock_or_recover();
+        let now = now_secs();
+        let mut stmt = match c.prepare_cached(
+            "SELECT (?1 - seen_at) / 900 AS quarter, AVG(eeg_focus) AS avg_focus, COUNT(*) AS n
+             FROM file_interactions WHERE seen_at >= ?1 - 3600 AND eeg_focus IS NOT NULL
+             GROUP BY quarter ORDER BY quarter DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => {
+                return FatigueAlert {
+                    fatigued: false,
+                    trend: vec![],
+                    focus_decline_pct: 0.0,
+                    suggestion: String::new(),
+                    continuous_work_mins: 0,
+                }
+            }
+        };
+        let buckets: Vec<FatigueBucket> = stmt
+            .query_map([now as i64], |row| {
+                Ok(FatigueBucket {
+                    quarter: row.get::<_, i64>(0)? as u8,
+                    avg_focus: row.get::<_, f64>(1).unwrap_or(50.0) as f32,
+                    interactions: row.get::<_, i64>(2)? as u64,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+        let decline = if buckets.len() >= 2 {
+            let newest = buckets.first().map(|b| b.avg_focus).unwrap_or(50.0);
+            let oldest = buckets.last().map(|b| b.avg_focus).unwrap_or(50.0);
+            if oldest > 0.0 {
+                (newest - oldest) / oldest * 100.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        let fatigued = decline < -10.0 && buckets.len() >= 3;
+        let suggestion = if fatigued {
+            "Consider a 10-minute break — your focus has been declining.".to_string()
+        } else {
+            String::new()
+        };
+        // Continuous work: time since last gap > 10min in file_interactions.
+        let continuous: u64 = c
+            .query_row(
+                "SELECT MIN(seen_at) FROM file_interactions WHERE seen_at >= ?1 - 7200",
+                params![now as i64],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .ok()
+            .flatten()
+            .map(|ts| (now - ts as u64) / 60)
+            .unwrap_or(0);
+        FatigueAlert {
+            fatigued,
+            trend: buckets,
+            focus_decline_pct: decline,
+            suggestion,
+            continuous_work_mins: continuous,
+        }
+    }
+
+    /// Files with high undo counts and low focus — struggling indicators.
+    pub fn undo_struggle(&self, since: u64, undo_threshold: u64) -> Vec<StruggleRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT file_path, language, project, SUM(undo_count) AS total_undos,
+                    AVG(eeg_focus) AS avg_focus, COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
+                    COALESCE(SUM(duration_secs), 0) AS total_secs
+             FROM file_interactions WHERE seen_at >= ?1 AND undo_count > 0
+             GROUP BY file_path HAVING total_undos >= ?2
+             ORDER BY total_undos DESC LIMIT 20",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, undo_threshold as i64], |row| {
+            let undos: f32 = row.get::<_, i64>(3)? as f32;
+            let focus: f32 = row.get::<_, Option<f64>>(4)?.unwrap_or(50.0) as f32;
+            Ok(StruggleRow {
+                file_path: row.get(0)?,
+                language: row.get::<_, String>(1).unwrap_or_default(),
+                project: row.get::<_, String>(2).unwrap_or_default(),
+                total_undos: undos as u64,
+                avg_focus: Some(focus),
+                total_churn: row.get::<_, i64>(5)? as u64,
+                total_secs: row.get::<_, i64>(6)? as u64,
+                struggle_score: (undos * (100.0 - focus) / 100.0).clamp(0.0, 100.0),
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Daily brain report split by morning/afternoon/evening.
+    pub fn daily_brain_report(&self, day_start: u64) -> DailyBrainReport {
+        let c = self.conn.lock_or_recover();
+        let day_end = day_start + 86400;
+        let mut stmt = match c.prepare_cached(
+            "SELECT CASE
+                WHEN (seen_at % 86400) / 3600 BETWEEN 6 AND 11 THEN 'morning'
+                WHEN (seen_at % 86400) / 3600 BETWEEN 12 AND 17 THEN 'afternoon'
+                ELSE 'evening'
+             END AS period,
+             COUNT(*) AS n, COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
+             AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus,
+             SUM(undo_count) AS undos, COUNT(DISTINCT file_path) AS files
+             FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2
+             GROUP BY period",
+        ) {
+            Ok(s) => s,
+            Err(_) => return DailyBrainReport::default_for(day_start),
+        };
+        let periods: Vec<PeriodSummary> = stmt
+            .query_map(params![day_start as i64, day_end as i64], |row| {
+                Ok(PeriodSummary {
+                    period: row.get(0)?,
+                    avg_focus: row.get::<_, Option<f64>>(3)?.map(|v| v as f32),
+                    churn: row.get::<_, i64>(2)? as u64,
+                    interactions: row.get::<_, i64>(1)? as u64,
+                    files_touched: row.get::<_, i64>(5)? as u32,
+                    undos: row.get::<_, i64>(4)? as u64,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+        let best = periods
+            .iter()
+            .max_by(|a, b| {
+                a.avg_focus
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.avg_focus.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|p| p.period.clone())
+            .unwrap_or_default();
+        let overall = periods.iter().filter_map(|p| p.avg_focus).sum::<f32>()
+            / periods.iter().filter(|p| p.avg_focus.is_some()).count().max(1) as f32;
+        let score = self.productivity_score(day_start);
+        DailyBrainReport {
+            day_start,
+            periods,
+            overall_focus: Some(overall),
+            productivity_score: score.score,
+            best_period: best,
+        }
+    }
+
+    /// Detect natural focus cycle length from 5-minute buckets.
+    pub fn break_timing(&self, since: u64) -> BreakTimingResult {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT (seen_at / 300) * 300 AS bucket, AVG(eeg_focus) AS avg_focus, COUNT(*) AS n
+             FROM file_interactions WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY bucket ORDER BY bucket ASC",
+        ) {
+            Ok(s) => s,
+            Err(_) => {
+                return BreakTimingResult {
+                    natural_cycle_mins: None,
+                    focus_curve: vec![],
+                    suggested_break_interval_mins: 52,
+                    confidence: 0.0,
+                }
+            }
+        };
+        let curve: Vec<FocusBucket> = stmt
+            .query_map([since as i64], |row| {
+                Ok(FocusBucket {
+                    ts: row.get::<_, i64>(0)? as u64,
+                    avg_focus: row.get::<_, f64>(1).unwrap_or(50.0) as f32,
+                    churn: row.get::<_, i64>(2)? as u64,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+        // Simple valley detection: find local minima.
+        let mut valleys = Vec::new();
+        for i in 1..curve.len().saturating_sub(1) {
+            if curve[i].avg_focus < curve[i - 1].avg_focus && curve[i].avg_focus < curve[i + 1].avg_focus {
+                valleys.push(curve[i].ts);
+            }
+        }
+        // Average interval between valleys.
+        let cycle = if valleys.len() >= 2 {
+            let intervals: Vec<u64> = valleys.windows(2).map(|w| w[1] - w[0]).collect();
+            let avg = intervals.iter().sum::<u64>() / intervals.len() as u64;
+            Some((avg / 60) as u32)
+        } else {
+            None
+        };
+        let suggested = cycle.unwrap_or(52);
+        let confidence = if valleys.len() >= 3 {
+            0.7
+        } else if valleys.len() >= 2 {
+            0.4
+        } else {
+            0.1
+        };
+        BreakTimingResult {
+            natural_cycle_mins: cycle,
+            focus_curve: curve,
+            suggested_break_interval_mins: suggested,
+            confidence,
+        }
+    }
+
+    /// Deep work streak: consecutive days with sufficient deep work.
+    pub fn deep_work_streak(&self, min_deep_work_mins: u32) -> DeepWorkStreak {
+        let c = self.conn.lock_or_recover();
+        let now = now_secs();
+        let since = now.saturating_sub(30 * 86400);
+        let mut stmt = match c.prepare_cached(
+            "SELECT seen_at / 86400 AS day_idx, COALESCE(SUM(duration_secs), 0) / 60 AS total_mins,
+                    AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus
+             FROM file_interactions WHERE seen_at >= ?1 AND was_modified = 1
+             GROUP BY day_idx ORDER BY day_idx DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return DeepWorkStreak::default(),
+        };
+        let days: Vec<DayDeepWork> = stmt
+            .query_map([since as i64], |row| {
+                let mins = row.get::<_, i64>(1)? as u32;
+                Ok(DayDeepWork {
+                    day_start: row.get::<_, i64>(0)? as u64 * 86400,
+                    deep_work_mins: mins,
+                    avg_focus: row.get::<_, Option<f64>>(2)?.map(|v| v as f32),
+                    qualified: mins >= min_deep_work_mins,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+        let mut streak = 0u32;
+        for d in &days {
+            if d.qualified {
+                streak += 1;
+            } else {
+                break;
+            }
+        }
+        let longest = {
+            let mut max = 0u32;
+            let mut cur = 0u32;
+            for d in &days {
+                if d.qualified {
+                    cur += 1;
+                    max = max.max(cur);
+                } else {
+                    cur = 0;
+                }
+            }
+            max
+        };
+        let today_mins = days.first().map(|d| d.deep_work_mins).unwrap_or(0);
+        let weekly: f32 = days.iter().take(7).map(|d| d.deep_work_mins as f32).sum::<f32>() / 7.0;
+        DeepWorkStreak {
+            current_streak_days: streak,
+            longest_streak_days: longest,
+            today_deep_mins: today_mins,
+            today_qualifies: today_mins >= min_deep_work_mins,
+            threshold_mins: min_deep_work_mins,
+            daily_history: days,
+            weekly_avg_deep_mins: weekly,
+        }
+    }
+
+    // ── AI events ─────────────────────────────────────────────────────────────
+
+    pub fn insert_ai_event(&self, event_type: &str, source: &str, file_path: &str, language: &str, at: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO ai_events (event_type, source, file_path, language, at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![event_type, source, file_path, language, at as i64],
+        );
+    }
+
+    pub fn get_recent_ai_events(&self, limit: u32) -> Vec<AiEventRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, event_type, source, file_path, language, at FROM ai_events ORDER BY at DESC LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([limit as i64], |row| {
+            Ok(AiEventRow {
+                id: row.get(0)?,
+                event_type: row.get(1)?,
+                source: row.get(2)?,
+                file_path: row.get(3)?,
+                language: row.get(4)?,
+                at: row.get::<_, i64>(5)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Fusion insights (EEG + activity + editor) ─────────────────────────────
+
+    /// Classify what the user is currently doing.
+    pub fn detect_task_type(&self, window_secs: u64) -> TaskTypeResult {
+        let c = self.conn.lock_or_recover();
+        let since = now_secs().saturating_sub(window_secs);
+        let row = c.query_row(
+            "SELECT SUM(lines_added) AS la, SUM(lines_removed) AS lr, SUM(undo_count) AS undos,
+                    COUNT(DISTINCT file_path) AS files, COUNT(*) AS n
+             FROM file_interactions WHERE seen_at >= ?1",
+            params![since as i64],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0).unwrap_or(0) as u64,
+                    row.get::<_, i64>(1).unwrap_or(0) as u64,
+                    row.get::<_, i64>(2).unwrap_or(0) as u64,
+                    row.get::<_, i64>(3).unwrap_or(0) as u64,
+                    row.get::<_, i64>(4).unwrap_or(0) as u64,
+                ))
+            },
+        );
+        let (la, lr, undos, files, _n) = row.unwrap_or_default();
+        // Check for debug/test events in build_events.
+        let build_fails: u64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND outcome = 'fail'",
+                params![since as i64],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+        let has_debug: bool = c
+            .query_row(
+                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND command LIKE '%debug%'",
+                params![since as i64],
+                |row| Ok(row.get::<_, i64>(0).unwrap_or(0) > 0),
+            )
+            .unwrap_or(false);
+        let has_test: bool = c
+            .query_row(
+                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND (command LIKE '%test%' OR command LIKE '%jest%' OR command LIKE '%pytest%')",
+                params![since as i64],
+                |row| Ok(row.get::<_, i64>(0).unwrap_or(0) > 0),
+            )
+            .unwrap_or(false);
+
+        if has_debug || (build_fails > 0 && undos > 5) {
+            return TaskTypeResult {
+                task_type: "debugging".into(),
+                confidence: 0.8,
+                signals: vec!["debug events or build failures + high undos".into()],
+            };
+        }
+        if has_test {
+            return TaskTypeResult {
+                task_type: "testing".into(),
+                confidence: 0.7,
+                signals: vec!["test commands detected".into()],
+            };
+        }
+        if files > 5 && la < 5 && lr < 5 {
+            return TaskTypeResult {
+                task_type: "reviewing".into(),
+                confidence: 0.6,
+                signals: vec!["many file switches, low edits".into()],
+            };
+        }
+        if la > 10 && lr > 10 && undos < 3 {
+            return TaskTypeResult {
+                task_type: "refactoring".into(),
+                confidence: 0.6,
+                signals: vec!["high add + remove, low undos".into()],
+            };
+        }
+        TaskTypeResult {
+            task_type: "coding".into(),
+            confidence: 0.5,
+            signals: vec!["default: editing code".into()],
+        }
+    }
+
+    /// Predict whether the user is stuck based on undo rate, velocity, and focus.
+    pub fn predict_struggle(&self, window_secs: u64) -> StrugglePrediction {
+        let c = self.conn.lock_or_recover();
+        let now = now_secs();
+        let since = now.saturating_sub(window_secs);
+        // Recent undo rate from edit chunks.
+        let (undo_total, _chunk_count): (u64, u64) = c
+            .query_row(
+                "SELECT COALESCE(SUM(undo_estimate), 0), COUNT(*) FROM file_edit_chunks WHERE chunk_at >= ?1",
+                params![since as i64],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0).unwrap_or(0) as u64,
+                        row.get::<_, i64>(1).unwrap_or(0) as u64,
+                    ))
+                },
+            )
+            .unwrap_or_default();
+        // Recent file: focus + time on it.
+        let recent = self.get_recent_files(1, None);
+        let current_file = recent.first().map(|f| f.file_path.clone()).unwrap_or_default();
+        let focus = recent.first().and_then(|f| f.eeg_focus);
+        let time_on_file = recent.first().and_then(|f| f.duration_secs).unwrap_or(0);
+        // Compute velocity drop: compare last 5min vs prior 15min.
+        let recent_churn: u64 = c
+            .query_row(
+                "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1",
+                params![(now - 300) as i64],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+        let prior_churn: u64 = c
+            .query_row(
+                "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2",
+                params![(now - 1200) as i64, (now - 300) as i64],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+
+        let mins = (window_secs as f32 / 60.0).max(1.0);
+        let undo_rate = undo_total as f32 / mins;
+        let velocity_drop = if prior_churn > 0 {
+            (1.0 - recent_churn as f32 / (prior_churn as f32 / 3.0)).clamp(0.0, 1.0) * 100.0
+        } else {
+            0.0
+        };
+        let focus_penalty = 100.0 - focus.unwrap_or(50.0);
+        let time_stuck = (time_on_file as f32 / 60.0).min(30.0) / 30.0 * 100.0;
+        let score = (undo_rate * 20.0 + velocity_drop * 0.3 + focus_penalty * 0.3 + time_stuck * 0.2).clamp(0.0, 100.0);
+        let struggling = score > 60.0;
+        let suggestion = if struggling {
+            if undo_rate > 3.0 {
+                "High undo rate — try a different approach or break the problem down."
+            } else if focus_penalty > 60.0 {
+                "Focus is low — consider a short break to reset."
+            } else {
+                "You've been stuck on this file for a while — step back and rethink."
+            }
+        } else {
+            ""
+        };
+        StrugglePrediction {
+            struggling,
+            score,
+            factors: StruggleFactors {
+                undo_rate,
+                edit_velocity_drop: velocity_drop,
+                focus_score: focus,
+                time_on_file_mins: (time_on_file / 60) as u32,
+            },
+            suggestion: suggestion.to_string(),
+            current_file,
+        }
+    }
+
+    /// Measure focus recovery time after interruptions (app switches, meetings).
+    pub fn interruption_recovery(&self, since: u64, limit: u32) -> InterruptionRecoveryResult {
+        let c = self.conn.lock_or_recover();
+        // Find app switches away from code editors.
+        let mut stmt = match c.prepare_cached(
+            "SELECT app_name, activated_at FROM active_windows
+             WHERE activated_at >= ?1
+             AND app_name NOT IN ('Code','code','Cursor','cursor','Visual Studio Code','Xcode','IntelliJ IDEA','WebStorm','PyCharm','Sublime Text','Neovim','vim')
+             ORDER BY activated_at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return InterruptionRecoveryResult { interruptions: vec![], avg_recovery_secs: 0, by_type: vec![] },
+        };
+        let switches: Vec<(String, u64)> = stmt
+            .query_map(params![since as i64, limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+
+        let mut rows = Vec::new();
+        let mut type_totals: std::collections::HashMap<String, (u64, u32)> = std::collections::HashMap::new();
+        for (app, at) in &switches {
+            let recovery: Option<u64> = c
+                .query_row(
+                    "SELECT MIN(seen_at) FROM file_interactions WHERE seen_at > ?1 AND eeg_focus > 50",
+                    params![*at as i64],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .ok()
+                .flatten()
+                .map(|ts| (ts as u64).saturating_sub(*at));
+            let lower = app.to_lowercase();
+            let itype = if lower.contains("slack") {
+                "slack"
+            } else if lower.contains("zoom") || lower.contains("teams") {
+                "meeting"
+            } else if lower.contains("chrome")
+                || app.to_lowercase().contains("safari")
+                || app.to_lowercase().contains("firefox")
+            {
+                "browser"
+            } else {
+                "app_switch"
+            };
+            if let Some(r) = recovery {
+                let entry = type_totals.entry(itype.to_string()).or_insert((0, 0));
+                entry.0 += r;
+                entry.1 += 1;
+            }
+            rows.push(InterruptionRow {
+                interruption_type: itype.to_string(),
+                source_app: app.clone(),
+                at: *at,
+                recovery_secs: recovery,
+            });
+        }
+        let total_recovery: u64 = rows.iter().filter_map(|r| r.recovery_secs).sum();
+        let count = rows.iter().filter(|r| r.recovery_secs.is_some()).count().max(1) as u64;
+        let by_type: Vec<RecoveryByType> = type_totals
+            .into_iter()
+            .map(|(t, (total, cnt))| RecoveryByType {
+                interruption_type: t,
+                avg_recovery_secs: total / cnt as u64,
+                count: cnt,
+            })
+            .collect();
+        InterruptionRecoveryResult {
+            interruptions: rows,
+            avg_recovery_secs: total_recovery / count,
+            by_type,
+        }
+    }
+
+    /// Correlate EEG brain states with code files, languages, and projects.
+    pub fn code_eeg_correlation(&self, since: u64) -> CodeEegCorrelation {
+        let c = self.conn.lock_or_recover();
+        let by_lang = |sql: &str| -> Vec<CodeBrainRow> {
+            c.prepare(sql)
+                .ok()
+                .map(|mut stmt| {
+                    stmt.query_map([since as i64], |row| {
+                        Ok(CodeBrainRow {
+                            key: row.get(0)?,
+                            avg_focus: row.get::<_, f64>(1).unwrap_or(50.0) as f32,
+                            total_mins: row.get::<_, i64>(2).unwrap_or(0) as u32,
+                            interactions: row.get::<_, i64>(3).unwrap_or(0) as u64,
+                            avg_undos: row.get::<_, f64>(4).unwrap_or(0.0) as f32,
+                        })
+                    })
+                    .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+                    .unwrap_or_default()
+                })
+                .unwrap_or_default()
+        };
+        let langs = by_lang(
+            "SELECT language, AVG(eeg_focus), SUM(duration_secs)/60, COUNT(*), AVG(undo_count)
+             FROM file_interactions WHERE seen_at >= ?1 AND language != '' AND eeg_focus IS NOT NULL
+             GROUP BY language ORDER BY AVG(eeg_focus) DESC",
+        );
+        let projects = by_lang(
+            "SELECT project, AVG(eeg_focus), SUM(duration_secs)/60, COUNT(*), AVG(undo_count)
+             FROM file_interactions WHERE seen_at >= ?1 AND project != '' AND eeg_focus IS NOT NULL
+             GROUP BY project ORDER BY AVG(eeg_focus) DESC",
+        );
+        let best = by_lang(
+            "SELECT file_path, AVG(eeg_focus), SUM(duration_secs)/60, COUNT(*), AVG(undo_count)
+             FROM file_interactions WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY file_path ORDER BY AVG(eeg_focus) DESC LIMIT 5",
+        );
+        let worst = by_lang(
+            "SELECT file_path, AVG(eeg_focus), SUM(duration_secs)/60, COUNT(*), AVG(undo_count)
+             FROM file_interactions WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY file_path ORDER BY AVG(eeg_focus) ASC LIMIT 5",
+        );
+        CodeEegCorrelation {
+            by_language: langs,
+            by_project: projects,
+            best_files: best,
+            worst_files: worst,
+        }
+    }
+
+    // ── Unified timeline ──────────────────────────────────────────────────────
+
+    /// Return a unified chronological stream of all activity events in a time range.
+    pub fn activity_timeline(&self, from_ts: u64, to_ts: u64, limit: u32) -> Vec<TimelineEvent> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare(
+            "SELECT kind, title, detail, ts, focus FROM (
+                SELECT 'file' AS kind, file_path AS title, language AS detail, seen_at AS ts, eeg_focus AS focus
+                FROM file_interactions WHERE seen_at >= ?1 AND seen_at <= ?2
+                UNION ALL
+                SELECT 'build', command, outcome, detected_at, NULL
+                FROM build_events WHERE detected_at >= ?1 AND detected_at <= ?2
+                UNION ALL
+                SELECT 'meeting', platform, title, start_at, NULL
+                FROM meeting_events WHERE start_at >= ?1 AND start_at <= ?2
+                UNION ALL
+                SELECT 'ai', event_type, source, at, eeg_focus
+                FROM ai_events WHERE at >= ?1 AND at <= ?2
+                UNION ALL
+                SELECT 'clipboard', source_app, content_type, copied_at, NULL
+                FROM clipboard_events WHERE copied_at >= ?1 AND copied_at <= ?2
+            ) ORDER BY ts DESC LIMIT ?3",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] activity_timeline: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![from_ts as i64, to_ts as i64, limit as i64], |row| {
+            Ok(TimelineEvent {
+                kind: row.get(0)?,
+                title: row.get(1)?,
+                detail: row.get::<_, String>(2).unwrap_or_default(),
+                ts: row.get::<_, i64>(3)? as u64,
+                eeg_focus: row.get(4)?,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1659,6 +2492,236 @@ pub struct ClipboardEventRow {
     pub copied_at: u64,
 }
 
+// ── Brain awareness types ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlowStateResult {
+    pub in_flow: bool,
+    pub score: f32,
+    pub duration_secs: u64,
+    pub avg_focus: Option<f32>,
+    pub file_switches: u32,
+    pub edit_velocity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CognitiveLoadRow {
+    pub key: String,
+    pub avg_focus: Option<f32>,
+    pub avg_undos: f32,
+    pub interactions: u64,
+    pub total_secs: u64,
+    pub load_score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetingRecoveryResult {
+    pub meetings: Vec<MeetingRecoveryRow>,
+    pub avg_recovery_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetingRecoveryRow {
+    pub meeting_id: i64,
+    pub title: String,
+    pub platform: String,
+    pub meeting_duration_secs: u64,
+    pub recovery_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimalHoursResult {
+    pub hours: Vec<HourScore>,
+    pub best_hours: Vec<u8>,
+    pub worst_hours: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HourScore {
+    pub hour: u8,
+    pub score: f32,
+    pub avg_focus: Option<f32>,
+    pub total_churn: u64,
+    pub interactions: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FatigueAlert {
+    pub fatigued: bool,
+    pub trend: Vec<FatigueBucket>,
+    pub focus_decline_pct: f32,
+    pub suggestion: String,
+    pub continuous_work_mins: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FatigueBucket {
+    pub quarter: u8,
+    pub avg_focus: f32,
+    pub interactions: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StruggleRow {
+    pub file_path: String,
+    pub language: String,
+    pub project: String,
+    pub total_undos: u64,
+    pub avg_focus: Option<f32>,
+    pub total_churn: u64,
+    pub total_secs: u64,
+    pub struggle_score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyBrainReport {
+    pub day_start: u64,
+    pub periods: Vec<PeriodSummary>,
+    pub overall_focus: Option<f32>,
+    pub productivity_score: f32,
+    pub best_period: String,
+}
+
+impl DailyBrainReport {
+    pub fn default_for(day_start: u64) -> Self {
+        Self {
+            day_start,
+            periods: vec![],
+            overall_focus: None,
+            productivity_score: 0.0,
+            best_period: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeriodSummary {
+    pub period: String,
+    pub avg_focus: Option<f32>,
+    pub churn: u64,
+    pub interactions: u64,
+    pub files_touched: u32,
+    pub undos: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BreakTimingResult {
+    pub natural_cycle_mins: Option<u32>,
+    pub focus_curve: Vec<FocusBucket>,
+    pub suggested_break_interval_mins: u32,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FocusBucket {
+    pub ts: u64,
+    pub avg_focus: f32,
+    pub churn: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeepWorkStreak {
+    pub current_streak_days: u32,
+    pub longest_streak_days: u32,
+    pub today_deep_mins: u32,
+    pub today_qualifies: bool,
+    pub threshold_mins: u32,
+    pub daily_history: Vec<DayDeepWork>,
+    pub weekly_avg_deep_mins: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DayDeepWork {
+    pub day_start: u64,
+    pub deep_work_mins: u32,
+    pub avg_focus: Option<f32>,
+    pub qualified: bool,
+}
+
+// ── Fusion insight types ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskTypeResult {
+    pub task_type: String,
+    pub confidence: f32,
+    pub signals: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrugglePrediction {
+    pub struggling: bool,
+    pub score: f32,
+    pub factors: StruggleFactors,
+    pub suggestion: String,
+    pub current_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StruggleFactors {
+    pub undo_rate: f32,
+    pub edit_velocity_drop: f32,
+    pub focus_score: Option<f32>,
+    pub time_on_file_mins: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterruptionRecoveryResult {
+    pub interruptions: Vec<InterruptionRow>,
+    pub avg_recovery_secs: u64,
+    pub by_type: Vec<RecoveryByType>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterruptionRow {
+    pub interruption_type: String,
+    pub source_app: String,
+    pub at: u64,
+    pub recovery_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryByType {
+    pub interruption_type: String,
+    pub avg_recovery_secs: u64,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeEegCorrelation {
+    pub by_language: Vec<CodeBrainRow>,
+    pub by_project: Vec<CodeBrainRow>,
+    pub best_files: Vec<CodeBrainRow>,
+    pub worst_files: Vec<CodeBrainRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeBrainRow {
+    pub key: String,
+    pub avg_focus: f32,
+    pub total_mins: u32,
+    pub interactions: u64,
+    pub avg_undos: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineEvent {
+    pub kind: String,
+    pub title: String,
+    pub detail: String,
+    pub ts: u64,
+    pub eeg_focus: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiEventRow {
+    pub id: i64,
+    pub event_type: String,
+    pub source: String,
+    pub file_path: String,
+    pub language: String,
+    pub at: u64,
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -2220,5 +3283,63 @@ mod tests {
         store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 7);
         let files = store.get_recent_files(1, None);
         assert_eq!(files[0].undo_count, 7);
+    }
+
+    // ── Fusion insight tests ────────────────────────────────────────────────
+
+    #[test]
+    fn detect_task_type_default_coding() {
+        let store = open_temp();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        ins(&store, "/a.rs", "code", "proj", now);
+        let result = store.detect_task_type(3600);
+        assert_eq!(result.task_type, "coding");
+    }
+
+    #[test]
+    fn detect_task_type_with_debug_events() {
+        let store = open_temp();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        ins(&store, "/a.rs", "code", "proj", now);
+        store.insert_build_event("debug_start", "running", "", now);
+        let result = store.detect_task_type(3600);
+        assert_eq!(result.task_type, "debugging");
+    }
+
+    #[test]
+    fn predict_struggle_empty() {
+        let store = open_temp();
+        let result = store.predict_struggle(300);
+        assert!(!result.struggling);
+    }
+
+    #[test]
+    fn code_eeg_correlation_groups_by_language() {
+        let store = open_temp();
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", 100, Some(80.0), None);
+        store.insert_file_interaction("/b.ts", "code", "proj", "typescript", "", "", 200, Some(40.0), None);
+        let result = store.code_eeg_correlation(0);
+        assert!(result.by_language.len() >= 2);
+        // Rust has higher focus than TypeScript
+        let rust = result.by_language.iter().find(|r| r.key == "rust");
+        let ts = result.by_language.iter().find(|r| r.key == "typescript");
+        assert!(rust.unwrap().avg_focus > ts.unwrap().avg_focus);
+    }
+
+    #[test]
+    fn ai_events_insert_and_retrieve() {
+        let store = open_temp();
+        store.insert_ai_event("suggestion_accepted", "copilot", "/a.rs", "rust", 1000);
+        store.insert_ai_event("chat_start", "claude", "/b.ts", "typescript", 2000);
+        let events = store.get_recent_ai_events(10);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].source, "claude"); // newest first
+        assert_eq!(events[1].event_type, "suggestion_accepted");
     }
 }

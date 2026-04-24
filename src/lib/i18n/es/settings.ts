@@ -445,9 +445,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "Dispositivo de inferencia",
   "settings.inferenceDeviceDesc":
     "Dónde se ejecuta la inferencia de IA. La GPU es más rápida; la CPU funciona en cualquier máquina sin presionar la VRAM. Reinicia el servidor LLM tras cambiar.",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "MLX en Apple Silicon, GPU en otros.",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Nativo de Apple Silicon — el más rápido en Mac.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "Usa GPU / Metal / CUDA para inferencia rápida (recomendado).",
+  "settings.inferenceDeviceGpuDesc": "Usa wgpu (Metal / Vulkan) para inferencia.",
   "settings.inferenceDeviceCpuDesc": "Se ejecuta completamente en CPU — más lento pero funciona sin GPU.",
   "settings.inferenceDeviceRestartHint": "Reinicia el servidor LLM para aplicar.",
   "settings.inferenceDeviceExgRestartHint": "Reconecta tu casco para aplicar.",
@@ -521,10 +525,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "Cargar informe semanal",
   "activity.weeklyAvgFocus": "Enfoque promedio",
   "activity.peakHour": "Hora pico",
+  "activity.noFlow": "Sin flujo",
+  "activity.fatiguedTitle": "Enfoque disminuyendo",
+  "activity.streakDays": "dias de racha",
+  "activity.todayLabel": "hoy",
+  "activity.timeline": "Linea de tiempo",
+  "activity.codeBrain": "Correlación código-cerebro",
+  "activity.brainByLanguage": "Enfoque por lenguaje",
+  "activity.bestFiles": "Mejor enfoque",
+  "activity.worstFiles": "Menor enfoque",
 
   "umapSettings.backend": "Backend de cómputo",
   "umapSettings.backendDesc":
     "Selecciona el backend de cómputo para la proyección UMAP. Auto elige MLX en Apple Silicon, GPU (wgpu) en otros.",
+  "umapSettings.precision": "Precisión",
+  "umapSettings.precisionDesc":
+    "Precisión de punto flotante. F16 (media) es más rápida y usa menos memoria; F32 (completa) es más precisa.",
 
   "umapSettings.repulsion": "Repulsión",
   "umapSettings.repulsionStrength": "Fuerza de repulsión",

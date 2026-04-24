@@ -523,6 +523,8 @@ pub(crate) enum Encoder {
     ZunaGpu(Box<ZunaGpuState>),
     #[cfg(feature = "embed-zuna-gpu-f16")]
     ZunaGpuF16(Box<ZunaGpuF16State>),
+    #[cfg(feature = "embed-zuna-mlx")]
+    ZunaMlx(Box<ZunaMlxState>),
     #[cfg(feature = "embed-luna")]
     Luna(Box<luna_rs::LunaEncoder<burn::backend::NdArray>>),
     #[cfg(feature = "embed-reve")]
@@ -566,15 +568,21 @@ pub(crate) struct ZunaGpuF16State {
     data_config: zuna_rs::config::DataConfig,
 }
 
+#[cfg(feature = "embed-zuna-mlx")]
+pub(crate) struct ZunaMlxState {
+    encoder: zuna_rs::ZunaEncoder<burn_mlx::Mlx>,
+    data_config: zuna_rs::config::DataConfig,
+}
+
 #[cfg(feature = "embed-neurorvq")]
 pub(crate) struct NeuroRVQState {
     model: NeuroRVQFM,
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
-    let use_gpu = skill_settings::load_settings(_skill_dir).exg_inference_device != "cpu";
+    let device_pref = skill_settings::load_settings(_skill_dir).exg_inference_device;
     let backend = config.model_backend.clone();
-    info!(backend = backend.as_str(), gpu = use_gpu, "loading EXG encoder");
+    info!(backend = backend.as_str(), device = %device_pref, "loading EXG encoder");
     let result = match &backend {
         #[cfg(feature = "embed-neurorvq")]
         ExgModelBackend::Neurorvq => {
@@ -598,9 +606,28 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
             info!(repo = %config.hf_repo, "loading ZUNA encoder");
-            // Try GPU backends first when user selects GPU.
+            // Backend selection: auto → mlx (macOS) → gpu → cpu
+            // "auto" on macOS tries MLX first, then GPU, then CPU.
+            // "mlx" forces MLX only (macOS).
+            // "gpu" forces wgpu only.
+            // "cpu" skips all accelerated backends.
+            let _try_mlx = matches!(device_pref.as_str(), "auto" | "mlx");
+            let try_gpu = matches!(device_pref.as_str(), "auto" | "gpu");
+
+            #[cfg(feature = "embed-zuna-mlx")]
+            if _try_mlx {
+                if let Some(s) = load_zuna_mlx(config) {
+                    info!("ZUNA MLX encoder loaded");
+                    return Some(Encoder::ZunaMlx(Box::new(s)));
+                }
+                if device_pref == "mlx" {
+                    warn!("MLX requested but unavailable, falling back to CPU");
+                } else {
+                    warn!("MLX unavailable, trying GPU wgpu");
+                }
+            }
             #[cfg(feature = "embed-zuna-gpu-f16")]
-            if use_gpu {
+            if try_gpu {
                 if let Some(s) = load_zuna_gpu_f16(config) {
                     info!("ZUNA GPU f16 encoder loaded");
                     return Some(Encoder::ZunaGpuF16(Box::new(s)));
@@ -608,7 +635,7 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
                 warn!("GPU f16 unavailable, trying GPU f32");
             }
             #[cfg(feature = "embed-zuna-gpu")]
-            if use_gpu {
+            if try_gpu {
                 if let Some(s) = load_zuna_gpu(config) {
                     info!("ZUNA GPU encoder loaded");
                     return Some(Encoder::ZunaGpu(Box::new(s)));
@@ -752,6 +779,8 @@ fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
         Encoder::ZunaGpu(state) => encode_zuna_gpu(state, msg),
         #[cfg(feature = "embed-zuna-gpu-f16")]
         Encoder::ZunaGpuF16(state) => encode_zuna_gpu_f16(state, msg),
+        #[cfg(feature = "embed-zuna-mlx")]
+        Encoder::ZunaMlx(state) => encode_zuna_mlx(state, msg),
         #[cfg(feature = "embed-luna")]
         Encoder::Luna(enc) => encode_luna(enc, msg),
         #[cfg(feature = "embed-reve")]
@@ -1105,6 +1134,81 @@ fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f3
             return None;
         }
     };
+    epochs.first().map(|ep| {
+        let dim = ep.output_dim();
+        let n_tok = ep.n_tokens();
+        if dim == 0 || n_tok == 0 {
+            return Vec::new();
+        }
+        let mut pooled = vec![0.0f32; dim];
+        for t in 0..n_tok {
+            for (d, p) in pooled.iter_mut().enumerate() {
+                *p += ep.embeddings[t * dim + d];
+            }
+        }
+        let inv = 1.0 / n_tok as f32;
+        for p in &mut pooled {
+            *p *= inv;
+        }
+        pooled
+    })
+}
+
+// ── MLX ZUNA encoder ──────────────────────────────────────────────────────────
+
+#[cfg(feature = "embed-zuna-mlx")]
+fn load_zuna_mlx(config: &ExgModelConfig) -> Option<ZunaMlxState> {
+    match skill_exg::resolve_hf_weights(&config.hf_repo) {
+        Some((weights_path, config_path)) => {
+            info!(weights = %weights_path.display(), "loading ZUNA encoder on MLX (Apple Silicon)");
+            let device = burn_mlx::MlxDevice::default();
+            match zuna_rs::ZunaEncoder::<burn_mlx::Mlx>::load(&config_path, &weights_path, device) {
+                Ok((encoder, ms)) => {
+                    info!(ms, "ZUNA MLX encoder loaded");
+                    let data_config = encoder.data_cfg.clone();
+                    Some(ZunaMlxState { encoder, data_config })
+                }
+                Err(e) => {
+                    warn!(%e, "ZUNA MLX encoder load failed — will try wgpu or CPU");
+                    None
+                }
+            }
+        }
+        None => {
+            warn!("ZUNA weights not found for MLX encoder");
+            None
+        }
+    }
+}
+
+#[cfg(feature = "embed-zuna-mlx")]
+fn encode_zuna_mlx(state: &ZunaMlxState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    use std::collections::HashMap as HM;
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
+    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
+        for (s, &v) in samples.iter().enumerate() {
+            data[[ch, s]] = v;
+        }
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let device = burn_mlx::MlxDevice::default();
+    let empty_pos: HM<String, [f32; 3]> = HM::new();
+    let batches = zuna_rs::load_from_named_tensor::<burn_mlx::Mlx>(
+        data,
+        &ch_names,
+        msg.sample_rate,
+        10.0,
+        &empty_pos,
+        &state.data_config,
+        &device,
+    )
+    .ok()?;
+    let epochs = state.encoder.encode_batches(batches).ok()?;
     epochs.first().map(|ep| {
         let dim = ep.output_dim();
         let n_tok = ep.n_tokens();

@@ -229,7 +229,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::api::router())
         .merge(routes::analysis::router())
         .merge(routes::search::router())
-        .merge(routes::iroh::router());
+        .merge(routes::iroh::router())
+        .merge(routes::brain::router());
 
     // Test-mode endpoints — debug builds only
     #[cfg(debug_assertions)]

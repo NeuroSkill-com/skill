@@ -12,6 +12,7 @@ import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
 import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
 import { Spinner } from "$lib/components/ui/spinner";
+import { daemonGet, daemonPost } from "$lib/daemon/http";
 import {
   type DailySummaryRow,
   type FocusSessionRow,
@@ -36,6 +37,12 @@ import {
   type WeeklyDigest,
 } from "$lib/daemon/settings";
 import { t } from "$lib/i18n/index.svelte";
+import {
+  getFatigue as brainFatigue,
+  getFlow as brainFlow,
+  getStreak as brainStreak,
+  startBrainPolling,
+} from "$lib/stores/brain.svelte";
 
 // ── State ─────────────────────────────────────────────────────────────────
 let loading = $state(true);
@@ -50,6 +57,17 @@ let heatmap = $state<HourlyEditRow[]>([]);
 let sessions = $state<FocusSessionRow[]>([]);
 let meetings = $state<MeetingEventRow[]>([]);
 let staleFiles = $state<StaleFileRow[]>([]);
+
+// Timeline
+let timeline = $state<{ kind: string; title: string; detail: string; ts: number; eeg_focus: number | null }[]>([]);
+
+// Fusion insights
+let taskType = $state<{ task_type: string; confidence: number; signals: string[] } | null>(null);
+let codeEeg = $state<{
+  by_language: { key: string; avg_focus: number; total_mins: number; interactions: number }[];
+  best_files: { key: string; avg_focus: number }[];
+  worst_files: { key: string; avg_focus: number }[];
+} | null>(null);
 
 // ── Focus session replay ──────────────────────────────────────────────────
 let expandedSession = $state<number | null>(null);
@@ -135,6 +153,7 @@ function fmtTime(unix: number): string {
 }
 
 onMount(async () => {
+  startBrainPolling();
   todayStart = todayUnix();
   const dayEnd = todayStart + 86400;
   const weekAgo = todayStart - 7 * 86400;
@@ -150,6 +169,9 @@ onMount(async () => {
       getFocusSessions(20, weekAgo),
       getMeetingsInRange(weekAgo, dayEnd),
       getStaleFiles(weekAgo),
+      daemonPost("/v1/brain/task-type", { windowSecs: 300 }),
+      daemonPost("/v1/brain/code-eeg", { since: weekAgo }),
+      daemonPost("/v1/activity/timeline", { since: weekAgo, limit: 30 }),
     ]);
 
     if (results[0].status === "fulfilled") summary = results[0].value;
@@ -161,6 +183,9 @@ onMount(async () => {
     if (results[6].status === "fulfilled") sessions = results[6].value;
     if (results[7].status === "fulfilled") meetings = results[7].value;
     if (results[8].status === "fulfilled") staleFiles = results[8].value;
+    if (results[9].status === "fulfilled") taskType = results[9].value as typeof taskType;
+    if (results[10].status === "fulfilled") codeEeg = results[10].value as typeof codeEeg;
+    if (results[11].status === "fulfilled") timeline = (results[11].value as typeof timeline) ?? [];
   } catch {}
   loading = false;
 });
@@ -172,11 +197,98 @@ $effect(() => {
 let heatmapMax = $state(1);
 </script>
 
+<!-- ── Brain State (real-time) ──────────────────────────────────────────── -->
+{#if true}
+{@const flow = brainFlow()}
+{@const fatigue = brainFatigue()}
+{@const streak = brainStreak()}
+{#if flow || fatigue || streak}
+  <section class="flex gap-2">
+    {#if flow}
+      <div class="flex-1 rounded-lg border px-3 py-2
+        {flow.in_flow
+          ? 'border-emerald-500/30 bg-emerald-500/5'
+          : 'border-border dark:border-white/[0.06] bg-muted/30 dark:bg-white/[0.02]'}">
+        <div class="flex items-center gap-1.5">
+          {#if flow.in_flow}
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="text-ui-sm font-bold text-emerald-500">FLOW</span>
+            <span class="text-ui-xs text-emerald-500/60 tabular-nums">{Math.floor(flow.duration_secs / 60)}m</span>
+          {:else}
+            <span class="w-2 h-2 rounded-full bg-muted-foreground/20"></span>
+            <span class="text-ui-sm text-muted-foreground/50">{t("activity.noFlow")}</span>
+          {/if}
+        </div>
+        {#if flow.avg_focus != null}
+          <div class="mt-1 text-ui-2xs text-muted-foreground/40">
+            {t("activity.eegFocus")}: {flow.avg_focus.toFixed(0)} | {flow.edit_velocity.toFixed(1)} ln/min
+          </div>
+        {/if}
+      </div>
+    {/if}
+    {#if fatigue?.fatigued}
+      <div class="flex-1 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+        <div class="text-ui-sm font-bold text-amber-500">{t("activity.fatiguedTitle")}</div>
+        <div class="text-ui-2xs text-amber-500/60">{fatigue.suggestion}</div>
+      </div>
+    {/if}
+    {#if streak && streak.current_streak_days > 0}
+      <div class="flex-1 rounded-lg border border-violet-500/30 bg-violet-500/5 px-3 py-2">
+        <div class="flex items-baseline gap-1">
+          <span class="text-ui-lg font-bold text-violet-500 tabular-nums">{streak.current_streak_days}</span>
+          <span class="text-ui-xs text-violet-500/60">{t("activity.streakDays")}</span>
+        </div>
+        <div class="text-ui-2xs text-muted-foreground/40">{streak.today_deep_mins}m {t("activity.deepWork")} {t("activity.todayLabel")}</div>
+      </div>
+    {/if}
+  </section>
+{/if}
+{/if}
+
 {#if loading}
   <div class="flex items-center justify-center py-12">
     <Spinner size="w-5 h-5" class="text-muted-foreground/40" />
   </div>
 {:else}
+  <!-- ── Activity Timeline ──────────────────────────────────────────────── -->
+  {#if timeline.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>{t("activity.timeline")}</SectionHeader>
+      <SettingsCard>
+        <CardContent class="py-0 px-0 max-h-64 overflow-y-auto">
+          <div class="divide-y divide-border dark:divide-white/[0.04]">
+            {#each timeline as ev}
+              {@const kindColors: Record<string, string> = {
+                file: "text-sky-500", build: ev.detail === "fail" ? "text-red-400" : "text-emerald-500",
+                meeting: "text-amber-500", ai: "text-violet-500", clipboard: "text-muted-foreground/40", label: "text-violet-400",
+              }}
+              {@const kindIcons: Record<string, string> = {
+                file: "~", build: ev.detail === "fail" ? "x" : "+", meeting: "@", ai: "*", clipboard: "=", label: "#",
+              }}
+              <div class="flex items-center gap-2 px-2.5 py-1 text-ui-2xs">
+                <span class="w-3 font-mono font-bold {kindColors[ev.kind] ?? 'text-muted-foreground/30'} shrink-0">{kindIcons[ev.kind] ?? "."}</span>
+                <span class="text-muted-foreground/40 tabular-nums shrink-0 w-12">{fmtTime(ev.ts)}</span>
+                <span class="truncate min-w-0 flex-1 {ev.kind === 'file' ? 'font-mono' : ''} text-foreground/80">
+                  {ev.kind === "file" ? ev.title.split("/").pop() : ev.title}
+                </span>
+                {#if ev.detail}
+                  <span class="text-muted-foreground/30 truncate shrink-0 max-w-24">{ev.detail}</span>
+                {/if}
+                {#if ev.eeg_focus != null}
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0
+                    {ev.eeg_focus >= 70 ? 'bg-emerald-500' : ev.eeg_focus >= 40 ? 'bg-amber-400' : 'bg-red-400'}"></span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
   <!-- ── Today's Summary ──────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("activity.todaySummary")}</SectionHeader>
@@ -471,6 +583,52 @@ let heatmapMax = $state(1);
               </div>
             {/each}
           </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Code-Brain Correlation ──────────────────────────────────────────── -->
+  {#if codeEeg && (codeEeg.by_language.length > 0 || codeEeg.best_files.length > 0)}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>{t("activity.codeBrain")}</SectionHeader>
+      <SettingsCard>
+        <CardContent class="py-3">
+          {#if codeEeg.by_language.length > 0}
+            <div class="flex flex-col gap-1.5 mb-3">
+              <span class="text-ui-2xs text-muted-foreground/40">{t("activity.brainByLanguage")}</span>
+              {#each codeEeg.by_language.slice(0, 6) as lang}
+                <div class="flex items-center gap-2 text-ui-sm">
+                  <span class="w-16 truncate text-ui-xs text-muted-foreground/60 shrink-0">{lang.key}</span>
+                  <div class="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                    <div class="h-full rounded-full {lang.avg_focus >= 70 ? 'bg-emerald-500/60' : lang.avg_focus >= 40 ? 'bg-amber-400/60' : 'bg-red-400/60'}"
+                         style="width:{lang.avg_focus}%"></div>
+                  </div>
+                  <span class="text-ui-2xs tabular-nums text-muted-foreground/40 w-6 text-right shrink-0">{lang.avg_focus.toFixed(0)}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if codeEeg.best_files.length > 0 || codeEeg.worst_files.length > 0}
+            <div class="grid grid-cols-2 gap-3 text-ui-2xs">
+              {#if codeEeg.best_files.length > 0}
+                <div>
+                  <span class="text-emerald-500/60 font-semibold">{t("activity.bestFiles")}</span>
+                  {#each codeEeg.best_files.slice(0, 3) as f}
+                    <div class="truncate text-muted-foreground/50" title={f.key}>{f.key.split("/").pop()} ({f.avg_focus.toFixed(0)})</div>
+                  {/each}
+                </div>
+              {/if}
+              {#if codeEeg.worst_files.length > 0}
+                <div>
+                  <span class="text-red-400/60 font-semibold">{t("activity.worstFiles")}</span>
+                  {#each codeEeg.worst_files.slice(0, 3) as f}
+                    <div class="truncate text-muted-foreground/50" title={f.key}>{f.key.split("/").pop()} ({f.avg_focus.toFixed(0)})</div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </CardContent>
       </SettingsCard>
     </section>

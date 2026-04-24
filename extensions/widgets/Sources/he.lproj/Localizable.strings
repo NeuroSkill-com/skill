@@ -1,0 +1,131 @@
+/* Hebrew */
+
+"widget.focus.name" = "ציון מיקוד";
+"widget.focus.desc" = "רמת מיקוד ומצב זרימה בזמן אמת.";
+"widget.streak.name" = "רצף עבודה עמוקה";
+"widget.streak.desc" = "עקוב אחר רצף העבודה העמוקה היומי שלך.";
+"widget.dash.name" = "לוח מחוונים מוחי";
+"widget.dash.desc" = "מיקוד, זרימה, עייפות ורצף במבט אחד.";
+"widget.hours.name" = "שעות אופטימליות";
+"widget.hours.desc" = "שעות המיקוד הטובות והגרועות ביותר שלך.";
+"widget.break.name" = "טיימר הפסקה";
+"widget.break.desc" = "ספירה לאחור להפסקה המומלצת הבאה.";
+"widget.session.name" = "סטטוס הפעלה";
+"widget.session.desc" = "הקלטה, איכות אות וסוללה.";
+"widget.daily.name" = "דוח יומי";
+"widget.daily.desc" = "מיקוד, פרודוקטיביות ותקופות של היום.";
+"widget.weekly.name" = "מגמה שבועית";
+"widget.weekly.desc" = "מגמת מיקוד של 7 ימים עם ממוצעים יומיים.";
+"widget.hr.name" = "דופק";
+"widget.hr.desc" = "דופק, HRV ומדד לחץ בזמן אמת.";
+"widget.cog.name" = "עומס קוגניטיבי";
+"widget.cog.desc" = "עומס קוגניטיבי נוכחי ותחומי קושי.";
+
+"focus.label" = "מיקוד";
+"focus.inFlow" = "בזרימה";
+"focus.notInFlow" = "לא בזרימה";
+
+"streak.label" = "רצף";
+"streak.day" = "יום";
+"streak.days" = "ימים";
+"streak.today" = "היום";
+
+"dash.monitoring" = "ניטור";
+"dash.fresh" = "רענן";
+"dash.fatigued" = "עייף";
+"dash.deepWork" = "עבודה עמוקה";
+
+"hours.title" = "שעות שיא";
+"hours.peak" = "שיא";
+
+"break.title" = "הפסקה";
+"break.minsLeft" = "דק' נותרו";
+"break.overdue" = "איחור";
+"break.working" = "עובד";
+
+"session.title" = "הפעלה";
+"session.signal" = "אות";
+"session.noDevice" = "אין מכשיר מחובר";
+"session.connectHint" = "פתח את NeuroSkill לחיבור";
+
+"daily.today" = "היום";
+"daily.avgFocus" = "מיקוד ממוצע";
+"daily.best" = "הכי טוב";
+"daily.morning" = "בוקר";
+"daily.afternoon" = "צהריים";
+"daily.evening" = "ערב";
+
+"weekly.subtitle" = "מגמת 7 ימים";
+"weekly.avgFocus" = "מיקוד ממוצע";
+"weekly.day" = "יום";
+
+"hr.title" = "דופק";
+"hr.stress" = "לחץ";
+"hr.low" = "נמוך";
+"hr.moderate" = "בינוני";
+"hr.high" = "גבוה";
+"hr.unknown" = "—";
+"hr.resp" = "נשימה";
+"hr.noPpg" = "אין נתוני PPG\nחבר מכשיר PPG";
+
+"cog.title" = "עומס קוג.";
+"cog.light" = "קל";
+"cog.moderate" = "בינוני";
+"cog.heavy" = "כבד";
+
+"status.daemonOffline" = "שרת לא מחובר";
+"status.noDevice" = "ללא מכשיר";
+"status.connected" = "מחובר";
+"status.scanning" = "סורק";
+"status.idle" = "לא פעיל";
+"status.recording" = "מקליט";
+"status.battery" = "סוללה";
+
+/* Calendar Mind State */
+"widget.cal.name" = "מצב מוחי ביומן";
+"widget.cal.desc" = "מצב המוח שלך ממופה על לוח הזמנים של היום.";
+"cal.subtitle" = "מוח + יומן";
+"cal.deepWork" = "עבודה עמוקה";
+"cal.noEvents" = "אין אירועים היום";
+"cal.freeDay" = "יומן פנוי — מושלם לעבודה עמוקה";
+"cal.slowRecovery" = "ממוצע %d דק' התאוששות אחרי פגישות";
+"cal.avoidHour" = "הימנע מעבודה עמוקה ב-%@";
+
+/* EEG Band Power */
+"widget.eeg.name" = "עוצמת פסי EEG";
+"widget.eeg.desc" = "עוצמות פסי alpha, beta, theta, gamma בזמן אמת.";
+"widget.eeg.medName" = "ספקטרום EEG";
+"widget.eeg.medDesc" = "ספקטרום מלא של עוצמת פסים עם הרפיה ומעורבות.";
+"eeg.title" = "פסי EEG";
+"eeg.spectrum" = "ספקטרום";
+"eeg.relax" = "הרפיה";
+"eeg.engage" = "מעורבות";
+"eeg.dominant" = "דומיננטי";
+
+/* Sleep Quality */
+"widget.sleep.name" = "איכות שינה";
+"widget.sleep.desc" = "משך השינה, שלבים וציון איכות של הלילה האחרון.";
+"widget.sleep.medName" = "ניתוח שינה";
+"widget.sleep.medDesc" = "פירוט מפורט של שלבי שינה עם ציון איכות.";
+"sleep.title" = "שינה";
+"sleep.lastNight" = "הלילה האחרון";
+"sleep.quality" = "איכות";
+"sleep.deep" = "עמוקה";
+"sleep.light" = "קלה";
+"sleep.rem" = "REM";
+"sleep.wake" = "ערות";
+
+/* Error states */
+"error.daemonOffline" = "שרת לא מחובר";
+"error.tokenMissing" = "טוקן חסר";
+"error.apiError" = "שגיאת API";
+"error.startApp" = "פתח את NeuroSkill כדי להתחיל";
+"error.reinstall" = "התקן מחדש או הפעל את האפליקציה";
+
+/* Accessibility */
+"a11y.good" = "טוב";
+"a11y.moderate" = "בינוני";
+"a11y.low" = "נמוך";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

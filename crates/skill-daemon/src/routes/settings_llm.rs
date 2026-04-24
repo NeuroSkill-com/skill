@@ -127,7 +127,12 @@ pub(crate) async fn set_exg_inference_device(
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
     let mut settings = load_user_settings(&state);
-    settings.exg_inference_device = if req.value == "cpu" { "cpu".into() } else { "gpu".into() };
+    settings.exg_inference_device = match req.value.as_str() {
+        "mlx" => "mlx".into(),
+        "gpu" => "gpu".into(),
+        "cpu" => "cpu".into(),
+        _ => "auto".into(),
+    };
     let out = settings.exg_inference_device.clone();
     save_user_settings(&state, &settings);
     Json(serde_json::json!({"ok": true, "value": out}))

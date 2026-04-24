@@ -6,6 +6,7 @@
 // the Free Software Foundation, version 3 only.
 
 export { default as ArtifactEvents } from "./ArtifactEvents.svelte";
+export { default as BrainCard } from "./BrainCard.svelte";
 export { default as BrainStateScores } from "./BrainStateScores.svelte";
 export { default as CollapsibleSection } from "./CollapsibleSection.svelte";
 export { default as CompositeScores } from "./CompositeScores.svelte";

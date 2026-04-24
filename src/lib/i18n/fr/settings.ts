@@ -205,9 +205,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "Périphérique d’inférence",
   "settings.inferenceDeviceDesc":
     "Où l’inférence IA s’exécute. Le GPU est plus rapide ; le CPU fonctionne sur n’importe quelle machine sans pression sur la VRAM. Redémarrez le serveur LLM après modification.",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "MLX sur Apple Silicon, GPU ailleurs.",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Natif Apple Silicon — le plus rapide sur Mac.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "Utilise le GPU / Metal / CUDA pour une inférence rapide (recommandé).",
+  "settings.inferenceDeviceGpuDesc": "Utilise wgpu (Metal / Vulkan) pour l’inférence.",
   "settings.inferenceDeviceCpuDesc": "S’exécute entièrement sur le CPU — plus lent mais fonctionne sans GPU.",
   "settings.inferenceDeviceRestartHint": "Redémarrez le serveur LLM pour appliquer.",
   "settings.inferenceDeviceExgRestartHint": "Reconnectez votre casque pour appliquer.",
@@ -280,10 +284,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "Charger le rapport hebdomadaire",
   "activity.weeklyAvgFocus": "Focus moyen",
   "activity.peakHour": "Heure de pointe",
+  "activity.noFlow": "Pas de flow",
+  "activity.fatiguedTitle": "Concentration en baisse",
+  "activity.streakDays": "jours de serie",
+  "activity.todayLabel": "aujourd'hui",
+  "activity.timeline": "Chronologie",
+  "activity.codeBrain": "Corrélation code-cerveau",
+  "activity.brainByLanguage": "Focus par langage",
+  "activity.bestFiles": "Meilleur focus",
+  "activity.worstFiles": "Focus le plus bas",
 
   "umapSettings.backend": "Backend de calcul",
   "umapSettings.backendDesc":
     "Sélectionner le backend de calcul pour la projection UMAP. Auto choisit MLX sur Apple Silicon, GPU (wgpu) ailleurs.",
+  "umapSettings.precision": "Précision",
+  "umapSettings.precisionDesc":
+    "Précision en virgule flottante. F16 (demi) est plus rapide et utilise moins de mémoire ; F32 (pleine) est plus précise.",
 
   "umapSettings.repulsion": "Répulsion",
   "umapSettings.repulsionStrength": "Force de répulsion",

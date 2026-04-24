@@ -1,0 +1,131 @@
+/* French */
+
+"widget.focus.name" = "Score de concentration";
+"widget.focus.desc" = "Niveau de concentration et état de flow en temps réel.";
+"widget.streak.name" = "Série de travail profond";
+"widget.streak.desc" = "Suivez votre série quotidienne de travail profond.";
+"widget.dash.name" = "Tableau de bord cérébral";
+"widget.dash.desc" = "Concentration, flow, fatigue et série en un coup d'œil.";
+"widget.hours.name" = "Heures optimales";
+"widget.hours.desc" = "Vos meilleures et pires heures de concentration.";
+"widget.break.name" = "Minuterie de pause";
+"widget.break.desc" = "Compte à rebours jusqu'à votre prochaine pause.";
+"widget.session.name" = "État de session";
+"widget.session.desc" = "Enregistrement, qualité du signal et batterie.";
+"widget.daily.name" = "Rapport quotidien";
+"widget.daily.desc" = "Concentration, productivité et périodes du jour.";
+"widget.weekly.name" = "Tendance hebdomadaire";
+"widget.weekly.desc" = "Tendance de concentration sur 7 jours.";
+"widget.hr.name" = "Fréquence cardiaque";
+"widget.hr.desc" = "Fréquence cardiaque, VFC et indice de stress en direct.";
+"widget.cog.name" = "Charge cognitive";
+"widget.cog.desc" = "Charge cognitive actuelle et zones de difficulté.";
+
+"focus.label" = "Concentration";
+"focus.inFlow" = "En flow";
+"focus.notInFlow" = "Pas en flow";
+
+"streak.label" = "Série";
+"streak.day" = "jour";
+"streak.days" = "jours";
+"streak.today" = "Aujourd'hui";
+
+"dash.monitoring" = "Surveillance";
+"dash.fresh" = "Frais";
+"dash.fatigued" = "Fatigué";
+"dash.deepWork" = "Travail profond";
+
+"hours.title" = "Meilleures heures";
+"hours.peak" = "Pic";
+
+"break.title" = "Pause";
+"break.minsLeft" = "min restantes";
+"break.overdue" = "En retard";
+"break.working" = "en cours";
+
+"session.title" = "Session";
+"session.signal" = "Signal";
+"session.noDevice" = "Aucun appareil connecté";
+"session.connectHint" = "Ouvrez NeuroSkill pour connecter";
+
+"daily.today" = "Aujourd'hui";
+"daily.avgFocus" = "Concentration moy.";
+"daily.best" = "Meilleur";
+"daily.morning" = "Matin";
+"daily.afternoon" = "Après-midi";
+"daily.evening" = "Soir";
+
+"weekly.subtitle" = "Tendance 7 jours";
+"weekly.avgFocus" = "Concentration moy.";
+"weekly.day" = "jour";
+
+"hr.title" = "Fréq. cardiaque";
+"hr.stress" = "Stress";
+"hr.low" = "Faible";
+"hr.moderate" = "Modéré";
+"hr.high" = "Élevé";
+"hr.unknown" = "—";
+"hr.resp" = "Resp.";
+"hr.noPpg" = "Pas de données PPG\nConnectez un appareil PPG";
+
+"cog.title" = "Charge cog.";
+"cog.light" = "Légère";
+"cog.moderate" = "Modérée";
+"cog.heavy" = "Lourde";
+
+"status.daemonOffline" = "Daemon hors ligne";
+"status.noDevice" = "Aucun appareil";
+"status.connected" = "Connecté";
+"status.scanning" = "Recherche";
+"status.idle" = "Inactif";
+"status.recording" = "Enregistrement";
+"status.battery" = "Batterie";
+
+/* Calendar Mind State */
+"widget.cal.name" = "État mental du calendrier";
+"widget.cal.desc" = "Votre état cérébral projeté sur l'emploi du temps du jour.";
+"cal.subtitle" = "Esprit + Calendrier";
+"cal.deepWork" = "Travail profond";
+"cal.noEvents" = "Aucun événement aujourd'hui";
+"cal.freeDay" = "Calendrier vide — parfait pour le travail profond";
+"cal.slowRecovery" = "Moy. %d min de récupération après les réunions";
+"cal.avoidHour" = "Évitez le travail profond à %@";
+
+/* EEG Band Power */
+"widget.eeg.name" = "Puissance des bandes EEG";
+"widget.eeg.desc" = "Puissances en direct des bandes alpha, beta, theta, gamma.";
+"widget.eeg.medName" = "Spectre EEG";
+"widget.eeg.medDesc" = "Spectre complet de puissance avec relaxation et engagement.";
+"eeg.title" = "Bandes EEG";
+"eeg.spectrum" = "Spectre";
+"eeg.relax" = "Relaxation";
+"eeg.engage" = "Engagement";
+"eeg.dominant" = "Dominant";
+
+/* Sleep Quality */
+"widget.sleep.name" = "Qualité du sommeil";
+"widget.sleep.desc" = "Durée, phases et score de qualité du sommeil de la nuit dernière.";
+"widget.sleep.medName" = "Analyse du sommeil";
+"widget.sleep.medDesc" = "Répartition détaillée des phases de sommeil avec score de qualité.";
+"sleep.title" = "Sommeil";
+"sleep.lastNight" = "Nuit dernière";
+"sleep.quality" = "Qualité";
+"sleep.deep" = "Profond";
+"sleep.light" = "Léger";
+"sleep.rem" = "REM";
+"sleep.wake" = "Éveil";
+
+/* Error states */
+"error.daemonOffline" = "Daemon hors ligne";
+"error.tokenMissing" = "Token manquant";
+"error.apiError" = "Erreur API";
+"error.startApp" = "Ouvrez NeuroSkill pour démarrer";
+"error.reinstall" = "Réinstallez ou lancez l'app";
+
+/* Accessibility */
+"a11y.good" = "Bon";
+"a11y.moderate" = "Modéré";
+"a11y.low" = "Faible";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

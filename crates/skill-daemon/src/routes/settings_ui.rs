@@ -262,17 +262,36 @@ pub(crate) async fn set_umap_config(
     Json(config): Json<skill_settings::UmapUserConfig>,
 ) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let old = skill_settings::load_umap_config(&skill_dir);
+    // Only invalidate the cache when a parameter that affects the computed
+    // result changes.  Switching GPU backend does not alter the output, so
+    // we skip the expensive cache purge in that case.
+    let results_changed = old.precision != config.precision
+        || old.repulsion_strength != config.repulsion_strength
+        || old.neg_sample_rate != config.neg_sample_rate
+        || old.n_epochs != config.n_epochs
+        || old.n_neighbors != config.n_neighbors
+        || old.cooldown_ms != config.cooldown_ms
+        || old.timeout_secs != config.timeout_secs;
     skill_settings::save_umap_config(&skill_dir, &config);
-    let cache_dir = skill_dir.join("umap_cache");
-    if cache_dir.exists() {
-        let _ = std::fs::remove_dir_all(&cache_dir);
+    if results_changed {
+        let cache_dir = skill_dir.join("umap_cache");
+        if cache_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cache_dir);
+        }
     }
     Json(serde_json::json!({"ok": true}))
 }
 
 pub(crate) async fn get_umap_backends() -> Json<serde_json::Value> {
+    let backends = skill_router::available_backends();
+    let precisions: std::collections::HashMap<&str, Vec<&str>> = backends
+        .iter()
+        .map(|&b| (b, skill_router::available_precisions(b)))
+        .collect();
     Json(serde_json::json!({
-        "available": skill_router::available_backends(),
+        "available": backends,
+        "precisions": precisions,
     }))
 }
 

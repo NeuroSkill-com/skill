@@ -31,6 +31,7 @@
     "test:pre-commit": "bash scripts/test-all.sh pre-commit",
     "test:pre-push": "bash scripts/test-all.sh pre-push",
     "test:e2e": "bash scripts/test-all.sh e2e",
+    "test:mlx-e2e": "bash scripts/test-all.sh mlx-e2e",
     "test:llm:e2e": "cargo test -p skill-llm --features llm --test llm_e2e -- --nocapture",
     "preview": "vite preview",
     "check:markdown-renderer": "node scripts/check-markdown-renderer.js",

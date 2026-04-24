@@ -75,5 +75,24 @@
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>Skill uses your location to provide geographic context for EEG sessions and to enrich LLM responses with local information such as timezone, city, and weather.</string>
 
+  <!-- ── URL Scheme (widget deep links) ─────────────────────────────────── -->
+
+  <!--
+    Custom URL scheme for WidgetKit deep links.  Widgets use
+    neuroskill://dashboard, neuroskill://devices, etc. to open
+    specific sections of the app when tapped.
+  -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.neuroskill.skill</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>neuroskill</string>
+      </array>
+    </dict>
+  </array>
+
 </dict>
 </plist>

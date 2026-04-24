@@ -1,0 +1,131 @@
+/* Japanese */
+
+"widget.focus.name" = "集中スコア";
+"widget.focus.desc" = "リアルタイムの集中力レベルとフロー状態。";
+"widget.streak.name" = "ディープワーク連続記録";
+"widget.streak.desc" = "毎日のディープワーク連続記録を追跡。";
+"widget.dash.name" = "ブレインダッシュボード";
+"widget.dash.desc" = "集中、フロー、疲労、連続記録を一目で確認。";
+"widget.hours.name" = "最適時間帯";
+"widget.hours.desc" = "最も集中できる時間帯と苦手な時間帯。";
+"widget.break.name" = "休憩タイマー";
+"widget.break.desc" = "次の推奨休憩までのカウントダウン。";
+"widget.session.name" = "セッション状態";
+"widget.session.desc" = "録画、信号品質、バッテリー。";
+"widget.daily.name" = "デイリーレポート";
+"widget.daily.desc" = "今日の集中力、生産性、時間帯別分析。";
+"widget.weekly.name" = "週間トレンド";
+"widget.weekly.desc" = "7日間の集中力トレンドと日別平均。";
+"widget.hr.name" = "心拍数";
+"widget.hr.desc" = "リアルタイム心拍数、HRV、ストレス指数。";
+"widget.cog.name" = "認知負荷";
+"widget.cog.desc" = "現在の認知負荷と困難な領域。";
+
+"focus.label" = "集中";
+"focus.inFlow" = "フロー中";
+"focus.notInFlow" = "フローなし";
+
+"streak.label" = "連続";
+"streak.day" = "日";
+"streak.days" = "日間";
+"streak.today" = "今日";
+
+"dash.monitoring" = "モニタリング";
+"dash.fresh" = "快調";
+"dash.fatigued" = "疲労";
+"dash.deepWork" = "ディープワーク";
+
+"hours.title" = "ピーク時間";
+"hours.peak" = "ピーク";
+
+"break.title" = "休憩";
+"break.minsLeft" = "分残り";
+"break.overdue" = "超過";
+"break.working" = "作業中";
+
+"session.title" = "セッション";
+"session.signal" = "信号";
+"session.noDevice" = "デバイス未接続";
+"session.connectHint" = "NeuroSkillを開いて接続";
+
+"daily.today" = "今日";
+"daily.avgFocus" = "平均集中";
+"daily.best" = "最高";
+"daily.morning" = "午前";
+"daily.afternoon" = "午後";
+"daily.evening" = "夜";
+
+"weekly.subtitle" = "7日間トレンド";
+"weekly.avgFocus" = "平均集中";
+"weekly.day" = "日";
+
+"hr.title" = "心拍数";
+"hr.stress" = "ストレス";
+"hr.low" = "低";
+"hr.moderate" = "中";
+"hr.high" = "高";
+"hr.unknown" = "—";
+"hr.resp" = "呼吸";
+"hr.noPpg" = "PPGデータなし\nPPGデバイスを接続";
+
+"cog.title" = "認知負荷";
+"cog.light" = "軽い";
+"cog.moderate" = "中程度";
+"cog.heavy" = "重い";
+
+"status.daemonOffline" = "デーモンオフライン";
+"status.noDevice" = "デバイスなし";
+"status.connected" = "接続中";
+"status.scanning" = "スキャン中";
+"status.idle" = "待機中";
+"status.recording" = "記録中";
+"status.battery" = "バッテリー";
+
+/* Calendar Mind State */
+"widget.cal.name" = "カレンダー脳状態";
+"widget.cal.desc" = "今日のスケジュールに脳の状態をマッピング。";
+"cal.subtitle" = "マインド + カレンダー";
+"cal.deepWork" = "ディープワーク";
+"cal.noEvents" = "今日の予定なし";
+"cal.freeDay" = "予定なし — ディープワークに最適";
+"cal.slowRecovery" = "会議後の平均回復時間 %d分";
+"cal.avoidHour" = "%@のディープワークを避ける";
+
+/* EEG Band Power */
+"widget.eeg.name" = "EEG帯域パワー";
+"widget.eeg.desc" = "Alpha、Beta、Theta、Gamma帯域パワーをライブ表示。";
+"widget.eeg.medName" = "EEGスペクトラム";
+"widget.eeg.medDesc" = "リラクゼーションとエンゲージメント付きの完全な帯域パワースペクトラム。";
+"eeg.title" = "EEG帯域";
+"eeg.spectrum" = "スペクトラム";
+"eeg.relax" = "リラックス";
+"eeg.engage" = "集中";
+"eeg.dominant" = "優勢";
+
+/* Sleep Quality */
+"widget.sleep.name" = "睡眠品質";
+"widget.sleep.desc" = "昨夜の睡眠時間、ステージ、品質スコア。";
+"widget.sleep.medName" = "睡眠分析";
+"widget.sleep.medDesc" = "品質スコア付きの詳細な睡眠ステージ内訳。";
+"sleep.title" = "睡眠";
+"sleep.lastNight" = "昨夜";
+"sleep.quality" = "品質";
+"sleep.deep" = "深い";
+"sleep.light" = "浅い";
+"sleep.rem" = "REM";
+"sleep.wake" = "覚醒";
+
+/* Error states */
+"error.daemonOffline" = "デーモンオフライン";
+"error.tokenMissing" = "トークン未設定";
+"error.apiError" = "APIエラー";
+"error.startApp" = "NeuroSkillを開いて開始";
+"error.reinstall" = "再インストールまたはアプリを起動";
+
+/* Accessibility */
+"a11y.good" = "良好";
+"a11y.moderate" = "普通";
+"a11y.low" = "低い";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

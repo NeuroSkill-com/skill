@@ -997,12 +997,14 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                         store.insert_meeting_start(platform, &info.window_title, &info.app_name, unix_secs())
                     {
                         active_meeting = Some((id, platform));
+                        auto_label_eeg(&skill_dir, &format!("meeting start: {platform}"), &info.window_title);
                     }
                 }
                 (None, Some((id, _))) => {
                     // Meeting ended.
                     store.update_meeting_end(*id, unix_secs());
                     active_meeting = None;
+                    auto_label_eeg(&skill_dir, "meeting end", "");
                 }
                 (Some(new_plat), Some((id, old_plat))) if new_plat != *old_plat => {
                     // Switched meeting platforms — end old, start new.
@@ -1489,6 +1491,21 @@ fn extract_browser_title(app_name: &str, title: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Auto-label the EEG recording when significant activity events occur.
+fn auto_label_eeg(skill_dir: &std::path::Path, text: &str, context: &str) {
+    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
+    let conn = match rusqlite::Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let now = unix_secs() as i64;
+    let _ = conn.execute(
+        "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
+         VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3)",
+        rusqlite::params![text, context, now],
+    );
 }
 
 /// Check if a file path matches any exclude pattern.

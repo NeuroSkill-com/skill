@@ -19,7 +19,9 @@ pub fn spawn_all(state: AppState) {
     spawn_auto_connect(state.clone());
     spawn_calibration_auto_start(state.clone());
     spawn_screenshot_worker(state.clone());
-    spawn_weekly_digest(state);
+    spawn_weekly_digest(state.clone());
+    spawn_fatigue_monitor(state.clone());
+    spawn_daily_brain_report(state);
 }
 
 fn spawn_calibration_auto_start(state: AppState) {
@@ -316,6 +318,128 @@ fn spawn_weekly_digest(state: AppState) {
             }
 
             // Dedup handled by ISO week check above — no extra sleep needed.
+        }
+    });
+}
+
+/// Insert an auto-generated EEG label for significant activity state transitions.
+/// Labels are stored in `labels.sqlite` alongside manual labels, enabling
+/// EEG search to find brain states correlated with coding events.
+fn auto_label(skill_dir: &std::path::Path, text: &str, context: &str) {
+    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
+    let conn = match rusqlite::Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let _ = conn.execute(
+        "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
+         VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3)",
+        rusqlite::params![text, context, now as i64],
+    );
+}
+
+/// Fatigue monitor — checks every 15 minutes for declining focus trend.
+/// Broadcasts `fatigue-alert` event and sends OS notification when fatigued.
+fn spawn_fatigue_monitor(state: AppState) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        loop {
+            tokio::time::sleep(Duration::from_secs(900)).await; // 15 minutes
+
+            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+            let alert = tokio::task::spawn_blocking(move || {
+                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.fatigue_check())
+            })
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(a) = alert {
+                if a.fatigued {
+                    state.broadcast(
+                        "fatigue-alert",
+                        serde_json::json!({
+                            "fatigued": true,
+                            "decline_pct": a.focus_decline_pct,
+                            "continuous_work_mins": a.continuous_work_mins,
+                            "suggestion": a.suggestion,
+                        }),
+                    );
+                    let _ = skill_data::dnd::send_notification("Focus declining", &a.suggestion);
+                    // Auto-label for EEG correlation.
+                    let sd = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+                    auto_label(
+                        &sd,
+                        "fatigue detected",
+                        &format!(
+                            "decline {}%, work {}m",
+                            a.focus_decline_pct as i32, a.continuous_work_mins
+                        ),
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// Daily brain report — fires at 6pm local, sends summary as notification.
+fn spawn_daily_brain_report(state: AppState) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        let mut last_report_day: i32 = -1;
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+
+            let now = chrono::Local::now();
+            if now.hour() != 18 {
+                continue;
+            }
+            let day_of_year = now.ordinal() as i32;
+            if day_of_year == last_report_day {
+                continue;
+            }
+            last_report_day = day_of_year;
+
+            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+            let today_start = {
+                let d = now.date_naive();
+                d.and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_local_timezone(chrono::Local)
+                    .earliest()
+                    .map(|t| t.timestamp() as u64)
+                    .unwrap_or(0)
+            };
+
+            let report = tokio::task::spawn_blocking(move || {
+                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.daily_brain_report(today_start))
+            })
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(r) = report {
+                let body = format!(
+                    "Best: {}. Score: {:.0}. Focus: {:.0}.",
+                    r.best_period,
+                    r.productivity_score,
+                    r.overall_focus.unwrap_or(0.0)
+                );
+                state.broadcast(
+                    "daily-brain-report",
+                    serde_json::json!({
+                        "day_start": r.day_start,
+                        "best_period": r.best_period,
+                        "productivity_score": r.productivity_score,
+                        "overall_focus": r.overall_focus,
+                    }),
+                );
+                let _ = skill_data::dnd::send_notification("Daily Brain Report", &body);
+            }
         }
     });
 }

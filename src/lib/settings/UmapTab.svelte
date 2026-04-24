@@ -25,6 +25,7 @@ interface UmapConfig {
   n_neighbors: number;
   cooldown_ms: number;
   backend: string;
+  precision: string;
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -36,8 +37,10 @@ let cfg = $state<UmapConfig>({
   n_neighbors: 15,
   cooldown_ms: 0,
   backend: "auto",
+  precision: "f32",
 });
 let availableBackends = $state<string[]>([]);
+let precisionsByBackend = $state<Record<string, string[]>>({});
 let saving = $state(false);
 let dirty = $state(false);
 let loaded = $state(false);
@@ -66,6 +69,7 @@ async function resetDefaults() {
     n_neighbors: 15,
     cooldown_ms: 0,
     backend: "auto",
+    precision: "f32",
   };
   dirty = true;
   await save();
@@ -75,10 +79,11 @@ async function resetDefaults() {
 onMount(async () => {
   const [config, backends] = await Promise.all([
     daemonInvoke<UmapConfig>("get_umap_config"),
-    daemonInvoke<{ available: string[] }>("get_umap_backends"),
+    daemonInvoke<{ available: string[]; precisions: Record<string, string[]> }>("get_umap_backends"),
   ]);
   cfg = config;
   availableBackends = backends.available;
+  precisionsByBackend = backends.precisions;
   loaded = true;
 });
 
@@ -163,6 +168,23 @@ const TIMEOUT_PRESETS: [string, number][] = [
           ].find(p => p[1] === cfg.backend) ?? ["Auto", "auto"]
         }
         onselect={(p) => { cfg.backend = p[1]; markDirty(); }}
+        labelFn={(p) => p[0]}
+      />
+    </CardContent>
+
+    {@const activePrecisions = precisionsByBackend[cfg.backend === "auto" ? (availableBackends[0] ?? "gpu") : cfg.backend] ?? ["f32"]}
+    <CardContent class="flex flex-col gap-2.5 px-4 py-3.5 border-t border-border dark:border-white/[0.05]">
+      <div class="flex items-baseline justify-between">
+        <span class="text-ui-lg font-semibold text-foreground">{t("umapSettings.precision")}</span>
+        <span class="text-ui-base text-muted-foreground tabular-nums">{cfg.precision.toUpperCase()}</span>
+      </div>
+      <p class="text-ui-base text-muted-foreground leading-relaxed -mt-0.5">
+        {t("umapSettings.precisionDesc")}
+      </p>
+      <ChipGroup
+        items={activePrecisions.map(p => [p.toUpperCase(), p] as [string, string])}
+        selected={activePrecisions.map(p => [p.toUpperCase(), p] as [string, string]).find(p => p[1] === cfg.precision) ?? [activePrecisions[0].toUpperCase(), activePrecisions[0]]}
+        onselect={(p) => { cfg.precision = p[1]; markDirty(); }}
         labelFn={(p) => p[0]}
       />
     </CardContent>
@@ -345,7 +367,7 @@ const TIMEOUT_PRESETS: [string, number][] = [
         </Badge>
         <Badge variant="outline"
           class="text-ui-xs py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
-          {cfg.backend === "auto" ? "auto" : cfg.backend.toUpperCase()}
+          {cfg.backend === "auto" ? "auto" : cfg.backend.toUpperCase()} · {cfg.precision}
         </Badge>
         <span class="ml-auto text-ui-xs text-muted-foreground/60 shrink-0">fast-umap 1.6.0</span>
       </div>

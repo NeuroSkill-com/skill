@@ -87,8 +87,11 @@ mod daemon_cmds;
 mod label_cmds;
 mod settings_cmds;
 
+mod deeplink;
 #[cfg(target_os = "macos")]
 mod external_renderer;
+#[cfg(target_os = "macos")]
+pub mod widget_reload;
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -172,8 +175,12 @@ pub fn run() {
     platform::setup_env();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(win) = app.get_webview_window("main") {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Check if launched via neuroskill:// deep link (widget tap)
+            let deep_link = args.iter().find(|a| a.starts_with("neuroskill://"));
+            if let Some(url) = deep_link {
+                deeplink::handle_deep_link(app, url);
+            } else if let Some(win) = app.get_webview_window("main") {
                 let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();

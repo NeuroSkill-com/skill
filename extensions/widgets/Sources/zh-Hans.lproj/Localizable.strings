@@ -1,0 +1,131 @@
+/* Simplified Chinese */
+
+"widget.focus.name" = "专注分数";
+"widget.focus.desc" = "实时专注水平和心流状态。";
+"widget.streak.name" = "深度工作连续记录";
+"widget.streak.desc" = "追踪你的每日深度工作连续天数。";
+"widget.dash.name" = "大脑仪表盘";
+"widget.dash.desc" = "专注、心流、疲劳和连续记录一目了然。";
+"widget.hours.name" = "最佳时段";
+"widget.hours.desc" = "你专注力最好和最差的时段。";
+"widget.break.name" = "休息计时器";
+"widget.break.desc" = "距下次建议休息的倒计时。";
+"widget.session.name" = "会话状态";
+"widget.session.desc" = "录制、信号质量和电量。";
+"widget.daily.name" = "每日报告";
+"widget.daily.desc" = "今日专注力、生产力和时段分析。";
+"widget.weekly.name" = "每周趋势";
+"widget.weekly.desc" = "7天专注力趋势和每日平均值。";
+"widget.hr.name" = "心率";
+"widget.hr.desc" = "实时心率、HRV和压力指数。";
+"widget.cog.name" = "认知负荷";
+"widget.cog.desc" = "当前认知负荷和困难领域。";
+
+"focus.label" = "专注";
+"focus.inFlow" = "心流中";
+"focus.notInFlow" = "未进入心流";
+
+"streak.label" = "连续";
+"streak.day" = "天";
+"streak.days" = "天";
+"streak.today" = "今天";
+
+"dash.monitoring" = "监测中";
+"dash.fresh" = "精力充沛";
+"dash.fatigued" = "疲劳";
+"dash.deepWork" = "深度工作";
+
+"hours.title" = "高峰时段";
+"hours.peak" = "高峰";
+
+"break.title" = "休息";
+"break.minsLeft" = "分钟剩余";
+"break.overdue" = "已超时";
+"break.working" = "工作中";
+
+"session.title" = "会话";
+"session.signal" = "信号";
+"session.noDevice" = "未连接设备";
+"session.connectHint" = "打开 NeuroSkill 进行连接";
+
+"daily.today" = "今天";
+"daily.avgFocus" = "平均专注";
+"daily.best" = "最佳";
+"daily.morning" = "上午";
+"daily.afternoon" = "下午";
+"daily.evening" = "晚上";
+
+"weekly.subtitle" = "7天趋势";
+"weekly.avgFocus" = "平均专注";
+"weekly.day" = "天";
+
+"hr.title" = "心率";
+"hr.stress" = "压力";
+"hr.low" = "低";
+"hr.moderate" = "中等";
+"hr.high" = "高";
+"hr.unknown" = "—";
+"hr.resp" = "呼吸";
+"hr.noPpg" = "无PPG数据\n请连接PPG设备";
+
+"cog.title" = "认知负荷";
+"cog.light" = "轻";
+"cog.moderate" = "中等";
+"cog.heavy" = "重";
+
+"status.daemonOffline" = "守护进程离线";
+"status.noDevice" = "无设备";
+"status.connected" = "已连接";
+"status.scanning" = "扫描中";
+"status.idle" = "空闲";
+"status.recording" = "录制中";
+"status.battery" = "电量";
+
+/* Calendar Mind State */
+"widget.cal.name" = "日历脑状态";
+"widget.cal.desc" = "将你的大脑状态映射到今日日程。";
+"cal.subtitle" = "心智 + 日历";
+"cal.deepWork" = "深度工作";
+"cal.noEvents" = "今天没有日程";
+"cal.freeDay" = "日历空闲 — 适合深度工作";
+"cal.slowRecovery" = "会议后平均 %d 分钟恢复";
+"cal.avoidHour" = "避免在 %@ 进行深度工作";
+
+/* EEG Band Power */
+"widget.eeg.name" = "EEG频段功率";
+"widget.eeg.desc" = "实时Alpha、Beta、Theta、Gamma频段功率。";
+"widget.eeg.medName" = "EEG频谱";
+"widget.eeg.medDesc" = "包含放松和专注的完整频段功率频谱。";
+"eeg.title" = "EEG频段";
+"eeg.spectrum" = "频谱";
+"eeg.relax" = "放松";
+"eeg.engage" = "专注";
+"eeg.dominant" = "主导";
+
+/* Sleep Quality */
+"widget.sleep.name" = "睡眠质量";
+"widget.sleep.desc" = "昨晚的睡眠时长、阶段和质量评分。";
+"widget.sleep.medName" = "睡眠分析";
+"widget.sleep.medDesc" = "包含质量评分的详细睡眠阶段分析。";
+"sleep.title" = "睡眠";
+"sleep.lastNight" = "昨晚";
+"sleep.quality" = "质量";
+"sleep.deep" = "深度";
+"sleep.light" = "浅度";
+"sleep.rem" = "REM";
+"sleep.wake" = "清醒";
+
+/* Error states */
+"error.daemonOffline" = "守护进程离线";
+"error.tokenMissing" = "令牌缺失";
+"error.apiError" = "API 错误";
+"error.startApp" = "打开 NeuroSkill 以启动";
+"error.reinstall" = "重新安装或启动应用";
+
+/* Accessibility */
+"a11y.good" = "良好";
+"a11y.moderate" = "一般";
+"a11y.low" = "低";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

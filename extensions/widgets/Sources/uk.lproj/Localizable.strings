@@ -1,0 +1,131 @@
+/* Ukrainian */
+
+"widget.focus.name" = "Оцінка фокусу";
+"widget.focus.desc" = "Рівень фокусу та стан потоку в реальному часі.";
+"widget.streak.name" = "Серія глибокої роботи";
+"widget.streak.desc" = "Відстежуйте свою щоденну серію глибокої роботи.";
+"widget.dash.name" = "Панель мозку";
+"widget.dash.desc" = "Фокус, потік, втома та серія одним поглядом.";
+"widget.hours.name" = "Оптимальні години";
+"widget.hours.desc" = "Ваші найкращі та найгірші години фокусу.";
+"widget.break.name" = "Таймер перерви";
+"widget.break.desc" = "Зворотний відлік до наступної рекомендованої перерви.";
+"widget.session.name" = "Статус сесії";
+"widget.session.desc" = "Запис, якість сигналу та батарея.";
+"widget.daily.name" = "Щоденний звіт";
+"widget.daily.desc" = "Сьогоднішній фокус, продуктивність та періоди.";
+"widget.weekly.name" = "Тижневий тренд";
+"widget.weekly.desc" = "7-денний тренд фокусу з денними середніми.";
+"widget.hr.name" = "Пульс";
+"widget.hr.desc" = "Пульс, ВСР та індекс стресу в реальному часі.";
+"widget.cog.name" = "Когнітивне навантаження";
+"widget.cog.desc" = "Поточне когнітивне навантаження та проблемні зони.";
+
+"focus.label" = "Фокус";
+"focus.inFlow" = "У потоці";
+"focus.notInFlow" = "Не в потоці";
+
+"streak.label" = "Серія";
+"streak.day" = "день";
+"streak.days" = "днів";
+"streak.today" = "Сьогодні";
+
+"dash.monitoring" = "Моніторинг";
+"dash.fresh" = "Бадьорий";
+"dash.fatigued" = "Втомлений";
+"dash.deepWork" = "Глибока робота";
+
+"hours.title" = "Пікові години";
+"hours.peak" = "Пік";
+
+"break.title" = "Перерва";
+"break.minsLeft" = "хв лишилось";
+"break.overdue" = "Прострочено";
+"break.working" = "працює";
+
+"session.title" = "Сесія";
+"session.signal" = "Сигнал";
+"session.noDevice" = "Пристрій не підключено";
+"session.connectHint" = "Відкрийте NeuroSkill для підключення";
+
+"daily.today" = "Сьогодні";
+"daily.avgFocus" = "Сер. фокус";
+"daily.best" = "Найкраще";
+"daily.morning" = "Ранок";
+"daily.afternoon" = "День";
+"daily.evening" = "Вечір";
+
+"weekly.subtitle" = "Тренд 7 днів";
+"weekly.avgFocus" = "Сер. фокус";
+"weekly.day" = "день";
+
+"hr.title" = "Пульс";
+"hr.stress" = "Стрес";
+"hr.low" = "Низький";
+"hr.moderate" = "Помірний";
+"hr.high" = "Високий";
+"hr.unknown" = "—";
+"hr.resp" = "Дихання";
+"hr.noPpg" = "Немає даних PPG\nПідключіть пристрій PPG";
+
+"cog.title" = "Ког. навант.";
+"cog.light" = "Легке";
+"cog.moderate" = "Помірне";
+"cog.heavy" = "Важке";
+
+"status.daemonOffline" = "Демон офлайн";
+"status.noDevice" = "Немає пристрою";
+"status.connected" = "Підключено";
+"status.scanning" = "Сканування";
+"status.idle" = "Очікування";
+"status.recording" = "Запис";
+"status.battery" = "Батарея";
+
+/* Calendar Mind State */
+"widget.cal.name" = "Стан розуму в календарі";
+"widget.cal.desc" = "Ваш стан мозку на сьогоднішньому розкладі.";
+"cal.subtitle" = "Розум + Календар";
+"cal.deepWork" = "Глибока робота";
+"cal.noEvents" = "Сьогодні немає подій";
+"cal.freeDay" = "Порожній календар — ідеально для глибокої роботи";
+"cal.slowRecovery" = "Сер. %d хв відновлення після зустрічей";
+"cal.avoidHour" = "Уникайте глибокої роботи о %@";
+
+/* EEG Band Power */
+"widget.eeg.name" = "Потужність смуг EEG";
+"widget.eeg.desc" = "Потужності смуг Alpha, Beta, Theta, Gamma в реальному часі.";
+"widget.eeg.medName" = "Спектр EEG";
+"widget.eeg.medDesc" = "Повний спектр потужності смуг з розслабленням та залученням.";
+"eeg.title" = "Смуги EEG";
+"eeg.spectrum" = "Спектр";
+"eeg.relax" = "Розслаблення";
+"eeg.engage" = "Залучення";
+"eeg.dominant" = "Домінантна";
+
+/* Sleep Quality */
+"widget.sleep.name" = "Якість сну";
+"widget.sleep.desc" = "Тривалість, стадії та оцінка якості сну минулої ночі.";
+"widget.sleep.medName" = "Аналіз сну";
+"widget.sleep.medDesc" = "Детальний розклад стадій сну з оцінкою якості.";
+"sleep.title" = "Сон";
+"sleep.lastNight" = "Минула ніч";
+"sleep.quality" = "Якість";
+"sleep.deep" = "Глибокий";
+"sleep.light" = "Легкий";
+"sleep.rem" = "REM";
+"sleep.wake" = "Пробудження";
+
+/* Error states */
+"error.daemonOffline" = "Демон офлайн";
+"error.tokenMissing" = "Токен відсутній";
+"error.apiError" = "Помилка API";
+"error.startApp" = "Відкрийте NeuroSkill для початку";
+"error.reinstall" = "Перевстановіть або запустіть застосунок";
+
+/* Accessibility */
+"a11y.good" = "Добре";
+"a11y.moderate" = "Помірно";
+"a11y.low" = "Низький";
+
+/* Brand */
+"brand.name" = "NeuroSkill";

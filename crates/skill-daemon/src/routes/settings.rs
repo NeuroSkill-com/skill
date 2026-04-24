@@ -236,6 +236,7 @@ pub fn router() -> Router<AppState> {
         .route("/activity/productivity-score", post(activity_productivity_score))
         .route("/activity/weekly-digest", post(activity_weekly_digest))
         .route("/activity/stale-files", post(activity_stale_files))
+        .route("/activity/vscode-events", post(activity_vscode_events))
         .route("/activity/files-in-range", post(activity_files_in_range))
         .route("/activity/meetings-in-range", post(activity_meetings_in_range))
         .route("/activity/recent-clipboard", post(activity_recent_clipboard))
@@ -907,6 +908,13 @@ async fn activity_stale_files(
     req: Json<ActivityFilesRequest>,
 ) -> Json<Vec<skill_data::activity_store::StaleFileRow>> {
     settings_hooks_activity::activity_stale_files_impl(state, req).await
+}
+
+async fn activity_vscode_events(
+    state: State<AppState>,
+    Json(events): Json<Vec<serde_json::Value>>,
+) -> Json<serde_json::Value> {
+    settings_hooks_activity::activity_vscode_events_impl(state, events).await
 }
 
 async fn activity_files_in_range(state: State<AppState>, req: Json<ActivityBucketsRequest>) -> Json<serde_json::Value> {

@@ -434,9 +434,13 @@ const settings: Record<string, string> = {
   "settings.inferenceDevice": "Inference Device",
   "settings.inferenceDeviceDesc":
     "Where AI inference runs. GPU is faster; CPU works on any machine and avoids VRAM pressure. Restart the LLM server after changing.",
+  "settings.inferenceDeviceAuto": "Auto",
+  "settings.inferenceDeviceAutoDesc": "MLX on Apple Silicon, GPU elsewhere.",
+  "settings.inferenceDeviceMlx": "MLX",
+  "settings.inferenceDeviceMlxDesc": "Apple Silicon native — fastest on Mac.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
-  "settings.inferenceDeviceGpuDesc": "Uses GPU / Metal / CUDA for fast inference (recommended).",
+  "settings.inferenceDeviceGpuDesc": "Uses wgpu (Metal / Vulkan) for inference.",
   "settings.inferenceDeviceCpuDesc": "Runs fully on CPU — slower but works without a GPU.",
   "settings.inferenceDeviceRestartHint": "Restart the LLM server to apply.",
   "settings.inferenceDeviceExgRestartHint": "Reconnect your headset to apply.",
@@ -510,10 +514,22 @@ const settings: Record<string, string> = {
   "activity.loadWeeklyReport": "Load Weekly Report",
   "activity.weeklyAvgFocus": "Avg focus",
   "activity.peakHour": "Peak hour",
+  "activity.noFlow": "Not in flow",
+  "activity.fatiguedTitle": "Focus declining",
+  "activity.streakDays": "day streak",
+  "activity.todayLabel": "today",
+  "activity.timeline": "Activity Timeline",
+  "activity.codeBrain": "Code-Brain Correlation",
+  "activity.brainByLanguage": "Focus by language",
+  "activity.bestFiles": "Best focus",
+  "activity.worstFiles": "Lowest focus",
 
   "umapSettings.backend": "Compute Backend",
   "umapSettings.backendDesc":
     "Select the compute backend for UMAP projection. Auto picks MLX on Apple Silicon, GPU (wgpu) elsewhere.",
+  "umapSettings.precision": "Precision",
+  "umapSettings.precisionDesc":
+    "Floating-point precision. F16 (half) is faster and uses less memory; F32 (full) is more accurate.",
 
   "umapSettings.repulsion": "Repulsion",
   "umapSettings.repulsionStrength": "Repulsion Strength",

@@ -7,3 +7,6 @@
 [submodule "neuroskill"]
 	path = neuroskill
 	url = https://github.com/NeuroSkill-com/neuroskill
+[submodule "extensions/vscode"]
+	path = extensions/vscode
+	url = https://github.com/NeuroSkill-com/vscode-neuroskill.git
