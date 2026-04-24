@@ -19,6 +19,7 @@ import { Separator } from "$lib/components/ui/separator";
 import { Spinner } from "$lib/components/ui/spinner";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { type FileInteractionRow, getFilesInRange, type SessionFileActivity } from "$lib/daemon/settings";
 import { SessionDetail } from "$lib/dashboard";
 import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 import {
@@ -168,6 +169,8 @@ let tsCache = $state<Record<string, EpochRow[] | "loading">>({});
 let locationCache = $state<Record<string, GpsPoint[] | "loading">>({});
 /** HNSW+SQLite epoch count per csv_path. */
 let embedCountCache = $state<Record<string, number | "loading">>({});
+/** File activity during each session — files worked on, focus sessions, meetings. */
+let activityCache = $state<Record<string, SessionFileActivity | "loading">>({});
 
 // ── Health / Oura data overlay ───────────────────────────────────────────
 interface HealthDaySummary {
@@ -444,6 +447,24 @@ async function loadEmbedCount(csvPath: string) {
   }
 }
 
+async function loadFileActivity(csvPath: string) {
+  if (csvPath in activityCache) return;
+  const session = sessionRegistry.get(csvPath);
+  if (!session?.session_start_utc || !session?.session_end_utc) return;
+  activityCache[csvPath] = "loading";
+  try {
+    activityCache[csvPath] = await getFilesInRange(session.session_start_utc, session.session_end_utc);
+  } catch {
+    activityCache[csvPath] = { files: [], focus_sessions: [], meetings: [] };
+  }
+}
+
+function getFileActivity(csvPath: string): SessionFileActivity | null {
+  const v = activityCache[csvPath];
+  if (v && v !== "loading") return v;
+  return null;
+}
+
 // ── Local-day helpers ────────────────────────────────────────────────────
 /** Convert a UTC Unix-seconds value to its UTC YYYYMMDD directory name. */
 
@@ -588,6 +609,7 @@ function toggleExpand(csvPath: string) {
     loadMetrics(csvPath);
     void loadLocation(csvPath);
     void loadEmbedCount(csvPath);
+    void loadFileActivity(csvPath);
     // Scroll expanded row into view after DOM update (#13)
     requestAnimationFrame(() => {
       const idx = sessions.findIndex((s) => s.csv_path === csvPath);
@@ -2042,6 +2064,88 @@ useWindowTitle("window.title.history");
                         <span class="text-ui-base font-mono tabular-nums text-foreground">{(embedCountCache[session.csv_path] as number).toLocaleString()}</span>
                         <span class="text-ui-2xs text-muted-foreground/40">epochs in HNSW/SQLite</span>
                       </div>
+                    {/if}
+
+                    <!-- File activity during session -->
+                    {#if activityCache[session.csv_path] === "loading"}
+                      <div class="flex items-center gap-2 py-1">
+                        <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
+                        <span class="text-ui-xs text-muted-foreground/40">{t("history.activityLoading")}</span>
+                      </div>
+                    {:else if getFileActivity(session.csv_path)}
+                      {@const fa = getFileActivity(session.csv_path)!}
+                      {#if fa.files.length > 0 || fa.meetings.length > 0}
+                        <div class="flex flex-col gap-1.5">
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">
+                              {t("history.activityTitle")}
+                            </span>
+                            <span class="text-ui-2xs text-muted-foreground/40">
+                              {fa.files.length} {fa.files.length === 1 ? t("history.activityFile") : t("history.activityFiles")}
+                              {#if fa.meetings.length > 0}
+                                · {fa.meetings.length} {fa.meetings.length === 1 ? t("history.activityMeeting") : t("history.activityMeetings")}
+                              {/if}
+                            </span>
+                          </div>
+                          <!-- File list -->
+                          <div class="rounded-lg border border-border dark:border-white/[0.06]
+                                      bg-muted/30 dark:bg-white/[0.02] divide-y divide-border dark:divide-white/[0.04] overflow-hidden">
+                            {#each fa.files.slice(0, 10) as fi (fi.id)}
+                              {@const basename = fi.file_path.split("/").pop() ?? fi.file_path}
+                              <div class="flex items-center gap-2 px-2.5 py-1.5 text-ui-sm">
+                                <!-- Focus indicator dot -->
+                                <span class="w-1.5 h-1.5 rounded-full shrink-0
+                                  {fi.eeg_focus != null && fi.eeg_focus >= 70 ? 'bg-emerald-500' :
+                                   fi.eeg_focus != null && fi.eeg_focus >= 40 ? 'bg-amber-400' :
+                                   fi.eeg_focus != null ? 'bg-red-400' : 'bg-muted-foreground/20'}"></span>
+                                <!-- File name -->
+                                <span class="font-mono text-foreground truncate min-w-0 flex-1" title={fi.file_path}>
+                                  {basename}
+                                </span>
+                                <!-- Language -->
+                                {#if fi.language}
+                                  <span class="text-ui-2xs text-muted-foreground/40 shrink-0">{fi.language}</span>
+                                {/if}
+                                <!-- Edit indicator -->
+                                {#if fi.was_modified}
+                                  <span class="text-ui-2xs tabular-nums shrink-0">
+                                    <span class="text-emerald-500">+{fi.lines_added}</span>
+                                    <span class="text-red-400">-{fi.lines_removed}</span>
+                                  </span>
+                                {/if}
+                                <!-- Focus score -->
+                                {#if fi.eeg_focus != null}
+                                  <span class="text-ui-2xs tabular-nums text-muted-foreground/50 shrink-0 w-8 text-right"
+                                        title={t("history.activityFocus")}>
+                                    {fi.eeg_focus.toFixed(0)}
+                                  </span>
+                                {/if}
+                              </div>
+                            {/each}
+                            {#if fa.files.length > 10}
+                              <div class="px-2.5 py-1 text-ui-2xs text-muted-foreground/40 text-center">
+                                +{fa.files.length - 10} {t("history.activityMore")}
+                              </div>
+                            {/if}
+                          </div>
+                          <!-- Meeting interruptions -->
+                          {#if fa.meetings.length > 0}
+                            <div class="flex flex-wrap gap-1.5 mt-0.5">
+                              {#each fa.meetings as mtg (mtg.id)}
+                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20
+                                             px-2 py-0.5 text-ui-2xs text-amber-600 dark:text-amber-400">
+                                  {mtg.platform}
+                                  {#if mtg.end_at}
+                                    <span class="text-amber-500/60 tabular-nums">
+                                      {Math.round((mtg.end_at - mtg.start_at) / 60)}m
+                                    </span>
+                                  {/if}
+                                </span>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
                     {/if}
 
                     <!-- Labels (rainbow circles with hover interaction) -->

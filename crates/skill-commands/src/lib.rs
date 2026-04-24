@@ -893,7 +893,7 @@ pub fn find_session_for_timestamp_in(skill_dir: &Path, timestamp_unix: u64, date
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
     pub id: String,
-    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot"
+    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity"
     pub kind: String,
     /// Human-readable label text (query string / label annotation).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -945,6 +945,26 @@ pub struct InteractiveGraphNode {
     /// Composite relevance score (0 = best). Combines text similarity, temporal distance, EEG quality.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relevance_score: Option<f32>,
+
+    // ── File activity fields ─────────────────────────────────────────────
+    /// File path (file_activity nodes only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+    /// Project name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// Programming language.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Whether the file was modified during this interaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub was_modified: Option<bool>,
+    /// Lines added during this interaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lines_added: Option<u64>,
+    /// Lines removed during this interaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lines_removed: Option<u64>,
 }
 
 /// A directed edge in the interactive search graph.
@@ -954,7 +974,7 @@ pub struct InteractiveGraphEdge {
     pub to_id: String,
     /// Strength of connection — same scale as the corresponding distance.
     pub distance: f32,
-    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim"
+    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim" | "file_activity_prox"
     pub kind: String,
 }
 

@@ -233,6 +233,12 @@ pub fn router() -> Router<AppState> {
         .route("/activity/focus-sessions", post(activity_focus_sessions))
         .route("/activity/forgotten-files", post(activity_forgotten_files))
         .route("/activity/recent-builds", get(activity_recent_builds))
+        .route("/activity/productivity-score", post(activity_productivity_score))
+        .route("/activity/weekly-digest", post(activity_weekly_digest))
+        .route("/activity/stale-files", post(activity_stale_files))
+        .route("/activity/files-in-range", post(activity_files_in_range))
+        .route("/activity/meetings-in-range", post(activity_meetings_in_range))
+        .route("/activity/recent-clipboard", post(activity_recent_clipboard))
         .route(
             "/activity/file-patterns",
             get(get_file_patterns).post(set_file_patterns),
@@ -248,6 +254,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/activity/tracking/files",
             get(get_file_activity_tracking).post(set_file_activity_tracking),
+        )
+        .route(
+            "/activity/tracking/clipboard",
+            get(get_clipboard_tracking).post(set_clipboard_tracking),
         )
         .route("/activity/current-window", get(get_current_active_window))
         .route("/activity/last-input", get(get_last_input_activity))
@@ -877,6 +887,45 @@ async fn activity_recent_builds(state: State<AppState>) -> Json<Vec<BuildEventRo
     settings_hooks_activity::activity_recent_builds_impl(state).await
 }
 
+async fn activity_productivity_score(
+    state: State<AppState>,
+    req: Json<DaySummaryRequest>,
+) -> Json<skill_data::activity_store::ProductivityScore> {
+    settings_hooks_activity::activity_productivity_score_impl(state, req).await
+}
+
+async fn activity_weekly_digest(
+    state: State<AppState>,
+    req: Json<DaySummaryRequest>,
+) -> Json<skill_data::activity_store::WeeklyDigest> {
+    settings_hooks_activity::activity_weekly_digest_impl(state, req).await
+}
+
+async fn activity_stale_files(
+    state: State<AppState>,
+    req: Json<ActivityFilesRequest>,
+) -> Json<Vec<skill_data::activity_store::StaleFileRow>> {
+    settings_hooks_activity::activity_stale_files_impl(state, req).await
+}
+
+async fn activity_files_in_range(state: State<AppState>, req: Json<ActivityBucketsRequest>) -> Json<serde_json::Value> {
+    settings_hooks_activity::activity_files_in_range_impl(state, req).await
+}
+
+async fn activity_meetings_in_range(
+    state: State<AppState>,
+    req: Json<ActivityBucketsRequest>,
+) -> Json<Vec<skill_data::activity_store::MeetingEventRow>> {
+    settings_hooks_activity::activity_meetings_in_range_impl(state, req).await
+}
+
+async fn activity_recent_clipboard(
+    state: State<AppState>,
+    req: Json<ActivityFilesRequest>,
+) -> Json<Vec<skill_data::activity_store::ClipboardEventRow>> {
+    settings_hooks_activity::activity_recent_clipboard_impl(state, req).await
+}
+
 async fn get_file_patterns(State(state): State<AppState>) -> Json<Vec<skill_settings::FilePatternRule>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let settings = skill_settings::load_settings(&skill_dir);
@@ -916,6 +965,21 @@ async fn set_file_activity_tracking(
     state
         .track_file_activity
         .store(req.value, std::sync::atomic::Ordering::Relaxed);
+    Json(serde_json::json!({"value": req.value}))
+}
+
+async fn get_clipboard_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let settings = load_user_settings(&state);
+    Json(serde_json::json!({"value": settings.track_clipboard}))
+}
+
+async fn set_clipboard_tracking(
+    State(state): State<AppState>,
+    Json(req): Json<BoolValueRequest>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.track_clipboard = req.value;
+    save_user_settings(&state, &settings);
     Json(serde_json::json!({"value": req.value}))
 }
 
@@ -972,6 +1036,7 @@ async fn get_current_active_window(State(state): State<AppState>) -> Json<Option
                 window_title: row.window_title,
                 document_path: None,
                 activated_at: row.activated_at,
+                browser_title: row.browser_title,
             })
     })
     .await

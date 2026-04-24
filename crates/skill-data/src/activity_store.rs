@@ -36,11 +36,12 @@ use crate::util::MutexExt;
 
 const DDL: &str = "
 CREATE TABLE IF NOT EXISTS active_windows (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name     TEXT    NOT NULL,
-    app_path     TEXT    NOT NULL DEFAULT '',
-    window_title TEXT    NOT NULL DEFAULT '',
-    activated_at INTEGER NOT NULL
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_name      TEXT    NOT NULL,
+    app_path      TEXT    NOT NULL DEFAULT '',
+    window_title  TEXT    NOT NULL DEFAULT '',
+    activated_at  INTEGER NOT NULL,
+    browser_title TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_aw_activated ON active_windows (activated_at DESC);
 
@@ -128,6 +129,27 @@ CREATE TABLE IF NOT EXISTS file_edit_chunks (
 );
 CREATE INDEX IF NOT EXISTS idx_fec_interaction ON file_edit_chunks (interaction_id);
 CREATE INDEX IF NOT EXISTS idx_fec_chunk ON file_edit_chunks (chunk_at DESC);
+
+-- Meeting/call events detected from window titles (Zoom, Teams, Slack, etc.).
+CREATE TABLE IF NOT EXISTS meeting_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform    TEXT    NOT NULL,
+    title       TEXT    NOT NULL DEFAULT '',
+    app_name    TEXT    NOT NULL DEFAULT '',
+    start_at    INTEGER NOT NULL,
+    end_at      INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_me_start ON meeting_events (start_at DESC);
+
+-- Clipboard change events (metadata only — content is never stored).
+CREATE TABLE IF NOT EXISTS clipboard_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_app   TEXT    NOT NULL DEFAULT '',
+    content_type TEXT    NOT NULL DEFAULT 'text',
+    content_size INTEGER NOT NULL DEFAULT 0,
+    copied_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ce_copied ON clipboard_events (copied_at DESC);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -162,13 +184,14 @@ impl ActivityStore {
     pub fn insert_active_window(&self, info: &ActiveWindowInfo) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
-            "INSERT INTO active_windows (app_name, app_path, window_title, activated_at)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO active_windows (app_name, app_path, window_title, activated_at, browser_title)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 &info.app_name,
                 &info.app_path,
                 &info.window_title,
                 info.activated_at as i64,
+                &info.browser_title,
             ],
         ) {
             eprintln!("[activity] insert_active_window: {e}");
@@ -218,7 +241,7 @@ impl ActivityStore {
     pub fn get_recent_windows(&self, limit: u32) -> Vec<ActiveWindowRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, app_name, app_path, window_title, activated_at
+            "SELECT id, app_name, app_path, window_title, activated_at, browser_title
              FROM active_windows ORDER BY activated_at DESC LIMIT ?1",
         ) {
             Ok(s) => s,
@@ -234,6 +257,7 @@ impl ActivityStore {
                 app_path: row.get(2)?,
                 window_title: row.get(3)?,
                 activated_at: row.get::<_, i64>(4)? as u64,
+                browser_title: row.get(5)?,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -568,6 +592,168 @@ impl ActivityStore {
             .unwrap_or_default()
     }
 
+    // ── Analysis ─────────────────────────────────────────────────────────────
+
+    /// Compute a productivity score for a day (0–100).
+    /// Composite of: focus session time, edit velocity, low context-switch rate, EEG focus.
+    pub fn productivity_score(&self, day_start: u64) -> ProductivityScore {
+        let summary = self.daily_summary(day_start);
+        let day_end = day_start + 86400;
+        let switch_rate = self.context_switch_rate(day_start, day_end);
+        let sessions = self.get_focus_sessions_in_range(day_start, day_end);
+
+        // Deep work minutes = sum of focus sessions > 15 min.
+        let deep_work_secs: u64 = sessions
+            .iter()
+            .filter(|s| s.end_at - s.start_at >= 900)
+            .map(|s| s.end_at - s.start_at)
+            .sum();
+
+        // Scoring (each 0–25, total 0–100):
+        // 1. Edit velocity: lines changed per hour (cap at 200 lines/hr = 25 pts).
+        let hours = (summary.total_secs as f64 / 3600.0).max(0.01);
+        let churn = (summary.lines_added + summary.lines_removed) as f64;
+        let velocity_score = ((churn / hours) / 200.0 * 25.0).min(25.0);
+
+        // 2. Deep work: minutes of sustained focus (cap at 120 min = 25 pts).
+        let deep_score = ((deep_work_secs as f64 / 60.0) / 120.0 * 25.0).min(25.0);
+
+        // 3. Context stability: low switch rate is better (0 switches = 25, 10+/min = 0).
+        let switch_score = ((10.0 - switch_rate) / 10.0 * 25.0).clamp(0.0, 25.0);
+
+        // 4. EEG focus (if available): avg focus 0-100 mapped to 0-25.
+        let eeg_score = summary
+            .avg_eeg_focus
+            .map(|f| (f as f64 / 100.0 * 25.0).min(25.0))
+            .unwrap_or(0.0);
+
+        let total = velocity_score + deep_score + switch_score + eeg_score;
+
+        ProductivityScore {
+            day_start,
+            score: total as f32,
+            edit_velocity: velocity_score as f32,
+            deep_work: deep_score as f32,
+            context_stability: switch_score as f32,
+            eeg_focus: eeg_score as f32,
+            deep_work_minutes: (deep_work_secs / 60) as u32,
+            switch_rate: switch_rate as f32,
+        }
+    }
+
+    /// Weekly digest: aggregate stats for 7 days starting at `week_start`.
+    pub fn weekly_digest(&self, week_start: u64) -> WeeklyDigest {
+        let mut days = Vec::with_capacity(7);
+        let mut total_interactions = 0u64;
+        let mut total_edits = 0u64;
+        let mut total_secs = 0u64;
+        let mut total_added = 0u64;
+        let mut total_removed = 0u64;
+        let mut focus_sum = 0.0f64;
+        let mut focus_count = 0u32;
+
+        for d in 0..7u64 {
+            let day = self.daily_summary(week_start + d * 86400);
+            total_interactions += day.interactions;
+            total_edits += day.edits;
+            total_secs += day.total_secs;
+            total_added += day.lines_added;
+            total_removed += day.lines_removed;
+            if let Some(f) = day.avg_eeg_focus {
+                focus_sum += f as f64;
+                focus_count += 1;
+            }
+            days.push(day);
+        }
+
+        let week_end = week_start + 7 * 86400;
+        let top_projects = self.top_projects(5, Some(week_start));
+        let languages = self.language_breakdown(Some(week_start));
+        let sessions = self.get_focus_sessions_in_range(week_start, week_end);
+        let meetings = self.get_meetings_in_range(week_start, week_end);
+
+        // Find peak day (most edits).
+        let peak_day_idx = days
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, d)| d.edits)
+            .map(|(i, _)| i as u8)
+            .unwrap_or(0);
+
+        // Find peak hour from heatmap.
+        let heatmap = self.hourly_edit_heatmap(Some(week_start));
+        let peak_hour = heatmap
+            .iter()
+            .max_by_key(|h| h.total_churn)
+            .map(|h| h.hour)
+            .unwrap_or(0);
+
+        WeeklyDigest {
+            week_start,
+            days,
+            total_interactions,
+            total_edits,
+            total_secs,
+            total_lines_added: total_added,
+            total_lines_removed: total_removed,
+            avg_eeg_focus: if focus_count > 0 {
+                Some((focus_sum / focus_count as f64) as f32)
+            } else {
+                None
+            },
+            top_projects,
+            top_languages: languages,
+            focus_session_count: sessions.len() as u32,
+            meeting_count: meetings.len() as u32,
+            peak_day_idx,
+            peak_hour,
+        }
+    }
+
+    /// Detect files that haven't been touched in `threshold_days` but were
+    /// modified within `since` — potential stale/abandoned work.
+    pub fn stale_files(&self, threshold_days: u32, since: u64) -> Vec<StaleFileRow> {
+        let c = self.conn.lock_or_recover();
+        let cutoff = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(threshold_days as u64 * 86400);
+        let mut stmt = match c.prepare_cached(
+            "SELECT file_path, MAX(seen_at) AS last_seen, SUM(was_modified) AS total_edits,
+                    project, language
+             FROM file_interactions
+             WHERE seen_at >= ?1
+             GROUP BY file_path
+             HAVING last_seen < ?2 AND total_edits > 0
+             ORDER BY last_seen ASC
+             LIMIT 50",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] stale_files: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![since as i64, cutoff as i64], |row| {
+            Ok(StaleFileRow {
+                file_path: row.get(0)?,
+                last_seen: row.get::<_, i64>(1)? as u64,
+                total_edits: row.get::<_, i64>(2)? as u64,
+                project: row.get(3)?,
+                language: row.get(4)?,
+                days_stale: ((std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    - row.get::<_, i64>(1)? as u64)
+                    / 86400) as u32,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
     // ── Focus sessions ───────────────────────────────────────────────────────
 
     /// Insert a detected focus session.
@@ -677,6 +863,176 @@ impl ActivityStore {
                 outcome: row.get(2)?,
                 project: row.get(3)?,
                 detected_at: row.get::<_, i64>(4)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Meeting events ─────────────────────────────────────────────────────────
+
+    /// Start a meeting event. Returns the row id.
+    pub fn insert_meeting_start(&self, platform: &str, title: &str, app_name: &str, start_at: u64) -> Option<i64> {
+        let c = self.conn.lock_or_recover();
+        match c.execute(
+            "INSERT INTO meeting_events (platform, title, app_name, start_at) VALUES (?1, ?2, ?3, ?4)",
+            params![platform, title, app_name, start_at as i64],
+        ) {
+            Ok(_) => Some(c.last_insert_rowid()),
+            Err(e) => {
+                eprintln!("[activity] insert_meeting_start: {e}");
+                None
+            }
+        }
+    }
+
+    /// Mark the end of a meeting event.
+    pub fn update_meeting_end(&self, id: i64, end_at: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "UPDATE meeting_events SET end_at = ?1 WHERE id = ?2",
+            params![end_at as i64, id],
+        );
+    }
+
+    /// Return meetings overlapping the given time range.
+    pub fn get_meetings_in_range(&self, from_ts: u64, to_ts: u64) -> Vec<MeetingEventRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, platform, title, app_name, start_at, end_at
+             FROM meeting_events
+             WHERE start_at <= ?2 AND (end_at IS NULL OR end_at >= ?1)
+             ORDER BY start_at ASC",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_meetings_in_range: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![from_ts as i64, to_ts as i64], |row| {
+            Ok(MeetingEventRow {
+                id: row.get(0)?,
+                platform: row.get(1)?,
+                title: row.get(2)?,
+                app_name: row.get(3)?,
+                start_at: row.get::<_, i64>(4)? as u64,
+                end_at: row.get::<_, Option<i64>>(5)?.map(|t| t as u64),
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Clipboard events ──────────────────────────────────────────────────────
+
+    /// Record a clipboard change event (metadata only).
+    pub fn insert_clipboard_event(&self, source_app: &str, content_type: &str, content_size: u64, copied_at: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO clipboard_events (source_app, content_type, content_size, copied_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![source_app, content_type, content_size as i64, copied_at as i64],
+        );
+    }
+
+    /// Return recent clipboard events, newest first.
+    pub fn get_recent_clipboard(&self, limit: u32) -> Vec<ClipboardEventRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, source_app, content_type, content_size, copied_at
+             FROM clipboard_events ORDER BY copied_at DESC LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_recent_clipboard: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map([limit as i64], |row| {
+            Ok(ClipboardEventRow {
+                id: row.get(0)?,
+                source_app: row.get(1)?,
+                content_type: row.get(2)?,
+                content_size: row.get::<_, i64>(3)? as u64,
+                copied_at: row.get::<_, i64>(4)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Range queries ─────────────────────────────────────────────────────────
+
+    /// Return file interactions within a time range, chronologically.
+    pub fn get_files_in_range(&self, from_ts: u64, to_ts: u64, limit: u32) -> Vec<FileInteractionRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, file_path, app_name, project, language, category, git_branch,
+                    seen_at, duration_secs, was_modified, size_delta,
+                    lines_added, lines_removed, words_delta, eeg_focus, eeg_mood
+             FROM file_interactions
+             WHERE seen_at >= ?1 AND seen_at <= ?2
+             ORDER BY seen_at ASC LIMIT ?3",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_files_in_range: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![from_ts as i64, to_ts as i64, limit as i64], |row| {
+            Ok(FileInteractionRow {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                app_name: row.get(2)?,
+                project: row.get(3)?,
+                language: row.get(4)?,
+                category: row.get(5)?,
+                git_branch: row.get(6)?,
+                seen_at: row.get::<_, i64>(7)? as u64,
+                duration_secs: row.get::<_, Option<i64>>(8)?.map(|t| t as u64),
+                was_modified: row.get::<_, i64>(9)? != 0,
+                size_delta: row.get(10)?,
+                lines_added: row.get::<_, i64>(11)? as u64,
+                lines_removed: row.get::<_, i64>(12)? as u64,
+                words_delta: row.get(13)?,
+                eeg_focus: row.get(14)?,
+                eeg_mood: row.get(15)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Return focus sessions overlapping a time range.
+    pub fn get_focus_sessions_in_range(&self, from_ts: u64, to_ts: u64) -> Vec<FocusSessionRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, start_at, end_at, project, file_count, edit_count,
+                    total_lines_added, total_lines_removed, avg_eeg_focus, avg_eeg_mood
+             FROM focus_sessions
+             WHERE start_at <= ?2 AND end_at >= ?1
+             ORDER BY start_at ASC",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_focus_sessions_in_range: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![from_ts as i64, to_ts as i64], |row| {
+            Ok(FocusSessionRow {
+                id: row.get(0)?,
+                start_at: row.get::<_, i64>(1)? as u64,
+                end_at: row.get::<_, i64>(2)? as u64,
+                project: row.get(3)?,
+                file_count: row.get::<_, i64>(4)? as u64,
+                edit_count: row.get::<_, i64>(5)? as u64,
+                total_lines_added: row.get::<_, i64>(6)? as u64,
+                total_lines_removed: row.get::<_, i64>(7)? as u64,
+                avg_eeg_focus: row.get(8)?,
+                avg_eeg_mood: row.get(9)?,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -964,6 +1320,7 @@ pub struct ActiveWindowRow {
     pub app_path: String,
     pub window_title: String,
     pub activated_at: u64,
+    pub browser_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1113,6 +1470,74 @@ pub struct InputBucketRow {
     pub mouse_count: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductivityScore {
+    pub day_start: u64,
+    /// Composite score 0–100.
+    pub score: f32,
+    /// Edit velocity component (0–25).
+    pub edit_velocity: f32,
+    /// Deep work component (0–25).
+    pub deep_work: f32,
+    /// Context stability component (0–25).
+    pub context_stability: f32,
+    /// EEG focus component (0–25).
+    pub eeg_focus: f32,
+    /// Minutes in deep-work focus sessions (>15 min).
+    pub deep_work_minutes: u32,
+    /// Context switches per minute.
+    pub switch_rate: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeeklyDigest {
+    pub week_start: u64,
+    pub days: Vec<DailySummaryRow>,
+    pub total_interactions: u64,
+    pub total_edits: u64,
+    pub total_secs: u64,
+    pub total_lines_added: u64,
+    pub total_lines_removed: u64,
+    pub avg_eeg_focus: Option<f32>,
+    pub top_projects: Vec<ProjectUsageRow>,
+    pub top_languages: Vec<LanguageBreakdownRow>,
+    pub focus_session_count: u32,
+    pub meeting_count: u32,
+    /// Day of week with most edits (0 = first day of the week).
+    pub peak_day_idx: u8,
+    /// Hour of day with most activity (0–23).
+    pub peak_hour: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StaleFileRow {
+    pub file_path: String,
+    pub last_seen: u64,
+    pub total_edits: u64,
+    pub project: String,
+    pub language: String,
+    pub days_stale: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetingEventRow {
+    pub id: i64,
+    pub platform: String,
+    pub title: String,
+    pub app_name: String,
+    pub start_at: u64,
+    pub end_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClipboardEventRow {
+    pub id: i64,
+    pub source_app: String,
+    pub content_type: String,
+    pub content_size: u64,
+    pub copied_at: u64,
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -1137,6 +1562,7 @@ mod tests {
             window_title: "Test Window".into(),
             document_path: None,
             activated_at: ts,
+            browser_title: None,
         }
     }
 
@@ -1237,6 +1663,7 @@ mod tests {
                 window_title: "".into(),
                 document_path: None,
                 activated_at: 100,
+                browser_title: None,
             });
         }
         for _ in 0..3 {
@@ -1246,6 +1673,7 @@ mod tests {
                 window_title: "".into(),
                 document_path: None,
                 activated_at: 200,
+                browser_title: None,
             });
         }
         store.insert_active_window(&ActiveWindowInfo {
@@ -1254,6 +1682,7 @@ mod tests {
             window_title: "".into(),
             document_path: None,
             activated_at: 300,
+            browser_title: None,
         });
         let top = store.top_apps(10, None);
         assert_eq!(top.len(), 3);
@@ -1274,6 +1703,7 @@ mod tests {
                 window_title: "".into(),
                 document_path: None,
                 activated_at: 100,
+                browser_title: None,
             });
         }
         for _ in 0..2 {
@@ -1283,6 +1713,7 @@ mod tests {
                 window_title: "".into(),
                 document_path: None,
                 activated_at: 500,
+                browser_title: None,
             });
         }
         let top = store.top_apps(10, Some(400));
@@ -1301,6 +1732,7 @@ mod tests {
                 window_title: "".into(),
                 document_path: None,
                 activated_at: i,
+                browser_title: None,
             });
         }
         assert_eq!(store.top_apps(3, None).len(), 3);
@@ -1430,5 +1862,168 @@ mod tests {
         let deleted = store.prune_file_interactions(400);
         assert_eq!(deleted, 1);
         assert_eq!(store.get_recent_files(10, None).len(), 1);
+    }
+
+    // ── Range query tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn files_in_range_returns_chronological() {
+        let store = open_temp();
+        ins(&store, "/a.rs", "code", "proj", 100);
+        ins(&store, "/b.rs", "code", "proj", 200);
+        ins(&store, "/c.rs", "code", "proj", 300);
+        let rows = store.get_files_in_range(150, 350, 10);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].file_path, "/b.rs");
+        assert_eq!(rows[1].file_path, "/c.rs");
+    }
+
+    #[test]
+    fn files_in_range_empty_for_no_match() {
+        let store = open_temp();
+        ins(&store, "/a.rs", "code", "", 100);
+        let rows = store.get_files_in_range(200, 300, 10);
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn files_in_range_respects_limit() {
+        let store = open_temp();
+        for i in 0..20u64 {
+            ins(&store, &format!("/f{i}.rs"), "code", "", 100 + i);
+        }
+        let rows = store.get_files_in_range(100, 200, 5);
+        assert_eq!(rows.len(), 5);
+    }
+
+    // ── Meeting event tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn meeting_start_and_end() {
+        let store = open_temp();
+        let id = store
+            .insert_meeting_start("zoom", "Team Sync", "zoom.us", 1000)
+            .unwrap();
+        store.update_meeting_end(id, 2000);
+        let meetings = store.get_meetings_in_range(500, 2500);
+        assert_eq!(meetings.len(), 1);
+        assert_eq!(meetings[0].platform, "zoom");
+        assert_eq!(meetings[0].end_at, Some(2000));
+    }
+
+    #[test]
+    fn meetings_in_range_filters_correctly() {
+        let store = open_temp();
+        let id1 = store.insert_meeting_start("zoom", "Early", "zoom", 100).unwrap();
+        store.update_meeting_end(id1, 200);
+        let id2 = store.insert_meeting_start("teams", "Late", "teams", 500).unwrap();
+        store.update_meeting_end(id2, 600);
+        // Range 150..250 only overlaps the first meeting.
+        let meetings = store.get_meetings_in_range(150, 250);
+        assert_eq!(meetings.len(), 1);
+        assert_eq!(meetings[0].platform, "zoom");
+    }
+
+    #[test]
+    fn meetings_open_ended_included() {
+        let store = open_temp();
+        // Meeting started but not ended — end_at is NULL.
+        store.insert_meeting_start("slack", "Huddle", "slack", 1000);
+        let meetings = store.get_meetings_in_range(900, 1100);
+        assert_eq!(meetings.len(), 1);
+        assert_eq!(meetings[0].end_at, None);
+    }
+
+    // ── Clipboard event tests ───────────────────────────────────────────────
+
+    #[test]
+    fn clipboard_insert_and_retrieve() {
+        let store = open_temp();
+        store.insert_clipboard_event("Code", "text", 42, 1000);
+        store.insert_clipboard_event("Safari", "image", 8192, 2000);
+        let rows = store.get_recent_clipboard(10);
+        assert_eq!(rows.len(), 2);
+        // Newest first.
+        assert_eq!(rows[0].source_app, "Safari");
+        assert_eq!(rows[0].content_type, "image");
+        assert_eq!(rows[0].content_size, 8192);
+        assert_eq!(rows[1].source_app, "Code");
+    }
+
+    #[test]
+    fn clipboard_limit_respected() {
+        let store = open_temp();
+        for i in 0..10u64 {
+            store.insert_clipboard_event("App", "text", i, 100 + i);
+        }
+        assert_eq!(store.get_recent_clipboard(3).len(), 3);
+    }
+
+    // ── Analysis tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn productivity_score_empty_day() {
+        let store = open_temp();
+        let score = store.productivity_score(1000);
+        assert_eq!(score.day_start, 1000);
+        // Empty day: context stability gets max (no switches), everything else 0.
+        assert!(score.score >= 0.0);
+        assert!(score.score <= 100.0);
+    }
+
+    #[test]
+    fn productivity_score_with_edits() {
+        let store = open_temp();
+        let day = 1_700_000_000u64;
+        // Insert several file interactions during the day.
+        for i in 0..20u64 {
+            store.insert_file_interaction(
+                &format!("/f{}.rs", i % 5),
+                "code",
+                "proj",
+                "rust",
+                "code",
+                "main",
+                day + i * 60,
+                Some(70.0),
+                None,
+            );
+        }
+        // Finalize some with edits.
+        store.finalize_file_interaction(1, 300, true, 100, 50, 10, 20);
+        let score = store.productivity_score(day);
+        assert!(score.score > 0.0);
+    }
+
+    #[test]
+    fn weekly_digest_returns_7_days() {
+        let store = open_temp();
+        let week = 1_700_000_000u64;
+        ins(&store, "/a.rs", "code", "proj", week + 100);
+        let digest = store.weekly_digest(week);
+        assert_eq!(digest.days.len(), 7);
+        assert_eq!(digest.week_start, week);
+        assert!(digest.total_interactions >= 1);
+    }
+
+    #[test]
+    fn stale_files_detects_old_edits() {
+        let store = open_temp();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // File edited 30 days ago.
+        let old_ts = now - 30 * 86400;
+        let id = ins(&store, "/stale.rs", "code", "proj", old_ts).unwrap();
+        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0);
+        // File edited today.
+        let new_id = ins(&store, "/fresh.rs", "code", "proj", now).unwrap();
+        store.finalize_file_interaction(new_id, 60, true, 0, 10, 5, 0);
+
+        let stale = store.stale_files(7, old_ts - 86400);
+        // Only the old file should be stale.
+        assert!(stale.iter().any(|s| s.file_path == "/stale.rs"));
+        assert!(!stale.iter().any(|s| s.file_path == "/fresh.rs"));
     }
 }

@@ -87,7 +87,7 @@ export interface SearchAnalysis {
 
 export interface GraphNode {
   id: string;
-  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
+  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity";
   text?: string;
   timestamp_unix?: number;
   distance: number;
@@ -109,13 +109,25 @@ export interface GraphNode {
   session_id?: string;
   /** Composite relevance score (0 = best). */
   relevance_score?: number;
+  /** File path (file_activity nodes only). */
+  file_path?: string;
+  /** Project name (file_activity nodes only). */
+  project?: string;
+  /** Programming language (file_activity nodes only). */
+  language?: string;
+  /** Whether the file was modified. */
+  was_modified?: boolean;
+  /** Lines added. */
+  lines_added?: number;
+  /** Lines removed. */
+  lines_removed?: number;
 }
 
 export interface GraphEdge {
   from_id: string;
   to_id: string;
   distance: number;
-  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
+  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link" | "file_activity_prox";
 }
 
 export interface JobTicket {

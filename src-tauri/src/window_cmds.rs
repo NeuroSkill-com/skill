@@ -279,6 +279,44 @@ pub fn open_screen_recording_settings() {
     { /* no-op — no special permission required */ }
 }
 
+/// Check whether macOS Automation (AppleScript) permission is granted.
+/// This is needed for clipboard monitoring via `osascript`.  There is no
+/// public API for this — we probe by running a minimal osascript command.
+/// Always returns `true` on non-macOS platforms.
+#[tauri::command]
+pub fn check_automation_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .args(["-e", "the clipboard info"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Open the macOS Automation privacy settings pane.
+#[tauri::command]
+pub fn open_automation_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let modern = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation")
+            .output();
+        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+                .spawn();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { /* no-op */ }
+}
+
 /// Open the OS notification settings panel.
 ///
 /// macOS 13+: deep-links directly to the Notifications pane.

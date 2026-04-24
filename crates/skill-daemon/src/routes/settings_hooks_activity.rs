@@ -3,9 +3,9 @@
 
 use axum::{extract::State, Json};
 use skill_data::activity_store::{
-    ActiveWindowRow, ActivityStore, BuildEventRow, CoEditRow, DailySummaryRow, EditChunkRow, FileInteractionRow,
-    FileUsageRow, FocusSessionRow, HourlyEditRow, InputActivityRow, InputBucketRow, LanguageBreakdownRow,
-    ProjectUsageRow,
+    ActiveWindowRow, ActivityStore, BuildEventRow, ClipboardEventRow, CoEditRow, DailySummaryRow, EditChunkRow,
+    FileInteractionRow, FileUsageRow, FocusSessionRow, HourlyEditRow, InputActivityRow, InputBucketRow,
+    LanguageBreakdownRow, MeetingEventRow, ProductivityScore, ProjectUsageRow, StaleFileRow, WeeklyDigest,
 };
 
 use crate::{
@@ -474,6 +474,135 @@ pub(crate) async fn activity_recent_builds_impl(State(state): State<AppState>) -
     let rows = tokio::task::spawn_blocking(move || {
         ActivityStore::open(&skill_dir)
             .map(|s| s.get_recent_builds(50))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_files_in_range_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityBucketsRequest>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let from = req.from_ts.unwrap_or(0);
+    let to = req.to_ts.unwrap_or(u64::MAX);
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir).map(|s| {
+            let files = s.get_files_in_range(from, to, 200);
+            let sessions = s.get_focus_sessions_in_range(from, to);
+            let meetings = s.get_meetings_in_range(from, to);
+            serde_json::json!({
+                "files": files,
+                "focus_sessions": sessions,
+                "meetings": meetings,
+            })
+        })
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| serde_json::json!({"files": [], "focus_sessions": [], "meetings": []}));
+    Json(result)
+}
+
+pub(crate) async fn activity_meetings_in_range_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityBucketsRequest>,
+) -> Json<Vec<MeetingEventRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let from = req.from_ts.unwrap_or(0);
+    let to = req.to_ts.unwrap_or(u64::MAX);
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.get_meetings_in_range(from, to))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_recent_clipboard_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<ClipboardEventRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let limit = req.limit.unwrap_or(50) as u32;
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.get_recent_clipboard(limit))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    Json(rows)
+}
+
+pub(crate) async fn activity_productivity_score_impl(
+    State(state): State<AppState>,
+    Json(req): Json<DaySummaryRequest>,
+) -> Json<ProductivityScore> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let day_start = req.day_start;
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.productivity_score(day_start)))
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(ProductivityScore {
+                day_start,
+                score: 0.0,
+                edit_velocity: 0.0,
+                deep_work: 0.0,
+                context_stability: 0.0,
+                eeg_focus: 0.0,
+                deep_work_minutes: 0,
+                switch_rate: 0.0,
+            });
+    Json(result)
+}
+
+pub(crate) async fn activity_weekly_digest_impl(
+    State(state): State<AppState>,
+    Json(req): Json<DaySummaryRequest>,
+) -> Json<WeeklyDigest> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let week_start = req.day_start;
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.weekly_digest(week_start)))
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(WeeklyDigest {
+                week_start,
+                days: vec![],
+                total_interactions: 0,
+                total_edits: 0,
+                total_secs: 0,
+                total_lines_added: 0,
+                total_lines_removed: 0,
+                avg_eeg_focus: None,
+                top_projects: vec![],
+                top_languages: vec![],
+                focus_session_count: 0,
+                meeting_count: 0,
+                peak_day_idx: 0,
+                peak_hour: 0,
+            });
+    Json(result)
+}
+
+pub(crate) async fn activity_stale_files_impl(
+    State(state): State<AppState>,
+    Json(req): Json<ActivityFilesRequest>,
+) -> Json<Vec<StaleFileRow>> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let since = req.since.unwrap_or(0);
+    let rows = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.stale_files(7, since))
             .unwrap_or_default()
     })
     .await

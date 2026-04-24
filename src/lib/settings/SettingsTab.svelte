@@ -42,6 +42,7 @@ import {
   setStorageFormat,
   setWsConfig,
 } from "$lib/daemon/client";
+import { getClipboardTracking, setClipboardTracking } from "$lib/daemon/settings";
 import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -120,6 +121,8 @@ interface ActiveWindowInfo {
 let trackActiveWindow = $state(true);
 let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
 let trackInputActivity = $state(true);
+let trackClipboard = $state(false);
+let clipboardPermission = $state(true); // assume granted until checked
 let mainWindowAutoFit = $state(true);
 // [kbd_ts, mouse_ts] in unix seconds; 0 = never
 let lastInputActivity = $state<[number, number]>([0, 0]);
@@ -197,6 +200,18 @@ onMount(async () => {
   trackActiveWindow = await getActiveWindowTracking();
   currentActiveWindow = await getActiveWindow();
   trackInputActivity = await getInputActivityTracking();
+  // Load clipboard tracking setting from daemon.
+  try {
+    trackClipboard = await getClipboardTracking();
+  } catch {
+    /* default false */
+  }
+  // Check Automation permission (macOS clipboard).
+  try {
+    clipboardPermission = await invoke<boolean>("check_automation_permission");
+  } catch {
+    /* assume ok */
+  }
   mainWindowAutoFit = await getMainWindowAutoFit().catch(() => true);
   locationEnabled = await getLocationEnabled().catch(() => false);
   lastInputActivity = await getLastInputActivity();
@@ -608,6 +623,32 @@ onDestroy(() => {
             {t("settings.inputActivityPermNote")}
           </p>
         </div>
+      {/if}
+
+      <Separator class="bg-border dark:bg-white/[0.04]" />
+
+      <!-- ── Clipboard tracking toggle (macOS only) ──────────────────────── -->
+      <ToggleRow
+        checked={trackClipboard}
+        label={t("settings.clipboardToggle")}
+        description={t("settings.clipboardToggleDesc")}
+        ontoggle={async () => {
+          trackClipboard = !trackClipboard;
+          try { await setClipboardTracking(trackClipboard); } catch {}
+          if (trackClipboard) {
+            try { clipboardPermission = await invoke<boolean>("check_automation_permission"); } catch {}
+          }
+        }}
+      />
+
+      {#if trackClipboard && !clipboardPermission}
+        <button
+          onclick={() => invoke("open_automation_settings")}
+          class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-ui-sm text-amber-700 dark:text-amber-300 leading-relaxed text-left
+                 hover:bg-amber-500/15 transition-colors cursor-pointer">
+          <span class="font-semibold">{t("settings.clipboardPermDenied")}</span>
+          <span class="ml-1">{t("settings.clipboardPermAction")}</span>
+        </button>
       {/if}
 
     </CardContent>

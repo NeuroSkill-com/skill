@@ -27,7 +27,7 @@ import { getResolved } from "$lib/stores/theme.svelte";
 // ── Types ─────────────────────────────────────────────────────────────────
 interface GraphNode {
   id: string;
-  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
+  kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot" | "file_activity";
   text?: string;
   timestamp_unix?: number;
   distance: number;
@@ -49,7 +49,7 @@ interface GraphEdge {
   from_id: string;
   to_id: string;
   distance: number;
-  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
+  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link" | "file_activity_prox";
 }
 
 type ThreeModule = typeof import("three");
@@ -95,6 +95,7 @@ const KIND_COLOR: Record<GraphNode["kind"], number> = {
   eeg_point: 0xf59e0b,
   found_label: 0x10b981,
   screenshot: 0x06b6d4,
+  file_activity: 0x0ea5e9,
 };
 const KIND_RADIUS: Record<GraphNode["kind"], number> = {
   query: 1.2,
@@ -102,6 +103,7 @@ const KIND_RADIUS: Record<GraphNode["kind"], number> = {
   eeg_point: 0.55,
   found_label: 0.65,
   screenshot: 0.45,
+  file_activity: 0.5,
 };
 const EDGE_COLOR: Record<GraphEdge["kind"], number> = {
   text_sim: 0x8b5cf6,
@@ -109,6 +111,7 @@ const EDGE_COLOR: Record<GraphEdge["kind"], number> = {
   eeg_sim: 0xf59e0b,
   label_prox: 0x10b981,
   screenshot_link: 0x06b6d4,
+  file_activity_prox: 0x0ea5e9,
 };
 const BASE_EMISSIVE: Record<GraphNode["kind"], number> = {
   query: 0.3,
@@ -116,9 +119,10 @@ const BASE_EMISSIVE: Record<GraphNode["kind"], number> = {
   eeg_point: 0.35,
   found_label: 0.18,
   screenshot: 0.25,
+  file_activity: 0.2,
 };
 
-const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5, screenshot: 2.5 };
+const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5, screenshot: 2.5, file_activity: 3.5 };
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 const BG_DARK = 0x13131f;
 const BG_LIGHT = 0xf1f5f9;

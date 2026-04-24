@@ -902,6 +902,10 @@ pub struct UserSettings {
     /// Rows older than this are periodically pruned.  0 = keep forever.
     #[serde(default = "default_file_retention_days")]
     pub file_retention_days: u32,
+    /// Track clipboard changes (metadata only — content is never stored).
+    /// macOS only.  Default: `false`.
+    #[serde(default)]
+    pub track_clipboard: bool,
     /// Auto-fit the main dashboard window height to content.
     #[serde(default = "default_main_window_auto_fit")]
     pub main_window_auto_fit: bool,
@@ -1223,6 +1227,7 @@ impl Default for UserSettings {
             file_patterns: Vec::new(),
             file_exclude_patterns: Vec::new(),
             file_retention_days: default_file_retention_days(),
+            track_clipboard: false,
             main_window_auto_fit: default_main_window_auto_fit(),
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),

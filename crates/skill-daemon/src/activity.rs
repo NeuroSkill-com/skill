@@ -40,11 +40,21 @@ pub fn start_workers(state: AppState) {
     }
 
     {
-        let s = state;
+        let s = state.clone();
+        let st3 = store.clone();
         std::thread::Builder::new()
             .name("daemon-file-watcher".into())
-            .spawn(move || run_file_watcher(s, store))
+            .spawn(move || run_file_watcher(s, st3))
             .expect("failed to spawn daemon file watcher");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let s = state;
+        std::thread::Builder::new()
+            .name("daemon-clipboard-monitor".into())
+            .spawn(move || run_clipboard_monitor(s, store))
+            .expect("failed to spawn daemon clipboard monitor");
     }
 }
 
@@ -117,6 +127,7 @@ return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
             Some(document_path)
         },
         activated_at: unix_secs(),
+        browser_title: None, // Enriched later in run_poller.
     })
 }
 
@@ -184,6 +195,7 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
         window_title,
         document_path,
         activated_at: unix_secs(),
+        browser_title: None,
     })
 }
 
@@ -293,6 +305,7 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
             window_title,
             document_path: None,
             activated_at: unix_secs(),
+            browser_title: None,
         })
     }
 }
@@ -578,6 +591,8 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
     let mut last_file: Option<String> = None;
     let mut snapshot: Option<FileSnapshot> = None;
     let mut last_prune: u64 = 0;
+    // Meeting state tracking.
+    let mut active_meeting: Option<(i64, &'static str)> = None; // (row_id, platform)
 
     // Load settings for file tracking.
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -620,7 +635,7 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
             retention_days = s.file_retention_days;
         }
 
-        let current = poll_active_window();
+        let mut current = poll_active_window();
         let changed = match (&last, &current) {
             (None, None) => false,
             (None, Some(_)) => true,
@@ -629,7 +644,9 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
         };
 
         if changed {
-            if let Some(info) = &current {
+            if let Some(info) = &mut current {
+                // Enrich with browser page title.
+                info.browser_title = extract_browser_title(&info.app_name, &info.window_title);
                 store.insert_active_window(info);
             }
             last.clone_from(&current);
@@ -696,6 +713,39 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                 let project = last_file.as_deref().map(|p| detect_project(p)).unwrap_or_default();
                 store.insert_build_event(&cmd, &outcome, &project, unix_secs());
             }
+        }
+
+        // ── Meeting / call detection ────────────────────────────────
+        if let Some(info) = &current {
+            let meeting = detect_meeting(&info.app_name, &info.window_title);
+            match (meeting, &active_meeting) {
+                (Some(platform), None) => {
+                    // Meeting started.
+                    if let Some(id) =
+                        store.insert_meeting_start(platform, &info.window_title, &info.app_name, unix_secs())
+                    {
+                        active_meeting = Some((id, platform));
+                    }
+                }
+                (None, Some((id, _))) => {
+                    // Meeting ended.
+                    store.update_meeting_end(*id, unix_secs());
+                    active_meeting = None;
+                }
+                (Some(new_plat), Some((id, old_plat))) if new_plat != *old_plat => {
+                    // Switched meeting platforms — end old, start new.
+                    store.update_meeting_end(*id, unix_secs());
+                    if let Some(new_id) =
+                        store.insert_meeting_start(new_plat, &info.window_title, &info.app_name, unix_secs())
+                    {
+                        active_meeting = Some((new_id, new_plat));
+                    }
+                }
+                _ => {} // Same meeting continues, or no meeting.
+            }
+        } else if let Some((id, _)) = active_meeting.take() {
+            // Window went to None — end any active meeting.
+            store.update_meeting_end(id, unix_secs());
         }
 
         // ── Periodic maintenance (once per hour) ──────────────────
@@ -1095,6 +1145,75 @@ fn detect_build_event(app_name: &str, title: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+/// Detect meeting/call applications from window title.
+/// Returns `Some(platform)` if a meeting is detected.
+fn detect_meeting(app_name: &str, title: &str) -> Option<&'static str> {
+    let lower_app = app_name.to_lowercase();
+    let lower_title = title.to_lowercase();
+
+    if lower_app.contains("zoom") && (lower_title.contains("meeting") || lower_title.contains("webinar")) {
+        return Some("zoom");
+    }
+    if lower_app.contains("teams")
+        && (lower_title.contains("meeting") || lower_title.contains("call") || lower_title.contains("| chat"))
+    {
+        return Some("teams");
+    }
+    if lower_app.contains("slack") && (lower_title.contains("huddle") || lower_title.contains("call")) {
+        return Some("slack");
+    }
+    if lower_title.contains("meet.google.com") || lower_title.contains("google meet") {
+        return Some("google_meet");
+    }
+    if lower_app.contains("facetime") {
+        return Some("facetime");
+    }
+    if lower_app.contains("discord") && (lower_title.contains("voice") || lower_title.contains("stage")) {
+        return Some("discord");
+    }
+    if lower_app.contains("webex") && (lower_title.contains("meeting") || lower_title.contains("call")) {
+        return Some("webex");
+    }
+    None
+}
+
+/// Extract page title from browser window titles.
+/// Most browsers use: "Page Title - Browser Name" or "Page Title — Browser Name".
+/// Returns `Some(page_title)` for known browser apps.
+fn extract_browser_title(app_name: &str, title: &str) -> Option<String> {
+    let lower_app = app_name.to_lowercase();
+    let is_browser = lower_app.contains("chrome")
+        || lower_app.contains("safari")
+        || lower_app.contains("firefox")
+        || lower_app.contains("edge")
+        || lower_app.contains("brave")
+        || lower_app.contains("arc")
+        || lower_app.contains("opera")
+        || lower_app.contains("vivaldi")
+        || lower_app.contains("chromium")
+        || lower_app.contains("orion");
+    if !is_browser {
+        return None;
+    }
+    // Strip trailing " - BrowserName" or " — BrowserName" suffix.
+    // Work backwards from the last separator.
+    let separators = [" — ", " - ", " – "];
+    for sep in &separators {
+        if let Some(idx) = title.rfind(sep) {
+            let page = title[..idx].trim();
+            if !page.is_empty() {
+                return Some(page.to_string());
+            }
+        }
+    }
+    // No separator found — use the full title.
+    if !title.is_empty() {
+        Some(title.to_string())
+    } else {
+        None
+    }
 }
 
 /// Check if a file path matches any exclude pattern.
@@ -1731,5 +1850,132 @@ mod tests {
         let (a, r) = diff_line_hashes(&[1, 2, 3], &[]);
         assert_eq!(a, 0);
         assert_eq!(r, 3);
+    }
+
+    // ── Meeting detection tests ──────────────────────────────────────────────
+
+    #[test]
+    fn detect_zoom_meeting() {
+        assert_eq!(detect_meeting("zoom.us", "Zoom Meeting"), Some("zoom"));
+        assert_eq!(detect_meeting("zoom.us", "Zoom"), None);
+    }
+
+    #[test]
+    fn detect_teams_call() {
+        assert_eq!(detect_meeting("Microsoft Teams", "John Doe | Meeting"), Some("teams"));
+    }
+
+    #[test]
+    fn detect_slack_huddle() {
+        assert_eq!(detect_meeting("Slack", "Huddle in #general"), Some("slack"));
+    }
+
+    #[test]
+    fn detect_google_meet_browser() {
+        assert_eq!(
+            detect_meeting("Google Chrome", "Meeting - meet.google.com"),
+            Some("google_meet")
+        );
+    }
+
+    #[test]
+    fn no_meeting_in_editor() {
+        assert_eq!(detect_meeting("Code", "main.rs — project — Visual Studio Code"), None);
+    }
+
+    // ── Browser title extraction tests ───────────────────────────────────────
+
+    #[test]
+    fn browser_title_chrome() {
+        let t = extract_browser_title("Google Chrome", "GitHub - Pull Request #123 - Google Chrome");
+        assert_eq!(t.as_deref(), Some("GitHub - Pull Request #123"));
+    }
+
+    #[test]
+    fn browser_title_safari() {
+        let t = extract_browser_title("Safari", "Apple Developer Documentation — Safari");
+        assert_eq!(t.as_deref(), Some("Apple Developer Documentation"));
+    }
+
+    #[test]
+    fn browser_title_not_browser() {
+        assert_eq!(
+            extract_browser_title("Code", "main.rs — project — Visual Studio Code"),
+            None
+        );
+    }
+}
+
+// ── Clipboard monitor (macOS only) ───────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
+    let mut last_change_count: i64 = -1;
+    let mut permission_denied_until: u64 = 0; // backoff when permission denied
+
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+
+        // Check if clipboard tracking is enabled.
+        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        let settings = skill_settings::load_settings(&skill_dir);
+        if !settings.track_clipboard {
+            continue;
+        }
+
+        // Backoff when permission was recently denied (re-check every 60s).
+        let now = unix_secs();
+        if now < permission_denied_until {
+            continue;
+        }
+
+        // Query macOS pasteboard change count via osascript.
+        // If Automation permission is not granted, this will fail.
+        let out = match std::process::Command::new("osascript")
+            .args(["-e", "the clipboard info"])
+            .output()
+        {
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+            _ => {
+                // Permission denied or osascript failed — back off for 60s.
+                permission_denied_until = now + 60;
+                continue;
+            }
+        };
+
+        // The output looks like: {{«class utf8», 42}, {string, 42}}
+        // We hash the output to detect changes.
+        let hash = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            out.hash(&mut h);
+            h.finish() as i64
+        };
+
+        if hash == last_change_count {
+            continue;
+        }
+        last_change_count = hash;
+
+        // Determine content size from the info string.
+        let content_size: u64 = out
+            .split(',')
+            .filter_map(|s| s.trim().trim_end_matches('}').trim().parse::<u64>().ok())
+            .next()
+            .unwrap_or(0);
+
+        // Detect content type from clipboard info.
+        let content_type = if out.contains("«class PNGf»") || out.contains("TIFF") {
+            "image"
+        } else if out.contains("«class furl»") {
+            "file"
+        } else {
+            "text"
+        };
+
+        // Get current active window as the "source app".
+        let source_app = poll_active_window().map(|w| w.app_name).unwrap_or_default();
+
+        store.insert_clipboard_event(&source_app, content_type, content_size, unix_secs());
     }
 }

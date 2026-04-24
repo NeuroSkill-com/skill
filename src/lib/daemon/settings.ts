@@ -203,6 +203,15 @@ export async function setFileActivityTracking(enabled: boolean): Promise<void> {
   await daemonPost("/v1/activity/tracking/files", { value: enabled });
 }
 
+export async function getClipboardTracking(): Promise<boolean> {
+  const r = await daemonGet<{ value: boolean }>("/v1/activity/tracking/clipboard");
+  return r.value;
+}
+
+export async function setClipboardTracking(enabled: boolean): Promise<void> {
+  await daemonPost("/v1/activity/tracking/clipboard", { value: enabled });
+}
+
 export function getRecentFiles(limit?: number, since?: number): Promise<FileInteractionRow[]> {
   return daemonPost<FileInteractionRow[]>("/v1/activity/recent-files", {
     limit,
@@ -268,6 +277,94 @@ export function getForgottenFiles(since?: number): Promise<string[]> {
 
 export function getRecentBuilds(): Promise<BuildEventRow[]> {
   return daemonGet<BuildEventRow[]>("/v1/activity/recent-builds");
+}
+
+// ── Range queries ─────────────────────────────────────────────────────────────
+
+export interface MeetingEventRow {
+  id: number;
+  platform: string;
+  title: string;
+  app_name: string;
+  start_at: number;
+  end_at: number | null;
+}
+
+export interface ClipboardEventRow {
+  id: number;
+  source_app: string;
+  content_type: string;
+  content_size: number;
+  copied_at: number;
+}
+
+export interface SessionFileActivity {
+  files: FileInteractionRow[];
+  focus_sessions: FocusSessionRow[];
+  meetings: MeetingEventRow[];
+}
+
+export function getFilesInRange(fromTs: number, toTs: number): Promise<SessionFileActivity> {
+  return daemonPost<SessionFileActivity>("/v1/activity/files-in-range", { from_ts: fromTs, to_ts: toTs });
+}
+
+export function getMeetingsInRange(fromTs: number, toTs: number): Promise<MeetingEventRow[]> {
+  return daemonPost<MeetingEventRow[]>("/v1/activity/meetings-in-range", { from_ts: fromTs, to_ts: toTs });
+}
+
+export function getRecentClipboard(limit?: number): Promise<ClipboardEventRow[]> {
+  return daemonPost<ClipboardEventRow[]>("/v1/activity/recent-clipboard", { limit });
+}
+
+// ── Analysis ──────────────────────────────────────────────────────────────────
+
+export interface ProductivityScore {
+  day_start: number;
+  score: number;
+  edit_velocity: number;
+  deep_work: number;
+  context_stability: number;
+  eeg_focus: number;
+  deep_work_minutes: number;
+  switch_rate: number;
+}
+
+export interface WeeklyDigest {
+  week_start: number;
+  days: DailySummaryRow[];
+  total_interactions: number;
+  total_edits: number;
+  total_secs: number;
+  total_lines_added: number;
+  total_lines_removed: number;
+  avg_eeg_focus: number | null;
+  top_projects: ProjectUsageRow[];
+  top_languages: LanguageBreakdownRow[];
+  focus_session_count: number;
+  meeting_count: number;
+  peak_day_idx: number;
+  peak_hour: number;
+}
+
+export interface StaleFileRow {
+  file_path: string;
+  last_seen: number;
+  total_edits: number;
+  project: string;
+  language: string;
+  days_stale: number;
+}
+
+export function getProductivityScore(dayStart: number): Promise<ProductivityScore> {
+  return daemonPost<ProductivityScore>("/v1/activity/productivity-score", { day_start: dayStart });
+}
+
+export function getWeeklyDigest(weekStart: number): Promise<WeeklyDigest> {
+  return daemonPost<WeeklyDigest>("/v1/activity/weekly-digest", { day_start: weekStart });
+}
+
+export function getStaleFiles(since?: number): Promise<StaleFileRow[]> {
+  return daemonPost<StaleFileRow[]>("/v1/activity/stale-files", { since });
 }
 
 export function getFilePatterns(): Promise<FilePatternRule[]> {

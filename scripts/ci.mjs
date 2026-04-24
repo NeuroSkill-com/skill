@@ -311,7 +311,8 @@ function cmdDiscordNotify(args) {
   });
 
   try {
-    execSync(`curl -sf -X POST "${webhook}" -H "Content-Type: application/json" -d ${JSON.stringify(payload)}`, { stdio: "pipe" });
+    const r = spawnSync("curl", ["-sf", "-X", "POST", webhook, "-H", "Content-Type: application/json", "-d", payload], { stdio: "pipe", encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`curl exited ${r.status}`);
   } catch {
     console.log("⚠ Discord notification failed (non-fatal).");
   }

@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { t } from "$lib/i18n/index.svelte";
+import ActivityTab from "$lib/settings/ActivityTab.svelte";
 import AppearanceTab from "$lib/settings/AppearanceTab.svelte";
 import CalibrationTab from "$lib/settings/CalibrationTab.svelte";
 import ClientsTab from "$lib/settings/ClientsTab.svelte";
@@ -51,6 +52,7 @@ type Tab =
   | "tools"
   | "clients"
   | "screenshots"
+  | "activity"
   | "tokens";
 let tab = $state<Tab>("goals");
 
@@ -68,6 +70,7 @@ const TAB_IDS: Tab[] = [
   "clients",
   "screenshots",
   "hooks",
+  "activity",
   "appearance",
   "settings",
   "shortcuts",
@@ -89,6 +92,7 @@ const TAB_LABELS: Record<Tab, () => string> = {
   clients: () => "Clients",
   embeddings: () => t("settingsTabs.embeddings"),
   hooks: () => t("settingsTabs.hooks"),
+  activity: () => t("settingsTabs.activity"),
   appearance: () => t("settingsTabs.appearance"),
   settings: () => t("settingsTabs.settings"),
   shortcuts: () => t("settingsTabs.shortcuts"),
@@ -114,6 +118,7 @@ const TAB_ICONS: Record<Tab, string> = {
   clients: `<path d="M17 11V7a5 5 0 0 0-10 0v4"/><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="16" r="1.5"/>`,
   embeddings: `<circle cx="12" cy="12" r="2"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="m6 6.5 4 4.5M14 6.5l-2 4M18 7l-4 4.5M6 17l4-4.5M14 17.5l2-4M18 17l-4-4.5"/>`,
   hooks: `<path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 1 1-7-7L7 11"/>`,
+  activity: `<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>`,
   appearance: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
   settings: `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`,
   shortcuts: `<rect x="3" y="11" width="4" height="6" rx="1"/><rect x="10" y="5" width="4" height="12" rx="1"/><rect x="17" y="8" width="4" height="9" rx="1"/>`,
@@ -448,6 +453,8 @@ $effect(() => {
         <ScreenshotsTab />
       {:else if tab === "permissions"}
         <PermissionsTab />
+      {:else if tab === "activity"}
+        <ActivityTab />
       {:else if tab === "tokens"}
         <TokensTab />
       {/if}

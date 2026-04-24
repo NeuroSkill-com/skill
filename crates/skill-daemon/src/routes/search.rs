@@ -665,6 +665,10 @@ fn interactive_search_impl(
         None
     };
 
+    // Open activity store for file interaction correlation.
+    let activity_store = skill_data::activity_store::ActivityStore::open(skill_dir);
+    let mut seen_files: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     // Helper: derive a session_id from a Unix timestamp (date + hour bucket).
     let session_id_from_ts = |ts: u64| -> String {
         let dt = skill_data::util::unix_to_ts(ts);
@@ -961,6 +965,60 @@ fn interactive_search_impl(
                         to_id: ss_id,
                         distance: 0.0,
                         kind: "screenshot_prox".into(),
+                    });
+                }
+            }
+
+            // Step 2c: Find file activity near this label's timestamp.
+            if let Some(ref store) = activity_store {
+                let nearby_files = store.get_files_in_range(ts.saturating_sub(reach_secs), ts + reach_secs, 5);
+                for (f, fi) in nearby_files.iter().enumerate() {
+                    if !seen_files.insert(fi.file_path.clone()) {
+                        continue; // dedup same file across labels
+                    }
+                    let basename = std::path::Path::new(&fi.file_path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(&fi.file_path)
+                        .to_string();
+                    let fa_id = format!("fa{i}_{f}");
+                    let mut fa_node = InteractiveGraphNode {
+                        id: fa_id.clone(),
+                        kind: "file_activity".into(),
+                        text: Some(basename),
+                        timestamp_unix: Some(fi.seen_at),
+                        file_path: Some(fi.file_path.clone()),
+                        project: if fi.project.is_empty() {
+                            None
+                        } else {
+                            Some(fi.project.clone())
+                        },
+                        language: if fi.language.is_empty() {
+                            None
+                        } else {
+                            Some(fi.language.clone())
+                        },
+                        was_modified: Some(fi.was_modified),
+                        lines_added: Some(fi.lines_added),
+                        lines_removed: Some(fi.lines_removed),
+                        parent_id: Some(node_id.clone()),
+                        ..Default::default()
+                    };
+                    // Copy EEG metrics from file interaction if present.
+                    if fi.eeg_focus.is_some() || fi.eeg_mood.is_some() {
+                        fa_node.eeg_metrics = Some(NeighborMetrics {
+                            engagement: fi.eeg_focus.map(|v| v as f64),
+                            mood: fi.eeg_mood.map(|v| v as f64),
+                            ..Default::default()
+                        });
+                    }
+                    fa_node.session_id = Some(session_id_from_ts(fi.seen_at));
+                    nodes.push(fa_node);
+                    edges.push(InteractiveGraphEdge {
+                        from_id: node_id.clone(),
+                        to_id: fa_id,
+                        distance: 0.0,
+                        kind: "file_activity_prox".into(),
                     });
                 }
             }
