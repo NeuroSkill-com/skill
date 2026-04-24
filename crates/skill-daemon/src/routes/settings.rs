@@ -1037,7 +1037,7 @@ async fn set_input_activity_tracking(
 async fn get_current_active_window(State(state): State<AppState>) -> Json<Option<ActiveWindowInfo>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let out = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .and_then(|store| store.get_recent_windows(1).into_iter().next())
             .map(|row| ActiveWindowInfo {
                 app_name: row.app_name,
@@ -1058,7 +1058,8 @@ async fn get_current_active_window(State(state): State<AppState>) -> Json<Option
 async fn get_last_input_activity(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let (keyboard, mouse) = tokio::task::spawn_blocking(move || {
-        let row = ActivityStore::open(&skill_dir).and_then(|store| store.get_recent_input(1).into_iter().next());
+        let row =
+            ActivityStore::open_readonly(&skill_dir).and_then(|store| store.get_recent_input(1).into_iter().next());
         (
             row.as_ref().and_then(|r| r.last_keyboard).unwrap_or(0),
             row.as_ref().and_then(|r| r.last_mouse).unwrap_or(0),

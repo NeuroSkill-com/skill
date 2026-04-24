@@ -11,7 +11,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/.build"
 CONFIG="Debug"
 EMBED_APP=""
-SIGN_IDENTITY="-"
+# Default signing: prefer "NeuroSkill Dev" cert if available (required for
+# macOS widget extension registration), fall back to ad-hoc.
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "NeuroSkill Dev"; then
+    SIGN_IDENTITY="NeuroSkill Dev"
+else
+    SIGN_IDENTITY="-"
+fi
 RUN_TESTS=false
 
 while [[ $# -gt 0 ]]; do
@@ -50,6 +56,7 @@ xcodebuild build \
     -arch "$(uname -m)" \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
+    OTHER_CODE_SIGN_FLAGS="--options=runtime --timestamp=none" \
     2>&1 | tail -5
 
 APPEX_PATH="$BUILD_DIR/Build/Products/$CONFIG/SkillWidgets.appex"

@@ -898,6 +898,65 @@ if (subcommand === "dev" && !process.env.SKILL_DAEMON_ADDR) {
   process.env.SKILL_DAEMON_ADDR = `127.0.0.1:${DEV_DAEMON_PORT}`;
 }
 
+// ── VS Code extension auto-install (dev mode only) ────────────────────────
+if (subcommand === "dev") {
+  const extDir = resolve(root, "extensions", "vscode");
+  const extPkg = resolve(extDir, "package.json");
+  const extOut = resolve(extDir, "out", "extension.js");
+  if (existsSync(extPkg)) {
+    // Only rebuild if source is newer than output.
+    const srcTs = resolve(extDir, "src", "extension.ts");
+    const { statSync, unlinkSync } = await import("node:fs"); // top-level await OK in ESM
+    const needsBuild = !existsSync(extOut) || (existsSync(srcTs) && statSync(srcTs).mtimeMs > statSync(extOut).mtimeMs);
+    if (needsBuild) {
+      console.log("\n🧩 Building VS Code extension…");
+      try {
+        execSync("npm install --silent", { cwd: extDir, stdio: "ignore" });
+        execSync("./node_modules/.bin/tsc -p tsconfig.json", { cwd: extDir, stdio: "ignore" });
+        console.log("   ✓ extension built");
+      } catch (e) {
+        console.warn("   ⚠ extension build failed (non-fatal):", e.message?.split("\n")[0]);
+      }
+    }
+    // Package and install if built and a code CLI is available.
+    if (existsSync(extOut)) {
+      try {
+        const vsceOut = execSync("npx @vscode/vsce package --no-dependencies 2>&1", { cwd: extDir }).toString();
+        const vsixMatch = vsceOut.match(/Packaged:\s+(.+\.vsix)/);
+        const vsixFile = vsixMatch ? resolve(extDir, vsixMatch[1].split("/").pop() || vsixMatch[1]) : null;
+        if (vsixFile && existsSync(vsixFile)) {
+          const codePaths = [
+            "code",
+            "/usr/local/bin/code",
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+            "/Applications/VSCodium.app/Contents/Resources/app/bin/codium",
+            "/Applications/Cursor.app/Contents/Resources/app/bin/code",
+          ];
+          for (const p of codePaths) {
+            try {
+              execSync(`"${p}" --install-extension "${vsixFile}" --force 2>/dev/null`, {
+                stdio: "ignore",
+                timeout: 15000,
+              });
+              console.log(`   ✓ extension installed via ${p.split("/").pop()}`);
+              break;
+            } catch {
+              /* try next */
+            }
+          }
+          try {
+            unlinkSync(vsixFile);
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        console.warn("   ⚠ extension package/install failed (non-fatal):", e.message?.split("\n")[0]);
+      }
+    }
+  }
+}
+
 let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
   console.log("\n🔧 Building skill-daemon…");
@@ -1052,6 +1111,41 @@ if (!tuiDaemonPane) {
         mkdirSync(pluginsDir, { recursive: true });
         rmSync(resolve(pluginsDir, "SkillWidgets.appex"), { recursive: true, force: true });
         cpSync(appex, resolve(pluginsDir, "SkillWidgets.appex"), { recursive: true });
+        // Re-sign: widget first (with its entitlements), then app (without --deep
+        // so the widget signature is preserved).
+        try {
+          let signId = "-";
+          const identities = execSync("security find-identity -v -p codesigning 2>/dev/null", { encoding: "utf8" });
+          if (identities.includes("NeuroSkill Dev")) signId = "NeuroSkill Dev";
+          const widgetEntitlements = resolve(
+            root,
+            "extensions",
+            "widgets",
+            "Sources",
+            "SkillWidgets.debug.entitlements",
+          );
+          const appexPath = resolve(pluginsDir, "SkillWidgets.appex");
+          execFileSync(
+            "codesign",
+            [
+              "--force",
+              "--sign",
+              signId,
+              "--options",
+              "runtime",
+              "--timestamp=none",
+              "--entitlements",
+              widgetEntitlements,
+              appexPath,
+            ],
+            { stdio: "inherit" },
+          );
+          execFileSync(
+            "codesign",
+            ["--force", "--sign", signId, "--options", "runtime", "--timestamp=none", appBundle],
+            { stdio: "inherit" },
+          );
+        } catch {}
         console.log(`\n🧩 Embedded widgets → ${pluginsDir}/SkillWidgets.appex`);
       } else if (appBundle) {
         console.warn("⚠ Widget .appex not found — run extensions/widgets/build-widgets.sh first");

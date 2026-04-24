@@ -195,7 +195,7 @@ fn hash_secret(secret: &str, salt: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     let max_len = a.len().max(b.len());
     let mut diff = a.len() ^ b.len();
 

@@ -136,17 +136,17 @@ pub(crate) fn auth_decision(headers: &HeaderMap, request: &axum::extract::Reques
         return AuthDecision::MissingOrInvalid;
     };
 
-    // Check in-memory default token first (fast path)
+    // Check in-memory default token first (fast path, constant-time comparison).
     if let Ok(current) = state.auth_token.lock() {
-        if token == *current {
+        if skill_daemon_state::auth::constant_time_eq(token.as_bytes(), current.as_bytes()) {
             return AuthDecision::Allowed;
         }
     }
 
-    // Check on-disk default token (handles refresh without restart)
+    // Check on-disk default token (handles refresh without restart).
     if let Ok(path) = token_path() {
         if let Ok(file_token) = std::fs::read_to_string(path) {
-            if token == file_token.trim() {
+            if skill_daemon_state::auth::constant_time_eq(token.as_bytes(), file_token.trim().as_bytes()) {
                 return AuthDecision::Allowed;
             }
         }

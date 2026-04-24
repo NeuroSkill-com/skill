@@ -21,7 +21,7 @@ import ThemeToggle from "./ThemeToggle.svelte";
 let osType: string | null = $state(null);
 let windowLabel = $state("main");
 let windowTitle = $state("");
-let searchMode = $state<"eeg" | "text" | "interactive" | "images">("interactive");
+let searchMode = $state<TitleBarSearchMode>("interactive");
 let titleObserver: MutationObserver | null = null;
 
 // ── Derived ─────────────────────────────────────────────────────────────
@@ -46,11 +46,13 @@ const HISTORY_VIEW_MODES = ["year", "month", "week", "day"] as const;
 function emitApiRefresh() {
   window.dispatchEvent(new CustomEvent(API_REFRESH_EVENT));
 }
-function emitSearchModeSwitch(mode: "eeg" | "text" | "interactive" | "images") {
+type TitleBarSearchMode = "eeg" | "text" | "interactive" | "images" | "code" | "meetings" | "brain";
+function emitSearchModeSwitch(mode: string) {
   window.dispatchEvent(new CustomEvent(SEARCH_SET_MODE_EVENT, { detail: { mode } }));
 }
-function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" | "images" {
-  return v === "eeg" || v === "text" || v === "interactive" || v === "images" ? v : "interactive";
+function normalizeSearchMode(v: unknown): TitleBarSearchMode {
+  const valid = ["eeg", "text", "interactive", "images", "code", "meetings", "brain"];
+  return valid.includes(v as string) ? (v as TitleBarSearchMode) : "interactive";
 }
 async function minimizeWindow() {
   await getCurrentWindow().minimize();

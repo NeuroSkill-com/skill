@@ -22,6 +22,7 @@ import {
   UMAP_POLL_INTERVAL_MS,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import {
@@ -118,13 +119,14 @@ interface CorpusStats {
 let corpusStats = $state<CorpusStats | null>(null);
 
 // ── Mode ─────────────────────────────────────────────────────────────────
-type SearchMode = "eeg" | "text" | "interactive" | "images";
+type SearchMode = "eeg" | "text" | "interactive" | "images" | "code" | "meetings" | "brain";
 let mode = $state<SearchMode>("interactive");
 const SEARCH_MODE_EVENT = "skill:search-mode";
 const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
 
 function normalizeSearchMode(value: unknown): SearchMode {
-  return value === "eeg" || value === "text" || value === "interactive" || value === "images" ? value : "interactive";
+  const valid: SearchMode[] = ["eeg", "text", "interactive", "images", "code", "meetings", "brain"];
+  return valid.includes(value as SearchMode) ? (value as SearchMode) : "interactive";
 }
 
 function emitSearchMode(value: SearchMode) {
@@ -135,6 +137,10 @@ function switchMode(m: SearchMode) {
   mode = m;
   error = "";
   page = 0;
+  // Auto-load data for new modes.
+  if (m === "code") loadCodeMode();
+  else if (m === "meetings") loadMeetingsMode();
+  else if (m === "brain") loadBrainMode();
 }
 
 onMount(() => {
@@ -1338,6 +1344,82 @@ let imgSearched = $state(false);
 let imgSearchMode = $state<"substring" | "semantic">("substring");
 let imgPort = $state(8375);
 let imgToken = $state("");
+
+// ── Code / Meetings / Brain mode state ────────────────────────────────────
+let codeFiles = $state<
+  { key: string; avg_focus: number; interactions: number; total_mins: number; avg_undos: number }[]
+>([]);
+let codeLoading = $state(false);
+let meetingsList = $state<{
+  meetings: {
+    meeting_id: number;
+    title: string;
+    platform: string;
+    meeting_duration_secs: number;
+    recovery_secs: number | null;
+  }[];
+  avg_recovery_secs: number;
+}>({ meetings: [], avg_recovery_secs: 0 });
+let meetingsLoading = $state(false);
+let brainReport = $state<{
+  day_start: number;
+  periods: {
+    period: string;
+    avg_focus: number | null;
+    churn: number;
+    interactions: number;
+    files_touched: number;
+    undos: number;
+  }[];
+  overall_focus: number | null;
+  productivity_score: number;
+  best_period: string;
+} | null>(null);
+let brainFlow = $state<{ in_flow: boolean; score: number; duration_secs: number; avg_focus: number | null } | null>(
+  null,
+);
+let brainLoading = $state(false);
+
+async function loadCodeMode() {
+  codeLoading = true;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const weekAgo = now - 7 * 86400;
+    const result = await daemonPost<{ by_language: typeof codeFiles }>("/v1/brain/code-eeg", { since: weekAgo });
+    codeFiles = result?.by_language ?? [];
+  } catch {
+    codeFiles = [];
+  }
+  codeLoading = false;
+}
+
+async function loadMeetingsMode() {
+  meetingsLoading = true;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const weekAgo = now - 7 * 86400;
+    const result = await daemonPost<typeof meetingsList>("/v1/brain/meeting-recovery", { since: weekAgo, limit: 20 });
+    meetingsList = result ?? { meetings: [], avg_recovery_secs: 0 };
+  } catch {
+    meetingsList = { meetings: [], avg_recovery_secs: 0 };
+  }
+  meetingsLoading = false;
+}
+
+async function loadBrainMode() {
+  brainLoading = true;
+  try {
+    const now = new Date();
+    const todayStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
+    const [report, flow] = await Promise.allSettled([
+      daemonPost<typeof brainReport>("/v1/brain/daily-report", { dayStart: todayStart }),
+      daemonPost<typeof brainFlow>("/v1/brain/flow-state", { windowSecs: 300 }),
+    ]);
+    brainReport = report.status === "fulfilled" ? report.value : null;
+    brainFlow = flow.status === "fulfilled" ? flow.value : null;
+  } catch {}
+  brainLoading = false;
+}
 
 function imgSrc(filename: string): string {
   if (!filename) return "";
@@ -4197,6 +4279,159 @@ Reference specific metrics and timestamps.`;
               </div>
             </div>
           {/each}
+        </div>
+      {/if}
+
+    {:else if mode === "code"}
+      {#if codeLoading}
+        <div class="flex items-center justify-center h-full gap-2">
+          <Spinner size="w-4 h-4" /><span class="text-ui-md text-muted-foreground">Loading code-brain data...</span>
+        </div>
+      {:else if codeFiles.length === 0}
+        <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-10">
+          <div class="w-16 h-16 rounded-2xl bg-sky-500/8 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8 text-sky-500/40">
+              <path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>
+            </svg>
+          </div>
+          <p class="text-ui-lg text-muted-foreground/50 max-w-[300px] leading-relaxed">No code activity with EEG data yet. Start coding with your headset connected.</p>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-3 p-4">
+          <h3 class="text-ui-sm font-semibold text-muted-foreground/60 tracking-widest uppercase">Focus by Language</h3>
+          <div class="flex flex-col gap-2">
+            {#each codeFiles as lang}
+              <div class="flex items-center gap-3 rounded-lg border border-border dark:border-white/[0.06] bg-surface-1 px-3 py-2">
+                <span class="text-ui-sm font-semibold text-foreground w-20 shrink-0">{lang.key}</span>
+                <div class="flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
+                  <div class="h-full rounded-full transition-all
+                    {lang.avg_focus >= 70 ? 'bg-emerald-500' : lang.avg_focus >= 40 ? 'bg-amber-400' : 'bg-red-400'}"
+                    style="width:{lang.avg_focus}%"></div>
+                </div>
+                <span class="text-ui-xs tabular-nums text-muted-foreground/50 w-8 text-right">{lang.avg_focus.toFixed(0)}</span>
+                <span class="text-ui-2xs text-muted-foreground/30">{lang.total_mins}m</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+    {:else if mode === "meetings"}
+      {#if meetingsLoading}
+        <div class="flex items-center justify-center h-full gap-2">
+          <Spinner size="w-4 h-4" /><span class="text-ui-md text-muted-foreground">Loading meetings...</span>
+        </div>
+      {:else if meetingsList.meetings.length === 0}
+        <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-10">
+          <div class="w-16 h-16 rounded-2xl bg-amber-500/8 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8 text-amber-500/40">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <p class="text-ui-lg text-muted-foreground/50 max-w-[300px] leading-relaxed">No meetings detected yet. Meeting detection works automatically from window titles.</p>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-3 p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="text-ui-sm font-semibold text-muted-foreground/60 tracking-widest uppercase">Meeting Recovery</h3>
+            <span class="ml-auto text-ui-xs text-muted-foreground/40">avg recovery: {Math.round(meetingsList.avg_recovery_secs / 60)}m</span>
+          </div>
+          <div class="flex flex-col gap-2">
+            {#each meetingsList.meetings as mtg}
+              <div class="flex items-center gap-3 rounded-lg border border-border dark:border-white/[0.06] bg-surface-1 px-3 py-2">
+                <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20
+                             px-2 py-0.5 text-ui-2xs text-amber-600 dark:text-amber-400 shrink-0">{mtg.platform}</span>
+                <span class="text-ui-sm text-foreground truncate min-w-0 flex-1">{mtg.title || "Untitled"}</span>
+                <span class="text-ui-xs tabular-nums text-muted-foreground/40 shrink-0">{Math.round(mtg.meeting_duration_secs / 60)}m</span>
+                {#if mtg.recovery_secs != null}
+                  <span class="text-ui-xs tabular-nums shrink-0
+                    {mtg.recovery_secs < 600 ? 'text-emerald-500' : mtg.recovery_secs < 1800 ? 'text-amber-400' : 'text-red-400'}">
+                    {Math.round(mtg.recovery_secs / 60)}m recovery
+                  </span>
+                {:else}
+                  <span class="text-ui-xs text-muted-foreground/30">no recovery data</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+    {:else if mode === "brain"}
+      {#if brainLoading}
+        <div class="flex items-center justify-center h-full gap-2">
+          <Spinner size="w-4 h-4" /><span class="text-ui-md text-muted-foreground">Loading brain report...</span>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-4 p-4">
+          <!-- Flow state -->
+          {#if brainFlow}
+            <div class="rounded-xl border px-4 py-3
+              {brainFlow.in_flow ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border dark:border-white/[0.06] bg-surface-1'}">
+              <div class="flex items-center gap-2">
+                {#if brainFlow.in_flow}
+                  <span class="relative flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <span class="text-ui-lg font-bold text-emerald-500">IN FLOW</span>
+                  <span class="text-ui-sm text-emerald-500/60 tabular-nums">{Math.floor(brainFlow.duration_secs / 60)}m</span>
+                {:else}
+                  <span class="w-3 h-3 rounded-full bg-muted-foreground/20"></span>
+                  <span class="text-ui-lg text-muted-foreground/50">Not in flow</span>
+                  <span class="text-ui-sm text-muted-foreground/30 tabular-nums">score: {brainFlow.score.toFixed(0)}</span>
+                {/if}
+              </div>
+              {#if brainFlow.avg_focus != null}
+                <div class="mt-2 w-full h-2 rounded-full bg-muted/40 overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500
+                    {brainFlow.avg_focus >= 70 ? 'bg-emerald-500' : brainFlow.avg_focus >= 40 ? 'bg-amber-400' : 'bg-red-400'}"
+                    style="width:{brainFlow.avg_focus}%"></div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- Daily brain report -->
+          {#if brainReport}
+            <div class="rounded-xl border border-border dark:border-white/[0.06] bg-surface-1 px-4 py-3">
+              <div class="flex items-center gap-2 mb-3">
+                <h3 class="text-ui-sm font-semibold text-muted-foreground/60 tracking-widest uppercase">Daily Brain Report</h3>
+                <span class="ml-auto text-ui-xs tabular-nums
+                  {brainReport.productivity_score >= 70 ? 'text-emerald-500' : brainReport.productivity_score >= 40 ? 'text-amber-400' : 'text-red-400'}">
+                  {brainReport.productivity_score.toFixed(0)}/100
+                </span>
+              </div>
+              <div class="flex flex-col gap-2">
+                {#each brainReport.periods as period}
+                  {@const isPeak = period.period === brainReport.best_period}
+                  <div class="flex items-center gap-3 {isPeak ? 'text-violet-500 font-semibold' : ''}">
+                    <span class="w-16 text-ui-xs capitalize shrink-0">{period.period}</span>
+                    <div class="flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
+                      <div class="h-full rounded-full {isPeak ? 'bg-violet-500/70' : period.avg_focus != null && period.avg_focus >= 60 ? 'bg-emerald-500/50' : 'bg-amber-400/50'}"
+                           style="width:{period.avg_focus ?? 0}%"></div>
+                    </div>
+                    <span class="text-ui-2xs tabular-nums text-muted-foreground/40 w-6 text-right">{period.avg_focus?.toFixed(0) ?? "-"}</span>
+                    <span class="text-ui-2xs text-muted-foreground/30 w-12">{period.files_touched} files</span>
+                  </div>
+                {/each}
+              </div>
+              {#if brainReport.best_period}
+                <div class="mt-2 text-ui-xs text-muted-foreground/40 text-center">
+                  Best period: <span class="capitalize font-semibold text-violet-500/70">{brainReport.best_period}</span>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="flex flex-col items-center justify-center gap-3 text-center px-10 py-8">
+              <div class="w-16 h-16 rounded-2xl bg-violet-500/8 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8 text-violet-500/40">
+                  <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+                </svg>
+              </div>
+              <p class="text-ui-lg text-muted-foreground/50 max-w-[300px] leading-relaxed">No brain data for today yet. Connect your EEG headset and start a session.</p>
+            </div>
+          {/if}
         </div>
       {/if}
     {/if}

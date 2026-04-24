@@ -117,13 +117,21 @@ async fn list_sessions(State(state): State<AppState>) -> Json<Vec<SessionSummary
 }
 
 async fn delete_session(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<DeleteSessionRequest>,
 ) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let csv_path = req.csv_path.clone();
-    let ok = tokio::task::spawn_blocking(move || skill_history::delete_session(&csv_path).is_ok())
-        .await
-        .unwrap_or(false);
+    let ok = tokio::task::spawn_blocking(move || {
+        // Validate the path is within skill_dir to prevent path traversal.
+        let canonical = std::path::Path::new(&csv_path).canonicalize().unwrap_or_default();
+        if !canonical.starts_with(&skill_dir) {
+            return false;
+        }
+        skill_history::delete_session(&csv_path).is_ok()
+    })
+    .await
+    .unwrap_or(false);
     Json(serde_json::json!({ "ok": ok }))
 }
 

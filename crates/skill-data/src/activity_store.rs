@@ -635,6 +635,10 @@ impl ActivityStore {
     /// Context-switch frequency: file switches per minute in a time range.
     pub fn context_switch_rate(&self, from_ts: u64, to_ts: u64) -> f64 {
         let c = self.conn.lock_or_recover();
+        Self::context_switch_rate_q(&c, from_ts, to_ts)
+    }
+
+    fn context_switch_rate_q(c: &rusqlite::Connection, from_ts: u64, to_ts: u64) -> f64 {
         let count: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM file_interactions WHERE seen_at >= ?1 AND seen_at <= ?2",
@@ -685,8 +689,12 @@ impl ActivityStore {
     /// Daily summary for a given day (unix timestamp of midnight).
     pub fn daily_summary(&self, day_start: u64) -> DailySummaryRow {
         let c = self.conn.lock_or_recover();
+        Self::daily_summary_q(&c, day_start)
+    }
+
+    fn daily_summary_q(c: &rusqlite::Connection, day_start: u64) -> DailySummaryRow {
         let day_end = day_start + 86400;
-        let row = c.query_row(
+        c.query_row(
             "SELECT COUNT(*) AS interactions,
                     SUM(was_modified) AS edits,
                     COALESCE(SUM(duration_secs), 0) AS total_secs,
@@ -710,8 +718,8 @@ impl ActivityStore {
                     avg_eeg_focus: row.get::<_, Option<f64>>(7)?.map(|v| v as f32),
                 })
             },
-        );
-        row.unwrap_or(DailySummaryRow {
+        )
+        .unwrap_or(DailySummaryRow {
             day_start,
             ..Default::default()
         })
@@ -774,10 +782,11 @@ impl ActivityStore {
     /// Compute a productivity score for a day (0–100).
     /// Composite of: focus session time, edit velocity, low context-switch rate, EEG focus.
     pub fn productivity_score(&self, day_start: u64) -> ProductivityScore {
-        let summary = self.daily_summary(day_start);
+        let c = self.conn.lock_or_recover();
+        let summary = Self::daily_summary_q(&c, day_start);
         let day_end = day_start + 86400;
-        let switch_rate = self.context_switch_rate(day_start, day_end);
-        let sessions = self.get_focus_sessions_in_range(day_start, day_end);
+        let switch_rate = Self::context_switch_rate_q(&c, day_start, day_end);
+        let sessions = Self::get_focus_sessions_in_range_q(&c, day_start, day_end);
 
         // Deep work minutes = sum of focus sessions > 15 min.
         let deep_work_secs: u64 = sessions
@@ -820,6 +829,7 @@ impl ActivityStore {
 
     /// Weekly digest: aggregate stats for 7 days starting at `week_start`.
     pub fn weekly_digest(&self, week_start: u64) -> WeeklyDigest {
+        let c = self.conn.lock_or_recover();
         let mut days = Vec::with_capacity(7);
         let mut total_interactions = 0u64;
         let mut total_edits = 0u64;
@@ -830,7 +840,7 @@ impl ActivityStore {
         let mut focus_count = 0u32;
 
         for d in 0..7u64 {
-            let day = self.daily_summary(week_start + d * 86400);
+            let day = Self::daily_summary_q(&c, week_start + d * 86400);
             total_interactions += day.interactions;
             total_edits += day.edits;
             total_secs += day.total_secs;
@@ -844,9 +854,11 @@ impl ActivityStore {
         }
 
         let week_end = week_start + 7 * 86400;
+        let sessions = Self::get_focus_sessions_in_range_q(&c, week_start, week_end);
+        // Drop the lock before calling methods that manage their own locking.
+        drop(c);
         let top_projects = self.top_projects(5, Some(week_start));
         let languages = self.language_breakdown(Some(week_start));
-        let sessions = self.get_focus_sessions_in_range(week_start, week_end);
         let meetings = self.get_meetings_in_range(week_start, week_end);
 
         // Find peak day (most edits).
@@ -2433,6 +2445,10 @@ impl ActivityStore {
     /// Return focus sessions overlapping a time range.
     pub fn get_focus_sessions_in_range(&self, from_ts: u64, to_ts: u64) -> Vec<FocusSessionRow> {
         let c = self.conn.lock_or_recover();
+        Self::get_focus_sessions_in_range_q(&c, from_ts, to_ts)
+    }
+
+    fn get_focus_sessions_in_range_q(c: &rusqlite::Connection, from_ts: u64, to_ts: u64) -> Vec<FocusSessionRow> {
         let mut stmt = match c.prepare_cached(
             "SELECT id, start_at, end_at, project, file_count, edit_count,
                     total_lines_added, total_lines_removed, avg_eeg_focus, avg_eeg_mood

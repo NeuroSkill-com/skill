@@ -355,6 +355,14 @@ async fn main() -> anyhow::Result<()> {
         .exg_download_cancel
         .store(true, std::sync::atomic::Ordering::Relaxed);
 
+    // 4. Checkpoint the activity WAL so the database is clean on next start.
+    {
+        let sd = shutdown_state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+        if let Some(store) = skill_data::activity_store::ActivityStore::open(&sd) {
+            store.optimize();
+        }
+    }
+
     // Clean up PID file
     let _ = std::fs::remove_file(&pid_path);
     info!("daemon shut down cleanly");

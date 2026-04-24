@@ -288,7 +288,8 @@ fn spawn_weekly_digest(state: AppState) {
             };
 
             let digest = tokio::task::spawn_blocking(move || {
-                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.weekly_digest(week_start))
+                skill_data::activity_store::ActivityStore::open_readonly(&skill_dir)
+                    .map(|s| s.weekly_digest(week_start))
             })
             .await
             .ok()
@@ -352,7 +353,7 @@ fn spawn_fatigue_monitor(state: AppState) {
 
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
             let alert = tokio::task::spawn_blocking(move || {
-                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.fatigue_check())
+                skill_data::activity_store::ActivityStore::open_readonly(&skill_dir).map(|s| s.fatigue_check())
             })
             .await
             .ok()
@@ -387,19 +388,17 @@ fn spawn_fatigue_monitor(state: AppState) {
 }
 
 /// Daily brain report — fires at 6pm local, sends summary as notification.
+/// If the daemon starts after 18:00, the report fires on the first tick.
 fn spawn_daily_brain_report(state: AppState) {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(60)).await;
         let mut last_report_day: i32 = -1;
         loop {
-            tokio::time::sleep(Duration::from_secs(3600)).await;
-
             let now = chrono::Local::now();
-            if now.hour() != 18 {
-                continue;
-            }
             let day_of_year = now.ordinal() as i32;
-            if day_of_year == last_report_day {
+            // Fire if we're past 18:00 today and haven't reported yet.
+            if now.hour() < 18 || day_of_year == last_report_day {
+                tokio::time::sleep(Duration::from_secs(3600)).await;
                 continue;
             }
             last_report_day = day_of_year;
@@ -416,19 +415,22 @@ fn spawn_daily_brain_report(state: AppState) {
             };
 
             let report = tokio::task::spawn_blocking(move || {
-                skill_data::activity_store::ActivityStore::open(&skill_dir).map(|s| s.daily_brain_report(today_start))
+                skill_data::activity_store::ActivityStore::open_readonly(&skill_dir)
+                    .map(|s| s.daily_brain_report(today_start))
             })
             .await
             .ok()
             .flatten();
 
             if let Some(r) = report {
-                let body = format!(
-                    "Best: {}. Score: {:.0}. Focus: {:.0}.",
-                    r.best_period,
-                    r.productivity_score,
-                    r.overall_focus.unwrap_or(0.0)
-                );
+                let mut parts = vec![format!("Score: {:.0}", r.productivity_score)];
+                if !r.best_period.is_empty() {
+                    parts.push(format!("Best: {}", r.best_period));
+                }
+                if let Some(focus) = r.overall_focus {
+                    parts.push(format!("Focus: {:.0}", focus));
+                }
+                let body = parts.join(". ") + ".";
                 state.broadcast(
                     "daily-brain-report",
                     serde_json::json!({
@@ -440,6 +442,7 @@ fn spawn_daily_brain_report(state: AppState) {
                 );
                 let _ = skill_data::dnd::send_notification("Daily Brain Report", &body);
             }
+            tokio::time::sleep(Duration::from_secs(3600)).await;
         }
     });
 }

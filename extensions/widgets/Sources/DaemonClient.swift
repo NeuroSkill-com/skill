@@ -24,9 +24,9 @@ final class DaemonClient: Sendable {
     // MARK: - Token
 
     private func loadToken() throws -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let tokenPath = home
-            .appendingPathComponent(".config")
+        // dirs::config_dir() in Rust → ~/Library/Application Support on macOS
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let tokenPath = appSupport
             .appendingPathComponent("skill")
             .appendingPathComponent("daemon")
             .appendingPathComponent("auth.token")
@@ -99,7 +99,9 @@ final class DaemonClient: Sendable {
     }
 
     func fetchDailyReport() async throws -> DailyBrainReport {
-        try await post("/v1/brain/daily-report")
+        let cal = Calendar.current
+        let dayStart = Int(cal.startOfDay(for: Date()).timeIntervalSince1970)
+        return try await post("/v1/brain/daily-report", body: ["dayStart": dayStart])
     }
 
     func fetchCognitiveLoad() async throws -> [CognitiveLoadRow] {
@@ -120,17 +122,19 @@ final class DaemonClient: Sendable {
     }
 
     func fetchSleep() async throws -> SleepStages {
-        let now = Int(Date().timeIntervalSince1970)
-        let sixAM = now - (now % 86400) + 21600 // approximate 6am today
+        let cal = Calendar.current
+        var sixAM = cal.startOfDay(for: Date())
+        sixAM = cal.date(bySettingHour: 6, minute: 0, second: 0, of: sixAM) ?? sixAM
+        let sixAMUnix = Int(sixAM.timeIntervalSince1970)
         return try await post("/v1/analysis/sleep", body: [
-            "start_utc": sixAM - 43200, // 6pm yesterday
-            "end_utc": sixAM             // 6am today
+            "start_utc": sixAMUnix - 43200, // 6pm yesterday
+            "end_utc": sixAMUnix             // 6am today
         ])
     }
 
     func fetchCalendarEvents() async throws -> [CalendarEvent] {
-        let now = Int(Date().timeIntervalSince1970)
-        let startOfDay = now - (now % 86400)  // approximate
+        let cal = Calendar.current
+        let startOfDay = Int(cal.startOfDay(for: Date()).timeIntervalSince1970)
         return try await post("/v1/api/calendar-events", body: [
             "start_utc": startOfDay,
             "end_utc": startOfDay + 86400

@@ -60,7 +60,7 @@ interface GraphEdge {
 }
 
 type ThreeModule = typeof import("three");
-type NodeMesh = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshPhongMaterial>;
+type NodeMesh = THREE_NS.Mesh<THREE_NS.BufferGeometry, THREE_NS.MeshPhongMaterial>;
 type NodeSprite = THREE_NS.Sprite;
 type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
 
@@ -219,6 +219,7 @@ let resizeObs: ResizeObserver | null = null;
 let raycaster!: THREE_NS.Raycaster;
 let mouse!: THREE_NS.Vector2;
 let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
+let canvasPointerDownHandler: ((e: PointerEvent) => void) | null = null;
 
 // Richer scene-object records
 let nodeEntries: NodeEntry[] = $state([]);
@@ -398,14 +399,11 @@ async function initScene() {
   // moved less than 5 px (i.e. not a drag/orbit gesture).
   let downX = 0,
     downY = 0;
-  renderer.domElement.addEventListener(
-    "pointerdown",
-    (e: PointerEvent) => {
-      downX = e.clientX;
-      downY = e.clientY;
-    },
-    { passive: true },
-  );
+  canvasPointerDownHandler = (e: PointerEvent) => {
+    downX = e.clientX;
+    downY = e.clientY;
+  };
+  renderer.domElement.addEventListener("pointerdown", canvasPointerDownHandler, { passive: true });
   canvasClickHandler = (e: MouseEvent) => {
     const dx = e.clientX - downX,
       dy = e.clientY - downY;
@@ -952,7 +950,11 @@ onMount(() => {
 onDestroy(() => {
   cancelAnimationFrame(animId);
   resizeObs?.disconnect();
-  if (canvasClickHandler) renderer?.domElement?.removeEventListener("click", canvasClickHandler);
+  if (renderer?.domElement) {
+    if (canvasClickHandler) renderer.domElement.removeEventListener("click", canvasClickHandler);
+    renderer.domElement.removeEventListener("dblclick", onDblClick);
+    if (canvasPointerDownHandler) renderer.domElement.removeEventListener("pointerdown", canvasPointerDownHandler);
+  }
   controls?.dispose();
   renderer?.dispose();
   if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);

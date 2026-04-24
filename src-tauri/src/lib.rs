@@ -435,6 +435,12 @@ pub fn run() {
                         if let Some(win) = app.get_webview_window("main") {
                             let _ = win.hide();
                         }
+                        // Unregister shortcuts — hiding doesn't fire Focused(false)
+                        let any_focused = app.state::<Arc<AtomicBool>>();
+                        any_focused.store(false, Ordering::SeqCst);
+                        if let Err(e) = shortcut_cmds::unregister_all_shortcuts(app) {
+                            eprintln!("[shortcut] unregister on hide: {e}");
+                        }
                     }
                 }
             }
@@ -446,6 +452,12 @@ pub fn run() {
                     api.prevent_exit();
                     if let Some(win) = app.get_webview_window("main") {
                         let _ = win.hide();
+                    }
+                    // Unregister shortcuts — hiding doesn't fire Focused(false)
+                    let any_focused = app.state::<Arc<AtomicBool>>();
+                    any_focused.store(false, Ordering::SeqCst);
+                    if let Err(e) = shortcut_cmds::unregister_all_shortcuts(app) {
+                        eprintln!("[shortcut] unregister on hide: {e}");
                     }
                 } else {
                     eprintln!("[run-event] explicit exit requested — running blocking shutdown");

@@ -51,6 +51,7 @@ pub(crate) async fn run_adapter_session(
                 if let Ok(mut s) = state.status.lock() {
                     s.clear_device();
                 }
+                if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                 broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({"reason": "idle_timeout"}));
                 break;
             }
@@ -63,6 +64,7 @@ pub(crate) async fn run_adapter_session(
                     if let Ok(mut s) = state.status.lock() {
                         s.clear_device();
                     }
+                    if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                     broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                     break;
                 };
@@ -310,6 +312,7 @@ pub(crate) async fn run_adapter_session(
                         if let Ok(mut s) = state.status.lock() {
                             s.clear_device();
                         }
+                        if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                         broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
                         break;
                     }

@@ -20,9 +20,8 @@ final class SnapshotCache: Sendable {
     static let shared = SnapshotCache()
 
     private let cacheURL: URL = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home
-            .appendingPathComponent(".config")
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport
             .appendingPathComponent("skill")
             .appendingPathComponent("daemon")
             .appendingPathComponent("widget-cache.json")

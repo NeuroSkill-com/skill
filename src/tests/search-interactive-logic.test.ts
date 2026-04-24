@@ -213,3 +213,81 @@ describe("AI Summary EEG metrics display", () => {
     expect(detail).toContain("hr=72");
   });
 });
+
+// ── New node/edge kind tests ────────────────────────────────────────────────
+
+describe("new graph node kinds", () => {
+  it("accepts file_activity kind", () => {
+    const node = mkNode("fa1", "file_activity", "main.rs");
+    expect(node.kind).toBe("file_activity");
+  });
+
+  it("accepts meeting kind", () => {
+    const node = mkNode("mtg1", "meeting", "Zoom call");
+    expect(node.kind).toBe("meeting");
+  });
+
+  it("mkNode with all supported kinds doesn't throw", () => {
+    const kinds: GraphNode["kind"][] = [
+      "query",
+      "text_label",
+      "eeg_point",
+      "found_label",
+      "screenshot",
+      "file_activity",
+      "meeting",
+    ];
+    for (const k of kinds) {
+      expect(() => mkNode(`node_${k}`, k)).not.toThrow();
+    }
+  });
+});
+
+describe("new graph edge kinds", () => {
+  it("accepts file_activity_prox kind", () => {
+    const edge: GraphEdge = { from_id: "a", to_id: "fa1", distance: 0, kind: "file_activity_prox" };
+    expect(edge.kind).toBe("file_activity_prox");
+  });
+
+  it("accepts meeting_prox kind", () => {
+    const edge: GraphEdge = { from_id: "a", to_id: "mtg1", distance: 0, kind: "meeting_prox" };
+    expect(edge.kind).toBe("meeting_prox");
+  });
+
+  it("all edge kinds are valid", () => {
+    const kinds: GraphEdge["kind"][] = [
+      "text_sim",
+      "eeg_bridge",
+      "eeg_sim",
+      "label_prox",
+      "screenshot_link",
+      "file_activity_prox",
+      "meeting_prox",
+    ];
+    for (const k of kinds) {
+      const edge: GraphEdge = { from_id: "a", to_id: "b", distance: 0.1, kind: k };
+      expect(edge.kind).toBe(k);
+    }
+  });
+});
+
+describe("file_activity node fields", () => {
+  it("supports file_path and language fields", () => {
+    const node: GraphNode = {
+      id: "fa1",
+      kind: "file_activity",
+      text: "main.rs",
+      distance: 0,
+      file_path: "/src/main.rs",
+      language: "rust",
+      was_modified: true,
+      lines_added: 10,
+      lines_removed: 3,
+    };
+    expect(node.file_path).toBe("/src/main.rs");
+    expect(node.language).toBe("rust");
+    expect(node.was_modified).toBe(true);
+    expect(node.lines_added).toBe(10);
+    expect(node.lines_removed).toBe(3);
+  });
+});

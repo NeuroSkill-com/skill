@@ -4,7 +4,7 @@
 
 [![Release](https://img.shields.io/github/v/release/NeuroSkill-com/skill?style=for-the-badge&logo=github&logoColor=white&label=Latest)](https://github.com/NeuroSkill-com/skill/releases/latest)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](https://github.com/NeuroSkill-com/skill/blob/main/LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/Rcvb8Cx4cZ)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/Rcvb8Cx4cZ) 
 
 > ⚠️ **Research use only — not a medical device.**
 > NeuroSkill is an open-source EXG/BCI research tool. It is not FDA/CE approved and must not be used for diagnosis or treatment.

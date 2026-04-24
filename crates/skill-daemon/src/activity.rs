@@ -24,41 +24,36 @@ pub fn start_workers(state: AppState) {
         return;
     };
 
-    {
-        let s = state.clone();
-        let st = store.clone();
-        std::thread::Builder::new()
-            .name("daemon-active-window-poll".into())
-            .spawn(move || run_poller(s, st))
-            .expect("failed to spawn daemon active-window poller");
-    }
-
-    {
-        let s = state.clone();
-        let st2 = store.clone();
-        std::thread::Builder::new()
-            .name("daemon-input-monitor".into())
-            .spawn(move || run_input_monitor(s, st2))
-            .expect("failed to spawn daemon input monitor");
-    }
-
-    {
-        let s = state.clone();
-        let st3 = store.clone();
-        std::thread::Builder::new()
-            .name("daemon-file-watcher".into())
-            .spawn(move || run_file_watcher(s, st3))
-            .expect("failed to spawn daemon file watcher");
-    }
+    spawn_resilient("daemon-active-window-poll", state.clone(), store.clone(), run_poller);
+    spawn_resilient("daemon-input-monitor", state.clone(), store.clone(), run_input_monitor);
+    spawn_resilient("daemon-file-watcher", state.clone(), store.clone(), run_file_watcher);
 
     #[cfg(target_os = "macos")]
-    {
-        let s = state;
-        std::thread::Builder::new()
-            .name("daemon-clipboard-monitor".into())
-            .spawn(move || run_clipboard_monitor(s, store))
-            .expect("failed to spawn daemon clipboard monitor");
-    }
+    spawn_resilient("daemon-clipboard-monitor", state, store, run_clipboard_monitor);
+}
+
+/// Spawn a named worker thread that automatically restarts on panic.
+/// Clones state and store for each attempt so the worker can be retried.
+fn spawn_resilient(
+    name: &'static str,
+    state: AppState,
+    store: Arc<ActivityStore>,
+    worker: fn(AppState, Arc<ActivityStore>),
+) {
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || loop {
+            let s = state.clone();
+            let st = store.clone();
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || worker(s, st))) {
+                Ok(()) => break, // normal exit
+                Err(e) => {
+                    tracing::error!("[{name}] worker panicked: {e:?} — restarting in 5s");
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                }
+            }
+        })
+        .unwrap_or_else(|_| panic!("failed to spawn {name}"));
 }
 
 #[cfg(target_os = "macos")]
@@ -648,6 +643,11 @@ struct FileSnapshot {
     total_lines_removed: u64,
     total_undo_estimate: u64,
     was_modified: bool,
+    /// Accumulated EEG samples for averaging over the interaction duration.
+    eeg_focus_sum: f64,
+    eeg_mood_sum: f64,
+    eeg_focus_count: u32,
+    eeg_mood_count: u32,
 }
 
 const CHUNK_INTERVAL_SECS: u64 = 5;
@@ -677,14 +677,33 @@ impl FileSnapshot {
             total_lines_removed: 0,
             total_undo_estimate: 0,
             was_modified: false,
+            eeg_focus_sum: 0.0,
+            eeg_mood_sum: 0.0,
+            eeg_focus_count: 0,
+            eeg_mood_count: 0,
         }
     }
 
-    fn maybe_emit_chunk(&mut self, store: &ActivityStore) {
+    /// Accumulate an EEG sample into the running average.
+    fn sample_eeg(&mut self, state: &AppState) {
+        let (focus, mood) = read_eeg_snapshot(state);
+        if let Some(f) = focus {
+            self.eeg_focus_sum += f as f64;
+            self.eeg_focus_count += 1;
+        }
+        if let Some(m) = mood {
+            self.eeg_mood_sum += m as f64;
+            self.eeg_mood_count += 1;
+        }
+    }
+
+    fn maybe_emit_chunk(&mut self, store: &ActivityStore, state: &AppState) {
         let now = unix_secs();
         if now < self.last_chunk_ts + CHUNK_INTERVAL_SECS {
             return;
         }
+        // Sample EEG every chunk tick (~5s) for duration-averaged focus/mood.
+        self.sample_eeg(state);
         self.last_chunk_ts = now;
 
         let (cur_mtime, cur_size) = file_mtime_and_size(&self.path);
@@ -725,7 +744,9 @@ impl FileSnapshot {
         self.prev_size = cur_size;
     }
 
-    fn finalize(mut self, store: &ActivityStore) {
+    fn finalize(mut self, store: &ActivityStore, state: &AppState) {
+        // Take one final EEG sample before averaging.
+        self.sample_eeg(state);
         let (cur_mtime, cur_size) = file_mtime_and_size(&self.path);
         if cur_mtime != self.prev_mtime {
             self.was_modified = true;
@@ -756,6 +777,17 @@ impl FileSnapshot {
             0
         };
 
+        let avg_focus = if self.eeg_focus_count > 0 {
+            Some((self.eeg_focus_sum / self.eeg_focus_count as f64) as f32)
+        } else {
+            None
+        };
+        let avg_mood = if self.eeg_mood_count > 0 {
+            Some((self.eeg_mood_sum / self.eeg_mood_count as f64) as f32)
+        } else {
+            None
+        };
+
         store.finalize_file_interaction(
             self.row_id,
             elapsed,
@@ -765,6 +797,8 @@ impl FileSnapshot {
             self.total_lines_removed,
             words_delta,
             self.total_undo_estimate,
+            avg_focus,
+            avg_mood,
         );
     }
 }
@@ -883,7 +917,7 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
 
         if !state.track_active_window.load(Ordering::Relaxed) {
             if let Some(snap) = snapshot.take() {
-                snap.finalize(&store);
+                snap.finalize(&store, &state);
             }
             last = None;
             last_file = None;
@@ -948,7 +982,7 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                     let now = unix_secs();
                     // Finalize the previous file interaction.
                     if let Some(snap) = snapshot.take() {
-                        snap.finalize(&store);
+                        snap.finalize(&store, &state);
                     }
 
                     if let Some(ref path) = file {
@@ -973,11 +1007,11 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                     last_file = file;
                 } else if let Some(ref mut snap) = snapshot {
                     // Same file still focused — check for edits every 5s.
-                    snap.maybe_emit_chunk(&store);
+                    snap.maybe_emit_chunk(&store, &state);
                 }
             } else {
                 if let Some(snap) = snapshot.take() {
-                    snap.finalize(&store);
+                    snap.finalize(&store, &state);
                 }
                 last_file = None;
             }
@@ -1037,12 +1071,18 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                 store.prune_meetings(cutoff);
                 store.prune_clipboard(cutoff);
                 store.prune_secondary_windows(cutoff);
+                store.prune_terminal_commands(cutoff);
+                store.prune_ai_events(cutoff);
+                store.prune_zone_switches(cutoff);
+                store.prune_layout_snapshots(cutoff);
                 if deleted > 0 {
                     tracing::info!("[activity] pruned {deleted} file_interactions older than {retention_days}d");
                 }
             }
             // Build focus sessions from recent interactions.
             build_focus_sessions(&store, now.saturating_sub(7200));
+            // Reclaim space from pruned rows (incremental auto-vacuum).
+            store.optimize();
         }
     }
 }
@@ -1272,7 +1312,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
     let mut lines_removed = 0u64;
     let mut focus_sum = 0f64;
     let mut mood_sum = 0f64;
-    let mut eeg_count = 0u64;
+    let mut focus_count = 0u64;
+    let mut mood_count = 0u64;
 
     let flush = |store: &ActivityStore,
                  start: u64,
@@ -1284,7 +1325,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
                  lr: u64,
                  fs: f64,
                  ms: f64,
-                 ec: u64| {
+                 fc: u64,
+                 mc: u64| {
         if end <= start {
             return;
         }
@@ -1293,8 +1335,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
             .max_by_key(|(_, &v)| v)
             .map(|(k, _)| k.as_str())
             .unwrap_or("");
-        let avg_focus = if ec > 0 { Some(fs as f32 / ec as f32) } else { None };
-        let avg_mood = if ec > 0 { Some(ms as f32 / ec as f32) } else { None };
+        let avg_focus = if fc > 0 { Some(fs as f32 / fc as f32) } else { None };
+        let avg_mood = if mc > 0 { Some(ms as f32 / mc as f32) } else { None };
         store.insert_focus_session(
             start,
             end,
@@ -1323,7 +1365,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
                 lines_removed,
                 focus_sum,
                 mood_sum,
-                eeg_count,
+                focus_count,
+                mood_count,
             );
             // Start new session.
             session_start = row.seen_at;
@@ -1334,7 +1377,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
             lines_removed = 0;
             focus_sum = 0.0;
             mood_sum = 0.0;
-            eeg_count = 0;
+            focus_count = 0;
+            mood_count = 0;
         }
         session_end = row.seen_at + row.duration_secs.unwrap_or(0);
         files.insert(row.file_path.clone());
@@ -1348,10 +1392,11 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
         lines_removed += row.lines_removed;
         if let Some(f) = row.eeg_focus {
             focus_sum += f as f64;
-            eeg_count += 1;
+            focus_count += 1;
         }
         if let Some(m) = row.eeg_mood {
             mood_sum += m as f64;
+            mood_count += 1;
         }
     }
     // Flush final session.
@@ -1366,7 +1411,8 @@ fn build_focus_sessions(store: &ActivityStore, since: u64) {
         lines_removed,
         focus_sum,
         mood_sum,
-        eeg_count,
+        focus_count,
+        mood_count,
     );
 }
 

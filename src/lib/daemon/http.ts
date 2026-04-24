@@ -65,6 +65,7 @@ async function daemonRequest<T>(
   path: string,
   body?: unknown,
   timeoutMs = 10_000,
+  _retry = true,
 ): Promise<T> {
   let port: number;
   let token: string;
@@ -94,8 +95,9 @@ async function daemonRequest<T>(
   if (!resp.ok) {
     const msg = json?.error || json?.message || `${resp.status} ${resp.statusText}`;
     if (resp.status === 401) {
-      // Token may be stale after daemon restart — force re-bootstrap on next request.
+      // Token may be stale after daemon restart — re-bootstrap and retry once.
       invalidateDaemonBootstrap();
+      if (_retry) return daemonRequest<T>(method, path, body, timeoutMs, false);
       import("./status.svelte")
         .then(({ notifyDaemonError }) => notifyDaemonError("authentication failed"))
         .catch(() => {});

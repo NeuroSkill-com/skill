@@ -666,7 +666,7 @@ fn interactive_search_impl(
     };
 
     // Open activity store for file interaction correlation.
-    let activity_store = skill_data::activity_store::ActivityStore::open(skill_dir);
+    let activity_store = skill_data::activity_store::ActivityStore::open_readonly(skill_dir);
     let mut seen_files: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // Helper: derive a session_id from a Unix timestamp (date + hour bucket).
