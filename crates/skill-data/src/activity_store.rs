@@ -135,6 +135,8 @@ CREATE INDEX IF NOT EXISTS idx_fi_path ON file_interactions (file_path);
 CREATE INDEX IF NOT EXISTS idx_fi_project ON file_interactions (project);
 CREATE INDEX IF NOT EXISTS idx_fi_language ON file_interactions (language);
 CREATE INDEX IF NOT EXISTS idx_fi_category ON file_interactions (category);
+CREATE INDEX IF NOT EXISTS idx_fi_seen_path ON file_interactions (seen_at, file_path);
+CREATE INDEX IF NOT EXISTS idx_fi_seen_project ON file_interactions (seen_at, project);
 
 -- Per-5-second edit chunks within a file interaction.
 -- Gives a granular timeline of when edits happened during a focus session.
@@ -183,6 +185,66 @@ CREATE TABLE IF NOT EXISTS ai_events (
     eeg_mood     REAL
 );
 CREATE INDEX IF NOT EXISTS idx_ai_at ON ai_events (at DESC);
+
+-- Terminal shell commands with EEG correlation.
+CREATE TABLE IF NOT EXISTS terminal_commands (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    terminal_name TEXT    NOT NULL DEFAULT '',
+    shell_type    TEXT    NOT NULL DEFAULT '',
+    command       TEXT    NOT NULL,
+    cwd           TEXT    NOT NULL DEFAULT '',
+    exit_code     INTEGER,
+    started_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    duration_secs INTEGER,
+    category      TEXT    NOT NULL DEFAULT 'other',
+    project       TEXT    NOT NULL DEFAULT '',
+    eeg_focus     REAL,
+    eeg_focus_end REAL,
+    eeg_mood      REAL
+);
+CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tc_category ON terminal_commands (category);
+
+-- Dev loops: edit → build/test → result cycles.
+CREATE TABLE IF NOT EXISTS dev_loops (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at       INTEGER NOT NULL,
+    ended_at         INTEGER,
+    loop_type        TEXT    NOT NULL DEFAULT '',
+    project          TEXT    NOT NULL DEFAULT '',
+    iteration_count  INTEGER NOT NULL DEFAULT 1,
+    pass_count       INTEGER NOT NULL DEFAULT 0,
+    fail_count       INTEGER NOT NULL DEFAULT 0,
+    avg_cycle_secs   REAL,
+    avg_focus        REAL,
+    focus_start      REAL,
+    focus_end        REAL,
+    focus_trend      TEXT    NOT NULL DEFAULT 'stable',
+    files_touched    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_dl_started ON dev_loops (started_at DESC);
+
+-- Zone switches: editor / terminal / panel transitions.
+CREATE TABLE IF NOT EXISTS zone_switches (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    zone      TEXT    NOT NULL,
+    from_zone TEXT    NOT NULL DEFAULT '',
+    at        INTEGER NOT NULL,
+    eeg_focus REAL
+);
+CREATE INDEX IF NOT EXISTS idx_zs_at ON zone_switches (at DESC);
+
+-- Layout snapshots (periodic).
+CREATE TABLE IF NOT EXISTS layout_snapshots (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    sampled_at       INTEGER NOT NULL,
+    editor_groups    INTEGER NOT NULL DEFAULT 1,
+    visible_editors  INTEGER NOT NULL DEFAULT 1,
+    open_tabs        INTEGER NOT NULL DEFAULT 0,
+    terminals        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ls_sampled ON layout_snapshots (sampled_at DESC);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -236,6 +298,28 @@ impl ActivityStore {
             eprintln!("[activity] DDL: {e}");
             return None;
         }
+        Some(Self { conn: Mutex::new(conn) })
+    }
+
+    /// Open an existing activity database for read-only queries.
+    /// Skips schema migrations and DDL — use only when the database has already
+    /// been initialised by a prior `open()` call (e.g. from the activity worker).
+    pub fn open_readonly(skill_dir: &Path) -> Option<Self> {
+        let path = skill_dir.join(skill_constants::ACTIVITY_FILE);
+        if !path.exists() {
+            return None;
+        }
+        let conn = match Connection::open_with_flags(
+            &path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[activity] open_readonly {}: {e}", path.display());
+                return None;
+            }
+        };
+        crate::util::init_wal_pragmas(&conn);
         Some(Self { conn: Mutex::new(conn) })
     }
 
@@ -478,13 +562,17 @@ impl ActivityStore {
         lines_removed: u64,
         words_delta: i64,
         undo_count: u64,
+        avg_eeg_focus: Option<f32>,
+        avg_eeg_mood: Option<f32>,
     ) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
             "UPDATE file_interactions
              SET duration_secs = ?1, was_modified = ?2, size_delta = ?3,
                  lines_added = ?4, lines_removed = ?5, words_delta = ?6,
-                 undo_count = ?7
+                 undo_count = ?7,
+                 eeg_focus = COALESCE(?9, eeg_focus),
+                 eeg_mood = COALESCE(?10, eeg_mood)
              WHERE id = ?8",
             params![
                 duration_secs as i64,
@@ -495,6 +583,8 @@ impl ActivityStore {
                 words_delta,
                 undo_count as i64,
                 row_id,
+                avg_eeg_focus,
+                avg_eeg_mood,
             ],
         ) {
             eprintln!("[activity] finalize_file_interaction: {e}");
@@ -628,11 +718,12 @@ impl ActivityStore {
     }
 
     /// Hourly edit heatmap: lines changed per hour of day (0-23).
-    pub fn hourly_edit_heatmap(&self, since: Option<u64>) -> Vec<HourlyEditRow> {
+    /// `tz_offset_secs` is the local UTC offset (e.g. -28800 for UTC-8).
+    pub fn hourly_edit_heatmap(&self, since: Option<u64>, tz_offset_secs: i32) -> Vec<HourlyEditRow> {
         let c = self.conn.lock_or_recover();
         let since_ts = since.unwrap_or(0) as i64;
         let mut stmt = match c.prepare_cached(
-            "SELECT (seen_at % 86400) / 3600 AS hour,
+            "SELECT ((seen_at + ?2) % 86400) / 3600 AS hour,
                     COUNT(*) AS interactions,
                     COALESCE(SUM(lines_added + lines_removed), 0) AS total_churn,
                     AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus
@@ -645,7 +736,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        stmt.query_map([since_ts], |row| {
+        stmt.query_map(params![since_ts, tz_offset_secs as i64], |row| {
             Ok(HourlyEditRow {
                 hour: row.get::<_, i64>(0)? as u8,
                 interactions: row.get::<_, i64>(1)? as u64,
@@ -767,7 +858,7 @@ impl ActivityStore {
             .unwrap_or(0);
 
         // Find peak hour from heatmap.
-        let heatmap = self.hourly_edit_heatmap(Some(week_start));
+        let heatmap = self.hourly_edit_heatmap(Some(week_start), crate::util::local_tz_offset_secs());
         let peak_hour = heatmap
             .iter()
             .max_by_key(|h| h.total_churn)
@@ -964,10 +1055,11 @@ impl ActivityStore {
     }
 
     /// Score each hour of the day by productivity.
-    pub fn optimal_hours(&self, since: u64, top_n: usize) -> OptimalHoursResult {
+    /// `tz_offset_secs` is the local UTC offset (e.g. -28800 for UTC-8).
+    pub fn optimal_hours(&self, since: u64, top_n: usize, tz_offset_secs: i32) -> OptimalHoursResult {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT (seen_at % 86400) / 3600 AS hour,
+            "SELECT ((seen_at + ?2) % 86400) / 3600 AS hour,
                     COUNT(*) AS interactions,
                     COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
                     AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus
@@ -984,7 +1076,7 @@ impl ActivityStore {
             }
         };
         let mut hours: Vec<HourScore> = stmt
-            .query_map([since as i64], |row| {
+            .query_map(params![since as i64, tz_offset_secs as i64], |row| {
                 Ok(HourScore {
                     hour: row.get::<_, i64>(0)? as u8,
                     interactions: row.get::<_, i64>(1)? as u64,
@@ -1112,25 +1204,27 @@ impl ActivityStore {
 
     /// Daily brain report split by morning/afternoon/evening.
     pub fn daily_brain_report(&self, day_start: u64) -> DailyBrainReport {
-        let c = self.conn.lock_or_recover();
         let day_end = day_start + 86400;
-        let mut stmt = match c.prepare_cached(
-            "SELECT CASE
-                WHEN (seen_at % 86400) / 3600 BETWEEN 6 AND 11 THEN 'morning'
-                WHEN (seen_at % 86400) / 3600 BETWEEN 12 AND 17 THEN 'afternoon'
-                ELSE 'evening'
-             END AS period,
-             COUNT(*) AS n, COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
-             AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus,
-             SUM(undo_count) AS undos, COUNT(DISTINCT file_path) AS files
-             FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2
-             GROUP BY period",
-        ) {
-            Ok(s) => s,
-            Err(_) => return DailyBrainReport::default_for(day_start),
-        };
-        let periods: Vec<PeriodSummary> = stmt
-            .query_map(params![day_start as i64, day_end as i64], |row| {
+        // Query periods in a scoped lock — must drop before calling
+        // productivity_score(), which re-acquires the same Mutex.
+        let periods: Vec<PeriodSummary> = {
+            let c = self.conn.lock_or_recover();
+            let mut stmt = match c.prepare_cached(
+                "SELECT CASE
+                    WHEN (seen_at - ?1) / 3600 BETWEEN 6 AND 11 THEN 'morning'
+                    WHEN (seen_at - ?1) / 3600 BETWEEN 12 AND 17 THEN 'afternoon'
+                    ELSE 'evening'
+                 END AS period,
+                 COUNT(*) AS n, COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
+                 AVG(CASE WHEN eeg_focus IS NOT NULL THEN eeg_focus END) AS avg_focus,
+                 SUM(undo_count) AS undos, COUNT(DISTINCT file_path) AS files
+                 FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2
+                 GROUP BY period",
+            ) {
+                Ok(s) => s,
+                Err(_) => return DailyBrainReport::default_for(day_start),
+            };
+            stmt.query_map(params![day_start as i64, day_end as i64], |row| {
                 Ok(PeriodSummary {
                     period: row.get(0)?,
                     avg_focus: row.get::<_, Option<f64>>(3)?.map(|v| v as f32),
@@ -1141,9 +1235,11 @@ impl ActivityStore {
                 })
             })
             .map(|rows| rows.filter_map(std::result::Result::ok).collect())
-            .unwrap_or_default();
+            .unwrap_or_default()
+        };
         let best = periods
             .iter()
+            .filter(|p| p.avg_focus.is_some())
             .max_by(|a, b| {
                 a.avg_focus
                     .unwrap_or(0.0)
@@ -1152,13 +1248,17 @@ impl ActivityStore {
             })
             .map(|p| p.period.clone())
             .unwrap_or_default();
-        let overall = periods.iter().filter_map(|p| p.avg_focus).sum::<f32>()
-            / periods.iter().filter(|p| p.avg_focus.is_some()).count().max(1) as f32;
+        let focus_count = periods.iter().filter(|p| p.avg_focus.is_some()).count();
+        let overall = if focus_count > 0 {
+            Some(periods.iter().filter_map(|p| p.avg_focus).sum::<f32>() / focus_count as f32)
+        } else {
+            None
+        };
         let score = self.productivity_score(day_start);
         DailyBrainReport {
             day_start,
             periods,
-            overall_focus: Some(overall),
+            overall_focus: overall,
             productivity_score: score.score,
             best_period: best,
         }
@@ -1271,7 +1371,12 @@ impl ActivityStore {
             max
         };
         let today_mins = days.first().map(|d| d.deep_work_mins).unwrap_or(0);
-        let weekly: f32 = days.iter().take(7).map(|d| d.deep_work_mins as f32).sum::<f32>() / 7.0;
+        let week_days = days.len().min(7);
+        let weekly: f32 = if week_days > 0 {
+            days.iter().take(7).map(|d| d.deep_work_mins as f32).sum::<f32>() / week_days as f32
+        } else {
+            0.0
+        };
         DeepWorkStreak {
             current_streak_days: streak,
             longest_streak_days: longest,
@@ -1360,6 +1465,68 @@ impl ActivityStore {
             )
             .unwrap_or(false);
 
+        // Terminal command categories — strong task-type signals.
+        let term_cats: Vec<(String, i64)> = c
+            .prepare_cached(
+                "SELECT category, COUNT(*) FROM terminal_commands
+                 WHERE started_at >= ?1 GROUP BY category ORDER BY COUNT(*) DESC",
+            )
+            .and_then(|mut stmt| {
+                stmt.query_map(params![since as i64], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            })
+            .unwrap_or_default();
+        let term_top = term_cats.first().map(|(cat, _)| cat.as_str()).unwrap_or("");
+        let term_total: i64 = term_cats.iter().map(|(_, n)| n).sum();
+
+        // Terminal-based detection takes priority when recent commands are present.
+        if term_total > 0 {
+            if has_debug || term_top == "debug" {
+                return TaskTypeResult {
+                    task_type: "debugging".into(),
+                    confidence: 0.9,
+                    signals: vec!["debugger active or debug commands in terminal".into()],
+                };
+            }
+            if term_top == "test" || has_test {
+                return TaskTypeResult {
+                    task_type: "testing".into(),
+                    confidence: 0.85,
+                    signals: vec![format!(
+                        "test commands in terminal ({}x)",
+                        term_cats
+                            .iter()
+                            .find(|(c, _)| c == "test")
+                            .map(|(_, n)| *n)
+                            .unwrap_or(0)
+                    )],
+                };
+            }
+            if term_top == "docker" || term_cats.iter().any(|(c, _)| c == "docker") {
+                return TaskTypeResult {
+                    task_type: "infrastructure".into(),
+                    confidence: 0.8,
+                    signals: vec!["docker/k8s commands in terminal".into()],
+                };
+            }
+            if term_top == "deploy" {
+                return TaskTypeResult {
+                    task_type: "deploying".into(),
+                    confidence: 0.85,
+                    signals: vec!["deployment commands in terminal".into()],
+                };
+            }
+            if term_top == "git" {
+                return TaskTypeResult {
+                    task_type: "git_management".into(),
+                    confidence: 0.7,
+                    signals: vec!["git commands dominating terminal".into()],
+                };
+            }
+        }
+
         if has_debug || (build_fails > 0 && undos > 5) {
             return TaskTypeResult {
                 task_type: "debugging".into(),
@@ -1397,12 +1564,13 @@ impl ActivityStore {
 
     /// Predict whether the user is stuck based on undo rate, velocity, and focus.
     pub fn predict_struggle(&self, window_secs: u64) -> StrugglePrediction {
-        let c = self.conn.lock_or_recover();
         let now = now_secs();
         let since = now.saturating_sub(window_secs);
-        // Recent undo rate from edit chunks.
-        let (undo_total, _chunk_count): (u64, u64) = c
-            .query_row(
+        // Recent undo rate from edit chunks (scoped lock — must drop before
+        // calling self.get_recent_files below).
+        let (undo_total, _chunk_count): (u64, u64) = {
+            let c = self.conn.lock_or_recover();
+            c.query_row(
                 "SELECT COALESCE(SUM(undo_estimate), 0), COUNT(*) FROM file_edit_chunks WHERE chunk_at >= ?1",
                 params![since as i64],
                 |row| {
@@ -1412,27 +1580,57 @@ impl ActivityStore {
                     ))
                 },
             )
-            .unwrap_or_default();
+            .unwrap_or_default()
+        };
         // Recent file: focus + time on it.
         let recent = self.get_recent_files(1, None);
         let current_file = recent.first().map(|f| f.file_path.clone()).unwrap_or_default();
         let focus = recent.first().and_then(|f| f.eeg_focus);
         let time_on_file = recent.first().and_then(|f| f.duration_secs).unwrap_or(0);
         // Compute velocity drop: compare last 5min vs prior 15min.
-        let recent_churn: u64 = c
-            .query_row(
-                "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1",
-                params![(now - 300) as i64],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0) as u64;
-        let prior_churn: u64 = c
-            .query_row(
-                "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2",
-                params![(now - 1200) as i64, (now - 300) as i64],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0) as u64;
+        let (recent_churn, prior_churn): (u64, u64) = {
+            let c = self.conn.lock_or_recover();
+            let rc = c
+                .query_row(
+                    "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1",
+                    params![(now - 300) as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            let pc = c
+                .query_row(
+                    "SELECT COALESCE(SUM(lines_added + lines_removed), 0) FROM file_interactions WHERE seen_at >= ?1 AND seen_at < ?2",
+                    params![(now - 1200) as i64, (now - 300) as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            (rc, pc)
+        };
+
+        // Terminal failure signal: recent failed commands boost struggle score.
+        let (fail_count, rerun_count): (u64, u64) = {
+            let c = self.conn.lock_or_recover();
+            let fails = c
+                .query_row(
+                    "SELECT COUNT(*) FROM terminal_commands WHERE started_at >= ?1 AND exit_code IS NOT NULL AND exit_code != 0",
+                    params![since as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            // Detect repeated same command (re-runs after failure)
+            let reruns = c
+                .query_row(
+                    "SELECT COUNT(*) FROM (
+                       SELECT command, COUNT(*) as c FROM terminal_commands
+                       WHERE started_at >= ?1 AND category IN ('build','test','run')
+                       GROUP BY command HAVING c >= 3
+                     )",
+                    params![since as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            (fails, reruns)
+        };
 
         let mins = (window_secs as f32 / 60.0).max(1.0);
         let undo_rate = undo_total as f32 / mins;
@@ -1443,10 +1641,22 @@ impl ActivityStore {
         };
         let focus_penalty = 100.0 - focus.unwrap_or(50.0);
         let time_stuck = (time_on_file as f32 / 60.0).min(30.0) / 30.0 * 100.0;
-        let score = (undo_rate * 20.0 + velocity_drop * 0.3 + focus_penalty * 0.3 + time_stuck * 0.2).clamp(0.0, 100.0);
+        let fail_penalty = (fail_count as f32 * 8.0).min(40.0);
+        let rerun_penalty = (rerun_count as f32 * 15.0).min(30.0);
+        let score = (undo_rate * 15.0
+            + velocity_drop * 0.25
+            + focus_penalty * 0.2
+            + time_stuck * 0.1
+            + fail_penalty
+            + rerun_penalty)
+            .clamp(0.0, 100.0);
         let struggling = score > 60.0;
         let suggestion = if struggling {
-            if undo_rate > 3.0 {
+            if rerun_count > 0 {
+                "You're re-running the same failing command — try a different approach."
+            } else if fail_count >= 3 {
+                "Multiple failures — step back and read the error messages carefully."
+            } else if undo_rate > 3.0 {
                 "High undo rate — try a different approach or break the problem down."
             } else if focus_penalty > 60.0 {
                 "Focus is low — consider a short break to reset."
@@ -1723,6 +1933,339 @@ impl ActivityStore {
             "INSERT INTO build_events (command, outcome, project, detected_at) VALUES (?1, ?2, ?3, ?4)",
             params![command, outcome, project, detected_at as i64],
         );
+    }
+
+    // ── Terminal commands ────────────────────────────────────────────────────
+
+    /// Categorize a terminal command by its first word / pattern.
+    fn categorize_command(cmd: &str) -> &'static str {
+        let first = cmd.split_whitespace().next().unwrap_or("");
+        let lower = first.to_lowercase();
+        match lower.as_str() {
+            "cargo" => {
+                if cmd.contains("test") {
+                    "test"
+                } else if cmd.contains("build") || cmd.contains("check") {
+                    "build"
+                } else if cmd.contains("run") {
+                    "run"
+                } else if cmd.contains("add") || cmd.contains("install") {
+                    "install"
+                } else {
+                    "build"
+                }
+            }
+            "npm" | "npx" | "pnpm" | "yarn" | "bun" => {
+                if cmd.contains("test") {
+                    "test"
+                } else if cmd.contains("build") {
+                    "build"
+                } else if cmd.contains("start") || cmd.contains("dev") {
+                    "run"
+                } else if cmd.contains("install") || cmd.contains("add") {
+                    "install"
+                } else {
+                    "run"
+                }
+            }
+            "make" | "cmake" | "ninja" | "tsc" | "webpack" | "vite" | "esbuild" | "swc" | "go"
+                if cmd.contains("build") =>
+            {
+                "build"
+            }
+            "go" if cmd.contains("test") => "test",
+            "go" if cmd.contains("run") => "run",
+            "pytest" | "jest" | "vitest" | "mocha" | "rspec" | "phpunit" => "test",
+            "python" | "node" | "deno" | "ruby" | "php" | "java" | "dotnet" => "run",
+            "git" => "git",
+            "docker" | "docker-compose" | "podman" | "kubectl" | "helm" | "k9s" | "k3s" | "minikube" | "skaffold" => {
+                "docker"
+            }
+            "terraform" | "ansible" | "pulumi" | "cdk" | "fly" | "vercel" | "netlify" | "aws" | "gcloud" | "az" => {
+                "deploy"
+            }
+            "pip" | "pip3" | "brew" | "apt" | "apt-get" | "pacman" | "yum" | "dnf" | "apk" => "install",
+            "cd" | "ls" | "ll" | "find" | "grep" | "rg" | "fd" | "tree" | "cat" | "less" | "head" | "tail" | "wc"
+            | "pwd" | "which" | "where" | "file" | "stat" | "du" => "navigate",
+            "gdb" | "lldb" | "dlv" | "pdb" => "debug",
+            "ssh" | "scp" | "rsync" | "curl" | "wget" | "httpie" => "network",
+            "mvn" | "gradle" | "ant" | "sbt" => {
+                if cmd.contains("test") {
+                    "test"
+                } else {
+                    "build"
+                }
+            }
+            _ => "other",
+        }
+    }
+
+    /// Insert a terminal command start event. Returns the row id.
+    pub fn insert_terminal_command_start(
+        &self,
+        terminal_name: &str,
+        command: &str,
+        cwd: &str,
+        started_at: u64,
+        eeg_focus: Option<f64>,
+        eeg_mood: Option<f64>,
+    ) -> i64 {
+        let category = Self::categorize_command(command);
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO terminal_commands (terminal_name, command, cwd, started_at, category, eeg_focus, eeg_mood)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                terminal_name,
+                command,
+                cwd,
+                started_at as i64,
+                category,
+                eeg_focus,
+                eeg_mood
+            ],
+        );
+        c.last_insert_rowid()
+    }
+
+    /// Update a terminal command with its end time and exit code.
+    pub fn update_terminal_command_end(
+        &self,
+        command: &str,
+        terminal_name: &str,
+        exit_code: Option<i64>,
+        ended_at: u64,
+        eeg_focus_end: Option<f64>,
+    ) {
+        let c = self.conn.lock_or_recover();
+        // Find the most recent matching command that hasn't ended yet
+        let _ = c.execute(
+            "UPDATE terminal_commands SET exit_code = ?1, ended_at = ?2,
+             duration_secs = ?2 - started_at, eeg_focus_end = ?3
+             WHERE id = (SELECT id FROM terminal_commands
+                         WHERE command = ?4 AND terminal_name = ?5 AND ended_at IS NULL
+                         ORDER BY started_at DESC LIMIT 1)",
+            params![exit_code, ended_at as i64, eeg_focus_end, command, terminal_name],
+        );
+    }
+
+    /// Insert a zone switch event.
+    pub fn insert_zone_switch(&self, zone: &str, from_zone: &str, at: u64, eeg_focus: Option<f64>) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO zone_switches (zone, from_zone, at, eeg_focus) VALUES (?1, ?2, ?3, ?4)",
+            params![zone, from_zone, at as i64, eeg_focus],
+        );
+    }
+
+    /// Insert a layout snapshot.
+    pub fn insert_layout_snapshot(&self, at: u64, groups: i64, visible: i64, tabs: i64, terminals: i64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO layout_snapshots (sampled_at, editor_groups, visible_editors, open_tabs, terminals)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![at as i64, groups, visible, tabs, terminals],
+        );
+    }
+
+    /// Detect and store dev loops (edit → build/test → result cycles).
+    /// Called periodically by a background worker.
+    pub fn detect_dev_loops(&self, window_secs: u64) -> Vec<DevLoopRow> {
+        let now = now_secs();
+        let since = now.saturating_sub(window_secs);
+        let c = self.conn.lock_or_recover();
+
+        // Find build/test commands in the window, ordered chronologically.
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, command, category, exit_code, started_at, ended_at, eeg_focus, eeg_focus_end
+             FROM terminal_commands
+             WHERE started_at >= ?1 AND category IN ('build', 'test', 'run')
+             ORDER BY started_at ASC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+
+        struct Cmd {
+            command: String,
+            category: String,
+            exit_code: Option<i64>,
+            started_at: u64,
+            focus: Option<f64>,
+            focus_end: Option<f64>,
+        }
+
+        let cmds: Vec<Cmd> = stmt
+            .query_map(params![since as i64], |row| {
+                Ok(Cmd {
+                    command: row.get(1)?,
+                    category: row.get(2)?,
+                    exit_code: row.get(3)?,
+                    started_at: row.get::<_, i64>(4)? as u64,
+                    focus: row.get(6)?,
+                    focus_end: row.get(7)?,
+                })
+            })
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
+
+        if cmds.is_empty() {
+            return vec![];
+        }
+
+        // Group consecutive same-command runs into loops.
+        let mut loops: Vec<DevLoopRow> = vec![];
+        let mut i = 0;
+        while i < cmds.len() {
+            let base = &cmds[i].command;
+            let cat = &cmds[i].category;
+            let loop_start = cmds[i].started_at;
+            let mut iterations = 0u32;
+            let mut passes = 0u32;
+            let mut fails = 0u32;
+            let mut focus_sum = 0.0f64;
+            let mut focus_count = 0u32;
+            let first_focus = cmds[i].focus;
+            let mut last_focus = cmds[i].focus_end.or(cmds[i].focus);
+            let mut loop_end = cmds[i].started_at;
+
+            while i < cmds.len() && cmds[i].command == *base {
+                iterations += 1;
+                match cmds[i].exit_code {
+                    Some(0) => passes += 1,
+                    Some(_) => fails += 1,
+                    None => {}
+                }
+                if let Some(f) = cmds[i].focus {
+                    focus_sum += f;
+                    focus_count += 1;
+                }
+                last_focus = cmds[i].focus_end.or(cmds[i].focus).or(last_focus);
+                loop_end = cmds[i].started_at;
+                i += 1;
+            }
+
+            if iterations >= 2 {
+                let duration = loop_end.saturating_sub(loop_start);
+                let avg_cycle = if iterations > 1 {
+                    duration as f64 / (iterations - 1) as f64
+                } else {
+                    0.0
+                };
+                let avg_focus = if focus_count > 0 {
+                    Some(focus_sum / focus_count as f64)
+                } else {
+                    None
+                };
+                let trend = match (first_focus, last_focus) {
+                    (Some(f), Some(l)) if l > f + 5.0 => "rising",
+                    (Some(f), Some(l)) if l < f - 5.0 => "falling",
+                    _ => "stable",
+                };
+                loops.push(DevLoopRow {
+                    loop_type: format!("edit-{cat}"),
+                    command: base.clone(),
+                    iterations,
+                    passes,
+                    fails,
+                    started_at: loop_start,
+                    ended_at: loop_end,
+                    avg_cycle_secs: avg_cycle,
+                    avg_focus,
+                    focus_trend: trend.to_string(),
+                });
+            }
+        }
+        loops
+    }
+
+    /// Get recent terminal commands.
+    pub fn get_recent_terminal_commands(&self, limit: u32, since: u64) -> Vec<TerminalCommandRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, terminal_name, command, cwd, exit_code, started_at, ended_at,
+                    duration_secs, category, eeg_focus, eeg_focus_end
+             FROM terminal_commands WHERE started_at >= ?1
+             ORDER BY started_at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, limit as i64], |row| {
+            Ok(TerminalCommandRow {
+                id: row.get(0)?,
+                terminal_name: row.get(1)?,
+                command: row.get(2)?,
+                cwd: row.get(3)?,
+                exit_code: row.get(4)?,
+                started_at: row.get::<_, i64>(5)? as u64,
+                ended_at: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
+                duration_secs: row.get(7)?,
+                category: row.get(8)?,
+                eeg_focus: row.get(9)?,
+                eeg_focus_end: row.get(10)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Terminal impact on focus: avg focus delta by command category.
+    pub fn terminal_focus_impact(&self, since: u64) -> Vec<TerminalImpactRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT category,
+                    COUNT(*) as cmd_count,
+                    AVG(eeg_focus_end - eeg_focus) as avg_focus_delta,
+                    SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as pass_count,
+                    SUM(CASE WHEN exit_code IS NOT NULL AND exit_code != 0 THEN 1 ELSE 0 END) as fail_count,
+                    AVG(duration_secs) as avg_duration
+             FROM terminal_commands
+             WHERE started_at >= ?1 AND eeg_focus IS NOT NULL AND eeg_focus_end IS NOT NULL
+             GROUP BY category
+             ORDER BY cmd_count DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([since as i64], |row| {
+            Ok(TerminalImpactRow {
+                category: row.get(0)?,
+                cmd_count: row.get(1)?,
+                avg_focus_delta: row.get(2)?,
+                pass_count: row.get(3)?,
+                fail_count: row.get(4)?,
+                avg_duration_secs: row.get(5)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Context switch cost: avg focus dip when switching zones.
+    pub fn zone_switch_cost(&self, since: u64) -> Vec<ZoneSwitchCostRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT from_zone, zone, COUNT(*) as switches,
+                    AVG(eeg_focus) as avg_focus_at_switch
+             FROM zone_switches
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY from_zone, zone
+             ORDER BY switches DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([since as i64], |row| {
+            Ok(ZoneSwitchCostRow {
+                from_zone: row.get(0)?,
+                to_zone: row.get(1)?,
+                switches: row.get(2)?,
+                avg_focus_at_switch: row.get(3)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
     }
 
     pub fn get_recent_builds(&self, limit: u32) -> Vec<BuildEventRow> {
@@ -2055,6 +2598,47 @@ impl ActivityStore {
             params![cutoff as i64],
         )
         .unwrap_or(0) as u64
+    }
+
+    /// Delete terminal commands older than `cutoff`.
+    pub fn prune_terminal_commands(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "DELETE FROM terminal_commands WHERE started_at < ?1",
+            params![cutoff as i64],
+        )
+        .unwrap_or(0) as u64
+    }
+
+    /// Delete AI events older than `cutoff`.
+    pub fn prune_ai_events(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute("DELETE FROM ai_events WHERE at < ?1", params![cutoff as i64])
+            .unwrap_or(0) as u64
+    }
+
+    /// Delete zone switch records older than `cutoff`.
+    pub fn prune_zone_switches(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute("DELETE FROM zone_switches WHERE at < ?1", params![cutoff as i64])
+            .unwrap_or(0) as u64
+    }
+
+    /// Delete layout snapshots older than `cutoff`.
+    pub fn prune_layout_snapshots(&self, cutoff: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "DELETE FROM layout_snapshots WHERE sampled_at < ?1",
+            params![cutoff as i64],
+        )
+        .unwrap_or(0) as u64
+    }
+
+    /// Run SQLite's `PRAGMA optimize` to update query planner statistics.
+    /// Lightweight — safe to call after pruning.
+    pub fn optimize(&self) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute_batch("PRAGMA optimize;");
     }
 
     /// Return secondary windows associated with a primary window ID.
@@ -2722,6 +3306,53 @@ pub struct AiEventRow {
     pub at: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DevLoopRow {
+    pub loop_type: String,
+    pub command: String,
+    pub iterations: u32,
+    pub passes: u32,
+    pub fails: u32,
+    pub started_at: u64,
+    pub ended_at: u64,
+    pub avg_cycle_secs: f64,
+    pub avg_focus: Option<f64>,
+    pub focus_trend: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TerminalCommandRow {
+    pub id: i64,
+    pub terminal_name: String,
+    pub command: String,
+    pub cwd: String,
+    pub exit_code: Option<i64>,
+    pub started_at: u64,
+    pub ended_at: Option<u64>,
+    pub duration_secs: Option<i64>,
+    pub category: String,
+    pub eeg_focus: Option<f64>,
+    pub eeg_focus_end: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TerminalImpactRow {
+    pub category: String,
+    pub cmd_count: i64,
+    pub avg_focus_delta: Option<f64>,
+    pub pass_count: i64,
+    pub fail_count: i64,
+    pub avg_duration_secs: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ZoneSwitchCostRow {
+    pub from_zone: String,
+    pub to_zone: String,
+    pub switches: i64,
+    pub avg_focus_at_switch: Option<f64>,
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -2986,7 +3617,7 @@ mod tests {
     fn finalize_backfill() {
         let store = open_temp();
         let id = ins(&store, "/a.rs", "code", "", 1_000).unwrap();
-        store.finalize_file_interaction(id, 120, true, 42, 8, 3, 15, 0);
+        store.finalize_file_interaction(id, 120, true, 42, 8, 3, 15, 0, None, None);
         let rows = store.get_recent_files(1, None);
         assert_eq!(rows[0].duration_secs, Some(120));
         assert!(rows[0].was_modified);
@@ -3000,9 +3631,9 @@ mod tests {
     fn top_files_sums_duration_and_edits() {
         let store = open_temp();
         let id1 = ins(&store, "/a.rs", "code", "", 100).unwrap();
-        store.finalize_file_interaction(id1, 60, true, 10, 5, 2, 8, 0);
+        store.finalize_file_interaction(id1, 60, true, 10, 5, 2, 8, 0, None, None);
         let id2 = ins(&store, "/a.rs", "code", "", 200).unwrap();
-        store.finalize_file_interaction(id2, 30, false, 0, 0, 0, 0, 0);
+        store.finalize_file_interaction(id2, 30, false, 0, 0, 0, 0, 0, None, None);
         let top = store.top_files(10, None);
         assert_eq!(top[0].total_secs, 90);
         assert_eq!(top[0].edits, 1);
@@ -3182,7 +3813,7 @@ mod tests {
             );
         }
         // Finalize some with edits.
-        store.finalize_file_interaction(1, 300, true, 100, 50, 10, 20, 3);
+        store.finalize_file_interaction(1, 300, true, 100, 50, 10, 20, 3, None, None);
         let score = store.productivity_score(day);
         assert!(score.score > 0.0);
     }
@@ -3208,10 +3839,10 @@ mod tests {
         // File edited 30 days ago.
         let old_ts = now - 30 * 86400;
         let id = ins(&store, "/stale.rs", "code", "proj", old_ts).unwrap();
-        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 0);
+        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 0, None, None);
         // File edited today.
         let new_id = ins(&store, "/fresh.rs", "code", "proj", now).unwrap();
-        store.finalize_file_interaction(new_id, 60, true, 0, 10, 5, 0, 0);
+        store.finalize_file_interaction(new_id, 60, true, 0, 10, 5, 0, 0, None, None);
 
         let stale = store.stale_files(7, old_ts - 86400);
         // Only the old file should be stale.
@@ -3280,7 +3911,7 @@ mod tests {
     fn finalize_writes_undo_count() {
         let store = open_temp();
         let id = ins(&store, "/undo.rs", "code", "proj", 1000).unwrap();
-        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 7);
+        store.finalize_file_interaction(id, 60, true, 0, 10, 5, 0, 7, None, None);
         let files = store.get_recent_files(1, None);
         assert_eq!(files[0].undo_count, 7);
     }

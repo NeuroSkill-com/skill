@@ -63,6 +63,10 @@ pub fn router() -> Router<AppState> {
         .route("/brain/struggle-predict", post(struggle_predict))
         .route("/brain/interruption-recovery", post(interruption_recovery))
         .route("/brain/code-eeg", post(code_eeg))
+        .route("/brain/terminal-impact", post(terminal_impact))
+        .route("/brain/context-cost", post(context_cost))
+        .route("/brain/terminal-commands", post(terminal_commands))
+        .route("/brain/dev-loops", post(dev_loops))
         .route("/activity/timeline", post(timeline))
 }
 
@@ -71,10 +75,11 @@ pub fn router() -> Router<AppState> {
 async fn flow_state(State(state): State<AppState>, Json(req): Json<FlowRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let window = req.window_secs.unwrap_or(300);
-    let result = tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.flow_state_now(window)))
-        .await
-        .ok()
-        .flatten();
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open_readonly(&skill_dir).map(|s| s.flow_state_now(window)))
+            .await
+            .ok()
+            .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
@@ -86,7 +91,7 @@ async fn cognitive_load(
     let since = req.since.unwrap_or(0);
     let by_lang = req.group_by.as_deref() != Some("file");
     let result = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir).map(|s| s.cognitive_load_by(since, by_lang))
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.cognitive_load_by(since, by_lang))
     })
     .await
     .ok()
@@ -100,7 +105,7 @@ async fn meeting_recovery(State(state): State<AppState>, Json(req): Json<SinceRe
     let since = req.since.unwrap_or(0);
     let limit = req.limit.unwrap_or(20);
     let result = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir).map(|s| s.meeting_recovery_times(since, limit))
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.meeting_recovery_times(since, limit))
     })
     .await
     .ok()
@@ -112,20 +117,23 @@ async fn optimal_hours(State(state): State<AppState>, Json(req): Json<SinceReque
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since.unwrap_or(0);
     let top_n = req.top_n.unwrap_or(5);
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.optimal_hours(since, top_n)))
-            .await
-            .ok()
-            .flatten();
+    let tz = chrono::Local::now().offset().local_minus_utc();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.optimal_hours(since, top_n, tz))
+    })
+    .await
+    .ok()
+    .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn fatigue(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let result = tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.fatigue_check()))
-        .await
-        .ok()
-        .flatten();
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open_readonly(&skill_dir).map(|s| s.fatigue_check()))
+            .await
+            .ok()
+            .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
@@ -133,65 +141,71 @@ async fn struggle(State(state): State<AppState>, Json(req): Json<SinceRequest>) 
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since.unwrap_or(0);
     let threshold = req.threshold.unwrap_or(5);
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.undo_struggle(since, threshold)))
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.undo_struggle(since, threshold))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn daily_report(State(state): State<AppState>, Json(req): Json<DayRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let day = req.day_start;
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.daily_brain_report(day)))
-            .await
-            .ok()
-            .flatten();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.daily_brain_report(day))
+    })
+    .await
+    .ok()
+    .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn break_timing(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since.unwrap_or(0);
-    let result = tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.break_timing(since)))
-        .await
-        .ok()
-        .flatten();
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open_readonly(&skill_dir).map(|s| s.break_timing(since)))
+            .await
+            .ok()
+            .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn streak(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let mins = req.min_deep_work_mins.unwrap_or(60);
-    let result = tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.deep_work_streak(mins)))
-        .await
-        .ok()
-        .flatten();
+    let result =
+        tokio::task::spawn_blocking(move || ActivityStore::open_readonly(&skill_dir).map(|s| s.deep_work_streak(mins)))
+            .await
+            .ok()
+            .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn task_type(State(state): State<AppState>, Json(req): Json<FlowRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let window = req.window_secs.unwrap_or(300);
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.detect_task_type(window)))
-            .await
-            .ok()
-            .flatten();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.detect_task_type(window))
+    })
+    .await
+    .ok()
+    .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
 async fn struggle_predict(State(state): State<AppState>, Json(req): Json<FlowRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let window = req.window_secs.unwrap_or(600);
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.predict_struggle(window)))
-            .await
-            .ok()
-            .flatten();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.predict_struggle(window))
+    })
+    .await
+    .ok()
+    .flatten();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
@@ -203,7 +217,7 @@ async fn interruption_recovery(
     let since = req.since.unwrap_or(0);
     let limit = req.limit.unwrap_or(20);
     let result = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir).map(|s| s.interruption_recovery(since, limit))
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.interruption_recovery(since, limit))
     })
     .await
     .ok()
@@ -214,11 +228,69 @@ async fn interruption_recovery(
 async fn code_eeg(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since.unwrap_or(0);
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.code_eeg_correlation(since)))
-            .await
-            .ok()
-            .flatten();
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.code_eeg_correlation(since))
+    })
+    .await
+    .ok()
+    .flatten();
+    Json(serde_json::to_value(result).unwrap_or_default())
+}
+
+async fn terminal_impact(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let since = req.since.unwrap_or(0);
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.terminal_focus_impact(since))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+    Json(serde_json::to_value(result).unwrap_or_default())
+}
+
+async fn context_cost(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let since = req.since.unwrap_or(0);
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.zone_switch_cost(since))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+    Json(serde_json::to_value(result).unwrap_or_default())
+}
+
+async fn dev_loops(State(state): State<AppState>, Json(req): Json<FlowRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let window = req.window_secs.unwrap_or(3600);
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.detect_dev_loops(window))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+    Json(serde_json::to_value(result).unwrap_or_default())
+}
+
+async fn terminal_commands(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(86400));
+    let limit = req.limit.unwrap_or(50);
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.get_recent_terminal_commands(limit, since))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
     Json(serde_json::to_value(result).unwrap_or_default())
 }
 
@@ -231,7 +303,7 @@ async fn timeline(State(state): State<AppState>, Json(req): Json<SinceRequest>) 
     let since = req.since.unwrap_or(now.saturating_sub(86400));
     let limit = req.limit.unwrap_or(100);
     let result = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir).map(|s| s.activity_timeline(since, now, limit))
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.activity_timeline(since, now, limit))
     })
     .await
     .ok()

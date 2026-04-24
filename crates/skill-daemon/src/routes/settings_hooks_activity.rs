@@ -207,7 +207,7 @@ pub(crate) async fn activity_recent_windows_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let limit = req.limit.unwrap_or(50).min(500);
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.get_recent_windows(limit))
             .unwrap_or_default()
     })
@@ -223,7 +223,7 @@ pub(crate) async fn activity_recent_input_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let limit = req.limit.unwrap_or(50).min(500);
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.get_recent_input(limit))
             .unwrap_or_default()
     })
@@ -244,7 +244,7 @@ pub(crate) async fn activity_input_buckets_impl(
     let end = req.to_ts.unwrap_or(now);
     let start = req.from_ts.unwrap_or_else(|| end.saturating_sub(24 * 3600));
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.get_input_buckets(start, end))
             .unwrap_or_default()
     })
@@ -261,7 +261,7 @@ pub(crate) async fn activity_recent_files_impl(
     let limit = req.limit.unwrap_or(50).min(500);
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.get_recent_files(limit, since))
             .unwrap_or_default()
     })
@@ -278,7 +278,7 @@ pub(crate) async fn activity_top_files_impl(
     let limit = req.limit.unwrap_or(20).min(200);
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.top_files(limit, since))
             .unwrap_or_default()
     })
@@ -295,7 +295,7 @@ pub(crate) async fn activity_top_projects_impl(
     let limit = req.limit.unwrap_or(20).min(200);
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|store| store.top_projects(limit, since))
             .unwrap_or_default()
     })
@@ -310,7 +310,7 @@ pub(crate) async fn activity_edit_chunks_impl(
 ) -> Json<Vec<EditChunkRow>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let rows = tokio::task::spawn_blocking(move || {
-        let Some(store) = ActivityStore::open(&skill_dir) else {
+        let Some(store) = ActivityStore::open_readonly(&skill_dir) else {
             return vec![];
         };
         if let Some(id) = req.interaction_id {
@@ -337,7 +337,7 @@ pub(crate) async fn activity_language_breakdown_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.language_breakdown(since))
             .unwrap_or_default()
     })
@@ -358,7 +358,7 @@ pub(crate) async fn activity_context_switch_rate_impl(
     let end = req.to_ts.unwrap_or(now);
     let start = req.from_ts.unwrap_or_else(|| end.saturating_sub(3600));
     let rate = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.context_switch_rate(start, end))
             .unwrap_or(0.0)
     })
@@ -376,7 +376,7 @@ pub(crate) async fn activity_coedited_files_impl(
     let limit = req.limit.unwrap_or(20).min(100);
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.coedited_files(window, limit, since))
             .unwrap_or_default()
     })
@@ -392,7 +392,7 @@ pub(crate) async fn activity_daily_summary_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let day = req.day_start;
     let row = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.daily_summary(day))
             .unwrap_or_default()
     })
@@ -407,9 +407,10 @@ pub(crate) async fn activity_hourly_heatmap_impl(
 ) -> Json<Vec<HourlyEditRow>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since;
+    let tz = chrono::Local::now().offset().local_minus_utc();
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
-            .map(|s| s.hourly_edit_heatmap(since))
+        ActivityStore::open_readonly(&skill_dir)
+            .map(|s| s.hourly_edit_heatmap(since, tz))
             .unwrap_or_default()
     })
     .await
@@ -425,7 +426,7 @@ pub(crate) async fn activity_focus_sessions_impl(
     let limit = req.limit.unwrap_or(20).min(100);
     let since = req.since;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.get_focus_sessions(limit, since))
             .unwrap_or_default()
     })
@@ -445,7 +446,7 @@ pub(crate) async fn activity_forgotten_files_impl(
         .unwrap_or(0);
     let since = req.since.unwrap_or_else(|| now.saturating_sub(86400));
     let files = tokio::task::spawn_blocking(move || {
-        let Some(store) = ActivityStore::open(&skill_dir) else {
+        let Some(store) = ActivityStore::open_readonly(&skill_dir) else {
             return vec![];
         };
         let modified = store.modified_files_since(since);
@@ -472,7 +473,7 @@ pub(crate) async fn activity_forgotten_files_impl(
 pub(crate) async fn activity_recent_builds_impl(State(state): State<AppState>) -> Json<Vec<BuildEventRow>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.get_recent_builds(50))
             .unwrap_or_default()
     })
@@ -489,7 +490,7 @@ pub(crate) async fn activity_files_in_range_impl(
     let from = req.from_ts.unwrap_or(0);
     let to = req.to_ts.unwrap_or(u64::MAX);
     let result = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir).map(|s| {
+        ActivityStore::open_readonly(&skill_dir).map(|s| {
             let files = s.get_files_in_range(from, to, 200);
             let sessions = s.get_focus_sessions_in_range(from, to);
             let meetings = s.get_meetings_in_range(from, to);
@@ -515,7 +516,7 @@ pub(crate) async fn activity_meetings_in_range_impl(
     let from = req.from_ts.unwrap_or(0);
     let to = req.to_ts.unwrap_or(u64::MAX);
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.get_meetings_in_range(from, to))
             .unwrap_or_default()
     })
@@ -531,7 +532,7 @@ pub(crate) async fn activity_recent_clipboard_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let limit = req.limit.unwrap_or(50) as u32;
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.get_recent_clipboard(limit))
             .unwrap_or_default()
     })
@@ -546,21 +547,22 @@ pub(crate) async fn activity_productivity_score_impl(
 ) -> Json<ProductivityScore> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let day_start = req.day_start;
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.productivity_score(day_start)))
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(ProductivityScore {
-                day_start,
-                score: 0.0,
-                edit_velocity: 0.0,
-                deep_work: 0.0,
-                context_stability: 0.0,
-                eeg_focus: 0.0,
-                deep_work_minutes: 0,
-                switch_rate: 0.0,
-            });
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.productivity_score(day_start))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(ProductivityScore {
+        day_start,
+        score: 0.0,
+        edit_velocity: 0.0,
+        deep_work: 0.0,
+        context_stability: 0.0,
+        eeg_focus: 0.0,
+        deep_work_minutes: 0,
+        switch_rate: 0.0,
+    });
     Json(result)
 }
 
@@ -570,27 +572,28 @@ pub(crate) async fn activity_weekly_digest_impl(
 ) -> Json<WeeklyDigest> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let week_start = req.day_start;
-    let result =
-        tokio::task::spawn_blocking(move || ActivityStore::open(&skill_dir).map(|s| s.weekly_digest(week_start)))
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(WeeklyDigest {
-                week_start,
-                days: vec![],
-                total_interactions: 0,
-                total_edits: 0,
-                total_secs: 0,
-                total_lines_added: 0,
-                total_lines_removed: 0,
-                avg_eeg_focus: None,
-                top_projects: vec![],
-                top_languages: vec![],
-                focus_session_count: 0,
-                meeting_count: 0,
-                peak_day_idx: 0,
-                peak_hour: 0,
-            });
+    let result = tokio::task::spawn_blocking(move || {
+        ActivityStore::open_readonly(&skill_dir).map(|s| s.weekly_digest(week_start))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(WeeklyDigest {
+        week_start,
+        days: vec![],
+        total_interactions: 0,
+        total_edits: 0,
+        total_secs: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+        avg_eeg_focus: None,
+        top_projects: vec![],
+        top_languages: vec![],
+        focus_session_count: 0,
+        meeting_count: 0,
+        peak_day_idx: 0,
+        peak_hour: 0,
+    });
     Json(result)
 }
 
@@ -601,7 +604,7 @@ pub(crate) async fn activity_stale_files_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since.unwrap_or(0);
     let rows = tokio::task::spawn_blocking(move || {
-        ActivityStore::open(&skill_dir)
+        ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.stale_files(7, since))
             .unwrap_or_default()
     })
@@ -672,6 +675,29 @@ pub(crate) async fn activity_vscode_events_impl(
                 | "ai_chat_end" => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
                     store.insert_ai_event(event_type, source, path, language, now);
+                }
+                "terminal_command_start" if !command.is_empty() => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    store.insert_terminal_command_start(source, command, path, now, None, None);
+                }
+                "terminal_command_end" => {
+                    let exit_code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    store.update_terminal_command_end(command, source, exit_code, now, None);
+                }
+                "zone_switch" => {
+                    let from = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    store.insert_zone_switch(command, from, now, None);
+                }
+                "layout_snapshot" => {
+                    // command field carries JSON payload
+                    if let Ok(snap) = serde_json::from_str::<serde_json::Value>(command) {
+                        let groups = snap.get("editorGroups").and_then(|v| v.as_i64()).unwrap_or(1);
+                        let visible = snap.get("visibleEditors").and_then(|v| v.as_i64()).unwrap_or(1);
+                        let tabs = snap.get("openTabs").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let terms = snap.get("terminals").and_then(|v| v.as_i64()).unwrap_or(0);
+                        store.insert_layout_snapshot(now, groups, visible, tabs, terms);
+                    }
                 }
                 _ => {}
             }
@@ -815,6 +841,24 @@ pub(crate) async fn activity_vscode_events_impl(
                 // === Terminal activity ===
                 "terminal_focus" => ("terminal focused".to_string(), command.to_string()),
                 "terminal_created" => ("terminal opened".to_string(), String::new()),
+                "terminal_command_start" if !command.is_empty() => {
+                    let short = if command.len() > 40 { &command[..40] } else { command };
+                    (format!("running: {short}"), path.to_string())
+                }
+                "terminal_command_end" => {
+                    let code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let status = match code {
+                        Some(0) => "passed".to_string(),
+                        Some(c) => format!("failed (exit {c})"),
+                        None => "ended".to_string(),
+                    };
+                    let short = if command.len() > 30 { &command[..30] } else { command };
+                    (format!("{short} {status}"), String::new())
+                }
+                "zone_switch" => {
+                    let from = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    (format!("switched to {command}"), format!("from {from}"))
+                }
 
                 // === Project file changes (external) ===
                 "project_file_changed" => ("project config changed".to_string(), basename.to_string()),
