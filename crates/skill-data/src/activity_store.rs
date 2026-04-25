@@ -192,6 +192,8 @@ CREATE TABLE IF NOT EXISTS terminal_commands (
     terminal_name TEXT    NOT NULL DEFAULT '',
     shell_type    TEXT    NOT NULL DEFAULT '',
     command       TEXT    NOT NULL,
+    binary        TEXT    NOT NULL DEFAULT '',
+    args          TEXT    NOT NULL DEFAULT '',
     cwd           TEXT    NOT NULL DEFAULT '',
     exit_code     INTEGER,
     started_at    INTEGER NOT NULL,
@@ -205,6 +207,7 @@ CREATE TABLE IF NOT EXISTS terminal_commands (
 );
 CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tc_category ON terminal_commands (category);
+CREATE INDEX IF NOT EXISTS idx_tc_binary ON terminal_commands (binary);
 
 -- Dev loops: edit → build/test → result cycles.
 CREATE TABLE IF NOT EXISTS dev_loops (
@@ -290,30 +293,60 @@ CREATE INDEX IF NOT EXISTS idx_conv_role ON conversations (role);
 
 -- Browser activity events from Chrome/Firefox/Safari extensions.
 CREATE TABLE IF NOT EXISTS browser_activities (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type      TEXT    NOT NULL,
-    url             TEXT    NOT NULL DEFAULT '',
-    domain          TEXT    NOT NULL DEFAULT '',
-    title           TEXT    NOT NULL DEFAULT '',
-    tab_id          INTEGER,
-    browser_name    TEXT    NOT NULL DEFAULT '',
-    scroll_depth    REAL,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type        TEXT    NOT NULL,
+    url               TEXT    NOT NULL DEFAULT '',
+    domain            TEXT    NOT NULL DEFAULT '',
+    title             TEXT    NOT NULL DEFAULT '',
+    tab_id            INTEGER,
+    browser_name      TEXT    NOT NULL DEFAULT '',
+    scroll_depth      REAL,
     reading_time_secs INTEGER,
-    typing_detected INTEGER NOT NULL DEFAULT 0,
-    media_playing   INTEGER NOT NULL DEFAULT 0,
-    search_query    TEXT    NOT NULL DEFAULT '',
-    tab_count       INTEGER,
-    devtools_open   INTEGER NOT NULL DEFAULT 0,
-    category        TEXT    NOT NULL DEFAULT '',
-    referrer_domain TEXT    NOT NULL DEFAULT '',
-    at              INTEGER NOT NULL,
-    eeg_focus       REAL,
-    eeg_mood        REAL
+    active_time_secs  INTEGER,
+    idle_time_secs    INTEGER,
+    typing_detected   INTEGER NOT NULL DEFAULT 0,
+    media_playing     INTEGER NOT NULL DEFAULT 0,
+    search_query      TEXT    NOT NULL DEFAULT '',
+    tab_count         INTEGER,
+    devtools_open     INTEGER NOT NULL DEFAULT 0,
+    category          TEXT    NOT NULL DEFAULT '',
+    content_type      TEXT    NOT NULL DEFAULT '',
+    referrer_domain   TEXT    NOT NULL DEFAULT '',
+    nav_type          TEXT    NOT NULL DEFAULT '',
+    click_target      TEXT    NOT NULL DEFAULT '',
+    click_count       INTEGER,
+    mouse_distance    INTEGER,
+    mouse_idle_secs   INTEGER,
+    has_video         INTEGER NOT NULL DEFAULT 0,
+    has_audio         INTEGER NOT NULL DEFAULT 0,
+    image_count       INTEGER,
+    word_count        INTEGER,
+    form_count        INTEGER,
+    video_watched_secs INTEGER,
+    copy_length       INTEGER,
+    paste_length      INTEGER,
+    at                INTEGER NOT NULL,
+    eeg_focus         REAL,
+    eeg_mood          REAL
 );
 CREATE INDEX IF NOT EXISTS idx_ba_at ON browser_activities (at DESC);
 CREATE INDEX IF NOT EXISTS idx_ba_domain ON browser_activities (domain);
 CREATE INDEX IF NOT EXISTS idx_ba_category ON browser_activities (category);
 CREATE INDEX IF NOT EXISTS idx_ba_event ON browser_activities (event_type);
+CREATE INDEX IF NOT EXISTS idx_ba_content ON browser_activities (content_type);
+
+CREATE TABLE IF NOT EXISTS user_screenshot_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    screenshot_id INTEGER NOT NULL,
+    captured_at   INTEGER NOT NULL,
+    app_name      TEXT    NOT NULL DEFAULT '',
+    window_title  TEXT    NOT NULL DEFAULT '',
+    original_path TEXT    NOT NULL DEFAULT '',
+    ocr_preview   TEXT    NOT NULL DEFAULT '',
+    eeg_focus     REAL,
+    eeg_mood      REAL
+);
+CREATE INDEX IF NOT EXISTS idx_use_captured ON user_screenshot_events (captured_at DESC);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -360,6 +393,12 @@ impl ActivityStore {
             "ALTER TABLE file_edit_chunks ADD COLUMN undo_estimate INTEGER NOT NULL DEFAULT 0",
             // focus_sessions
             "ALTER TABLE focus_sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''",
+            // terminal_commands — binary/args extraction
+            "ALTER TABLE terminal_commands ADD COLUMN binary TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE terminal_commands ADD COLUMN args TEXT NOT NULL DEFAULT ''",
+            // conversations — EEG columns
+            "ALTER TABLE conversations ADD COLUMN eeg_focus REAL",
+            "ALTER TABLE conversations ADD COLUMN eeg_mood REAL",
         ] {
             let _ = conn.execute_batch(alter);
         }
@@ -1911,6 +1950,9 @@ impl ActivityStore {
                 UNION ALL
                 SELECT 'clipboard', source_app, content_type, copied_at, NULL
                 FROM clipboard_events WHERE copied_at >= ?1 AND copied_at <= ?2
+                UNION ALL
+                SELECT 'screenshot', original_path, app_name, captured_at, eeg_focus
+                FROM user_screenshot_events WHERE captured_at >= ?1 AND captured_at <= ?2
             ) ORDER BY ts DESC LIMIT ?3",
         ) {
             Ok(s) => s,
@@ -2064,25 +2106,73 @@ impl ActivityStore {
             "go" if cmd.contains("run") => "run",
             "pytest" | "jest" | "vitest" | "mocha" | "rspec" | "phpunit" => "test",
             "python" | "node" | "deno" | "ruby" | "php" | "java" | "dotnet" => "run",
+            // Version control
             "git" => "git",
-            "docker" | "docker-compose" | "podman" | "kubectl" | "helm" | "k9s" | "k3s" | "minikube" | "skaffold" => {
-                "docker"
+            "gh" => "git",   // GitHub CLI
+            "glab" => "git", // GitLab CLI
+            "hg" => "git",   // Mercurial
+            "svn" => "git",
+            // Containers & orchestration
+            "docker" | "docker-compose" | "podman" | "kubectl" | "helm" | "k9s" | "k3s" | "minikube" | "skaffold"
+            | "kompose" | "kustomize" | "kind" | "containerd" | "nerdctl" | "buildah" | "cri-o" | "istioctl"
+            | "linkerd" | "argocd" => "docker",
+            // Cloud & deploy
+            "terraform" | "ansible" | "pulumi" | "cdk" | "cdktf" | "fly" | "flyctl" | "vercel" | "netlify"
+            | "railway" | "aws" | "gcloud" | "az" | "doctl" | "linode-cli" | "heroku" | "cf" | "ecs-cli" | "sam"
+            | "serverless" | "wrangler" | "cloudflared" => "deploy",
+            // Package managers
+            "pip" | "pip3" | "pipx" | "uv" | "poetry" | "pdm" | "brew" | "cask" | "port" | "mas" | "apt"
+            | "apt-get" | "dpkg" | "snap" | "flatpak" | "pacman" | "yay" | "paru" | "yum" | "dnf" | "rpm"
+            | "zypper" | "apk" | "nix" | "nix-env" | "nix-shell" | "gem" | "bundle" | "composer" | "nuget" | "go"
+                if cmd.contains("install") || cmd.contains("get") =>
+            {
+                "install"
             }
-            "terraform" | "ansible" | "pulumi" | "cdk" | "fly" | "vercel" | "netlify" | "aws" | "gcloud" | "az" => {
-                "deploy"
-            }
-            "pip" | "pip3" | "brew" | "apt" | "apt-get" | "pacman" | "yum" | "dnf" | "apk" => "install",
-            "cd" | "ls" | "ll" | "find" | "grep" | "rg" | "fd" | "tree" | "cat" | "less" | "head" | "tail" | "wc"
-            | "pwd" | "which" | "where" | "file" | "stat" | "du" => "navigate",
-            "gdb" | "lldb" | "dlv" | "pdb" => "debug",
-            "ssh" | "scp" | "rsync" | "curl" | "wget" | "httpie" => "network",
-            "mvn" | "gradle" | "ant" | "sbt" => {
+            "cargo" if cmd.contains("install") => "install",
+            // Navigation & file ops
+            "cd" | "ls" | "ll" | "la" | "find" | "grep" | "rg" | "fd" | "fzf" | "tree" | "cat" | "bat" | "less"
+            | "more" | "head" | "tail" | "wc" | "pwd" | "which" | "where" | "file" | "stat" | "du" | "df" | "exa"
+            | "eza" | "lsd" | "zoxide" | "z" | "j" | "autojump" | "cp" | "mv" | "rm" | "mkdir" | "rmdir" | "touch"
+            | "ln" | "chmod" | "chown" | "xattr" | "open" | "pbcopy" | "pbpaste" | "sed" | "awk" | "sort" | "uniq"
+            | "cut" | "tr" | "diff" | "patch" | "tar" | "zip" | "unzip" | "gzip" | "gunzip" | "xz" | "7z" => "navigate",
+            // Debugging
+            "gdb" | "lldb" | "dlv" | "pdb" | "ipdb" | "rr" | "strace" | "dtrace" | "valgrind" | "perf"
+            | "instruments" | "leaks" | "sample" => "debug",
+            // Network & HTTP
+            "ssh" | "scp" | "rsync" | "curl" | "wget" | "httpie" | "http" | "https" | "nc" | "ncat" | "netcat"
+            | "telnet" | "dig" | "nslookup" | "host" | "ping" | "traceroute" | "mtr" | "nmap" | "tcpdump"
+            | "wireshark" | "ngrok" | "localtunnel" => "network",
+            // Databases
+            "psql" | "pg_dump" | "pg_restore" | "createdb" | "dropdb" | "mysql" | "mysqldump" | "mycli" | "sqlite3"
+            | "litecli" | "redis-cli" | "redis-server" | "mongosh" | "mongo" | "mongodump" | "mongorestore"
+            | "cqlsh" | "influx" | "clickhouse-client" => "database",
+            // AI & ML tools
+            "hf" | "huggingface-cli" => "ai",
+            "ollama" => "ai",
+            "claude" | "aider" | "cody" | "copilot" => "ai",
+            "pi" => "ai",
+            "jupyter" | "ipython" => "ai",
+            "mlflow" | "wandb" | "dvc" | "bentoml" => "ai",
+            // Editors & tools
+            "vim" | "nvim" | "vi" | "nano" | "emacs" | "code" | "subl" | "micro" => "editor",
+            "tmux" | "screen" | "zellij" | "byobu" => "multiplexer",
+            "htop" | "btop" | "top" | "glances" | "nmon" | "ps" | "kill" | "killall" | "lsof" | "ss" | "netstat"
+            | "iostat" | "vmstat" | "free" | "uptime" | "w" | "who" => "monitor",
+            // Environment & config
+            "env" | "export" | "set" | "unset" | "source" | "alias" | "echo" | "printf" | "eval" | "exec" | "xargs"
+            | "direnv" | "asdf" | "mise" | "rtx" | "fnm" | "nvm" | "rbenv" | "pyenv" | "rustup" | "swiftenv"
+            | "sdkman" => "env",
+            // Build systems
+            "mvn" | "gradle" | "ant" | "sbt" | "bazel" | "buck" | "pants" | "meson" | "autoconf" | "automake"
+            | "configure" => {
                 if cmd.contains("test") {
                     "test"
                 } else {
                     "build"
                 }
             }
+            // System management
+            "systemctl" | "service" | "launchctl" | "journalctl" | "crontab" | "at" | "watch" => "system",
             _ => "other",
         }
     }
@@ -2098,13 +2188,19 @@ impl ActivityStore {
         eeg_mood: Option<f64>,
     ) -> i64 {
         let category = Self::categorize_command(command);
+        // Extract binary name (first word) and args (rest)
+        let mut parts = command.splitn(2, char::is_whitespace);
+        let binary = parts.next().unwrap_or("").trim();
+        let args = parts.next().unwrap_or("").trim();
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO terminal_commands (terminal_name, command, cwd, started_at, category, eeg_focus, eeg_mood)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO terminal_commands (terminal_name, command, binary, args, cwd, started_at, category, eeg_focus, eeg_mood)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 terminal_name,
                 command,
+                binary,
+                args,
                 cwd,
                 started_at as i64,
                 category,
@@ -2563,6 +2659,260 @@ impl ActivityStore {
         results
     }
 
+    /// Recategorize all terminal commands and backfill binary/args.
+    /// Call after updating categorize_command() rules.
+    pub fn recategorize_commands(&self) -> u64 {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare("SELECT id, command FROM terminal_commands") {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|r| r.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default();
+        let mut count = 0u64;
+        for (id, cmd) in &rows {
+            let category = Self::categorize_command(cmd);
+            let mut parts = cmd.splitn(2, char::is_whitespace);
+            let binary = parts.next().unwrap_or("").trim();
+            let args = parts.next().unwrap_or("").trim();
+            let _ = c.execute(
+                "UPDATE terminal_commands SET category = ?1, binary = ?2, args = ?3 WHERE id = ?4",
+                params![category, binary, args, id],
+            );
+            count += 1;
+        }
+        count
+    }
+
+    /// Get usage frequency per binary (for discovering uncategorized tools).
+    pub fn binary_usage_stats(&self, since: u64, limit: u32) -> Vec<(String, String, i64)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT binary, category, COUNT(*) as n FROM terminal_commands
+             WHERE started_at >= ?1 AND binary != ''
+             GROUP BY binary ORDER BY n DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, limit as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map(|rows| rows.filter_map(|x| x.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Developer Insights (EEG + activity fusion) ─────────────────────────
+
+    /// Insight 1: Test failure rate by focus level.
+    /// "Your tests fail more when focus is below X."
+    pub fn insight_test_failure_by_focus(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(String, i64, i64)> = c
+            .prepare_cached(
+                "SELECT
+               CASE WHEN eeg_focus >= 70 THEN 'high' WHEN eeg_focus >= 40 THEN 'mid' ELSE 'low' END as level,
+               SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as passes,
+               SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) as fails
+             FROM terminal_commands
+             WHERE started_at >= ?1 AND category IN ('test','build') AND exit_code IS NOT NULL AND eeg_focus IS NOT NULL
+             GROUP BY level",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .map(|r| r.filter_map(|x| x.ok()).collect())
+                    .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows.into_iter().map(|(level, p, f)| {
+            let total = p + f;
+            serde_json::json!({"focus_level": level, "passes": p, "fails": f, "fail_rate": if total > 0 { f as f64 / total as f64 } else { 0.0 }})
+        }).collect();
+        serde_json::json!({"test_failure_by_focus": arr})
+    }
+
+    /// Insight 2: Productivity by hour with EEG.
+    /// "You write 3x more bugs after 2pm."
+    pub fn insight_hourly_productivity(&self, since: u64, tz_offset: i32) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(i64, f64, i64, i64)> = c
+            .prepare_cached(
+                "SELECT ((seen_at + ?2) % 86400) / 3600 as hour,
+                    AVG(COALESCE(eeg_focus, 50)) as avg_focus,
+                    SUM(lines_added + lines_removed) as churn,
+                    SUM(undo_count) as undos
+             FROM file_interactions WHERE seen_at >= ?1
+             GROUP BY hour ORDER BY hour",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64, tz_offset as i64], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })
+                .map(|r| r.filter_map(|x| x.ok()).collect())
+                .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows.into_iter().map(|(h, focus, churn, undos)| {
+            serde_json::json!({"hour": h, "avg_focus": focus, "churn": churn, "undo_rate": if churn > 0 { undos as f64 / churn as f64 } else { 0.0 }})
+        }).collect();
+        serde_json::json!({"hourly_productivity": arr})
+    }
+
+    /// Insight 3: Context switch recovery time.
+    /// "Switching to terminal costs you N minutes of focus recovery."
+    pub fn insight_switch_recovery(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        // Get zone switches with focus before and after
+        let rows: Vec<(String, String, f64)> = c
+            .prepare_cached(
+                "SELECT from_zone, zone, AVG(eeg_focus) FROM zone_switches
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY from_zone, zone",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .map(|r| r.filter_map(|x| x.ok()).collect())
+                    .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|(from, to, focus)| serde_json::json!({"from": from, "to": to, "avg_focus_at_switch": focus}))
+            .collect();
+        serde_json::json!({"switch_recovery": arr})
+    }
+
+    /// Insight 4: AI tool impact on flow.
+    /// "Claude conversations drop your focus by X points on average."
+    pub fn insight_ai_impact(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(String, f64, i64)> = c
+            .prepare_cached(
+                "SELECT app, AVG(eeg_focus), COUNT(*) FROM conversations
+             WHERE at >= ?1 AND role = 'user' AND eeg_focus IS NOT NULL
+             GROUP BY app",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .map(|r| r.filter_map(|x| x.ok()).collect())
+                    .ok()
+            })
+            .unwrap_or_default();
+        // Compare with overall avg focus
+        let overall: f64 = c
+            .query_row(
+                "SELECT AVG(eeg_focus) FROM file_interactions WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL",
+                params![since as i64],
+                |r| r.get(0),
+            )
+            .unwrap_or(50.0);
+        let arr: Vec<serde_json::Value> = rows.into_iter().map(|(app, focus, n)| {
+            serde_json::json!({"app": app, "avg_focus_during": focus, "baseline_focus": overall, "delta": focus - overall, "message_count": n})
+        }).collect();
+        serde_json::json!({"ai_impact": arr, "baseline_focus": overall})
+    }
+
+    /// Insight 5: Focus by language/file type.
+    /// "Your best code happens in Rust, worst in CSS."
+    pub fn insight_focus_by_language(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(String, f64, i64, i64)> = c
+            .prepare_cached(
+                "SELECT language, AVG(eeg_focus), SUM(undo_count), COUNT(*)
+             FROM file_interactions
+             WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL AND language != ''
+             GROUP BY language HAVING COUNT(*) >= 3
+             ORDER BY AVG(eeg_focus) DESC",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })
+                .map(|r| r.filter_map(|x| x.ok()).collect())
+                .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows.into_iter().map(|(lang, focus, undos, n)| {
+            serde_json::json!({"language": lang, "avg_focus": focus, "undo_rate": undos as f64 / n.max(1) as f64, "interactions": n})
+        }).collect();
+        serde_json::json!({"focus_by_language": arr})
+    }
+
+    /// Insight 6: Dev loop efficiency by time of day.
+    /// "Your cycle time doubles after 3pm."
+    pub fn insight_loop_efficiency(&self, since: u64, tz_offset: i32) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(i64, f64, i64, i64)> = c
+            .prepare_cached(
+                "SELECT ((started_at + ?2) % 86400) / 3600 as hour,
+                    AVG(duration_secs) as avg_duration,
+                    SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as passes,
+                    SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) as fails
+             FROM terminal_commands
+             WHERE started_at >= ?1 AND category IN ('test','build') AND exit_code IS NOT NULL
+             GROUP BY hour ORDER BY hour",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64, tz_offset as i64], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })
+                .map(|r| r.filter_map(|x| x.ok()).collect())
+                .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows.into_iter().map(|(h, dur, p, f)| {
+            let total = p + f;
+            serde_json::json!({"hour": h, "avg_cycle_secs": dur, "pass_rate": if total > 0 { p as f64 / total as f64 } else { 0.0 }, "total": total})
+        }).collect();
+        serde_json::json!({"loop_efficiency_by_hour": arr})
+    }
+
+    /// Insight 7: Tool impact on focus.
+    /// "Docker commands correlate with your lowest focus."
+    pub fn insight_tool_impact(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+        let rows: Vec<(String, f64, i64)> = c
+            .prepare_cached(
+                "SELECT category, AVG(eeg_focus), COUNT(*) FROM terminal_commands
+             WHERE started_at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY category HAVING COUNT(*) >= 2
+             ORDER BY AVG(eeg_focus) ASC",
+            )
+            .ok()
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .map(|r| r.filter_map(|x| x.ok()).collect())
+                    .ok()
+            })
+            .unwrap_or_default();
+        let arr: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|(cat, focus, n)| serde_json::json!({"category": cat, "avg_focus": focus, "count": n}))
+            .collect();
+        serde_json::json!({"tool_focus_impact": arr})
+    }
+
+    /// All insights in one call.
+    pub fn developer_insights(&self, since: u64, tz_offset: i32) -> serde_json::Value {
+        serde_json::json!({
+            "test_failure_by_focus": self.insight_test_failure_by_focus(since),
+            "hourly_productivity": self.insight_hourly_productivity(since, tz_offset),
+            "switch_recovery": self.insight_switch_recovery(since),
+            "ai_impact": self.insight_ai_impact(since),
+            "focus_by_language": self.insight_focus_by_language(since),
+            "loop_efficiency": self.insight_loop_efficiency(since, tz_offset),
+            "tool_impact": self.insight_tool_impact(since),
+        })
+    }
+
     // ── EEG Time-series ────────────────────────────────────────────────────
 
     /// Insert an EEG snapshot. Called periodically (every 5s) from the session runner.
@@ -2922,6 +3272,39 @@ impl ActivityStore {
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
+    }
+
+    // ── User screenshot events ─────────────────────────────────────────────────
+
+    /// Record a user-initiated screenshot event with full context.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_user_screenshot_event(
+        &self,
+        screenshot_id: i64,
+        captured_at: u64,
+        app_name: &str,
+        window_title: &str,
+        original_path: &str,
+        ocr_preview: &str,
+        eeg_focus: Option<f32>,
+        eeg_mood: Option<f32>,
+    ) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO user_screenshot_events
+             (screenshot_id, captured_at, app_name, window_title, original_path, ocr_preview, eeg_focus, eeg_mood)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                screenshot_id,
+                captured_at as i64,
+                app_name,
+                window_title,
+                original_path,
+                ocr_preview,
+                eeg_focus,
+                eeg_mood,
+            ],
+        );
     }
 
     // ── Range queries ─────────────────────────────────────────────────────────
