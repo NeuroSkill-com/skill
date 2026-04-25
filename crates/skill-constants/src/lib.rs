@@ -62,6 +62,7 @@ pub mod prelude {
         CGX_MAX_EEG_CHANNELS,
         CGX_SAMPLE_RATE,
         CHANNEL_NAMES,
+        CODE_CONTEXT_INDEX_FILE,
         DEFAULT_HP_HZ,
         DEFAULT_LP_HZ,
         DEFAULT_NOTCH_BW_HZ,
@@ -585,6 +586,10 @@ pub const LABEL_CONTEXT_INDEX_FILE: &str = "label_context_index.hnsw";
 
 /// HNSW index for EEG embeddings of label epochs.
 pub const LABEL_EEG_INDEX_FILE: &str = "label_eeg_index.hnsw";
+
+/// HNSW index for code context embeddings (terminal commands, conversations, file interactions).
+/// Separate from the label index to avoid diluting EEG-focused searches.
+pub const CODE_CONTEXT_INDEX_FILE: &str = "code_context_index.hnsw";
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 

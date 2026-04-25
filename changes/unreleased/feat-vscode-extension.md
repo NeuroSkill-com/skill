@@ -48,10 +48,37 @@
 - **`neuroskill vscode` CLI**: auto-install extension to VS Code, VSCodium, or Cursor on macOS, Linux, and Windows.
 - **Meeting nodes in search graph**: meetings appear as amber nodes in the interactive 3D search graph linked by `meeting_prox` edges.
 
+### Brain Insights (EEG + Activity Fusion)
+
+- **Developer insights endpoint**: `POST /v1/brain/developer-insights` returns 7 actionable insights in one call.
+- **Test failure by focus level**: correlates build/test exit codes with EEG focus (high/mid/low) — "your tests fail 45% more when focus is low."
+- **Hourly productivity**: churn + undo rate + avg focus by hour of day — "you write 3x more bugs after 2pm."
+- **Context switch recovery**: focus level at editor/terminal/panel transitions — "switching to terminal costs 4 focus points."
+- **AI tool impact**: Claude/Pi focus delta vs baseline — "Claude conversations drop focus by 8 points."
+- **Focus by language**: avg EEG focus + undo rate per programming language — "best focus in Rust, worst in CSS."
+- **Dev loop efficiency by hour**: build/test cycle time + pass rate by time of day.
+- **Tool focus impact**: avg focus when using each command category (docker, git, deploy, etc.).
+
+### Data Architecture
+
+- **Conversations table + FTS5**: full-text search on all AI conversation messages (user/assistant/tool). Three search modes: FTS, fuzzy, structured.
+- **EEG timeseries table**: periodic JSON snapshots of all brain metrics. Extensible — new metrics without schema changes. Join-at-query-time correlation with any event.
+- **Embeddings store**: generic, multi-model. User prompts embedded via fastembed (local, no API credits). Can re-embed with different models.
+- **Code context HNSW index**: separate from label index for code-specific semantic search.
+- **Binary extraction**: terminal commands store raw binary name + args separately. Lazy categorization — 284 CLI tools recognized, rerun anytime.
+- **EEG attachment**: live focus/mood from `latest_bands` injected at event storage time.
+- **EEG timeseries worker**: writes full band powers to `eeg_timeseries` every 5s during recording.
+
+### Design System
+
+- **Design tokens** (`tokens.css`): 30+ CSS custom properties — palette, surfaces, backgrounds, borders, semantic, typography. Zero inline rgba() in sidebar.
+- **7 reusable Svelte components**: Card, MetricRow, Chevron, ProgressBar, Gauge, Badge, Callout.
+- **Timestamp compliance**: 25 tests verifying UTC in data layer, local conversion only in UI.
+
 ### Docs
 
 - VS Code extension design plan at `docs/vscode-extension.md`.
-- `neuroskill-activity` skill documentation with 18 activity + 17 brain subcommands, terminal integration, shell hook reference, command categorization table.
+- `neuroskill-activity` skill documentation with 18 activity + 24 brain subcommands, terminal integration, shell hook reference, command categorization table.
 - Updated `neuroskill-dnd` skill with grayscale mode.
 - Updated `neuroskill/README.md` with terminal, brain awareness, and VS Code extension features.
 - Updated `skills/SKILL.md` index with terminal tracking skill reference.

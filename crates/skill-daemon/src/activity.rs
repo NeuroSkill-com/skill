@@ -27,9 +27,27 @@ pub fn start_workers(state: AppState) {
     spawn_resilient("daemon-active-window-poll", state.clone(), store.clone(), run_poller);
     spawn_resilient("daemon-input-monitor", state.clone(), store.clone(), run_input_monitor);
     spawn_resilient("daemon-file-watcher", state.clone(), store.clone(), run_file_watcher);
+    spawn_resilient(
+        "daemon-eeg-timeseries",
+        state.clone(),
+        store.clone(),
+        run_eeg_timeseries,
+    );
 
     #[cfg(target_os = "macos")]
-    spawn_resilient("daemon-clipboard-monitor", state, store, run_clipboard_monitor);
+    spawn_resilient(
+        "daemon-clipboard-monitor",
+        state.clone(),
+        store.clone(),
+        run_clipboard_monitor,
+    );
+
+    spawn_resilient(
+        "daemon-user-screenshot-watcher",
+        state,
+        store,
+        run_user_screenshot_watcher,
+    );
 }
 
 /// Spawn a named worker thread that automatically restarts on panic.
@@ -1231,6 +1249,25 @@ fn detect_git_branch(file_path: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Periodically write EEG snapshots to the timeseries table (every 5s when recording).
+fn run_eeg_timeseries(state: &AppState, store: &Arc<ActivityStore>) {
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let bands = state.latest_bands.lock().ok().and_then(|g| g.clone());
+        if let Some(v) = bands {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            // Store the full band powers JSON as-is — extensible, any metric available
+            let json = serde_json::to_string(&v).unwrap_or_default();
+            if !json.is_empty() && json != "null" {
+                store.insert_eeg_sample(now, &json);
+            }
+        }
+    }
+}
+
 /// Read the current EEG focus (beta/alpha ratio) and mood from daemon state.
 fn read_eeg_snapshot(state: &AppState) -> (Option<f32>, Option<f32>) {
     let bands = state.latest_bands.lock().ok().and_then(|g| g.clone());
@@ -2334,5 +2371,217 @@ fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
         let source_app = poll_active_window().map(|w| w.app_name).unwrap_or_default();
 
         store.insert_clipboard_event(&source_app, content_type, content_size, unix_secs());
+
+        // ── Clipboard image capture ──
+        // When the clipboard contains an image and the feature is enabled,
+        // extract the image data and import it into the screenshot store.
+        if content_type == "image" {
+            let settings = skill_settings::load_settings(&skill_dir);
+            if settings.screenshot.clipboard_image_enabled {
+                if let Some(png_path) = extract_clipboard_image_to_temp() {
+                    let (eeg_focus, eeg_mood) = read_eeg_snapshot(&state);
+                    if let Some(saved) =
+                        skill_screenshots::user_screenshot::import_user_screenshot(&skill_dir, &png_path)
+                    {
+                        store.insert_user_screenshot_event(
+                            saved.row_id,
+                            unix_secs(),
+                            &source_app,
+                            "clipboard",
+                            &png_path.to_string_lossy(),
+                            "",
+                            eeg_focus,
+                            eeg_mood,
+                        );
+                        tracing::info!(
+                            "[clipboard-image] captured clipboard image -> row_id={} (focus={:?})",
+                            saved.row_id,
+                            eeg_focus,
+                        );
+                    }
+                    // Clean up temp file.
+                    let _ = std::fs::remove_file(&png_path);
+                }
+            }
+        }
+    }
+}
+
+/// Extract clipboard image data to a temporary PNG file (macOS).
+/// Returns the path to the temp file, or None if extraction fails.
+#[cfg(target_os = "macos")]
+fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join(format!("skill_clipboard_{}.png", unix_secs()));
+    // Use osascript to write clipboard PNG data to a file.
+    let script = format!(
+        r#"
+        set pngData to the clipboard as «class PNGf»
+        set filePath to POSIX file "{}"
+        set fileRef to open for access filePath with write permission
+        write pngData to fileRef
+        close access fileRef
+        "#,
+        tmp_path.display()
+    );
+    match run_osascript(&script) {
+        Some(_) if tmp_path.exists() => Some(tmp_path),
+        _ => {
+            let _ = std::fs::remove_file(&tmp_path);
+            None
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
+    // TODO: Windows/Linux clipboard image extraction.
+    None
+}
+
+// ── User screenshot watcher (cross-platform) ────────────────────────────────
+
+fn run_user_screenshot_watcher(state: AppState, store: Arc<ActivityStore>) {
+    use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+    use std::collections::{HashMap, HashSet};
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+
+    // Wait for the feature to be enabled (poll every 5s).
+    loop {
+        let settings = skill_settings::load_settings(&skill_dir);
+        if settings.screenshot.user_screenshot_enabled {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(5));
+    }
+
+    // Detect screenshot directories.
+    let watch_dirs = skill_screenshots::user_screenshot::detect_screenshot_dirs();
+    if watch_dirs.is_empty() {
+        tracing::info!("[user-screenshot] no screenshot directories found to watch");
+        return;
+    }
+
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::warn!("[user-screenshot] failed to create watcher: {e}");
+            return;
+        }
+    };
+
+    for dir in &watch_dirs {
+        // Non-recursive — screenshot directories are flat.
+        if let Err(e) = watcher.watch(dir, RecursiveMode::NonRecursive) {
+            tracing::warn!("[user-screenshot] failed to watch {}: {e}", dir.display());
+        } else {
+            tracing::info!("[user-screenshot] watching {}", dir.display());
+        }
+    }
+
+    let mut seen: HashSet<std::path::PathBuf> = HashSet::new();
+    let mut debounce: HashMap<std::path::PathBuf, Instant> = HashMap::new();
+
+    // Open a persistent ScreenshotStore handle for dedup checks.
+    let ss_store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir);
+
+    loop {
+        // Use recv_timeout to periodically drain the debounce map.
+        match rx.recv_timeout(Duration::from_millis(500)) {
+            Ok(Ok(event)) => {
+                let is_relevant = matches!(
+                    event.kind,
+                    EventKind::Create(_) | EventKind::Modify(notify::event::ModifyKind::Data(_))
+                );
+                if is_relevant {
+                    for path in event.paths {
+                        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                        if skill_screenshots::user_screenshot::is_user_screenshot(name) {
+                            debounce.insert(path, Instant::now());
+                        }
+                    }
+                }
+            }
+            Ok(Err(_)) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+
+        // Process debounced files (1.5s since last event for that path).
+        let now = Instant::now();
+        let ready: Vec<std::path::PathBuf> = debounce
+            .iter()
+            .filter(|(_, ts)| now.duration_since(**ts) >= Duration::from_millis(1500))
+            .map(|(p, _)| p.clone())
+            .collect();
+
+        for path in ready {
+            debounce.remove(&path);
+
+            if seen.contains(&path) {
+                continue;
+            }
+            if !path.exists() || !path.is_file() {
+                continue;
+            }
+
+            // Re-check config is still enabled.
+            let settings = skill_settings::load_settings(&skill_dir);
+            if !settings.screenshot.user_screenshot_enabled {
+                continue;
+            }
+
+            // Dedup against SQLite (survives daemon restarts).
+            let path_str = path.to_string_lossy().to_string();
+            if let Some(ref store) = ss_store {
+                if store.has_user_screenshot_from_path(&path_str) {
+                    seen.insert(path.clone());
+                    continue;
+                }
+            }
+
+            // Capture context at the moment the user took the screenshot.
+            let (eeg_focus, eeg_mood) = read_eeg_snapshot(&state);
+            let aw = poll_active_window();
+            let (aw_app, aw_title) = aw.map(|w| (w.app_name, w.window_title)).unwrap_or_default();
+
+            // Import the screenshot into the screenshot store.
+            match skill_screenshots::user_screenshot::import_user_screenshot(&skill_dir, &path) {
+                Some(saved) => {
+                    seen.insert(path.clone());
+
+                    // Record as an activity event with EEG + window context.
+                    let now_ts = unix_secs();
+                    store.insert_user_screenshot_event(
+                        saved.row_id,
+                        now_ts,
+                        &aw_app,
+                        &aw_title,
+                        &path_str,
+                        "", // OCR preview filled later by embed backfill
+                        eeg_focus,
+                        eeg_mood,
+                    );
+
+                    tracing::info!(
+                        "[user-screenshot] imported {} -> row_id={} (focus={:?})",
+                        path.display(),
+                        saved.row_id,
+                        eeg_focus,
+                    );
+                }
+                None => {
+                    tracing::warn!("[user-screenshot] failed to import {}", path.display());
+                }
+            }
+        }
+
+        // Prevent unbounded growth of the seen set.
+        if seen.len() > 10_000 {
+            seen.clear();
+        }
     }
 }
