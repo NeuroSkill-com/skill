@@ -756,6 +756,30 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "Chat",
   "settings.shortcutCompare": "Comparer",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "Extensions",
+  "extensions.ideTitle": "Extensions IDE",
+  "extensions.browserTitle": "Extensions de navigateur",
+  "extensions.browserDesc": "Suivez vos habitudes de navigation et corrélez-les avec l'état cérébral EEG. Toutes les données restent sur votre machine.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "Commandes du terminal, suggestions IA, boucles de développement et suivi de l'activité des fichiers.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.installed": "Installé",
+  "extensions.install": "Installer",
+  "extensions.reinstall": "Réinstaller",
+  "extensions.installing": "Installation…",
+  "extensions.openStore": "Store",
+  "extensions.pairingTitle": "Appairage de l'extension navigateur",
+  "extensions.pairingDesc": "Copiez votre auth token et collez-le dans les paramètres de l'extension navigateur pour l'appairer.",
+  "extensions.copyToken": "Copier l'auth token",
+  "extensions.tokenCopied": "Token copié dans le presse-papiers",
+  "extensions.tokenFailed": "Impossible de copier le token",
 };
 
 export default settings;

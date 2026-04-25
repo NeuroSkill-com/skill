@@ -743,6 +743,30 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "Чат",
   "settings.shortcutCompare": "Порівняння",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "Розширення",
+  "extensions.ideTitle": "Розширення IDE",
+  "extensions.browserTitle": "Розширення браузера",
+  "extensions.browserDesc": "Відстежуйте шаблони перегляду та корелюйте їх зі станом мозку за EEG. Усі дані залишаються на вашому пристрої.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "Команди терміналу, пропозиції AI, цикли розробки та відстеження активності файлів.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "Активність вкладок, шаблони читання, глибина прокрутки та поведінка пошуку.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "Активність вкладок, шаблони читання, глибина прокрутки та поведінка пошуку.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "Активність вкладок, шаблони читання, глибина прокрутки та поведінка пошуку.",
+  "extensions.installed": "Встановлено",
+  "extensions.install": "Встановити",
+  "extensions.reinstall": "Перевстановити",
+  "extensions.installing": "Встановлення…",
+  "extensions.openStore": "Магазин",
+  "extensions.pairingTitle": "Парування розширення браузера",
+  "extensions.pairingDesc": "Скопіюйте свій auth token і вставте його в налаштуваннях розширення браузера для парування.",
+  "extensions.copyToken": "Скопіювати auth token",
+  "extensions.tokenCopied": "Токен скопійовано до буфера обміну",
+  "extensions.tokenFailed": "Не вдалося скопіювати токен",
 };
 
 export default settings;

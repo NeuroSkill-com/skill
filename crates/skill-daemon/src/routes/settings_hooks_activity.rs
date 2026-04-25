@@ -621,6 +621,19 @@ pub(crate) async fn activity_vscode_events_impl(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let embedder = state.text_embedder.clone();
     let label_index = state.label_index.clone();
+    // Extract current EEG focus/mood from live band powers (if recording).
+    let (eeg_focus, eeg_mood): (Option<f64>, Option<f64>) = state
+        .latest_bands
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref().map(|v| {
+                let focus = v.get("focus").and_then(|f| f.as_f64());
+                let mood = v.get("mood").and_then(|m| m.as_f64());
+                (focus, mood)
+            })
+        })
+        .unwrap_or((None, None));
     let processed = tokio::task::spawn_blocking(move || {
         let Some(store) = ActivityStore::open(&skill_dir) else {
             return 0u64;
@@ -685,11 +698,11 @@ pub(crate) async fn activity_vscode_events_impl(
                     let msg_ts = event.get("exit_code").and_then(|v| v.as_u64()).unwrap_or(now);
                     // Session ID derived from filename hash passed via breakpoint_count presence
                     let session = if event.get("breakpoint_count").is_some() { app } else { "" };
-                    store.insert_conversation(app, role, command, path, msg_ts, session);
+                    store.insert_conversation(app, role, command, path, msg_ts, session, eeg_focus, eeg_mood);
                 }
                 "terminal_command_start" if !command.is_empty() => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
-                    store.insert_terminal_command_start(source, command, path, now, None, None);
+                    store.insert_terminal_command_start(source, command, path, now, eeg_focus, eeg_mood);
                 }
                 "terminal_command_end" => {
                     let exit_code = event.get("exit_code").and_then(|v| v.as_i64());
@@ -698,12 +711,12 @@ pub(crate) async fn activity_vscode_events_impl(
                 }
                 "zone_switch" => {
                     let from = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
-                    store.insert_zone_switch(command, from, now, None);
+                    store.insert_zone_switch(command, from, now, eeg_focus);
                 }
                 "window_focus" => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("vscode");
                     let zone = if command == "focused" { "vscode_focus" } else { "vscode_blur" };
-                    store.insert_zone_switch(zone, source, now, None);
+                    store.insert_zone_switch(zone, source, now, eeg_focus);
                 }
                 "layout_snapshot" => {
                     // command field carries JSON payload
@@ -918,6 +931,244 @@ pub(crate) async fn activity_vscode_events_impl(
                     rusqlite::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
                 ).ok().map(|_| conn.last_insert_rowid());
                 // Incrementally insert into HNSW index for immediate searchability.
+                if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
+                    let ce = ctx_emb.as_deref().unwrap_or(&[]);
+                    skill_label_index::insert_label(&skill_dir, id, te, ce, now, now, &label_index);
+                }
+            }
+            count += 1;
+        }
+        count
+    })
+    .await
+    .unwrap_or(0);
+    Json(serde_json::json!({"ok": true, "processed": processed}))
+}
+
+/// Process a batch of browser extension events.
+/// Mirrors `activity_vscode_events_impl` but handles browser-specific event types
+/// (tab switches, page loads, scroll depth, reading time, search queries, etc.).
+pub(crate) async fn activity_browser_events_impl(
+    State(state): State<AppState>,
+    events: Vec<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let embedder = state.text_embedder.clone();
+    let label_index = state.label_index.clone();
+    let (eeg_focus, eeg_mood): (Option<f64>, Option<f64>) = state
+        .latest_bands
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref().map(|v| {
+                let focus = v.get("focus").and_then(|f| f.as_f64());
+                let mood = v.get("mood").and_then(|m| m.as_f64());
+                (focus, mood)
+            })
+        })
+        .unwrap_or((None, None));
+
+    let processed = tokio::task::spawn_blocking(move || {
+        let Some(store) = ActivityStore::open(&skill_dir) else {
+            return 0u64;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
+        let labels_conn = rusqlite::Connection::open(&labels_db).ok();
+        if let Some(ref c) = labels_conn {
+            skill_data::util::init_wal_pragmas(c);
+        }
+
+        let mut count = 0u64;
+        for event in &events {
+            let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let url = event.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let domain = event.get("domain").and_then(|v| v.as_str()).unwrap_or("");
+            let title = event.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            let category = event.get("category").and_then(|v| v.as_str()).unwrap_or("");
+            let tab_id = event.get("tab_id").and_then(|v| v.as_i64());
+            let tab_count = event.get("tab_count").and_then(|v| v.as_i64());
+            let browser_name = event.get("category")
+                .and_then(|v| v.as_str())
+                .filter(|_| event_type == "env_context")
+                .unwrap_or("");
+
+            // ── Data storage ────────────────────────────────────────────
+            match event_type {
+                "tab_switch" | "page_load" if !domain.is_empty() => {
+                    // Insert into active_windows so brain analytics see browser context.
+                    let app_name = format!("Browser ({})", if !browser_name.is_empty() { browser_name } else { domain });
+                    let aw = skill_data::active_window::ActiveWindowInfo {
+                        app_name,
+                        app_path: String::new(),
+                        window_title: title.to_string(),
+                        document_path: None,
+                        activated_at: now,
+                        browser_title: Some(title.to_string()),
+                        monitor_id: None,
+                    };
+                    store.insert_active_window(&aw);
+                    // Insert into browser_activities.
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        browser_name, None, None, false, false,
+                        "", tab_count, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "navigation" if !domain.is_empty() => {
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        "", None, None, false, false,
+                        "", tab_count, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "tab_open" | "tab_close" => {
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        "", None, None, false, false,
+                        "", tab_count, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "window_focus" | "window_blur" => {
+                    let zone = if event_type == "window_focus" { "browser_focus" } else { "browser_blur" };
+                    store.insert_zone_switch(zone, "browser", now, eeg_focus);
+                }
+                "scroll" => {
+                    let depth = event.get("scroll_depth").and_then(|v| v.as_f64());
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        "", depth, None, false, false,
+                        "", None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "reading_time" => {
+                    let secs = event.get("reading_time_secs").and_then(|v| v.as_i64());
+                    let depth = event.get("scroll_depth").and_then(|v| v.as_f64());
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        "", depth, secs, false, false,
+                        "", None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "typing_detected" => {
+                    store.insert_browser_activity(
+                        event_type, "", domain, "", tab_id,
+                        "", None, None, true, false,
+                        "", None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "media_state" => {
+                    let playing = event.get("media_playing").and_then(|v| v.as_bool()).unwrap_or(false);
+                    store.insert_browser_activity(
+                        event_type, "", domain, "", tab_id,
+                        "", None, None, false, playing,
+                        "", None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "search_query" => {
+                    let query = event.get("search_query").and_then(|v| v.as_str()).unwrap_or("");
+                    store.insert_browser_activity(
+                        event_type, "", domain, "", tab_id,
+                        "", None, None, false, false,
+                        query, None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "devtools_toggle" => {
+                    let open = event.get("devtools_open").and_then(|v| v.as_bool()).unwrap_or(false);
+                    store.insert_browser_activity(
+                        event_type, "", domain, "", tab_id,
+                        "", None, None, false, false,
+                        "", None, open, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                "bookmark_created" | "download_started" => {
+                    store.insert_browser_activity(
+                        event_type, url, domain, title, tab_id,
+                        "", None, None, false, false,
+                        "", None, false, category, "", now,
+                        eeg_focus, eeg_mood,
+                    );
+                }
+                _ => {}
+            }
+
+            // ── EEG auto-labeling ───────────────────────────────────────
+            let (label, ctx) = match event_type {
+                "tab_switch" if !domain.is_empty() => {
+                    (format!("browsing {category}"), domain.to_string())
+                }
+                "page_load" if !domain.is_empty() => {
+                    let title_short = if title.len() > 60 { &title[..60] } else { title };
+                    (format!("opened {domain}"), title_short.to_string())
+                }
+                "search_query" => {
+                    let q = event.get("search_query").and_then(|v| v.as_str()).unwrap_or("");
+                    if q.is_empty() { count += 1; continue; }
+                    let qshort = if q.len() > 80 { &q[..80] } else { q };
+                    ("web search".to_string(), qshort.to_string())
+                }
+                "reading_time" => {
+                    let secs = event.get("reading_time_secs").and_then(|v| v.as_i64()).unwrap_or(0);
+                    if secs < 30 { count += 1; continue; }
+                    (format!("reading: {domain}"), format!("{secs}s deep read"))
+                }
+                "scroll" => {
+                    let depth = event.get("scroll_depth").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    if depth < 0.7 { count += 1; continue; }
+                    ("deep read".to_string(), format!("{domain} ({:.0}%)", depth * 100.0))
+                }
+                "devtools_toggle" => {
+                    let open = event.get("devtools_open").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if open {
+                        ("devtools opened".to_string(), domain.to_string())
+                    } else {
+                        count += 1; continue;
+                    }
+                }
+                "media_state" => {
+                    let playing = event.get("media_playing").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if playing {
+                        ("media playing".to_string(), domain.to_string())
+                    } else {
+                        count += 1; continue;
+                    }
+                }
+                "bookmark_created" => ("bookmarked".to_string(), domain.to_string()),
+                "download_started" => ("file download".to_string(), domain.to_string()),
+                "typing_detected" => ("form input".to_string(), domain.to_string()),
+                "env_context" | "window_focus" | "window_blur" | "tab_open" | "tab_close" | "navigation" => {
+                    count += 1;
+                    continue;
+                }
+                _ => {
+                    count += 1;
+                    continue;
+                }
+            };
+
+            if let Some(ref conn) = labels_conn {
+                let text_emb = embedder.embed(&label);
+                let ctx_emb = if !ctx.is_empty() { embedder.embed(&ctx) } else { None };
+                let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
+                let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
+                let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
+                let label_id = conn.execute(
+                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, context_embedding, embedding_model)
+                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
+                ).ok().map(|_| conn.last_insert_rowid());
                 if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
                     let ce = ctx_emb.as_deref().unwrap_or(&[]);
                     skill_label_index::insert_label(&skill_dir, id, te, ce, now, now, &label_index);

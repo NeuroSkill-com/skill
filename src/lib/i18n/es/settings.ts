@@ -755,6 +755,30 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "Chat",
   "settings.shortcutCompare": "Comparar",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "Extensiones",
+  "extensions.ideTitle": "Extensiones de IDE",
+  "extensions.browserTitle": "Extensiones de navegador",
+  "extensions.browserDesc": "Rastrea patrones de navegación y correlácionlos con el estado cerebral EEG. Todos los datos permanecen en tu máquina.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "Comandos de terminal, sugerencias de IA, bucles de desarrollo y seguimiento de actividad de archivos.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.installed": "Instalado",
+  "extensions.install": "Instalar",
+  "extensions.reinstall": "Reinstalar",
+  "extensions.installing": "Instalando…",
+  "extensions.openStore": "Tienda",
+  "extensions.pairingTitle": "Emparejar extensión del navegador",
+  "extensions.pairingDesc": "Copia tu auth token y pégalo en los ajustes de la extensión del navegador para emparejar.",
+  "extensions.copyToken": "Copiar auth token",
+  "extensions.tokenCopied": "Token copiado al portapapeles",
+  "extensions.tokenFailed": "No se pudo copiar el token",
 };
 
 export default settings;

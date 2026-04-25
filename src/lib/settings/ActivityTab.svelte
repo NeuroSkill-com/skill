@@ -62,6 +62,14 @@ let staleFiles = $state<StaleFileRow[]>([]);
 // Timeline
 let timeline = $state<{ kind: string; title: string; detail: string; ts: number; eeg_focus: number | null }[]>([]);
 
+// New: Terminal & conversation data from VS Code extension
+let terminalCommands = $state<{ command: string; category: string; exit_code: number | null; started_at: number; cwd: string; eeg_focus: number | null }[]>([]);
+let terminalImpact = $state<{ category: string; cmd_count: number; avg_focus_delta: number | null; pass_count: number; fail_count: number }[]>([]);
+let contextCost = $state<{ from_zone: string; to_zone: string; switches: number; avg_focus_at_switch: number | null }[]>([]);
+let devLoops = $state<{ loop_type: string; command: string; iterations: number; passes: number; fails: number; avg_cycle_secs: number; focus_trend: string }[]>([]);
+let conversations = $state<{ app: string; role: string; text: string; at: number; eeg_focus: number | null }[]>([]);
+let aiUsage = $state<{ suggestions_shown: number; accepted: number; acceptance_rate: number; chat_sessions: number; by_source: { source: string; count: number }[] } | null>(null);
+
 // Fusion insights
 let taskType = $state<{ task_type: string; confidence: number; signals: string[] } | null>(null);
 let codeEeg = $state<{
@@ -173,6 +181,13 @@ onMount(async () => {
       daemonPost("/v1/brain/task-type", { windowSecs: 300 }),
       daemonPost("/v1/brain/code-eeg", { since: weekAgo }),
       daemonPost("/v1/activity/timeline", { since: weekAgo, limit: 30 }),
+      // New VS Code extension data
+      daemonPost("/v1/brain/terminal-commands", { since: todayStart, limit: 50 }),
+      daemonPost("/v1/brain/terminal-impact", { since: todayStart }),
+      daemonPost("/v1/brain/context-cost", { since: todayStart }),
+      daemonPost("/v1/brain/dev-loops", { windowSecs: 3600 }),
+      daemonPost("/v1/brain/search-conversations", { mode: "structured", since: todayStart, limit: 50 }),
+      daemonPost("/v1/brain/ai-usage", { since: todayStart }),
     ]);
 
     if (results[0].status === "fulfilled") summary = results[0].value;
@@ -187,6 +202,12 @@ onMount(async () => {
     if (results[9].status === "fulfilled") taskType = results[9].value as typeof taskType;
     if (results[10].status === "fulfilled") codeEeg = results[10].value as typeof codeEeg;
     if (results[11].status === "fulfilled") timeline = (results[11].value as typeof timeline) ?? [];
+    if (results[12].status === "fulfilled") terminalCommands = (results[12].value as typeof terminalCommands) ?? [];
+    if (results[13].status === "fulfilled") terminalImpact = (results[13].value as typeof terminalImpact) ?? [];
+    if (results[14].status === "fulfilled") contextCost = (results[14].value as typeof contextCost) ?? [];
+    if (results[15].status === "fulfilled") devLoops = (results[15].value as typeof devLoops) ?? [];
+    if (results[16].status === "fulfilled") conversations = (results[16].value as typeof conversations) ?? [];
+    if (results[17].status === "fulfilled") aiUsage = results[17].value as typeof aiUsage;
   } catch {}
   loading = false;
 });
@@ -654,6 +675,178 @@ let heatmapMax = $state(1);
                   <span class="text-ui-2xs text-muted-foreground/40 shrink-0">{sf.language}</span>
                 {/if}
                 <span class="text-ui-2xs text-amber-500/70 shrink-0">{sf.days_stale}d {t("activity.staleAgo")}</span>
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Terminal Commands ──────────────────────────────────────────────── -->
+  {#if terminalCommands.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>Terminal Commands ({terminalCommands.length} today)</SectionHeader>
+      <SettingsCard>
+        <CardContent class="py-0 px-0">
+          <div class="divide-y divide-border dark:divide-white/[0.04] max-h-64 overflow-y-auto">
+            {#each terminalCommands.slice(0, 30) as cmd}
+              <div class="flex items-center gap-2 px-4 py-1.5 text-xs font-mono">
+                <span class="w-14 shrink-0 text-muted-foreground tabular-nums">{new Date(cmd.started_at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})}</span>
+                <span class="w-4 text-center">
+                  {#if cmd.exit_code === null}<span class="text-yellow-400">~</span>
+                  {:else if cmd.exit_code === 0}<span class="text-green-400">ok</span>
+                  {:else}<span class="text-red-400">!</span>{/if}
+                </span>
+                <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{cmd.category}</span>
+                <span class="truncate" title={cmd.command}>{cmd.command}</span>
+                {#if cmd.eeg_focus != null}
+                  <span class="text-[10px] tabular-nums {cmd.eeg_focus >= 70 ? 'text-emerald-400' : cmd.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus">{Math.round(cmd.eeg_focus)}</span>
+                {/if}
+                <span class="ml-auto text-[10px] text-muted-foreground truncate max-w-24" title={cmd.cwd}>{cmd.cwd?.split("/").pop()}</span>
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Terminal Impact on Focus ─────────────────────────────────────────── -->
+  {#if terminalImpact.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>Terminal Impact on Focus</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="Terminal Impact on Focus" description="How different command categories affect your EEG focus score." />
+        <CardContent>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            {#each terminalImpact as row}
+              {@const delta = row.avg_focus_delta ?? 0}
+              {@const total = row.pass_count + row.fail_count}
+              <div class="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+                <span class="font-medium capitalize">{row.category}</span>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold tabular-nums {delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : ''}">{delta > 0 ? "+" : ""}{delta.toFixed(1)}</span>
+                  <span class="text-muted-foreground">{row.cmd_count}x</span>
+                  {#if total > 0}
+                    <span class="text-green-400 text-[10px]">{Math.round((row.pass_count / total) * 100)}%</span>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Context Switch Cost ──────────────────────────────────────────────── -->
+  {#if contextCost.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>Context Switch Cost</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="Context Switch Cost" description="Your EEG focus level at the moment you switch between editor, terminal, and panels." />
+        <CardContent>
+          <div class="space-y-1 text-xs">
+            {#each contextCost as row}
+              <div class="flex items-center justify-between">
+                <span class="capitalize">{row.from_zone} → {row.to_zone}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-muted-foreground">{row.switches}x</span>
+                  {#if row.avg_focus_at_switch != null}
+                    <span class="font-bold tabular-nums">{Math.round(row.avg_focus_at_switch)}</span>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Dev Loops ────────────────────────────────────────────────────────── -->
+  {#if devLoops.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>Dev Loops (last hour)</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="Dev Loops" description="Edit-build-test cycles detected from your terminal commands. Shows iteration count, pass rate, and how your focus changes across iterations." />
+        <CardContent>
+          <div class="space-y-2">
+            {#each devLoops as loop}
+              {@const passRate = (loop.passes + loop.fails) > 0 ? Math.round((loop.passes / (loop.passes + loop.fails)) * 100) : null}
+              <div class="rounded-md bg-muted/30 px-3 py-2 text-xs {loop.fails > loop.passes ? 'border-l-2 border-red-400' : ''}">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-mono font-medium truncate" title={loop.command}>{loop.command.slice(0, 40)}</span>
+                  <span class="text-muted-foreground">{loop.loop_type}</span>
+                </div>
+                <div class="flex items-center gap-3 text-muted-foreground">
+                  <span class="font-bold text-foreground">{loop.iterations}x</span>
+                  {#if passRate !== null}
+                    <span class="{passRate >= 50 ? 'text-green-400' : 'text-red-400'}">{passRate}% pass</span>
+                  {/if}
+                  <span>{Math.round(loop.avg_cycle_secs)}s/cycle</span>
+                  <span class="font-bold {loop.focus_trend === 'rising' ? 'text-green-400' : loop.focus_trend === 'falling' ? 'text-red-400' : ''}">{loop.focus_trend === "rising" ? "\u2191" : loop.focus_trend === "falling" ? "\u2193" : "\u2194"}</span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── AI Coding Assistants ─────────────────────────────────────────────── -->
+  {#if aiUsage && (aiUsage.suggestions_shown > 0 || aiUsage.chat_sessions > 0)}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>AI Usage</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="AI Coding Assistants" description="Copilot, Codeium, and other AI suggestion acceptance rates today." />
+        <CardContent>
+          <div class="space-y-2 text-sm">
+            {#if aiUsage.suggestions_shown > 0}
+              <div class="flex items-center gap-3">
+                <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                  <div class="h-full bg-green-400 rounded-full" style="width: {Math.round(aiUsage.acceptance_rate * 100)}%"></div>
+                </div>
+                <span class="text-xs font-bold">{Math.round(aiUsage.acceptance_rate * 100)}% accepted</span>
+              </div>
+              <div class="flex gap-4 text-xs text-muted-foreground">
+                <span>{aiUsage.suggestions_shown} shown</span>
+                <span>{aiUsage.accepted} accepted</span>
+                <span>{aiUsage.chat_sessions} chats</span>
+              </div>
+            {/if}
+            {#if aiUsage.by_source?.length > 0}
+              <div class="flex gap-2 flex-wrap">
+                {#each aiUsage.by_source as s}
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-muted">{s.source} ({s.count})</span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Conversations ────────────────────────────────────────────────────── -->
+  {#if conversations.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>AI Conversations ({conversations.length} messages today)</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="AI Conversations" description="Messages exchanged with Claude, Pi, and other coding assistants. Stored locally, searchable via full-text and semantic search." />
+        <CardContent class="py-0 px-0">
+          <div class="divide-y divide-border dark:divide-white/[0.04] max-h-80 overflow-y-auto">
+            {#each conversations.slice(0, 30) as msg}
+              <div class="flex items-start gap-2 px-4 py-1.5 text-xs {msg.role === 'user' ? 'bg-blue-500/[0.03]' : ''}">
+                <span class="w-12 shrink-0 text-muted-foreground tabular-nums mt-0.5">{new Date(msg.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
+                <span class="w-4 shrink-0 text-center mt-0.5 {msg.role === 'user' ? 'text-blue-400' : msg.role === 'tool' ? 'text-muted-foreground' : ''}">{msg.role === "user" ? "\u276F" : msg.role === "tool" ? "\u2699" : "\u2190"}</span>
+                <span class="shrink-0 text-[10px] text-muted-foreground mt-0.5">{msg.app}</span>
+                <span class="flex-1 text-xs leading-relaxed {msg.role === 'user' ? 'font-medium' : 'text-muted-foreground'}" title={msg.text}>{msg.text?.slice(0, 120) ?? ""}</span>
+                {#if msg.eeg_focus != null}
+                  <span class="shrink-0 text-[10px] tabular-nums mt-0.5 {msg.eeg_focus >= 70 ? 'text-emerald-400' : msg.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus at this moment">{Math.round(msg.eeg_focus)}</span>
+                {/if}
               </div>
             {/each}
           </div>
