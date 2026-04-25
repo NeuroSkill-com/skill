@@ -242,6 +242,7 @@ pub fn router() -> Router<AppState> {
         .route("/activity/install-shell-hook", post(install_shell_hook))
         .route("/activity/uninstall-shell-hook", post(uninstall_shell_hook))
         .route("/activity/shell-hook-status", post(shell_hook_status))
+        .route("/activity/terminal-logs", post(terminal_logs))
         .route("/activity/files-in-range", post(activity_files_in_range))
         .route("/activity/meetings-in-range", post(activity_meetings_in_range))
         .route("/activity/recent-clipboard", post(activity_recent_clipboard))
@@ -1187,6 +1188,68 @@ async fn uninstall_shell_hook(
     Json(result)
 }
 
+/// Read the tail of recent terminal session logs.
+async fn terminal_logs(State(state): State<AppState>, Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let tail_bytes = body.get("bytes").and_then(|v| v.as_u64()).unwrap_or(5000) as usize;
+    let result = tokio::task::spawn_blocking(move || {
+        let log_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".skill")
+            .join("terminal-logs");
+        if !log_dir.exists() {
+            return serde_json::json!({"logs": []});
+        }
+        let mut entries: Vec<_> = std::fs::read_dir(&log_dir)
+            .map(|rd| rd.filter_map(|e| e.ok()).collect())
+            .unwrap_or_default();
+        entries.sort_by_key(|e| std::cmp::Reverse(e.metadata().ok().and_then(|m| m.modified().ok())));
+
+        let mut logs = Vec::new();
+        for entry in entries.iter().take(5) {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("log") {
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let content = if size > 0 {
+                let file = std::fs::File::open(&path).ok();
+                file.and_then(|mut f| {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let start = if size > tail_bytes as u64 {
+                        size - tail_bytes as u64
+                    } else {
+                        0
+                    };
+                    f.seek(SeekFrom::Start(start)).ok()?;
+                    let mut buf = Vec::new();
+                    f.read_to_end(&mut buf).ok()?;
+                    // Strip ANSI and control chars for readability
+                    let s = String::from_utf8_lossy(&buf);
+                    let clean: String = s
+                        .chars()
+                        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+                        .collect();
+                    Some(clean)
+                })
+                .unwrap_or_default()
+            } else {
+                String::new()
+            };
+            logs.push(serde_json::json!({
+                "file": name,
+                "size": size,
+                "tail": content,
+            }));
+        }
+        serde_json::json!({"logs": logs})
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()}));
+    Json(result)
+}
+
 /// Get the rc file path for a given shell.
 fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
     match shell {
@@ -1233,6 +1296,20 @@ _neuroskill_precmd() {{
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _neuroskill_preexec
 add-zsh-hook precmd _neuroskill_precmd
+
+# Session recording — captures all terminal I/O (input inside interactive programs)
+if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+  export NEUROSKILL_RECORDING=1
+  _ns_log_dir="$HOME/.skill/terminal-logs"
+  mkdir -p "$_ns_log_dir"
+  # Rotate: keep last 20 logs, max 1MB each
+  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
+  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
+  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
+  if command -v script >/dev/null 2>&1; then
+    SHELL=${{SHELL:-/bin/zsh}} exec script -q -F "$_ns_log" 2>/dev/null
+  fi
+fi
 "#
         ),
 
@@ -1272,6 +1349,19 @@ _neuroskill_prompt_cmd() {{
 }}
 trap '_neuroskill_debug_trap' DEBUG
 PROMPT_COMMAND="_neuroskill_prompt_cmd${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+
+# Session recording
+if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+  export NEUROSKILL_RECORDING=1
+  _ns_log_dir="$HOME/.skill/terminal-logs"
+  mkdir -p "$_ns_log_dir"
+  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
+  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
+  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
+  if command -v script >/dev/null 2>&1; then
+    SHELL=${{SHELL:-/bin/bash}} exec script -q -f "$_ns_log" 2>/dev/null
+  fi
+fi
 "#
         ),
 

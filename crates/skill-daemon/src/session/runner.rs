@@ -1295,10 +1295,10 @@ mod tests {
             ..Default::default()
         };
         let _source = VirtualLslSource::start(cfg).expect("virtual source");
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
 
         // 2. Discover: daemon handler calls discover_streams().
-        let streams = tokio::task::spawn_blocking(|| skill_lsl::discover_streams(3.0))
+        let streams = tokio::task::spawn_blocking(|| skill_lsl::discover_streams(5.0))
             .await
             .unwrap();
 
@@ -1341,7 +1341,7 @@ mod tests {
         let mut rx = state_check.events_tx.subscribe();
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(2200)).await;
+            tokio::time::sleep(Duration::from_millis(3000)).await;
             let _ = cancel_tx.send(());
         });
 

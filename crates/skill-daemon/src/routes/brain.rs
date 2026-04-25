@@ -104,6 +104,8 @@ pub fn router() -> Router<AppState> {
         .route("/brain/terminal-commands", post(terminal_commands))
         .route("/brain/terminal-input", post(terminal_input))
         .route("/brain/dev-loops", post(dev_loops))
+        .route("/brain/ai-usage", post(ai_usage))
+        .route("/brain/search-conversations", post(search_conversations))
         .route("/activity/timeline", post(timeline))
 }
 
@@ -257,6 +259,80 @@ async fn terminal_input(
     let since = req.since.unwrap_or(now.saturating_sub(86400));
     run_query(&state, move |s| {
         serde_json::to_value(s.terminal_input_activity(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn ai_usage(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(86400));
+    run_query(&state, move |s| {
+        let events = s.get_recent_ai_events(500);
+        let filtered: Vec<_> = events.iter().filter(|e| e.at >= since).collect();
+        let shown = filtered
+            .iter()
+            .filter(|e| e.event_type == "ai_suggestion_shown")
+            .count();
+        let accepted = filtered
+            .iter()
+            .filter(|e| e.event_type == "ai_suggestion_accepted")
+            .count();
+        let rejected = filtered
+            .iter()
+            .filter(|e| e.event_type == "ai_suggestion_rejected")
+            .count();
+        let chats = filtered.iter().filter(|e| e.event_type == "ai_chat_start").count();
+        let rate = if shown > 0 { accepted as f64 / shown as f64 } else { 0.0 };
+        let mut by_source: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        for e in &filtered {
+            if !e.source.is_empty() {
+                *by_source.entry(e.source.clone()).or_default() += 1;
+            }
+        }
+        let sources: Vec<_> = by_source
+            .into_iter()
+            .map(|(s, c)| serde_json::json!({"source": s, "count": c}))
+            .collect();
+        serde_json::json!({
+            "suggestions_shown": shown,
+            "accepted": accepted,
+            "rejected": rejected,
+            "acceptance_rate": rate,
+            "chat_sessions": chats,
+            "by_source": sources,
+        })
+    })
+    .await
+}
+
+/// Search conversations: mode = "fts" (full-text), "fuzzy" (LIKE), or "structured" (filters).
+async fn search_conversations(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let query = body.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mode = body.get("mode").and_then(|v| v.as_str()).unwrap_or("fts").to_string();
+    let app = body.get("app").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let role = body.get("role").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let limit = body.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as u32;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = body.get("since").and_then(|v| v.as_u64()).unwrap_or(0);
+    let until = body.get("until").and_then(|v| v.as_u64()).unwrap_or(now);
+
+    run_query(&state, move |s| {
+        let results = match mode.as_str() {
+            "fts" => s.search_conversations_fts(&query, limit),
+            "fuzzy" => s.search_conversations_fuzzy(&query, limit),
+            "structured" => s.search_conversations_structured(app.as_deref(), role.as_deref(), since, until, limit),
+            _ => s.search_conversations_fts(&query, limit),
+        };
+        serde_json::to_value(results).unwrap_or_default()
     })
     .await
 }

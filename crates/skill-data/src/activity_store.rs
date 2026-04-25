@@ -245,6 +245,21 @@ CREATE TABLE IF NOT EXISTS layout_snapshots (
     terminals        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ls_sampled ON layout_snapshots (sampled_at DESC);
+
+-- Conversation messages from AI coding assistants (claude, pi, etc.).
+-- Stores full text for all roles (user, assistant, tool) for searchability.
+CREATE TABLE IF NOT EXISTS conversations (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    app       TEXT    NOT NULL DEFAULT '',
+    role      TEXT    NOT NULL DEFAULT '',
+    text      TEXT    NOT NULL,
+    cwd       TEXT    NOT NULL DEFAULT '',
+    at        INTEGER NOT NULL,
+    session   TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_conv_at ON conversations (at DESC);
+CREATE INDEX IF NOT EXISTS idx_conv_app ON conversations (app);
+CREATE INDEX IF NOT EXISTS idx_conv_role ON conversations (role);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -298,6 +313,12 @@ impl ActivityStore {
             eprintln!("[activity] DDL: {e}");
             return None;
         }
+        // FTS5 virtual table for full-text search on conversations.
+        let _ = conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
+                text, app, role, content=conversations, content_rowid=id
+            );",
+        );
         Some(Self { conn: Mutex::new(conn) })
     }
 
@@ -2350,6 +2371,120 @@ impl ActivityStore {
         results
     }
 
+    // ── Conversations ─────────────────────────────────────────────────────
+
+    /// Insert a conversation message and update the FTS index.
+    pub fn insert_conversation(&self, app: &str, role: &str, text: &str, cwd: &str, at: u64, session: &str) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO conversations (app, role, text, cwd, at, session) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![app, role, text, cwd, at as i64, session],
+        );
+        // Keep FTS in sync
+        let id = c.last_insert_rowid();
+        let _ = c.execute(
+            "INSERT INTO conversations_fts (rowid, text, app, role) VALUES (?1, ?2, ?3, ?4)",
+            params![id, text, app, role],
+        );
+    }
+
+    /// Full-text search on conversations.
+    pub fn search_conversations_fts(&self, query: &str, limit: u32) -> Vec<ConversationRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT c.id, c.app, c.role, c.text, c.cwd, c.at, c.session
+             FROM conversations_fts f
+             JOIN conversations c ON c.id = f.rowid
+             WHERE conversations_fts MATCH ?1
+             ORDER BY c.at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![query, limit as i64], |row| {
+            Ok(ConversationRow {
+                id: row.get(0)?,
+                app: row.get(1)?,
+                role: row.get(2)?,
+                text: row.get(3)?,
+                cwd: row.get(4)?,
+                at: row.get::<_, i64>(5)? as u64,
+                session: row.get(6)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Structured query: filter by app, role, time range.
+    pub fn search_conversations_structured(
+        &self,
+        app: Option<&str>,
+        role: Option<&str>,
+        since: u64,
+        until: u64,
+        limit: u32,
+    ) -> Vec<ConversationRow> {
+        let c = self.conn.lock_or_recover();
+        let mut sql =
+            "SELECT id, app, role, text, cwd, at, session FROM conversations WHERE at >= ?1 AND at <= ?2".to_string();
+        if app.is_some() {
+            sql += " AND app = ?3";
+        }
+        if role.is_some() {
+            sql += " AND role = ?4";
+        }
+        sql += " ORDER BY at DESC LIMIT ?5";
+        let mut stmt = match c.prepare_cached(&sql) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        let app_val = app.unwrap_or("");
+        let role_val = role.unwrap_or("");
+        stmt.query_map(
+            params![since as i64, until as i64, app_val, role_val, limit as i64],
+            |row| {
+                Ok(ConversationRow {
+                    id: row.get(0)?,
+                    app: row.get(1)?,
+                    role: row.get(2)?,
+                    text: row.get(3)?,
+                    cwd: row.get(4)?,
+                    at: row.get::<_, i64>(5)? as u64,
+                    session: row.get(6)?,
+                })
+            },
+        )
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Fuzzy search: LIKE-based substring matching.
+    pub fn search_conversations_fuzzy(&self, query: &str, limit: u32) -> Vec<ConversationRow> {
+        let c = self.conn.lock_or_recover();
+        let pattern = format!("%{query}%");
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, app, role, text, cwd, at, session FROM conversations
+             WHERE text LIKE ?1 ORDER BY at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![pattern, limit as i64], |row| {
+            Ok(ConversationRow {
+                id: row.get(0)?,
+                app: row.get(1)?,
+                role: row.get(2)?,
+                text: row.get(3)?,
+                cwd: row.get(4)?,
+                at: row.get::<_, i64>(5)? as u64,
+                session: row.get(6)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
     pub fn get_recent_builds(&self, limit: u32) -> Vec<BuildEventRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
@@ -3390,6 +3525,17 @@ pub struct AiEventRow {
     pub file_path: String,
     pub language: String,
     pub at: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConversationRow {
+    pub id: i64,
+    pub app: String,
+    pub role: String,
+    pub text: String,
+    pub cwd: String,
+    pub at: u64,
+    pub session: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

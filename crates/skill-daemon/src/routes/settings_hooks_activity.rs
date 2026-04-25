@@ -679,6 +679,14 @@ pub(crate) async fn activity_vscode_events_impl(
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
                     store.insert_ai_event(event_type, source, path, language, now);
                 }
+                "conversation_message" if !command.is_empty() => {
+                    let role = event.get("source").and_then(|v| v.as_str()).unwrap_or("user");
+                    let app = event.get("language").and_then(|v| v.as_str()).unwrap_or("claude");
+                    let msg_ts = event.get("exit_code").and_then(|v| v.as_u64()).unwrap_or(now);
+                    // Session ID derived from filename hash passed via breakpoint_count presence
+                    let session = if event.get("breakpoint_count").is_some() { app } else { "" };
+                    store.insert_conversation(app, role, command, path, msg_ts, session);
+                }
                 "terminal_command_start" if !command.is_empty() => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
                     store.insert_terminal_command_start(source, command, path, now, None, None);
@@ -691,6 +699,11 @@ pub(crate) async fn activity_vscode_events_impl(
                 "zone_switch" => {
                     let from = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
                     store.insert_zone_switch(command, from, now, None);
+                }
+                "window_focus" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("vscode");
+                    let zone = if command == "focused" { "vscode_focus" } else { "vscode_blur" };
+                    store.insert_zone_switch(zone, source, now, None);
                 }
                 "layout_snapshot" => {
                     // command field carries JSON payload
@@ -861,6 +874,19 @@ pub(crate) async fn activity_vscode_events_impl(
                 "zone_switch" => {
                     let from = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
                     (format!("switched to {command}"), format!("from {from}"))
+                }
+
+                // === Conversation messages (claude, pi, etc.) ===
+                // Only user-typed input gets embedded. Responses and tool calls are
+                // recorded as labels but without embeddings to save compute.
+                "conversation_message" => {
+                    let role = event.get("source").and_then(|v| v.as_str()).unwrap_or("user");
+                    let app = event.get("language").and_then(|v| v.as_str()).unwrap_or("claude");
+                    let text = command;
+                    if text.is_empty() || role != "user" { count += 1; continue; }
+                    // Clip to ~1000 chars for embedding (configurable in Tauri settings)
+                    let clipped = if text.len() > 1000 { &text[..1000] } else { text };
+                    (format!("{app} prompt: {clipped}"), path.to_string())
                 }
 
                 // === Project file changes (external) ===
