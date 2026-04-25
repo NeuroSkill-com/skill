@@ -246,6 +246,31 @@ CREATE TABLE IF NOT EXISTS layout_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_ls_sampled ON layout_snapshots (sampled_at DESC);
 
+-- EEG time-series: periodic snapshots of all brain metrics.
+-- Events correlate by joining on nearest timestamp — no fixed EEG columns needed.
+-- JSON metrics column is extensible: add new metrics without schema changes.
+-- Example: {\"focus\":72,\"mood\":45,\"alpha\":0.3,\"beta\":0.5,\"theta\":0.2,\"hrv\":65,\"stress\":0.4}
+CREATE TABLE IF NOT EXISTS eeg_timeseries (
+    ts      INTEGER PRIMARY KEY,
+    metrics TEXT    NOT NULL DEFAULT '{}'
+);
+
+-- Generic embedding store: decouple embeddings from specific tables.
+-- Can re-embed with different models, store multiple vectors per item,
+-- and query across all source types.
+CREATE TABLE IF NOT EXISTS embeddings (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT    NOT NULL,
+    source_id   INTEGER NOT NULL,
+    source_text TEXT    NOT NULL DEFAULT '',
+    model       TEXT    NOT NULL,
+    vector      BLOB    NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_emb_source ON embeddings (source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings (model);
+CREATE INDEX IF NOT EXISTS idx_emb_created ON embeddings (created_at DESC);
+
 -- Conversation messages from AI coding assistants (claude, pi, etc.).
 -- Stores full text for all roles (user, assistant, tool) for searchability.
 CREATE TABLE IF NOT EXISTS conversations (
@@ -255,11 +280,40 @@ CREATE TABLE IF NOT EXISTS conversations (
     text      TEXT    NOT NULL,
     cwd       TEXT    NOT NULL DEFAULT '',
     at        INTEGER NOT NULL,
-    session   TEXT    NOT NULL DEFAULT ''
+    session   TEXT    NOT NULL DEFAULT '',
+    eeg_focus REAL,
+    eeg_mood  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_conv_at ON conversations (at DESC);
 CREATE INDEX IF NOT EXISTS idx_conv_app ON conversations (app);
 CREATE INDEX IF NOT EXISTS idx_conv_role ON conversations (role);
+
+-- Browser activity events from Chrome/Firefox/Safari extensions.
+CREATE TABLE IF NOT EXISTS browser_activities (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type      TEXT    NOT NULL,
+    url             TEXT    NOT NULL DEFAULT '',
+    domain          TEXT    NOT NULL DEFAULT '',
+    title           TEXT    NOT NULL DEFAULT '',
+    tab_id          INTEGER,
+    browser_name    TEXT    NOT NULL DEFAULT '',
+    scroll_depth    REAL,
+    reading_time_secs INTEGER,
+    typing_detected INTEGER NOT NULL DEFAULT 0,
+    media_playing   INTEGER NOT NULL DEFAULT 0,
+    search_query    TEXT    NOT NULL DEFAULT '',
+    tab_count       INTEGER,
+    devtools_open   INTEGER NOT NULL DEFAULT 0,
+    category        TEXT    NOT NULL DEFAULT '',
+    referrer_domain TEXT    NOT NULL DEFAULT '',
+    at              INTEGER NOT NULL,
+    eeg_focus       REAL,
+    eeg_mood        REAL
+);
+CREATE INDEX IF NOT EXISTS idx_ba_at ON browser_activities (at DESC);
+CREATE INDEX IF NOT EXISTS idx_ba_domain ON browser_activities (domain);
+CREATE INDEX IF NOT EXISTS idx_ba_category ON browser_activities (category);
+CREATE INDEX IF NOT EXISTS idx_ba_event ON browser_activities (event_type);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -2101,6 +2155,144 @@ impl ActivityStore {
         );
     }
 
+    /// Record a browser extension activity event.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_browser_activity(
+        &self,
+        event_type: &str,
+        url: &str,
+        domain: &str,
+        title: &str,
+        tab_id: Option<i64>,
+        browser_name: &str,
+        scroll_depth: Option<f64>,
+        reading_time_secs: Option<i64>,
+        typing_detected: bool,
+        media_playing: bool,
+        search_query: &str,
+        tab_count: Option<i64>,
+        devtools_open: bool,
+        category: &str,
+        referrer_domain: &str,
+        at: u64,
+        eeg_focus: Option<f64>,
+        eeg_mood: Option<f64>,
+    ) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO browser_activities
+                (event_type, url, domain, title, tab_id, browser_name,
+                 scroll_depth, reading_time_secs, typing_detected, media_playing,
+                 search_query, tab_count, devtools_open, category, referrer_domain,
+                 at, eeg_focus, eeg_mood)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                event_type,
+                url,
+                domain,
+                title,
+                tab_id,
+                browser_name,
+                scroll_depth,
+                reading_time_secs,
+                typing_detected as i32,
+                media_playing as i32,
+                search_query,
+                tab_count,
+                devtools_open as i32,
+                category,
+                referrer_domain,
+                at as i64,
+                eeg_focus,
+                eeg_mood,
+            ],
+        );
+    }
+
+    /// Query recent browser activities.
+    pub fn get_recent_browser_activities(&self, limit: u32, since: u64) -> Vec<BrowserActivityRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, event_type, url, domain, title, tab_id, browser_name,
+                    scroll_depth, reading_time_secs, typing_detected, media_playing,
+                    search_query, tab_count, devtools_open, category, referrer_domain,
+                    at, eeg_focus, eeg_mood
+             FROM browser_activities WHERE at >= ?1 ORDER BY at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, limit], |row| {
+            Ok(BrowserActivityRow {
+                id: row.get(0)?,
+                event_type: row.get(1)?,
+                url: row.get(2)?,
+                domain: row.get(3)?,
+                title: row.get(4)?,
+                tab_id: row.get(5)?,
+                browser_name: row.get(6)?,
+                scroll_depth: row.get(7)?,
+                reading_time_secs: row.get(8)?,
+                typing_detected: row.get::<_, i32>(9)? != 0,
+                media_playing: row.get::<_, i32>(10)? != 0,
+                search_query: row.get(11)?,
+                tab_count: row.get(12)?,
+                devtools_open: row.get::<_, i32>(13)? != 0,
+                category: row.get(14)?,
+                referrer_domain: row.get(15)?,
+                at: row.get::<_, i64>(16)? as u64,
+                eeg_focus: row.get(17)?,
+                eeg_mood: row.get(18)?,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Top domains by event count in the given time window.
+    pub fn browser_domain_breakdown(&self, since: u64) -> Vec<(String, String, u64)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, category, COUNT(*) as cnt
+             FROM browser_activities
+             WHERE at >= ?1 AND domain != ''
+             GROUP BY domain, category
+             ORDER BY cnt DESC
+             LIMIT 50",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? as u64,
+            ))
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Tab switch rate: number of tab_switch events per minute in the window.
+    pub fn browser_context_switch_rate(&self, start: u64, end: u64) -> f64 {
+        let c = self.conn.lock_or_recover();
+        let count: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities
+                 WHERE event_type = 'tab_switch' AND at >= ?1 AND at <= ?2",
+                params![start as i64, end as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let minutes = (end.saturating_sub(start)) as f64 / 60.0;
+        if minutes > 0.0 {
+            count as f64 / minutes
+        } else {
+            0.0
+        }
+    }
+
     /// Detect and store dev loops (edit → build/test → result cycles).
     /// Called periodically by a background worker.
     pub fn detect_dev_loops(&self, window_secs: u64) -> Vec<DevLoopRow> {
@@ -2371,14 +2563,139 @@ impl ActivityStore {
         results
     }
 
+    // ── EEG Time-series ────────────────────────────────────────────────────
+
+    /// Insert an EEG snapshot. Called periodically (every 5s) from the session runner.
+    pub fn insert_eeg_sample(&self, ts: u64, metrics_json: &str) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT OR REPLACE INTO eeg_timeseries (ts, metrics) VALUES (?1, ?2)",
+            params![ts as i64, metrics_json],
+        );
+    }
+
+    /// Get the EEG metrics closest to a given timestamp.
+    pub fn eeg_at(&self, ts: u64) -> Option<serde_json::Value> {
+        let c = self.conn.lock_or_recover();
+        c.query_row(
+            "SELECT metrics FROM eeg_timeseries WHERE ts <= ?1 ORDER BY ts DESC LIMIT 1",
+            params![ts as i64],
+            |row| {
+                let s: String = row.get(0)?;
+                Ok(serde_json::from_str(&s).unwrap_or_default())
+            },
+        )
+        .ok()
+    }
+
+    /// Get EEG metrics in a time range (for charts, correlation analysis).
+    pub fn eeg_range(&self, from: u64, to: u64, max_points: u32) -> Vec<(u64, serde_json::Value)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c
+            .prepare_cached("SELECT ts, metrics FROM eeg_timeseries WHERE ts >= ?1 AND ts <= ?2 ORDER BY ts LIMIT ?3")
+        {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![from as i64, to as i64, max_points as i64], |row| {
+            let ts = row.get::<_, i64>(0)? as u64;
+            let s: String = row.get(1)?;
+            let v: serde_json::Value = serde_json::from_str(&s).unwrap_or_default();
+            Ok((ts, v))
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    // ── Generic Embeddings ───────────────────────────────────────────────
+
+    /// Store an embedding vector for any source item.
+    pub fn insert_embedding(
+        &self,
+        source_type: &str,
+        source_id: i64,
+        source_text: &str,
+        model: &str,
+        vector: &[u8],
+        created_at: u64,
+    ) -> i64 {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO embeddings (source_type, source_id, source_text, model, vector, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![source_type, source_id, source_text, model, vector, created_at as i64],
+        );
+        c.last_insert_rowid()
+    }
+
+    /// Get embeddings for a source item (may have multiple models).
+    pub fn get_embeddings(&self, source_type: &str, source_id: i64) -> Vec<EmbeddingRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, source_type, source_id, source_text, model, vector, created_at
+             FROM embeddings WHERE source_type = ?1 AND source_id = ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![source_type, source_id], |row| {
+            Ok(EmbeddingRow {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                source_text: row.get(3)?,
+                model: row.get(4)?,
+                vector: row.get(5)?,
+                created_at: row.get::<_, i64>(6)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Get all embeddings of a given model (for building HNSW indices).
+    pub fn get_embeddings_by_model(&self, model: &str, limit: u32) -> Vec<EmbeddingRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, source_type, source_id, source_text, model, vector, created_at
+             FROM embeddings WHERE model = ?1 ORDER BY created_at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![model, limit as i64], |row| {
+            Ok(EmbeddingRow {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                source_text: row.get(3)?,
+                model: row.get(4)?,
+                vector: row.get(5)?,
+                created_at: row.get::<_, i64>(6)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
     // ── Conversations ─────────────────────────────────────────────────────
 
     /// Insert a conversation message and update the FTS index.
-    pub fn insert_conversation(&self, app: &str, role: &str, text: &str, cwd: &str, at: u64, session: &str) {
+    pub fn insert_conversation(
+        &self,
+        app: &str,
+        role: &str,
+        text: &str,
+        cwd: &str,
+        at: u64,
+        session: &str,
+        eeg_focus: Option<f64>,
+        eeg_mood: Option<f64>,
+    ) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO conversations (app, role, text, cwd, at, session) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![app, role, text, cwd, at as i64, session],
+            "INSERT INTO conversations (app, role, text, cwd, at, session, eeg_focus, eeg_mood) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![app, role, text, cwd, at as i64, session, eeg_focus, eeg_mood],
         );
         // Keep FTS in sync
         let id = c.last_insert_rowid();
@@ -2392,7 +2709,7 @@ impl ActivityStore {
     pub fn search_conversations_fts(&self, query: &str, limit: u32) -> Vec<ConversationRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT c.id, c.app, c.role, c.text, c.cwd, c.at, c.session
+            "SELECT c.id, c.app, c.role, c.text, c.cwd, c.at, c.session, c.eeg_focus
              FROM conversations_fts f
              JOIN conversations c ON c.id = f.rowid
              WHERE conversations_fts MATCH ?1
@@ -2410,6 +2727,7 @@ impl ActivityStore {
                 cwd: row.get(4)?,
                 at: row.get::<_, i64>(5)? as u64,
                 session: row.get(6)?,
+                eeg_focus: row.get(7).ok(),
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -2427,7 +2745,8 @@ impl ActivityStore {
     ) -> Vec<ConversationRow> {
         let c = self.conn.lock_or_recover();
         let mut sql =
-            "SELECT id, app, role, text, cwd, at, session FROM conversations WHERE at >= ?1 AND at <= ?2".to_string();
+            "SELECT id, app, role, text, cwd, at, session, eeg_focus FROM conversations WHERE at >= ?1 AND at <= ?2"
+                .to_string();
         if app.is_some() {
             sql += " AND app = ?3";
         }
@@ -2452,6 +2771,7 @@ impl ActivityStore {
                     cwd: row.get(4)?,
                     at: row.get::<_, i64>(5)? as u64,
                     session: row.get(6)?,
+                    eeg_focus: row.get(7).ok(),
                 })
             },
         )
@@ -2464,7 +2784,7 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
         let mut stmt = match c.prepare_cached(
-            "SELECT id, app, role, text, cwd, at, session FROM conversations
+            "SELECT id, app, role, text, cwd, at, session, eeg_focus FROM conversations
              WHERE text LIKE ?1 ORDER BY at DESC LIMIT ?2",
         ) {
             Ok(s) => s,
@@ -2479,6 +2799,7 @@ impl ActivityStore {
                 cwd: row.get(4)?,
                 at: row.get::<_, i64>(5)? as u64,
                 session: row.get(6)?,
+                eeg_focus: row.get(7).ok(),
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -3528,6 +3849,16 @@ pub struct AiEventRow {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct EmbeddingRow {
+    pub id: i64,
+    pub source_type: String,
+    pub source_id: i64,
+    pub source_text: String,
+    pub model: String,
+    pub vector: Vec<u8>,
+    pub created_at: u64,
+}
+
 pub struct ConversationRow {
     pub id: i64,
     pub app: String,
@@ -3536,6 +3867,7 @@ pub struct ConversationRow {
     pub cwd: String,
     pub at: u64,
     pub session: String,
+    pub eeg_focus: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -3550,6 +3882,29 @@ pub struct DevLoopRow {
     pub avg_cycle_secs: f64,
     pub avg_focus: Option<f64>,
     pub focus_trend: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserActivityRow {
+    pub id: i64,
+    pub event_type: String,
+    pub url: String,
+    pub domain: String,
+    pub title: String,
+    pub tab_id: Option<i64>,
+    pub browser_name: String,
+    pub scroll_depth: Option<f64>,
+    pub reading_time_secs: Option<i64>,
+    pub typing_detected: bool,
+    pub media_playing: bool,
+    pub search_query: String,
+    pub tab_count: Option<i64>,
+    pub devtools_open: bool,
+    pub category: String,
+    pub referrer_domain: String,
+    pub at: u64,
+    pub eeg_focus: Option<f64>,
+    pub eeg_mood: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

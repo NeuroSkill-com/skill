@@ -237,6 +237,7 @@ pub fn router() -> Router<AppState> {
         .route("/activity/weekly-digest", post(activity_weekly_digest))
         .route("/activity/stale-files", post(activity_stale_files))
         .route("/activity/vscode-events", post(activity_vscode_events))
+        .route("/activity/browser-events", post(activity_browser_events))
         .route("/activity/shell-command", post(activity_shell_command))
         .route("/activity/shell-hook", get(get_shell_hook))
         .route("/activity/install-shell-hook", post(install_shell_hook))
@@ -923,6 +924,13 @@ async fn activity_vscode_events(
     settings_hooks_activity::activity_vscode_events_impl(state, events).await
 }
 
+async fn activity_browser_events(
+    state: State<AppState>,
+    Json(events): Json<Vec<serde_json::Value>>,
+) -> Json<serde_json::Value> {
+    settings_hooks_activity::activity_browser_events_impl(state, events).await
+}
+
 /// Receive a single shell command from the OS-wide shell hook (preexec).
 /// Expects JSON: {"command":"...", "cwd":"...", "shell":"zsh", "exit_code": null}
 async fn activity_shell_command(
@@ -932,6 +940,20 @@ async fn activity_shell_command(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let embedder = state.text_embedder.clone();
     let label_index = state.label_index.clone();
+    // Attach live EEG if recording
+    let (eeg_focus, _eeg_mood): (Option<f64>, Option<f64>) = state
+        .latest_bands
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref().map(|v| {
+                (
+                    v.get("focus").and_then(|f| f.as_f64()),
+                    v.get("mood").and_then(|m| m.as_f64()),
+                )
+            })
+        })
+        .unwrap_or((None, None));
     let result = tokio::task::spawn_blocking(move || {
         let Some(store) = ActivityStore::open(&skill_dir) else { return 0u64; };
         let now = std::time::SystemTime::now()
@@ -945,11 +967,9 @@ async fn activity_shell_command(
         if command.is_empty() { return 0; }
 
         if exit_code.is_none() {
-            // Command start
-            store.insert_terminal_command_start(shell, command, cwd, now, None, None);
+            store.insert_terminal_command_start(shell, command, cwd, now, eeg_focus, None);
         } else {
-            // Command end (with exit code)
-            store.update_terminal_command_end(command, shell, exit_code, now, None);
+            store.update_terminal_command_end(command, shell, exit_code, now, eeg_focus);
         }
 
         // Auto-label for EEG

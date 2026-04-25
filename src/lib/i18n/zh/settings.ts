@@ -700,6 +700,30 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.antneuro1": "通过 USB 连接您的 eego 放大器。",
   "settings.supportedDevices.instruction.antneuro2":
     "扫描器会自动检测 eego 放大器。从设备列表中选择并连接。如需要，可在 Device API 设置中配置电极帽布局。",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "扩展",
+  "extensions.ideTitle": "IDE 扩展",
+  "extensions.browserTitle": "浏览器扩展",
+  "extensions.browserDesc": "追踪浏览模式并与 EEG 脑电状态关联。所有数据保留在您的设备上。",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "终端命令、AI 建议、开发循环和文件活动跟踪。",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "标签页活动、阅读模式、滚动深度和搜索行为。",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "标签页活动、阅读模式、滚动深度和搜索行为。",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "标签页活动、阅读模式、滚动深度和搜索行为。",
+  "extensions.installed": "已安装",
+  "extensions.install": "安装",
+  "extensions.reinstall": "重新安装",
+  "extensions.installing": "安装中…",
+  "extensions.openStore": "商店",
+  "extensions.pairingTitle": "浏览器扩展配对",
+  "extensions.pairingDesc": "复制您的 auth token 并粘贴到浏览器扩展设置中以完成配对。",
+  "extensions.copyToken": "复制 auth token",
+  "extensions.tokenCopied": "令牌已复制到剪贴板",
+  "extensions.tokenFailed": "无法复制令牌",
 };
 
 export default settings;

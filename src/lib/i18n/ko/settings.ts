@@ -712,6 +712,30 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.antneuro1": "eego 앰프를 USB로 연결하세요.",
   "settings.supportedDevices.instruction.antneuro2":
     "스캐너가 eego 앰프를 자동으로 감지합니다. 장치 목록에서 선택하여 연결하세요. 필요한 경우 Device API 설정에서 캡 레이아웃을 구성할 수 있습니다.",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "확장 프로그램",
+  "extensions.ideTitle": "IDE 확장 프로그램",
+  "extensions.browserTitle": "브라우저 확장 프로그램",
+  "extensions.browserDesc": "브라우징 패턴을 추적하고 EEG 뇌 상태와 상관관계를 분석합니다. 모든 데이터는 사용자의 기기에 저장됩니다.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "터미널 명령, AI 제안, 개발 루프 및 파일 활동 추적.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "탭 활동, 읽기 패턴, 스크롤 깊이 및 검색 행동.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "탭 활동, 읽기 패턴, 스크롤 깊이 및 검색 행동.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "탭 활동, 읽기 패턴, 스크롤 깊이 및 검색 행동.",
+  "extensions.installed": "설치됨",
+  "extensions.install": "설치",
+  "extensions.reinstall": "재설치",
+  "extensions.installing": "설치 중…",
+  "extensions.openStore": "스토어",
+  "extensions.pairingTitle": "브라우저 확장 프로그램 페어링",
+  "extensions.pairingDesc": "auth token을 복사하여 브라우저 확장 프로그램 설정에 붙여넣으면 페어링됩니다.",
+  "extensions.copyToken": "auth token 복사",
+  "extensions.tokenCopied": "토큰이 클립보드에 복사되었습니다",
+  "extensions.tokenFailed": "토큰을 복사할 수 없습니다",
 };
 
 export default settings;

@@ -753,6 +753,30 @@ const settings: Record<string, string> = {
   // ── Auto-synced from en/ (2026-04-15) ──
   "settings.shortcutChat": "Chat",
   "settings.shortcutCompare": "Vergleichen",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "Erweiterungen",
+  "extensions.ideTitle": "IDE-Erweiterungen",
+  "extensions.browserTitle": "Browser-Erweiterungen",
+  "extensions.browserDesc": "Surfverhalten erfassen und mit dem EEG-Hirnzustand korrelieren. Alle Daten bleiben auf Ihrem Gerät.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "Terminalbefehle, KI-Vorschläge, Entwicklungsschleifen und Dateiaktivitäts-Tracking.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "Tab-Aktivität, Lesemuster, Scrolltiefe und Suchverhalten.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "Tab-Aktivität, Lesemuster, Scrolltiefe und Suchverhalten.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "Tab-Aktivität, Lesemuster, Scrolltiefe und Suchverhalten.",
+  "extensions.installed": "Installiert",
+  "extensions.install": "Installieren",
+  "extensions.reinstall": "Neu installieren",
+  "extensions.installing": "Wird installiert…",
+  "extensions.openStore": "Store",
+  "extensions.pairingTitle": "Browser-Erweiterung koppeln",
+  "extensions.pairingDesc": "Kopieren Sie Ihr Auth-Token und fügen Sie es in den Einstellungen der Browser-Erweiterung ein, um sie zu koppeln.",
+  "extensions.copyToken": "Auth-Token kopieren",
+  "extensions.tokenCopied": "Token in die Zwischenablage kopiert",
+  "extensions.tokenFailed": "Token konnte nicht kopiert werden",
 };
 
 export default settings;

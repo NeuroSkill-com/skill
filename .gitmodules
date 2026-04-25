@@ -10,3 +10,6 @@
 [submodule "extensions/vscode"]
 	path = extensions/vscode
 	url = https://github.com/NeuroSkill-com/vscode-neuroskill.git
+[submodule "extensions/browser"]
+	path = extensions/browser
+	url = https://github.com/NeuroSkill-com/browser-extension.git

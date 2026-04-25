@@ -714,6 +714,30 @@ const settings: Record<string, string> = {
 
   "settings.shortcutChat": "צ׳אט",
   "settings.shortcutCompare": "השוואה",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "הרחבות",
+  "extensions.ideTitle": "הרחבות IDE",
+  "extensions.browserTitle": "הרחבות דפדפן",
+  "extensions.browserDesc": "עקוב אחר דפוסי גלישה ושייך אותם למצב המוח ב-EEG. כל הנתונים נשארים על המחשב שלך.",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "פקודות טרמינל, הצעות AI, לולאות פיתוח ומעקב אחר פעילות קבצים.",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "פעילות לשוניות, דפוסי קריאה, עומק גלילה והתנהגות חיפוש.",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "פעילות לשוניות, דפוסי קריאה, עומק גלילה והתנהגות חיפוש.",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "פעילות לשוניות, דפוסי קריאה, עומק גלילה והתנהגות חיפוש.",
+  "extensions.installed": "מותקן",
+  "extensions.install": "התקן",
+  "extensions.reinstall": "התקן מחדש",
+  "extensions.installing": "מתקין…",
+  "extensions.openStore": "חנות",
+  "extensions.pairingTitle": "שיוך הרחבת דפדפן",
+  "extensions.pairingDesc": "העתק את ה-auth token שלך והדבק אותו בהגדרות הרחבת הדפדפן כדי לשייך.",
+  "extensions.copyToken": "העתק auth token",
+  "extensions.tokenCopied": "הטוקן הועתק ללוח",
+  "extensions.tokenFailed": "לא ניתן להעתיק את הטוקן",
 };
 
 export default settings;

@@ -106,6 +106,8 @@ pub fn router() -> Router<AppState> {
         .route("/brain/dev-loops", post(dev_loops))
         .route("/brain/ai-usage", post(ai_usage))
         .route("/brain/search-conversations", post(search_conversations))
+        .route("/brain/eeg-at", post(eeg_at))
+        .route("/brain/eeg-range", post(eeg_range))
         .route("/activity/timeline", post(timeline))
 }
 
@@ -333,6 +335,38 @@ async fn search_conversations(
             _ => s.search_conversations_fts(&query, limit),
         };
         serde_json::to_value(results).unwrap_or_default()
+    })
+    .await
+}
+
+/// Get EEG metrics at a specific timestamp (nearest sample).
+async fn eeg_at(State(state): State<AppState>, Json(body): Json<serde_json::Value>) -> BrainResult<serde_json::Value> {
+    let ts = body.get("ts").and_then(|v| v.as_u64()).unwrap_or(0);
+    run_query(&state, move |s| s.eeg_at(ts).unwrap_or(serde_json::json!(null))).await
+}
+
+/// Get EEG time-series in a range (for charts, correlation).
+async fn eeg_range(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let from = body
+        .get("from")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(now.saturating_sub(3600));
+    let to = body.get("to").and_then(|v| v.as_u64()).unwrap_or(now);
+    let max_points = body.get("maxPoints").and_then(|v| v.as_u64()).unwrap_or(500) as u32;
+    run_query(&state, move |s| {
+        let points = s.eeg_range(from, to, max_points);
+        let arr: Vec<serde_json::Value> = points
+            .into_iter()
+            .map(|(ts, m)| serde_json::json!({"ts": ts, "metrics": m}))
+            .collect();
+        serde_json::to_value(arr).unwrap_or_default()
     })
     .await
 }

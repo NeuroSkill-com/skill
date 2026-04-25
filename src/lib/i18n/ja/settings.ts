@@ -726,6 +726,30 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.antneuro1": "eego アンプを USB で接続してください。",
   "settings.supportedDevices.instruction.antneuro2":
     "スキャナーが eego アンプを自動検出します。デバイス一覧から選択して接続してください。必要に応じて Device API 設定でキャップレイアウトを変更できます。",
+
+  // ── Extensions ──
+  "settingsTabs.extensions": "拡張機能",
+  "extensions.ideTitle": "IDE拡張機能",
+  "extensions.browserTitle": "ブラウザ拡張機能",
+  "extensions.browserDesc": "ブラウジングパターンを追跡し、EEG脳波状態と相関させます。すべてのデータはお使いのマシンに保存されます。",
+  "extensions.vscode": "VS Code",
+  "extensions.vscodeDesc": "ターミナルコマンド、AI提案、開発ループ、ファイルアクティビティの追跡。",
+  "extensions.chrome": "Chrome",
+  "extensions.chromeDesc": "タブアクティビティ、閲覧パターン、スクロール深度、検索行動。",
+  "extensions.firefox": "Firefox",
+  "extensions.firefoxDesc": "タブアクティビティ、閲覧パターン、スクロール深度、検索行動。",
+  "extensions.safari": "Safari",
+  "extensions.safariDesc": "タブアクティビティ、閲覧パターン、スクロール深度、検索行動。",
+  "extensions.installed": "インストール済み",
+  "extensions.install": "インストール",
+  "extensions.reinstall": "再インストール",
+  "extensions.installing": "インストール中…",
+  "extensions.openStore": "ストア",
+  "extensions.pairingTitle": "ブラウザ拡張機能のペアリング",
+  "extensions.pairingDesc": "auth tokenをコピーしてブラウザ拡張機能の設定に貼り付けるとペアリングできます。",
+  "extensions.copyToken": "auth tokenをコピー",
+  "extensions.tokenCopied": "トークンをクリップボードにコピーしました",
+  "extensions.tokenFailed": "トークンをコピーできませんでした",
 };
 
 export default settings;
