@@ -1250,7 +1250,7 @@ fn detect_git_branch(file_path: &str) -> String {
 }
 
 /// Periodically write EEG snapshots to the timeseries table (every 5s when recording).
-fn run_eeg_timeseries(state: &AppState, store: &Arc<ActivityStore>) {
+fn run_eeg_timeseries(state: AppState, store: Arc<ActivityStore>) {
     loop {
         std::thread::sleep(std::time::Duration::from_secs(5));
         let bands = state.latest_bands.lock().ok().and_then(|g| g.clone());
