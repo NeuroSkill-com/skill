@@ -41,6 +41,138 @@ pub(crate) async fn readyz(State(state): State<AppState>) -> Json<serde_json::Va
     }))
 }
 
+// ── Browser extension pairing (TOTP-based, same as iroh) ─────────────────
+
+/// Generate a TOTP-based pairing invite for browser extensions (authed).
+/// Creates a TOTP entry, then returns a URL to the pairing page that embeds
+/// the TOTP secret. The browser extension content script reads the secret,
+/// generates an OTP, and registers via POST /v1/iroh/clients/register —
+/// the same flow as phone pairing.
+pub(crate) async fn pair_generate_code(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let port = 18444u16;
+
+    // Create a TOTP entry via the iroh auth store (reuse the same system)
+    let result = (|| -> anyhow::Result<(String, String)> {
+        let mut auth = state.iroh_auth.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let (totp_view, secret_b32, _) = auth.create_totp("browser-extension")?;
+        Ok((totp_view.id, secret_b32))
+    })();
+
+    match result {
+        Ok((totp_id, secret_b32)) => {
+            // Store the secret in pairing_codes for the unauthenticated page to read
+            let expires = now_unix_secs() + 300; // 5 minutes
+            if let Ok(mut codes) = state.pairing_codes.lock() {
+                codes.retain(|_, (_, exp)| *exp > now_unix_secs());
+                codes.insert(totp_id.clone(), (secret_b32.clone(), expires));
+            }
+            let url = format!("http://127.0.0.1:{port}/pair/browser?totp_id={totp_id}");
+            Json(serde_json::json!({
+                "totp_id": totp_id,
+                "url": url,
+                "expires_in_secs": 300,
+            }))
+        }
+        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
+/// Serve the browser extension pairing page (unauthenticated, TOTP-gated).
+/// Embeds the TOTP secret + daemon port so the content script can register.
+pub(crate) async fn pair_browser_page(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> axum::response::Response {
+    let totp_id = params.get("totp_id").cloned().unwrap_or_default();
+    if totp_id.is_empty() {
+        return pair_error_response("Missing pairing ID.");
+    }
+
+    // Look up the TOTP secret from the short-lived pairing_codes cache
+    let secret = if let Ok(mut codes) = state.pairing_codes.lock() {
+        codes.retain(|_, (_, exp)| *exp > now_unix_secs());
+        codes.get(&totp_id).map(|(s, _)| s.clone())
+    } else {
+        None
+    };
+
+    let Some(secret_b32) = secret else {
+        return pair_error_response("Invalid or expired pairing link. Generate a new one from the NeuroSkill app.");
+    };
+
+    let port = 18444u16;
+    let html = PAIR_PAGE_TOTP
+        .replace("{TOTP_ID}", &totp_id)
+        .replace("{SECRET}", &secret_b32)
+        .replace("{PORT}", &port.to_string());
+
+    axum::response::Response::builder()
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(axum::body::Body::from(html))
+        .unwrap_or_default()
+}
+
+fn pair_error_response(msg: &str) -> axum::response::Response {
+    axum::response::Response::builder()
+        .status(403)
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(axum::body::Body::from(PAIR_PAGE_ERROR.replace("{MSG}", msg)))
+        .unwrap_or_default()
+}
+
+/// The pairing page embeds the TOTP secret and daemon port. An inline script
+/// (and the browser extension's content script) uses these to:
+/// 1. Generate a 6-digit OTP from the TOTP secret (SHA-1, 30s period)
+/// 2. Generate a persistent browser endpoint_id (random UUID)
+/// 3. POST /v1/iroh/clients/register { endpoint_id, otp, totp_id, name, scope }
+/// 4. Store the resulting auth token in chrome.storage.local
+const PAIR_PAGE_TOTP: &str = r##"<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeuroSkill — Pair Browser Extension</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#121212;color:#e0e0e0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:32px;max-width:420px;text-align:center}
+h1{font-size:20px;margin-bottom:8px}
+p{color:#999;font-size:14px;margin-bottom:16px}
+.spinner{display:inline-block;width:48px;height:48px;border:4px solid #333;border-top-color:#4f46e5;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ok{color:#4CAF50;font-size:48px;margin-bottom:12px;display:none}
+.err{color:#FF5722;font-size:48px;margin-bottom:12px;display:none}
+.msg{border-radius:8px;padding:12px;font-size:13px;margin-top:16px;display:none}
+.msg.success{background:#1b2e1b;border:1px solid #4CAF50;color:#4CAF50;display:block}
+.msg.error{background:#2e1b1b;border:1px solid #FF5722;color:#FF5722;display:block}
+</style></head><body>
+<div class="card">
+  <div class="spinner" id="spin"></div>
+  <div class="ok" id="ok-icon">&#10003;</div>
+  <div class="err" id="err-icon">&#10007;</div>
+  <h1 id="title">Pairing...</h1>
+  <p id="desc">Connecting your browser extension to the NeuroSkill daemon.</p>
+  <div class="msg" id="msg"></div>
+</div>
+<div id="neuroskill-pair"
+     data-totp-id="{TOTP_ID}"
+     data-secret="{SECRET}"
+     data-port="{PORT}"
+     style="display:none"></div>
+</body></html>"##;
+
+const PAIR_PAGE_ERROR: &str = r#"<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeuroSkill Pairing</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#121212;color:#e0e0e0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:32px;max-width:400px;text-align:center}
+h1{font-size:20px;margin-bottom:8px;color:#FF5722}p{color:#999;font-size:14px}
+.err{color:#FF5722;font-size:48px;margin-bottom:12px}
+</style></head><body>
+<div class="card">
+<div class="err">&#10007;</div>
+<h1>Pairing Failed</h1>
+<p>{MSG}</p>
+</div>
+</body></html>"#;
+
 /// Serve a screenshot image by bare filename (e.g., `20260413081553.webp`).
 /// Infers the date subdirectory from the first 8 characters of the filename.
 pub(crate) async fn serve_screenshot(
