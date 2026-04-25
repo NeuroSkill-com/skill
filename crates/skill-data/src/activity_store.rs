@@ -4242,6 +4242,7 @@ pub struct EmbeddingRow {
     pub created_at: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ConversationRow {
     pub id: i64,
     pub app: String,
