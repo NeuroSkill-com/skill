@@ -106,6 +106,9 @@ pub fn router() -> Router<AppState> {
         .route("/brain/dev-loops", post(dev_loops))
         .route("/brain/ai-usage", post(ai_usage))
         .route("/brain/search-conversations", post(search_conversations))
+        .route("/brain/developer-insights", post(developer_insights))
+        .route("/brain/binary-stats", post(binary_stats))
+        .route("/brain/recategorize-commands", post(recategorize_commands))
         .route("/brain/eeg-at", post(eeg_at))
         .route("/brain/eeg-range", post(eeg_range))
         .route("/activity/timeline", post(timeline))
@@ -337,6 +340,52 @@ async fn search_conversations(
         serde_json::to_value(results).unwrap_or_default()
     })
     .await
+}
+
+/// All developer insights in one call — EEG + activity fusion.
+async fn developer_insights(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(7 * 86400));
+    let tz = chrono::Local::now().offset().local_minus_utc();
+    run_query(&state, move |s| s.developer_insights(since, tz)).await
+}
+
+/// Binary usage frequency — discover uncategorized tools.
+async fn binary_stats(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(7 * 86400));
+    let limit = req.limit.unwrap_or(50);
+    run_query(&state, move |s| {
+        let stats = s.binary_usage_stats(since, limit);
+        let arr: Vec<serde_json::Value> = stats
+            .into_iter()
+            .map(|(bin, cat, n)| serde_json::json!({"binary": bin, "category": cat, "count": n}))
+            .collect();
+        serde_json::to_value(arr).unwrap_or_default()
+    })
+    .await
+}
+
+/// Recategorize all terminal commands (after rule updates).
+async fn recategorize_commands(State(state): State<AppState>) -> BrainResult<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let count = tokio::task::spawn_blocking(move || {
+        ActivityStore::open(&skill_dir)
+            .map(|s| s.recategorize_commands())
+            .unwrap_or(0)
+    })
+    .await
+    .unwrap_or(0);
+    Ok(Json(serde_json::json!({"recategorized": count})))
 }
 
 /// Get EEG metrics at a specific timestamp (nearest sample).

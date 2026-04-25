@@ -69,6 +69,7 @@ let contextCost = $state<{ from_zone: string; to_zone: string; switches: number;
 let devLoops = $state<{ loop_type: string; command: string; iterations: number; passes: number; fails: number; avg_cycle_secs: number; focus_trend: string }[]>([]);
 let conversations = $state<{ app: string; role: string; text: string; at: number; eeg_focus: number | null }[]>([]);
 let aiUsage = $state<{ suggestions_shown: number; accepted: number; acceptance_rate: number; chat_sessions: number; by_source: { source: string; count: number }[] } | null>(null);
+let insights = $state<any>(null);
 
 // Fusion insights
 let taskType = $state<{ task_type: string; confidence: number; signals: string[] } | null>(null);
@@ -188,6 +189,7 @@ onMount(async () => {
       daemonPost("/v1/brain/dev-loops", { windowSecs: 3600 }),
       daemonPost("/v1/brain/search-conversations", { mode: "structured", since: todayStart, limit: 50 }),
       daemonPost("/v1/brain/ai-usage", { since: todayStart }),
+      daemonPost("/v1/brain/developer-insights", { since: todayStart - 7 * 86400 }),
     ]);
 
     if (results[0].status === "fulfilled") summary = results[0].value;
@@ -208,6 +210,7 @@ onMount(async () => {
     if (results[15].status === "fulfilled") devLoops = (results[15].value as typeof devLoops) ?? [];
     if (results[16].status === "fulfilled") conversations = (results[16].value as typeof conversations) ?? [];
     if (results[17].status === "fulfilled") aiUsage = results[17].value as typeof aiUsage;
+    if (results[18].status === "fulfilled") insights = results[18].value;
   } catch {}
   loading = false;
 });
@@ -279,6 +282,104 @@ let heatmapMax = $state(1);
     <Spinner size="w-5 h-5" class="text-muted-foreground/40" />
   </div>
 {:else}
+  <!-- ── Brain Insights ───────────────────────────────────────────────── -->
+  {#if insights}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>Brain Insights (last 7 days)</SectionHeader>
+      <SettingsCard>
+        <SectionHeader title="Developer Brain Insights" description="Actionable patterns from correlating your EEG brain state with coding activity. Requires EEG recording sessions." />
+        <CardContent>
+          <div class="space-y-4">
+            <!-- Test failure by focus -->
+            {#if insights.test_failure_by_focus?.test_failure_by_focus?.length > 0}
+              {@const tfb = insights.test_failure_by_focus.test_failure_by_focus}
+              <div>
+                <div class="text-xs font-semibold mb-1">Test Failure Rate by Focus Level</div>
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                  {#each tfb as row}
+                    <div class="rounded-md bg-muted/30 px-3 py-2 text-center">
+                      <div class="text-[10px] text-muted-foreground capitalize">{row.focus_level} focus</div>
+                      <div class="text-lg font-bold tabular-nums {row.fail_rate > 0.3 ? 'text-red-400' : row.fail_rate > 0.1 ? 'text-yellow-400' : 'text-green-400'}">{Math.round(row.fail_rate * 100)}%</div>
+                      <div class="text-[10px] text-muted-foreground">fail rate ({row.passes + row.fails} runs)</div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <!-- Focus by language -->
+            {#if insights.focus_by_language?.focus_by_language?.length > 0}
+              {@const fbl = insights.focus_by_language.focus_by_language}
+              <div>
+                <div class="text-xs font-semibold mb-1">Focus by Language</div>
+                <div class="space-y-1">
+                  {#each fbl.slice(0, 6) as row}
+                    <div class="flex items-center gap-2 text-xs">
+                      <span class="w-16 font-medium">{row.language}</span>
+                      <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div class="h-full rounded-full {row.avg_focus >= 70 ? 'bg-green-400' : row.avg_focus >= 40 ? 'bg-yellow-400' : 'bg-red-400'}" style="width: {row.avg_focus}%"></div>
+                      </div>
+                      <span class="tabular-nums font-bold w-8 text-right">{Math.round(row.avg_focus)}</span>
+                      <span class="text-muted-foreground text-[10px] w-12">undo {row.undo_rate.toFixed(1)}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <!-- AI impact -->
+            {#if insights.ai_impact?.ai_impact?.length > 0}
+              {@const ai = insights.ai_impact}
+              <div>
+                <div class="text-xs font-semibold mb-1">AI Tool Impact on Focus</div>
+                {#each ai.ai_impact as row}
+                  <div class="flex items-center gap-2 text-xs rounded-md bg-muted/30 px-3 py-2">
+                    <span class="font-medium capitalize">{row.app}</span>
+                    <span class="ml-auto tabular-nums font-bold {row.delta > 0 ? 'text-green-400' : row.delta < -5 ? 'text-red-400' : 'text-yellow-400'}">{row.delta > 0 ? '+' : ''}{row.delta.toFixed(1)}</span>
+                    <span class="text-muted-foreground text-[10px]">vs {Math.round(ai.baseline_focus)} baseline ({row.message_count} msgs)</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- Tool impact -->
+            {#if insights.tool_impact?.tool_focus_impact?.length > 0}
+              {@const ti = insights.tool_impact.tool_focus_impact}
+              <div>
+                <div class="text-xs font-semibold mb-1">Focus Level by Tool Category</div>
+                <div class="grid grid-cols-2 gap-1">
+                  {#each ti.slice(0, 8) as row}
+                    <div class="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/20">
+                      <span class="capitalize">{row.category}</span>
+                      <span class="font-bold tabular-nums {row.avg_focus >= 70 ? 'text-green-400' : row.avg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}">{Math.round(row.avg_focus)}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <!-- Hourly productivity -->
+            {#if insights.hourly_productivity?.hourly_productivity?.length > 0}
+              {@const hp = insights.hourly_productivity.hourly_productivity}
+              <div>
+                <div class="text-xs font-semibold mb-1">Productivity by Hour</div>
+                <div class="flex items-end gap-[2px] h-12">
+                  {#each hp as row}
+                    {@const maxChurn = Math.max(1, ...hp.map((r: any) => r.churn))}
+                    <div class="flex-1 flex flex-col items-center" title="{row.hour}:00 — focus: {Math.round(row.avg_focus)}, churn: {row.churn}, undo rate: {(row.undo_rate * 100).toFixed(0)}%">
+                      <div class="w-full rounded-t {row.avg_focus >= 70 ? 'bg-green-400/60' : row.avg_focus >= 40 ? 'bg-yellow-400/60' : 'bg-red-400/60'}" style="height: {Math.max(2, (row.churn / maxChurn) * 40)}px"></div>
+                      <span class="text-[7px] text-muted-foreground mt-0.5">{row.hour}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
   <!-- ── Activity Timeline ──────────────────────────────────────────────── -->
   {#if timeline.length > 0}
     <section class="flex flex-col gap-2">
