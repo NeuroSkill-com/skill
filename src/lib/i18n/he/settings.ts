@@ -732,6 +732,7 @@ const settings: Record<string, string> = {
   "extensions.install": "התקן",
   "extensions.reinstall": "התקן מחדש",
   "extensions.installing": "מתקין…",
+  "extensions.noIdeDetected": "לא זוהה עורך מבוסס VS Code. התקן את VS Code, VSCodium, Cursor, Windsurf או עורך אחר מבוסס VS Code כדי להתקין את ההרחבה.",
   "extensions.openStore": "חנות",
   "extensions.pairingTitle": "שיוך הרחבת דפדפן",
   "extensions.pairingDesc": "העתק את ה-auth token שלך והדבק אותו בהגדרות הרחבת הדפדפן כדי לשייך.",
@@ -744,6 +745,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "דף השיוך נפתח — ההרחבה תתחבר אוטומטית",
   "extensions.pairingFailed": "לא ניתן ליצור קישור שיוך",
   "extensions.pairingInProgress": "פותח…",
+  "extensions.copyPairingToken": "העתק טוקן שיוך",
+  "extensions.copyPairingTokenHint": "מומלץ: פתח את חלון ההרחבה ← שיוך אוטומטי מהלוח",
+  "extensions.clipboardPairCopied": "הטוקן הועתק. פתח את חלון ההרחבה — השיוך יתבצע אוטומטית.",
 };
 
 export default settings;

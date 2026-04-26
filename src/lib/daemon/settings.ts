@@ -358,11 +358,11 @@ export interface StaleFileRow {
 }
 
 export function getProductivityScore(dayStart: number): Promise<ProductivityScore> {
-  return daemonPost<ProductivityScore>("/v1/activity/productivity-score", { day_start: dayStart });
+  return daemonPost<ProductivityScore>("/v1/activity/productivity-score", { dayStart });
 }
 
 export function getWeeklyDigest(weekStart: number): Promise<WeeklyDigest> {
-  return daemonPost<WeeklyDigest>("/v1/activity/weekly-digest", { day_start: weekStart });
+  return daemonPost<WeeklyDigest>("/v1/activity/weekly-digest", { dayStart: weekStart });
 }
 
 export function getStaleFiles(since?: number): Promise<StaleFileRow[]> {

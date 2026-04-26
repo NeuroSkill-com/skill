@@ -744,6 +744,7 @@ const settings: Record<string, string> = {
   "extensions.install": "インストール",
   "extensions.reinstall": "再インストール",
   "extensions.installing": "インストール中…",
+  "extensions.noIdeDetected": "VS Code 系のエディタが検出されませんでした。VS Code、VSCodium、Cursor、Windsurf などをインストールすると拡張機能をインストールできます。",
   "extensions.openStore": "ストア",
   "extensions.pairingTitle": "ブラウザ拡張機能のペアリング",
   "extensions.pairingDesc": "auth tokenをコピーしてブラウザ拡張機能の設定に貼り付けるとペアリングできます。",
@@ -756,6 +757,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "ペアリングページを開きました — 拡張機能が自動的に接続します",
   "extensions.pairingFailed": "ペアリングリンクを生成できませんでした",
   "extensions.pairingInProgress": "開いています…",
+  "extensions.copyPairingToken": "ペアリングトークンをコピー",
+  "extensions.copyPairingTokenHint": "推奨: 拡張機能のポップアップを開く → クリップボードから自動ペアリング",
+  "extensions.clipboardPairCopied": "トークンをコピーしました。拡張機能のポップアップを開いてください — 自動的にペアリングされます。",
 };
 
 export default settings;

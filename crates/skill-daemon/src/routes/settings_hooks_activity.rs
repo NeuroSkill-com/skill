@@ -875,8 +875,8 @@ pub(crate) async fn activity_vscode_events_impl(
                 }
                 "ai_inline_chat" => ("AI inline assist".to_string(), format!("{basename} ({language})")),
                 "ai_code_refined" => ("AI code refined".to_string(), format!("{basename} ({language})")),
-                "ai_code_undone" => ("AI code undone".to_string(), format!("{basename}")),
-                "ai_code_deleted" => ("AI code deleted".to_string(), format!("{basename}")),
+                "ai_code_undone" => ("AI code undone".to_string(), basename.to_string()),
+                "ai_code_deleted" => ("AI code deleted".to_string(), basename.to_string()),
                 "completion_accepted" => ("AI completion accepted".to_string(), format!("{basename} ({language})")),
 
                 // === Developer signals ===
@@ -964,8 +964,7 @@ pub(crate) async fn activity_vscode_events_impl(
                     (category.to_string(), format!("{cmd_name} in {basename}"))
                 }
 
-                // === IntelliSense completion accepted ===
-                "completion_accepted" => ("autocomplete accepted".to_string(), format!("{basename} ({language})")),
+                // (completion_accepted handled in the AI block above)
 
                 // === Clipboard activity ===
                 "clipboard_change" => {
@@ -1098,12 +1097,12 @@ pub(crate) async fn activity_browser_events_impl(
         let mut count = 0u64;
         for event in &events {
             let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            let url = event.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let _url = event.get("url").and_then(|v| v.as_str()).unwrap_or("");
             let domain = event.get("domain").and_then(|v| v.as_str()).unwrap_or("");
             let title = event.get("title").and_then(|v| v.as_str()).unwrap_or("");
             let category = event.get("category").and_then(|v| v.as_str()).unwrap_or("");
-            let tab_id = event.get("tab_id").and_then(|v| v.as_i64());
-            let tab_count = event.get("tab_count").and_then(|v| v.as_i64());
+            let _tab_id = event.get("tab_id").and_then(|v| v.as_i64());
+            let _tab_count = event.get("tab_count").and_then(|v| v.as_i64());
             let browser_name = event.get("category")
                 .and_then(|v| v.as_str())
                 .filter(|_| event_type == "env_context")

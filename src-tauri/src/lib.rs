@@ -373,6 +373,7 @@ pub fn run() {
             autosize_main_window,
             install_extension,
             check_extensions_installed,
+            enable_safari_unsigned_extensions,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

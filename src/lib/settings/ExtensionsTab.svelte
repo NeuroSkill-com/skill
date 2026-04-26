@@ -29,17 +29,18 @@ interface ExtensionInfo {
 
 // ── State ────────────────────────────────────────────────────────────────────
 
+// VS Code-family forks: one row per available fork (detected at runtime).
+// `id` matches the backend fork id (vscode, vscode-insiders, vscodium, cursor, …).
+interface VsForkUI {
+  id: string;
+  name: string;
+  available: boolean;
+  installed: boolean;
+  installing: boolean;
+}
+let vsForks = $state<VsForkUI[]>([]);
+
 let extensions = $state<ExtensionInfo[]>([
-  {
-    id: "vscode",
-    nameKey: "extensions.vscode",
-    descKey: "extensions.vscodeDesc",
-    icon: `<path d="M17.583 2.237L10.82 8.363 5.94 4.657 3.5 5.726v12.548l2.44 1.069 4.88-3.706 6.763 6.126L20.5 19.92V4.08l-2.917-1.843zM10 12l-4.146 3.291V8.709L10 12zm7.5 4.846L13.038 12l4.462-4.846v9.692z"/>`,
-    installed: false,
-    installing: false,
-    storeUrl: "https://marketplace.visualstudio.com/items?itemName=neuroskill.neuroskill",
-    canAutoInstall: true,
-  },
   {
     id: "chrome",
     nameKey: "extensions.chrome",
@@ -61,6 +62,16 @@ let extensions = $state<ExtensionInfo[]>([
     canAutoInstall: true,
   },
   {
+    id: "edge",
+    nameKey: "extensions.edge",
+    descKey: "extensions.edgeDesc",
+    icon: `<circle cx="12" cy="12" r="10"/><path d="M2 12 12 12 22 12"/><path d="M12 2 12 22"/>`,
+    installed: false,
+    installing: false,
+    storeUrl: "",
+    canAutoInstall: true,
+  },
+  {
     id: "safari",
     nameKey: "extensions.safari",
     descKey: "extensions.safariDesc",
@@ -72,6 +83,9 @@ let extensions = $state<ExtensionInfo[]>([
   },
 ]);
 
+// Per-extension message (so each row shows its own success/error)
+let extMessage = $state<Record<string, { text: string; type: "success" | "error" }>>({});
+
 let statusMessage = $state("");
 let statusType = $state<"success" | "error" | "">("");
 
@@ -81,7 +95,7 @@ async function installExtension(ext: ExtensionInfo): Promise<void> {
   const idx = extensions.findIndex((e) => e.id === ext.id);
   if (idx < 0) return;
   extensions[idx].installing = true;
-  statusMessage = "";
+  extMessage[ext.id] = { text: "Installing...", type: "success" };
 
   try {
     const result = await invoke<{ ok: boolean; message: string }>("install_extension", {
@@ -89,17 +103,16 @@ async function installExtension(ext: ExtensionInfo): Promise<void> {
     });
     if (result.ok) {
       extensions[idx].installed = true;
-      statusMessage = result.message;
-      statusType = "success";
+      extMessage[ext.id] = { text: result.message, type: "success" };
     } else {
-      statusMessage = result.message;
-      statusType = "error";
+      extMessage[ext.id] = { text: result.message, type: "error" };
     }
   } catch (e: any) {
-    statusMessage = e.message ?? String(e);
-    statusType = "error";
+    extMessage[ext.id] = { text: e.message ?? String(e), type: "error" };
   }
   extensions[idx].installing = false;
+  // Auto-clear after 8 seconds
+  setTimeout(() => { delete extMessage[ext.id]; extMessage = { ...extMessage }; }, 8000);
 }
 
 async function openStore(ext: ExtensionInfo): Promise<void> {
@@ -110,15 +123,60 @@ async function openStore(ext: ExtensionInfo): Promise<void> {
 
 async function checkInstalled(): Promise<void> {
   try {
-    const result = await invoke<Record<string, boolean>>("check_extensions_installed");
-    for (let i = 0; i < extensions.length; i++) {
-      if (result[extensions[i].id] !== undefined) {
-        extensions[i].installed = result[extensions[i].id];
-      }
+    const result = await invoke<{
+      vscode?: boolean;
+      vscode_forks?: Array<{ id: string; name: string; available: boolean; installed: boolean }>;
+    } & Record<string, boolean>>("check_extensions_installed");
+
+    // VS Code forks: keep only ones the user actually has installed (available),
+    // so the UI doesn't list 7 editors for someone who runs only one.
+    if (Array.isArray(result.vscode_forks)) {
+      const next: VsForkUI[] = result.vscode_forks
+        .filter((f) => f.available)
+        .map((f) => {
+          const prev = vsForks.find((p) => p.id === f.id);
+          return {
+            id: f.id,
+            name: f.name,
+            available: f.available,
+            installed: f.installed,
+            installing: prev?.installing ?? false,
+          };
+        });
+      vsForks = next;
     }
-  } catch {
-    // Backend may not implement this yet — fail silently
+
+    // Browser extensions
+    for (let i = 0; i < extensions.length; i++) {
+      const v = (result as Record<string, boolean>)[extensions[i].id];
+      if (v !== undefined) extensions[i].installed = v;
+    }
+  } catch (e) {
+    console.error("checkInstalled failed:", e);
   }
+}
+
+async function installFork(fork: VsForkUI): Promise<void> {
+  const idx = vsForks.findIndex((f) => f.id === fork.id);
+  if (idx < 0) return;
+  vsForks[idx].installing = true;
+  extMessage[fork.id] = { text: t("extensions.installing"), type: "success" };
+  try {
+    const result = await invoke<{ ok: boolean; message: string }>("install_extension", {
+      extensionId: fork.id,
+    });
+    if (result.ok) {
+      vsForks[idx].installed = true;
+      extMessage[fork.id] = { text: result.message, type: "success" };
+    } else {
+      extMessage[fork.id] = { text: result.message, type: "error" };
+    }
+  } catch (e: any) {
+    extMessage[fork.id] = { text: e.message ?? String(e), type: "error" };
+    console.error("installFork failed:", e);
+  }
+  vsForks[idx].installing = false;
+  setTimeout(() => { delete extMessage[fork.id]; extMessage = { ...extMessage }; }, 8000);
 }
 
 async function copyAuthToken(): Promise<void> {
@@ -135,6 +193,27 @@ async function copyAuthToken(): Promise<void> {
   setTimeout(() => { statusMessage = ""; }, 3000);
 }
 
+/**
+ * Generate a one-time pairing token and copy it to the clipboard with a
+ * recognizable prefix. The browser extension popup auto-detects this prefix
+ * and redeems the token automatically — zero typing, zero deep links.
+ */
+async function copyPairingToken(): Promise<void> {
+  try {
+    const { daemonPost } = await import("$lib/daemon/http");
+    const result = await daemonPost<{ pin: string; token: string; expires_in_secs: number }>("/v1/pair/start");
+    // Prefix lets the extension popup recognize it (and ignore unrelated clipboard data)
+    const payload = `neuroskill-pair:${result.token}`;
+    await navigator.clipboard.writeText(payload);
+    statusMessage = t("extensions.clipboardPairCopied");
+    statusType = "success";
+  } catch {
+    statusMessage = t("extensions.tokenFailed");
+    statusType = "error";
+  }
+  setTimeout(() => { statusMessage = ""; }, 5000);
+}
+
 let pairingInProgress = $state(false);
 
 async function pairViaBrowser(): Promise<void> {
@@ -142,7 +221,7 @@ async function pairViaBrowser(): Promise<void> {
   statusMessage = "";
   try {
     const { daemonPost } = await import("$lib/daemon/http");
-    const result = await daemonPost<{ code: string; url: string }>("/pair/generate-code");
+    const result = await daemonPost<{ code: string; url: string }>("/v1/pair/generate-code");
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(result.url);
     statusMessage = t("extensions.pairingOpened");
@@ -155,6 +234,26 @@ async function pairViaBrowser(): Promise<void> {
   setTimeout(() => { statusMessage = ""; }, 5000);
 }
 
+/** Enable Safari's Develop menu and try to toggle "Allow Unsigned Extensions". */
+let enablingUnsigned = $state(false);
+async function enableSafariUnsignedExtensions(): Promise<void> {
+  enablingUnsigned = true;
+  extMessage["safari"] = { text: "Enabling Develop menu…", type: "success" };
+  try {
+    const result = await invoke<{ ok: boolean; message: string; needs_accessibility?: boolean; auto_clicked?: boolean }>(
+      "enable_safari_unsigned_extensions",
+    );
+    extMessage["safari"] = {
+      text: result.message,
+      type: result.ok ? "success" : "error",
+    };
+  } catch (e: any) {
+    extMessage["safari"] = { text: e.message ?? String(e), type: "error" };
+  }
+  enablingUnsigned = false;
+  setTimeout(() => { delete extMessage["safari"]; extMessage = { ...extMessage }; }, 12000);
+}
+
 // Check status on mount
 $effect(() => {
   checkInstalled();
@@ -163,52 +262,54 @@ $effect(() => {
 
 <div class="flex flex-col gap-5">
 
-  <!-- IDE Extensions -->
+  <!-- IDE Extensions: one row per detected VS Code-family editor -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("extensions.ideTitle")}</SectionHeader>
     <SettingsCard>
       <CardContent class="py-0 px-0">
         <div class="divide-y divide-border dark:divide-white/[0.04]">
-          {#each extensions.filter((e) => e.id === "vscode") as ext}
+          {#if vsForks.length === 0}
+            <p class="px-4 py-3 text-sm text-muted-foreground">
+              {t("extensions.noIdeDetected")}
+            </p>
+          {/if}
+          {#each vsForks as fork}
             <div class="flex items-center justify-between gap-3 px-4 py-3.5">
-              <div class="flex items-center gap-3 flex-1 min-w-0">
-                <div class="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-md bg-muted dark:bg-white/[0.06]">
-                  <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" stroke="none">
-                    {@html ext.icon}
+              <div class="flex min-w-0 flex-1 items-center gap-3">
+                <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted dark:bg-white/[0.06]">
+                  <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" stroke="none">
+                    <path d="M17.583 2.237L10.82 8.363 5.94 4.657 3.5 5.726v12.548l2.44 1.069 4.88-3.706 6.763 6.126L20.5 19.92V4.08l-2.917-1.843zM10 12l-4.146 3.291V8.709L10 12zm7.5 4.846L13.038 12l4.462-4.846v9.692z"/>
                   </svg>
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-medium text-sm">{t(ext.nameKey)}</span>
-                    {#if ext.installed}
+                    <span class="text-sm font-medium">{fork.name}</span>
+                    {#if fork.installed}
                       <Badge variant="default">{t("extensions.installed")}</Badge>
                     {/if}
                   </div>
-                  <p class="text-xs text-muted-foreground mt-0.5 truncate">{t(ext.descKey)}</p>
+                  {#if extMessage[fork.id]}
+                    <p class="mt-1 text-xs {extMessage[fork.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
+                      {extMessage[fork.id].text}
+                    </p>
+                  {/if}
                 </div>
               </div>
-              <div class="flex items-center gap-2 flex-shrink-0">
-                {#if ext.storeUrl}
-                  <Button size="sm" variant="ghost" onclick={() => openStore(ext)}>
-                    {t("extensions.openStore")}
-                  </Button>
-                {/if}
-                {#if ext.canAutoInstall}
-                  <Button
-                    size="sm"
-                    variant={ext.installed ? "outline" : "default"}
-                    disabled={ext.installing}
-                    onclick={() => installExtension(ext)}
-                  >
-                    {#if ext.installing}
-                      {t("extensions.installing")}
-                    {:else if ext.installed}
-                      {t("extensions.reinstall")}
-                    {:else}
-                      {t("extensions.install")}
-                    {/if}
-                  </Button>
-                {/if}
+              <div class="flex flex-shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={fork.installed ? "outline" : "default"}
+                  disabled={fork.installing}
+                  onclick={() => installFork(fork)}
+                >
+                  {#if fork.installing}
+                    {t("extensions.installing")}
+                  {:else if fork.installed}
+                    {t("extensions.reinstall")}
+                  {:else}
+                    {t("extensions.install")}
+                  {/if}
+                </Button>
               </div>
             </div>
           {/each}
@@ -224,7 +325,7 @@ $effect(() => {
     <SettingsCard>
       <CardContent class="py-0 px-0">
         <div class="divide-y divide-border dark:divide-white/[0.04]">
-          {#each extensions.filter((e) => e.id !== "vscode") as ext}
+          {#each extensions as ext}
             <div class="flex items-center justify-between gap-3 px-4 py-3.5">
               <div class="flex items-center gap-3 flex-1 min-w-0">
                 <div class="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-md bg-muted dark:bg-white/[0.06]">
@@ -240,9 +341,25 @@ $effect(() => {
                     {/if}
                   </div>
                   <p class="text-xs text-muted-foreground mt-0.5 truncate">{t(ext.descKey)}</p>
+                  {#if extMessage[ext.id]}
+                    <p class="text-xs mt-1 {extMessage[ext.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
+                      {extMessage[ext.id].text}
+                    </p>
+                  {/if}
                 </div>
               </div>
               <div class="flex items-center gap-2 flex-shrink-0">
+                {#if ext.id === "safari" && ext.installed}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={enablingUnsigned}
+                    onclick={enableSafariUnsignedExtensions}
+                    title="Enable Safari's Develop menu and Allow Unsigned Extensions"
+                  >
+                    {#if enablingUnsigned}…{:else}{t("extensions.allowUnsigned")}{/if}
+                  </Button>
+                {/if}
                 {#if ext.storeUrl}
                   <Button size="sm" variant="ghost" onclick={() => openStore(ext)}>
                     {t("extensions.openStore")}
@@ -279,7 +396,13 @@ $effect(() => {
     <SettingsCard>
       <CardContent class="px-4 py-3.5 flex flex-col gap-3">
         <div class="flex items-center gap-2">
-          <Button size="sm" variant="default" onclick={pairViaBrowser} disabled={pairingInProgress}>
+          <Button size="sm" variant="default" onclick={copyPairingToken}>
+            {t("extensions.copyPairingToken")}
+          </Button>
+          <span class="text-xs text-muted-foreground">{t("extensions.copyPairingTokenHint")}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline" onclick={pairViaBrowser} disabled={pairingInProgress}>
             {#if pairingInProgress}
               {t("extensions.pairingInProgress")}
             {:else}

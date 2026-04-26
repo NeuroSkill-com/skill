@@ -62,8 +62,6 @@ let tab = $state<Tab>("activity");
 
 const TAB_IDS: Tab[] = [
   "activity",
-  "terminal",
-  "extensions",
   "goals",
   "devices",
   "exg",
@@ -84,6 +82,8 @@ const TAB_IDS: Tab[] = [
   "updates",
   "permissions",
   "tokens",
+  "terminal",
+  "extensions",
 ];
 const TAB_LABELS: Record<Tab, () => string> = {
   goals: () => t("settingsTabs.goals"),

@@ -718,6 +718,7 @@ const settings: Record<string, string> = {
   "extensions.install": "安装",
   "extensions.reinstall": "重新安装",
   "extensions.installing": "安装中…",
+  "extensions.noIdeDetected": "未检测到任何基于 VS Code 的编辑器。请安装 VS Code、VSCodium、Cursor、Windsurf 等基于 VS Code 的编辑器以安装扩展。",
   "extensions.openStore": "商店",
   "extensions.pairingTitle": "浏览器扩展配对",
   "extensions.pairingDesc": "复制您的 auth token 并粘贴到浏览器扩展设置中以完成配对。",
@@ -730,6 +731,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "配对页面已打开 — 扩展将自动连接",
   "extensions.pairingFailed": "无法生成配对链接",
   "extensions.pairingInProgress": "正在打开…",
+  "extensions.copyPairingToken": "复制配对令牌",
+  "extensions.copyPairingTokenHint": "推荐：打开扩展弹窗 → 自动从剪贴板配对",
+  "extensions.clipboardPairCopied": "令牌已复制。打开扩展弹窗 — 将自动完成配对。",
 };
 
 export default settings;

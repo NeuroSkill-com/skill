@@ -730,6 +730,7 @@ const settings: Record<string, string> = {
   "extensions.install": "설치",
   "extensions.reinstall": "재설치",
   "extensions.installing": "설치 중…",
+  "extensions.noIdeDetected": "VS Code 계열 에디터가 감지되지 않았습니다. VS Code, VSCodium, Cursor, Windsurf 등 VS Code 기반 에디터를 설치하면 확장을 설치할 수 있습니다.",
   "extensions.openStore": "스토어",
   "extensions.pairingTitle": "브라우저 확장 프로그램 페어링",
   "extensions.pairingDesc": "auth token을 복사하여 브라우저 확장 프로그램 설정에 붙여넣으면 페어링됩니다.",
@@ -742,6 +743,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "페어링 페이지가 열렸습니다 — 확장 프로그램이 자동으로 연결됩니다",
   "extensions.pairingFailed": "페어링 링크를 생성할 수 없습니다",
   "extensions.pairingInProgress": "여는 중…",
+  "extensions.copyPairingToken": "페어링 토큰 복사",
+  "extensions.copyPairingTokenHint": "권장: 확장 프로그램 팝업 열기 → 클립보드에서 자동 페어링",
+  "extensions.clipboardPairCopied": "토큰이 복사되었습니다. 확장 프로그램 팝업을 여세요 — 자동으로 페어링됩니다.",
 };
 
 export default settings;
